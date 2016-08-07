@@ -89,28 +89,30 @@ def set_stat(jsn, items, selectfunc, hiswdth=64, lab='histogram'):
       stds.append( np.std() )
       sums.append( np.sum() )
 
-   # print quasi historgram
+   # print quasi histogram
    gb = 2.0**30.0
+   mb = 2.0**20.0
    sumsnp = numpy.array(sums, dtype='f8')
    sumsmax, sumsmin = sumsnp.max(), sumsnp.min() 
    sumall = sumsnp.sum() 
-   fstr = "%15s |%s      [%0.1fGB, %0.1f std]" 
-   print "\n\n%s, min=%.1f, max=%.1f total=%.0fGB\n%s" % (lab, sumsmin/gb, sumsmax/gb, sumall/gb, '-'*(hiswdth+15))
+   fstr = "%15s |%s      [%0.1fGB sz, %0.1fMB stdv]" 
+   print "\n\n%s : min=%.1f, max=%.1f total=%.0f (GB)\n%s" % (lab, sumsmin/gb, sumsmax/gb, sumall/gb, '-'*(hiswdth+15))
    for i, s in enumerate(sums): 
-      nx = sums[i] / (sumsmax*1.2)
-      hst = ''
-      for x in range(0, int(round(hiswdth * nx))): hst += '*'
-      for y in range(x, hiswdth): hst += ' '
-      print fstr % (lables[i], hst, sums[i]/gb, stds[i]/gb)
+      nx = int(round((sums[i] / (sumsmax*1.2))*hiswdth))
+      hst = '*'*nx
+      hst += ' '*(hiswdth-nx)
+      print fstr % (lables[i], hst, sums[i]/gb, stds[i]/mb)
 #set_stat
 
 #---------------------------------------------------------------------------------
 def summarize_size(jsn):
    mstats, vrstats, exstats = [None]*3
-   # get info break down
    models, exprs, vrs = get_gddp_sets(jsn)
+   logging.info('building stats for models ...')
    mstats = set_stat(jsn, models, select_gddp_model, lab='models')
+   logging.info('building stats for experiments ...')
    exstats = set_stat(jsn, exprs, select_gddp_experiment, lab='scenarios')
+   logging.info('building stats for variables ...')
    vrstats = set_stat(jsn, vrs, select_gddp_var, lab='variables')
 #summarize_size
 
