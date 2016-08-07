@@ -2,8 +2,8 @@
 # Copyright by The HDF Group.                                                #
 # All rights reserved.                                                       #
 #                                                                            #
-# This file is part of HSDS (HDF5 Scalable Data Service), Libraries and      #
-# Utilities.  The full HSDS copyright notice, including          #
+# This file is part of HSDS (HDF5 Scalable Data Server) Service, Libraries and      #
+# Utilities.  The full HSDS Server copyright notice, including          #
 # terms governing use, modification, and redistribution, is contained in     #
 # the file COPYING, which can be found at the root of the source code        #
 # distribution tree.  If you do not have access to this file, you may        #
@@ -13,29 +13,11 @@ import os
 import sys
 
 cfg = {
-    'aws_access_key_id': 'xxx',  
-    'aws_secret_access_key': 'xxx',    
-    'aws_region': 'us-east-1',
-    'bucket_name': 'hdfgroup.hsdsdev',
-    'head_port': 5050,
-    'dn_port' : 6050,
-    'sn_port': 7050,
-    'target_sn_count': 4,
-    'target_dn_count': 4,
-    'log_file': 'head.log',
-    'log_level': 'INFO'   # ERROR, WARNING, INFO, DEBUG, or NOTSET,
-     
+    'head_host': '127.0.0.1',
+    'head_port': 5020
 }
    
-def get(x): 
-    # see if there is a command-line override
-    option = '--'+x+'='
-    for i in range(1, len(sys.argv)):
-        #print i, sys.argv[i]
-        if sys.argv[i].startswith(option):
-            # found an override
-            arg = sys.argv[i]
-            return arg[len(option):]  # return text after option string    
+def get(x):     
     # see if there are an environment variable override
     if x.upper() in os.environ:
         return os.environ[x.upper()]
