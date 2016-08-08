@@ -94,6 +94,10 @@ async def register(request):
         raise HttpBadRequest(message="missing key 'id'")
     if 'port' not in body:
         raise HttpBadRequest(message="missing key 'port'")
+    if 'node_type' not in body:
+        raise HttpBadRequest(message="missing key 'node_type'")
+    if body['node_type'] not in ('sn', 'dn'):
+        raise HttpBadRequest(message="invalid node_type")
     
     peername = request.transport.get_extra_info('peername')
     if peername is None:
@@ -110,7 +114,7 @@ async def register(request):
     else:
         nodes = app['nodes']
         for node in nodes:
-            if node['host'] is None:
+            if node['host'] is None and node['node_type'] == body['node_type']:
                 # found a free node
                 node['host'] = host
                 node['port'] = body["port"]
@@ -129,11 +133,10 @@ async def register(request):
     resp.headers['Content-Type'] = 'application/json'
     answer = {}
     if ret_node is not None:
-        answer["node_type"] = ret_node["node_type"]
         answer["node_number"] = ret_node["node_number"]
     else:
         # all nodes allocated, let caller know it's in the reserve pool
-        answer["node_type"] = "reserve"  
+        answer["node_number"] = -1
      
     answer = json.dumps(answer)
     answer = answer.encode('utf8')
@@ -147,9 +150,10 @@ async def nodestate(request):
     print("nodestat") 
     node_type = request.match_info.get('nodetype', '*')
     print("node_type:", node_type)
-    if node_type not in ("sn", "dn"):
-        #raise HttpBadRequest(message="Invalid nodetype")
+    if node_type not in ("sn", "dn", "*"):
         print("bad nodetype")
+        raise HttpBadRequest(message="Invalid nodetype")
+        
     app = request.app
     resp = StreamResponse()
     resp.headers['Content-Type'] = 'application/json'
@@ -227,11 +231,12 @@ async def init(loop):
      
 
 
-    app.router.add_get('/', intro)
+    app.router.add_get('/', info)
     app.router.add_get('/simple', simple)
     app.router.add_get('/change_body', change_body)
     app.router.add_get('/hello/{name}', hello)
     app.router.add_get('/nodestate', nodestate)
+    app.router.add_get('/nodestate/{nodetype}', nodestate)
     app.router.add_get('/hello', hello)
     app.router.add_get('/info', info)
     app.router.add_post('/register', register)
