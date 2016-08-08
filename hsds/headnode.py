@@ -19,40 +19,6 @@ import config
 from timeUtil import unixTimeToUTC, elapsedTime
  
 
-async def intro(request):
-    url = "127.0.0.1:{}".format(config.get("head_port"))
-    txt = textwrap.dedent("""\
-        Type {url}/hello/John  {url}/simple or {url}/change_body
-        in browser url bar
-    """).format(url=url)
-    binary = txt.encode('utf8')
-    resp = StreamResponse()
-    resp.content_length = len(binary)
-    await resp.prepare(request)
-    resp.write(binary)
-    return resp
-
-
-async def simple(request):
-    return Response(text="Simple answer")
-
-
-async def change_body(request):
-    resp = Response()
-    resp.body = b"Body changed"
-    return resp
-
-
-async def hello(request):
-    resp = StreamResponse()
-    name = request.match_info.get('name', 'Anonymous')
-    answer = ('Hello, ' + name).encode('utf8')
-    resp.content_length = len(answer)
-    await resp.prepare(request)
-    resp.write(answer)
-    await resp.write_eof()
-    return resp
-
 async def healthCheck():
     while True:
         #print("health check")
@@ -224,20 +190,9 @@ async def init(loop):
     #log = initLogger('head_node')
     #log.info("log init")
 
-    
-  
-     
-    #app.make_handler(web_log=log)
-     
-
-
     app.router.add_get('/', info)
-    app.router.add_get('/simple', simple)
-    app.router.add_get('/change_body', change_body)
-    app.router.add_get('/hello/{name}', hello)
     app.router.add_get('/nodestate', nodestate)
     app.router.add_get('/nodestate/{nodetype}', nodestate)
-    app.router.add_get('/hello', hello)
     app.router.add_get('/info', info)
     app.router.add_post('/register', register)
     
