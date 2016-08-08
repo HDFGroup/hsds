@@ -81,6 +81,13 @@ class HeadTest(unittest.TestCase):
         self.assertEqual(rsp_json["target_sn_count"], 4)
         self.assertEqual(rsp_json["cluster_state"], "READY")
 
+        nodes_req = self.endpoint + "/nodestate"
+        rsp = requests.get(nodes_req)
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(rsp.headers['content-type'], 'application/json')
+        rsp_json = json.loads(rsp.text)
+        print(rsp_json)
+
 
 
              

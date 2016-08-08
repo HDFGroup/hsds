@@ -143,6 +143,31 @@ async def register(request):
     await resp.write_eof()
     return resp
 
+async def nodestate(request):
+    print("nodestat") 
+    node_type = request.match_info.get('nodetype', '*')
+    print("node_type:", node_type)
+    if node_type not in ("sn", "dn"):
+        #raise HttpBadRequest(message="Invalid nodetype")
+        print("bad nodetype")
+    app = request.app
+    resp = StreamResponse()
+    resp.headers['Content-Type'] = 'application/json'
+    nodes = []
+    for node in app["nodes"]:
+        if node["node_type"] == node_type or node_type == "*":
+            nodes.append(node)
+
+    answer = {"nodes": nodes }
+    
+    answer = json.dumps(answer)
+    answer = answer.encode('utf8')
+    resp.content_length = len(answer)
+    await resp.prepare(request)
+    resp.write(answer)
+    await resp.write_eof()
+    return resp
+
 def getTargetNodeCount(app, node_type):
     count = None
     if node_type == "dn":
@@ -206,9 +231,11 @@ async def init(loop):
     app.router.add_get('/simple', simple)
     app.router.add_get('/change_body', change_body)
     app.router.add_get('/hello/{name}', hello)
+    app.router.add_get('/nodestate', nodestate)
     app.router.add_get('/hello', hello)
     app.router.add_get('/info', info)
     app.router.add_post('/register', register)
+    
     return app
 
 
