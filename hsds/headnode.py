@@ -12,17 +12,52 @@ import logging.handlers
 import sys
 
 from aiohttp.web import Application, Response, StreamResponse, run_app
-from aiohttp import log 
-from aiohttp.errors import HttpBadRequest
+from aiohttp import log, ClientSession, TCPConnector  
+from aiohttp.errors import HttpBadRequest, ClientOSError
 
 import config
 from timeUtil import unixTimeToUTC, elapsedTime
+
+async def http_get(app, url):
+    print("http_get:", url)
+    client = app['client']
+    rsp_json = None
+    try:
+        async with client.get(url) as rsp:
+            print("head response status:", rsp.status)
+            rsp_json = await rsp.json()
+            print("got response: ", rsp_json)
+    except ClientOSError:
+        print("unable to connect with", url)
+    return rsp_json
  
 
-async def healthCheck():
+async def healthCheck(app):
+    nodes =  app["nodes"]
     while True:
-        #print("health check")
-        await  asyncio.sleep(5)
+        print("health check " + unixTimeToUTC(int(time.time())))
+        for node in nodes:
+            
+            if node["host"] is None:
+                continue
+            url = "http://{}:{}".format(node["host"], node["port"])
+            print("health check for: ", url)
+            rsp_json = await http_get(app, url)
+            if rsp_json is None:
+                # node has gone away?
+                print("removing {}:{} from active list".format(node["host"], node["port"]))
+                node["host"] = None
+                if app["cluster_state"] == "READY":
+                    # go back to INITIALIZING state until another node is registered
+                    app["cluster_state"] = "INITIALIZING"
+            else:
+                # mark the last time we got a response from this node
+                node["healthcheck"] = unixTimeToUTC(int(time.time()))
+            
+            
+
+        sleep_secs = config.get("head_sleep_time")
+        await  asyncio.sleep(sleep_secs)
 
 async def info(request):
     print("info") 
@@ -36,9 +71,9 @@ async def info(request):
     answer['up_time'] = elapsedTime(app['start_time'])
     answer['cluster_state'] = app['cluster_state']     
     answer['target_sn_count'] = getTargetNodeCount(app, "sn") 
-    answer['active_sn_count'] = getActiveNodeCount(app, "dn")
-    answer['target_dn_count'] = getTargetNodeCount(app, "sn") 
-    answer['active_dn_count'] = getActiveNodeCount(app, "sn")
+    answer['active_sn_count'] = getActiveNodeCount(app, "sn")
+    answer['target_dn_count'] = getTargetNodeCount(app, "dn") 
+    answer['active_dn_count'] = getActiveNodeCount(app, "dn")
 
     answer = json.dumps(answer)
     answer = answer.encode('utf8')
@@ -50,11 +85,13 @@ async def info(request):
 
 async def register(request):
     print("register")   
-    
+    print("request method:", request.method)
     app = request.app
-
-    body = await request.json()
-    print(body)
+    text = await request.text()
+    print("got text:", text)
+    # body = await request.json()
+    body = json.loads(text)
+    print("body:", body)
     if 'id' not in body:
         print("missing id")
         raise HttpBadRequest(message="missing key 'id'")
@@ -82,9 +119,11 @@ async def register(request):
         for node in nodes:
             if node['host'] is None and node['node_type'] == body['node_type']:
                 # found a free node
+                print("got free node:", node)
                 node['host'] = host
                 node['port'] = body["port"]
                 node['id'] =   body["id"]
+                node["connected"] = unixTimeToUTC(int(time.time()))
                 ret_node = node
                 node_ids[body["id"]] = ret_node
                 break
@@ -113,9 +152,13 @@ async def register(request):
     return resp
 
 async def nodestate(request):
-    print("nodestat") 
+    
     node_type = request.match_info.get('nodetype', '*')
-    print("node_type:", node_type)
+    node_number = '*'
+    if node_type is not '*':
+        node_number = request.match_info.get('nodenumber', '*')
+        
+    print("nodestate/{}/{}".format(node_type, node_number))
     if node_type not in ("sn", "dn", "*"):
         print("bad nodetype")
         raise HttpBadRequest(message="Invalid nodetype")
@@ -123,12 +166,19 @@ async def nodestate(request):
     app = request.app
     resp = StreamResponse()
     resp.headers['Content-Type'] = 'application/json'
-    nodes = []
-    for node in app["nodes"]:
-        if node["node_type"] == node_type or node_type == "*":
-            nodes.append(node)
-
-    answer = {"nodes": nodes }
+    
+    if node_number == '*':
+        nodes = []
+        for node in app["nodes"]:
+            if node["node_type"] == node_type or node_type == "*":
+                nodes.append(node)
+        answer = {"nodes": nodes }
+    else:
+         answer = {}
+         for node in app["nodes"]:
+            if node["node_type"] == node_type and str(node["node_number"]) == node_number:
+                answer = node
+                break
     
     answer = json.dumps(answer)
     answer = answer.encode('utf8')
@@ -180,7 +230,7 @@ async def init(loop):
             node = {"node_number": i,
                 "node_type": node_type,
                 "host": None,
-                "port": None }
+                "port": None}
             nodes.append(node)
     app["nodes"] = nodes
     app["node_ids"] = {}  # dictionary to look up node by id
@@ -193,18 +243,32 @@ async def init(loop):
     app.router.add_get('/', info)
     app.router.add_get('/nodestate', nodestate)
     app.router.add_get('/nodestate/{nodetype}', nodestate)
+    app.router.add_get('/nodestate/{nodetype}/{nodenumber}', nodestate)
     app.router.add_get('/info', info)
     app.router.add_post('/register', register)
     
     return app
 
+#
+# Main
+#
 
-loop = asyncio.get_event_loop()
-app = loop.run_until_complete(init(loop))
+if __name__ == '__main__':
+    loop = asyncio.get_event_loop()
+
+    # create a client Session here so that all client requests 
+    #   will share the same connection pool
+    max_tcp_connections = int(config.get("max_tcp_connections"))
+    client = ClientSession(loop=loop, connector=TCPConnector(limit=max_tcp_connections))
+
+    app = loop.run_until_complete(init(loop))
+    app['client'] = client
+
+    print("app keys:", list(app.keys()))
  
-print("is coroutine:", asyncio.iscoroutine(healthCheck()))
-asyncio.ensure_future(healthCheck(), loop=loop)
+    #print("is coroutine:", asyncio.iscoroutine(healthCheck(app)))
+    asyncio.ensure_future(healthCheck(app), loop=loop)
 
-print("port: ", config.get("head_port"))
-#handler = app.make_handler(access_log=log.access_logger, logger=log.server_logger)
-run_app(app, port=config.get("head_port"))
+    print("port: ", config.get("head_port"))
+    #handler = app.make_handler(access_log=log.access_logger, logger=log.server_logger)
+    run_app(app, port=config.get("head_port"))

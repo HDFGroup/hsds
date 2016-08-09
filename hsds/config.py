@@ -17,13 +17,19 @@ cfg = {
     'aws_secret_access_key': 'xxx',    
     'aws_region': 'us-east-1',
     'bucket_name': 'hdfgroup.hsdsdev',
+    'head_host': 'localhost',
     'head_port': 5050,
+    'dn_host': 'localhost',
     'dn_port' : 6050,
+    'sn_host': 'localhost',
     'sn_port': 7050,
     'target_sn_count': 4,
     'target_dn_count': 4,
     'log_file': 'head.log',
-    'log_level': 'INFO'   # ERROR, WARNING, INFO, DEBUG, or NOTSET,
+    'log_level': 'INFO',   # ERROR, WARNING, INFO, DEBUG, or NOTSET,
+    'max_tcp_connections': 16,
+    'head_sleep_time': 10,
+    'node_sleep_time': 10
      
 }
    
