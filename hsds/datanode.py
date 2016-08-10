@@ -18,6 +18,9 @@ from hsdsUtil import http_get, isOK, http_post
 
 
 async def register(app):
+    """ register node with headnode
+    OK to call idempotetently (e.g. if the headnode seems to have forgetten us)"""
+
     print("register...")
     req_reg = app["head_url"] + "/register"
     print("req:", req_reg)
@@ -32,8 +35,9 @@ async def register(app):
 
 
 async def healthCheck(app):
+    """ Periodic method that either registers with headnode (if state in INITIALIZING) or 
+    calls headnode to verify vitals about this node (otherwise)"""
     while True:
-        
         if app["node_state"] == "INITIALIZING":
             print("register")
             await register(app)
@@ -50,6 +54,7 @@ async def healthCheck(app):
         await asyncio.sleep(sleep_secs)
  
 async def info(request):
+    """HTTP Method to retun node state to caller"""
     print("info") 
     app = request.app
     resp = StreamResponse()
@@ -72,7 +77,7 @@ async def info(request):
 
 
 async def init(loop):
-    
+    """Intitialize application and return app object"""
     app = Application(loop=loop)
 
     # set a bunch of global state 
@@ -84,7 +89,6 @@ async def init(loop):
 
     app["head_url"] = "http://{}:{}".format(config.get("head_host"), config.get("head_port"))
     
-
     #initLogger('aiohtp.server')
     #log = initLogger('head_node')
     #log.info("log init")

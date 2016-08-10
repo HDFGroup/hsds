@@ -16,6 +16,9 @@ from hsdsUtil import http_get
 
 
 async def healthCheck(app):
+    """ Periodic method that pings each active node and verifies it is still healthy.  
+    If node doesn't respond, free up the node slot (the node can re-register if it comes back)'"""
+
     nodes =  app["nodes"]
     while True:
         print("health check " + unixTimeToUTC(int(time.time())))
@@ -43,6 +46,7 @@ async def healthCheck(app):
         await  asyncio.sleep(sleep_secs)
 
 async def info(request):
+    """HTTP Method to retun node state to caller"""
     print("info") 
     app = request.app
     resp = StreamResponse()
@@ -67,6 +71,7 @@ async def info(request):
     return resp
 
 async def register(request):
+    """ HTTP method for nodes to register with head node"""
     print("register")   
     print("request method:", request.method)
     app = request.app
@@ -135,7 +140,7 @@ async def register(request):
     return resp
 
 async def nodestate(request):
-    
+    """HTTP method to return information about registed nodes"""
     node_type = request.match_info.get('nodetype', '*')
     node_number = '*'
     if node_type is not '*':
@@ -195,7 +200,7 @@ def getInactiveNodeCount(app):
 
 
 async def init(loop):
-    
+    """Intitialize application and return app object"""
     app = Application(loop=loop)
 
     # set a bunch of global state 
