@@ -12,20 +12,8 @@ from aiohttp.errors import HttpBadRequest, ClientOSError
 
 import config
 from timeUtil import unixTimeToUTC, elapsedTime
+from hsdsUtil import http_get
 
-async def http_get(app, url):
-    print("http_get:", url)
-    client = app['client']
-    rsp_json = None
-    try:
-        async with client.get(url) as rsp:
-            print("head response status:", rsp.status)
-            rsp_json = await rsp.json()
-            print("got response: ", rsp_json)
-    except ClientOSError:
-        print("unable to connect with", url)
-    return rsp_json
- 
 
 async def healthCheck(app):
     nodes =  app["nodes"]
