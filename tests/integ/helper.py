@@ -28,6 +28,7 @@ def getActiveNodeCount():
     req = getEndpoint("head") + "/info"
     rsp = requests.get(req)   
     rsp_json = json.loads(rsp.text)
+    print("rsp_json", rsp_json)
     sn_count = rsp_json["active_sn_count"]
     dn_count = rsp_json["active_dn_count"]
     return sn_count, dn_count

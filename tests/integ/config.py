@@ -14,7 +14,7 @@ import sys
 
 cfg = {
     'head_host': '127.0.0.1',
-    'head_port': 6000
+    'head_port': 5100
 }
    
 def get(x):     

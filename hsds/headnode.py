@@ -2,14 +2,9 @@
 # Head node of hsds cluster
 # 
 import asyncio
-
-import textwrap
 import uuid
 import json
 import time
-import logging
-import logging.handlers
-import sys
 
 from aiohttp.web import Application, Response, StreamResponse, run_app
 from aiohttp import log, ClientSession, TCPConnector  
