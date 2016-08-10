@@ -1,5 +1,5 @@
 #
-# data node of hsds cluster
+# service node of hsds cluster
 # 
 import asyncio
 import uuid
@@ -20,7 +20,7 @@ from basenode import register, healthCheck, info, baseInit
 
 async def init(loop):
     """Intitialize application and return app object"""
-    app = baseInit(loop, 'dn')
+    app = baseInit(loop, 'sn')
 
     #
     # call app.router.add_get() here to add node-specific routes
@@ -49,4 +49,4 @@ if __name__ == '__main__':
     asyncio.ensure_future(healthCheck(app), loop=loop)
    
     # run the app
-    run_app(app, port=config.get("dn_port"))
+    run_app(app, port=config.get("sn_port"))

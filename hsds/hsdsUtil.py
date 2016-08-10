@@ -4,7 +4,11 @@
 import json
 from aiohttp.errors import  ClientOSError
 
-
+def isOK(http_response):
+    if http_response < 300:
+        return True
+    return False
+    
 async def http_get(app, url):
     print("http_get:", url)
     client = app['client']
