@@ -2,7 +2,7 @@
 
  
 if [ $# -eq 0 ] || [ $1 == "-h" ] || [ $1 == "--help" ]; then
-   echo "Usage: run.sh [head|dn|sn|stop|clean] [count]"
+   echo "Usage: run.sh [head|dn|sn|stopdn|stopsn|clean] [count]"
    exit 1
 fi
 
@@ -19,7 +19,6 @@ NODE_TYPE="head_node"
 HEAD_PORT=5100
 DN_PORT=5101
 SN_PORT=5102
-
 
 #
 # run container given in arguments
@@ -49,15 +48,27 @@ elif [ $1 == "dn" ]; then
     done
 elif [ $1 == "sn" ]; then
   echo "run sn"
-  docker run -d -p ${SN_PORT}:${SN_PORT} --name hsds_sn \
-  --env SN_PORT=${SN_PORT} \
-  --env NODE_TYPE="sn"  \
-  hdfgroup/hsds    
-elif [ $1 == "stop" ]; then
+  for i in $(seq 1 $count);
+    do    
+      NAME="hsds_sn_"$(($i-1))
+      docker run -d -p ${SN_PORT}:${SN_PORT} --name $NAME \
+        --env SN_PORT=${SN_PORT} \
+        --env HEAD_HOST="hsds_head" \
+        --env HEAD_PORT=${HEAD_PORT} \
+        --env NODE_TYPE="sn"  \
+        --link hsds_head:hsds_head \
+        hdfgroup/hsds
+      SN_PORT=$(($SN_PORT+2))
+    done    
+elif [ $1 == "stopdn" ]; then
    for i in $(seq 1 $count);
      do    
         DN_NAME="hsds_dn_"$(($i-1))   
         docker stop $DN_NAME
+     done
+elif [ $1 == "stopsn" ]; then
+   for i in $(seq 1 $count);
+     do    
         SN_NAME="hsds_sn_"$(($i-1))
         docker stop $SN_NAME
      done
