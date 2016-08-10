@@ -18,11 +18,11 @@ cfg = {
     'aws_region': 'us-east-1',
     'bucket_name': 'hdfgroup.hsdsdev',
     'head_host': 'localhost',
-    'head_port': 6000,
+    'head_port': 5100,
     'dn_host': 'localhost',
-    'dn_port' : 6001,  # run multiple dn nodes on odd ports
+    'dn_port' : 5101,  # run multiple dn nodes on odd ports
     'sn_host': 'localhost',
-    'sn_port': 6002,   # run multipe sn nodes on even ports
+    'sn_port': 5102,   # run multipe sn nodes on even ports
     'target_sn_count': 4,
     'target_dn_count': 4,
     'log_file': 'head.log',
