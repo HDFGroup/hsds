@@ -1,16 +1,20 @@
 #!/usr/bin/env python
 
-import sys, os, re
+#
+# A rudimentry script to probe two test datasets...
+#
+
 import urllib2, urllib
-import datetime
 import Queue
 import threading
 import logging
 import json
 import numpy
 
-GDDP_INVENTORY = 'https://s3-us-west-2.amazonaws.com/nasanex/NEX-GDDP/nex-gddp-s3-files.json'
-NTRHS = 4
+INVENTORIES = ('https://s3-us-west-2.amazonaws.com/nasanex/NEX-GDDP/nex-gddp-s3-files.json',)
+#INVENTORIES = ('https://s3-us-west-2.amazonaws.com/nasanex/NEX-GDDP/nex-gddp-s3-files.json', \
+#            'https://s3-us-west-2.amazonaws.com/nasanex/NEX-DCP/nex-dcp30-s3-files.json')
+NTRHS = 6
 JSN = None
 
 #---------------------------------------------------------------------------------
@@ -37,6 +41,26 @@ def get_gddp_sets(jdata):
    exprs = set( [jdata[k]['experiment_id'] for k in jdata.keys()] )
    vrs = set( [jdata[k]['variable'] for k in jdata.keys()] )
    return models, exprs, vrs 
+
+#---------------------------------------------------------------------------------
+def get_remote_info_json(jfname):
+   try:
+      logging.info('loading example '+jfname)
+      rfo = urllib.urlopen(jfname)
+      di = json.loads(rfo.read())
+      nat, glbs = 0, 0
+      for k,v in di.items():
+        if k != 'dimensions' or k != 'variables':
+            glbs +=1 
+      for k,v in di['variables'].items():
+         for a in v: nat += 1  
+      dims = [ l for k, v in di['dimensions'].items() for d, l in v.items() if d == 'length' ]
+      return { 'num global' : glbs, 'num vars' : len(di['variables'].keys()), 'num dims' : \
+               len(di['dimensions'].keys()), 'ave attrs per var' : nat / len(di['variables'].keys()), \
+               'dims sizes' : dims }
+   except Exception, e:
+      logging.warn("WARN get_remote_info_json on %s failed : %s" % (jfname, str(e)))
+      return None
 
 #---------------------------------------------------------------------------------
 def get_remote_size(rfname):
@@ -71,7 +95,8 @@ def get_sizes():
          logging.info(str(thrd.ident)+' :' +str(itm))
          val = get_remote_size(itm)
          if val != None: JSN[itm]['objsize'] = val
-   except Queue.Empty, e: 
+         queue.task_done()
+   except Queue.Empty: 
       pass
    logging.info('thread '+str(thrd.ident)+' done...') 
 #get_sizes
@@ -105,30 +130,35 @@ def set_stat(jsn, items, selectfunc, hiswdth=64, lab='histogram'):
 #set_stat
 
 #---------------------------------------------------------------------------------
-def summarize_size(jsn):
-   mstats, vrstats, exstats = [None]*3
+def summarize_size(jsn, n):
    models, exprs, vrs = get_gddp_sets(jsn)
    logging.info('building stats for models ...')
-   mstats = set_stat(jsn, models, select_gddp_model, lab='models')
+   set_stat(jsn, models, select_gddp_model, lab='models')
    logging.info('building stats for experiments ...')
-   exstats = set_stat(jsn, exprs, select_gddp_experiment, lab='scenarios')
+   set_stat(jsn, exprs, select_gddp_experiment, lab='scenarios')
    logging.info('building stats for variables ...')
-   vrstats = set_stat(jsn, vrs, select_gddp_var, lab='variables')
+   set_stat(jsn, vrs, select_gddp_var, lab='variables')
+   print 'Number of files: ', n
 #summarize_size
 
 #---------------------------------------------------------------------------------
 if __name__ == '__main__':
    logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
-   thrds = []
-   queue, JSN = queue_list( GDDP_INVENTORY )
-   for i in range(NTRHS):
-      t = threading.Thread(target=get_sizes)
-      t.daemon = False
-      t.start()
-      thrds.append(t)
-   for t in thrds: 
-      t.join()
-
-   summarize_size(JSN)
+   for inv in INVENTORIES:
+      thrds = []
+      queue, JSN = queue_list( inv )
+      eginfo = get_remote_info_json( JSN.iterkeys().next()[:-2]+'json') 
+      nfiles = queue.qsize()
+      for i in range(NTRHS):
+         t = threading.Thread(target=get_sizes)
+         t.daemon = False
+         t.start()
+         thrds.append(t)
+      for t in thrds: 
+         t.join()
+   
+      summarize_size(JSN, nfiles)
+      for k, v, in eginfo.items(): 
+         print k, '=', v
 #__main__
 
