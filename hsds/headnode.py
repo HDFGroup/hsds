@@ -9,19 +9,62 @@ import time
 from aiohttp.web import Application, Response, StreamResponse, run_app
 from aiohttp import log, ClientSession, TCPConnector  
 from aiohttp.errors import HttpBadRequest, ClientOSError
+import aiobotocore
 
 import config
 from timeUtil import unixTimeToUTC, elapsedTime
-from hsdsUtil import http_get
+from hsdsUtil import http_get, getRootTocUuid, getS3Key, getHeadNodeS3Key, getS3JSONObj, putS3JSONObj, isS3Obj
 
-
+ 
 async def healthCheck(app):
     """ Periodic method that pings each active node and verifies it is still healthy.  
     If node doesn't respond, free up the node slot (the node can re-register if it comes back)'"""
 
+    app["last_health_check"] = int(time.time())
+
+    # update/initialize root object before starting node updates
+    bucket_name = app['bucket_name']
+    headnode_key = getHeadNodeS3Key()
+    print("headnode key", headnode_key)
+    headnode_obj_found = await isS3Obj(app, headnode_key)
+    rsp = None
+    if not headnode_obj_found:
+        # first time hsds has run with this bucket name?
+        print("need to create headnode obj")
+        head_state = {  }
+        head_state["created"] = int(time.time())
+        head_state["id"] = app["id"]
+        head_state["last_health_check"] = app["last_health_check"]
+        rsp = await putS3JSONObj(app, headnode_key, head_state)
+
+
     nodes =  app["nodes"]
     while True:
-        print("health check " + unixTimeToUTC(int(time.time())))
+        # sleep for a bit
+        sleep_secs = config.get("head_sleep_time")
+        await  asyncio.sleep(sleep_secs)
+
+        now = int(time.time())
+        print("health check " + unixTimeToUTC(now))
+        
+
+        head_state = await getS3JSONObj(app, headnode_key)
+        print("head_state:", head_state)
+        print("elapsed time since last health check: {}".format(elapsedTime(head_state["last_health_check"])))
+        if head_state['id'] != app['id']:
+            print("mis-match bucket head id: {}".format(head_state["id"]))
+            if now - head_state["last_health_check"] < sleep_secs * 4:
+                print("other headnode is active")
+                continue  # skip node checks and loop around again
+            else:
+                print("other headnode is not active, making this headnode leader")
+                head_state['id'] = app['id']
+        else:
+            print("head_state id matches S3 Object")
+
+        head_state["last_health_check"] = now
+        rsp = await putS3JSONObj(app, headnode_key, head_state)
+        
         for node in nodes:
             
             if node["host"] is None:
@@ -41,9 +84,9 @@ async def healthCheck(app):
                 node["healthcheck"] = unixTimeToUTC(int(time.time()))
             
             
-
-        sleep_secs = config.get("head_sleep_time")
-        await  asyncio.sleep(sleep_secs)
+        
+        
+        
 
 async def info(request):
     """HTTP Method to retun node state to caller"""
@@ -55,8 +98,10 @@ async def info(request):
     # copy relevant entries from state dictionary to response
     answer['id'] = request.app['id']
     answer['start_time'] = unixTimeToUTC(app['start_time'])
+    answer['last_health_check'] = unixTimeToUTC(app['last_health_check'])
     answer['up_time'] = elapsedTime(app['start_time'])
-    answer['cluster_state'] = app['cluster_state']     
+    answer['cluster_state'] = app['cluster_state']  
+    answer['bucket_name'] = app['bucket_name']   
     answer['target_sn_count'] = getTargetNodeCount(app, "sn") 
     answer['active_sn_count'] = getActiveNodeCount(app, "sn")
     answer['target_dn_count'] = getTargetNodeCount(app, "dn") 
@@ -206,10 +251,10 @@ async def init(loop):
     # set a bunch of global state 
     app["id"] = str(uuid.uuid1())
     app["cluster_state"] = "INITIALIZING"
-    app["start_time"] = int(time.time())  # seconds after epoch
-     
+    app["start_time"] = int(time.time())  # seconds after epoch 
     app["target_sn_count"] = int(config.get("target_sn_count"))
     app["target_dn_count"] = int(config.get("target_dn_count"))
+    app["bucket_name"] = config.get("bucket_name")
     
     nodes = []
     for node_type in ("dn", "sn"):
@@ -249,8 +294,24 @@ if __name__ == '__main__':
     max_tcp_connections = int(config.get("max_tcp_connections"))
     client = ClientSession(loop=loop, connector=TCPConnector(limit=max_tcp_connections))
 
+
+    # get connection to S3
+    # app["bucket_name"] = config.get("bucket_name")
+    aws_region = config.get("aws_region")
+    aws_secret_access_key = config.get("aws_secret_access_key")
+    print("aws_secret_access_key:", aws_secret_access_key)
+    aws_access_key_id = config.get("aws_access_key_id")
+    print("aws_access_key:_id", aws_access_key_id)
+
+    session = aiobotocore.get_session(loop=loop)
+    aws_client = session.create_client('s3', region_name=aws_region,
+                                   aws_secret_access_key=aws_secret_access_key,
+                                   aws_access_key_id=aws_access_key_id)
+    
+
     app = loop.run_until_complete(init(loop))
     app['client'] = client
+    app['s3'] = aws_client
 
     print("app keys:", list(app.keys()))
  
