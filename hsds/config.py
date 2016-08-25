@@ -29,8 +29,7 @@ cfg = {
     'log_level': 'INFO',   # ERROR, WARNING, INFO, DEBUG, or NOTSET,
     'max_tcp_connections': 16,
     'head_sleep_time': 10,
-    'node_sleep_time': 10
-     
+    'node_sleep_time': 10     
 }
    
 def get(x): 
