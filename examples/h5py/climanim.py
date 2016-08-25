@@ -80,17 +80,13 @@ def make_vid(tempdir):
     if fls and len(fls) == 0: 
         logging.warn("no png\'s found")
     obase = os.path.normpath(os.path.join(tempdir, '..')) 
-    txt = os.path.join(obase, 'list.txt')
     vf = os.path.join(obase, 'mov.mp4')
-    ftmp = open(txt, "w") 
-    for f in fls:
-        print >>ftmp, "file", f
-    ftmp.close()
-    cmd = [ 'ffmpeg', '-r', '3', '-i', txt, '-c:v', 'libx264', '-vframes', \
-            str(len(fls)), '-preset', 'slower', '-pix_fmt', 'yuv420p', \
-            '-x264opts', 'rc_lookahead=80:crf=20', vf ]
+    pngs = os.path.join(tempdir, '*.png')
+    cmd = ['ffmpeg', '-r', '3', '-pattern_type', 'glob', '-i', pngs, '-codec', 'libx264', \
+           '-preset', 'slower', '-pix_fmt', 'yuv420p',  vf]
     logging.info(str(cmd))
-    #subprocess.call(" ".join(cmd), shell=True)
+    print " ".join(cmd)
+    #subprocess.call(cmd, shell=True) #" ".join(cmd)) #, shell=True)
 #make_vid
 
 def proc_files(flist, vname):
@@ -114,16 +110,18 @@ def proc_files(flist, vname):
                 h5_file_2_imgs(fout.name, vname, tdir) 
                 os.unlink(fout.name)
         make_vid(tdir)
-        os. removedirs(tdir)
+        os.removedirs(tdir)
     except (OSError, KeyboardInterrupt), e:
         logging.warn(str(e))
 #h5_files_2_imgs
 
 if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
+    make_vid('/media/ephemeral0/tmp/h52img-jEPxI2')
+    sys.exit()
     if len(sys.argv) != 1:
         logging.error('climanim.py - pipe in a list of files to make an' + \
-                      'animation, e.g. cat flist.txt | ./gddpanim.py'+\
+                      'animation, e.g. cat flist.txt | ./climanim.py'+\
                       'Files in the list should be an appropriate set,'+\
                       'historical+rcp85 of some variable, etc...')
         sys.exit(1)
