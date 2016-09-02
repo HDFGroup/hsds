@@ -10,16 +10,29 @@ def isOK(http_response):
         return True
     return False
 
+def getIdHash(id):
+    """  Return md5 prefix based on id value"""
+    m = hashlib.new('md5')
+    print("id:", id)
+    print("type:", type(id))
+    m.update(id.encode('utf8'))
+    hexdigest = m.hexdigest()
+    return hexdigest[:5]
+
 def getS3Key(id):
     """ Return s3 key based on uuid and class char.
     Add a md5 prefix in front of the returned key to better 
     distribute S3 objects"""
-    m = hashlib.new('md5')
-    m.update(id.encode('utf8'))
-    hexdigest = m.hexdigest()
-    key = "{}-{}".format(hexdigest[:5], id)
+    idhash = getIdHash(id)
+    key = "{}-{}".format(idhash, id)
     return key
 
+def createId(obj_type):
+    if obj_type not in ('group', 'dataset', 'namedtype', 'chunk'):
+        raise ValueError("unexpected obj_type")
+    id = obj_type[0] + '-' + str(uuid.uuid1())
+    return id
+    
 def getHeadNodeS3Key():
     return "headnode"
 
@@ -28,6 +41,28 @@ def getRootTocUuid():
     can be identified a-priori in a given bucket"""
     zero_uuid = "g-{}-{}-{}-{}-{}".format('0'*8, '0'*4, '0'*4, '0'*4, '0'*12)
     return zero_uuid
+
+def validateUuid(id):
+    if not isinstance(id, str):
+        raise ValueError("Expected string type")
+    if len(id) != 38:  
+        # id should be prefix (e.g. "g-") and uuid value
+        raise ValueError("Unexpected id length")
+    if id[0] not in ('g', 'd', 't', 'c'):
+        raise ValueError("Unexpected prefix")
+    if id[1] != '-':
+        raise ValueError("Unexpected prefix")
+
+def getUuidFromId(id):
+    return id[2:]
+
+def getS3Partition(id, count):
+    hash_code = getIdHash(id)
+    hash_value = int(hash_code, 16)
+    number = hash_value % count
+    return number
+        
+    
 
 async def getS3JSONObj(app, id):
     key = getS3Key(id)
