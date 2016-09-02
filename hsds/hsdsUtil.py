@@ -13,8 +13,6 @@ def isOK(http_response):
 def getIdHash(id):
     """  Return md5 prefix based on id value"""
     m = hashlib.new('md5')
-    print("id:", id)
-    print("type:", type(id))
     m.update(id.encode('utf8'))
     hexdigest = m.hexdigest()
     return hexdigest[:5]
@@ -61,8 +59,6 @@ def getS3Partition(id, count):
     hash_value = int(hash_code, 16)
     number = hash_value % count
     return number
-        
-    
 
 async def getS3JSONObj(app, id):
     key = getS3Key(id)
@@ -84,8 +80,6 @@ async def putS3JSONObj(app, id, json_obj):
     data = data.encode('utf8')
     resp = await client.put_object(Bucket=bucket, Key=key, Body=data)
     
-     
-
 async def isS3Obj(app, id):
     key = getS3Key(id)
     print("isS3Obj({})".format(key))

@@ -47,7 +47,6 @@ async def healthCheck(app):
         now = int(time.time())
         print("health check " + unixTimeToUTC(now))
         
-
         head_state = await getS3JSONObj(app, headnode_key)
         print("head_state:", head_state)
         print("elapsed time since last health check: {}".format(elapsedTime(head_state["last_health_check"])))
@@ -83,9 +82,6 @@ async def healthCheck(app):
                 # mark the last time we got a response from this node
                 node["healthcheck"] = unixTimeToUTC(int(time.time()))
             
-            
-        
-        
         
 
 async def info(request):

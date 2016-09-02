@@ -28,6 +28,7 @@ async def getGroup(request):
         # The request shouldn't have come to this node'
         raise HttpBadRequest(message="wrong node for 'id':{}".format(group_id))
 
+
     meta_cache = app['meta_cache'] 
     group_json = None 
     if group_id in meta_cache:
@@ -46,8 +47,8 @@ async def getGroup(request):
             # not a S3 Key
             if group_id == getRootTocUuid():
                 print("TOC group uuid not found, initializing TOC Root for this bucket")
-                now = time.time()
-                group_json = {"id": group_id, "created": now, "lastModified": now, "links": [], "attributes": [] }
+                now = int(time.time())
+                group_json = {"id": group_id, "root": group_id, "created": now, "lastModified": now, "links": [], "attributes": [] }
                 await putS3JSONObj(app, group_id, group_json)  # write to S3
             else:
                 msg = "{} not found".format(group_id)
@@ -70,6 +71,44 @@ async def getGroup(request):
     return resp
 
 
+async def createGroup(request):
+    """ Hander for POST /groups"""
+    print("createGroup")
+    data = await request.post()
+    root_id = None
+    if data is not None:
+        if "root" in data:
+            root_id = data["root"]
+            if not root_id.startswith("g-"):
+                msg = "Bad createGroup request, malformed root id"
+                print("Client Error: " + msg)
+                raise HttpBadRequest(message=msg)
+            is_obj = await isS3Obj(app, root_id)
+            if not is_obj:
+                msg = "Bad createGroup request, root id does not exist"
+                print("Client Error: " + msg)
+                raise HttpBadRequest(message=msg)
+
+    group_id = "g-" + str(uuid.uuid1())
+    now = int(time.time())
+    print("root_id:", root_id)
+    if root_id is None:
+        # no root_id passed, so treat this group as a root group
+        root_id = group_id
+    group_json = {"id": group_id, "root": root_id, "created": now, "lastModified": now, "links": [], "attributes": [] }
+    await putS3JSONObj(app, group_id, group_json)  # write to S3
+
+    resp = StreamResponse()
+    resp.headers['Content-Type'] = 'application/json'
+    answer = json.dumps(group_json)
+    answer = answer.encode('utf8')
+    resp.set_status(201)
+    resp.content_length = len(answer)
+    await resp.prepare(request)
+    resp.write(answer)
+    await resp.write_eof()
+    return resp
+               
 
 async def init(loop):
     """Intitialize application and return app object"""
@@ -78,7 +117,8 @@ async def init(loop):
     #
     # call app.router.add_get() here to add node-specific routes
     #
-    app.router.add_get('/groups/{id}', getGroup)
+    app.router.add_route('GET', '/groups/{id}', getGroup)
+    app.router.add_route('POST', '/groups', createGroup)
       
     return app
 
