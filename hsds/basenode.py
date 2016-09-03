@@ -15,50 +15,54 @@ import aiobotocore
 
 import config
 from timeUtil import unixTimeToUTC, elapsedTime
-from hsdsUtil import http_get, isOK, http_post
+from hsdsUtil import http_get, isOK, http_post, jsonResponse
+import hsds_logger as log
 
 
 async def register(app):
     """ register node with headnode
-    OK to call idempotetently (e.g. if the headnode seems to have forgetten us)"""
+    OK to call idempotently (e.g. if the headnode seems to have forgotten us)"""
 
-    print("register...")
     req_reg = app["head_url"] + "/register"
-    print("req:", req_reg)
+    log.info("register: {}".format(req_reg))
+   
     body = {"id": app["id"], "port": app["node_port"], "node_type": app["node_type"]}
     try:
+        log.info("register req: {} body: {}".format(req_reg, body))
         rsp_json = await http_post(app, req_reg, body)
-        print("register response:", rsp_json)
+        log.info("register response: {}".format(rsp_json))
         if rsp_json is not None:
+            log.info("register response: {}".format(rsp_json))
             app["node_number"] = rsp_json["node_number"]
             app["node_count"] = rsp_json["node_count"]
+            log.info("setting node_state to READY")
             app["node_state"] = "READY"
     except OSError:
-        print("failed to register")
+        log.error("failed to register")
 
 
 async def healthCheck(app):
     """ Periodic method that either registers with headnode (if state in INITIALIZING) or 
     calls headnode to verify vitals about this node (otherwise)"""
+    log.info("health check start")
+    sleep_secs = config.get("node_sleep_time")
     while True:
         if app["node_state"] == "INITIALIZING":
-            print("register")
             await register(app)
         else:
-            print("health check")
             # check in with the head node and make sure we are still active
             req_node = "{}/nodestate/{}/{}".format(app["head_url"], app["node_type"], app["node_number"])
-            print("node check url:", req_node)
+            log.info("health check req {}".format(req_node))
             rsp_json = await http_get(app, req_node)
             if rsp_json is None or "host" not in rsp_json or rsp_json["host"] is None or rsp_json["id"] != app["id"]:
-                print("reregister node")
-                await register(app)
-        sleep_secs = config.get("node_sleep_time")
+                log.warn("reregister node")
+                await register(app)     
+        log.info("health check sleep: {}".format(sleep_secs))
         await asyncio.sleep(sleep_secs)
  
 async def info(request):
     """HTTP Method to retun node state to caller"""
-    print("info") 
+    log.request(request)
     app = request.app
     resp = StreamResponse()
     resp.headers['Content-Type'] = 'application/json'
@@ -72,18 +76,14 @@ async def info(request):
     answer['node_number'] = app['node_number']
     answer['node_count'] = app['node_count']
         
-     
-    answer = json.dumps(answer)
-    answer = answer.encode('utf8')
-    resp.content_length = len(answer)
-    await resp.prepare(request)
-    resp.write(answer)
-    await resp.write_eof()
+    resp = await jsonResponse(request, answer) 
+    log.response(request, resp=resp)
     return resp
 
 
 def baseInit(loop, node_type):
     """Intitialize application and return app object"""
+    log.info("Application baseInit")
     app = Application(loop=loop)
 
     # set a bunch of global state 
@@ -106,9 +106,7 @@ def baseInit(loop, node_type):
     # app["bucket_name"] = config.get("bucket_name")
     aws_region = config.get("aws_region")
     aws_secret_access_key = config.get("aws_secret_access_key")
-    print("aws_secret_access_key:", aws_secret_access_key)
     aws_access_key_id = config.get("aws_access_key_id")
-    print("aws_access_key:_id", aws_access_key_id)
 
     session = aiobotocore.get_session(loop=loop)
     aws_client = session.create_client('s3', region_name=aws_region,
@@ -116,11 +114,6 @@ def baseInit(loop, node_type):
                                    aws_access_key_id=aws_access_key_id)
     app['client'] = client
     app['s3'] = aws_client
-
-    
-    #initLogger('aiohtp.server')
-    #log = initLogger('head_node')
-    #log.info("log init")
 
     app.router.add_get('/', info)
     app.router.add_get('/info', info)

@@ -3,7 +3,9 @@
 # 
 import json
 import hashlib
+from aiohttp.web import StreamResponse
 from aiohttp.errors import  ClientOSError
+import hsds_logger as log
 
 def isOK(http_response):
     if http_response < 300:
@@ -62,7 +64,7 @@ def getS3Partition(id, count):
 
 async def getS3JSONObj(app, id):
     key = getS3Key(id)
-    print("getS3JSONObj({})".format(key))
+    log.info("getS3JSONObj({})".format(key))
     client = app['s3']
     bucket = app['bucket_name']
     resp = await client.get_object(Bucket=bucket, Key=key)
@@ -73,7 +75,7 @@ async def getS3JSONObj(app, id):
 
 async def putS3JSONObj(app, id, json_obj):
     key = getS3Key(id)
-    print("putS3JSONObj({})".format(key))
+    log.info("putS3JSONObj({})".format(key))
     client = app['s3']
     bucket = app['bucket_name']
     data = json.dumps(json_obj)
@@ -82,7 +84,7 @@ async def putS3JSONObj(app, id, json_obj):
     
 async def isS3Obj(app, id):
     key = getS3Key(id)
-    print("isS3Obj({})".format(key))
+    log.info("isS3Obj({})".format(key))
     client = app['s3']
     bucket = app['bucket_name']
     resp = await client.list_objects(Bucket=bucket, MaxKeys=1, Prefix=key)
@@ -96,27 +98,34 @@ async def isS3Obj(app, id):
         return False
     
 async def http_get(app, url):
-    print("http_get('{}')".format(url))
+    log.info("http_get('{}')".format(url))
     client = app['client']
     rsp_json = None
-    try:
-        async with client.get(url) as rsp:
-            print("head response status:", rsp.status)
-            rsp_json = await rsp.json()
-            print("got response: ", rsp_json)
-    except ClientOSError:
-        print("unable to connect with", url)
+    async with client.get(url) as rsp:
+        log.info("http_get status: {}".format(rsp.status))
+        rsp_json = await rsp.json()
+        log.info("http_get({}) response: {}".format(url, rsp_json))  
     return rsp_json
 
 async def http_post(app, url, data):
-    print("http_post('{}')".format(url))
+    log.info("http_post('{}', data)".format(url, data))
     client = app['client']
     rsp_json = None
     client = app['client']
     
     async with client.post(url, data=json.dumps(data)) as rsp:
-        print("head response status:", rsp.status)
-        if isOK(rsp.status):  
-            rsp_json = await rsp.json()
-            print("got response: ", rsp_json)
+        log.info("http_post status: {}".format(rsp.status))
+        rsp_json = await rsp.json()
+        log.info("http_post({}) response: {}".format(url, rsp_json))
     return rsp_json
+
+async def jsonResponse(request, data):
+    resp = StreamResponse()
+    resp.headers['Content-Type'] = 'application/json'
+    answer = json.dumps(data)
+    answer = answer.encode('utf8')
+    resp.content_length = len(answer)
+    await resp.prepare(request)
+    resp.write(answer)
+    await resp.write_eof()
+    return resp

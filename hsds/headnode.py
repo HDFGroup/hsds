@@ -14,6 +14,7 @@ import aiobotocore
 import config
 from timeUtil import unixTimeToUTC, elapsedTime
 from hsdsUtil import http_get, getRootTocUuid, getS3Key, getHeadNodeS3Key, getS3JSONObj, putS3JSONObj, isS3Obj
+import hsds_logger as log
 
  
 async def healthCheck(app):
@@ -25,18 +26,18 @@ async def healthCheck(app):
     # update/initialize root object before starting node updates
     bucket_name = app['bucket_name']
     headnode_key = getHeadNodeS3Key()
-    print("headnode key", headnode_key)
+    log.info("headnode S3 key".format(headnode_key))
     headnode_obj_found = await isS3Obj(app, headnode_key)
     rsp = None
     if not headnode_obj_found:
         # first time hsds has run with this bucket name?
-        print("need to create headnode obj")
+        log.warn("need to create headnode obj")
         head_state = {  }
         head_state["created"] = int(time.time())
         head_state["id"] = app["id"]
         head_state["last_health_check"] = app["last_health_check"]
+        log.info("write head_state to S3: {}".format(head_state))
         rsp = await putS3JSONObj(app, headnode_key, head_state)
-
 
     nodes =  app["nodes"]
     while True:
@@ -45,48 +46,50 @@ async def healthCheck(app):
         await  asyncio.sleep(sleep_secs)
 
         now = int(time.time())
-        print("health check " + unixTimeToUTC(now))
+        log.info("health check {}".format(unixTimeToUTC(now)))
         
         head_state = await getS3JSONObj(app, headnode_key)
-        print("head_state:", head_state)
-        print("elapsed time since last health check: {}".format(elapsedTime(head_state["last_health_check"])))
+        log.info("head_state: {}".format(head_state))
+        log.info("elapsed time since last health check: {}".format(elapsedTime(head_state["last_health_check"])))
         if head_state['id'] != app['id']:
-            print("mis-match bucket head id: {}".format(head_state["id"]))
+            log.warn("mis-match bucket head id: {}".format(head_state["id"]))
             if now - head_state["last_health_check"] < sleep_secs * 4:
-                print("other headnode is active")
+                log.warn("other headnode is active")
                 continue  # skip node checks and loop around again
             else:
-                print("other headnode is not active, making this headnode leader")
+                log.warn("other headnode is not active, making this headnode leader")
                 head_state['id'] = app['id']
         else:
-            print("head_state id matches S3 Object")
+            log.info("head_state id matches S3 Object")
 
         head_state["last_health_check"] = now
+        log.info("write head_state to S3: {}".format(head_state))
         rsp = await putS3JSONObj(app, headnode_key, head_state)
         
-        for node in nodes:
-            
+        for node in nodes:         
             if node["host"] is None:
                 continue
             url = "http://{}:{}".format(node["host"], node["port"])
-            print("health check for: ", url)
-            rsp_json = await http_get(app, url)
-            if rsp_json is None:
+            log.info("health check for: ".format(url))
+            try:
+                rsp_json = await http_get(app, url)
+                log.info("get health check response: {}".format(rsp_json))
+                # mark the last time we got a response from this node
+                node["healthcheck"] = unixTimeToUTC(int(time.time()))
+            except OSError as ose:
+                log.warn("OSError: {}".format(str(ose)))
                 # node has gone away?
-                print("removing {}:{} from active list".format(node["host"], node["port"]))
+                log.warn("removing {}:{} from active list".format(node["host"], node["port"]))
                 node["host"] = None
                 if app["cluster_state"] == "READY":
                     # go back to INITIALIZING state until another node is registered
+                    log.warn("Setting cluster_state from READY to INITIALIZING")
                     app["cluster_state"] = "INITIALIZING"
-            else:
-                # mark the last time we got a response from this node
-                node["healthcheck"] = unixTimeToUTC(int(time.time()))
-            
         
 
 async def info(request):
     """HTTP Method to retun node state to caller"""
-    print("info") 
+    log.request(request) 
     app = request.app
     resp = StreamResponse()
     resp.headers['Content-Type'] = 'application/json'
@@ -113,23 +116,26 @@ async def info(request):
 
 async def register(request):
     """ HTTP method for nodes to register with head node"""
-    print("register")   
-    print("request method:", request.method)
+    log.request(request)   
     app = request.app
     text = await request.text()
-    print("got text:", text)
     # body = await request.json()
     body = json.loads(text)
-    print("body:", body)
+    log.info("body: {}".format(body))
     if 'id' not in body:
-        print("missing id")
-        raise HttpBadRequest(message="missing key 'id'")
+        msg = "Missing 'id'"
+        log.response(request, code=400, message=msg)
+        raise HttpBadRequest(message=msg)
     if 'port' not in body:
-        raise HttpBadRequest(message="missing key 'port'")
+        msg = "missing key 'port'"
+        log.response(request, code=400, message=msg)
+        raise HttpBadRequest(message=msg)
     if 'node_type' not in body:
         raise HttpBadRequest(message="missing key 'node_type'")
     if body['node_type'] not in ('sn', 'dn'):
-        raise HttpBadRequest(message="invalid node_type")
+        msg="invalid node_type"
+        log.response(request, code=400, message=msg)
+        raise HttpBadRequest(message=msg)
     
     peername = request.transport.get_extra_info('peername')
     if peername is None:
@@ -148,7 +154,7 @@ async def register(request):
         for node in nodes:
             if node['host'] is None and node['node_type'] == body['node_type']:
                 # found a free node
-                print("got free node:", node)
+                log.info("got free node: {}".format(node))
                 node['host'] = host
                 node['port'] = body["port"]
                 node['id'] =   body["id"]
@@ -160,7 +166,7 @@ async def register(request):
 
     if getInactiveNodeCount(app) == 0:
         # all the nodes have checked in
-        print("setting cluster state to ready")
+        log.info("setting cluster state to ready")
         app['cluster_state'] = "READY"
          
     resp = StreamResponse()
@@ -183,19 +189,22 @@ async def register(request):
     await resp.prepare(request)
     resp.write(answer)
     await resp.write_eof()
+    log.response(request, resp=resp)
     return resp
 
 async def nodestate(request):
     """HTTP method to return information about registed nodes"""
+    log.request(request) 
     node_type = request.match_info.get('nodetype', '*')
     node_number = '*'
     if node_type is not '*':
         node_number = request.match_info.get('nodenumber', '*')
         
-    print("nodestate/{}/{}".format(node_type, node_number))
+    log.info("nodestate/{}/{}".format(node_type, node_number))
     if node_type not in ("sn", "dn", "*"):
-        print("bad nodetype")
-        raise HttpBadRequest(message="Invalid nodetype")
+        msg="invalid node_type"
+        log.response(request, code=400, message=msg)
+        raise HttpBadRequest(message=msg)
         
     app = request.app
     resp = StreamResponse()
@@ -220,6 +229,7 @@ async def nodestate(request):
     await resp.prepare(request)
     resp.write(answer)
     await resp.write_eof()
+    log.response(request, resp=resp)
     return resp
 
 def getTargetNodeCount(app, node_type):
@@ -300,9 +310,15 @@ if __name__ == '__main__':
     # app["bucket_name"] = config.get("bucket_name")
     aws_region = config.get("aws_region")
     aws_secret_access_key = config.get("aws_secret_access_key")
-    print("aws_secret_access_key:", aws_secret_access_key)
+    if not aws_secret_access_key or aws_secret_access_key == 'xxx':
+        msg="Invalid aws secret access key"
+        log.error(msg)
+        sys.exit(msg)
     aws_access_key_id = config.get("aws_access_key_id")
-    print("aws_access_key:_id", aws_access_key_id)
+    if not aws_access_key_id or aws_access_key_id == 'xxx':
+        msg="Invalid aws access key"
+        log.error(msg)
+        sys.exit(msg)
 
     session = aiobotocore.get_session(loop=loop)
     aws_client = session.create_client('s3', region_name=aws_region,
@@ -313,12 +329,8 @@ if __name__ == '__main__':
     app = loop.run_until_complete(init(loop))
     app['client'] = client
     app['s3'] = aws_client
-
-    print("app keys:", list(app.keys()))
- 
-    #print("is coroutine:", asyncio.iscoroutine(healthCheck(app)))
+    log.info("app keys: {}".format(list(app.keys())))
     asyncio.ensure_future(healthCheck(app), loop=loop)
-
-    print("port: ", config.get("head_port"))
-    #handler = app.make_handler(access_log=log.access_logger, logger=log.server_logger)
-    run_app(app, port=config.get("head_port"))
+    head_port = config.get("head_port")
+    log.info("port: ".format(head_port))
+    run_app(app, port=head_port)
