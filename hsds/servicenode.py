@@ -2,7 +2,6 @@
 # service node of hsds cluster
 # 
 import asyncio
-import uuid
 import json
 import time
 import sys

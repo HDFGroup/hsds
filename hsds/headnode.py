@@ -2,7 +2,6 @@
 # Head node of hsds cluster
 # 
 import asyncio
-import uuid
 import json
 import time
 
@@ -13,7 +12,7 @@ import aiobotocore
 
 import config
 from timeUtil import unixTimeToUTC, elapsedTime
-from hsdsUtil import http_get, getRootTocUuid, getS3Key, getHeadNodeS3Key, getS3JSONObj, putS3JSONObj, isS3Obj
+from hsdsUtil import http_get, getRootTocUuid, jsonResponse, createNodeId, getS3Key, getHeadNodeS3Key, getS3JSONObj, putS3JSONObj, isS3Obj
 import hsds_logger as log
 
  
@@ -74,6 +73,10 @@ async def healthCheck(app):
             try:
                 rsp_json = await http_get(app, url)
                 log.info("get health check response: {}".format(rsp_json))
+                if rsp_json['id'] != node['id']:
+                    log.warn("unexpected node_id (expecting: {})".format(node['id']))
+                if rsp_json['node_number'] != node['node_number']:
+                    log.warn("unexpected node_number (expecting: {})".format(noe['node_number']))
                 # mark the last time we got a response from this node
                 node["healthcheck"] = unixTimeToUTC(int(time.time()))
             except OSError as ose:
@@ -88,7 +91,7 @@ async def healthCheck(app):
         
 
 async def info(request):
-    """HTTP Method to retun node state to caller"""
+    """HTTP Method to return node state to caller"""
     log.request(request) 
     app = request.app
     resp = StreamResponse()
@@ -106,12 +109,8 @@ async def info(request):
     answer['target_dn_count'] = getTargetNodeCount(app, "dn") 
     answer['active_dn_count'] = getActiveNodeCount(app, "dn")
 
-    answer = json.dumps(answer)
-    answer = answer.encode('utf8')
-    resp.content_length = len(answer)
-    await resp.prepare(request)
-    resp.write(answer)
-    await resp.write_eof()
+    resp = await jsonResponse(request, answer)
+    log.response(request, resp=resp)
     return resp
 
 async def register(request):
@@ -182,13 +181,7 @@ async def register(request):
     else:
         answer["node_count"] = app["target_dn_count"]
         
-     
-    answer = json.dumps(answer)
-    answer = answer.encode('utf8')
-    resp.content_length = len(answer)
-    await resp.prepare(request)
-    resp.write(answer)
-    await resp.write_eof()
+    resp = await jsonResponse(request, answer)
     log.response(request, resp=resp)
     return resp
 
@@ -223,12 +216,7 @@ async def nodestate(request):
                 answer = node
                 break
     
-    answer = json.dumps(answer)
-    answer = answer.encode('utf8')
-    resp.content_length = len(answer)
-    await resp.prepare(request)
-    resp.write(answer)
-    await resp.write_eof()
+    resp = await jsonResponse(request, answer)
     log.response(request, resp=resp)
     return resp
 
@@ -260,7 +248,7 @@ async def init(loop):
     app = Application(loop=loop)
 
     # set a bunch of global state 
-    app["id"] = str(uuid.uuid1())
+    app["id"] = createNodeId("head")
     app["cluster_state"] = "INITIALIZING"
     app["start_time"] = int(time.time())  # seconds after epoch 
     app["target_sn_count"] = int(config.get("target_sn_count"))
@@ -278,12 +266,6 @@ async def init(loop):
             nodes.append(node)
     app["nodes"] = nodes
     app["node_ids"] = {}  # dictionary to look up node by id
-
-
-    #initLogger('aiohtp.server')
-    #log = initLogger('head_node')
-    #log.info("log init")
-
     app.router.add_get('/', info)
     app.router.add_get('/nodestate', nodestate)
     app.router.add_get('/nodestate/{nodetype}', nodestate)

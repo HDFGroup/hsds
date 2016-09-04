@@ -2,7 +2,6 @@
 # data node of hsds cluster
 # 
 import asyncio
-import uuid
 import json
 import time
 import sys
@@ -15,7 +14,7 @@ from botocore.exceptions import ClientError
 
 import config
 from timeUtil import unixTimeToUTC, elapsedTime
-from hsdsUtil import http_get, isOK, http_post, getS3Key, getS3Partition, getS3JSONObj, putS3JSONObj, isS3Obj, getRootTocUuid, jsonResponse
+from hsdsUtil import http_get, isOK, http_post, createNodeId, createObjId, getS3Partition, getS3JSONObj, putS3JSONObj, isS3Obj, getRootTocUuid, jsonResponse
 from basenode import register, healthCheck, info, baseInit
 import hsds_logger as log
 
@@ -78,7 +77,7 @@ async def createGroup(request):
                 log.response(request, code=400, mesage=msg)
                 raise HttpBadRequest(message=msg)
 
-    group_id = "g-" + str(uuid.uuid1())
+    group_id = createObjId("group") 
     now = int(time.time())
     if root_id is None:
         # no root_id passed, so treat this group as a root group
@@ -90,15 +89,7 @@ async def createGroup(request):
     group_json = {"id": group_id, "root": root_id, "created": now, "lastModified": now, "links": [], "attributes": [] }
     await putS3JSONObj(app, group_id, group_json)  # write to S3
 
-    resp = StreamResponse()
-    resp.headers['Content-Type'] = 'application/json'
-    answer = json.dumps(group_json)
-    answer = answer.encode('utf8')
-    resp.set_status(201)
-    resp.content_length = len(answer)
-    await resp.prepare(request)
-    resp.write(answer)
-    await resp.write_eof()
+    resp = await jsonResponse(request, group_json, status=201)
     log.response(request, resp=resp)
     return resp
                

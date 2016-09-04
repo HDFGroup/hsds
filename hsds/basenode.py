@@ -2,20 +2,19 @@
 # common node methods of hsds cluster
 # 
 import asyncio
-import uuid
 import json
 import time
 import sys
 
 from aiohttp.web import Application, Response, StreamResponse, run_app
 from aiohttp import log, ClientSession, TCPConnector 
-from aiohttp.errors import HttpBadRequest, ClientOSError
+from aiohttp.errors import HttpBadRequest, ClientOSError, ClientError
 import aiobotocore
  
 
 import config
 from timeUtil import unixTimeToUTC, elapsedTime
-from hsdsUtil import http_get, isOK, http_post, jsonResponse
+from hsdsUtil import http_get, isOK, createNodeId, http_post, jsonResponse
 import hsds_logger as log
 
 
@@ -30,8 +29,9 @@ async def register(app):
     try:
         log.info("register req: {} body: {}".format(req_reg, body))
         rsp_json = await http_post(app, req_reg, body)
-        log.info("register response: {}".format(rsp_json))
+        print("rsp_json:", rsp_json)       
         if rsp_json is not None:
+            log.info("register response: {}".format(rsp_json))
             log.info("register response: {}".format(rsp_json))
             app["node_number"] = rsp_json["node_number"]
             app["node_count"] = rsp_json["node_count"]
@@ -53,10 +53,17 @@ async def healthCheck(app):
             # check in with the head node and make sure we are still active
             req_node = "{}/nodestate/{}/{}".format(app["head_url"], app["node_type"], app["node_number"])
             log.info("health check req {}".format(req_node))
-            rsp_json = await http_get(app, req_node)
-            if rsp_json is None or "host" not in rsp_json or rsp_json["host"] is None or rsp_json["id"] != app["id"]:
-                log.warn("reregister node")
-                await register(app)     
+            try:
+                rsp_json = await http_get(app, req_node)
+                if rsp_json is None or "host" not in rsp_json or not isinstance(rsp_json, dict) or rsp_json["host"] is None or rsp_json["id"] != app["id"]:
+                    log.warn("invalid health check response: type: {} text: {}".format(type(rsp_json), rsp_json))
+                    log.warn("reregister node")
+                    await register(app)    
+                else:
+                    log.info("health check ok") 
+            except ClientError as ce:
+                log.warn("ClientError: {} for health check".format(str(ce)))
+
         log.info("health check sleep: {}".format(sleep_secs))
         await asyncio.sleep(sleep_secs)
  
@@ -87,7 +94,7 @@ def baseInit(loop, node_type):
     app = Application(loop=loop)
 
     # set a bunch of global state 
-    app["id"] = str(uuid.uuid1())
+    app["id"] = createNodeId(node_type)
     app["node_state"] = "INITIALIZING"
     app["node_type"] = node_type
     app["node_port"] = config.get(node_type + "_port")
@@ -106,7 +113,15 @@ def baseInit(loop, node_type):
     # app["bucket_name"] = config.get("bucket_name")
     aws_region = config.get("aws_region")
     aws_secret_access_key = config.get("aws_secret_access_key")
+    if not aws_secret_access_key or aws_secret_access_key == 'xxx':
+        msg="Invalid aws secret access key"
+        log.error(msg)
+        sys.exit(msg)
     aws_access_key_id = config.get("aws_access_key_id")
+    if not aws_access_key_id or aws_access_key_id == 'xxx':
+        msg="Invalid aws access key"
+        log.error(msg)
+        sys.exit(msg)
 
     session = aiobotocore.get_session(loop=loop)
     aws_client = session.create_client('s3', region_name=aws_region,

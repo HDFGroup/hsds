@@ -3,6 +3,7 @@
 # 
 import json
 import hashlib
+import uuid
 from aiohttp.web import StreamResponse
 from aiohttp.errors import  ClientOSError
 import hsds_logger as log
@@ -27,7 +28,14 @@ def getS3Key(id):
     key = "{}-{}".format(idhash, id)
     return key
 
-def createId(obj_type):
+def createNodeId(prefix):
+    """ Create a random id used to identify nodes"""
+    node_uuid = str(uuid.uuid1())
+    idhash = getIdHash(node_uuid)
+    key = prefix + "-" + idhash
+    return key
+
+def createObjId(obj_type):
     if obj_type not in ('group', 'dataset', 'namedtype', 'chunk'):
         raise ValueError("unexpected obj_type")
     id = obj_type[0] + '-' + str(uuid.uuid1())
@@ -105,6 +113,9 @@ async def http_get(app, url):
         log.info("http_get status: {}".format(rsp.status))
         rsp_json = await rsp.json()
         log.info("http_get({}) response: {}".format(url, rsp_json))  
+    if isinstance(rsp_json, str):
+        log.info("converting str to json")
+        rsp_json = json.loads(rsp_json)
     return rsp_json
 
 async def http_post(app, url, data):
@@ -119,8 +130,8 @@ async def http_post(app, url, data):
         log.info("http_post({}) response: {}".format(url, rsp_json))
     return rsp_json
 
-async def jsonResponse(request, data):
-    resp = StreamResponse()
+async def jsonResponse(request, data, status=200):
+    resp = StreamResponse(status=status)
     resp.headers['Content-Type'] = 'application/json'
     answer = json.dumps(data)
     answer = answer.encode('utf8')
