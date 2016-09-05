@@ -7,14 +7,14 @@ import time
 import sys
 
 from aiohttp.web import Application, Response, StreamResponse, run_app
-from aiohttp import log, ClientSession, TCPConnector 
+from aiohttp import ClientSession, TCPConnector, HttpProcessingError 
 from aiohttp.errors import HttpBadRequest, ClientOSError
 from botocore.exceptions import ClientError
  
 
 import config
 from timeUtil import unixTimeToUTC, elapsedTime
-from hsdsUtil import http_get, isOK, http_post, createNodeId, createObjId, getS3Partition, getS3JSONObj, putS3JSONObj, isS3Obj, getRootTocUuid, jsonResponse
+from hsdsUtil import isOK, http_post, createNodeId, createObjId, getS3Partition, getS3JSONObj, putS3JSONObj, isS3Obj, getRootTocUuid, jsonResponse
 from basenode import register, healthCheck, info, baseInit
 import hsds_logger as log
 
@@ -28,7 +28,6 @@ async def getGroup(request):
         # The request shouldn't have come to this node'
         raise HttpBadRequest(message="wrong node for 'id':{}".format(group_id))
 
-
     meta_cache = app['meta_cache'] 
     group_json = None 
     if group_id in meta_cache:
@@ -38,7 +37,7 @@ async def getGroup(request):
             log.info("{} found in meta cache".format(group_id))
             group_json = await getS3JSONObj(app, group_id)
         except ClientError as ce:
-            # key doesn not exist?
+            # key does not exist?
             is_s3obj = await isS3Obj(app, group_id)
             if is_s3obj:
                 msg = "Error getting s3 obj: " + str(ce)

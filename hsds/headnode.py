@@ -12,7 +12,7 @@ import aiobotocore
 
 import config
 from timeUtil import unixTimeToUTC, elapsedTime
-from hsdsUtil import http_get, getRootTocUuid, jsonResponse, createNodeId, getS3Key, getHeadNodeS3Key, getS3JSONObj, putS3JSONObj, isS3Obj
+from hsdsUtil import http_get_json, getRootTocUuid, jsonResponse, createNodeId, getS3Key, getHeadNodeS3Key, getS3JSONObj, putS3JSONObj, isS3Obj
 import hsds_logger as log
 
  
@@ -71,7 +71,7 @@ async def healthCheck(app):
             url = "http://{}:{}".format(node["host"], node["port"])
             log.info("health check for: ".format(url))
             try:
-                rsp_json = await http_get(app, url)
+                rsp_json = await http_get_json(app, url)
                 log.info("get health check response: {}".format(rsp_json))
                 if rsp_json['id'] != node['id']:
                     log.warn("unexpected node_id (expecting: {})".format(node['id']))
@@ -215,7 +215,7 @@ async def nodestate(request):
             if node["node_type"] == node_type and str(node["node_number"]) == node_number:
                 answer = node
                 break
-    
+    answer["cluster_state"] = app["cluster_state"]  
     resp = await jsonResponse(request, answer)
     log.response(request, resp=resp)
     return resp

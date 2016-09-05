@@ -7,14 +7,14 @@ import time
 import sys
 
 from aiohttp.web import Application, Response, StreamResponse, run_app
-from aiohttp import log, ClientSession, TCPConnector 
-from aiohttp.errors import HttpBadRequest, ClientOSError, ClientError
+from aiohttp import ClientSession, TCPConnector 
+from aiohttp.errors import HttpBadRequest, ClientError
 import aiobotocore
  
 
 import config
 from timeUtil import unixTimeToUTC, elapsedTime
-from hsdsUtil import http_get, isOK, createNodeId, http_post, jsonResponse
+from hsdsUtil import http_get_json, isOK, createNodeId, http_post, jsonResponse
 import hsds_logger as log
 
 
@@ -32,11 +32,10 @@ async def register(app):
         print("rsp_json:", rsp_json)       
         if rsp_json is not None:
             log.info("register response: {}".format(rsp_json))
-            log.info("register response: {}".format(rsp_json))
             app["node_number"] = rsp_json["node_number"]
             app["node_count"] = rsp_json["node_count"]
-            log.info("setting node_state to READY")
-            app["node_state"] = "READY"
+            log.info("setting node_state to WAITING")
+            app["node_state"] = "WAITING"  # wait for other nodes to be active
     except OSError:
         log.error("failed to register")
 
@@ -51,15 +50,44 @@ async def healthCheck(app):
             await register(app)
         else:
             # check in with the head node and make sure we are still active
-            req_node = "{}/nodestate/{}/{}".format(app["head_url"], app["node_type"], app["node_number"])
+            req_node = "{}/nodestate".format(app["head_url"])
             log.info("health check req {}".format(req_node))
             try:
-                rsp_json = await http_get(app, req_node)
-                if rsp_json is None or "host" not in rsp_json or not isinstance(rsp_json, dict) or rsp_json["host"] is None or rsp_json["id"] != app["id"]:
+                rsp_json = await http_get_json(app, req_node)
+                if rsp_json is None or not isinstance(rsp_json, dict):
                     log.warn("invalid health check response: type: {} text: {}".format(type(rsp_json), rsp_json))
-                    log.warn("reregister node")
-                    await register(app)    
                 else:
+                    #print("rsp_json: ", rsp_json)
+                    # save the url's to each of the active nodes'
+                    sn_urls = {}
+                    dn_urls = {}
+                    #  or rsp_json["host"] is None or rsp_json["id"] != app["id"]
+                    for node in rsp_json["nodes"]:
+                        if node["node_type"] == app["node_type"] and node["node_number"] == app["node_number"]:
+                            # this should be this node
+                            if node["id"] != app["id"]:
+                                # flag - to re-register
+                                log.warn("mis-match node ids, app: {} vs head: {} - re-initializing".format(node["id"], app["id"]))
+                                app["node_state"] == "INITIALIZING"
+                        if not node["host"]:
+                            continue  # not online
+                        url = "http://" + node["host"] + ":" + str(node["port"])
+                        node_number = node["node_number"]
+                        if node["node_type"] == "dn":
+                            dn_urls[node_number] = url
+                        else: 
+                            sn_urls[node_number] = url
+                    app["sn_urls"] = sn_urls
+                    app["dn_urls"] = dn_urls
+                    cluster_state = rsp_json["cluster_state"]
+                    log.info("Cluster_state: {}".format(cluster_state))
+                    if app["node_state"] == "WAITING" and cluster_state == "READY":
+                        log.info("setting node_state to READY")
+                        app["node_state"]  = "READY"
+                    elif app["node_state"] == "READY" and cluster_state != "READY":
+                        log.info("setting node_state to WAITING")
+                        app["node_state"]  = "WAITING"
+                        
                     log.info("health check ok") 
             except ClientError as ce:
                 log.warn("ClientError: {} for health check".format(str(ce)))
@@ -103,6 +131,8 @@ def baseInit(loop, node_type):
     app["start_time"] = int(time.time())  # seconds after epoch
     app["bucket_name"] = config.get("bucket_name")
     app["head_url"] = "http://{}:{}".format(config.get("head_host"), config.get("head_port"))
+    app["sn_urls"] = {}
+    app["dn_urls"] = {}
 
     # create a client Session here so that all client requests 
     #   will share the same connection pool

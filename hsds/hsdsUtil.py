@@ -108,13 +108,24 @@ async def isS3Obj(app, id):
 async def http_get(app, url):
     log.info("http_get('{}')".format(url))
     client = app['client']
+    rsp = None
+    async with client.get(url) as rsp:
+        log.info("http_get status: {}".format(rsp.status))
+        rsp = await rsp.text()
+        log.info("http_get({}) response: {}".format(url, rsp))  
+    
+    return rsp
+
+async def http_get_json(app, url):
+    log.info("http_get('{}')".format(url))
+    client = app['client']
     rsp_json = None
     async with client.get(url) as rsp:
         log.info("http_get status: {}".format(rsp.status))
         rsp_json = await rsp.json()
         log.info("http_get({}) response: {}".format(url, rsp_json))  
     if isinstance(rsp_json, str):
-        log.info("converting str to json")
+        log.warn("converting str to json")
         rsp_json = json.loads(rsp_json)
     return rsp_json
 
