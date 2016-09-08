@@ -3,7 +3,10 @@
 # 
 import json
 import hashlib
+import uuid
+from aiohttp.web import StreamResponse
 from aiohttp.errors import  ClientOSError
+import hsds_logger as log
 
 def isOK(http_response):
     if http_response < 300:
@@ -13,8 +16,6 @@ def isOK(http_response):
 def getIdHash(id):
     """  Return md5 prefix based on id value"""
     m = hashlib.new('md5')
-    print("id:", id)
-    print("type:", type(id))
     m.update(id.encode('utf8'))
     hexdigest = m.hexdigest()
     return hexdigest[:5]
@@ -27,7 +28,14 @@ def getS3Key(id):
     key = "{}-{}".format(idhash, id)
     return key
 
-def createId(obj_type):
+def createNodeId(prefix):
+    """ Create a random id used to identify nodes"""
+    node_uuid = str(uuid.uuid1())
+    idhash = getIdHash(node_uuid)
+    key = prefix + "-" + idhash
+    return key
+
+def createObjId(obj_type):
     if obj_type not in ('group', 'dataset', 'namedtype', 'chunk'):
         raise ValueError("unexpected obj_type")
     id = obj_type[0] + '-' + str(uuid.uuid1())
@@ -61,12 +69,10 @@ def getS3Partition(id, count):
     hash_value = int(hash_code, 16)
     number = hash_value % count
     return number
-        
-    
 
 async def getS3JSONObj(app, id):
     key = getS3Key(id)
-    print("getS3JSONObj({})".format(key))
+    log.info("getS3JSONObj({})".format(key))
     client = app['s3']
     bucket = app['bucket_name']
     resp = await client.get_object(Bucket=bucket, Key=key)
@@ -77,18 +83,16 @@ async def getS3JSONObj(app, id):
 
 async def putS3JSONObj(app, id, json_obj):
     key = getS3Key(id)
-    print("putS3JSONObj({})".format(key))
+    log.info("putS3JSONObj({})".format(key))
     client = app['s3']
     bucket = app['bucket_name']
     data = json.dumps(json_obj)
     data = data.encode('utf8')
     resp = await client.put_object(Bucket=bucket, Key=key, Body=data)
     
-     
-
 async def isS3Obj(app, id):
     key = getS3Key(id)
-    print("isS3Obj({})".format(key))
+    log.info("isS3Obj({})".format(key))
     client = app['s3']
     bucket = app['bucket_name']
     resp = await client.list_objects(Bucket=bucket, MaxKeys=1, Prefix=key)
@@ -102,27 +106,48 @@ async def isS3Obj(app, id):
         return False
     
 async def http_get(app, url):
-    print("http_get('{}')".format(url))
+    log.info("http_get('{}')".format(url))
+    client = app['client']
+    rsp = None
+    async with client.get(url) as rsp:
+        log.info("http_get status: {}".format(rsp.status))
+        rsp = await rsp.text()
+        log.info("http_get({}) response: {}".format(url, rsp))  
+    
+    return rsp
+
+async def http_get_json(app, url):
+    log.info("http_get('{}')".format(url))
     client = app['client']
     rsp_json = None
-    try:
-        async with client.get(url) as rsp:
-            print("head response status:", rsp.status)
-            rsp_json = await rsp.json()
-            print("got response: ", rsp_json)
-    except ClientOSError:
-        print("unable to connect with", url)
+    async with client.get(url) as rsp:
+        log.info("http_get status: {}".format(rsp.status))
+        rsp_json = await rsp.json()
+        log.info("http_get({}) response: {}".format(url, rsp_json))  
+    if isinstance(rsp_json, str):
+        log.warn("converting str to json")
+        rsp_json = json.loads(rsp_json)
     return rsp_json
 
 async def http_post(app, url, data):
-    print("http_post('{}')".format(url))
+    log.info("http_post('{}', data)".format(url, data))
     client = app['client']
     rsp_json = None
     client = app['client']
     
     async with client.post(url, data=json.dumps(data)) as rsp:
-        print("head response status:", rsp.status)
-        if isOK(rsp.status):  
-            rsp_json = await rsp.json()
-            print("got response: ", rsp_json)
+        log.info("http_post status: {}".format(rsp.status))
+        rsp_json = await rsp.json()
+        log.info("http_post({}) response: {}".format(url, rsp_json))
     return rsp_json
+
+async def jsonResponse(request, data, status=200):
+    resp = StreamResponse(status=status)
+    resp.headers['Content-Type'] = 'application/json'
+    answer = json.dumps(data)
+    answer = answer.encode('utf8')
+    resp.content_length = len(answer)
+    await resp.prepare(request)
+    resp.write(answer)
+    await resp.write_eof()
+    return resp

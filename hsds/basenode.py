@@ -2,63 +2,102 @@
 # common node methods of hsds cluster
 # 
 import asyncio
-import uuid
 import json
 import time
 import sys
 
 from aiohttp.web import Application, Response, StreamResponse, run_app
-from aiohttp import log, ClientSession, TCPConnector 
-from aiohttp.errors import HttpBadRequest, ClientOSError
+from aiohttp import ClientSession, TCPConnector 
+from aiohttp.errors import HttpBadRequest, ClientError
 import aiobotocore
  
 
 import config
 from timeUtil import unixTimeToUTC, elapsedTime
-from hsdsUtil import http_get, isOK, http_post
+from hsdsUtil import http_get_json, isOK, createNodeId, http_post, jsonResponse
+import hsds_logger as log
 
 
 async def register(app):
     """ register node with headnode
-    OK to call idempotetently (e.g. if the headnode seems to have forgetten us)"""
+    OK to call idempotently (e.g. if the headnode seems to have forgotten us)"""
 
-    print("register...")
     req_reg = app["head_url"] + "/register"
-    print("req:", req_reg)
+    log.info("register: {}".format(req_reg))
+   
     body = {"id": app["id"], "port": app["node_port"], "node_type": app["node_type"]}
     try:
+        log.info("register req: {} body: {}".format(req_reg, body))
         rsp_json = await http_post(app, req_reg, body)
-        print("register response:", rsp_json)
+        print("rsp_json:", rsp_json)       
         if rsp_json is not None:
+            log.info("register response: {}".format(rsp_json))
             app["node_number"] = rsp_json["node_number"]
             app["node_count"] = rsp_json["node_count"]
-            app["node_state"] = "READY"
+            log.info("setting node_state to WAITING")
+            app["node_state"] = "WAITING"  # wait for other nodes to be active
     except OSError:
-        print("failed to register")
+        log.error("failed to register")
 
 
 async def healthCheck(app):
     """ Periodic method that either registers with headnode (if state in INITIALIZING) or 
     calls headnode to verify vitals about this node (otherwise)"""
+    log.info("health check start")
+    sleep_secs = config.get("node_sleep_time")
     while True:
         if app["node_state"] == "INITIALIZING":
-            print("register")
             await register(app)
         else:
-            print("health check")
             # check in with the head node and make sure we are still active
-            req_node = "{}/nodestate/{}/{}".format(app["head_url"], app["node_type"], app["node_number"])
-            print("node check url:", req_node)
-            rsp_json = await http_get(app, req_node)
-            if rsp_json is None or "host" not in rsp_json or rsp_json["host"] is None or rsp_json["id"] != app["id"]:
-                print("reregister node")
-                await register(app)
-        sleep_secs = config.get("node_sleep_time")
+            req_node = "{}/nodestate".format(app["head_url"])
+            log.info("health check req {}".format(req_node))
+            try:
+                rsp_json = await http_get_json(app, req_node)
+                if rsp_json is None or not isinstance(rsp_json, dict):
+                    log.warn("invalid health check response: type: {} text: {}".format(type(rsp_json), rsp_json))
+                else:
+                    #print("rsp_json: ", rsp_json)
+                    # save the url's to each of the active nodes'
+                    sn_urls = {}
+                    dn_urls = {}
+                    #  or rsp_json["host"] is None or rsp_json["id"] != app["id"]
+                    for node in rsp_json["nodes"]:
+                        if node["node_type"] == app["node_type"] and node["node_number"] == app["node_number"]:
+                            # this should be this node
+                            if node["id"] != app["id"]:
+                                # flag - to re-register
+                                log.warn("mis-match node ids, app: {} vs head: {} - re-initializing".format(node["id"], app["id"]))
+                                app["node_state"] == "INITIALIZING"
+                        if not node["host"]:
+                            continue  # not online
+                        url = "http://" + node["host"] + ":" + str(node["port"])
+                        node_number = node["node_number"]
+                        if node["node_type"] == "dn":
+                            dn_urls[node_number] = url
+                        else: 
+                            sn_urls[node_number] = url
+                    app["sn_urls"] = sn_urls
+                    app["dn_urls"] = dn_urls
+                    cluster_state = rsp_json["cluster_state"]
+                    log.info("Cluster_state: {}".format(cluster_state))
+                    if app["node_state"] == "WAITING" and cluster_state == "READY":
+                        log.info("setting node_state to READY")
+                        app["node_state"]  = "READY"
+                    elif app["node_state"] == "READY" and cluster_state != "READY":
+                        log.info("setting node_state to WAITING")
+                        app["node_state"]  = "WAITING"
+                        
+                    log.info("health check ok") 
+            except ClientError as ce:
+                log.warn("ClientError: {} for health check".format(str(ce)))
+
+        log.info("health check sleep: {}".format(sleep_secs))
         await asyncio.sleep(sleep_secs)
  
 async def info(request):
     """HTTP Method to retun node state to caller"""
-    print("info") 
+    log.request(request)
     app = request.app
     resp = StreamResponse()
     resp.headers['Content-Type'] = 'application/json'
@@ -72,22 +111,18 @@ async def info(request):
     answer['node_number'] = app['node_number']
     answer['node_count'] = app['node_count']
         
-     
-    answer = json.dumps(answer)
-    answer = answer.encode('utf8')
-    resp.content_length = len(answer)
-    await resp.prepare(request)
-    resp.write(answer)
-    await resp.write_eof()
+    resp = await jsonResponse(request, answer) 
+    log.response(request, resp=resp)
     return resp
 
 
 def baseInit(loop, node_type):
     """Intitialize application and return app object"""
+    log.info("Application baseInit")
     app = Application(loop=loop)
 
     # set a bunch of global state 
-    app["id"] = str(uuid.uuid1())
+    app["id"] = createNodeId(node_type)
     app["node_state"] = "INITIALIZING"
     app["node_type"] = node_type
     app["node_port"] = config.get(node_type + "_port")
@@ -96,6 +131,8 @@ def baseInit(loop, node_type):
     app["start_time"] = int(time.time())  # seconds after epoch
     app["bucket_name"] = config.get("bucket_name")
     app["head_url"] = "http://{}:{}".format(config.get("head_host"), config.get("head_port"))
+    app["sn_urls"] = {}
+    app["dn_urls"] = {}
 
     # create a client Session here so that all client requests 
     #   will share the same connection pool
@@ -106,9 +143,15 @@ def baseInit(loop, node_type):
     # app["bucket_name"] = config.get("bucket_name")
     aws_region = config.get("aws_region")
     aws_secret_access_key = config.get("aws_secret_access_key")
-    print("aws_secret_access_key:", aws_secret_access_key)
+    if not aws_secret_access_key or aws_secret_access_key == 'xxx':
+        msg="Invalid aws secret access key"
+        log.error(msg)
+        sys.exit(msg)
     aws_access_key_id = config.get("aws_access_key_id")
-    print("aws_access_key:_id", aws_access_key_id)
+    if not aws_access_key_id or aws_access_key_id == 'xxx':
+        msg="Invalid aws access key"
+        log.error(msg)
+        sys.exit(msg)
 
     session = aiobotocore.get_session(loop=loop)
     aws_client = session.create_client('s3', region_name=aws_region,
@@ -116,11 +159,6 @@ def baseInit(loop, node_type):
                                    aws_access_key_id=aws_access_key_id)
     app['client'] = client
     app['s3'] = aws_client
-
-    
-    #initLogger('aiohtp.server')
-    #log = initLogger('head_node')
-    #log.info("log init")
 
     app.router.add_get('/', info)
     app.router.add_get('/info', info)
