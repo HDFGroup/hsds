@@ -6,6 +6,7 @@ import hashlib
 import uuid
 from aiohttp.web import StreamResponse
 from aiohttp.errors import  ClientOSError
+from aiohttp import HttpProcessingError 
 import hsds_logger as log
 
 def isOK(http_response):
@@ -44,12 +45,6 @@ def createObjId(obj_type):
 def getHeadNodeS3Key():
     return "headnode"
 
-def getRootTocUuid():
-    """ Return fake uuid of the root TOC group.  This will be the one object that
-    can be identified a-priori in a given bucket"""
-    zero_uuid = "g-{}-{}-{}-{}-{}".format('0'*8, '0'*4, '0'*4, '0'*4, '0'*12)
-    return zero_uuid
-
 def validateUuid(id):
     if not isinstance(id, str):
         raise ValueError("Expected string type")
@@ -61,6 +56,13 @@ def validateUuid(id):
     if id[1] != '-':
         raise ValueError("Unexpected prefix")
 
+def isValidUuid(id):
+    try:
+        validateUuid(id)
+        return True
+    except ValueError:
+        return False
+
 def getUuidFromId(id):
     return id[2:]
 
@@ -69,9 +71,12 @@ def getS3Partition(id, count):
     hash_value = int(hash_code, 16)
     number = hash_value % count
     return number
-
-async def getS3JSONObj(app, id):
-    key = getS3Key(id)
+ 
+async def getS3JSONObj(app, id, addprefix=True):
+    if addprefix:
+        key = getS3Key(id)
+    else:
+        key = id  # for domain gets
     log.info("getS3JSONObj({})".format(key))
     client = app['s3']
     bucket = app['bucket_name']
@@ -79,10 +84,14 @@ async def getS3JSONObj(app, id):
     data = await resp['Body'].read()
     resp['Body'].close()
     json_dict = json.loads(data.decode('utf8'))
+    print("s3 returned:", json_dict)
     return json_dict
 
-async def putS3JSONObj(app, id, json_obj):
-    key = getS3Key(id)
+async def putS3JSONObj(app, id, json_obj, addprefix=True):
+    if addprefix:
+        key = getS3Key(id)
+    else:
+        key = id  # for domain sets
     log.info("putS3JSONObj({})".format(key))
     client = app['s3']
     bucket = app['bucket_name']
@@ -90,8 +99,11 @@ async def putS3JSONObj(app, id, json_obj):
     data = data.encode('utf8')
     resp = await client.put_object(Bucket=bucket, Key=key, Body=data)
     
-async def isS3Obj(app, id):
-    key = getS3Key(id)
+async def isS3Obj(app, id, addprefix=True):
+    if addprefix:
+        key = getS3Key(id)
+    else:
+        key = id  # for domain queries
     log.info("isS3Obj({})".format(key))
     client = app['s3']
     bucket = app['bucket_name']
@@ -122,6 +134,11 @@ async def http_get_json(app, url):
     rsp_json = None
     async with client.get(url) as rsp:
         log.info("http_get status: {}".format(rsp.status))
+        if rsp.status != 200:
+            print("got bad response:", rsp)
+            msg = "request to {} failed with code: {}".format(url, rsp.status)
+            log.warn(msg)
+            raise HttpProcessingError(message=msg, code=rsp.status)
         rsp_json = await rsp.json()
         log.info("http_get({}) response: {}".format(url, rsp_json))  
     if isinstance(rsp_json, str):
@@ -151,3 +168,7 @@ async def jsonResponse(request, data, status=200):
     resp.write(answer)
     await resp.write_eof()
     return resp
+
+
+
+ 

@@ -11,7 +11,7 @@ def error(msg):
 	print("ERROR> " + msg)
 
 def request(req):
-	print("REQ> {}: {}".format(req.method, req.path))
+	print("REQ> {}: {} host:[{}]".format(req.method, req.path, req.headers["host"]))
 
 def response(req, resp=None, code=None, message=None):
 	level = "INFO"

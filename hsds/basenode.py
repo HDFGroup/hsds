@@ -7,7 +7,7 @@ import time
 import sys
 
 from aiohttp.web import Application, Response, StreamResponse, run_app
-from aiohttp import ClientSession, TCPConnector 
+from aiohttp import ClientSession, TCPConnector,  HttpProcessingError  
 from aiohttp.errors import HttpBadRequest, ClientError
 import aiobotocore
  
@@ -56,6 +56,11 @@ async def healthCheck(app):
                 rsp_json = await http_get_json(app, req_node)
                 if rsp_json is None or not isinstance(rsp_json, dict):
                     log.warn("invalid health check response: type: {} text: {}".format(type(rsp_json), rsp_json))
+                elif rsp_json["cluster_state"] != "READY":
+                    log.info("cluster_state: {}".format(rsp_json["cluster_state"]))
+                    if app["node_state"] != "WAITING":
+                        log.info("changing node_state to WAITING")
+                        app_node["node_state"] = "WAITING"
                 else:
                     #print("rsp_json: ", rsp_json)
                     # save the url's to each of the active nodes'
@@ -69,6 +74,8 @@ async def healthCheck(app):
                                 # flag - to re-register
                                 log.warn("mis-match node ids, app: {} vs head: {} - re-initializing".format(node["id"], app["id"]))
                                 app["node_state"] == "INITIALIZING"
+                                app["node_number"] = -1
+                                break
                         if not node["host"]:
                             continue  # not online
                         url = "http://" + node["host"] + ":" + str(node["port"])
@@ -79,18 +86,14 @@ async def healthCheck(app):
                             sn_urls[node_number] = url
                     app["sn_urls"] = sn_urls
                     app["dn_urls"] = dn_urls
-                    cluster_state = rsp_json["cluster_state"]
-                    log.info("Cluster_state: {}".format(cluster_state))
-                    if app["node_state"] == "WAITING" and cluster_state == "READY":
-                        log.info("setting node_state to READY")
+                    if app["node_state"] == "WAITING" and rsp_json["cluster_state"] == "READY" and app["node_number"] >= 0:
+                        log.info("setting node_state to READY, node_number: {}".format(app["node_number"]))
                         app["node_state"]  = "READY"
-                    elif app["node_state"] == "READY" and cluster_state != "READY":
-                        log.info("setting node_state to WAITING")
-                        app["node_state"]  = "WAITING"
-                        
                     log.info("health check ok") 
             except ClientError as ce:
                 log.warn("ClientError: {} for health check".format(str(ce)))
+            except HttpProcessingError as he:
+                log.warn("HttpProcessingError <{}> for health check".format(he.code))
 
         log.info("health check sleep: {}".format(sleep_secs))
         await asyncio.sleep(sleep_secs)
@@ -160,7 +163,6 @@ def baseInit(loop, node_type):
     app['client'] = client
     app['s3'] = aws_client
 
-    app.router.add_get('/', info)
     app.router.add_get('/info', info)
       
     return app

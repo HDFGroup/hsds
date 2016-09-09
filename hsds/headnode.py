@@ -6,13 +6,13 @@ import json
 import time
 
 from aiohttp.web import Application, Response, StreamResponse, run_app
-from aiohttp import log, ClientSession, TCPConnector  
+from aiohttp import log, ClientSession, TCPConnector, HttpProcessingError
 from aiohttp.errors import HttpBadRequest, ClientOSError
 import aiobotocore
 
 import config
 from timeUtil import unixTimeToUTC, elapsedTime
-from hsdsUtil import http_get_json, getRootTocUuid, jsonResponse, createNodeId, getS3Key, getHeadNodeS3Key, getS3JSONObj, putS3JSONObj, isS3Obj
+from hsdsUtil import http_get_json, jsonResponse, createNodeId, getS3Key, getHeadNodeS3Key, getS3JSONObj, putS3JSONObj, isS3Obj
 import hsds_logger as log
 
  
@@ -53,7 +53,7 @@ async def healthCheck(app):
         if head_state['id'] != app['id']:
             log.warn("mis-match bucket head id: {}".format(head_state["id"]))
             if now - head_state["last_health_check"] < sleep_secs * 4:
-                log.warn("other headnode is active")
+                log.warn("other headnode may be active")
                 continue  # skip node checks and loop around again
             else:
                 log.warn("other headnode is not active, making this headnode leader")
@@ -68,15 +68,21 @@ async def healthCheck(app):
         for node in nodes:         
             if node["host"] is None:
                 continue
-            url = "http://{}:{}".format(node["host"], node["port"])
+            url = "http://{}:{}/info".format(node["host"], node["port"])
             log.info("health check for: ".format(url))
             try:
                 rsp_json = await http_get_json(app, url)
                 log.info("get health check response: {}".format(rsp_json))
                 if rsp_json['id'] != node['id']:
                     log.warn("unexpected node_id (expecting: {})".format(node['id']))
+                    node['host'] = None
+                    node['id'] = None
+                    app["cluster_state"] = "INITIALIZING"
                 if rsp_json['node_number'] != node['node_number']:
-                    log.warn("unexpected node_number (expecting: {})".format(noe['node_number']))
+                    log.warn("unexpected node_number (expecting: {})".format(node['node_number']))
+                    node['host'] = None
+                    node['id'] = None
+                    app["cluster_state"] = "INITIALIZING"
                 # mark the last time we got a response from this node
                 node["healthcheck"] = unixTimeToUTC(int(time.time()))
             except OSError as ose:
