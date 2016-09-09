@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #
-# A rudimentry script to probe two test datasets...
+# A rudimentry script to probe three test datasets...
 #
 
 import urllib2, urllib
@@ -11,32 +11,32 @@ import logging
 import json
 import numpy
 
-INVENTORIES = ('https://s3-us-west-2.amazonaws.com/nasanex/NEX-GDDP/nex-gddp-s3-files.json',)
-#INVENTORIES = ('https://s3-us-west-2.amazonaws.com/nasanex/NEX-GDDP/nex-gddp-s3-files.json', \
-#            'https://s3-us-west-2.amazonaws.com/nasanex/NEX-DCP/nex-dcp30-s3-files.json')
-NTRHS = 6
-JSN = None
+INVENTORIES = ( 'https://s3-us-west-2.amazonaws.com/nasanex/NEX-GDDP/nex-gddp-s3-files.json', \
+                'https://s3-us-west-2.amazonaws.com/nasanex/NEX-DCP30/nex-dcp30-s3-files.json', \
+                'https://s3-us-west-2.amazonaws.com/nasanex/LOCA/loca-s3-files.json')
+
+NTRHS = 10
 
 #---------------------------------------------------------------------------------
-def get_gddp_json(invlink):
+def get_json(invlink):
    logging.info("getting inventory from %s" % (invlink))
    jdata = json.loads( urllib2.urlopen(invlink).read() )
    return jdata
 
 #---------------------------------------------------------------------------------
-def select_gddp_model(jdata, model):
+def select_model(jdata, model):
    return  [ k for k in jdata.keys() if jdata[k]['model'] == model ]
 
 #---------------------------------------------------------------------------------
-def select_gddp_experiment(jdata, expr):
+def select_experiment(jdata, expr):
    return  [ k for k in jdata.keys() if jdata[k]['experiment_id'] == expr ]
 
 #---------------------------------------------------------------------------------
-def select_gddp_var(jdata, vr):
+def select_var(jdata, vr):
    return  [ k for k in jdata.keys() if jdata[k]['variable'] == vr ]
 
 #---------------------------------------------------------------------------------
-def get_gddp_sets(jdata):
+def get_sets(jdata):
    models = set( [jdata[k]['model'] for k in jdata.keys()] )
    exprs = set( [jdata[k]['experiment_id'] for k in jdata.keys()] )
    vrs = set( [jdata[k]['variable'] for k in jdata.keys()] )
@@ -55,12 +55,12 @@ def get_remote_info_json(jfname):
       for k,v in di['variables'].items():
          for a in v: nat += 1  
       dims = [ l for k, v in di['dimensions'].items() for d, l in v.items() if d == 'length' ]
-      return { 'num global' : glbs, 'num vars' : len(di['variables'].keys()), 'num dims' : \
+      return { 'num global attr' : glbs, 'num vars' : len(di['variables'].keys()), 'num dims' : \
                len(di['dimensions'].keys()), 'ave attrs per var' : nat / len(di['variables'].keys()), \
                'dims sizes' : dims }
    except Exception, e:
-      logging.warn("WARN get_remote_info_json on %s failed : %s" % (jfname, str(e)))
-      return None
+      logging.warn("WARN get_remote_info_json on %s : %s, update S3 bucket" % (jfname, str(e)))
+      return {}
 
 #---------------------------------------------------------------------------------
 def get_remote_size(rfname):
@@ -76,15 +76,14 @@ def get_remote_size(rfname):
 #---------------------------------------------------------------------------------
 def queue_list(invlink):
    queue = Queue.Queue()
-   jsn = get_gddp_json(invlink)
+   jsn = get_json(invlink)
    for k in jsn.keys():
       queue.put( k )
    return queue, jsn
 #queue_list
 
 #---------------------------------------------------------------------------------
-def get_sizes():
-   global JSN 
+def get_sizes(jsn):
    thrd = threading.current_thread()
    logging.info('starting thread '+str(thrd.ident)+' ...')
    try:
@@ -94,7 +93,7 @@ def get_sizes():
          itm = queue.get()
          logging.info(str(thrd.ident)+' :' +str(itm))
          val = get_remote_size(itm)
-         if val != None: JSN[itm]['objsize'] = val
+         if val != None: jsn[itm]['objsize'] = val
          queue.task_done()
    except Queue.Empty: 
       pass
@@ -131,13 +130,13 @@ def set_stat(jsn, items, selectfunc, hiswdth=64, lab='histogram'):
 
 #---------------------------------------------------------------------------------
 def summarize_size(jsn, n):
-   models, exprs, vrs = get_gddp_sets(jsn)
+   models, exprs, vrs = get_sets(jsn)
    logging.info('building stats for models ...')
-   set_stat(jsn, models, select_gddp_model, lab='models')
+   set_stat(jsn, models, select_model, lab='models')
    logging.info('building stats for experiments ...')
-   set_stat(jsn, exprs, select_gddp_experiment, lab='scenarios')
+   set_stat(jsn, exprs, select_experiment, lab='scenarios')
    logging.info('building stats for variables ...')
-   set_stat(jsn, vrs, select_gddp_var, lab='variables')
+   set_stat(jsn, vrs, select_var, lab='variables')
    print 'Number of files: ', n
 #summarize_size
 
@@ -146,18 +145,18 @@ if __name__ == '__main__':
    logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
    for inv in INVENTORIES:
       thrds = []
-      queue, JSN = queue_list( inv )
-      eginfo = get_remote_info_json( JSN.iterkeys().next()[:-2]+'json') 
+      queue, jsn = queue_list( inv )
+      eginfo = get_remote_info_json( jsn.iterkeys().next()[:-2]+'json') 
       nfiles = queue.qsize()
       for i in range(NTRHS):
-         t = threading.Thread(target=get_sizes)
+         t = threading.Thread(target=get_sizes, args=(jsn,))
          t.daemon = False
          t.start()
          thrds.append(t)
       for t in thrds: 
          t.join()
    
-      summarize_size(JSN, nfiles)
+      summarize_size(jsn, nfiles)
       for k, v, in eginfo.items(): 
          print k, '=', v
 #__main__

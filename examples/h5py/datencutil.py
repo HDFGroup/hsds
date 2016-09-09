@@ -28,11 +28,14 @@ ISO8601_REGEX = re.compile(r"(?P<year>[+-]?[0-9]{1,4})(-(?P<month>[0-9]{1,2})(-(
                            r"((?P<separator2>.?)(?P<timezone>Z|(([-+])([0-9]{1,2}):([0-9]{1,2}))))?)?)?)?"
                            )
 
+TIMEZONE_REGEX = re.compile("(?P<prefix>[+-])(?P<hours>[0-9]{1,2}):(?P<minutes>[0-9]{1,2})")
+
 def parse_timezone(tzstring):
     """
     Parses ISO 8601 time zone specs into tzinfo offsets
     Adapted from pyiso8601 (http://code.google.com/p/pyiso8601/)
     """
+    global TIMEZONE_REGEX 
     if tzstring == "Z":
         return 0
     # This isn't strictly correct, but it's common to encounter dates without
@@ -53,6 +56,7 @@ def parse_date(datestring):
     The timezone is parsed from the date string, assuming UTC by default.
     Adapted from pyiso8601 (http://code.google.com/p/pyiso8601/)
     """
+    global ISO8601_REGEX 
     if not isinstance(datestring, str) and not isinstance(datestring, unicode):
         raise ValueError("Expecting a string %r" % datestring)
     m = ISO8601_REGEX.match(datestring.strip())
