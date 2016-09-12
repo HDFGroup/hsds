@@ -2,6 +2,7 @@ import base64
 import binascii
 from aiohttp.errors import HttpBadRequest, HttpProcessingError
 import hsds_logger as log
+from domainUtil import getDomainJson, getDomainFromRequest
 
 
 def validateUserPassword(user_name, password):
@@ -13,7 +14,7 @@ def validateUserPassword(user_name, password):
     # just hard-code a couple of users for now
     user_db = { "test_user1": {"pwd": "test" },
                 "test_user2": {"pwd": "test" } }
-
+    
     if not user_name:
         log.info('validateUserPassword - null user')
         raise HttpBadRequest("provide user name and password")
@@ -27,8 +28,7 @@ def validateUserPassword(user_name, password):
         raise HttpProcessingError(code=401, message="provide user and password")
 
     user_data = user_db[user_name] 
-    print("user_data[pwd]", user_data['pwd'])
-    print("password:", password)
+    
     if user_data['pwd'] == password:
         log.info("user  password validated")
     else:
@@ -64,4 +64,54 @@ def getUserFromRequest(request):
     pswd = pswd.decode('utf-8')   # convert bytes to string
     validateUserPassword(user, pswd)  
     return user
+
+def aclCheck(acls, req_action, req_user):
+    log.info("aclCheck: {} for user: {}".format(req_action, req_user))
+    if acls is None:
+        log.error("no acls found")
+        raise HttpProcessingError(code=500, message="Unexpected error")
+    if req_action not in ("create", "read", "update", "delete", "readACL", "updateACL"):
+        log.error("unexpected req_action: {}".format(req_action))
+    acl = None
+    if req_user in acls:
+        acl = acls[req_user]
+    elif "default" in acls:
+        acl = acls["default"]
+    else:
+        acl = { }
+    if req_action not in acl or not acl[req_action]:
+        domain = getDomainFromRequest(request)
+        log.warn("Action: {} not permitted for user: {} in domain: {}".format(req_action, req_user, domain))
+        raise HttpProcessingError(code=403, message="Forbidden")
+    log.info("action permitted")
+    
+
+async def authValidate(request, req_action=None):
+    """ check user credentials and that user has permissions for the given domain
+    """
+    app = request.app
+    if req_action is None:
+        if request.method == "GET":
+            req_action = "read"
+        elif request.method == "PUT":
+            req_action = "create"
+        elif request.method == "POST":
+            req_action = "create"
+        elif request.method == "DELETE":
+            req_action = "delete"
+        else:
+            req_action = "read"
+
+    req_user = getUserFromRequest(request)  # throws exception if user/password is invalid
+    domain = getDomainFromRequest(request)
+    domain_json =  await getDomainJson(app, domain)
+    acls = domain_json["acls"]
+    aclCheck(acls, req_action, req_user)    # throws exception if action not permitted
+    
+
+
+
+
+
+
          

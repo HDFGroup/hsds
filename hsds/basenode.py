@@ -60,16 +60,18 @@ async def healthCheck(app):
                     log.info("cluster_state: {}".format(rsp_json["cluster_state"]))
                     if app["node_state"] != "WAITING":
                         log.info("changing node_state to WAITING")
-                        app_node["node_state"] = "WAITING"
+                        app["node_state"] = "WAITING"
                 else:
                     #print("rsp_json: ", rsp_json)
                     # save the url's to each of the active nodes'
                     sn_urls = {}
                     dn_urls = {}
                     #  or rsp_json["host"] is None or rsp_json["id"] != app["id"]
+                    this_node = None
                     for node in rsp_json["nodes"]:
                         if node["node_type"] == app["node_type"] and node["node_number"] == app["node_number"]:
                             # this should be this node
+                           
                             if node["id"] != app["id"]:
                                 # flag - to re-register
                                 log.warn("mis-match node ids, app: {} vs head: {} - re-initializing".format(node["id"], app["id"]))
@@ -78,6 +80,7 @@ async def healthCheck(app):
                                 break
                         if not node["host"]:
                             continue  # not online
+                        this_node = node
                         url = "http://" + node["host"] + ":" + str(node["port"])
                         node_number = node["node_number"]
                         if node["node_type"] == "dn":
@@ -86,6 +89,11 @@ async def healthCheck(app):
                             sn_urls[node_number] = url
                     app["sn_urls"] = sn_urls
                     app["dn_urls"] = dn_urls
+                    if this_node is None and rsp_json["cluster_state"] != "READY":
+                        log.warn("this node not found, re-initialize")
+                        app["node_state"] == "INITIALIZING"
+                        app["node_number"] = -1
+                        
                     if app["node_state"] == "WAITING" and rsp_json["cluster_state"] == "READY" and app["node_number"] >= 0:
                         log.info("setting node_state to READY, node_number: {}".format(app["node_number"]))
                         app["node_state"]  = "READY"

@@ -20,7 +20,9 @@ from basenode import register, healthCheck, info, baseInit
 from domainUtil import getS3KeyForDomain
 import hsds_logger as log
 
-async def getDomain(request):
+async def GET_Domain(request):
+    """HTTP GET method to return JSON for /domains/
+    """
     log.request(request)
     app = request.app
     domain_key = request.match_info.get('key')
@@ -65,8 +67,94 @@ async def getDomain(request):
     log.response(request, resp=resp)
     return resp
 
-async def getGroup(request):
-    """HTTP method to return JSON for group"""
+async def PUT_Domain(request):
+    """HTTP PUT method to create a domain
+    """
+    log.request(request)
+    app = request.app
+    domain_key = request.match_info.get('key')
+    log.info("domain: {}".format(domain_key))
+    s3_key = None
+    try:
+        s3_key = getS3KeyForDomain(domain_key)
+        log.info("s3_key for domain {}: {}".format(domain_key, s3_key))
+    except ValueError as ve:
+        msg = "Invalid domain key: {}".format(str(ve))
+        log.warn(msg)
+        raise HttpBadRequest(msg)
+
+    if getS3Partition(s3_key, app['node_count']) != app['node_number']:
+        # The request shouldn't have come to this node'
+        raise HttpBadRequest(message="wrong node for 'key':{}".format(s3_key))
+
+    meta_cache = app['meta_cache'] 
+    
+    domain_exist = False
+    if s3_key in meta_cache:
+        log.info("{} found in meta cache".format(s3_key))
+        domain_exist = True
+    else:
+        domain_exist = await isS3Obj(app, s3_key, addprefix=False)
+    if domain_exist:
+        # this domain already exists, client must delete it first
+        msg = "Conflict: resource exists: " + domain_key
+        log.info(msg)
+        raise HttpProcessingError(code=409, message=msg)   
+
+    if not request.has_body:
+        msg = "Expected Body to be in request"
+        log.warn(msg)
+        raise HttpProcessingError(code=500, message=msg) 
+
+    body_json = await request.json()
+    if "owner" not in body_json:
+        msg = "Expected Owner Key in Body"
+        log.warn(msg)
+        raise HttpProcessingError(code=500, message=msg) 
+    if "acls" not in body_json:
+        msg = "Expected Owner Key in Body"
+        log.warn(msg)
+        raise HttpProcessingError(code=500, message=msg) 
+
+    # create a root group for the new domain
+    root_id = createObjId("group") 
+    log.info("new root group id: {}".format(root_id))
+    group_json = {"id": root_id, "root": root_id, "domain": domain_key, "links": [], "attributes": [] }
+    try:
+        await putS3JSONObj(app, root_id, group_json)  # write to S3
+    except ClientError as ce:
+        msg = "Error writing s3 obj: " + str(ce)
+        log.response(request, code=500, message=msg)
+        raise HttpProcessingError(code=500, message=msg)
+
+    domain_json = { "root": root_id }
+    domain_json["owner"] = body_json["owner"]
+    domain_json["acls"] = body_json["acls"]
+
+    try:
+        await putS3JSONObj(app, s3_key, domain_json, addprefix=False)  # write to S3
+    except ClientError as ce:
+        msg = "Error writing s3 obj: " + str(ce)
+        log.response(request, code=500, message=msg)
+        raise HttpProcessingError(code=500, message=msg)
+
+    # read back from S3 (will add timestamps metakeys) 
+    log.info("getS3JSONObj({})".format(s3_key))
+    try:
+        domain_json = await getS3JSONObj(app, s3_key, addprefix=False)
+    except ClientError as ce:
+        msg = "Error reading s3 obj: " + s3_key
+        log.response(request, code=500, message=msg)
+        raise HttpProcessingError(code=500, message=msg)
+    meta_cache[s3_key] = domain_json
+
+    resp = await jsonResponse(request, domain_json, status=201)
+    log.response(request, resp=resp)
+    return resp
+
+async def GET_Group(request):
+    """HTTP GET method to return JSON for /groups/
+    """
     log.request(request)
     app = request.app
     group_id = request.match_info.get('id')
@@ -100,7 +188,7 @@ async def getGroup(request):
     log.response(request, resp=resp)
     return resp
 
-async def createGroup(request):
+async def POST_Group(request):
     """ Hander for POST /groups"""
     log.request(request)
     data = await request.post()
@@ -142,9 +230,10 @@ async def init(loop):
     #
     # call app.router.add_get() here to add node-specific routes
     #
-    app.router.add_route('GET', '/domains/{key}', getDomain)
-    app.router.add_route('GET', '/groups/{id}', getGroup)
-    app.router.add_route('POST', '/groups', createGroup)
+    app.router.add_route('GET', '/domains/{key}', GET_Domain)
+    app.router.add_route('PUT', '/domains/{key}', PUT_Domain)
+    app.router.add_route('GET', '/groups/{id}', GET_Group)
+    app.router.add_route('POST', '/groups', POST_Group)
       
     return app
 

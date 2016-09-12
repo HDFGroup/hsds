@@ -14,65 +14,97 @@ from aiohttp.errors import HttpBadRequest, ClientError
 
 import config
 from timeUtil import unixTimeToUTC, elapsedTime
-from hsdsUtil import http_get, isOK, http_post, http_get_json, jsonResponse, getS3Partition, validateUuid, isValidUuid
-from authUtil import getUserFromRequest
-from domainUtil import getParentDomain, getDomainFromRequest
+from hsdsUtil import http_get, isOK, http_post, http_put, http_get_json, jsonResponse, getS3Partition, validateUuid, isValidUuid, getDataNodeUrl
+from authUtil import getUserFromRequest, authValidate, aclCheck
+from domainUtil import getParentDomain, getDomainFromRequest, getDomainJson, isValidDomain
 from basenode import register, healthCheck, info, baseInit
 import hsds_logger as log
 
 
-def getDataNodeUrl(app, obj_id):
-    """ Return host/port for datanode for given obj_id.
-    Throw exception if service is not ready"""
-    dn_urls = app["dn_urls"]
-    node_number = app["node_number"]
-    if app["node_state"] != "READY" or node_number not in dn_urls:
-        print("Node_state:", app["node_state"])
-        print("node_number:", node_number)
-        msg="Service not ready"
-        log.warn(msg)
-        raise HttpProcessingError(message=msg, code=503)
-    dn_number = getS3Partition(obj_id, app['node_count'])
-      
-    url = dn_urls[node_number]
-    log.info("got dn url: {}".format(url))
-    return url
-
-async def getDomain(request):
+async def GET_Domain(request):
     """HTTP method to return JSON for given domain"""
     log.request(request)
     app = request.app
-    user = getUserFromRequest(request)
-    if user:
-        log.info("user: {}".format(user))
-    print("query_string:", request.query_string)
-    if 'myquery' in request.GET:
-        print("myquery:", request.GET['myquery'])
+    await authValidate(request)
+     
+    #print("query_string:", request.query_string)
+    #if 'myquery' in request.GET:
+    #    print("myquery:", request.GET['myquery'])
     
     domain = getDomainFromRequest(request)
-    if isValidUuid(domain):
-        # valid uuid's are not valid domains'
+    if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     
+    domain_json = await getDomainJson(app, domain)
+    
+    resp = await jsonResponse(request, domain_json)
+    log.response(request, resp=resp)
+    return resp
+
+async def PUT_Domain(request):
+    """HTTP method to create a new domain"""
+    log.request(request)
+    app = request.app
+    # use getUserFromRequest rather than authValidate here becuase the domain does not
+    # yet exist
+    # await authValidate(request)
+    req_user = getUserFromRequest(request) # throws exception if user/password is not valid
+    log.info("PUT domain request from: {}".format(req_user))
+    print("getdomain from req") 
+    domain = getDomainFromRequest(request)
+    print("got domain", domain)
+    if not isValidDomain(domain):
+        msg = "Invalid host value: {}".format(domain)
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+
+    parent_domain = getParentDomain(domain)
+    if parent_domain is None:
+        msg = "creation of top-level domains is not supported"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    print("parent_domain:", parent_domain)
+    parent_json = None
+    try:
+        print("get parent domain", parent_domain)
+        parent_json = await getDomainJson(app, parent_domain)
+    except HttpProcessingError as hpe:
+        print("error getting parent domain: {}".format(hpe.code))
+        msg = "Parent domain not found"
+        log.warn(msg)
+        raise HttpProcessingError(code=404, message=msg)
+
+    print("got parent json:", parent_json)
+    if "acls" not in parent_json:
+        log.warn("acls not found in domain: {}".format(parent_domain))
+        raise HttpProcessingError(code=404, message="Forbidden")
+    aclCheck(parent_json["acls"], "create", req_user)  # throws exception is not allowed
+    
     domain_json = { }
+
+    # construct dn request to create new domain
     req = getDataNodeUrl(app, domain)
     req += "/domains/" + domain 
-    print("datanode uri", req)
+    body = { "owner": req_user }
+    body["acls"] = parent_json["acls"]  # copy parent acls to new domain
+
     try:
-        domain_json = await http_get_json(app, req)
-    except ClientError as ce:
-        msg="Error getting domain state -- " + str(ce)
+        domain_json = await http_put(app, req, body)
+    except HttpProcessingError as ce:
+        msg="Error creating domain state -- " + str(ce)
         log.warn(msg)
-        raise HttpProcessingError(message=msg, code=503)
+        raise ce
+
+    # domain creation successful     
     resp = await jsonResponse(request, domain_json)
     log.response(request, resp=resp)
     return resp
 
 
 
-async def getGroup(request):
+async def GET_Group(request):
     """HTTP method to return JSON for group"""
     log.request(request)
     app = request.app 
@@ -108,8 +140,9 @@ async def init(loop):
     #
     # call app.router.add_get() here to add node-specific routes
     #
-    app.router.add_route('GET', '/', getDomain)
-    app.router.add_route('GET', '/groups/{id}', getGroup)
+    app.router.add_route('GET', '/', GET_Domain)
+    app.router.add_route('PUT', '/', PUT_Domain)
+    app.router.add_route('GET', '/groups/{id}', GET_Group)
     #app.router.add_route('POST', '/groups', createGroup)
       
     return app
@@ -130,6 +163,7 @@ if __name__ == '__main__':
     #create the app object
     app = loop.run_until_complete(init(loop))
     app['client'] = client
+    app['domain_cache'] = {}
 
     # run background task
     asyncio.ensure_future(healthCheck(app), loop=loop)

@@ -84,7 +84,7 @@ async def getS3JSONObj(app, id, addprefix=True):
     data = await resp['Body'].read()
     resp['Body'].close()
     json_dict = json.loads(data.decode('utf8'))
-    print("s3 returned:", json_dict)
+    log.info("s3 returned: {}".format(json_dict))
     return json_dict
 
 async def putS3JSONObj(app, id, json_obj, addprefix=True):
@@ -135,7 +135,6 @@ async def http_get_json(app, url):
     async with client.get(url) as rsp:
         log.info("http_get status: {}".format(rsp.status))
         if rsp.status != 200:
-            print("got bad response:", rsp)
             msg = "request to {} failed with code: {}".format(url, rsp.status)
             log.warn(msg)
             raise HttpProcessingError(message=msg, code=rsp.status)
@@ -150,12 +149,34 @@ async def http_post(app, url, data):
     log.info("http_post('{}', data)".format(url, data))
     client = app['client']
     rsp_json = None
-    client = app['client']
     
     async with client.post(url, data=json.dumps(data)) as rsp:
         log.info("http_post status: {}".format(rsp.status))
+        if rsp.status != 200:
+            print("bad response:", str(rsp))
+            msg = "request error"  # tbd - pull error from rsp
+            log.warn(msg)
+            raise HttpProcessingError(message=msg, code=rsp.status)
         rsp_json = await rsp.json()
         log.info("http_post({}) response: {}".format(url, rsp_json))
+    return rsp_json
+
+async def http_put(app, url, data):
+    log.info("http_put('{}', data)".format(url, data))
+    client = app['client']
+    rsp_json = None
+    client = app['client']
+    
+    async with client.put(url, data=json.dumps(data)) as rsp:
+        log.info("http_put status: {}".format(rsp.status))
+        if rsp.status != 201:
+            print("bad response:", str(rsp))
+            msg = "request error"  # tbd - pull error from rsp
+            log.warn(msg)
+            raise HttpProcessingError(message=msg, code=rsp.status)
+
+        rsp_json = await rsp.json()
+        log.info("http_put({}) response: {}".format(url, rsp_json))
     return rsp_json
 
 async def jsonResponse(request, data, status=200):
@@ -168,6 +189,23 @@ async def jsonResponse(request, data, status=200):
     resp.write(answer)
     await resp.write_eof()
     return resp
+
+def getDataNodeUrl(app, obj_id):
+    """ Return host/port for datanode for given obj_id.
+    Throw exception if service is not ready"""
+    dn_urls = app["dn_urls"]
+    node_number = app["node_number"]
+    if app["node_state"] != "READY" or node_number not in dn_urls:
+        log.info("Node_state:".format(app["node_state"]))
+        log.info("node_number:".format(node_number))
+        msg="Service not ready"
+        log.warn(msg)
+        raise HttpProcessingError(message=msg, code=503)
+    dn_number = getS3Partition(obj_id, app['node_count'])
+      
+    url = dn_urls[node_number]
+    log.info("got dn url: {}".format(url))
+    return url
 
 
 
