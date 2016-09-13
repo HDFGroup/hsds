@@ -19,12 +19,11 @@ def isIPAddress(s):
     """Return True if the string looks like an IP address:
         n.n.n.n where n is between 0 and 255 """
     
+    if s == 'localhost':
+        return True # special case for loopback dns_path
+
     parts = s.split('.')
     
-    if len(parts) == 1:
-        # treat as IP address for names like "localhost" or other one-word names
-        # that may get mapped to IP address via /etc/hosts entries
-        return True
     if len(parts) != 4:
         return False
     for part in parts:
@@ -49,6 +48,8 @@ def getParentDomain(domain):
 def validateDomain(id):
     if not isinstance(id, str):
         raise ValueError("Expected string type")
+    if len(id) < 3:
+        raise ValueError("Domain name is too short")
     if len(id) == 38 and id[5] == '-' and id[7] == '-' and id[16] == '-' and id[21] == '-' and id[26] == '-':  
         raise ValueError("Domain name not allowed")
     if len(id) == 14 and id.endswith("-headnode"):
