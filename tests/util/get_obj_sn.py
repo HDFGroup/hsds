@@ -1,3 +1,14 @@
+##############################################################################
+# Copyright by The HDF Group.                                                #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HSDS (HDF5 Scalable Data Service), Libraries and      #
+# Utilities.  The full HSDS copyright notice, including                      #
+# terms governing use, modification, and redistribution, is contained in     #
+# the file COPYING, which can be found at the root of the source code        #
+# distribution tree.  If you do not have access to this file, you may        #
+# request a copy from help@hdfgroup.org.                                     #
+##############################################################################
 import requests
 import sys
 import json
@@ -9,8 +20,8 @@ def printUsage():
 endpoint = '127.0.0.1'
 domain = None
 port = 5102
-username = None
-password = None
+username = "test_user1"
+password = "test"
  
 nargs = len(sys.argv) - 1
 for arg in sys.argv:
@@ -55,5 +66,6 @@ rsp = requests.get(req, headers=headers)
 print("<{}>".format(rsp.status_code))
 if rsp.status_code == 200:
     print(rsp.json())
+
     
     

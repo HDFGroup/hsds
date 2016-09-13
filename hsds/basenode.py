@@ -1,3 +1,14 @@
+##############################################################################
+# Copyright by The HDF Group.                                                #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HSDS (HDF5 Scalable Data Service), Libraries and      #
+# Utilities.  The full HSDS copyright notice, including                      #
+# terms governing use, modification, and redistribution, is contained in     #
+# the file COPYING, which can be found at the root of the source code        #
+# distribution tree.  If you do not have access to this file, you may        #
+# request a copy from help@hdfgroup.org.                                     #
+##############################################################################
 #
 # common node methods of hsds cluster
 # 
@@ -5,6 +16,7 @@ import asyncio
 import json
 import time
 import sys
+from copy import copy
 
 from aiohttp.web import Application, Response, StreamResponse, run_app
 from aiohttp import ClientSession, TCPConnector,  HttpProcessingError  
@@ -13,8 +25,9 @@ import aiobotocore
  
 
 import config
-from timeUtil import unixTimeToUTC, elapsedTime
-from hsdsUtil import http_get_json, isOK, createNodeId, http_post, jsonResponse
+from util.timeUtil import unixTimeToUTC, elapsedTime
+from util.httpUtil import http_get_json, isOK, http_post, jsonResponse
+from util.idUtil import createNodeId
 import hsds_logger as log
 
 
@@ -26,10 +39,10 @@ async def register(app):
     log.info("register: {}".format(req_reg))
    
     body = {"id": app["id"], "port": app["node_port"], "node_type": app["node_type"]}
+    app['register_time'] = int(time.time())
     try:
         log.info("register req: {} body: {}".format(req_reg, body))
-        rsp_json = await http_post(app, req_reg, body)
-        print("rsp_json:", rsp_json)       
+        rsp_json = await http_post(app, req_reg, body)     
         if rsp_json is not None:
             log.info("register response: {}".format(rsp_json))
             app["node_number"] = rsp_json["node_number"]
@@ -56,12 +69,12 @@ async def healthCheck(app):
                 rsp_json = await http_get_json(app, req_node)
                 if rsp_json is None or not isinstance(rsp_json, dict):
                     log.warn("invalid health check response: type: {} text: {}".format(type(rsp_json), rsp_json))
-                elif rsp_json["cluster_state"] != "READY":
+                else:
                     log.info("cluster_state: {}".format(rsp_json["cluster_state"]))
-                    if app["node_state"] != "WAITING":
+                    if rsp_json["cluster_state"] != "READY" and app["node_state"] == "READY":
                         log.info("changing node_state to WAITING")
                         app["node_state"] = "WAITING"
-                else:
+
                     #print("rsp_json: ", rsp_json)
                     # save the url's to each of the active nodes'
                     sn_urls = {}
@@ -78,9 +91,15 @@ async def healthCheck(app):
                                 app["node_state"] == "INITIALIZING"
                                 app["node_number"] = -1
                                 break
+                            if not node["host"]:
+                                # flag - to re-register
+                                log.warn("host not set for this node  - re-initializing".format(node["id"], app["id"]))
+                                app["node_state"] == "INITIALIZING"
+                                app["node_number"] = -1
+                                break
                         if not node["host"]:
                             continue  # not online
-                        this_node = node
+                        this_node = copy(node)
                         url = "http://" + node["host"] + ":" + str(node["port"])
                         node_number = node["node_number"]
                         if node["node_type"] == "dn":
@@ -89,7 +108,8 @@ async def healthCheck(app):
                             sn_urls[node_number] = url
                     app["sn_urls"] = sn_urls
                     app["dn_urls"] = dn_urls
-                    if this_node is None and rsp_json["cluster_state"] != "READY":
+                     
+                    if this_node is None  and rsp_json["cluster_state"] != "READY":
                         log.warn("this node not found, re-initialize")
                         app["node_state"] == "INITIALIZING"
                         app["node_number"] = -1
@@ -140,6 +160,7 @@ def baseInit(loop, node_type):
     app["node_number"] = -1
     app["node_count"] = -1
     app["start_time"] = int(time.time())  # seconds after epoch
+    app['register_time'] = 0
     app["bucket_name"] = config.get("bucket_name")
     app["head_url"] = "http://{}:{}".format(config.get("head_host"), config.get("head_port"))
     app["sn_urls"] = {}

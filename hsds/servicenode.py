@@ -1,3 +1,14 @@
+##############################################################################
+# Copyright by The HDF Group.                                                #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HSDS (HDF5 Scalable Data Service), Libraries and      #
+# Utilities.  The full HSDS copyright notice, including                      #
+# terms governing use, modification, and redistribution, is contained in     #
+# the file COPYING, which can be found at the root of the source code        #
+# distribution tree.  If you do not have access to this file, you may        #
+# request a copy from help@hdfgroup.org.                                     #
+##############################################################################
 #
 # service node of hsds cluster
 # 
@@ -13,24 +24,52 @@ from aiohttp.errors import HttpBadRequest, ClientError
  
 
 import config
-from timeUtil import unixTimeToUTC, elapsedTime
-from hsdsUtil import http_get, isOK, http_post, http_put, http_get_json, jsonResponse, getS3Partition, validateUuid, isValidUuid, getDataNodeUrl
-from authUtil import getUserFromRequest, authValidate, aclCheck
-from domainUtil import getParentDomain, getDomainFromRequest, getDomainJson, isValidDomain
+from util.timeUtil import unixTimeToUTC, elapsedTime
+from util.httpUtil import http_get, isOK, http_post, http_put, http_get_json, jsonResponse
+from util.idUtil import  getObjPartition, validateUuid, isValidUuid, getDataNodeUrl
+from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
+from util.domainUtil import getParentDomain, getDomainFromRequest, isValidDomain
 from basenode import register, healthCheck, info, baseInit
 import hsds_logger as log
 
+async def getDomainJson(app, domain):
+    """ Return domain JSON from cache or fetch from DN if not found
+    """
+    log.info("getDomainJson({})".format(domain))
+    domain_cache = app["domain_cache"]
+    #domain = getDomainFromRequest(request)
+
+    if domain in domain_cache:
+        log.info("returning domain_cache value")
+        return domain_cache[domain]
+
+    domain_json = { }
+    req = getDataNodeUrl(app, domain)
+    req += "/domains/" + domain 
+    log.info("sending dn req: {}".format(req))
+    try:
+        domain_json = await http_get_json(app, req)
+    except ClientError as ce:
+        msg="Error getting domain state -- " + str(ce)
+        log.warn(msg)
+        raise HttpProcessingError(message=msg, code=503)
+    if 'owner' not in domain_json:
+        log.warn("No owner key found in domain")
+        raise HttpProcessingError("Unexpected error", code=500)
+
+    if 'acls' not in domain_json:
+        log.warn("No acls key found in domain")
+        raise HttpProcessingError("Unexpected error", code=500)
+
+    domain_cache[domain] = domain_json  # add to cache
+    return domain_json
 
 async def GET_Domain(request):
     """HTTP method to return JSON for given domain"""
     log.request(request)
     app = request.app
-    await authValidate(request)
-     
-    #print("query_string:", request.query_string)
-    #if 'myquery' in request.GET:
-    #    print("myquery:", request.GET['myquery'])
-    
+    (username, pswd) = getUserPasswordFromRequest(request)
+    validateUserPassword(username, pswd)
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
@@ -38,7 +77,9 @@ async def GET_Domain(request):
         raise HttpBadRequest(message=msg)
     
     domain_json = await getDomainJson(app, domain)
-    
+    # validate that the requesting user has permission to read this domain
+    aclCheck(domain_json, "read", username)
+
     resp = await jsonResponse(request, domain_json)
     log.response(request, resp=resp)
     return resp
@@ -47,14 +88,11 @@ async def PUT_Domain(request):
     """HTTP method to create a new domain"""
     log.request(request)
     app = request.app
-    # use getUserFromRequest rather than authValidate here becuase the domain does not
     # yet exist
-    # await authValidate(request)
-    req_user = getUserFromRequest(request) # throws exception if user/password is not valid
-    log.info("PUT domain request from: {}".format(req_user))
-    print("getdomain from req") 
+    username, pswd = getUserPasswordFromRequest(request) # throws exception if user/password is not valid
+    validateUserPassword(username, pswd)
+    log.info("PUT domain request from: {}".format(username))
     domain = getDomainFromRequest(request)
-    print("got domain", domain)
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
@@ -65,29 +103,24 @@ async def PUT_Domain(request):
         msg = "creation of top-level domains is not supported"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-    print("parent_domain:", parent_domain)
+    log.info("parent_domain: {}".format(parent_domain))
     parent_json = None
     try:
-        print("get parent domain", parent_domain)
+        log.info("get parent domain {}".format(parent_domain))
         parent_json = await getDomainJson(app, parent_domain)
     except HttpProcessingError as hpe:
-        print("error getting parent domain: {}".format(hpe.code))
         msg = "Parent domain not found"
         log.warn(msg)
         raise HttpProcessingError(code=404, message=msg)
 
-    print("got parent json:", parent_json)
-    if "acls" not in parent_json:
-        log.warn("acls not found in domain: {}".format(parent_domain))
-        raise HttpProcessingError(code=404, message="Forbidden")
-    aclCheck(parent_json["acls"], "create", req_user)  # throws exception is not allowed
+    aclCheck(parent_json, "create", username)  # throws exception if not allowed
     
     domain_json = { }
 
     # construct dn request to create new domain
     req = getDataNodeUrl(app, domain)
     req += "/domains/" + domain 
-    body = { "owner": req_user }
+    body = { "owner": username }
     body["acls"] = parent_json["acls"]  # copy parent acls to new domain
 
     try:
@@ -98,7 +131,7 @@ async def PUT_Domain(request):
         raise ce
 
     # domain creation successful     
-    resp = await jsonResponse(request, domain_json)
+    resp = await jsonResponse(request, domain_json, status=201)
     log.response(request, resp=resp)
     return resp
 
@@ -118,6 +151,18 @@ async def GET_Group(request):
         msg = "Invalid group id: {}".format(group_id)
         log.warn(msg)
         raise HttpBadRequest(message=msg)
+
+    username, pswd = getUserPasswordFromRequest(request)
+    validateUserPassword(username, pswd)
+    
+    domain = getDomainFromRequest(request)
+    if not isValidDomain(domain):
+        msg = "Invalid host value: {}".format(domain)
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    
+    domain_json = await getDomainJson(app, domain)
+    aclCheck(domain_json, "read", username)  # throws exception if not allowed
 
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id
