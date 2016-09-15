@@ -11,13 +11,18 @@
 ##############################################################################
 import requests
 import json
+from datetime import datetime
+import time
+import pytz
+import base64
+
 import config
 """
     Helper function - get endpoint we'll send http requests to 
 """ 
-def getEndpoint(node_type):
+def getEndpoint():
     
-    endpoint = 'http://' + config.get(node_type + '_host') + ':' + str(config.get(node_type + '_port'))
+    endpoint = config.get("hsds_endpoint")
     return endpoint
 
 """
@@ -43,4 +48,86 @@ def getActiveNodeCount():
     sn_count = rsp_json["active_sn_count"]
     dn_count = rsp_json["active_dn_count"]
     return sn_count, dn_count
+
+"""
+Helper - get base domain to use for test_cases
+"""
+def getTestDomainName(name):
+    now = int(time.time())
+    dt = datetime.fromtimestamp(now, pytz.utc)
+    domain = "{:04d}{:02d}{:02d}T{:02d}{:02d}{:02d}Z".format(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second)  
+    domain += '.' 
+    domain += name.lower()
+    domain += '.'
+    domain += config.get('user_name')
+    domain += '.home'
+    return domain
+
+
+
+"""
+Helper - get default request headers for domain
+"""
+def getRequestHeaders(domain=None, username=None, password=None):
+    if username is None:
+        username = config.get("user_name")
+    if password is None:
+        password = config.get("user_password")
+    headers = { }
+    if domain is not None:
+        headers['host'] = domain
+    if username and password:
+        auth_string = username + ':' + password
+        auth_string = auth_string.encode('utf-8')
+        auth_string = base64.b64encode(auth_string)
+        auth_string = b"Basic " + auth_string
+        headers['Authorization'] = auth_string
+    return headers
+
+"""
+Helper - Get parent domain of given domain.
+"""
+def getParentDomain(domain):
+    indx = domain.find('.')
+    if indx < 0:
+        return None  # already at top-level domain
+    if indx == len(domain) - 1:
+        raise ValueError("Invalid domain") # can't end with dot
+    indx += 1
+    parent = domain[indx:]
+    return parent
+
+"""
+Helper - Create domain (and parent domin if needed)
+"""
+def setupDomain(domain):
+    endpoint = config.get("hsds_endpoint")
+    headers = getRequestHeaders(domain=domain)
+    req = endpoint + "/"
+    rsp = requests.get(req, headers=headers)
+    if rsp.status_code == 200:
+        print("domain exists")
+        return  # already have domain
+    if rsp.status_code != 404:
+        # something other than "not found"
+        raise ValueError("Unexpected get domain error: {}".format(rsp.status_code))
+
+    parent_domain = getParentDomain(domain)
+    if parent_domain is None:
+        raise ValueError("Invalid domain")
+    # create parent domain if needed
+    setupDomain(parent_domain)  
+     
+    headers = getRequestHeaders(domain=domain)
+    rsp = requests.put(req, headers=headers)
+    if rsp.status_code != 201:
+        raise ValueError("Unexpected put domain error: {}".format(rsp.status_code))
+       
+
+     
+
+    
+
+
+
         

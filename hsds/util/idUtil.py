@@ -49,7 +49,7 @@ def createObjId(obj_type):
 def getHeadNodeS3Key():
     return "headnode"
 
-def validateUuid(id):
+def validateUuid(id, obj_class=None):
     if not isinstance(id, str):
         raise ValueError("Expected string type")
     if len(id) != 38:  
@@ -59,10 +59,19 @@ def validateUuid(id):
         raise ValueError("Unexpected prefix")
     if id[1] != '-':
         raise ValueError("Unexpected prefix")
+    if obj_class is not None:
+        if id[0] != obj_class[0].lower():
+            raise ValueError("Unexpected prefix for class: " + obj_class)
+    for ch in id:
+        if ch.isalnum():
+            continue
+        if ch == '-':
+            continue
+        raise ValueError("Unexpected character in uuid: " + ch)
 
-def isValidUuid(id):
+def isValidUuid(id, obj_class=None):
     try:
-        validateUuid(id)
+        validateUuid(id, obj_class)
         return True
     except ValueError:
         return False

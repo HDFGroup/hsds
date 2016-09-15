@@ -59,9 +59,8 @@ async def http_post(app, url, data):
     
     async with client.post(url, data=json.dumps(data)) as rsp:
         log.info("http_post status: {}".format(rsp.status))
-        if rsp.status != 200:
-            print("bad response:", str(rsp))
-            msg = "request error"  # tbd - pull error from rsp
+        if rsp.status not in (200, 201):
+            msg = "request error - satus: ".format(rsp.status)  # tbd - pull error from rsp
             log.warn(msg)
             raise HttpProcessingError(message=msg, code=rsp.status)
         rsp_json = await rsp.json()

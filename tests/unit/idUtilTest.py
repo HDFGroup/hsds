@@ -16,12 +16,11 @@ import os
 
 sys.path.append('../../hsds/util')
 sys.path.append('../../hsds')
-from idUtil import getObjPartition, createObjId
-from domainUtil import getParentDomain, isValidDomain, getS3KeyForDomain
-
-class UtilTest(unittest.TestCase):
+from idUtil import getObjPartition, isValidUuid, validateUuid, createObjId
+ 
+class IdUtilTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
-        super(UtilTest, self).__init__(*args, **kwargs)
+        super(IdUtilTest, self).__init__(*args, **kwargs)
         # main
     
     def testCreateObjId(self):
@@ -42,6 +41,21 @@ class UtilTest(unittest.TestCase):
         except ValueError:
             pass # expected
 
+    def testIsValidUuid(self):
+        id = "g-1e76d862-7abe-11e6-8852-3c15c2da029e"
+        bad_ids = ("g-1e76d862",
+                   "g-1e76d862/7abe-11e6-8852-3c15c2da029e",
+                   "1e76d862-7abe-11e6-8852-3c15c2da029e-g")
+         
+        self.assertTrue(isValidUuid(id))
+        self.assertTrue(isValidUuid(id, obj_class="Group"))
+        self.assertTrue(isValidUuid(id, obj_class="group"))
+        self.assertTrue(not isValidUuid(id, obj_class="Dataset"))
+        validateUuid(id)
+        for item in bad_ids:
+            self.assertEqual(isValidUuid(item), False)
+        
+
 
     def testGetObjPartition(self):
         node_count = 12
@@ -52,36 +66,7 @@ class UtilTest(unittest.TestCase):
                 self.assertTrue(node_number >= 0)
                 self.assertTrue(node_number < node_count)
 
-    def testGetS3KeyForDomain(self):
-        s3path = getS3KeyForDomain("nex.nasa.gov")
-        self.assertEqual(s3path, "gov/nasa/nex")
-        s3path = getS3KeyForDomain("my-data.nex.nasa.gov")  # hyphen ok
-        self.assertEqual(s3path, "gov/nasa/nex/my-data")
-        # test invalid dns names
-        invalid_domains = ('x',       # too short
-                           '.x.y.z',  # period in front
-                           'x.y.z.',  # period in back
-                           'x.y..z',  # consecutive periods
-                           '192.168.1.100',  # looks like IP
-                           'mydomain/foobar') # has a slash
-        for domain in invalid_domains:
-            self.assertEqual(isValidDomain(domain), False)  
-
-        valid_domains = ("nex.nasa.gov", "home")
-        for domain in valid_domains:
-            self.assertTrue(isValidDomain(domain))  
-
-              
-
-    def testGetParentDomain(self):
-        domain = "nex.nasa.gov"
-        parent = getParentDomain(domain)
-        self.assertEqual(parent, "nasa.gov")
-        domain = "gov"
-        parent = getParentDomain(domain)
-        self.assertEqual(parent, None)
-
-                                  
+    
              
 if __name__ == '__main__':
     #setup test files

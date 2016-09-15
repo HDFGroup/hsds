@@ -58,7 +58,7 @@ print("req:", req)
 body = { }
 rsp = requests.put(req, headers=headers, data=json.dumps(body))
 print("<{}>".format(rsp.status_code))
-if rsp.status_code == 200:
+if rsp.status_code == 201:
     print(rsp.json())
     
     

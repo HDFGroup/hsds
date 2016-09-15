@@ -14,7 +14,10 @@ import sys
 
 cfg = {
     'head_host': '127.0.0.1',
-    'head_port': 5100
+    'head_port': 5100,
+    'hsds_endpoint': 'http://127.0.0.1:5102',
+    'user_name': 'test_user1',
+    'user_password': 'test'
 }
    
 def get(x):     

@@ -36,6 +36,10 @@ def isIPAddress(s):
     return True
 
 def getParentDomain(domain):
+    """Get parent domain of given domain.
+    E.g. getParentDomain("www.hdfgroup.org") returns "hdfgroup.org"
+    Return None if the given domain is already a top-level domain.
+    """
     indx = domain.find('.')
     if indx < 0:
         return None  # already at top-level domain

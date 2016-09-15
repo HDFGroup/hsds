@@ -26,7 +26,7 @@ from aiohttp.errors import HttpBadRequest, ClientError
 import config
 from util.timeUtil import unixTimeToUTC, elapsedTime
 from util.httpUtil import http_get, isOK, http_post, http_put, http_get_json, jsonResponse
-from util.idUtil import  getObjPartition, validateUuid, isValidUuid, getDataNodeUrl
+from util.idUtil import  getObjPartition, validateUuid, isValidUuid, getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import getParentDomain, getDomainFromRequest, isValidDomain
 from basenode import register, healthCheck, info, baseInit
@@ -115,6 +115,20 @@ async def PUT_Domain(request):
 
     aclCheck(parent_json, "create", username)  # throws exception if not allowed
     
+    # create a root group for the new domain
+    # TBD - fire off create group and create domain dn requests at the same time
+    root_id = createObjId("group") 
+    log.info("new root group id: {}".format(root_id))
+    group_json = {"id": root_id, "root": root_id, "domain": domain }
+    log.info("create group for domain, body: " + json.dumps(group_json))
+    req = getDataNodeUrl(app, root_id) + "/groups"
+    try:
+        group_json = await http_post(app, req, group_json)
+    except HttpProcessingError as ce:
+        msg="Error creating root group for domain -- " + str(ce)
+        log.warn(msg)
+        raise ce
+ 
     domain_json = { }
 
     # construct dn request to create new domain
@@ -122,6 +136,7 @@ async def PUT_Domain(request):
     req += "/domains/" + domain 
     body = { "owner": username }
     body["acls"] = parent_json["acls"]  # copy parent acls to new domain
+    body["root"] = root_id
 
     try:
         domain_json = await http_put(app, req, body)
