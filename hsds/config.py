@@ -19,6 +19,7 @@ cfg = {
     'bucket_name': 'hdfgroup.hsdsdev',
     'head_host': 'localhost',
     'head_port': 5100,
+    'hsds_endpoint': 'http://127.0.0.1:5102',
     'dn_host': 'localhost',
     'dn_port' : 5101,  # run multiple dn nodes on odd ports
     'sn_host': 'localhost',

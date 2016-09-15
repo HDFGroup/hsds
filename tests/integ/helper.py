@@ -106,7 +106,6 @@ def setupDomain(domain):
     req = endpoint + "/"
     rsp = requests.get(req, headers=headers)
     if rsp.status_code == 200:
-        print("domain exists")
         return  # already have domain
     if rsp.status_code != 404:
         # something other than "not found"
