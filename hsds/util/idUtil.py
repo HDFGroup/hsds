@@ -13,9 +13,9 @@
 # idUtil:
 # id (uuid) related functions
 # 
-import json
 import hashlib
 import uuid
+from aiohttp import HttpProcessingError
 import hsds_logger as log
 
 def getIdHash(id):
@@ -98,7 +98,7 @@ def getDataNodeUrl(app, obj_id):
         raise HttpProcessingError(message=msg, code=503)
     dn_number = getObjPartition(obj_id, app['node_count'])
       
-    url = dn_urls[node_number]
+    url = dn_urls[dn_number]
     log.info("got dn url: {}".format(url))
     return url
   

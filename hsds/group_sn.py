@@ -12,24 +12,16 @@
 #
 # service node of hsds cluster
 # 
-import asyncio
-import json
-import time
-import sys
  
 
-from aiohttp.web import Application, Response, StreamResponse
-from aiohttp import ClientSession, TCPConnector, HttpProcessingError 
+from aiohttp import HttpProcessingError 
 from aiohttp.errors import HttpBadRequest, ClientError
  
-
-import config
-from util.timeUtil import unixTimeToUTC, elapsedTime
-from util.httpUtil import http_get, isOK, http_post, http_put, http_get_json, jsonResponse
-from util.idUtil import  getObjPartition, validateUuid, isValidUuid, getDataNodeUrl, createObjId
+from util.httpUtil import  http_get_json, jsonResponse
+from util.idUtil import   isValidUuid, getDataNodeUrl
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
-from util.domainUtil import getParentDomain, getDomainFromRequest, isValidDomain
-from basenode import register, healthCheck, info, baseInit
+from util.domainUtil import  getDomainFromRequest, isValidDomain
+from servicenode_lib import getDomainJson
 import hsds_logger as log
 
 
@@ -50,7 +42,10 @@ async def GET_Group(request):
         raise HttpBadRequest(message=msg)
 
     username, pswd = getUserPasswordFromRequest(request)
-    validateUserPassword(username, pswd)
+    if username is None and app['allow_noauth']:
+        username = "default"
+    else:
+        validateUserPassword(username, pswd)
     
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):

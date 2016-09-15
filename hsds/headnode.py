@@ -15,10 +15,11 @@
 import asyncio
 import json
 import time
+import sys
 
-from aiohttp.web import Application, Response, StreamResponse, run_app
-from aiohttp import log, ClientSession, TCPConnector, HttpProcessingError
-from aiohttp.errors import HttpBadRequest, ClientOSError
+from aiohttp.web import Application, StreamResponse, run_app
+from aiohttp import  ClientSession, TCPConnector
+from aiohttp.errors import HttpBadRequest
 import aiobotocore
 
 import config
@@ -36,7 +37,6 @@ async def healthCheck(app):
     app["last_health_check"] = int(time.time())
 
     # update/initialize root object before starting node updates
-    bucket_name = app['bucket_name']
     headnode_key = getHeadNodeS3Key()
     log.info("headnode S3 key".format(headnode_key))
     headnode_obj_found = await isS3Obj(app, headnode_key)
@@ -77,6 +77,7 @@ async def healthCheck(app):
         head_state["last_health_check"] = now
         log.info("write head_state to S3: {}".format(head_state))
         rsp = await putS3JSONObj(app, headnode_key, head_state)
+        log.info("putS3JSONObj complete")
         
         for node in nodes:         
             if node["host"] is None:

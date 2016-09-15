@@ -10,7 +10,6 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 
-from aiohttp.errors import HttpBadRequest, ClientError
 
 #
 # Domain utilities

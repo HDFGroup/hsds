@@ -53,9 +53,8 @@ def getUserPasswordFromRequest(request):
     pswd = None
     if 'Authorization' not in request.headers:
         log.info("no Authorization in header")
-        raise  HttpBadRequest("Invalid Authorization header")
-    scheme, _, token = auth_header = request.headers.get(
-        'Authorization', '').partition(' ')
+        return None, None
+    scheme, _, token =  request.headers.get('Authorization', '').partition(' ')
     if not scheme or not token:
         log.info("Invalid Authorization header")
         raise HttpBadRequest("Invalid Authorization header")
@@ -68,17 +67,17 @@ def getUserPasswordFromRequest(request):
         token_decoded = base64.decodebytes(token)
     except binascii.Error:
         msg = "Malformed authorization header"
-        low.warn(msg)
-        raise HTTPBadRequest(msg)
+        log.warn(msg)
+        raise HttpBadRequest(msg)
     if token_decoded.index(b':') < 0:
         msg = "Malformed authorization header (No ':' character)"
-        low.warn(msg)
-        raise HTTPBadRequest(msg)
+        log.warn(msg)
+        raise HttpBadRequest(msg)
     user, _, pswd = token_decoded.partition(b':')
     if not user or not pswd:
         msg = "Malformed authorization header, user/password not found"
-        low.warn(msg)
-        raise HTTPBadRequest(msg)
+        log.warn(msg)
+        raise HttpBadRequest(msg)
    
     user = user.decode('utf-8')   # convert bytes to string
     pswd = pswd.decode('utf-8')   # convert bytes to string

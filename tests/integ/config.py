@@ -17,7 +17,8 @@ cfg = {
     'head_port': 5100,
     'hsds_endpoint': 'http://127.0.0.1:5102',
     'user_name': 'test_user1',
-    'user_password': 'test'
+    'user_password': 'test',
+    'test_noauth': True
 }
    
 def get(x):     

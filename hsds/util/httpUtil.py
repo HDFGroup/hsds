@@ -15,7 +15,6 @@
 # 
 import json
 from aiohttp.web import StreamResponse
-from aiohttp.errors import  ClientOSError
 from aiohttp import HttpProcessingError 
 import hsds_logger as log
 

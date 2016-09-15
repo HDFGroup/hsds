@@ -12,64 +12,29 @@
 #
 # service node of hsds cluster
 # 
-import asyncio
 import json
-import time
-import sys
- 
 
-from aiohttp.web import Application, Response, StreamResponse
-from aiohttp import ClientSession, TCPConnector, HttpProcessingError 
-from aiohttp.errors import HttpBadRequest, ClientError
- 
+from aiohttp import  HttpProcessingError 
+from aiohttp.errors import HttpBadRequest
 
-import config
-from util.timeUtil import unixTimeToUTC, elapsedTime
-from util.httpUtil import http_get, isOK, http_post, http_put, http_get_json, jsonResponse
-from util.idUtil import  getObjPartition, validateUuid, isValidUuid, getDataNodeUrl, createObjId
+from util.httpUtil import  http_post, http_put, jsonResponse
+from util.idUtil import  getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
-from util.domainUtil import getParentDomain, getDomainFromRequest, isValidDomain
-from basenode import register, healthCheck, info, baseInit
+from util.domainUtil import getParentDomain, getDomainFromRequest, isValidDomain 
+from servicenode_lib import getDomainJson
 import hsds_logger as log
 
-async def getDomainJson(app, domain):
-    """ Return domain JSON from cache or fetch from DN if not found
-    """
-    log.info("getDomainJson({})".format(domain))
-    domain_cache = app["domain_cache"]
-    #domain = getDomainFromRequest(request)
-
-    if domain in domain_cache:
-        log.info("returning domain_cache value")
-        return domain_cache[domain]
-
-    domain_json = { }
-    req = getDataNodeUrl(app, domain)
-    req += "/domains/" + domain 
-    log.info("sending dn req: {}".format(req))
-    try:
-        domain_json = await http_get_json(app, req)
-    except ClientError as ce:
-        msg="Error getting domain state -- " + str(ce)
-        log.warn(msg)
-        raise HttpProcessingError(message=msg, code=503)
-    if 'owner' not in domain_json:
-        log.warn("No owner key found in domain")
-        raise HttpProcessingError("Unexpected error", code=500)
-
-    if 'acls' not in domain_json:
-        log.warn("No acls key found in domain")
-        raise HttpProcessingError("Unexpected error", code=500)
-
-    domain_cache[domain] = domain_json  # add to cache
-    return domain_json
 
 async def GET_Domain(request):
     """HTTP method to return JSON for given domain"""
     log.request(request)
     app = request.app
+
     (username, pswd) = getUserPasswordFromRequest(request)
-    validateUserPassword(username, pswd)
+    if username is None and app['allow_noauth']:
+        username = "default"
+    else:
+        validateUserPassword(username, pswd)
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
@@ -80,7 +45,12 @@ async def GET_Domain(request):
     # validate that the requesting user has permission to read this domain
     aclCheck(domain_json, "read", username)
 
-    resp = await jsonResponse(request, domain_json)
+    # return just the keys as per the REST API
+    rsp_json = { }
+    rsp_json["root"] = domain_json["root"]
+    rsp_json["owner"] = domain_json["owner"]
+
+    resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp
 

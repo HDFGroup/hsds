@@ -13,20 +13,19 @@
 # common node methods of hsds cluster
 # 
 import asyncio
-import json
 import time
 import sys
 from copy import copy
 
-from aiohttp.web import Application, Response, StreamResponse, run_app
+from aiohttp.web import Application, StreamResponse
 from aiohttp import ClientSession, TCPConnector,  HttpProcessingError  
-from aiohttp.errors import HttpBadRequest, ClientError
+from aiohttp.errors import ClientError
 import aiobotocore
  
 
 import config
 from util.timeUtil import unixTimeToUTC, elapsedTime
-from util.httpUtil import http_get_json, isOK, http_post, jsonResponse
+from util.httpUtil import http_get_json, http_post, jsonResponse
 from util.idUtil import createNodeId
 import hsds_logger as log
 

@@ -54,9 +54,49 @@ class DomainTest(unittest.TestCase):
         for k in ("root", "owner", "acls"):
              self.assertTrue(k in rspJson)
 
+        root_id = rspJson["root"]
+
         # verify that putting the same domain again fails with a 409 error
         rsp = requests.put(req, headers=headers)
         self.assertEqual(rsp.status_code, 409)
+
+        # do a get on the new domain
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        for k in ("root", "owner"):
+             self.assertTrue(k in rspJson)
+        # we should get the same value for root id
+        self.assertEqual(root_id, rspJson["root"])
+
+        # try doing a GET with a host query args
+        headers = helper.getRequestHeaders()
+        req = helper.getEndpoint() + "/?host=" + domain
+        # do a get on the domain with a query arg for host
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        for k in ("root", "owner"):
+             self.assertTrue(k in rspJson)
+        # we should get the same value for root id
+        self.assertEqual(root_id, rspJson["root"])
+
+        # try doing a un-authenticated request
+        if config.get("test_noauth"):
+            print("test_noauth")
+            headers = helper.getRequestHeaders()
+            req = helper.getEndpoint() + "/?host=" + domain
+            # do a get on the domain with a query arg for host
+            rsp = requests.get(req)
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+            for k in ("root", "owner"):
+                self.assertTrue(k in rspJson)
+            # we should get the same value for root id
+            self.assertEqual(root_id, rspJson["root"])
+
+
+
 
     def testGetNotFound(self):
         domain = 'doesnotexist.' + self.base_domain  
@@ -64,6 +104,38 @@ class DomainTest(unittest.TestCase):
         req = helper.getEndpoint() + '/'
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 404)
+
+    def testInvalidDomain(self):
+        # can't have two consecutive dots'       
+        domain = 'two.dots..are.bad.' + self.base_domain   
+        req = helper.getEndpoint() + '/'
+        headers = helper.getRequestHeaders(domain=domain)
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 400)  # 400 == bad syntax
+        
+        # can't have a slash
+        domain = 'no/slash.' + self.base_domain    
+        req = helper.getEndpoint() + '/'
+        headers = helper.getRequestHeaders(domain=domain)
+        rsp = requests.get(req, headers=headers)
+        # somehow this is showing up as a 400
+        self.assertEqual(rsp.status_code, 404)  # 400 == bad syntax
+        
+        # just a dot is no good
+        domain = '.'  + self.base_domain  
+        req = helper.getEndpoint() + '/'
+        headers = helper.getRequestHeaders(domain=domain)
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 400)  # 400 == bad syntax
+        
+        # dot in the front is bad
+        domain =  '.dot.in.front.is.bad.' + self.base_domain    
+        req = helper.getEndpoint() + '/'
+        headers = helper.getRequestHeaders(domain=domain)
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 400)  # 400 == bad syntax
+        
+         
     
              
 if __name__ == '__main__':

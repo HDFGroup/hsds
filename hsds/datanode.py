@@ -13,18 +13,11 @@
 # data node of hsds cluster
 # 
 import asyncio
-import json
-import time
-import sys
 
-from aiohttp.web import Application, Response, run_app
-from aiohttp import ClientSession, TCPConnector, HttpProcessingError 
-from aiohttp.errors import HttpBadRequest, ClientOSError 
-
+from aiohttp.web import run_app
+from aiohttp import ClientSession, TCPConnector 
 import config
-from util.timeUtil import unixTimeToUTC, elapsedTime
-from util.httpUtil import isOK, http_post, jsonResponse
-from basenode import register, healthCheck, info, baseInit
+from basenode import healthCheck, baseInit
 import hsds_logger as log
 from domain_dn import GET_Domain, PUT_Domain, DELETE_Domain
 from group_dn import GET_Group, POST_Group

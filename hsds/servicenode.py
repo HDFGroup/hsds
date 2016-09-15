@@ -13,26 +13,15 @@
 # service node of hsds cluster
 # 
 import asyncio
-import json
-import time
-import sys
  
-
-from aiohttp.web import Application, Response, StreamResponse, run_app
-from aiohttp import ClientSession, TCPConnector, HttpProcessingError 
-from aiohttp.errors import HttpBadRequest, ClientError
+from aiohttp.web import  run_app
+from aiohttp import ClientSession, TCPConnector 
  
-
 import config
-from util.timeUtil import unixTimeToUTC, elapsedTime
-from util.httpUtil import http_get, isOK, http_post, http_put, http_get_json, jsonResponse
-from util.idUtil import  getObjPartition, validateUuid, isValidUuid, getDataNodeUrl, createObjId
-from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
-from util.domainUtil import getParentDomain, getDomainFromRequest, isValidDomain
-from basenode import register, healthCheck, info, baseInit
+from basenode import healthCheck,  baseInit
 import hsds_logger as log
 from domain_sn import GET_Domain, PUT_Domain
-from group_dn import GET_Group, POST_Group
+from group_sn import GET_Group 
  
 
 async def init(loop):
@@ -54,7 +43,7 @@ async def init(loop):
 #
 
 if __name__ == '__main__':
-
+    log.info("Servicenode initializing")
     loop = asyncio.get_event_loop()
 
     # create a client Session here so that all client requests 
@@ -66,6 +55,11 @@ if __name__ == '__main__':
     app = loop.run_until_complete(init(loop))
     app['client'] = client
     app['domain_cache'] = {}
+    if config.get("allow_noauth"):
+        app['allow_noauth'] = True
+    else:
+        app['allow_noauth'] = False
+
 
     # run background task
     asyncio.ensure_future(healthCheck(app), loop=loop)

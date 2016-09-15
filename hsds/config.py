@@ -13,6 +13,7 @@ import os
 import sys
 
 cfg = {
+    'allow_noauth': True,
     'aws_access_key_id': 'xxx',  
     'aws_secret_access_key': 'xxx',    
     'aws_region': 'us-east-1',
