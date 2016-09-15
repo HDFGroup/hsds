@@ -18,7 +18,7 @@ import time
 import sys
  
 
-from aiohttp.web import Application, Response, StreamResponse, run_app
+from aiohttp.web import Application, Response, StreamResponse
 from aiohttp import ClientSession, TCPConnector, HttpProcessingError 
 from aiohttp.errors import HttpBadRequest, ClientError
  
@@ -31,44 +31,47 @@ from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPass
 from util.domainUtil import getParentDomain, getDomainFromRequest, isValidDomain
 from basenode import register, healthCheck, info, baseInit
 import hsds_logger as log
-from domain_sn import GET_Domain, PUT_Domain
-from group_dn import GET_Group, POST_Group
+
+
+
+async def GET_Group(request):
+    """HTTP method to return JSON for group"""
+    log.request(request)
+    app = request.app 
+
+    group_id = request.match_info.get('id')
+    if not group_id:
+        msg = "Missing group id"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    if not isValidUuid(group_id) or not group_id.startswith("g-"):
+        msg = "Invalid group id: {}".format(group_id)
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+
+    username, pswd = getUserPasswordFromRequest(request)
+    validateUserPassword(username, pswd)
+    
+    domain = getDomainFromRequest(request)
+    if not isValidDomain(domain):
+        msg = "Invalid host value: {}".format(domain)
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    
+    domain_json = await getDomainJson(app, domain)
+    aclCheck(domain_json, "read", username)  # throws exception if not allowed
+
+    req = getDataNodeUrl(app, group_id)
+    req += "/groups/" + group_id
+    group_json = {} 
+    try:
+        group_json = await http_get_json(app, req)
+    except ClientError as ce:
+        msg="Error getting group state -- " + str(ce)
+        log.warn(msg)
+        raise HttpProcessingError(message=msg, code=503)
  
-
-async def init(loop):
-    """Intitialize application and return app object"""
-    app = baseInit(loop, 'sn')
-
-    #
-    # call app.router.add_get() here to add node-specific routes
-    #
-    app.router.add_route('GET', '/', GET_Domain)
-    app.router.add_route('PUT', '/', PUT_Domain)
-    app.router.add_route('GET', '/groups/{id}', GET_Group)
-    #app.router.add_route('POST', '/groups', createGroup)
-      
-    return app
-
-#
-# Main
-#
-
-if __name__ == '__main__':
-
-    loop = asyncio.get_event_loop()
-
-    # create a client Session here so that all client requests 
-    #   will share the same connection pool
-    max_tcp_connections = int(config.get("max_tcp_connections"))
-    client = ClientSession(loop=loop, connector=TCPConnector(limit=max_tcp_connections))
-
-    #create the app object
-    app = loop.run_until_complete(init(loop))
-    app['client'] = client
-    app['domain_cache'] = {}
-
-    # run background task
-    asyncio.ensure_future(healthCheck(app), loop=loop)
-   
-    # run the app
-    run_app(app, port=config.get("sn_port"))
+    resp = await jsonResponse(request, group_json)
+    log.response(request, resp=resp)
+    return resp
+ 
