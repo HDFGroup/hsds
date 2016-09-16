@@ -30,10 +30,10 @@ CSV_LOCK, CSV = None, None
 CSV_HEADING = ['routine', 'iteration', 'seconds', 'micro_seconds']
 
 # Number of random time series for multiple_time_series
-MUTLI_SERISE_N = 18
+MULTI_SERIES_N = 16
 
-#LOGLEVEL = logging.INFO   
-LOGLEVEL = logging.DEBUG
+LOGLEVEL = logging.INFO   
+#LOGLEVEL = logging.DEBUG
 
 def timing_tally_init():
     '''Routine sets up a timing output csv stream. The lock is used
@@ -144,14 +144,14 @@ def single_time_series(fname, vname, its):
 
 def multiple_time_series(fname, vname, its):
     '''Multiple time-series - Get multiple timeseries (x and y are fixed, but there is a set of them)'''
-    global MUTLI_SERISE_N 
+    global MULTI_SERIES_N 
     logging.info('multiple_time_series called with (%s, %s), iterations %d' % (fname, vname, its) )
     hfd, fillv, dtm = prime_h5_source(fname, vname, 1)
     tmrnge = len(dtm)
 
     for i in range(0, its):
         tmstr = datetime.datetime.now() 
-        xyall = random_loc(hfd['lon'].shape[0], hfd['lat'].shape[0], MUTLI_SERISE_N)
+        xyall = random_loc(hfd['lon'].shape[0], hfd['lat'].shape[0], MULTI_SERIES_N)
 
         for xy in xyall: 
             dat = hfd[vname][ 0:tmrnge-1, xy[1], xy[0] ]
@@ -160,7 +160,7 @@ def multiple_time_series(fname, vname, its):
             logging.debug("multiple_time_series : %s, mean %s, variance %s " % (str(xy), str(m), str(v)) )
 
         logging.debug('multiple_time_series called with %d locations over times %s to %s, iteration %d' % \
-                         (MUTLI_SERISE_N, dtm[0].strftime("%Y.%m.%d"), dtm[tmrnge-1].strftime("%Y.%m.%d"), i) ) 
+                         (MULTI_SERIES_N, dtm[0].strftime("%Y.%m.%d"), dtm[tmrnge-1].strftime("%Y.%m.%d"), i) ) 
         tmtot = datetime.datetime.now() - tmstr 
         tally_write(['multiple_time_series', i+1, tmtot.seconds, tmtot.microseconds])
 
@@ -211,7 +211,7 @@ if __name__ == '__main__':
         logging.warn("WARN : number of threads is < number of test routines. N threads set to %d" % nthrds)
     if nthrds%nroutines != 0: 
         nthrds = nthrds + (nthrds%nroutines)
-        logging.warn("WARN : number of threads is not evenly diviable by the number of test routines. N threads set to %d for probe fairness" % nthrds)
+        logging.warn("WARN : number of threads is not evenly divisible by the number of test routines. N threads set to %d for probe fairness" % nthrds)
     
     logging.debug("starting with number of threads %d, number of test routines %d, number of iterations %d" % (nthrds, nroutines, nits))
         
