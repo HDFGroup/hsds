@@ -134,9 +134,9 @@ def proc_files(flist, vname):
 if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
     if len(sys.argv) != 1:
-        logging.error('climanim.py - pipe in a list of files to make an' + \
-                      'animation, e.g. cat flist.txt | ./climanim.py'+\
-                      'Files in the list should be an appropriate set,'+\
+        logging.error('climanim.py - pipe in a list of files to make an ' + \
+                      'animation, e.g. cat flist.txt | ./climanim.py '+\
+                      'Files in the list should be an appropriate set, '+\
                       'historical+rcp85 of some variable, etc...')
         sys.exit(1)
 
