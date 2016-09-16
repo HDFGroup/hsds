@@ -2,8 +2,8 @@
 # Copyright by The HDF Group.                                                #
 # All rights reserved.                                                       #
 #                                                                            #
-# This file is part of HSDS (HDF5 Scalable Data Server) Service, Libraries and      #
-# Utilities.  The full HSDS Server copyright notice, including          #
+# This file is part of HSDS (HDF5 Scalable Data Service), Libraries and      #
+# Utilities.  The full HSDS copyright notice, including                      #
 # terms governing use, modification, and redistribution, is contained in     #
 # the file COPYING, which can be found at the root of the source code        #
 # distribution tree.  If you do not have access to this file, you may        #
@@ -14,7 +14,11 @@ import sys
 
 cfg = {
     'head_host': '127.0.0.1',
-    'head_port': 5100
+    'head_port': 5100,
+    'hsds_endpoint': 'http://127.0.0.1:5102',
+    'user_name': 'test_user1',
+    'user_password': 'test',
+    'test_noauth': True
 }
    
 def get(x):     

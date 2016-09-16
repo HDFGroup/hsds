@@ -3,7 +3,7 @@
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HSDS (HDF5 Scalable Data Service), Libraries and      #
-# Utilities.  The full HSDS copyright notice, including          #
+# Utilities.  The full HSDS copyright notice, including                      #
 # terms governing use, modification, and redistribution, is contained in     #
 # the file COPYING, which can be found at the root of the source code        #
 # distribution tree.  If you do not have access to this file, you may        #
@@ -13,12 +13,14 @@ import os
 import sys
 
 cfg = {
+    'allow_noauth': True,
     'aws_access_key_id': 'xxx',  
     'aws_secret_access_key': 'xxx',    
     'aws_region': 'us-east-1',
     'bucket_name': 'hdfgroup.hsdsdev',
     'head_host': 'localhost',
     'head_port': 5100,
+    'hsds_endpoint': 'http://127.0.0.1:5102',
     'dn_host': 'localhost',
     'dn_port' : 5101,  # run multiple dn nodes on odd ports
     'sn_host': 'localhost',

@@ -1,18 +1,32 @@
+##############################################################################
+# Copyright by The HDF Group.                                                #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HSDS (HDF5 Scalable Data Service), Libraries and      #
+# Utilities.  The full HSDS copyright notice, including                      #
+# terms governing use, modification, and redistribution, is contained in     #
+# the file COPYING, which can be found at the root of the source code        #
+# distribution tree.  If you do not have access to this file, you may        #
+# request a copy from help@hdfgroup.org.                                     #
+##############################################################################
 #
 # Head node of hsds cluster
 # 
 import asyncio
 import json
 import time
+import sys
 
-from aiohttp.web import Application, Response, StreamResponse, run_app
-from aiohttp import log, ClientSession, TCPConnector, HttpProcessingError
-from aiohttp.errors import HttpBadRequest, ClientOSError
+from aiohttp.web import Application, StreamResponse, run_app
+from aiohttp import  ClientSession, TCPConnector
+from aiohttp.errors import HttpBadRequest
 import aiobotocore
 
 import config
-from timeUtil import unixTimeToUTC, elapsedTime
-from hsdsUtil import http_get_json, jsonResponse, createNodeId, getS3Key, getHeadNodeS3Key, getS3JSONObj, putS3JSONObj, isS3Obj
+from util.timeUtil import unixTimeToUTC, elapsedTime
+from util.httpUtil import http_get_json, jsonResponse
+from util.s3Util import  getS3JSONObj, putS3JSONObj, isS3Obj
+from util.idUtil import  createNodeId, getHeadNodeS3Key
 import hsds_logger as log
 
  
@@ -23,7 +37,6 @@ async def healthCheck(app):
     app["last_health_check"] = int(time.time())
 
     # update/initialize root object before starting node updates
-    bucket_name = app['bucket_name']
     headnode_key = getHeadNodeS3Key()
     log.info("headnode S3 key".format(headnode_key))
     headnode_obj_found = await isS3Obj(app, headnode_key)
@@ -64,6 +77,7 @@ async def healthCheck(app):
         head_state["last_health_check"] = now
         log.info("write head_state to S3: {}".format(head_state))
         rsp = await putS3JSONObj(app, headnode_key, head_state)
+        log.info("putS3JSONObj complete")
         
         for node in nodes:         
             if node["host"] is None:

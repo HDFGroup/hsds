@@ -1,137 +1,28 @@
+##############################################################################
+# Copyright by The HDF Group.                                                #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HSDS (HDF5 Scalable Data Service), Libraries and      #
+# Utilities.  The full HSDS copyright notice, including                      #
+# terms governing use, modification, and redistribution, is contained in     #
+# the file COPYING, which can be found at the root of the source code        #
+# distribution tree.  If you do not have access to this file, you may        #
+# request a copy from help@hdfgroup.org.                                     #
+##############################################################################
 #
 # service node of hsds cluster
 # 
 import asyncio
-import json
-import time
-import sys
  
-
-from aiohttp.web import Application, Response, StreamResponse, run_app
-from aiohttp import ClientSession, TCPConnector, HttpProcessingError 
-from aiohttp.errors import HttpBadRequest, ClientError
+from aiohttp.web import  run_app
+from aiohttp import ClientSession, TCPConnector 
  
-
 import config
-from timeUtil import unixTimeToUTC, elapsedTime
-from hsdsUtil import http_get, isOK, http_post, http_put, http_get_json, jsonResponse, getS3Partition, validateUuid, isValidUuid, getDataNodeUrl
-from authUtil import getUserFromRequest, authValidate, aclCheck
-from domainUtil import getParentDomain, getDomainFromRequest, getDomainJson, isValidDomain
-from basenode import register, healthCheck, info, baseInit
+from basenode import healthCheck,  baseInit
 import hsds_logger as log
-
-
-async def GET_Domain(request):
-    """HTTP method to return JSON for given domain"""
-    log.request(request)
-    app = request.app
-    await authValidate(request)
-     
-    #print("query_string:", request.query_string)
-    #if 'myquery' in request.GET:
-    #    print("myquery:", request.GET['myquery'])
-    
-    domain = getDomainFromRequest(request)
-    if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
-    
-    domain_json = await getDomainJson(app, domain)
-    
-    resp = await jsonResponse(request, domain_json)
-    log.response(request, resp=resp)
-    return resp
-
-async def PUT_Domain(request):
-    """HTTP method to create a new domain"""
-    log.request(request)
-    app = request.app
-    # use getUserFromRequest rather than authValidate here becuase the domain does not
-    # yet exist
-    # await authValidate(request)
-    req_user = getUserFromRequest(request) # throws exception if user/password is not valid
-    log.info("PUT domain request from: {}".format(req_user))
-    print("getdomain from req") 
-    domain = getDomainFromRequest(request)
-    print("got domain", domain)
-    if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
-
-    parent_domain = getParentDomain(domain)
-    if parent_domain is None:
-        msg = "creation of top-level domains is not supported"
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
-    print("parent_domain:", parent_domain)
-    parent_json = None
-    try:
-        print("get parent domain", parent_domain)
-        parent_json = await getDomainJson(app, parent_domain)
-    except HttpProcessingError as hpe:
-        print("error getting parent domain: {}".format(hpe.code))
-        msg = "Parent domain not found"
-        log.warn(msg)
-        raise HttpProcessingError(code=404, message=msg)
-
-    print("got parent json:", parent_json)
-    if "acls" not in parent_json:
-        log.warn("acls not found in domain: {}".format(parent_domain))
-        raise HttpProcessingError(code=404, message="Forbidden")
-    aclCheck(parent_json["acls"], "create", req_user)  # throws exception is not allowed
-    
-    domain_json = { }
-
-    # construct dn request to create new domain
-    req = getDataNodeUrl(app, domain)
-    req += "/domains/" + domain 
-    body = { "owner": req_user }
-    body["acls"] = parent_json["acls"]  # copy parent acls to new domain
-
-    try:
-        domain_json = await http_put(app, req, body)
-    except HttpProcessingError as ce:
-        msg="Error creating domain state -- " + str(ce)
-        log.warn(msg)
-        raise ce
-
-    # domain creation successful     
-    resp = await jsonResponse(request, domain_json)
-    log.response(request, resp=resp)
-    return resp
-
-
-
-async def GET_Group(request):
-    """HTTP method to return JSON for group"""
-    log.request(request)
-    app = request.app 
-
-    group_id = request.match_info.get('id')
-    if not group_id:
-        msg = "Missing group id"
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
-    if not isValidUuid(group_id) or not group_id.startswith("g-"):
-        msg = "Invalid group id: {}".format(group_id)
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
-
-    req = getDataNodeUrl(app, group_id)
-    req += "/groups/" + group_id
-    group_json = {} 
-    try:
-        group_json = await http_get_json(app, req)
-    except ClientError as ce:
-        msg="Error getting group state -- " + str(ce)
-        log.warn(msg)
-        raise HttpProcessingError(message=msg, code=503)
+from domain_sn import GET_Domain, PUT_Domain
+from group_sn import GET_Group 
  
-    resp = await jsonResponse(request, group_json)
-    log.response(request, resp=resp)
-    return resp
 
 async def init(loop):
     """Intitialize application and return app object"""
@@ -152,7 +43,7 @@ async def init(loop):
 #
 
 if __name__ == '__main__':
-
+    log.info("Servicenode initializing")
     loop = asyncio.get_event_loop()
 
     # create a client Session here so that all client requests 
@@ -164,6 +55,11 @@ if __name__ == '__main__':
     app = loop.run_until_complete(init(loop))
     app['client'] = client
     app['domain_cache'] = {}
+    if config.get("allow_noauth"):
+        app['allow_noauth'] = True
+    else:
+        app['allow_noauth'] = False
+
 
     # run background task
     asyncio.ensure_future(healthCheck(app), loop=loop)

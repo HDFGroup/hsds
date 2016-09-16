@@ -13,20 +13,16 @@ import unittest
 import time
 import sys
 import os
- 
- 
 
+sys.path.append('../../hsds/util')
 sys.path.append('../../hsds')
-from hsdsUtil import getS3Partition, createObjId
-from domainUtil import getParentDomain, getS3KeyForDomain
-
-class UtilTest(unittest.TestCase):
+from idUtil import getObjPartition, isValidUuid, validateUuid, createObjId
+ 
+class IdUtilTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
-        super(UtilTest, self).__init__(*args, **kwargs)
+        super(IdUtilTest, self).__init__(*args, **kwargs)
         # main
     
-    
-
     def testCreateObjId(self):
         id_len = 38  # 36 for uuid plus two for prefix ("g-", "d-")
         ids = set()
@@ -45,45 +41,32 @@ class UtilTest(unittest.TestCase):
         except ValueError:
             pass # expected
 
+    def testIsValidUuid(self):
+        id = "g-1e76d862-7abe-11e6-8852-3c15c2da029e"
+        bad_ids = ("g-1e76d862",
+                   "g-1e76d862/7abe-11e6-8852-3c15c2da029e",
+                   "1e76d862-7abe-11e6-8852-3c15c2da029e-g")
+         
+        self.assertTrue(isValidUuid(id))
+        self.assertTrue(isValidUuid(id, obj_class="Group"))
+        self.assertTrue(isValidUuid(id, obj_class="group"))
+        self.assertTrue(not isValidUuid(id, obj_class="Dataset"))
+        validateUuid(id)
+        for item in bad_ids:
+            self.assertEqual(isValidUuid(item), False)
+        
 
-    def testGetS3Partition(self):
+
+    def testGetObjPartition(self):
         node_count = 12
         for obj_class in ('group', 'dataset', 'namedtype', 'chunk'):
             for i in range(100):
                 id = createObjId(obj_class)
-                node_number = getS3Partition(id, node_count)
+                node_number = getObjPartition(id, node_count)
                 self.assertTrue(node_number >= 0)
                 self.assertTrue(node_number < node_count)
 
-    def testGetS3KeyForDomain(self):
-        s3path = getS3KeyForDomain("nex.nasa.gov")
-        self.assertEqual(s3path, "/gov/nasa/nex")
-        s3path = getS3KeyForDomain("my-data.nex.nasa.gov")  # hyphen ok
-        self.assertEqual(s3path, "/gov/nasa/nex/my-data")
-        # test invalid dns names
-        invalid_domains = ('x',       # too short
-                           '.x.y.z',  # period in front
-                           'x.y.z.',  # period in back
-                           'x.y..z')  # consecutive periods
-        for domain in invalid_domains:
-            try:
-                getS3KeyForDomain(domain)
-                self.assertTrue(False)
-            except ValueError:
-                pass # epxected
-
-    def testGetParentDomain(self):
-        domain = "nex.nasa.gov"
-        parent = getParentDomain(domain)
-        self.assertEqual(parent, "nasa.gov")
-        domain = "gov"
-        parent = getParentDomain(domain)
-        self.assertEqual(parent, None)
-
-                      
-                 
-            
-         
+    
              
 if __name__ == '__main__':
     #setup test files
