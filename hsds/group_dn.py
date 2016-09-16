@@ -84,9 +84,7 @@ async def POST_Group(request):
     data = await request.json()
     #body = await request.read()
     #data = json.loads(body)
-    print("POST_GROUP data: ", data)
-    print("POST_GROUP data type: ", type(data))
-
+    
     root_id = None
     group_id = None
     domain = None

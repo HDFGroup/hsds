@@ -18,7 +18,7 @@ from aiohttp import HttpProcessingError
 from aiohttp.errors import HttpBadRequest, ClientError
  
 from util.httpUtil import  http_get_json, jsonResponse
-from util.idUtil import   isValidUuid, getDataNodeUrl
+from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from servicenode_lib import getDomainJson
@@ -69,4 +69,46 @@ async def GET_Group(request):
     resp = await jsonResponse(request, group_json)
     log.response(request, resp=resp)
     return resp
+
+async def POST_Group(request):
+    """HTTP method to return JSON for group"""
+    log.request(request)
+    app = request.app
+
+    username, pswd = getUserPasswordFromRequest(request)
+    # write actions need auth
+    validateUserPassword(username, pswd)
+
+    domain = getDomainFromRequest(request)
+    if not isValidDomain(domain):
+        msg = "Invalid host value: {}".format(domain)
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    
+    domain_json = await getDomainJson(app, domain)
+
+    aclCheck(domain_json, "create", username)  # throws exception if not allowed
+
+    if "root" not in domain_json:
+        log.error("Expected root key in domain json for domain: {}".format(domain))
+        raise HttpBadRequest(message="Unexpected Error")
+
+    root_id = domain_json["root"]
+    group_id = createObjId("group") 
+    log.info("new  group id: {}".format(group_id))
+    group_json = {"id": group_id, "root": root_id, "domain": domain }
+    log.info("create group, body: " + json.dumps(group_json))
+    req = getDataNodeUrl(app, group_id) + "/groups"
+    try:
+        group_json = await http_post(app, req, group_json)
+    except HttpProcessingError as ce:
+        msg="Error creating root group for domain -- " + str(ce)
+        log.warn(msg)
+        raise ce
+
+    # domain creation successful     
+    resp = await jsonResponse(request, group_json, status=201)
+    log.response(request, resp=resp)
+    return resp
+
  

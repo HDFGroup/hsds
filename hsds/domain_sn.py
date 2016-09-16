@@ -42,13 +42,16 @@ async def GET_Domain(request):
         raise HttpBadRequest(message=msg)
     
     domain_json = await getDomainJson(app, domain)
+    log.info("got domain_json: {}".format(domain_json))
     # validate that the requesting user has permission to read this domain
     aclCheck(domain_json, "read", username)
 
     # return just the keys as per the REST API
     rsp_json = { }
-    rsp_json["root"] = domain_json["root"]
-    rsp_json["owner"] = domain_json["owner"]
+    if "root" in domain_json:
+        rsp_json["root"] = domain_json["root"]
+    if "owner" in domain_json:
+        rsp_json["owner"] = domain_json["owner"]
 
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)

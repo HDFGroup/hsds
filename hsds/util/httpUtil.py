@@ -30,7 +30,7 @@ async def http_get(app, url):
     async with client.get(url) as rsp:
         log.info("http_get status: {}".format(rsp.status))
         rsp = await rsp.text()
-        log.info("http_get({}) response: {}".format(url, rsp))  
+        #log.info("http_get({}) response: {}".format(url, rsp))  
     
     return rsp
 
@@ -45,7 +45,7 @@ async def http_get_json(app, url):
             log.warn(msg)
             raise HttpProcessingError(message=msg, code=rsp.status)
         rsp_json = await rsp.json()
-        log.info("http_get({}) response: {}".format(url, rsp_json))  
+        #log.info("http_get({}) response: {}".format(url, rsp_json))  
     if isinstance(rsp_json, str):
         log.warn("converting str to json")
         rsp_json = json.loads(rsp_json)

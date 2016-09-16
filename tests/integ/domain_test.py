@@ -27,14 +27,31 @@ class DomainTest(unittest.TestCase):
     def testBaseDomain(self):
         print("testBaseDomain", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
+        
         req = helper.getEndpoint() + '/'
-
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers['content-type'], 'application/json')
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
         helper.validateId(root_uuid)
+
+    def testGetTopLevelDomain(self):
+        domain = "home"
+        print("testGetTopLevelDomain", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 404)
+        domain = "test_user1.home"
+        headers = helper.getRequestHeaders(domain=domain)
+        
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+         
+        
 
     def testCreateDomain(self):
         print("testCreateDomain", self.base_domain)
@@ -78,7 +95,6 @@ class DomainTest(unittest.TestCase):
 
         # try doing a un-authenticated request
         if config.get("test_noauth"):
-            print("test_noauth")
             headers = helper.getRequestHeaders()
             req = helper.getEndpoint() + "/?host=" + domain
             # do a get on the domain with a query arg for host
@@ -91,12 +107,11 @@ class DomainTest(unittest.TestCase):
             self.assertEqual(root_id, rspJson["root"])
 
 
-
-
     def testGetNotFound(self):
         domain = 'doesnotexist.' + self.base_domain  
         headers = helper.getRequestHeaders(domain=domain) 
         req = helper.getEndpoint() + '/'
+        
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 404)
 

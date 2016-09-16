@@ -54,16 +54,24 @@ async def GET_Domain(request):
             domain_json = await getS3JSONObj(app, s3_key)
         except ClientError as ce:
             # key does not exist?
-            log.warn("got ClientError on s3 get: {}".format(str(ce)))
-            is_s3obj = await isS3Obj(app, s3_key)
-            if is_s3obj:
+            # check for not found status
+            is_404 = False
+            if "ResponseMetadata" in ce.response:
+                metadata = ce.response["ResponseMetadata"]
+                if "HTTPStatusCode" in metadata:
+                    if metadata["HTTPStatusCode"] == 404:
+                        is_404 = True
+            if is_404:
+                msg = "s3_key: {} not found for domain: {}".format(s3_key, domain_key)
+                log.warn(msg)
+                raise HttpProcessingError(code=404, message=msg)
+            else:
+                log.warn("got ClientError on s3 get: {}".format(str(ce)))
+            
                 msg = "Error getting s3 obj: " + str(ce)
                 log.response(request, code=500, message=msg)
                 raise HttpProcessingError(code=500, message=msg)
-            else:
-                msg = "{} not found".format(s3_key)
-                log.response(request, code=404, message=msg)
-                raise HttpProcessingError(code=404, message=msg)
+           
         meta_cache[domain_key] = domain_json
 
     resp = await jsonResponse(request, domain_json)
