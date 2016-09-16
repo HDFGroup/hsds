@@ -10,13 +10,8 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import unittest
-import time
-import sys
-import os
 import requests
-import sys
 import json
-import base64
 import config
 import helper
  
@@ -28,7 +23,7 @@ class DomainTest(unittest.TestCase):
         helper.setupDomain(self.base_domain)
         
         # main
-    
+     
     def testBaseDomain(self):
         print("testBaseDomain", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)

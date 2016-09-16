@@ -39,13 +39,13 @@ async def GET_Domain(request):
         log.warn(msg)
         raise HttpBadRequest(msg)
 
-    if getObjPartition(s3_key, app['node_count']) != app['node_number']:
+    if getObjPartition(domain_key, app['node_count']) != app['node_number']:
         # The request shouldn't have come to this node'
         raise HttpBadRequest(message="wrong node for 'key':{}".format(s3_key))
 
     meta_cache = app['meta_cache'] 
     domain_json = None 
-    if s3_key in meta_cache:
+    if domain_key in meta_cache:
         log.info("{} found in meta cache".format(s3_key))
         domain_json = meta_cache[s3_key]
     else:
@@ -64,7 +64,7 @@ async def GET_Domain(request):
                 msg = "{} not found".format(s3_key)
                 log.response(request, code=404, message=msg)
                 raise HttpProcessingError(code=404, message=msg)
-        meta_cache[s3_key] = domain_json
+        meta_cache[domain_key] = domain_json
 
     resp = await jsonResponse(request, domain_json)
     log.response(request, resp=resp)
@@ -86,7 +86,7 @@ async def PUT_Domain(request):
         log.warn(msg)
         raise HttpBadRequest(msg)
 
-    if getObjPartition(s3_key, app['node_count']) != app['node_number']:
+    if getObjPartition(domain_key, app['node_count']) != app['node_number']:
         # The request shouldn't have come to this node'
         raise HttpBadRequest(message="wrong node for 'key':{}".format(s3_key))
 

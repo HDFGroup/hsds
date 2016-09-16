@@ -19,6 +19,8 @@ from aiohttp import HttpProcessingError
 
 from util.idUtil import   getDataNodeUrl
 from util.httpUtil import   http_get_json
+from util.domainUtil import getS3KeyForDomain
+
 import hsds_logger as log
 
 

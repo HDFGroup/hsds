@@ -20,7 +20,7 @@ from aiohttp.errors import HttpBadRequest
 from util.httpUtil import  http_post, http_put, jsonResponse
 from util.idUtil import  getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
-from util.domainUtil import getParentDomain, getDomainFromRequest, isValidDomain 
+from util.domainUtil import getParentDomain, getDomainFromRequest, isValidDomain
 from servicenode_lib import getDomainJson
 import hsds_logger as log
 

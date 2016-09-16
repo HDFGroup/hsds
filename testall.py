@@ -15,7 +15,7 @@ import sys
 
 
 unit_tests = ('domainUtilTest', 'idUtilTest')
-integ_tests = ('domain_test', )
+integ_tests = ('uptest', 'domain_test', )
 
 #todo - add spidertest back
 cwd = os.getcwd()
