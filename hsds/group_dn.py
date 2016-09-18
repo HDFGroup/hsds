@@ -12,24 +12,17 @@
 #
 # data node of hsds cluster
 # 
-import asyncio
-import json
 import time
-import sys
 
-from aiohttp.web import Application, Response
-from aiohttp import ClientSession, TCPConnector, HttpProcessingError 
-from aiohttp.errors import HttpBadRequest, ClientOSError
+from aiohttp import HttpProcessingError 
+from aiohttp.errors import HttpBadRequest
 from botocore.exceptions import ClientError
  
-
-import config
-from util.timeUtil import unixTimeToUTC, elapsedTime
-from util.idUtil import createNodeId, createObjId, getObjPartition, getS3Key, validateUuid
-from util.httpUtil import isOK, http_post, jsonResponse
+ 
+from util.idUtil import getObjPartition, getS3Key, validateUuid
+from util.httpUtil import jsonResponse
 from util.s3Util import getS3JSONObj, putS3JSONObj, isS3Obj 
-from util.domainUtil import getS3KeyForDomain, validateDomain
-from basenode import register, healthCheck, info, baseInit
+from util.domainUtil import   validateDomain
 import hsds_logger as log
  
  
@@ -104,7 +97,7 @@ async def POST_Group(request):
         msg = "POST_Group with no id"
         log.error(msg)
         raise HttpBadRequest(message=msg)
-    group_id = data["root"]
+    group_id = data["id"]
     try:
         validateUuid(group_id, "group")
     except ValueError:

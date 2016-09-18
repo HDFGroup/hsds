@@ -40,7 +40,7 @@ async def healthCheck(app):
     headnode_key = getHeadNodeS3Key()
     log.info("headnode S3 key".format(headnode_key))
     headnode_obj_found = await isS3Obj(app, headnode_key)
-    rsp = None
+    
     if not headnode_obj_found:
         # first time hsds has run with this bucket name?
         log.warn("need to create headnode obj")
@@ -49,7 +49,7 @@ async def healthCheck(app):
         head_state["id"] = app["id"]
         head_state["last_health_check"] = app["last_health_check"]
         log.info("write head_state to S3: {}".format(head_state))
-        rsp = await putS3JSONObj(app, headnode_key, head_state)
+        await putS3JSONObj(app, headnode_key, head_state)
 
     nodes =  app["nodes"]
     while True:
@@ -76,7 +76,8 @@ async def healthCheck(app):
 
         head_state["last_health_check"] = now
         log.info("write head_state to S3: {}".format(head_state))
-        rsp = await putS3JSONObj(app, headnode_key, head_state)
+        await putS3JSONObj(app, headnode_key, head_state)
+         
         log.info("putS3JSONObj complete")
         
         for node in nodes:         
@@ -331,8 +332,7 @@ if __name__ == '__main__':
     app = loop.run_until_complete(init(loop))
     app['client'] = client
     app['s3'] = aws_client
-    log.info("app keys: {}".format(list(app.keys())))
     asyncio.ensure_future(healthCheck(app), loop=loop)
     head_port = config.get("head_port")
-    log.info("port: ".format(head_port))
+    log.info("Starting service on port: {}".format(head_port))
     run_app(app, port=head_port)

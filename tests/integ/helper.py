@@ -32,8 +32,8 @@ def validateId(id):
     if type(id) != str and type(id) != unicode: 
         # should be a string
         return False
-    if len(id) != 36:
-        # id's returned by uuid.uuid1() are always 36 chars long
+    if len(id) != 38:
+        # id's returned by uuid.uuid1() are always 38 chars long
         return False
     return True
 

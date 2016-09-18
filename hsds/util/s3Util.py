@@ -33,7 +33,7 @@ async def putS3JSONObj(app, key, json_obj):
     bucket = app['bucket_name']
     data = json.dumps(json_obj)
     data = data.encode('utf8')
-    resp = await client.put_object(Bucket=bucket, Key=key, Body=data)
+    await client.put_object(Bucket=bucket, Key=key, Body=data)
     log.info("putS3JSONObj complete")
     
 async def isS3Obj(app, key):

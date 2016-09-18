@@ -23,6 +23,8 @@ echo "stopping service nodes"
 
 sleep 10  # allow some time for containers to shutdown
 docker ps
+sleep 10
+docker ps
    
  
 
