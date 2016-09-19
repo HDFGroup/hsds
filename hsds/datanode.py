@@ -20,7 +20,7 @@ import config
 from basenode import healthCheck, baseInit
 import hsds_logger as log
 from domain_dn import GET_Domain, PUT_Domain, DELETE_Domain
-from group_dn import GET_Group, POST_Group
+from group_dn import GET_Group, POST_Group, DELETE_Group
                
 
 async def init(loop):
@@ -34,6 +34,7 @@ async def init(loop):
     app.router.add_route('PUT', '/domains/{key}', PUT_Domain)
     app.router.add_route('DELETE', '/domains/{key}', DELETE_Domain)
     app.router.add_route('GET', '/groups/{id}', GET_Group)
+    app.router.add_route('DELETE', '/groups/{id}', DELETE_Group)
     app.router.add_route('POST', '/groups', POST_Group)
       
     return app
@@ -56,6 +57,7 @@ if __name__ == '__main__':
     app['client'] = client
     app['meta_cache'] = {}
     app['data_cache'] = {}
+    app['deleted_ids'] = set()
 
     # run background task
     asyncio.ensure_future(healthCheck(app), loop=loop)

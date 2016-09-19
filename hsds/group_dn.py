@@ -21,11 +21,10 @@ from botocore.exceptions import ClientError
  
 from util.idUtil import getObjPartition, getS3Key, validateUuid
 from util.httpUtil import jsonResponse
-from util.s3Util import getS3JSONObj, putS3JSONObj, isS3Obj 
+from util.s3Util import getS3JSONObj, putS3JSONObj, isS3Obj, deleteS3Obj 
 from util.domainUtil import   validateDomain
 import hsds_logger as log
- 
- 
+    
 
 async def GET_Group(request):
     """HTTP GET method to return JSON for /groups/
@@ -33,10 +32,17 @@ async def GET_Group(request):
     log.request(request)
     app = request.app
     group_id = request.match_info.get('id')
+    validateUuid(group_id, "group")
     
     if getObjPartition(group_id, app['node_count']) != app['node_number']:
         # The request shouldn't have come to this node'
         raise HttpBadRequest(message="wrong node for 'id':{}".format(group_id))
+
+    deleted_ids = app['deleted_ids']
+    if group_id in deleted_ids:
+        msg = "{} has been deleted".format(group_id)
+        log.response(request, code=510, message=msg)
+        raise HttpProcessingError(code=510, message=msg)
 
     meta_cache = app['meta_cache'] 
     group_json = None 
@@ -59,8 +65,19 @@ async def GET_Group(request):
             msg = "{} not found".format(group_id)
             log.response(request, code=404, message=msg)
             raise HttpProcessingError(code=404, message=msg)
-        meta_cache[group_id] = group_json
-    resp = await jsonResponse(request, group_json)
+        meta_cache[group_id] = group_json  # add to cache
+
+    resp_json = { } 
+    resp_json["id"] = group_json["id"]
+    resp_json["root"] = group_json["root"]
+    resp_json["created"] = group_json["created"]
+    resp_json["lastModified"] = group_json["lastModified"]
+    resp_json["linkCount"] = 0  # TBD
+    resp_json["attributeCount"] = 0 # TBD
+    if "domain" in group_json:
+        resp_json["domain"] = group_json["domain"]
+     
+    resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
     return resp
 
@@ -142,7 +159,62 @@ async def POST_Group(request):
     # save the object to cache
     meta_cache[group_id] = group_json
 
-    resp = await jsonResponse(request, group_json, status=201)
+    resp_json = {} 
+    resp_json["id"] = group_id 
+    resp_json["root"] = root_id
+    resp_json["created"] = group_json["created"]
+    resp_json["lastModified"] = group_json["lastModified"]
+    resp_json["linkCount"] = 0  
+    resp_json["attributeCount"] = 0
+
+    resp = await jsonResponse(request, resp_json, status=201)
+    log.response(request, resp=resp)
+    return resp
+
+
+async def DELETE_Group(request):
+    """HTTP DELETE method for /groups/
+    """
+    log.request(request)
+    app = request.app
+    group_id = request.match_info.get('id')
+    validateUuid(group_id, "group")
+    
+    if getObjPartition(group_id, app['node_count']) != app['node_number']:
+        # The request shouldn't have come to this node'
+        raise HttpBadRequest(message="wrong node for 'id':{}".format(group_id))
+
+    meta_cache = app['meta_cache'] 
+    deleted_ids = app['deleted_ids']
+    deleted_ids.add(group_id)
+    
+    s3_key = getS3Key(group_id)
+    obj_exists = False
+    if group_id in meta_cache:
+        obj_exists = True
+    else:
+        obj_exists = await isS3Obj(app, s3_key)
+    if not obj_exists:
+        # duplicate uuid?
+        msg = "{} not found".format(group_id)
+        log.response(request, code=404, message=msg)
+        raise HttpProcessingError(code=404, message=msg)
+    
+    try:
+        log.info("deleteS3Obj({})".format(s3_key))
+        await deleteS3Obj(app, s3_key)
+    except ClientError as ce:
+        # key does not exist? 
+        msg = "Error deleting s3 obj: " + str(ce)
+        log.response(request, code=500, message=msg)
+        raise HttpProcessingError(code=500, message=msg)
+
+    if group_id in meta_cache:
+        del meta_cache[group_id]
+
+    resp_json = {  } 
+      
+    resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
     return resp
    

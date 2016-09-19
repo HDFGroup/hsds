@@ -67,14 +67,30 @@ async def http_post(app, url, data):
     return rsp_json
 
 async def http_put(app, url, data):
-    log.info("http_put('{}', data)".format(url, data))
-    client = app['client']
+    log.info("http_put('{}', data: {})".format(url, data))
     rsp_json = None
     client = app['client']
     
     async with client.put(url, data=json.dumps(data)) as rsp:
         log.info("http_put status: {}".format(rsp.status))
         if rsp.status != 201:
+            print("bad response:", str(rsp))
+            msg = "request error"  # tbd - pull error from rsp
+            log.warn(msg)
+            raise HttpProcessingError(message=msg, code=rsp.status)
+
+        rsp_json = await rsp.json()
+        log.info("http_put({}) response: {}".format(url, rsp_json))
+    return rsp_json
+
+async def http_delete(app, url):
+    log.info("http_delete('{}'".format(url))
+    client = app['client']
+    rsp_json = None
+    
+    async with client.delete(url) as rsp:
+        log.info("http_delete status: {}".format(rsp.status))
+        if rsp.status != 200:
             print("bad response:", str(rsp))
             msg = "request error"  # tbd - pull error from rsp
             log.warn(msg)

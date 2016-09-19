@@ -17,7 +17,7 @@ import json
 from aiohttp import HttpProcessingError 
 from aiohttp.errors import HttpBadRequest, ClientError
  
-from util.httpUtil import  http_get_json, http_post, jsonResponse
+from util.httpUtil import  http_get_json, http_post, http_delete, jsonResponse
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
@@ -36,7 +36,7 @@ async def GET_Group(request):
         msg = "Missing group id"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-    if not isValidUuid(group_id) or not group_id.startswith("g-"):
+    if not isValidUuid(group_id, "Group"):
         msg = "Invalid group id: {}".format(group_id)
         log.warn(msg)
         raise HttpBadRequest(message=msg)
@@ -108,6 +108,47 @@ async def POST_Group(request):
 
     # domain creation successful     
     resp = await jsonResponse(request, group_json, status=201)
+    log.response(request, resp=resp)
+    return resp
+
+async def DELETE_Group(request):
+    """HTTP method to delete a group resource"""
+    log.request(request)
+    app = request.app 
+
+    group_id = request.match_info.get('id')
+    if not group_id:
+        msg = "Missing group id"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    if not isValidUuid(group_id, "Group"):
+        msg = "Invalid group id: {}".format(group_id)
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+
+    username, pswd = getUserPasswordFromRequest(request)
+    validateUserPassword(username, pswd)
+    
+    domain = getDomainFromRequest(request)
+    if not isValidDomain(domain):
+        msg = "Invalid host value: {}".format(domain)
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    
+    domain_json = await getDomainJson(app, domain)
+    aclCheck(domain_json, "delete", username)  # throws exception if not allowed
+
+    req = getDataNodeUrl(app, group_id)
+    req += "/groups/" + group_id
+    rsp_json = {} 
+    try:
+        rsp_json = await http_delete(app, req)
+    except ClientError as ce:
+        msg="Error getting group state -- " + str(ce)
+        log.warn(msg)
+        raise HttpProcessingError(message=msg, code=503)
+ 
+    resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp
 

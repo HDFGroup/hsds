@@ -47,6 +47,11 @@ class GroupTest(unittest.TestCase):
         self.assertEqual(group_id, root_id)
         self.assertTrue("domain" in rspJson)
         self.assertEqual(rspJson["domain"], self.base_domain)
+        self.assertTrue("created" in rspJson)
+        self.assertTrue("lastModified" in rspJson)
+        self.assertTrue("linkCount" in rspJson)
+        self.assertTrue("attributeCount" in rspJson)
+
 
     def testGetInvalidUUID(self):
         print("testGetRootGroup", self.base_domain)
@@ -64,7 +69,7 @@ class GroupTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 404)
 
     def testPost(self):
-        # test PUT_root
+        # test POST group
         print("testPost", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
         req = helper.getEndpoint() + '/groups'  
@@ -73,8 +78,8 @@ class GroupTest(unittest.TestCase):
         rsp = requests.post(req, headers=headers)
         self.assertEqual(rsp.status_code, 201) 
         rspJson = json.loads(rsp.text)
-        #self.assertEqual(rspJson["linkCount"], 0)  # TBD
-        #self.assertEqual(rspJson["attributeCount"], 0)  # TBD
+        self.assertEqual(rspJson["linkCount"], 0)  # TBD
+        self.assertEqual(rspJson["attributeCount"], 0)  # TBD
         self.assertTrue("id" in rspJson)
         group_id = rspJson["id"]
         self.assertTrue(helper.validateId(group_id))
@@ -90,6 +95,42 @@ class GroupTest(unittest.TestCase):
         self.assertTrue(rspJson["root"] != group_id)
         self.assertTrue("domain" in rspJson)
         self.assertEqual(rspJson["domain"], self.base_domain)
+
+    def testDelete(self):
+        # test Delete_root
+        print("testDelete", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = helper.getEndpoint() + '/groups'  
+        
+        # create a new group
+        rsp = requests.post(req, headers=headers)
+        self.assertEqual(rsp.status_code, 201) 
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("id" in rspJson)
+        group_id = rspJson["id"]
+        self.assertTrue(helper.validateId(group_id))
+
+        # verify we can do a get on the new group
+        req = helper.getEndpoint() + '/groups/' + group_id
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("id" in rspJson)
+        self.assertEqual(rspJson["id"], group_id)
+        self.assertTrue("root" in rspJson)
+        self.assertTrue(rspJson["root"] != group_id)
+        self.assertTrue("domain" in rspJson)
+        self.assertEqual(rspJson["domain"], self.base_domain)
+
+        # delete the new group
+        rsp = requests.delete(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue(rspJson is not None)
+
+        # a get for the group should now return 510 (GONE)
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 510)
          
 
         

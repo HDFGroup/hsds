@@ -35,6 +35,13 @@ async def putS3JSONObj(app, key, json_obj):
     data = data.encode('utf8')
     await client.put_object(Bucket=bucket, Key=key, Body=data)
     log.info("putS3JSONObj complete")
+
+async def deleteS3Obj(app, key):
+    log.info("deleteS3Obj({})".format(key))
+    client = app['s3']
+    bucket = app['bucket_name']
+    await client.delete_object(Bucket=bucket, Key=key)
+    log.info("deleteS3Obj complete")
     
 async def isS3Obj(app, key):
     log.info("isS3Obj({})".format(key))
