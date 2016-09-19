@@ -105,8 +105,10 @@ class GroupTest(unittest.TestCase):
 
         # try POST with user who doesn't have create permission on this domain
         headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
+        print("headers: ", headers)
+        req = helper.getEndpoint() + '/groups'
         rsp = requests.post(req, headers=headers)
-        self.assertEqual(rsp.status_code, 405) # not allowed
+        self.assertEqual(rsp.status_code, 403) # forbidden
 
 
 
