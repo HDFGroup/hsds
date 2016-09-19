@@ -52,6 +52,14 @@ class GroupTest(unittest.TestCase):
         self.assertTrue("linkCount" in rspJson)
         self.assertTrue("attributeCount" in rspJson)
 
+        # try get with a different user (who has read permission)
+        headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["root"], root_uuid)
+         
+
 
     def testGetInvalidUUID(self):
         print("testGetRootGroup", self.base_domain)
@@ -78,9 +86,8 @@ class GroupTest(unittest.TestCase):
         rsp = requests.post(req, headers=headers)
         self.assertEqual(rsp.status_code, 201) 
         rspJson = json.loads(rsp.text)
-        self.assertEqual(rspJson["linkCount"], 0)  # TBD
-        self.assertEqual(rspJson["attributeCount"], 0)  # TBD
-        self.assertTrue("id" in rspJson)
+        self.assertEqual(rspJson["linkCount"], 0)   
+        self.assertEqual(rspJson["attributeCount"], 0)   
         group_id = rspJson["id"]
         self.assertTrue(helper.validateId(group_id))
 
@@ -95,6 +102,14 @@ class GroupTest(unittest.TestCase):
         self.assertTrue(rspJson["root"] != group_id)
         self.assertTrue("domain" in rspJson)
         self.assertEqual(rspJson["domain"], self.base_domain)
+
+        # try POST with user who doesn't have create permission on this domain
+        headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
+        rsp = requests.post(req, headers=headers)
+        self.assertEqual(rsp.status_code, 405) # not allowed
+
+
+
 
     def testDelete(self):
         # test Delete_root
