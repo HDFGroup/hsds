@@ -144,6 +144,31 @@ class DomainTest(unittest.TestCase):
         headers = helper.getRequestHeaders(domain=domain)
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 400)  # 400 == bad syntax
+
+    def testDeleteDomain(self):
+        print("testDeleteDomain", self.base_domain)
+        domain = "deleteme." + self.base_domain
+        
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + '/'
+
+        # create a domain
+        rsp = requests.put(req, headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # try deleting the domain with a user who doesn't have permissions'
+        headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
+        rsp = requests.delete(req, headers=headers)
+        self.assertEqual(rsp.status_code, 403) # forbidden
+
+        # delete the domain (with the orginal user)
+        headers = helper.getRequestHeaders(domain=domain)
+        rsp = requests.delete(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # try getting the domain
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 410)
         
          
     

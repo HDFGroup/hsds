@@ -15,9 +15,9 @@
 import json
 
 from aiohttp import  HttpProcessingError 
-from aiohttp.errors import HttpBadRequest
+from aiohttp.errors import HttpBadRequest, ClientError
 
-from util.httpUtil import  http_post, http_put, jsonResponse
+from util.httpUtil import  http_post, http_put, http_get_json, http_delete, jsonResponse
 from util.idUtil import  getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import getParentDomain, getDomainFromRequest, isValidDomain
@@ -41,10 +41,30 @@ async def GET_Domain(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     
-    domain_json = await getDomainJson(app, domain)
+    # don't use app["domain_cache"]  if a direct domain request is made 
+    # as opposed to an implicit request as with other operations, query
+    # the domain from the authoritative source (the dn node)
+    domain_json = { }
+    req = getDataNodeUrl(app, domain)
+    req += "/domains/" + domain 
+    log.info("sending dn req: {}".format(req))
+    try:
+        domain_json = await http_get_json(app, req)
+    except ClientError as ce:
+        msg="Error getting domain state -- " + str(ce)
+        log.warn(msg)
+        raise HttpProcessingError(message=msg, code=503)
+    if 'owner' not in domain_json:
+        log.warn("No owner key found in domain")
+        raise HttpProcessingError("Unexpected error", code=500)
+
+    if 'acls' not in domain_json:
+        log.warn("No acls key found in domain")
+        raise HttpProcessingError("Unexpected error", code=500)
+
     log.info("got domain_json: {}".format(domain_json))
     # validate that the requesting user has permission to read this domain
-    aclCheck(domain_json, "read", username)
+    aclCheck(domain_json, "read", username)  # throws exception if not authorized
 
     # return just the keys as per the REST API
     rsp_json = { }
@@ -120,6 +140,37 @@ async def PUT_Domain(request):
 
     # domain creation successful     
     resp = await jsonResponse(request, domain_json, status=201)
+    log.response(request, resp=resp)
+    return resp
+
+async def DELETE_Domain(request):
+    """HTTP method to delete a domain resource"""
+    log.request(request)
+    app = request.app 
+
+    domain = getDomainFromRequest(request)
+    if not isValidDomain(domain):
+        msg = "Invalid host value: {}".format(domain)
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+ 
+    username, pswd = getUserPasswordFromRequest(request)
+    validateUserPassword(username, pswd)
+    
+    domain_json = await getDomainJson(app, domain)
+    aclCheck(domain_json, "delete", username)  # throws exception if not allowed
+
+    req = getDataNodeUrl(app, domain)
+    req += "/domains/" + domain
+    rsp_json = {} 
+    try:
+        rsp_json = await http_delete(app, req)
+    except ClientError as ce:
+        msg="Error getting deleting group -- " + str(ce)
+        log.warn(msg)
+        raise HttpProcessingError(message=msg, code=503)
+ 
+    resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp
 

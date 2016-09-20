@@ -21,7 +21,7 @@ fi
 for f in ${SRC_DIR}/*.py
 do
   if [ $GETCOUNT -ge 1 ]; then
-     COUNT=$(($COUNT + $(pyflakes $f | wc -l)))
+     COUNT=$(($COUNT + $(pyflakes $f 2>&1 | wc -l)))
   else
      pyflakes $f
   fi

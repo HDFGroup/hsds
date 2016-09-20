@@ -138,7 +138,13 @@ class GroupTest(unittest.TestCase):
         self.assertTrue("domain" in rspJson)
         self.assertEqual(rspJson["domain"], self.base_domain)
 
+        # try DELETE with user who doesn't have create permission on this domain
+        headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
+        rsp = requests.delete(req, headers=headers)
+        self.assertEqual(rsp.status_code, 403) # forbidden
+
         # delete the new group
+        headers = helper.getRequestHeaders(domain=self.base_domain)
         rsp = requests.delete(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
