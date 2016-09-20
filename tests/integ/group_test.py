@@ -105,7 +105,6 @@ class GroupTest(unittest.TestCase):
 
         # try POST with user who doesn't have create permission on this domain
         headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
-        print("headers: ", headers)
         req = helper.getEndpoint() + '/groups'
         rsp = requests.post(req, headers=headers)
         self.assertEqual(rsp.status_code, 403) # forbidden
@@ -145,9 +144,9 @@ class GroupTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue(rspJson is not None)
 
-        # a get for the group should now return 510 (GONE)
+        # a get for the group should now return 410 (GONE)
         rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 510)
+        self.assertEqual(rsp.status_code, 410)
          
 
         

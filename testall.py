@@ -20,7 +20,6 @@ integ_tests = ('uptest', 'domain_test', "group_test" )
 #todo - add spidertest back
 cwd = os.getcwd()
 no_server = False
-print(len(sys.argv))
 if len(sys.argv) > 1:
     if sys.argv[1] == '--unit':
         integ_tests = () # skip integ tests

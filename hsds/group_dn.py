@@ -41,8 +41,8 @@ async def GET_Group(request):
     deleted_ids = app['deleted_ids']
     if group_id in deleted_ids:
         msg = "{} has been deleted".format(group_id)
-        log.response(request, code=510, message=msg)
-        raise HttpProcessingError(code=510, message=msg)
+        log.response(request, code=410, message=msg)
+        raise HttpProcessingError(code=410, message=msg)
 
     meta_cache = app['meta_cache'] 
     group_json = None 
