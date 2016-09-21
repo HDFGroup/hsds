@@ -13,8 +13,7 @@
 # service node of hsds cluster
 # 
  
-from aiohttp import HttpProcessingError 
-from aiohttp.errors import HttpBadRequest, ClientError
+from aiohttp.errors import HttpBadRequest
  
 from util.httpUtil import  http_get_json, http_put, http_delete, jsonResponse
 from util.idUtil import   isValidUuid, getDataNodeUrl
@@ -59,13 +58,8 @@ async def GET_Link(request):
 
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id + "/" + link_title
-    link_json = None
-    try:
-        link_json = await http_get_json(app, req)
-    except ClientError as ce:
-        msg="Error getting link item -- " + str(ce)
-        log.warn(msg)
-        raise HttpProcessingError(message="Unexpected error", code=500)
+    
+    link_json = await http_get_json(app, req)
  
     resp = await jsonResponse(request, link_json)
     log.response(request, resp=resp)
@@ -139,14 +133,9 @@ async def PUT_Link(request):
 
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id
-    json_rsp = None
-    try:
-        json_rsp = await http_put(app, req, link_json)
-    except ClientError as ce:
-        msg="Error creating root group for domain -- " + str(ce)
-        log.Error(msg)
-        raise HttpProcessingError(message="Unexpected error", code=500)
-
+    
+    json_rsp = await http_put(app, req, link_json)
+    
     # link creation successful     
     resp = await jsonResponse(request, json_rsp, status=201)
     log.response(request, resp=resp)
@@ -183,14 +172,8 @@ async def DELETE_Link(request):
 
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id + "/" + link_title
-    rsp_json = {} 
-    try:
-        rsp_json = await http_delete(app, req)
-    except ClientError as ce:
-        msg="Error getting group state -- " + str(ce)
-        log.warn(msg)
-        raise HttpProcessingError(message=msg, code=503)
- 
+    rsp_json = await http_delete(app, req)
+    
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp

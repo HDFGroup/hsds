@@ -14,8 +14,7 @@
 # 
  
 import json
-from aiohttp import HttpProcessingError 
-from aiohttp.errors import HttpBadRequest, ClientError
+from aiohttp.errors import HttpBadRequest
  
 from util.httpUtil import  http_get_json, http_post, http_delete, jsonResponse
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
@@ -63,12 +62,8 @@ async def GET_Group(request):
 
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id
-    group_json = None
-    try:
-        group_json = await http_get_json(app, req)
-    except ClientError as ce:
-        log.error("Error getting group state -- " + str(ce))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+
+    group_json = await http_get_json(app, req)   
 
     if group_json["root"] != domain_json["root"]:
         msg = "Group id is not a member of the given domain"
@@ -110,12 +105,9 @@ async def POST_Group(request):
     group_json = {"id": group_id, "root": root_id, "domain": domain }
     log.info("create group, body: " + json.dumps(group_json))
     req = getDataNodeUrl(app, group_id) + "/groups"
-    try:
-        group_json = await http_post(app, req, group_json)
-    except ClientError as ce:
-        log.error("Error creating root group for domain -- " + str(ce))
-        raise HttpProcessingError(message="Unexpected error", code=500)
-
+    
+    group_json = await http_post(app, req, group_json)
+    
     # domain creation successful     
     resp = await jsonResponse(request, group_json, status=201)
     log.response(request, resp=resp)
@@ -155,13 +147,8 @@ async def DELETE_Group(request):
 
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id
-    rsp_json = {} 
-    try:
-        rsp_json = await http_delete(app, req)
-    except ClientError as ce:
-        msg="Error getting group state -- " + str(ce)
-        log.warn(msg)
-        raise HttpProcessingError(message="Unexpected Error", code=500)
+    
+    rsp_json = await http_delete(app, req)
  
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)

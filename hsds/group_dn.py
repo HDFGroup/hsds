@@ -16,7 +16,6 @@ import time
 
 from aiohttp import HttpProcessingError 
 from aiohttp.errors import HttpBadRequest
-from botocore.exceptions import ClientError
  
  
 from util.idUtil import getObjPartition, getS3Key, validateUuid
@@ -169,15 +168,8 @@ async def DELETE_Group(request):
         log.response(request, code=404, message=msg)
         raise HttpProcessingError(code=404, message=msg)
     
-    try:
-        log.info("deleteS3Obj({})".format(s3_key))
-        await deleteS3Obj(app, s3_key)
-    except ClientError as ce:
-        # key does not exist? 
-        msg = "Error deleting s3 obj: " + str(ce)
-        log.response(request, code=500, message=msg)
-        raise HttpProcessingError(code=500, message=msg)
-
+    await deleteS3Obj(app, s3_key)
+     
     if group_id in meta_cache:
         del meta_cache[group_id]
 

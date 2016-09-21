@@ -15,11 +15,9 @@
  
 from aiohttp import HttpProcessingError 
 from aiohttp.errors import HttpBadRequest
-from botocore.exceptions import ClientError
- 
- 
+  
 from util.idUtil import getObjPartition, getS3Key, isValidUuid
-from util.s3Util import getS3JSONObj, isS3Obj, putS3JSONObj
+from util.s3Util import getS3JSONObj, putS3JSONObj
 import hsds_logger as log
     
 
@@ -47,20 +45,12 @@ async def get_metadata_obj(app, obj_id):
         log.info("{} found in meta cache".format(obj_id))
         obj_json = meta_cache[obj_id]
     else:
-        try:
-            s3_key = getS3Key(obj_id)
-            log.info("getS3JSONObj({})".format(s3_key))
-            obj_json = await getS3JSONObj(app, s3_key)
-        except ClientError as ce:
-            # key does not exist?
-            is_s3obj = await isS3Obj(app, s3_key)
-            if is_s3obj:
-                log.error("Error getting s3 obj: " + str(ce))
-                raise HttpProcessingError(code=500, message="Unexpected Error") 
-            # not a S3 Key
-            msg = "{} not found".format(obj_id)
-            log.warn(msg)  
-            raise HttpProcessingError(code=404, message=msg)
+       
+        s3_key = getS3Key(obj_id)
+        log.info("getS3JSONObj({})".format(s3_key))
+        # read S3 object as JSON
+        obj_json = await getS3JSONObj(app, s3_key)
+         
         meta_cache[obj_id] = obj_json  # add to cache
     return obj_json
 
@@ -86,11 +76,9 @@ async def save_metadata_obj(app, obj_json):
         raise HttpProcessingError(code=500, message="Unexpected Error") 
     s3_key = getS3Key(obj_id)
     # write back to S3
-    try:
-        await putS3JSONObj(app, s3_key, obj_json) 
-    except ClientError as ce:
-        log.error("Unexpected Error writing to s3 obj: " + str(ce))
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+    
+    await putS3JSONObj(app, s3_key, obj_json) 
+     
     
 
     

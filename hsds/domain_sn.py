@@ -15,7 +15,7 @@
 import json
 
 from aiohttp import  HttpProcessingError 
-from aiohttp.errors import HttpBadRequest, ClientError
+from aiohttp.errors import HttpBadRequest
 
 from util.httpUtil import  http_post, http_put, http_get_json, http_delete, jsonResponse
 from util.idUtil import  getDataNodeUrl, createObjId
@@ -44,16 +44,12 @@ async def GET_Domain(request):
     # don't use app["domain_cache"]  if a direct domain request is made 
     # as opposed to an implicit request as with other operations, query
     # the domain from the authoritative source (the dn node)
-    domain_json = { }
     req = getDataNodeUrl(app, domain)
     req += "/domains/" + domain 
     log.info("sending dn req: {}".format(req))
-    try:
-        domain_json = await http_get_json(app, req)
-    except ClientError as ce:
-        msg="Error getting domain state -- " + str(ce)
-        log.warn(msg)
-        raise HttpProcessingError(message=msg, code=503)
+     
+    domain_json = await http_get_json(app, req)
+     
     if 'owner' not in domain_json:
         log.warn("No owner key found in domain")
         raise HttpProcessingError("Unexpected error", code=500)
@@ -162,13 +158,8 @@ async def DELETE_Domain(request):
 
     req = getDataNodeUrl(app, domain)
     req += "/domains/" + domain
-    rsp_json = {} 
-    try:
-        rsp_json = await http_delete(app, req)
-    except ClientError as ce:
-        msg="Error getting deleting group -- " + str(ce)
-        log.warn(msg)
-        raise HttpProcessingError(message=msg, code=503)
+    
+    rsp_json = await http_delete(app, req)
  
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)

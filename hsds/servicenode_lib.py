@@ -14,7 +14,6 @@
 # service node of hsds cluster
 # 
  
-from aiohttp.errors import  ClientError
 from aiohttp import HttpProcessingError 
 
 from util.idUtil import   getDataNodeUrl
@@ -39,16 +38,12 @@ async def getDomainJson(app, domain):
         log.info("returning domain_cache value")
         return domain_cache[domain]
 
-    domain_json = { }
     req = getDataNodeUrl(app, domain)
     req += "/domains/" + domain 
     log.info("sending dn req: {}".format(req))
-    try:
-        domain_json = await http_get_json(app, req)
-    except ClientError as ce:
-        msg="Error getting domain state -- " + str(ce)
-        log.warn(msg)
-        raise HttpProcessingError(message=msg, code=503)
+    
+    domain_json = await http_get_json(app, req)
+    
     if 'owner' not in domain_json:
         log.warn("No owner key found in domain")
         raise HttpProcessingError("Unexpected error", code=500)

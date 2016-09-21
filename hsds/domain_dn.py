@@ -15,7 +15,6 @@
 
 from aiohttp.errors import HttpBadRequest
 from aiohttp import HttpProcessingError 
-from botocore.exceptions import ClientError
  
 from util.idUtil import   getObjPartition
 from util.httpUtil import  jsonResponse
@@ -59,28 +58,8 @@ async def GET_Domain(request):
         log.info("{} found in meta cache".format(domain_key))
         domain_json = meta_cache[domain_key]
     else:
-        try:
-            log.info("getS3JSONObj({})".format(s3_key))
-            domain_json = await getS3JSONObj(app, s3_key)
-        except ClientError as ce:
-            # key does not exist?
-            # check for not found status
-            is_404 = False
-            if "ResponseMetadata" in ce.response:
-                metadata = ce.response["ResponseMetadata"]
-                if "HTTPStatusCode" in metadata:
-                    if metadata["HTTPStatusCode"] == 404:
-                        is_404 = True
-            if is_404:
-                msg = "s3_key: {} not found for domain: {}".format(s3_key, domain_key)
-                log.warn(msg)
-                raise HttpProcessingError(code=404, message=msg)
-            else:
-                log.warn("got ClientError on s3 get: {}".format(str(ce)))
-            
-                msg = "Error getting s3 obj: " + str(ce)
-                log.response(request, code=500, message=msg)
-                raise HttpProcessingError(code=500, message=msg)
+        
+        domain_json = await getS3JSONObj(app, s3_key)
            
         meta_cache[domain_key] = domain_json  # save to cache
 
@@ -148,21 +127,13 @@ async def PUT_Domain(request):
     domain_json["owner"] = body_json["owner"]
     domain_json["acls"] = body_json["acls"]
 
-    try:
-        await putS3JSONObj(app, s3_key, domain_json)  # write to S3
-    except ClientError as ce:
-        msg = "Error writing s3 obj: " + str(ce)
-        log.response(request, code=500, message=msg)
-        raise HttpProcessingError(code=500, message=msg)
-
+    # write to S3
+    await putS3JSONObj(app, s3_key, domain_json)  
+     
     # read back from S3 (will add timestamps metakeys) 
     log.info("getS3JSONObj({})".format(s3_key))
-    try:
-        domain_json = await getS3JSONObj(app, s3_key)
-    except ClientError as ce:
-        msg = "Error reading s3 obj: " + s3_key
-        log.response(request, code=500, message=msg)
-        raise HttpProcessingError(code=500, message=msg)
+    domain_json = await getS3JSONObj(app, s3_key)
+     
     meta_cache[domain_key] = domain_json
     if domain_key in deleted_ids:
         deleted_ids.remove(domain_key)  # un-gone the domain key
@@ -194,7 +165,6 @@ async def DELETE_Domain(request):
     meta_cache = app['meta_cache'] 
     deleted_ids = app['deleted_ids']
     
-    
     domain_exist = False
     if domain_key in meta_cache:
         log.info("{} found in meta cache".format(domain_key))
@@ -207,15 +177,9 @@ async def DELETE_Domain(request):
         log.info(msg)
         raise HttpProcessingError(code=404, message=msg) 
 
-    try:
-        log.info("deleteS3Obj({})".format(s3_key))
-        await deleteS3Obj(app, s3_key)
-    except ClientError as ce:
-        # key does not exist? 
-        msg = "Error deleting s3 obj: " + str(ce)
-        log.response(request, code=500, message=msg)
-        raise HttpProcessingError(code=500, message=msg)  
-
+    # delete S3 obj 
+    await deleteS3Obj(app, s3_key)
+    
     deleted_ids.add(domain_key)
 
     json_response = { "domain": domain_key }

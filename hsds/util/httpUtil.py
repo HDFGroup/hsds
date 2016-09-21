@@ -16,6 +16,8 @@
 import json
 from aiohttp.web import StreamResponse
 from aiohttp import HttpProcessingError 
+from aiohttp.errors import ClientError
+
 import hsds_logger as log
 
 def isOK(http_response):
@@ -27,25 +29,33 @@ async def http_get(app, url):
     log.info("http_get('{}')".format(url))
     client = app['client']
     rsp = None
-    async with client.get(url) as rsp:
-        log.info("http_get status: {}".format(rsp.status))
-        rsp = await rsp.text()
-        #log.info("http_get({}) response: {}".format(url, rsp))  
-    
+    try:
+        async with client.get(url) as rsp:
+            log.info("http_get status: {}".format(rsp.status))
+            rsp = await rsp.text()
+            #log.info("http_get({}) response: {}".format(url, rsp))  
+    except ClientError as ce:
+        log.error("Error for http_get({}): {} ".format(url, str(ce)))
+        raise HttpProcessingError(message="Unexpected error", code=500)
     return rsp
 
 async def http_get_json(app, url):
     log.info("http_get('{}')".format(url))
     client = app['client']
     rsp_json = None
-    async with client.get(url) as rsp:
-        log.info("http_get status: {}".format(rsp.status))
-        if rsp.status != 200:
-            msg = "request to {} failed with code: {}".format(url, rsp.status)
-            log.warn(msg)
-            raise HttpProcessingError(message=msg, code=rsp.status)
-        rsp_json = await rsp.json()
-        #log.info("http_get({}) response: {}".format(url, rsp_json))  
+     
+    try:    
+        async with client.get(url) as rsp:
+            log.info("http_get status: {}".format(rsp.status))
+            if rsp.status != 200:
+                msg = "request to {} failed with code: {}".format(url, rsp.status)
+                log.warn(msg)
+                raise HttpProcessingError(message=msg, code=rsp.status)
+            rsp_json = await rsp.json()
+            #log.info("http_get({}) response: {}".format(url, rsp_json))  
+    except ClientError as ce:
+        log.error("Error for http_get_json({}): {} ".format(url, str(ce)))
+        raise HttpProcessingError(message="Unexpected error", code=500)
     if isinstance(rsp_json, str):
         log.warn("converting str to json")
         rsp_json = json.loads(rsp_json)
@@ -56,14 +66,18 @@ async def http_post(app, url, data):
     client = app['client']
     rsp_json = None
     
-    async with client.post(url, data=json.dumps(data)) as rsp:
-        log.info("http_post status: {}".format(rsp.status))
-        if rsp.status not in (200, 201):
-            msg = "request error - status: ".format(rsp.status)  # tbd - pull error from rsp
-            log.warn(msg)
-            raise HttpProcessingError(message=msg, code=rsp.status)
-        rsp_json = await rsp.json()
-        log.info("http_post({}) response: {}".format(url, rsp_json))
+    try:
+        async with client.post(url, data=json.dumps(data)) as rsp:
+            log.info("http_post status: {}".format(rsp.status))
+            if rsp.status not in (200, 201):
+                msg = "request error - status: ".format(rsp.status)  # tbd - pull error from rsp
+                log.warn(msg)
+                raise HttpProcessingError(message=msg, code=rsp.status)
+            rsp_json = await rsp.json()
+            log.info("http_post({}) response: {}".format(url, rsp_json))
+    except ClientError as ce:
+        log.error("Error for http_post({}): {} ".format(url, str(ce)))
+        raise HttpProcessingError(message="Unexpected error", code=500)
     return rsp_json
 
 async def http_put(app, url, data):
@@ -71,16 +85,20 @@ async def http_put(app, url, data):
     rsp_json = None
     client = app['client']
     
-    async with client.put(url, data=json.dumps(data)) as rsp:
-        log.info("http_put status: {}".format(rsp.status))
-        if rsp.status != 201:
-            print("bad response:", str(rsp))
-            msg = "request error"  # tbd - pull error from rsp
-            log.warn(msg)
-            raise HttpProcessingError(message=msg, code=rsp.status)
+    try:
+        async with client.put(url, data=json.dumps(data)) as rsp:
+            log.info("http_put status: {}".format(rsp.status))
+            if rsp.status != 201:
+                print("bad response:", str(rsp))
+                msg = "request error"  # tbd - pull error from rsp
+                log.warn(msg)
+                raise HttpProcessingError(message=msg, code=rsp.status)
 
-        rsp_json = await rsp.json()
-        log.info("http_put({}) response: {}".format(url, rsp_json))
+            rsp_json = await rsp.json()
+            log.info("http_put({}) response: {}".format(url, rsp_json))
+    except ClientError as ce:
+        log.error("Error for http_post({}): {} ".format(url, str(ce)))
+        raise HttpProcessingError(message="Unexpected error", code=500)
     return rsp_json
 
 async def http_delete(app, url):
@@ -88,16 +106,20 @@ async def http_delete(app, url):
     client = app['client']
     rsp_json = None
     
-    async with client.delete(url) as rsp:
-        log.info("http_delete status: {}".format(rsp.status))
-        if rsp.status != 200:
-            print("bad response:", str(rsp))
-            msg = "request error"  # tbd - pull error from rsp
-            log.warn(msg)
-            raise HttpProcessingError(message=msg, code=rsp.status)
+    try:
+        async with client.delete(url) as rsp:
+            log.info("http_delete status: {}".format(rsp.status))
+            if rsp.status != 200:
+                print("bad response:", str(rsp))
+                msg = "request error"  # tbd - pull error from rsp
+                log.warn(msg)
+                raise HttpProcessingError(message=msg, code=rsp.status)
 
-        rsp_json = await rsp.json()
-        log.info("http_put({}) response: {}".format(url, rsp_json))
+            rsp_json = await rsp.json()
+            log.info("http_put({}) response: {}".format(url, rsp_json))
+    except ClientError as ce:
+        log.error("Error for http_delete({}): {} ".format(url, str(ce)))
+        raise HttpProcessingError(message="Unexpected error", code=500)
     return rsp_json
 
 async def jsonResponse(request, data, status=200):
