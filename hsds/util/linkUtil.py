@@ -9,24 +9,21 @@
 # distribution tree.  If you do not have access to this file, you may        #
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
-import os
-import sys
+#
+# linkdUtil:
+# link related functions
+# 
+from aiohttp import HttpBadRequest
+import hsds_logger as log
 
-cfg = {
-    'head_host': '192.168.99.100',
-    'head_port': 5100,
-    'hsds_endpoint': 'http://192.168.99.100:5102',
-    'user_name': 'test_user1',
-    'user_password': 'test',
-    'test_noauth': True
-}
-   
-def get(x):     
-    # see if there are an environment variable override
-    if x.upper() in os.environ:
-        return os.environ[x.upper()]
-    # no command line override, just return the cfg value        
-    return cfg[x]
-
-  
-  
+def validateLinkName(name):
+    if not isinstance(name, str):
+        msg = "Unexpected type for link name"
+        log.error(msg)
+        raise HttpBadRequest(message=msg)
+    if name.find('/') >= 0:
+        msg = "link name contains slash"
+        log.error(msg)
+        raise HttpBadRequest(message=msg)
+ 
+ 

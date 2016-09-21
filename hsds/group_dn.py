@@ -21,8 +21,9 @@ from botocore.exceptions import ClientError
  
 from util.idUtil import getObjPartition, getS3Key, validateUuid
 from util.httpUtil import jsonResponse
-from util.s3Util import getS3JSONObj, putS3JSONObj, isS3Obj, deleteS3Obj 
+from util.s3Util import putS3JSONObj, isS3Obj, deleteS3Obj 
 from util.domainUtil import   validateDomain
+from datanode_lib import get_metadata_obj
 import hsds_logger as log
     
 
@@ -32,40 +33,8 @@ async def GET_Group(request):
     log.request(request)
     app = request.app
     group_id = request.match_info.get('id')
-    validateUuid(group_id, "group")
     
-    if getObjPartition(group_id, app['node_count']) != app['node_number']:
-        # The request shouldn't have come to this node'
-        raise HttpBadRequest(message="wrong node for 'id':{}".format(group_id))
-
-    deleted_ids = app['deleted_ids']
-    if group_id in deleted_ids:
-        msg = "{} has been deleted".format(group_id)
-        log.response(request, code=410, message=msg)
-        raise HttpProcessingError(code=410, message=msg)
-
-    meta_cache = app['meta_cache'] 
-    group_json = None 
-    if group_id in meta_cache:
-        log.info("{} found in meta cache".format(group_id))
-        group_json = meta_cache[group_id]
-    else:
-        try:
-            s3_key = getS3Key(group_id)
-            log.info("getS3JSONObj({})".format(s3_key))
-            group_json = await getS3JSONObj(app, s3_key)
-        except ClientError as ce:
-            # key does not exist?
-            is_s3obj = await isS3Obj(app, s3_key)
-            if is_s3obj:
-                msg = "Error getting s3 obj: " + str(ce)
-                log.response(request, code=500, message=msg)
-                raise HttpProcessingError(code=500, message=msg)
-            # not a S3 Key
-            msg = "{} not found".format(group_id)
-            log.response(request, code=404, message=msg)
-            raise HttpProcessingError(code=404, message=msg)
-        meta_cache[group_id] = group_json  # add to cache
+    group_json = await get_metadata_obj(app, group_id)
 
     resp_json = { } 
     resp_json["id"] = group_json["id"]

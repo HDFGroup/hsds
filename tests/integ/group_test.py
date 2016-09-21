@@ -58,6 +58,15 @@ class GroupTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["root"], root_uuid)
+
+        # try to do a GET with a different domain (should fail)
+        another_domain = helper.getParentDomain(self.base_domain)
+        print("another_domain:", another_domain)
+        headers = helper.getRequestHeaders(domain=another_domain)
+        req = helper.getEndpoint() + '/groups/' + root_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+         
          
 
 
@@ -142,6 +151,16 @@ class GroupTest(unittest.TestCase):
         headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
         rsp = requests.delete(req, headers=headers)
         self.assertEqual(rsp.status_code, 403) # forbidden
+
+        # try to do a DELETE with a different domain (should fail)
+        """
+        another_domain = helper.getParentDomain(self.base_domain)
+        print("another_domain:", another_domain)
+        headers = helper.getRequestHeaders(domain=another_domain)
+        req = helper.getEndpoint() + '/groups/' + group_id
+        rsp = requests.delete(req, headers=headers)
+        self.assertEqual(rsp.status_code, 400)   
+        """
 
         # delete the new group
         headers = helper.getRequestHeaders(domain=self.base_domain)

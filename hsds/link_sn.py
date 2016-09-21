@@ -13,20 +13,19 @@
 # service node of hsds cluster
 # 
  
-import json
 from aiohttp import HttpProcessingError 
 from aiohttp.errors import HttpBadRequest, ClientError
  
-from util.httpUtil import  http_get_json, http_post, http_delete, jsonResponse
-from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
+from util.httpUtil import  http_get_json, http_put, http_delete, jsonResponse
+from util.idUtil import   isValidUuid, getDataNodeUrl
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
+from util.linkUtil import validateLinkName
 from servicenode_lib import getDomainJson
 import hsds_logger as log
 
 
-
-async def GET_Group(request):
+async def GET_Link(request):
     """HTTP method to return JSON for group"""
     log.request(request)
     app = request.app 
@@ -40,6 +39,8 @@ async def GET_Group(request):
         msg = "Invalid group id: {}".format(group_id)
         log.warn(msg)
         raise HttpBadRequest(message=msg)
+    link_title = request.match_info.get('title')
+    validateLinkName(link_title)
 
     username, pswd = getUserPasswordFromRequest(request)
     if username is None and app['allow_noauth']:
@@ -56,38 +57,71 @@ async def GET_Group(request):
     domain_json = await getDomainJson(app, domain)
     aclCheck(domain_json, "read", username)  # throws exception if not allowed
 
-    if "root" not in domain_json:
-        msg = "Domain has no root group"
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
-
     req = getDataNodeUrl(app, group_id)
-    req += "/groups/" + group_id
-    group_json = None
+    req += "/groups/" + group_id + "/" + link_title
+    link_json = None
     try:
-        group_json = await http_get_json(app, req)
+        link_json = await http_get_json(app, req)
     except ClientError as ce:
-        log.error("Error getting group state -- " + str(ce))
-        raise HttpProcessingError(message="Unexpected error", code=500)
-
-    if group_json["root"] != domain_json["root"]:
-        msg = "Group id is not a member of the given domain"
+        msg="Error getting link item -- " + str(ce)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
-
+        raise HttpProcessingError(message="Unexpected error", code=500)
  
-    resp = await jsonResponse(request, group_json)
+    resp = await jsonResponse(request, link_json)
     log.response(request, resp=resp)
     return resp
 
-async def POST_Group(request):
+async def PUT_Link(request):
     """HTTP method to return JSON for group"""
     log.request(request)
     app = request.app
 
+    group_id = request.match_info.get('id')
+    if not group_id:
+        msg = "Missing group id"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    if not isValidUuid(group_id, "Group"):
+        msg = "Invalid group id: {}".format(group_id)
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    link_title = request.match_info.get('title')
+    validateLinkName(link_title)
+
+
     username, pswd = getUserPasswordFromRequest(request)
     # write actions need auth
     validateUserPassword(username, pswd)
+
+    if not request.has_body:
+        msg = "PUT Link with no body"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+
+    body = await request.json()   
+
+    link_json = {}
+    link_json["title"] = link_title
+    if "id" in body:
+        if not isValidUuid(body["id"]):
+            msg = "PUT Link with invalid id in body"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        link_json["id"] = body["id"]
+        link_json["class"] = "H5L_TYPE_HARD"
+    elif "h5path" in body:
+        link_json["h5path"] = body["h5path"]
+        # could be hard or soft link
+        if "h5domain" in body:
+            link_json["h5domain"] = body["h5domain"]
+            link_json["class"] = "H5L_TYPE_EXTERNAL"
+        else:
+            # soft link
+            link_json["class"] = "H5L_TYPE_SOFT"
+    else:
+        msg = "PUT Link with no id or h5path keys"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
@@ -100,28 +134,25 @@ async def POST_Group(request):
     aclCheck(domain_json, "create", username)  # throws exception if not allowed
 
     if "root" not in domain_json:
-        msg = "Expected root key for domain: {}".format(domain)
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        log.error("Expected root key for domain: {}".format(domain))
+        raise HttpBadRequest(message="Unexpected Error")
 
-    root_id = domain_json["root"]
-    group_id = createObjId("group") 
-    log.info("new  group id: {}".format(group_id))
-    group_json = {"id": group_id, "root": root_id, "domain": domain }
-    log.info("create group, body: " + json.dumps(group_json))
-    req = getDataNodeUrl(app, group_id) + "/groups"
+    req = getDataNodeUrl(app, group_id)
+    req += "/groups/" + group_id
+    json_rsp = None
     try:
-        group_json = await http_post(app, req, group_json)
+        json_rsp = await http_put(app, req, link_json)
     except ClientError as ce:
-        log.error("Error creating root group for domain -- " + str(ce))
+        msg="Error creating root group for domain -- " + str(ce)
+        log.Error(msg)
         raise HttpProcessingError(message="Unexpected error", code=500)
 
-    # domain creation successful     
-    resp = await jsonResponse(request, group_json, status=201)
+    # link creation successful     
+    resp = await jsonResponse(request, json_rsp, status=201)
     log.response(request, resp=resp)
     return resp
 
-async def DELETE_Group(request):
+async def DELETE_Link(request):
     """HTTP method to delete a group resource"""
     log.request(request)
     app = request.app 
@@ -135,6 +166,8 @@ async def DELETE_Group(request):
         msg = "Invalid group id: {}".format(group_id)
         log.warn(msg)
         raise HttpBadRequest(message=msg)
+    link_title = request.match_info.get('title')
+    validateLinkName(link_title)
 
     username, pswd = getUserPasswordFromRequest(request)
     validateUserPassword(username, pswd)
@@ -148,20 +181,15 @@ async def DELETE_Group(request):
     domain_json = await getDomainJson(app, domain)
     aclCheck(domain_json, "delete", username)  # throws exception if not allowed
 
-    if "root" not in domain_json:
-        msg = "Domain has no root group"
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
-
     req = getDataNodeUrl(app, group_id)
-    req += "/groups/" + group_id
+    req += "/groups/" + group_id + "/" + link_title
     rsp_json = {} 
     try:
         rsp_json = await http_delete(app, req)
     except ClientError as ce:
         msg="Error getting group state -- " + str(ce)
         log.warn(msg)
-        raise HttpProcessingError(message="Unexpected Error", code=500)
+        raise HttpProcessingError(message=msg, code=503)
  
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
