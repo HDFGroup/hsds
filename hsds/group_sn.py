@@ -29,6 +29,7 @@ async def GET_Group(request):
     """HTTP method to return JSON for group"""
     log.request(request)
     app = request.app 
+    meta_cache = app['meta_cache']
 
     group_id = request.match_info.get('id')
     if not group_id:
@@ -60,6 +61,7 @@ async def GET_Group(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
 
+    # get authoritative state for group from DN (even if it's in the meta_cache).
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id
 
@@ -69,8 +71,10 @@ async def GET_Group(request):
         msg = "Group id is not a member of the given domain"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
+    
+    # save to cache
+    meta_cache[group_id] = group_json
 
- 
     resp = await jsonResponse(request, group_json)
     log.response(request, resp=resp)
     return resp
@@ -117,6 +121,7 @@ async def DELETE_Group(request):
     """HTTP method to delete a group resource"""
     log.request(request)
     app = request.app 
+    meta_cache = app['meta_cache']
 
     group_id = request.match_info.get('id')
     if not group_id:
@@ -147,8 +152,17 @@ async def DELETE_Group(request):
 
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id
-    
+
+    group_json = await http_get_json(app, req)  
+    if group_json["root"] != domain_json["root"]:
+        msg = "Group id is not a member of the given domain"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+ 
     rsp_json = await http_delete(app, req)
+
+    if group_id in meta_cache:
+        del meta_cache[group_id]  # remove from cache
  
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)

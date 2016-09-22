@@ -121,6 +121,20 @@ def setupDomain(domain):
     rsp = requests.put(req, headers=headers)
     if rsp.status_code != 201:
         raise ValueError("Unexpected put domain error: {}".format(rsp.status_code))
+
+"""
+Helper function - get root uuid for domain
+""" 
+def getRootUUID(domain, username=None, password=None):
+    req = getEndpoint() + "/"
+    headers = getRequestHeaders(domain=domain, username=username, password=password)
+    
+    rsp = requests.get(req, headers=headers)
+    root_uuid= None
+    if rsp.status_code == 200:
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+    return root_uuid
        
 
      

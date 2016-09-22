@@ -45,6 +45,19 @@ def createObjId(obj_type):
         raise ValueError("unexpected obj_type")
     id = obj_type[0] + '-' + str(uuid.uuid1())
     return id
+
+def getCollectionForId(obj_id):
+    collection = None
+    if obj_id.startswith("g-"):
+        collection = "groups"
+    elif obj_id.startswith("d-"):
+        collection = "datasets"
+    elif obj_id.starts("n-"):
+        collection = "datatypes"
+    else:
+        raise ValueError("not a collection id")
+    return collection
+
     
 def getHeadNodeS3Key():
     return "headnode"

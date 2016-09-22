@@ -40,8 +40,8 @@ async def GET_Group(request):
     resp_json["root"] = group_json["root"]
     resp_json["created"] = group_json["created"]
     resp_json["lastModified"] = group_json["lastModified"]
-    resp_json["linkCount"] = 0  # TBD
-    resp_json["attributeCount"] = 0 # TBD
+    resp_json["linkCount"] = len(group_json["links"])
+    resp_json["attributeCount"] = len(group_json["attributes"])
     if "domain" in group_json:
         resp_json["domain"] = group_json["domain"]
      
@@ -118,7 +118,7 @@ async def POST_Group(request):
     # ok - all set, create group obj
     now = int(time.time())
     
-    group_json = {"id": group_id, "root": root_id, "created": now, "lastModified": now, "links": [], "attributes": [] }
+    group_json = {"id": group_id, "root": root_id, "created": now, "lastModified": now, "links": {}, "attributes": {} }
     if domain is not None:
         group_json["domain"] = domain
 

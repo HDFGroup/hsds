@@ -22,6 +22,7 @@ from basenode import healthCheck,  baseInit
 import hsds_logger as log
 from domain_sn import GET_Domain, PUT_Domain, DELETE_Domain
 from group_sn import GET_Group, POST_Group, DELETE_Group
+from link_sn import GET_Link, PUT_Link, DELETE_Link
  
 
 async def init(loop):
@@ -37,6 +38,9 @@ async def init(loop):
     app.router.add_route('GET', '/groups/{id}', GET_Group)
     app.router.add_route('DELETE', '/groups/{id}', DELETE_Group)
     app.router.add_route('POST', '/groups', POST_Group)
+    app.router.add_route('GET', '/groups/{id}/links/{title}', GET_Link)
+    app.router.add_route('DELETE', '/groups/{id}/links/{title}', DELETE_Link)
+    app.router.add_route('PUT', '/groups/{id}/links/{title}', PUT_Link)
       
     return app
 
@@ -57,6 +61,7 @@ if __name__ == '__main__':
     app = loop.run_until_complete(init(loop))
     app['client'] = client
     app['domain_cache'] = {}
+    app['meta_cache'] = {}
     if config.get("allow_noauth"):
         app['allow_noauth'] = True
     else:

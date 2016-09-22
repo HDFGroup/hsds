@@ -67,8 +67,6 @@ class GroupTest(unittest.TestCase):
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 400)
          
-         
-
 
     def testGetInvalidUUID(self):
         print("testGetRootGroup", self.base_domain)
@@ -153,14 +151,13 @@ class GroupTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 403) # forbidden
 
         # try to do a DELETE with a different domain (should fail)
-        """
         another_domain = helper.getParentDomain(self.base_domain)
         print("another_domain:", another_domain)
         headers = helper.getRequestHeaders(domain=another_domain)
         req = helper.getEndpoint() + '/groups/' + group_id
         rsp = requests.delete(req, headers=headers)
         self.assertEqual(rsp.status_code, 400)   
-        """
+        
 
         # delete the new group
         headers = helper.getRequestHeaders(domain=self.base_domain)

@@ -75,9 +75,14 @@ async def save_metadata_obj(app, obj_json):
         log.warn("{} has been deleted".format(obj_id))
         raise HttpProcessingError(code=500, message="Unexpected Error") 
     s3_key = getS3Key(obj_id)
-    # write back to S3
     
+    # write back to S3    
     await putS3JSONObj(app, s3_key, obj_json) 
+    
+    # update meta cache
+    meta_cache = app['meta_cache'] 
+    log.info("save: {} to cache: {}".format(obj_id, str(obj_json)))
+    meta_cache[obj_id] = obj_json
      
     
 

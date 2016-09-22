@@ -35,6 +35,7 @@ async def GET_Link(request):
     validateLinkName(link_title)
 
     group_json = await get_metadata_obj(app, group_id)
+    log.info("for id: {} got group json: {}".format(group_id, str(group_json)))
     if "links" not in group_json:
         msg = "unexpected group data for id: {}".format(group_id)
         msg.error(msg)
@@ -43,7 +44,7 @@ async def GET_Link(request):
     links = group_json["links"]
     if link_title not in links:
         msg = "Link name {} not found in group: {}".format(link_title, group_id)
-        msg.error(msg)
+        log.error(msg)
         raise HttpProcessingError(code=404, message=msg)
 
     link_json = links[link_title]
@@ -58,6 +59,10 @@ async def PUT_Link(request):
     app = request.app
     group_id = request.match_info.get('id')
     validateUuid(group_id, "group")
+    link_title = request.match_info.get('title')
+    validateLinkName(link_title)
+
+    log.info("link_title: {}".format(link_title))
 
     if not request.has_body:
         msg = "PUT Link with no body"
@@ -70,25 +75,16 @@ async def PUT_Link(request):
         log.error("Expected class in PUT Link")
         raise HttpProcessingError(code=500, message="Unexpected Error")
     link_class = body["class"]
-    if "title" not in body:
-        log.error("Expected title in PUT Link")
-        raise HttpProcessingError(code=500, message="Unexpected Error")
-    link_title = body["title"]
-
-    now = int(time.time())
+     
     link_json = {}
     link_json["class"] = link_class
-    link_json["title"] = link_title
-    link_json["created"] = now
-    link_json["lastModified"] = now
-
 
     if "id" in body:
         link_json["id"] = body["id"]    
     if "h5path" in body:    
         link_json["h5path"] = body["h5path"]
     if "h5domain" in body:
-        link_json = body["h5domain"]
+        link_json["h5domain"] = body["h5domain"]
 
     group_json = await get_metadata_obj(app, group_id)
     if "links" not in group_json:
@@ -99,17 +95,22 @@ async def PUT_Link(request):
     links = group_json["links"]
     if link_title in links:
         msg = "Link name {} already found in group: {}".format(link_title, group_id)
-        msg.error(msg)
-        raise HttpProcessingError(code=404, message=msg)
+        log.warn(msg)
+        raise HttpProcessingError(code=409, message=msg)
     
-    # add the link
-    links[link_title] = body
+    now = int(time.time())
+    link_json["created"] = now
 
-    # write back to S3
-    save_metadata_obj(app, group_json)
+    # add the link
+    links[link_title] = link_json
+
+    # update the group lastModified
+    group_json["lastModified"] = now
+
+    # write back to S3, save to metadata cache
+    await save_metadata_obj(app, group_json)
     
-    hrefs = []  # TBD
-    resp_json = {"href":  hrefs} 
+    resp_json = { } 
      
     resp = await jsonResponse(request, resp_json, status=201)
     log.response(request, resp=resp)
@@ -139,6 +140,10 @@ async def DELETE_Link(request):
         raise HttpProcessingError(code=404, message=msg)
 
     del links[link_title]  # remove the link from dictionary
+
+    # update the group lastModified
+    now = int(time.time())
+    group_json["lastModified"] = now
 
     # write back to S3
     save_metadata_obj(app, group_json)
