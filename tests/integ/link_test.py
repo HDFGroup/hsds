@@ -306,7 +306,7 @@ class LinkTest(unittest.TestCase):
         last_link = links[-1]
         self.assertEqual(last_link["title"], sorted_names[limit-1])
 
-        # get links starting with name: "seventh"
+        # get links after the one with name: "seventh"
         marker = "seventh"
         req = helper.getEndpoint() + "/groups/" + root_id + "/links?Marker=" + marker
         rsp = requests.get(req, headers=headers)
@@ -319,7 +319,7 @@ class LinkTest(unittest.TestCase):
         last_link = links[-1]
         self.assertEqual(last_link["title"], "twelfth")
 
-        # get links strating with name: "seventh", and limit to 3 results
+        # get links starting with name: "seventh", and limit to 3 results
         marker = "seventh"
         limit = 3
         req = helper.getEndpoint() + "/groups/" + root_id + "/links"
