@@ -170,6 +170,7 @@ async def PUT_Link(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     link_title = request.match_info.get('title')
+    log.info("Link_title: [{}]".format(link_title) )
     validateLinkName(link_title)
 
 

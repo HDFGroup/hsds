@@ -50,7 +50,7 @@ async def GET_Links(request):
             log.error(msg)  # should be validated by SN
             raise HttpBadRequest(message=msg)
     marker = None
-    if "Marker" in request.GET:   
+    if "Marker" in request.GET:
         marker = request.GET["Marker"]
         log.info("GET_Links - using Marker: {}".format(marker))
      

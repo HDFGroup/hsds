@@ -36,7 +36,7 @@ class LinkTest(unittest.TestCase):
         root_id = rspJson["root"]
 
         # get root group and check it has no links
-        req = helper.getEndpoint() + "/groups/" + root_id 
+        req = helper.getEndpoint() + "/groups/" + root_id
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)  
         rspJson = json.loads(rsp.text)
@@ -113,12 +113,34 @@ class LinkTest(unittest.TestCase):
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 404)  # not found
 
+        # try creating a link without a link name
+        payload = {"id": grp1_id}
+        req = helper.getEndpoint() + "/groups/" + root_id + "/links/" 
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 404)  # Not Found
+
         # got a real id, but outside this domain
+        req = helper.getEndpoint() + "/groups/" + root_id + "/links/another_domain"
         another_domain = helper.getParentDomain(self.base_domain)
         another_id = helper.getRootUUID(another_domain)
         payload = {"id": another_id}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 400)  # Invalid request
+
+        # try creating a link with a space in the title
+        link_title = "name with spaces"
+        payload = {"id": grp1_id}
+        req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # Created
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # should get link now
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("link" in rspJson)
+        rspLink = rspJson["link"]
+        self.assertEqual(rspLink["title"], link_title)
+        rsp = requests.delete(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200) 
 
         # get the root group and verify the link count is zero
         req = helper.getEndpoint() + "/groups/" + root_id 
@@ -126,7 +148,7 @@ class LinkTest(unittest.TestCase):
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)  
         rspJson = json.loads(rsp.text)
-        self.assertEqual(rspJson["linkCount"], 0)  # link count is zero
+        self.assertEqual(rspJson["linkCount"], 0)  # link count should zero
 
     def testSoftLink(self):
         print("testSoftLink", self.base_domain)
