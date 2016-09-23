@@ -13,6 +13,8 @@
 # data node of hsds cluster
 # 
 import time
+from copy import copy
+from bisect import bisect_left
 
 from aiohttp import HttpProcessingError 
 from aiohttp.errors import HttpBadRequest 
@@ -22,7 +24,72 @@ from util.httpUtil import jsonResponse
 from util.linkUtil import validateLinkName
 from datanode_lib import get_metadata_obj, save_metadata_obj
 import hsds_logger as log
+
+def index(a, x):
+    """ Locate the leftmost value exactly equal to x
+    """
+    i = bisect_left(a, x)
+    if i != len(a) and a[i] == x:
+        return i
+    return -1
+
+async def GET_Links(request):
+    """HTTP GET method to return JSON for a link collection
+    """
+    log.request(request)
+    app = request.app
+    group_id = request.match_info.get('id')
+    validateUuid(group_id, "group")
+    limit = None
+    if "Limit" in request.GET:
+        try:
+            limit = int(request.GET["Limit"])
+        except ValueError:
+            msg = "Bad Request: Expected int type for limit"
+            log.error(msg)  # should be validated by SN
+            raise HttpBadRequest(message=msg)
+    marker = None
+    if "Marker" in request.GET:
+        marker = request.GET["Marker"]
+     
+    group_json = await get_metadata_obj(app, group_id)
     
+    log.info("for id: {} got group json: {}".format(group_id, str(group_json)))
+    if "links" not in group_json:
+        msg = "unexpected group data for id: {}".format(group_id)
+        msg.error(msg)
+        raise HttpProcessingError(code=500, message=msg)
+
+    # return a list of links based on sorted dictionary keys
+    link_dict = group_json["links"]
+    titles = list(link_dict.keys())
+    titles.sort()  # sort by key 
+    # TBD: provide an option to sort by create date
+
+    start_index = 0
+    if marker is not None:
+        start_index = index(titles, marker) + 1
+        if start_index == -1:
+            # marker not found, return 404
+            msg = "Link marker: {}, not found".format(marker)
+            log.warn(msg)
+            raise HttpProcessingError(code=404, message=msg)
+
+    end_index = len(titles) 
+    if limit is not None and (end_index - start_index) > limit:
+        end_index = start_index + limit
+    
+    link_list = []
+    for i in range(start_index, end_index):
+        title = titles[i]
+        link = copy(link_dict[title])
+        link["title"] = title
+        link_list.append(link)
+
+    resp_json = {"links": link_list} 
+    resp = await jsonResponse(request, resp_json)
+    log.response(request, resp=resp)
+    return resp    
 
 async def GET_Link(request):
     """HTTP GET method to return JSON for a link
@@ -52,6 +119,8 @@ async def GET_Link(request):
     resp = await jsonResponse(request, link_json)
     log.response(request, resp=resp)
     return resp
+
+
 
 async def PUT_Link(request):
     """ Handler creating a new link"""

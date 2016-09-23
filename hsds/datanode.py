@@ -21,7 +21,7 @@ from basenode import healthCheck, baseInit
 import hsds_logger as log
 from domain_dn import GET_Domain, PUT_Domain, DELETE_Domain
 from group_dn import GET_Group, POST_Group, DELETE_Group
-from link_dn import GET_Link, PUT_Link, DELETE_Link
+from link_dn import GET_Links, GET_Link, PUT_Link, DELETE_Link
                
 
 async def init(loop):
@@ -37,6 +37,7 @@ async def init(loop):
     app.router.add_route('GET', '/groups/{id}', GET_Group)
     app.router.add_route('DELETE', '/groups/{id}', DELETE_Group)
     app.router.add_route('POST', '/groups', POST_Group)
+    app.router.add_route('GET', '/groups/{id}/links', GET_Links)
     app.router.add_route('GET', '/groups/{id}/links/{title}', GET_Link)
     app.router.add_route('DELETE', '/groups/{id}/links/{title}', DELETE_Link)
     app.router.add_route('PUT', '/groups/{id}/links/{title}', PUT_Link)

@@ -12,7 +12,6 @@
 import unittest
 import requests
 import json
-import config
 import helper
  
 class UpTest(unittest.TestCase):

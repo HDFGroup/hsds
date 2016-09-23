@@ -24,8 +24,76 @@ from servicenode_lib import getDomainJson
 import hsds_logger as log
 
 
+async def GET_Links(request):
+    """HTTP method to return JSON for link collection"""
+    log.request(request)
+    app = request.app 
+
+    group_id = request.match_info.get('id')
+    if not group_id:
+        msg = "Missing group id"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    if not isValidUuid(group_id, "Group"):
+        msg = "Invalid group id: {}".format(group_id)
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    limit = None
+    if "Limit" in request.GET:
+        try:
+            limit = int(request.GET["Limit"])
+        except ValueError:
+            msg = "Bad Request: Expected int type for limit"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+    marker = None
+    if "Marker" in request.GET:
+        marker = request.GET["Marker"]
+    
+    username, pswd = getUserPasswordFromRequest(request)
+    if username is None and app['allow_noauth']:
+        username = "default"
+    else:
+        validateUserPassword(username, pswd)
+    
+    domain = getDomainFromRequest(request)
+    if not isValidDomain(domain):
+        msg = "Invalid host value: {}".format(domain)
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    
+    domain_json = await getDomainJson(app, domain)
+    aclCheck(domain_json, "read", username)  # throws exception if not allowed
+
+    req = getDataNodeUrl(app, group_id)
+    req += "/groups/" + group_id + "/links" 
+    query_sep = '?'
+    if limit is not None:
+        req += query_sep + "Limit=" + str(limit)
+        query_sep = '&'
+    if marker is not None:
+        req += query_sep + "Marker=" + marker
+        
+    log.info("get LINKS: " + req)
+    links_json = await http_get_json(app, req)
+    log.info("got links_json: " + str(links_json)) 
+    links = links_json["links"]
+
+    # mix in collection key
+    for link in links:
+        if link["class"] == "H5L_TYPE_HARD": 
+            link["collection"] = getCollectionForId(link["id"])
+ 
+    resp_json = {}
+    resp_json["links"] = links
+    resp_json["hrefs"] = []  # TBD
+ 
+    resp = await jsonResponse(request, resp_json)
+    log.response(request, resp=resp)
+    return resp
+
 async def GET_Link(request):
-    """HTTP method to return JSON for group"""
+    """HTTP method to return JSON for a group link"""
     log.request(request)
     app = request.app 
 

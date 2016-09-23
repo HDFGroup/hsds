@@ -29,7 +29,7 @@ def getEndpoint():
 Helper function - return true if the parameter looks like a UUID
 """
 def validateId(id):
-    if type(id) != str and type(id) != unicode: 
+    if type(id) != str: 
         # should be a string
         return False
     if len(id) != 38:

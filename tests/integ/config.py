@@ -10,7 +10,6 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import os
-import sys
 
 cfg = {
     'head_host': '192.168.99.100',
