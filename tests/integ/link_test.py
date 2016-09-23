@@ -319,6 +319,12 @@ class LinkTest(unittest.TestCase):
         last_link = links[-1]
         self.assertEqual(last_link["title"], "twelfth")
 
+        # Use a marker that is not present (should return 404)
+        marker = "foobar"
+        req = helper.getEndpoint() + "/groups/" + root_id + "/links?Marker=" + marker
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 404)
+
         # get links starting with name: "seventh", and limit to 3 results
         marker = "seventh"
         limit = 3

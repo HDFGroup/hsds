@@ -44,13 +44,15 @@ async def GET_Links(request):
     if "Limit" in request.GET:
         try:
             limit = int(request.GET["Limit"])
+            log.info("GET_Links - using Limit: {}".format(limit))
         except ValueError:
             msg = "Bad Request: Expected int type for limit"
             log.error(msg)  # should be validated by SN
             raise HttpBadRequest(message=msg)
     marker = None
-    if "Marker" in request.GET:
+    if "Marker" in request.GET:   
         marker = request.GET["Marker"]
+        log.info("GET_Links - using Marker: {}".format(marker))
      
     group_json = await get_metadata_obj(app, group_id)
     
@@ -69,7 +71,7 @@ async def GET_Links(request):
     start_index = 0
     if marker is not None:
         start_index = index(titles, marker) + 1
-        if start_index == -1:
+        if start_index == 0:
             # marker not found, return 404
             msg = "Link marker: {}, not found".format(marker)
             log.warn(msg)
@@ -215,7 +217,7 @@ async def DELETE_Link(request):
     group_json["lastModified"] = now
 
     # write back to S3
-    save_metadata_obj(app, group_json)
+    await save_metadata_obj(app, group_json)
 
     hrefs = []  # TBD
     resp_json = {"href":  hrefs} 
