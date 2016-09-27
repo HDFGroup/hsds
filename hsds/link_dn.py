@@ -19,7 +19,7 @@ from bisect import bisect_left
 from aiohttp import HttpProcessingError 
 from aiohttp.errors import HttpBadRequest 
  
-from util.idUtil import  validateUuid
+from util.idUtil import  isValidUuid, validateInPartition
 from util.httpUtil import jsonResponse
 from util.linkUtil import validateLinkName
 from datanode_lib import get_metadata_obj, save_metadata_obj
@@ -39,7 +39,13 @@ async def GET_Links(request):
     log.request(request)
     app = request.app
     group_id = request.match_info.get('id')
-    validateUuid(group_id, "group")
+
+    if not isValidUuid(group_id, obj_class="group"):
+        log.error( "Unexpected group_id: {}".format(group_id))
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+
+    validateInPartition(app, group_id)
+
     limit = None
     if "Limit" in request.GET:
         try:
@@ -58,9 +64,8 @@ async def GET_Links(request):
     
     log.info("for id: {} got group json: {}".format(group_id, str(group_json)))
     if "links" not in group_json:
-        msg = "unexpected group data for id: {}".format(group_id)
-        msg.error(msg)
-        raise HttpProcessingError(code=500, message=msg)
+        msg.error("unexpected group data for id: {}".format(group_id))
+        raise HttpProcessingError(code=500, message="Unexpected Error")
 
     # return a list of links based on sorted dictionary keys
     link_dict = group_json["links"]
@@ -99,22 +104,27 @@ async def GET_Link(request):
     log.request(request)
     app = request.app
     group_id = request.match_info.get('id')
-    validateUuid(group_id, "group")
+
+    if not isValidUuid(group_id, obj_class="group"):
+        log.error( "Unexpected group_id: {}".format(group_id))
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+
+    validateInPartition(app, group_id)
+
     link_title = request.match_info.get('title')
+
     validateLinkName(link_title)
 
     group_json = await get_metadata_obj(app, group_id)
     log.info("for id: {} got group json: {}".format(group_id, str(group_json)))
     if "links" not in group_json:
-        msg = "unexpected group data for id: {}".format(group_id)
-        msg.error(msg)
-        raise HttpProcessingError(code=500, message=msg)
+        log.error("unexpected group data for id: {}".format(group_id))
+        raise HttpProcessingError(code=500, message="Unexpected Error")
 
     links = group_json["links"]
     if link_title not in links:
-        msg = "Link name {} not found in group: {}".format(link_title, group_id)
-        log.error(msg)
-        raise HttpProcessingError(code=404, message=msg)
+        log.error("Link name {} not found in group: {}".format(link_title, group_id))
+        raise HttpProcessingError(code=404, message="Unexpected Error")
 
     link_json = links[link_title]
      
@@ -129,7 +139,13 @@ async def PUT_Link(request):
     log.request(request)
     app = request.app
     group_id = request.match_info.get('id')
-    validateUuid(group_id, "group")
+    
+    if not isValidUuid(group_id, obj_class="group"):
+        log.error( "Unexpected group_id: {}".format(group_id))
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+
+    validateInPartition(app, group_id)
+
     link_title = request.match_info.get('title')
     validateLinkName(link_title)
 
@@ -159,9 +175,8 @@ async def PUT_Link(request):
 
     group_json = await get_metadata_obj(app, group_id)
     if "links" not in group_json:
-        msg = "unexpected group data for id: {}".format(group_id)
-        msg.error(msg)
-        raise HttpProcessingError(code=500, message=msg)
+        log.error( "unexpected group data for id: {}".format(group_id))
+        raise HttpProcessingError(code=500, message="Unexpected Error")
 
     links = group_json["links"]
     if link_title in links:
@@ -194,20 +209,25 @@ async def DELETE_Link(request):
     log.request(request)
     app = request.app
     group_id = request.match_info.get('id')
-    validateUuid(group_id, "group")
+
+    if not isValidUuid(group_id, obj_class="group"):
+        log.error( "Unexpected group_id: {}".format(group_id))
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+
+    validateInPartition(app, group_id)
+
     link_title = request.match_info.get('title')
     validateLinkName(link_title)
 
     group_json = await get_metadata_obj(app, group_id)
     if "links" not in group_json:
-        msg = "unexpected group data for id: {}".format(group_id)
-        msg.error(msg)
-        raise HttpProcessingError(code=500, message=msg)
+        log.error("unexpected group data for id: {}".format(group_id))
+        raise HttpProcessingError(code=500, message="Unexpected Error")
 
     links = group_json["links"]
     if link_title not in links:
         msg = "Link name {} not found in group: {}".format(link_title, group_id)
-        msg.error(msg)
+        log.warn(msg)
         raise HttpProcessingError(code=404, message=msg)
 
     del links[link_title]  # remove the link from dictionary

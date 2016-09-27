@@ -14,9 +14,9 @@
 # 
  
 from aiohttp import HttpProcessingError 
-from aiohttp.errors import HttpBadRequest
+#from aiohttp.errors import HttpBadRequest
   
-from util.idUtil import getObjPartition, getS3Key, isValidUuid
+from util.idUtil import validateInPartition, getS3Key, isValidUuid
 from util.s3Util import getS3JSONObj, putS3JSONObj
 import hsds_logger as log
     
@@ -25,14 +25,13 @@ async def get_metadata_obj(app, obj_id):
     """ Get object from metadata cache (if present).
         Otherwise fetch from S3 and add to cache
     """
-    if not isValidUuid:
+    if not isValidUuid(obj_id):
         msg = "Invalid obj id: {}".format(obj_id)
         log.error(msg)
-        raise HttpBadRequest(message=msg)
-    if getObjPartition(obj_id, app['node_count']) != app['node_number']:
-        # The request shouldn't have come to this node'
-        log.error("wrong node for 'id':{}".format(obj_id))
-        raise HttpProcessingError(code=500, message="Unexpected Error") 
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+
+    validateInPartition(app, obj_id)
+
     deleted_ids = app['deleted_ids']
     if obj_id in deleted_ids:
         msg = "{} has been deleted".format(obj_id)
@@ -66,10 +65,8 @@ async def save_metadata_obj(app, obj_json):
         log.error("Invalid obj id: {}".format(obj_id))
         raise HttpProcessingError(code=500, message="Unexpected Error")
     
-    if getObjPartition(obj_id, app['node_count']) != app['node_number']:
-        # The request shouldn't have come to this node'
-        log.error("wrong node for 'id':{}".format(obj_id))
-        raise HttpProcessingError(code=500, message="Unexpected Error") 
+    validateInPartition(app, obj_id)
+
     deleted_ids = app['deleted_ids']
     if obj_id in deleted_ids:
         log.warn("{} has been deleted".format(obj_id))

@@ -22,6 +22,7 @@ import hsds_logger as log
 from domain_dn import GET_Domain, PUT_Domain, DELETE_Domain
 from group_dn import GET_Group, POST_Group, DELETE_Group
 from link_dn import GET_Links, GET_Link, PUT_Link, DELETE_Link
+from attr_dn import GET_Attributes, GET_Attribute, PUT_Attribute, DELETE_Attribute
                
 
 async def init(loop):
@@ -41,6 +42,10 @@ async def init(loop):
     app.router.add_route('GET', '/groups/{id}/links/{title}', GET_Link)
     app.router.add_route('DELETE', '/groups/{id}/links/{title}', DELETE_Link)
     app.router.add_route('PUT', '/groups/{id}/links/{title}', PUT_Link)
+    app.router.add_route('GET', '/groups/{id}/attributes', GET_Attributes)
+    app.router.add_route('GET', '/groups/{id}/attributes/{name}', GET_Attribute)
+    app.router.add_route('DELETE', '/groups/{id}/attributes/{name}', DELETE_Attribute)
+    app.router.add_route('PUT', '/groups/{id}/attributes/{name}', PUT_Attribute)
       
     return app
 

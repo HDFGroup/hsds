@@ -14,11 +14,10 @@
 # 
 import time
 
-from aiohttp import HttpProcessingError 
+from aiohttp import HttpProcessingError  
 from aiohttp.errors import HttpBadRequest
  
- 
-from util.idUtil import getObjPartition, getS3Key, validateUuid
+from util.idUtil import validateInPartition, getS3Key, isValidUuid, validateUuid
 from util.httpUtil import jsonResponse
 from util.s3Util import putS3JSONObj, isS3Obj, deleteS3Obj 
 from util.domainUtil import   validateDomain
@@ -32,6 +31,12 @@ async def GET_Group(request):
     log.request(request)
     app = request.app
     group_id = request.match_info.get('id')
+    
+    if not isValidUuid(group_id, obj_class="group"):
+        log.error( "Unexpected group_id: {}".format(group_id))
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+
+    validateInPartition(app, group_id)
     
     group_json = await get_metadata_obj(app, group_id)
 
@@ -98,10 +103,8 @@ async def POST_Group(request):
             log.error(msg)
             raise HttpBadRequest(message=msg)
 
-    if getObjPartition(group_id, app['node_count']) != app['node_number']:
-        # The request shouldn't have come to this node'
-        raise HttpBadRequest(message="wrong node for 'id':{}".format(group_id))
-
+    validateInPartition(app, group_id)
+    
     meta_cache = app['meta_cache'] 
     s3_key = getS3Key(group_id)
     obj_exists = False
@@ -146,11 +149,12 @@ async def DELETE_Group(request):
     log.request(request)
     app = request.app
     group_id = request.match_info.get('id')
-    validateUuid(group_id, "group")
-    
-    if getObjPartition(group_id, app['node_count']) != app['node_number']:
-        # The request shouldn't have come to this node'
-        raise HttpBadRequest(message="wrong node for 'id':{}".format(group_id))
+
+    if not isValidUuid(group_id, obj_class="group"):
+        log.error( "Unexpected group_id: {}".format(group_id))
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+
+    validateInPartition(app, group_id)
 
     meta_cache = app['meta_cache'] 
     deleted_ids = app['deleted_ids']

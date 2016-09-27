@@ -90,13 +90,25 @@ def isValidUuid(id, obj_class=None):
         return False
 
 def getUuidFromId(id):
+    """ strip off the type prefix ('g-' or 'd-', or 't-')
+    and return the uuid part """
     return id[2:]
 
 def getObjPartition(id, count):
+    """ Get the id of the dn node that should be handling the given obj id
+    """
     hash_code = getIdHash(id)
     hash_value = int(hash_code, 16)
     number = hash_value % count
     return number
+
+def validateInPartition(app, obj_id):
+    if getObjPartition(obj_id, app['node_count']) != app['node_number']:
+        # The request shouldn't have come to this node'
+        expected_node = getObjPartition(obj_id, app['node_count'])
+        msg = "wrong node for 'id':{}, expected node {} got {}".format(obj_id, expected_node, app['node_number'])
+        log.error(msg)
+        raise HttpProcessingError(message=msg, code=500)
 
 def getDataNodeUrl(app, obj_id):
     """ Return host/port for datanode for given obj_id.
@@ -114,6 +126,8 @@ def getDataNodeUrl(app, obj_id):
     url = dn_urls[dn_number]
     log.info("got dn url: {}".format(url))
     return url
+
+
   
 
 
