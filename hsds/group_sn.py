@@ -16,11 +16,11 @@
 import json
 from aiohttp.errors import HttpBadRequest
  
-from util.httpUtil import  http_get_json, http_post, http_delete, jsonResponse
+from util.httpUtil import http_post, http_delete, jsonResponse
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
-from servicenode_lib import getDomainJson
+from servicenode_lib import getDomainJson, getObjectJson, validateAction
 import hsds_logger as log
 
 
@@ -29,7 +29,6 @@ async def GET_Group(request):
     """HTTP method to return JSON for group"""
     log.request(request)
     app = request.app 
-    meta_cache = app['meta_cache']
 
     group_id = request.match_info.get('id')
     if not group_id:
@@ -46,34 +45,17 @@ async def GET_Group(request):
         username = "default"
     else:
         validateUserPassword(username, pswd)
-    
+
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     
-    domain_json = await getDomainJson(app, domain)
-    aclCheck(domain_json, "read", username)  # throws exception if not allowed
-
-    if "root" not in domain_json:
-        msg = "Domain has no root group"
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
-
     # get authoritative state for group from DN (even if it's in the meta_cache).
-    req = getDataNodeUrl(app, group_id)
-    req += "/groups/" + group_id
+    group_json = await getObjectJson(app, group_id, refresh=True)  
 
-    group_json = await http_get_json(app, req)   
-
-    if group_json["root"] != domain_json["root"]:
-        msg = "Group id is not a member of the given domain"
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
-    
-    # save to cache
-    meta_cache[group_id] = group_json
+    await validateAction(app, domain, group_id, username, "read")
 
     resp = await jsonResponse(request, group_json)
     log.response(request, resp=resp)
@@ -142,22 +124,17 @@ async def DELETE_Group(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     
+    # get domain JSON
     domain_json = await getDomainJson(app, domain)
-    aclCheck(domain_json, "delete", username)  # throws exception if not allowed
-
     if "root" not in domain_json:
-        msg = "Domain has no root group"
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        log.error("Expected root key for domain: {}".format(domain))
+        raise HttpBadRequest(message="Unexpected Error")
+
+    # TBD - verify that the obj_id belongs to the given domain
+    await validateAction(app, domain, group_id, username, "delete")
 
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id
-
-    group_json = await http_get_json(app, req)  
-    if group_json["root"] != domain_json["root"]:
-        msg = "Group id is not a member of the given domain"
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
  
     rsp_json = await http_delete(app, req)
 

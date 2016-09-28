@@ -17,10 +17,10 @@ from aiohttp.errors import HttpBadRequest
  
 from util.httpUtil import  http_get_json, http_put, http_delete, jsonResponse
 from util.idUtil import   isValidUuid, getDataNodeUrl, getCollectionForId
-from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
+from util.authUtil import getUserPasswordFromRequest,   validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.linkUtil import validateLinkName
-from servicenode_lib import getDomainJson
+from servicenode_lib import  validateAction, getObjectJson
 import hsds_logger as log
 
 
@@ -62,8 +62,7 @@ async def GET_Links(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     
-    domain_json = await getDomainJson(app, domain)
-    aclCheck(domain_json, "read", username)  # throws exception if not allowed
+    await validateAction(app, domain, group_id, username, "read")
 
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id + "/links" 
@@ -120,10 +119,8 @@ async def GET_Link(request):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
         raise HttpBadRequest(message=msg)
+    await validateAction(app, domain, group_id, username, "read")
     
-    domain_json = await getDomainJson(app, domain)
-    aclCheck(domain_json, "read", username)  # throws exception if not allowed
-
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id + "/links/" + link_title
     log.info("get LINK: " + req)
@@ -158,7 +155,6 @@ async def PUT_Link(request):
     """HTTP method to create a new link"""
     log.request(request)
     app = request.app
-    meta_cache = app['meta_cache']
 
     group_id = request.match_info.get('id')
     if not group_id:
@@ -213,37 +209,14 @@ async def PUT_Link(request):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
         raise HttpBadRequest(message=msg)
+    await validateAction(app, domain, group_id, username, "create")
     
-    # get domain JSON
-    domain_json = await getDomainJson(app, domain)
-    if "root" not in domain_json:
-        log.error("Expected root key for domain: {}".format(domain))
-        raise HttpBadRequest(message="Unexpected Error")
-
-    group_json = None
-    if group_id in meta_cache:
-        group_json = meta_cache[group_id]
-    else:
-        # fetch from DN
-        req = getDataNodeUrl(app, group_id)
-        req += "/groups/" + group_id
-        group_json = await http_get_json(app, req) 
-        meta_cache[group_id] = group_json
-
-    if group_json["root"] != domain_json["root"]:
-        msg = "Group id is not a member of the given domain"
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
-
-    aclCheck(domain_json, "create", username)  # throws exception if not allowed
 
     # for hard links, verify that the referenced id exists and is in this domain
     if "id" in body:
         ref_id = body["id"]
-        req = getDataNodeUrl(app, ref_id)
-        req += '/' + getCollectionForId(ref_id) + '/' + ref_id
-        ref_json = await http_get_json(app, req)  # throws 404 if doesn't exist'
-        meta_cache[ref_id] = ref_json
+        ref_json = await getObjectJson(app, ref_id)
+        group_json = await getObjectJson(app, group_id)
         if ref_json["root"] != group_json["root"]:
             msg = "Hard link must reference an object in the same domain"
             log.warn(msg)
@@ -289,9 +262,8 @@ async def DELETE_Link(request):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-    
-    domain_json = await getDomainJson(app, domain)
-    aclCheck(domain_json, "delete", username)  # throws exception if not allowed
+
+    await validateAction(app, domain, group_id, username, "delete")
 
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id + "/links/" + link_title

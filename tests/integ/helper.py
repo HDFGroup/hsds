@@ -53,9 +53,9 @@ def getActiveNodeCount():
 Helper - get base domain to use for test_cases
 """
 def getTestDomainName(name):
-    now = int(time.time())
+    now = time.time()
     dt = datetime.fromtimestamp(now, pytz.utc)
-    domain = "{:04d}{:02d}{:02d}T{:02d}{:02d}{:02d}Z".format(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second)  
+    domain = "{:04d}{:02d}{:02d}T{:02d}{:02d}{:02d}_{:06d}Z".format(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, dt.microsecond)  
     domain += '.' 
     domain += name.lower()
     domain += '.'

@@ -116,8 +116,6 @@ class GroupTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 403) # forbidden
 
 
-
-
     def testDelete(self):
         # test Delete_root
         print("testDelete", self.base_domain)

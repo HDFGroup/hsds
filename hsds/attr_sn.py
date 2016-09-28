@@ -17,10 +17,10 @@ from aiohttp.errors import HttpBadRequest
  
 from util.httpUtil import  http_get_json, http_put, http_delete, jsonResponse
 from util.idUtil import   isValidUuid, getDataNodeUrl
-from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
+from util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.attrUtil import  validateAttributeName, getRequestCollectionName
-from servicenode_lib import getDomainJson
+from servicenode_lib import getDomainJson, validateAction
 import hsds_logger as log
 
 
@@ -65,8 +65,14 @@ async def GET_Attributes(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     
+    # get domain JSON
     domain_json = await getDomainJson(app, domain)
-    aclCheck(domain_json, "read", username)  # throws exception if not allowed
+    if "root" not in domain_json:
+        log.error("Expected root key for domain: {}".format(domain))
+        raise HttpBadRequest(message="Unexpected Error")
+
+    # TBD - verify that the obj_id belongs to the given domain
+    await validateAction(app, domain, obj_id, username, "read")
 
     req = getDataNodeUrl(app, obj_id)
     
@@ -121,8 +127,14 @@ async def GET_Attribute(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     
+    # get domain JSON
     domain_json = await getDomainJson(app, domain)
-    aclCheck(domain_json, "read", username)  # throws exception if not allowed
+    if "root" not in domain_json:
+        log.error("Expected root key for domain: {}".format(domain))
+        raise HttpBadRequest(message="Unexpected Error")
+
+    # TBD - verify that the obj_id belongs to the given domain
+    await validateAction(app, domain, obj_id, username, "read")
 
     req = getDataNodeUrl(app, obj_id)
     req += '/' + collection + '/' + obj_id + "/attributes/" + attr_name
@@ -132,7 +144,7 @@ async def GET_Attribute(request):
    
      
     resp_json = {}
-    resp_json["name"] = dn_json["name"]
+    resp_json["name"] = attr_name
     resp_json["type"] = dn_json["type"]
     resp_json["shape"] = dn_json["shape"]
     if "value" in dn_json:
@@ -212,6 +224,14 @@ async def PUT_Attribute(request):
         value = body["value"]
         # TBD - validate that the value agrees with type/shape
 
+    if shape is None:
+        # For no shape, if value is supplied, then this is a scalar
+        # otherwise a null space attribute
+        if value is None:
+            shape = {"class": "H5S_NULL"}
+        else:
+            shape = {"class": "H5S_SCALAR"}
+
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
@@ -225,8 +245,7 @@ async def PUT_Attribute(request):
         raise HttpBadRequest(message="Unexpected Error")
 
     # TBD - verify that the obj_id belongs to the given domain
-
-    aclCheck(domain_json, "create", username)  # throws exception if not allowed
+    await validateAction(app, domain, obj_id, username, "create")
      
     # ready to add attribute now
     req = getDataNodeUrl(app, obj_id)
@@ -276,8 +295,14 @@ async def DELETE_Attribute(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     
+    # get domain JSON
     domain_json = await getDomainJson(app, domain)
-    aclCheck(domain_json, "delete", username)  # throws exception if not allowed
+    if "root" not in domain_json:
+        log.error("Expected root key for domain: {}".format(domain))
+        raise HttpBadRequest(message="Unexpected Error")
+
+    # TBD - verify that the obj_id belongs to the given domain
+    await validateAction(app, domain, obj_id, username, "delete")
 
     req = getDataNodeUrl(app, obj_id)
     req += '/' + collection + '/' + obj_id + "/attributes/" + attr_name
