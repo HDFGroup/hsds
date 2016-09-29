@@ -117,9 +117,17 @@ class GroupTest(unittest.TestCase):
 
 
     def testDelete(self):
-        # test Delete_root
+        # test Delete
         print("testDelete", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
+
+        # get domain
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_id = rspJson["root"]
+
         req = helper.getEndpoint() + '/groups'  
         
         # create a new group
@@ -149,13 +157,11 @@ class GroupTest(unittest.TestCase):
 
         # try to do a DELETE with a different domain (should fail)
         another_domain = helper.getParentDomain(self.base_domain)
-        print("another_domain:", another_domain)
         headers = helper.getRequestHeaders(domain=another_domain)
         req = helper.getEndpoint() + '/groups/' + group_id
         rsp = requests.delete(req, headers=headers)
         self.assertEqual(rsp.status_code, 400)   
         
-
         # delete the new group
         headers = helper.getRequestHeaders(domain=self.base_domain)
         rsp = requests.delete(req, headers=headers)
@@ -166,6 +172,14 @@ class GroupTest(unittest.TestCase):
         # a get for the group should now return 410 (GONE)
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 410)
+
+        # try deleting the root group
+        req = helper.getEndpoint() + '/groups/' + root_id
+        rsp = requests.delete(req, headers=headers)
+        self.assertEqual(rsp.status_code, 403)  # Forbidden
+         
+
+
          
 
         

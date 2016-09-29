@@ -14,7 +14,7 @@
 # 
  
 import json
-from aiohttp.errors import HttpBadRequest
+from aiohttp.errors import HttpBadRequest, HttpProcessingError
  
 from util.httpUtil import http_post, http_delete, jsonResponse
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
@@ -132,6 +132,11 @@ async def DELETE_Group(request):
 
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, group_id, username, "delete")
+
+    if group_id == domain_json["root"]:
+        msg = "Forbidden - deletion of root group is not allowed - delete domain first"
+        log.warn(msg)
+        raise HttpProcessingError(code=403, message=msg)
 
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id
