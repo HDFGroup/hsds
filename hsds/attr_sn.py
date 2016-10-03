@@ -20,6 +20,7 @@ from util.idUtil import   isValidUuid, getDataNodeUrl
 from util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.attrUtil import  validateAttributeName, getRequestCollectionName
+from util.hdf5dtype import validateTypeItem
 from servicenode_lib import getDomainJson, validateAction
 import hsds_logger as log
 
@@ -200,6 +201,8 @@ async def PUT_Attribute(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     datatype = body["type"]
+
+    validateTypeItem(datatype)
 
     dims = []  # default as empty tuple (will create a scalar attribute)
     if "shape" in body:
