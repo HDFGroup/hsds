@@ -184,10 +184,19 @@ def baseInit(loop, node_type):
         log.error(msg)
         sys.exit(msg)
 
+    s3_gateway = config.get('aws_s3_gateway')
+    if not s3_gateway:
+        msg="Invalid aws s3 gateway"
+        log.error(msg)
+        sys.exit(msg)
+
     session = aiobotocore.get_session(loop=loop)
     aws_client = session.create_client('s3', region_name=aws_region,
                                    aws_secret_access_key=aws_secret_access_key,
-                                   aws_access_key_id=aws_access_key_id)
+                                   aws_access_key_id=aws_access_key_id,
+                                   endpoint_url=s3_gateway)
+
+     
     app['client'] = client
     app['s3'] = aws_client
 

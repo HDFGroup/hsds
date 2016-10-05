@@ -17,6 +17,7 @@ cfg = {
     'aws_access_key_id': 'xxx',  
     'aws_secret_access_key': 'xxx',    
     'aws_region': 'us-east-1',
+    'aws_s3_gateway': 'https://s3.amazonaws.com',
     'bucket_name': 'hdfgroup.hsdsdev',
     'head_host': 'localhost',
     'head_port': 5100,
