@@ -128,8 +128,8 @@ class DomainTest(unittest.TestCase):
         req = helper.getEndpoint() + '/'
         headers = helper.getRequestHeaders(domain=domain)
         rsp = requests.get(req, headers=headers)
-        # somehow this is showing up as a 400
-        self.assertEqual(rsp.status_code, 404)  # 400 == bad syntax
+        # somehow this is showing up as a 400 in ceph and 404 in S3
+        self.assertTrue(rsp.status_code in (400, 404))  # 400 == bad syntax
         
         # just a dot is no good
         domain = '.'  + self.base_domain  
