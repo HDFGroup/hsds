@@ -52,6 +52,9 @@ async def register(app):
     """ register node with headnode
     OK to call idempotently (e.g. if the headnode seems to have forgotten us)"""
     head_url = await getHeadUrl(app)
+    if not head_url:
+        log.warn("head_url is not set, can not register yet")
+        return
     req_reg = head_url + "/register"
     log.info("register: {}".format(req_reg))
    
