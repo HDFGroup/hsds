@@ -27,14 +27,32 @@ import config
 from util.timeUtil import unixTimeToUTC, elapsedTime
 from util.httpUtil import http_get_json, http_post, jsonResponse
 from util.idUtil import createNodeId
+from util.s3Util import getS3JSONObj 
+from util.idUtil import getHeadNodeS3Key
+
 import hsds_logger as log
 
+
+async def getHeadUrl(app):
+    head_url = None
+    if head_url in app:
+        head_url = app["head_url"]
+    else:
+        headnode_key = getHeadNodeS3Key()
+        head_state = await getS3JSONObj(app, headnode_key)
+        if "head_url" not in head_state:
+            msg = "head_url not found in head_state"
+            log.error(msg)
+        else:
+            head_url = head_state["head_url"]
+            app["head_url"] = head_url  # so we don't need to check S3 next time
+    return head_url
 
 async def register(app):
     """ register node with headnode
     OK to call idempotently (e.g. if the headnode seems to have forgotten us)"""
-
-    req_reg = app["head_url"] + "/register"
+    head_url = await getHeadUrl(app)
+    req_reg = head_url + "/register"
     log.info("register: {}".format(req_reg))
    
     body = {"id": app["id"], "port": app["node_port"], "node_type": app["node_type"]}
@@ -57,12 +75,13 @@ async def healthCheck(app):
     calls headnode to verify vitals about this node (otherwise)"""
     log.info("health check start")
     sleep_secs = config.get("node_sleep_time")
+    head_url = await getHeadUrl(app)
     while True:
         if app["node_state"] == "INITIALIZING":
             await register(app)
         else:
             # check in with the head node and make sure we are still active
-            req_node = "{}/nodestate".format(app["head_url"])
+            req_node = "{}/nodestate".format(head_url)
             log.info("health check req {}".format(req_node))
             try:
                 rsp_json = await http_get_json(app, req_node)
@@ -161,7 +180,6 @@ def baseInit(loop, node_type):
     app["start_time"] = int(time.time())  # seconds after epoch
     app['register_time'] = 0
     app["bucket_name"] = config.get("bucket_name")
-    app["head_url"] = "http://{}:{}".format(config.get("head_host"), config.get("head_port"))
     app["sn_urls"] = {}
     app["dn_urls"] = {}
 

@@ -24,7 +24,7 @@ import aiobotocore
 
 import config
 from util.timeUtil import unixTimeToUTC, elapsedTime
-from util.httpUtil import http_get_json, jsonResponse
+from util.httpUtil import http_get_json, jsonResponse, getUrl
 from util.s3Util import  getS3JSONObj, putS3JSONObj, isS3Obj
 from util.idUtil import  createNodeId, getHeadNodeS3Key
 import hsds_logger as log
@@ -40,6 +40,8 @@ async def healthCheck(app):
     headnode_key = getHeadNodeS3Key()
     log.info("headnode S3 key".format(headnode_key))
     headnode_obj_found = await isS3Obj(app, headnode_key)
+
+    head_url = getUrl(app["head_host"], app["head_port"])  
     
     if not headnode_obj_found:
         # first time hsds has run with this bucket name?
@@ -48,10 +50,11 @@ async def healthCheck(app):
         head_state["created"] = int(time.time())
         head_state["id"] = app["id"]
         head_state["last_health_check"] = app["last_health_check"]
+        head_state["head_url"] = head_url
         log.info("write head_state to S3: {}".format(head_state))
         await putS3JSONObj(app, headnode_key, head_state)
 
-    nodes =  app["nodes"]
+    nodes = app["nodes"]
     while True:
         # sleep for a bit
         sleep_secs = config.get("head_sleep_time")
@@ -75,6 +78,7 @@ async def healthCheck(app):
             log.info("head_state id matches S3 Object")
 
         head_state["last_health_check"] = now
+        head_state["head_url"] = head_url
         log.info("write head_state to S3: {}".format(head_state))
         await putS3JSONObj(app, headnode_key, head_state)
          
@@ -83,7 +87,7 @@ async def healthCheck(app):
         for node in nodes:         
             if node["host"] is None:
                 continue
-            url = "http://{}:{}/info".format(node["host"], node["port"])
+            url = getUrl(node["host"], node["port"]) + "/info"  
             log.info("health check for: ".format(url))
             try:
                 rsp_json = await http_get_json(app, url)
@@ -275,6 +279,8 @@ async def init(loop):
     app["target_sn_count"] = int(config.get("target_sn_count"))
     app["target_dn_count"] = int(config.get("target_dn_count"))
     app["bucket_name"] = config.get("bucket_name")
+    app["head_host"] = config.get("head_host")
+    app["head_port"] = config.get("head_port")
     
     nodes = []
     for node_type in ("dn", "sn"):
@@ -339,6 +345,7 @@ if __name__ == '__main__':
     app = loop.run_until_complete(init(loop))
     app['client'] = client
     app['s3'] = aws_client
+
     asyncio.ensure_future(healthCheck(app), loop=loop)
     head_port = config.get("head_port")
     log.info("Starting service on port: {}".format(head_port))

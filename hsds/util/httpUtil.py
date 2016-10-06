@@ -25,6 +25,11 @@ def isOK(http_response):
         return True
     return False
 
+
+def getUrl(host, port):
+    return "http://{}:{}".format(host, port)
+
+
 async def http_get(app, url):
     log.info("http_get('{}')".format(url))
     client = app['client']

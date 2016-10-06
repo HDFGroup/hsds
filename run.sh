@@ -29,6 +29,7 @@ if [ $1 == "head" ]; then
   --env TARGET_SN_COUNT=${count} \
   --env TARGET_DN_COUNT=${count} \
   --env HEAD_PORT=${HEAD_PORT} \
+  --env HEAD_HOST="hsds_head" \
   --env NODE_TYPE="head_node"  \
   --env AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
   --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
@@ -41,8 +42,6 @@ elif [ $1 == "dn" ]; then
       NAME="hsds_dn_"$(($i-1))
       docker run -d -p ${DN_PORT}:${DN_PORT} --name $NAME \
         --env DN_PORT=${DN_PORT} \
-        --env HEAD_HOST="hsds_head" \
-        --env HEAD_PORT=${HEAD_PORT} \
         --env NODE_TYPE="dn"  \
         --env AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
         --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
@@ -57,8 +56,6 @@ elif [ $1 == "sn" ]; then
       NAME="hsds_sn_"$(($i-1))
       docker run -d -p ${SN_PORT}:${SN_PORT} --name $NAME \
         --env SN_PORT=${SN_PORT} \
-        --env HEAD_HOST="hsds_head" \
-        --env HEAD_PORT=${HEAD_PORT} \
         --env NODE_TYPE="sn"  \
         --env AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
         --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
