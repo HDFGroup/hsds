@@ -29,7 +29,9 @@ def isOK(http_response):
 def getUrl(host, port):
     return "http://{}:{}".format(host, port)
 
-
+"""
+Helper function  - async HTTP GET
+""" 
 async def http_get(app, url, params=None):
     log.info("http_get('{}')".format(url))
     client = app['client']
@@ -44,6 +46,9 @@ async def http_get(app, url, params=None):
         raise HttpProcessingError(message="Unexpected error", code=500)
     return rsp
 
+"""
+Helper function  - async HTTP GET, return response as JSON
+""" 
 async def http_get_json(app, url, params=None):
     log.info("http_get('{}')".format(url))
     client = app['client']
@@ -66,6 +71,9 @@ async def http_get_json(app, url, params=None):
         rsp_json = json.loads(rsp_json)
     return rsp_json
 
+"""
+Helper function  - async HTTP GET
+""" 
 async def http_post(app, url, data=None, params=None):
     log.info("http_post('{}', data)".format(url, data))
     client = app['client']
@@ -85,6 +93,9 @@ async def http_post(app, url, data=None, params=None):
         raise HttpProcessingError(message="Unexpected error", code=500)
     return rsp_json
 
+"""
+Helper function  - async HTTP PUT
+""" 
 async def http_put(app, url, data=None, params=None):
     log.info("http_put('{}', data: {})".format(url, data))
     rsp_json = None
@@ -106,6 +117,9 @@ async def http_put(app, url, data=None, params=None):
         raise HttpProcessingError(message="Unexpected error", code=500)
     return rsp_json
 
+"""
+Helper function  - async HTTP DELETE
+""" 
 async def http_delete(app, url, params=None):
     log.info("http_delete('{}'".format(url))
     client = app['client']
