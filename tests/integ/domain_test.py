@@ -36,6 +36,18 @@ class DomainTest(unittest.TestCase):
         root_uuid = rspJson["root"]
         helper.validateId(root_uuid)
 
+        # verify that passing domain as query string works as well
+        del headers["host"]
+        req += "?host=" + self.base_domain
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(rsp.headers['content-type'], 'application/json')
+        rspJson = json.loads(rsp.text)
+        root_uuid_2 = rspJson["root"]
+        self.assertEqual(root_uuid, root_uuid_2)
+
+
+
     def testGetTopLevelDomain(self):
         domain = "home"
         print("testGetTopLevelDomain", domain)

@@ -52,11 +52,11 @@ async def GET_Domain(request):
      
     if 'owner' not in domain_json:
         log.warn("No owner key found in domain")
-        raise HttpProcessingError("Unexpected error", code=500)
+        raise HttpProcessingError(code=500, message="Unexpected error")
 
     if 'acls' not in domain_json:
         log.warn("No acls key found in domain")
-        raise HttpProcessingError("Unexpected error", code=500)
+        raise HttpProcessingError(code=500, message="Unexpected error")
 
     log.info("got domain_json: {}".format(domain_json))
     # validate that the requesting user has permission to read this domain
