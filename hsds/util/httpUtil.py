@@ -30,12 +30,12 @@ def getUrl(host, port):
     return "http://{}:{}".format(host, port)
 
 
-async def http_get(app, url):
+async def http_get(app, url, params=None):
     log.info("http_get('{}')".format(url))
     client = app['client']
     rsp = None
     try:
-        async with client.get(url) as rsp:
+        async with client.get(url, params=params) as rsp:
             log.info("http_get status: {}".format(rsp.status))
             rsp = await rsp.text()
             #log.info("http_get({}) response: {}".format(url, rsp))  
@@ -44,13 +44,13 @@ async def http_get(app, url):
         raise HttpProcessingError(message="Unexpected error", code=500)
     return rsp
 
-async def http_get_json(app, url):
+async def http_get_json(app, url, params=None):
     log.info("http_get('{}')".format(url))
     client = app['client']
     rsp_json = None
      
     try:    
-        async with client.get(url) as rsp:
+        async with client.get(url, params=params) as rsp:
             log.info("http_get status: {}".format(rsp.status))
             if rsp.status != 200:
                 msg = "request to {} failed with code: {}".format(url, rsp.status)
@@ -66,13 +66,13 @@ async def http_get_json(app, url):
         rsp_json = json.loads(rsp_json)
     return rsp_json
 
-async def http_post(app, url, data):
+async def http_post(app, url, data=None, params=None):
     log.info("http_post('{}', data)".format(url, data))
     client = app['client']
     rsp_json = None
     
     try:
-        async with client.post(url, data=json.dumps(data)) as rsp:
+        async with client.post(url, data=json.dumps(data), params=params ) as rsp:
             log.info("http_post status: {}".format(rsp.status))
             if rsp.status not in (200, 201):
                 msg = "request error - status: ".format(rsp.status)  # tbd - pull error from rsp
@@ -85,13 +85,13 @@ async def http_post(app, url, data):
         raise HttpProcessingError(message="Unexpected error", code=500)
     return rsp_json
 
-async def http_put(app, url, data):
+async def http_put(app, url, data=None, params=None):
     log.info("http_put('{}', data: {})".format(url, data))
     rsp_json = None
     client = app['client']
     
     try:
-        async with client.put(url, data=json.dumps(data)) as rsp:
+        async with client.put(url, data=json.dumps(data), params=params) as rsp:
             log.info("http_put status: {}".format(rsp.status))
             if rsp.status != 201:
                 print("bad response:", str(rsp))
@@ -106,13 +106,13 @@ async def http_put(app, url, data):
         raise HttpProcessingError(message="Unexpected error", code=500)
     return rsp_json
 
-async def http_delete(app, url):
+async def http_delete(app, url, params=None):
     log.info("http_delete('{}'".format(url))
     client = app['client']
     rsp_json = None
     
     try:
-        async with client.delete(url) as rsp:
+        async with client.delete(url, params=params) as rsp:
             log.info("http_delete status: {}".format(rsp.status))
             if rsp.status != 200:
                 print("bad response:", str(rsp))

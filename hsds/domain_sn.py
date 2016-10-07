@@ -112,7 +112,7 @@ async def PUT_Domain(request):
     log.info("create group for domain, body: " + json.dumps(group_json))
     req = getDataNodeUrl(app, root_id) + "/groups"
     try:
-        group_json = await http_post(app, req, group_json)
+        group_json = await http_post(app, req, data=group_json)
     except HttpProcessingError as ce:
         msg="Error creating root group for domain -- " + str(ce)
         log.warn(msg)
@@ -128,7 +128,7 @@ async def PUT_Domain(request):
     body["root"] = root_id
 
     try:
-        domain_json = await http_put(app, req, body)
+        domain_json = await http_put(app, req, data=body)
     except HttpProcessingError as ce:
         msg="Error creating domain state -- " + str(ce)
         log.warn(msg)

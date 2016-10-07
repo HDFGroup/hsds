@@ -78,15 +78,14 @@ async def GET_Attributes(request):
     req = getDataNodeUrl(app, obj_id)
     
     req += '/' + collection + '/' + obj_id + "/attributes" 
-    query_sep = '?'
+    params = {}
     if limit is not None:
-        req += query_sep + "Limit=" + str(limit)
-        query_sep = '&'
+        params["Limit"] = str(limit)
     if marker is not None:
-        req += query_sep + "Marker=" + marker
+        params["Marker"] = marker
         
     log.info("get attributes: " + req)
-    dn_json = await http_get_json(app, req)
+    dn_json = await http_get_json(app, req, params=params)
     log.info("got dn_json: " + str(dn_json)) 
     attributes = dn_json["attributes"]
  

@@ -62,7 +62,7 @@ async def register(app):
     app['register_time'] = int(time.time())
     try:
         log.info("register req: {} body: {}".format(req_reg, body))
-        rsp_json = await http_post(app, req_reg, body)     
+        rsp_json = await http_post(app, req_reg, data=body)     
         if rsp_json is not None:
             log.info("register response: {}".format(rsp_json))
             app["node_number"] = rsp_json["node_number"]

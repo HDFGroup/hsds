@@ -92,7 +92,7 @@ async def POST_Group(request):
     log.info("create group, body: " + json.dumps(group_json))
     req = getDataNodeUrl(app, group_id) + "/groups"
     
-    group_json = await http_post(app, req, group_json)
+    group_json = await http_post(app, req, data=group_json)
     
     # domain creation successful     
     resp = await jsonResponse(request, group_json, status=201)
