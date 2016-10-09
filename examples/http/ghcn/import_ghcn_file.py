@@ -223,6 +223,7 @@ async def import_line(line):
     params = {"host": domain}
     headers = getRequestHeaders()
     client = globals["client"]
+    globals["lines_read"] += 1
     
     fields = line.split(',')
     if len(fields) != 8:
@@ -260,6 +261,8 @@ async def import_line(line):
             log.warn("409 for req: " + req)
         elif rsp.status != 201:
             raise HttpProcessingError(code=rsp.status, message="Unexpected error")
+        else:
+            globals["attribute_count"] += 1
 
     
 def import_file(filename):
@@ -279,6 +282,7 @@ def import_file(filename):
             tasks = []
     # finish any remaining tasks
     loop.run_until_complete(asyncio.gather(*tasks))
+    globals["files_read"] += 1
 
 
 
@@ -297,6 +301,9 @@ def main():
     max_tcp_connections = int(config.get("max_tcp_connections"))
     client = ClientSession(loop=loop, connector=TCPConnector(limit=max_tcp_connections))
     globals["client"] = client
+    globals["files_read"] = 0
+    globals["lines_read"] = 0
+    globals["attribute_count"] = 0
 
     loop.run_until_complete(getEndpoints())
 
@@ -318,7 +325,8 @@ def main():
 
     loop.run_until_complete(verifyGroupPath("/data"))
 
-    for filename in globals["input_files"]:
+    input_files = globals["input_files"]
+    for filename in input_files:
         import_file(filename)
 
     log.info("h5path_cache...")
@@ -326,6 +334,11 @@ def main():
     keys.sort()
     for key in keys:
         log.info("{} -> {}".format(key, h5path_cache[key]))
+
+    print("files read: {}".format(globals["files_read"]))
+    print("lines read: {}".format(globals["lines_read"]))
+    print("num groups: {}".format(len(keys)))
+    print("attr created: {}".format(globals["attribute_count"]))
 
     loop.close()
     client.close()

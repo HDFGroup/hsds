@@ -213,8 +213,9 @@ async def PUT_Attribute(request):
 
     attributes = obj_json["attributes"]
     if attr_name in attributes:
-        # TBD - should this be a 409 coflict error (like with link updates)?
-        log.info("Replacing attribute: {} in obj_id:".format(attr_name, obj_id))
+        # Attribute already exists, return a 409
+        log.warn("Attempt to overwrite attribute: {} in obj_id:".format(attr_name, obj_id))
+        raise HttpProcessingError(code=409, message="Attribute with name: {} already exists".format(attr_name))
 
     # ok - all set, create attribute obj
     now = int(time.time())

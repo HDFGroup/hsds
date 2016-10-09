@@ -78,7 +78,7 @@ async def save_metadata_obj(app, obj_json):
     
     # update meta cache
     meta_cache = app['meta_cache'] 
-    log.info("save: {} to cache: {}".format(obj_id, str(obj_json)))
+    log.info("save: {} to cache".format(obj_id))
     meta_cache[obj_id] = obj_json
      
     

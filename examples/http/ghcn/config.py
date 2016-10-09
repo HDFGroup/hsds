@@ -12,6 +12,7 @@
 import os
 
 cfg = {
+    'domain_name': 'ghcn_test1',
     'head_host': '192.168.99.100',
     'head_port': 5100,
     'user_name': 'test_user1',

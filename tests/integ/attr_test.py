@@ -168,7 +168,7 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 201)  # created
 
         # read the attribute we just created
-        rsp = requests.get(req,  headers=headers)
+        rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)  # create attribute
         rspJson = json.loads(rsp.text)
         self.assertTrue("created" in rspJson)
@@ -187,6 +187,11 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)  
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["attributeCount"], 1)  # one attribute
+
+        # try creating the attribute again - should return 409
+        req = helper.getEndpoint() + "/groups/" + grp1_id + "/attributes/" + attr_name
+        rsp = requests.put(req, data=json.dumps(attr_payload), headers=headers)
+        self.assertEqual(rsp.status_code, 409)  # conflict
 
         # delete the attribute
         req = helper.getEndpoint() + "/groups/" + grp1_id + "/attributes/" + attr_name
