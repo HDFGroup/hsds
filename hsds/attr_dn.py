@@ -70,7 +70,7 @@ async def GET_Attributes(request):
      
     obj_json = await get_metadata_obj(app, obj_id)
     
-    log.info("for id: {} got obj json: {}".format(obj_id, str(obj_json)))
+    log.info("GET attributes obj_id: {} got json".format(obj_id))
     if "attributes" not in obj_json:
         msg = "unexpected data for obj id: {}".format(obj_id)
         msg.error(msg)
@@ -132,7 +132,7 @@ async def GET_Attribute(request):
     validateAttributeName(attr_name)
         
     obj_json = await get_metadata_obj(app, obj_id)
-    log.info("for id: {} got obj json: {}".format(obj_id, str(obj_json)))
+    log.info("GET attribute obj_id: {} got json".format(obj_id))
 
     if "attributes" not in obj_json:
         log.error("unexpected obj data for id: {}".format(obj_id))
@@ -141,7 +141,7 @@ async def GET_Attribute(request):
     attributes = obj_json["attributes"]
     if attr_name not in attributes:
         msg = "Attribute  {} not found in {} with id: {}".format(attr_name, collection, obj_id)
-        log.error(msg)
+        log.warn(msg)
         raise HttpProcessingError(code=404, message=msg)
 
     attr_json = attributes[attr_name]
@@ -205,7 +205,7 @@ async def PUT_Attribute(request):
 
   
     obj_json = await get_metadata_obj(app, obj_id)
-    log.info("for id: {} got obj json: {}".format(obj_id, str(obj_json)))
+    log.info("PUT attribute obj_id: {} got json".format(obj_id))
 
     if "attributes" not in obj_json:
         log.error("unexpected obj data for id: {}".format(obj_id))
@@ -258,7 +258,7 @@ async def DELETE_Attribute(request):
 
     obj_json = await get_metadata_obj(app, obj_id)
     
-    log.info("for id: {} got obj json: {}".format(obj_id, str(obj_json)))
+    log.info("DELETE attribute obj_id: {} got json".format(obj_id))
     if "attributes" not in obj_json:
         msg = "unexpected data for obj id: {}".format(obj_id)
         msg.error(msg)
@@ -269,7 +269,7 @@ async def DELETE_Attribute(request):
 
     if attr_name not in attributes:
         msg = "Attribute  {} not found in {} with id: {}".format(attr_name, collection, obj_id)
-        log.error(msg)
+        log.warn(msg)
         raise HttpProcessingError(code=404, message=msg)
 
     del attributes[attr_name] 

@@ -23,6 +23,8 @@ from domain_dn import GET_Domain, PUT_Domain, DELETE_Domain
 from group_dn import GET_Group, POST_Group, DELETE_Group
 from link_dn import GET_Links, GET_Link, PUT_Link, DELETE_Link
 from attr_dn import GET_Attributes, GET_Attribute, PUT_Attribute, DELETE_Attribute
+from datanode_lib import s3sync 
+
                
 
 async def init(loop):
@@ -68,9 +70,15 @@ if __name__ == '__main__':
     app['meta_cache'] = {}
     app['data_cache'] = {}
     app['deleted_ids'] = set()
+    app['dirty_ids'] = {}
 
-    # run background task
+    # run background tasks
     asyncio.ensure_future(healthCheck(app), loop=loop)
+
+    # run data sync tasks
+    asyncio.ensure_future(s3sync(app), loop=loop)
+
+
    
     # run the app
     run_app(app, port=config.get("dn_port"))

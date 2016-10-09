@@ -123,7 +123,7 @@ async def GET_Link(request):
 
     links = group_json["links"]
     if link_title not in links:
-        log.error("Link name {} not found in group: {}".format(link_title, group_id))
+        log.warn("Link name {} not found in group: {}".format(link_title, group_id))
         raise HttpProcessingError(code=404, message="Unexpected Error")
 
     link_json = links[link_title]

@@ -12,8 +12,7 @@
 ##############################################################################
 #
 # service node of hsds cluster
-# 
- 
+#  
 from aiohttp import HttpProcessingError 
 from aiohttp.errors import HttpBadRequest
 

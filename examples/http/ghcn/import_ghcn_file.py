@@ -44,7 +44,7 @@ async def getEndpoints():
     docker_machine_ip = config.get("docker_machine_ip")
     req = "http://{}:{}/nodestate/sn".format(config.get("head_host"), config.get("head_port")) 
     client = globals["client"]
-    #rsp_json = await http_get_json(client, req)
+    globals["request_count"] += 1
     async with client.get(req) as rsp:
         if rsp.status == 200:
             rsp_json = await rsp.json()
@@ -104,6 +104,7 @@ async def createGroup(parent_group, group_name):
     # create a new group
     req = base_req + "/groups"
     log.info("POST:" + req)
+    globals["request_count"] += 1
     async with client.post(req, headers=headers, params=params) as rsp:
         if rsp.status != 201:
             raise HttpProcessingError(code=rsp.status, message="Unexpected error")
@@ -115,6 +116,7 @@ async def createGroup(parent_group, group_name):
     data = {"id": group_id }
     link_created = False
     log.info("PUT " + req)
+    globals["request_count"] += 1
     async with client.put(req, data=json.dumps(data), headers=headers, params=params) as rsp:
         if rsp.status == 409:
             # another task has created this link already
@@ -127,6 +129,7 @@ async def createGroup(parent_group, group_name):
     if not link_created:
         # fetch the existing link and return the group 
         log.info("GET " + req)
+        globals["request_count"] += 1
         async with client.get(req, headers=headers, params=params) as rsp:
             if rsp.status != 200:
                 log.warn("unexpected error {}".format(rsp.status))
@@ -171,6 +174,7 @@ async def verifyGroupPath(h5path):
         
         req = base_req + parent_group + "/links/" + group_name
         log.info("GET " + req)
+        globals["request_count"] += 1
         async with client.get(req, headers=headers, params=params) as rsp:
             if rsp.status == 404:
                 parent_group = await createGroup(parent_group, group_name)
@@ -196,6 +200,7 @@ async def verifyDomain(domain):
     req = getEndpoint() + '/'
     root_id = None
     log.info("GET " + req)
+    globals["request_count"] += 1
     async with client.get(req, headers=headers, params=params) as rsp:
         if rsp.status == 200:
             domain_json = await rsp.json()
@@ -206,10 +211,12 @@ async def verifyDomain(domain):
     elif rsp.status == 404:
         # create the domain
         log.info("PUT " + req)
+        globals["request_count"] += 1
         async with client.put(req, headers=headers, params=params) as rsp:
             if rsp.status != 201:
                 raise HttpProcessingError(code=rsp.status, message="Unexpected error")
         log.info("GET " + req)
+        globals["request_count"] += 1
         async with client.get(req, headers=headers, params=params) as rsp:
             if rsp.status == 200:
                 domain_json = await rsp.json()
@@ -256,6 +263,7 @@ async def import_line(line):
     data = {'type': 'H5T_STD_I32LE', 'value': value}
     req = getEndpoint() + "/groups/" + grp_id + "/attributes/" + date
     log.info("PUT " + req)
+    globals["request_count"] += 1
     async with client.put(req, headers=headers, data=json.dumps(data), params=params) as rsp:
         if rsp.status == 409:
             log.warn("409 for req: " + req)
@@ -287,7 +295,8 @@ def import_file(filename):
 
 
 def main():    
-    domain ="ghcn_test1." + config.get("user_name") + ".home"
+    domain = config.get("domain_name") + '.' + config.get("user_name") + ".home"
+    print("domain: {}".format(domain) )
     
     getFileList() # populates file_list global
      
@@ -304,6 +313,7 @@ def main():
     globals["files_read"] = 0
     globals["lines_read"] = 0
     globals["attribute_count"] = 0
+    globals["request_count"] = 0
 
     loop.run_until_complete(getEndpoints())
 
@@ -339,6 +349,7 @@ def main():
     print("lines read: {}".format(globals["lines_read"]))
     print("num groups: {}".format(len(keys)))
     print("attr created: {}".format(globals["attribute_count"]))
+    print("requests made: {}".format(globals["request_count"]))
 
     loop.close()
     client.close()

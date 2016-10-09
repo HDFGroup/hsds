@@ -19,7 +19,7 @@ from aiohttp.errors import HttpBadRequest
  
 from util.idUtil import validateInPartition, getS3Key, isValidUuid, validateUuid
 from util.httpUtil import jsonResponse
-from util.s3Util import putS3JSONObj, isS3Obj, deleteS3Obj 
+from util.s3Util import  isS3Obj, deleteS3Obj 
 from util.domainUtil import   validateDomain
 from datanode_lib import get_metadata_obj
 import hsds_logger as log
@@ -125,7 +125,9 @@ async def POST_Group(request):
     if domain is not None:
         group_json["domain"] = domain
 
-    await putS3JSONObj(app, s3_key, group_json)  # write to S3
+    # await putS3JSONObj(app, s3_key, group_json)  # write to S3
+    dirty_ids = app['dirty_ids']
+    dirty_ids[group_id] = now  # mark to flush to S3
 
     # save the object to cache
     meta_cache[group_id] = group_json
@@ -158,6 +160,7 @@ async def DELETE_Group(request):
 
     meta_cache = app['meta_cache'] 
     deleted_ids = app['deleted_ids']
+    dirty_ids = app['dirty_ids']
     deleted_ids.add(group_id)
     
     s3_key = getS3Key(group_id)
@@ -176,6 +179,8 @@ async def DELETE_Group(request):
      
     if group_id in meta_cache:
         del meta_cache[group_id]
+    if group_id in dirty_ids:
+        del dirty_ids[group_id]  # TBD - possible race condition?
 
     resp_json = {  } 
       

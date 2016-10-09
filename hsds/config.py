@@ -32,7 +32,8 @@ cfg = {
     'log_level': 'INFO',   # ERROR, WARNING, INFO, DEBUG, or NOTSET,
     'max_tcp_connections': 16,
     'head_sleep_time': 10,
-    'node_sleep_time': 10     
+    'node_sleep_time': 10,
+    's3_sync_interval': 30  # time to wait to write object data to S3 (in sec)     
 }
    
 def get(x): 

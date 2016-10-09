@@ -86,7 +86,7 @@ async def GET_Attributes(request):
         
     log.info("get attributes: " + req)
     dn_json = await http_get_json(app, req, params=params)
-    log.info("got dn_json: " + str(dn_json)) 
+    log.info("got attributes json from dn for obj_id: " + str(obj_id)) 
     attributes = dn_json["attributes"]
  
     resp_json = {}
@@ -140,7 +140,7 @@ async def GET_Attribute(request):
     req += '/' + collection + '/' + obj_id + "/attributes/" + attr_name
     log.info("get Attribute: " + req)
     dn_json = await http_get_json(app, req)
-    log.info("got dn_json: " + str(dn_json)) 
+    log.info("got attributes json from dn for obj_id: " + str(obj_id)) 
    
      
     resp_json = {}

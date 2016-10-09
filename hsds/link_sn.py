@@ -75,7 +75,7 @@ async def GET_Links(request):
         
     log.info("get LINKS: " + req)
     links_json = await http_get_json(app, req)
-    log.info("got links_json: " + str(links_json)) 
+    log.info("got links json from dn for group_id: {}".format(group_id)) 
     links = links_json["links"]
 
     # mix in collection key
