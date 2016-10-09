@@ -18,7 +18,7 @@ cfg = {
     'user_name': 'test_user1',
     'user_password': 'test',
     'max_tcp_connections': 16,
-    'max_concurrent_tasks': 10,
+    'max_concurrent_tasks': 128,
     'docker_machine_ip': "192.168.99.100"
 }
    

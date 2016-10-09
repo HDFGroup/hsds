@@ -107,6 +107,7 @@ async def createGroup(parent_group, group_name):
     globals["request_count"] += 1
     async with client.post(req, headers=headers, params=params) as rsp:
         if rsp.status != 201:
+            log.error("Group creation failed: {}, rsp: {}".format(rsp.status, str(rsp)))
             raise HttpProcessingError(code=rsp.status, message="Unexpected error")
         group_json = await rsp.json()
         group_id = group_json["id"]
@@ -122,6 +123,7 @@ async def createGroup(parent_group, group_name):
             # another task has created this link already
             log.warn("got 409 in request: " + req)
         elif rsp.status != 201:
+            log.error("got http error: {} for request: {}, rsp: {}".format(rsp.status, req, rsp))
             raise HttpProcessingError(code=rsp.status, message="Unexpected error")
         else:
             link_created = True
@@ -132,7 +134,7 @@ async def createGroup(parent_group, group_name):
         globals["request_count"] += 1
         async with client.get(req, headers=headers, params=params) as rsp:
             if rsp.status != 200:
-                log.warn("unexpected error {}".format(rsp.status))
+                log.warn("unexpected error (expected to find link) {} for request: {}".format(rsp.status, req))
                 raise HttpProcessingError(code=rsp.status, message="Unexpected error")
             else:
                 rsp_json = await rsp.json()
@@ -225,6 +227,13 @@ async def verifyDomain(domain):
                 raise HttpProcessingError(code=rsp.status, message="Service error")
     globals["root"] = root_id
 
+async def import_line_task(line):
+    try:
+        await import_line(line)
+    except HttpProcessingError as hpe:
+        log.error("failed to write line: {}".format(line))
+        globals["failed_line_updates"] += 1
+
 async def import_line(line):
     domain = globals["domain"]
     params = {"host": domain}
@@ -282,7 +291,7 @@ def import_file(filename):
         for line in fh:
             line = line.rstrip()
             #loop.run_until_complete(import_line(line))
-            tasks.append(asyncio.ensure_future(import_line(line)))
+            tasks.append(asyncio.ensure_future(import_line_task(line)))
             if len(tasks) < max_concurrent_tasks:
                 continue  # get next line
             # got a batch, move them out!
@@ -314,6 +323,7 @@ def main():
     globals["lines_read"] = 0
     globals["attribute_count"] = 0
     globals["request_count"] = 0
+    globals["failed_line_updates"] = 0
 
     loop.run_until_complete(getEndpoints())
 
@@ -347,9 +357,11 @@ def main():
 
     print("files read: {}".format(globals["files_read"]))
     print("lines read: {}".format(globals["lines_read"]))
+    print("lines unable to process: {}".format(globals["failed_line_updates"]))
     print("num groups: {}".format(len(keys)))
     print("attr created: {}".format(globals["attribute_count"]))
     print("requests made: {}".format(globals["request_count"]))
+    
 
     loop.close()
     client.close()
