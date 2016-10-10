@@ -231,7 +231,7 @@ async def import_line_task(line):
     try:
         await import_line(line)
     except HttpProcessingError as hpe:
-        log.error("failed to write line: {}".format(line))
+        log.error("failed to write line: {}, err: {}".format(line, str(hpe)))
         globals["failed_line_updates"] += 1
 
 async def import_line(line):
