@@ -243,25 +243,25 @@ async def import_line(line):
     
     fields = line.split(',')
     if len(fields) != 8:
-        log.warn("unexpected number of fields in line: [()]".foramt(line))
+        log.warn("unexpected number of fields in line: [()]".format(line))
         return
     station = fields[0]
     if len(station) != 11:
-        log.warn("unexpected station length line: [()]".foramt(line))
+        log.warn("unexpected station length line: [()]".format(line))
         return
     date = fields[1]
     if len(date) != 8:
-        log.warn("unexpected station length line: [()]".foramt(line))
+        log.warn("unexpected station length line: [()]".format(line))
         return
     obstype = fields[2]
     if len(obstype) != 4:
-        log.warn("unexpected obstype length line: [()]".foramt(line))
+        log.warn("unexpected obstype length line: [()]".format(line))
         return
     value = 0
     try:
         value = int(fields[3])
     except ValueError:
-        log.warn("unexpected value in line: [()]".foramt(line))
+        log.warn("unexpected value in line: [()]".format(line))
         return
     # TBD - do something with other fields
     log.info("data: {} {} {} {}".format(station, obstype, date, value))
