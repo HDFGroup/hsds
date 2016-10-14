@@ -10,7 +10,10 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import sys
+import signal
 import random
+import numpy as np
+import time
 import base64
 import json
 import asyncio
@@ -107,7 +110,7 @@ async def createGroup(parent_group, group_name):
     globals["request_count"] += 1
     async with client.post(req, headers=headers, params=params) as rsp:
         if rsp.status != 201:
-            log.error("Group creation failed: {}, rsp: {}".format(rsp.status, str(rsp)))
+            log.error("POST {} failed with status: {}, rsp: {}".format(req, rsp.status, str(rsp)))
             raise HttpProcessingError(code=rsp.status, message="Unexpected error")
         group_json = await rsp.json()
         group_id = group_json["id"]
@@ -216,6 +219,7 @@ async def verifyDomain(domain):
         globals["request_count"] += 1
         async with client.put(req, headers=headers, params=params) as rsp:
             if rsp.status != 201:
+                log.error("got status: {} for PUT req: {}".format(rsp.status, req))
                 raise HttpProcessingError(code=rsp.status, message="Unexpected error")
         log.info("GET " + req)
         globals["request_count"] += 1
@@ -224,15 +228,9 @@ async def verifyDomain(domain):
                 domain_json = await rsp.json()
                 root_id = domain_json["root"]
             else:
+                log.error("got status: {} for GET req: {}".format(rsp.status, req))
                 raise HttpProcessingError(code=rsp.status, message="Service error")
     globals["root"] = root_id
-
-async def import_line_task(line):
-    try:
-        await import_line(line)
-    except HttpProcessingError as hpe:
-        log.error("failed to write line: {}, err: {}".format(line, str(hpe)))
-        globals["failed_line_updates"] += 1
 
 async def import_line(line):
     domain = globals["domain"]
@@ -240,6 +238,9 @@ async def import_line(line):
     headers = getRequestHeaders()
     client = globals["client"]
     globals["lines_read"] += 1
+    task_log = {}
+    task_log["line"] = line
+    task_log["start"] = time.time()
     
     fields = line.split(',')
     if len(fields) != 8:
@@ -266,18 +267,32 @@ async def import_line(line):
     # TBD - do something with other fields
     log.info("data: {} {} {} {}".format(station, obstype, date, value))
     h5path = "/data/" + station + "/" + obstype
-    grp_id = await verifyGroupPath(h5path)
+    task_log["h5path"] = h5path
+    task_log["state"] = "INPROGRESS"
+    globals["tasks"].append(task_log)  # add before the first await
+    try:
+        grp_id = await verifyGroupPath(h5path)
+    except HttpProcessingError as hpe:
+        log.error("failed to verifyGroupPath: {}, err: {}".format(h5path, str(hpe)))
+        globals["failed_line_updates"] += 1
+        task_log["state"] = "COMPLETE"
+        return
 
     # create the attribute
     data = {'type': 'H5T_STD_I32LE', 'value': value}
     req = getEndpoint() + "/groups/" + grp_id + "/attributes/" + date
     log.info("PUT " + req)
     globals["request_count"] += 1
+    task_log["req"] = req
     async with client.put(req, headers=headers, data=json.dumps(data), params=params) as rsp:
+        task_log["stop"] = time.time()
+        task_log["state"] = "COMPLETE"
+        task_log["status"] = rsp.status
         if rsp.status == 409:
             log.warn("409 for req: " + req)
         elif rsp.status != 201:
-            raise HttpProcessingError(code=rsp.status, message="Unexpected error")
+            log.error("got status: {} for req: {}".format(rsp.status, req))
+            globals["failed_line_updates"] += 1
         else:
             globals["attribute_count"] += 1
 
@@ -291,7 +306,7 @@ def import_file(filename):
         for line in fh:
             line = line.rstrip()
             #loop.run_until_complete(import_line(line))
-            tasks.append(asyncio.ensure_future(import_line_task(line)))
+            tasks.append(asyncio.ensure_future(import_line(line)))
             if len(tasks) < max_concurrent_tasks:
                 continue  # get next line
             # got a batch, move them out!
@@ -301,6 +316,39 @@ def import_file(filename):
     loop.run_until_complete(asyncio.gather(*tasks))
     globals["files_read"] += 1
 
+def print_results():
+    log.info("h5path_cache...")
+    h5path_cache = globals["h5path_cache"]  
+    keys = list(h5path_cache.keys())
+    keys.sort()
+    for key in keys:
+        log.info("{} -> {}".format(key, h5path_cache[key]))
+
+    print("files read: {}".format(globals["files_read"]))
+    print("lines read: {}".format(globals["lines_read"]))
+    print("lines unable to process: {}".format(globals["failed_line_updates"]))
+    print("num groups: {}".format(len(keys)))
+    print("attr created: {}".format(globals["attribute_count"]))
+    print("requests made: {}".format(globals["request_count"]))
+
+    latencies = []
+    tasks = globals["tasks"]
+    for task in tasks:
+        # print(task)
+        if "start" in task and "stop" in task:
+            latency = task["stop"] - task["start"]
+            latencies.append(latency)
+
+    timings = np.array(latencies)
+    print("latencies...")
+    print("avg: {}".format(timings.mean()))
+    print("min: {}".format(timings.min()))
+    print("max: {}".format(timings.max()))
+    print("std: {}".format(timings.std()))
+
+def sig_handler(sig, frame):
+    log.warning('Caught signal: %s', sig)
+    print_results()
 
 
 def main():    
@@ -310,6 +358,9 @@ def main():
     getFileList() # populates file_list global
      
     log.info("initializing")
+    signal.signal(signal.SIGTERM, sig_handler)  # add handlers for early exit
+    signal.signal(signal.SIGINT, sig_handler)
+
     loop = asyncio.get_event_loop()
     globals["loop"] = loop
     #domain = helper.getTestDomainName()
@@ -323,6 +374,7 @@ def main():
     globals["lines_read"] = 0
     globals["attribute_count"] = 0
     globals["request_count"] = 0
+    globals["tasks"] = []
     globals["failed_line_updates"] = 0
 
     loop.run_until_complete(getEndpoints())
@@ -349,22 +401,10 @@ def main():
     for filename in input_files:
         import_file(filename)
 
-    log.info("h5path_cache...")
-    keys = list(h5path_cache.keys())
-    keys.sort()
-    for key in keys:
-        log.info("{} -> {}".format(key, h5path_cache[key]))
-
-    print("files read: {}".format(globals["files_read"]))
-    print("lines read: {}".format(globals["lines_read"]))
-    print("lines unable to process: {}".format(globals["failed_line_updates"]))
-    print("num groups: {}".format(len(keys)))
-    print("attr created: {}".format(globals["attribute_count"]))
-    print("requests made: {}".format(globals["request_count"]))
-    
-
     loop.close()
     client.close()
+
+    print_results()
     
      
 
