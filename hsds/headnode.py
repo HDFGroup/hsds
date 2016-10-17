@@ -78,6 +78,7 @@ async def healthCheck(app):
             log.info("head_state id matches S3 Object")
 
         head_state["last_health_check"] = now
+        app["last_health_check"] = now
         head_state["head_url"] = head_url
         log.info("write head_state to S3: {}".format(head_state))
         await putS3JSONObj(app, headnode_key, head_state)
@@ -334,12 +335,17 @@ if __name__ == '__main__':
         msg="Invalid aws s3 gateway"
         log.error(msg)
         sys.exit(msg)
+    log.info("s3_gateway: {}".format(s3_gateway))
 
     session = aiobotocore.get_session(loop=loop)
+    use_ssl = False
+    if s3_gateway.startswith("https"):
+        use_ssl = True
     aws_client = session.create_client('s3', region_name=aws_region,
                                    aws_secret_access_key=aws_secret_access_key,
                                    aws_access_key_id=aws_access_key_id,
-                                   endpoint_url=s3_gateway)
+                                   endpoint_url=s3_gateway,
+                                   use_ssl=use_ssl)
     
 
     app = loop.run_until_complete(init(loop))
