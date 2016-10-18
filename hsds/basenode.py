@@ -14,20 +14,19 @@
 # 
 import asyncio
 import time
-import sys
 from copy import copy
 
 from aiohttp.web import Application, StreamResponse
 from aiohttp import ClientSession, TCPConnector,  HttpProcessingError  
 from aiohttp.errors import ClientError
-import aiobotocore
+from aiobotocore import get_session
  
 
 import config
 from util.timeUtil import unixTimeToUTC, elapsedTime
 from util.httpUtil import http_get_json, http_post, jsonResponse
 from util.idUtil import createNodeId
-from util.s3Util import getS3JSONObj 
+from util.s3Util import getS3JSONObj, getS3Client 
 from util.idUtil import getHeadNodeS3Key
 
 import hsds_logger as log
@@ -192,34 +191,11 @@ def baseInit(loop, node_type):
     client = ClientSession(loop=loop, connector=TCPConnector(limit=max_tcp_connections))
 
     # get connection to S3
-    # app["bucket_name"] = config.get("bucket_name")
-    aws_region = config.get("aws_region")
-    aws_secret_access_key = config.get("aws_secret_access_key")
-    if not aws_secret_access_key or aws_secret_access_key == 'xxx':
-        msg="Invalid aws secret access key"
-        log.error(msg)
-        sys.exit(msg)
-    aws_access_key_id = config.get("aws_access_key_id")
-    if not aws_access_key_id or aws_access_key_id == 'xxx':
-        msg="Invalid aws access key"
-        log.error(msg)
-        sys.exit(msg)
-
-    s3_gateway = config.get('aws_s3_gateway')
-    if not s3_gateway:
-        msg="Invalid aws s3 gateway"
-        log.error(msg)
-        sys.exit(msg)
-
-    session = aiobotocore.get_session(loop=loop)
-    aws_client = session.create_client('s3', region_name=aws_region,
-                                   aws_secret_access_key=aws_secret_access_key,
-                                   aws_access_key_id=aws_access_key_id,
-                                   endpoint_url=s3_gateway)
-
+    session = get_session(loop=loop)
      
+    app['s3'] = getS3Client(session)
+
     app['client'] = client
-    app['s3'] = aws_client
 
     app.router.add_get('/info', info)
       

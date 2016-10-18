@@ -12,11 +12,14 @@
 #
 # Simple looger 
 #
+import config
 def info(msg):
-	print("INFO> " + msg)
+	if config.get("log_level") == "INFO":
+		print("INFO> " + msg)
 
 def warn(msg):
-	print("WARN> " + msg)
+	if config.get("log_level") != "ERROR":
+		print("WARN> " + msg)
 
 def error(msg):
 	print("ERROR> " + msg)
@@ -37,5 +40,7 @@ def response(req, resp=None, code=None, message=None):
 		else:
 			level = "ERROR"
 	
-	print("{} RSP> <{}> ({}): {}".format(level, code, message, req.path))
+	log_level = config.get("log_level")
+	if log_level == "INFO" or (log_level == "WARN" and level != "INFO") or (log_level == "ERROR" and level == "ERROR"):
+		print("{} RSP> <{}> ({}): {}".format(level, code, message, req.path))
 

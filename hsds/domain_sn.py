@@ -152,6 +152,21 @@ async def DELETE_Domain(request):
  
     username, pswd = getUserPasswordFromRequest(request)
     validateUserPassword(username, pswd)
+
+    # verify that this is not a top-level domain
+    parent_domain = getParentDomain(domain)
+    if parent_domain is None:
+        msg = "Top level domain can not be deleted"
+        log.warn(msg)
+        raise HttpProcessingError(code=403, message="Forbidden")
+    try:
+        log.info("get parent domain {}".format(parent_domain))
+        parent_json = await getDomainJson(app, parent_domain)
+    except HttpProcessingError as hpe:
+        msg = "Attempt to delete domain with no parent domain"
+        log.warn(msg)
+        raise HttpProcessingError(code=403, message="Forbidden")
+    log.info("got parent json: {}".format(parent_json))
     
     domain_json = await getDomainJson(app, domain)
     aclCheck(domain_json, "delete", username)  # throws exception if not allowed

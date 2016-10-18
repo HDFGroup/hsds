@@ -15,7 +15,6 @@
 import asyncio
 import json
 import time
-import sys
 
 from aiohttp.web import Application, StreamResponse, run_app
 from aiohttp import  ClientSession, TCPConnector
@@ -25,7 +24,7 @@ import aiobotocore
 import config
 from util.timeUtil import unixTimeToUTC, elapsedTime
 from util.httpUtil import http_get_json, jsonResponse, getUrl
-from util.s3Util import  getS3JSONObj, putS3JSONObj, isS3Obj
+from util.s3Util import  getS3JSONObj, putS3JSONObj, isS3Obj, getS3Client
 from util.idUtil import  createNodeId, getHeadNodeS3Key
 import hsds_logger as log
 
@@ -309,49 +308,17 @@ async def init(loop):
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
+    app = loop.run_until_complete(init(loop))   
 
     # create a client Session here so that all client requests 
     #   will share the same connection pool
     max_tcp_connections = int(config.get("max_tcp_connections"))
-    client = ClientSession(loop=loop, connector=TCPConnector(limit=max_tcp_connections))
-
-
-    # get connection to S3
-    # app["bucket_name"] = config.get("bucket_name")
-    aws_region = config.get("aws_region")
-    aws_secret_access_key = config.get("aws_secret_access_key")
-    if not aws_secret_access_key or aws_secret_access_key == 'xxx':
-        msg="Invalid aws secret access key"
-        log.error(msg)
-        sys.exit(msg)
-    aws_access_key_id = config.get("aws_access_key_id")
-    if not aws_access_key_id or aws_access_key_id == 'xxx':
-        msg="Invalid aws access key"
-        log.error(msg)
-        sys.exit(msg)
-
-    s3_gateway = config.get('aws_s3_gateway')
-    if not s3_gateway:
-        msg="Invalid aws s3 gateway"
-        log.error(msg)
-        sys.exit(msg)
-    log.info("s3_gateway: {}".format(s3_gateway))
-
+    app['client'] = ClientSession(loop=loop, connector=TCPConnector(limit=max_tcp_connections))
+     
     session = aiobotocore.get_session(loop=loop)
-    use_ssl = False
-    if s3_gateway.startswith("https"):
-        use_ssl = True
-    aws_client = session.create_client('s3', region_name=aws_region,
-                                   aws_secret_access_key=aws_secret_access_key,
-                                   aws_access_key_id=aws_access_key_id,
-                                   endpoint_url=s3_gateway,
-                                   use_ssl=use_ssl)
-    
 
-    app = loop.run_until_complete(init(loop))
-    app['client'] = client
-    app['s3'] = aws_client
-
+    app['s3'] = getS3Client(session)
+      
     asyncio.ensure_future(healthCheck(app), loop=loop)
     head_port = config.get("head_port")
     log.info("Starting service on port: {}".format(head_port))

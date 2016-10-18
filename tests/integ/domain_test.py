@@ -181,6 +181,10 @@ class DomainTest(unittest.TestCase):
         # try getting the domain
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 410)
+
+        # TBD - try deleting a top-level domain
+
+        # TBD - try deleting a domain that has child-domains
         
          
     

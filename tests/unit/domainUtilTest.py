@@ -42,9 +42,9 @@ class DomainUtilTest(unittest.TestCase):
 
     def testGetS3KeyForDomain(self):
         s3path = getS3KeyForDomain("nex.nasa.gov")
-        self.assertEqual(s3path, "gov/nasa/nex")
+        self.assertEqual(s3path, "gov/nasa/nex/domain.json")
         s3path = getS3KeyForDomain("my-data.nex.nasa.gov")  # hyphen ok
-        self.assertEqual(s3path, "gov/nasa/nex/my-data")
+        self.assertEqual(s3path, "gov/nasa/nex/my-data/domain.json")
          
               
 

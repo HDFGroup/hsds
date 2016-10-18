@@ -12,11 +12,12 @@
 import os
 
 cfg = {
-    'domain_name': 'ghcn_test1',
+    'domain_name': 'ghcn_test',
     'head_host': '192.168.99.100',
     'head_port': 5100,
     'user_name': 'test_user1',
     'user_password': 'test',
+    'log_level': 'INFO',   # ERROR, WARNING, INFO, DEBUG, or NOTSET,
     'max_tcp_connections': 16,
     'max_concurrent_tasks': 128,
     'docker_machine_ip': "192.168.99.100"

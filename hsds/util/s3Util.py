@@ -18,6 +18,7 @@ from botocore.exceptions import ClientError
 from aiohttp import HttpProcessingError 
 
 import hsds_logger as log
+import config
  
 async def getS3JSONObj(app, key):
     """ Get S3 object identified by key and read as JSON
@@ -96,17 +97,51 @@ async def isS3Obj(app, key):
         msg = "Error listing s3 obj: " + str(ce)
         log.error(msg)
         raise HttpProcessingError(code=500, message=msg)
+    #print("list_object resp: {}".format(resp))
     if 'Contents' not in resp:
+        log.info("no Contents in resp to isS3Obj({})".format(key))
         return False
     contents = resp['Contents']
     
+    found = False
     if len(contents) > 0:
-        return True
-    else:
-        return False
+        #print("list_objects contents:", contents)
+        item = contents[0]
+        if item["Key"] == key:
+            # if the key is a S3 folder, the key will be the first object in the folder,
+            # not the requested object
+            found = True
+    return found
 
+def getS3Client(session):
+    """ Return s3client handle
+    """
 
-  
+    aws_region = config.get("aws_region")
+    aws_secret_access_key = config.get("aws_secret_access_key")
+    if not aws_secret_access_key or aws_secret_access_key == 'xxx':
+        msg="Invalid aws secret access key"
+        log.error(msg)
+        raise ValueError(msg)
+    aws_access_key_id = config.get("aws_access_key_id")
+    if not aws_access_key_id or aws_access_key_id == 'xxx':
+        msg="Invalid aws access key"
+        log.error(msg)
+        raise ValueError(msg)
 
+    s3_gateway = config.get('aws_s3_gateway')
+    if not s3_gateway:
+        msg="Invalid aws s3 gateway"
+        log.error(msg)
+        raise ValueError(msg)
+    log.info("s3_gateway: {}".format(s3_gateway))
 
- 
+    use_ssl = False
+    if s3_gateway.startswith("https"):
+        use_ssl = True
+    aws_client = session.create_client('s3', region_name=aws_region,
+                                   aws_secret_access_key=aws_secret_access_key,
+                                   aws_access_key_id=aws_access_key_id,
+                                   endpoint_url=s3_gateway,
+                                   use_ssl=use_ssl)
+    return aws_client

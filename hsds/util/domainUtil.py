@@ -106,7 +106,8 @@ def getS3KeyForDomain(host_value):
         s3Path += field
         s3Path += '/'
 
-    s3Path = s3Path[:-1]  # remove trailing slash
+    #s3Path = s3Path[:-1]  # remove trailing slash
+    s3Path += "domain.json"  # add a json suffix
      
     return s3Path
 
