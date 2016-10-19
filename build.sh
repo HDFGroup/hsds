@@ -18,13 +18,13 @@ if [ $run_pyflakes ]; then
         ./pyflakes.sh hsds
         exit 1
     fi
-fi
 
-echo "running pyflakes on hsds/util"
-if [ $(./pyflakes.sh -count hsds/util) -ge 1 ]; then
-    echo "pyflakes errors in hsds/util..."
-    ./pyflakes.sh hsds/util
-    exit 1
+    echo "running pyflakes on hsds/util"
+    if [ $(./pyflakes.sh -count hsds/util) -ge 1 ]; then
+        echo "pyflakes errors in hsds/util..."
+        ./pyflakes.sh hsds/util
+        exit 1
+    fi
 fi
 
 echo "clean stopped containers"
