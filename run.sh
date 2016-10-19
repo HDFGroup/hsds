@@ -33,6 +33,7 @@ if [ $1 == "head" ]; then
   --env NODE_TYPE="head_node"  \
   --env AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
   --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
+  --env BUCKET_NAME=${BUCKET_NAME} \
   hdfgroup/hsds  
 elif [ $1 == "dn" ]; then
   echo "run dn"
@@ -45,6 +46,7 @@ elif [ $1 == "dn" ]; then
         --env NODE_TYPE="dn"  \
         --env AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
         --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
+        --env BUCKET_NAME=${BUCKET_NAME} \
         --link hsds_head:hsds_head \
         hdfgroup/hsds
       DN_PORT=$(($DN_PORT+2))
@@ -59,6 +61,7 @@ elif [ $1 == "sn" ]; then
         --env NODE_TYPE="sn"  \
         --env AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
         --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
+        --env BUCKET_NAME=${BUCKET_NAME} \
         --link hsds_head:hsds_head \
         hdfgroup/hsds
       SN_PORT=$(($SN_PORT+2))

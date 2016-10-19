@@ -14,34 +14,14 @@ import signal
 import random
 import numpy as np
 import time
-import base64
 import json
 import asyncio
 from aiohttp import ClientSession, TCPConnector, HttpProcessingError 
 import config
 import hsds_logger as log
+from helper import getRequestHeaders
 
 globals = {}
-
-"""
-get default request headers for domain
-"""
-def getRequestHeaders(domain=None, username=None, password=None):
-    if username is None:
-        username = config.get("user_name")
-    if password is None:
-        password = config.get("user_password")
-    headers = { }
-    if domain is not None:
-        headers['host'] = domain
-    if username and password:
-        auth_string = username + ':' + password
-        auth_string = auth_string.encode('utf-8')
-        auth_string = base64.b64encode(auth_string)
-        auth_string = auth_string.decode('utf-8')
-        auth_string = "Basic " + auth_string
-        headers['Authorization'] = auth_string
-    return headers
 
 async def getEndpoints():
     docker_machine_ip = config.get("docker_machine_ip")

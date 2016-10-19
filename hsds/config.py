@@ -17,11 +17,10 @@ cfg = {
     'aws_access_key_id': 'xxx',  
     'aws_secret_access_key': 'xxx',    
     'aws_region': 'us-east-1',
-    'aws_s3_gateway': 'https://s3.amazonaws.com', # 'http://192.168.99.100:9000', # 'http://minio:9000',   
+    'aws_s3_gateway': 'https://s3.amazonaws.com',  
     'bucket_name': 'hdfgroup_hsdsdev',
     'head_host': 'localhost',
     'head_port': 5100,
-    #'hsds_endpoint': 'http://127.0.0.1:5102',
     'dn_host': 'localhost',
     'dn_port' : 5101,  # run multiple dn nodes on odd ports
     'sn_host': 'localhost',
