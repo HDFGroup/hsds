@@ -77,8 +77,7 @@ if __name__ == '__main__':
 
     # run data sync tasks
     asyncio.ensure_future(s3sync(app), loop=loop)
-
-
    
     # run the app
-    run_app(app, port=config.get("dn_port"))
+    port = int(config.get("dn_port"))
+    run_app(app, port=port)

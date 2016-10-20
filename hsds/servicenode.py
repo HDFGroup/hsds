@@ -78,4 +78,5 @@ if __name__ == '__main__':
     asyncio.ensure_future(healthCheck(app), loop=loop)
    
     # run the app
-    run_app(app, port=config.get("sn_port"))
+    port = int(config.get("sn_port"))
+    run_app(app, port=port)

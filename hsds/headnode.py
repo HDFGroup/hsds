@@ -13,6 +13,7 @@
 # Head node of hsds cluster
 # 
 import asyncio
+import sys
 import json
 import time
 
@@ -278,7 +279,12 @@ async def init(loop):
     app["start_time"] = int(time.time())  # seconds after epoch 
     app["target_sn_count"] = int(config.get("target_sn_count"))
     app["target_dn_count"] = int(config.get("target_dn_count"))
-    app["bucket_name"] = config.get("bucket_name")
+    app["bucket_name"] = bucket_name = config.get("bucket_name")
+    if not bucket_name:
+        log.error("BUCKET_NAME environment variable not set")
+        sys.exit()
+    app["bucket_name"] = bucket_name
+        
     app["head_host"] = config.get("head_host")
     app["head_port"] = config.get("head_port")
     
@@ -322,4 +328,4 @@ if __name__ == '__main__':
     asyncio.ensure_future(healthCheck(app), loop=loop)
     head_port = config.get("head_port")
     log.info("Starting service on port: {}".format(head_port))
-    run_app(app, port=head_port)
+    run_app(app, port=int(head_port))
