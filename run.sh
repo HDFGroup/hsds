@@ -81,6 +81,8 @@ elif [ $1 == "stopsn" ]; then
 elif [ $1 == "clean" ]; then
    echo "run_clean"
    docker rm -v $(docker ps -aq -f status=exited) 
+else
+  echo "Argument not recognized" 
 fi
  
 

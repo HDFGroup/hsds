@@ -186,6 +186,7 @@ def baseInit(loop, node_type):
     if not bucket_name:
         log.error("BUCKET_NAME environment variable not set")
         sys.exit()
+    log.info("using bucket: {}".format(bucket_name))
     app["bucket_name"] = bucket_name
     app["sn_urls"] = {}
     app["dn_urls"] = {}

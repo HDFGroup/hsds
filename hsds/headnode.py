@@ -279,10 +279,11 @@ async def init(loop):
     app["start_time"] = int(time.time())  # seconds after epoch 
     app["target_sn_count"] = int(config.get("target_sn_count"))
     app["target_dn_count"] = int(config.get("target_dn_count"))
-    app["bucket_name"] = bucket_name = config.get("bucket_name")
+    bucket_name = config.get("bucket_name")
     if not bucket_name:
         log.error("BUCKET_NAME environment variable not set")
         sys.exit()
+    log.info("using bucket: {}".format(bucket_name))
     app["bucket_name"] = bucket_name
         
     app["head_host"] = config.get("head_host")
