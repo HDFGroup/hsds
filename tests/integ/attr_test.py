@@ -148,7 +148,7 @@ class AttributeTest(unittest.TestCase):
         attr_name = "attr"
         attr_payload = {'type': 'H5T_STD_I32LE', 'value': 42}
         req = helper.getEndpoint() + "/groups/" + grp1_id + "/attributes/" + attr_name
-        rsp = requests.get(req, data=json.dumps(attr_payload), headers=headers)
+        rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 404)  # not found
 
         # try adding the attribute as a different user
@@ -222,16 +222,7 @@ class AttributeTest(unittest.TestCase):
         attr_payload = {'type': 'H5T_FOOBAR', 'value': 42}
         req = helper.getEndpoint() + "/groups/" + root_id + "/attributes/" + attr_name
         rsp = requests.put(req, data=json.dumps(attr_payload), headers=headers)
-        self.assertEqual(rsp.status_code, 400)  # invalid request
-
-
-
-
-
-
-  
-
-    
+        self.assertEqual(rsp.status_code, 400)  # invalid request 
 
 
 if __name__ == '__main__':

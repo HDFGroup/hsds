@@ -176,16 +176,7 @@ class GroupTest(unittest.TestCase):
         # try deleting the root group
         req = helper.getEndpoint() + '/groups/' + root_id
         rsp = requests.delete(req, headers=headers)
-        self.assertEqual(rsp.status_code, 403)  # Forbidden
-         
-
-
-         
-
-        
-
-
-         
+        self.assertEqual(rsp.status_code, 403)  # Forbidden    
     
              
 if __name__ == '__main__':

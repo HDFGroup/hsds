@@ -19,7 +19,7 @@ import hsds_logger as log
 
 def getRequestCollectionName(request):
     """ request is in the form /(datasets|groups|datatypes)/<id>/attributes(/<name>),
-    return datasets | groups | datatypes
+    return datasets | groups | types
     """
     uri = request.path
 
@@ -31,6 +31,7 @@ def getRequestCollectionName(request):
     uri = uri[(npos+1):]
     npos = uri.find('/')  # second '/'
     col_name = uri[:npos]
+
 
     log.info('got collection name: [' + col_name + ']')
     if col_name not in ('datasets', 'groups', 'datatypes'):

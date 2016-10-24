@@ -99,7 +99,6 @@ async def isS3Obj(app, key):
         raise HttpProcessingError(code=500, message=msg)
     #print("list_object resp: {}".format(resp))
     if 'Contents' not in resp:
-        log.info("no Contents in resp to isS3Obj({})".format(key))
         return False
     contents = resp['Contents']
     

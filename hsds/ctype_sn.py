@@ -14,29 +14,29 @@
 # 
  
 import json
-from aiohttp.errors import HttpBadRequest, HttpProcessingError
+from aiohttp.errors import HttpBadRequest 
  
 from util.httpUtil import http_post, http_delete, jsonResponse
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
+from util.hdf5dtype import validateTypeItem
 from servicenode_lib import getDomainJson, getObjectJson, validateAction
 import hsds_logger as log
 
 
-
-async def GET_Group(request):
-    """HTTP method to return JSON for group"""
+async def GET_Datatype(request):
+    """HTTP method to return JSON for committed datatype"""
     log.request(request)
     app = request.app 
 
-    group_id = request.match_info.get('id')
-    if not group_id:
-        msg = "Missing group id"
+    ctype_id = request.match_info.get('id')
+    if not ctype_id:
+        msg = "Missing type id"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-    if not isValidUuid(group_id, "Group"):
-        msg = "Invalid group id: {}".format(group_id)
+    if not isValidUuid(ctype_id, "Type"):
+        msg = "Invalid type id: {}".format(ctype_id)
         log.warn(msg)
         raise HttpBadRequest(message=msg)
 
@@ -53,22 +53,35 @@ async def GET_Group(request):
         raise HttpBadRequest(message=msg)
     
     # get authoritative state for group from DN (even if it's in the meta_cache).
-    group_json = await getObjectJson(app, group_id, refresh=True)  
+    type_json = await getObjectJson(app, ctype_id, refresh=True)  
 
-    await validateAction(app, domain, group_id, username, "read")
+    await validateAction(app, domain, ctype_id, username, "read")
 
-    resp = await jsonResponse(request, group_json)
+    resp = await jsonResponse(request, type_json)
     log.response(request, resp=resp)
     return resp
 
-async def POST_Group(request):
-    """HTTP method to create new Group object"""
+async def POST_Datatype(request):
+    """HTTP method to create new committed datatype object"""
     log.request(request)
     app = request.app
 
     username, pswd = getUserPasswordFromRequest(request)
     # write actions need auth
     validateUserPassword(username, pswd)
+
+    if not request.has_body:
+        msg = "POST Datatype with no body"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+
+    body = await request.json()
+    if "type" not in body:
+        msg = "POST Datatype has no type key in body"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    datatype = body["type"]
+    validateTypeItem(datatype)
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
@@ -86,32 +99,32 @@ async def POST_Group(request):
         raise HttpBadRequest(message=msg)
 
     root_id = domain_json["root"]
-    group_id = createObjId("groups") 
-    log.info("new  group id: {}".format(group_id))
-    group_json = {"id": group_id, "root": root_id, "domain": domain }
-    log.info("create group, body: " + json.dumps(group_json))
-    req = getDataNodeUrl(app, group_id) + "/groups"
+    ctype_id = createObjId("datatypes") 
+    log.info("new  type id: {}".format(ctype_id))
+    ctype_json = {"id": ctype_id, "root": root_id, "domain": domain, "type": datatype }
+    log.info("create named type, body: " + json.dumps(ctype_json))
+    req = getDataNodeUrl(app, ctype_id) + "/datatypes"
     
-    group_json = await http_post(app, req, data=group_json)
+    type_json = await http_post(app, req, data=ctype_json)
     
-    # group creation successful     
-    resp = await jsonResponse(request, group_json, status=201)
+    # datatype creation successful     
+    resp = await jsonResponse(request, type_json, status=201)
     log.response(request, resp=resp)
     return resp
 
-async def DELETE_Group(request):
-    """HTTP method to delete a group resource"""
+async def DELETE_Datatype(request):
+    """HTTP method to delete a committed type resource"""
     log.request(request)
     app = request.app 
     meta_cache = app['meta_cache']
 
-    group_id = request.match_info.get('id')
-    if not group_id:
-        msg = "Missing group id"
+    ctype_id = request.match_info.get('id')
+    if not ctype_id:
+        msg = "Missing committed type id"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-    if not isValidUuid(group_id, "Group"):
-        msg = "Invalid group id: {}".format(group_id)
+    if not isValidUuid(ctype_id, "Type"):
+        msg = "Invalid committed type id: {}".format(ctype_id)
         log.warn(msg)
         raise HttpBadRequest(message=msg)
 
@@ -131,20 +144,14 @@ async def DELETE_Group(request):
         raise HttpBadRequest(message="Unexpected Error")
 
     # TBD - verify that the obj_id belongs to the given domain
-    await validateAction(app, domain, group_id, username, "delete")
+    await validateAction(app, domain, ctype_id, username, "delete")
 
-    if group_id == domain_json["root"]:
-        msg = "Forbidden - deletion of root group is not allowed - delete domain first"
-        log.warn(msg)
-        raise HttpProcessingError(code=403, message=msg)
-
-    req = getDataNodeUrl(app, group_id)
-    req += "/groups/" + group_id
+    req = getDataNodeUrl(app, ctype_id) + "/datatypes/" + ctype_id
  
     rsp_json = await http_delete(app, req)
 
-    if group_id in meta_cache:
-        del meta_cache[group_id]  # remove from cache
+    if ctype_id in meta_cache:
+        del meta_cache[ctype_id]  # remove from cache
  
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)

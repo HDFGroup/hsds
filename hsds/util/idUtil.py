@@ -41,18 +41,25 @@ def createNodeId(prefix):
     return key
 
 def createObjId(obj_type):
-    if obj_type not in ('group', 'dataset', 'namedtype', 'chunk'):
+    if obj_type not in ('groups', 'datasets', 'datatypes', 'chunks'):
         raise ValueError("unexpected obj_type")
-    id = obj_type[0] + '-' + str(uuid.uuid1())
+    prefix = None
+    if obj_type == 'datatypes':
+        prefix = 't'
+    else:
+        prefix = obj_type[0]
+    id = prefix + '-' + str(uuid.uuid1())
     return id
 
 def getCollectionForId(obj_id):
+    if not isinstance(obj_id, str):
+        raise ValueError("invalid object id")
     collection = None
     if obj_id.startswith("g-"):
         collection = "groups"
     elif obj_id.startswith("d-"):
         collection = "datasets"
-    elif obj_id.starts("n-"):
+    elif obj_id.startswith("t-"):
         collection = "datatypes"
     else:
         raise ValueError("not a collection id")
@@ -73,7 +80,11 @@ def validateUuid(id, obj_class=None):
     if id[1] != '-':
         raise ValueError("Unexpected prefix")
     if obj_class is not None:
-        if id[0] != obj_class[0].lower():
+        obj_class = obj_class.lower()
+        prefix = obj_class[0]
+        if obj_class.startswith("datatype"):
+            prefix = 't'
+        if id[0] != prefix:
             raise ValueError("Unexpected prefix for class: " + obj_class)
     for ch in id:
         if ch.isalnum():

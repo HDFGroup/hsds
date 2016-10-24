@@ -106,7 +106,7 @@ async def PUT_Domain(request):
     
     # create a root group for the new domain
     # TBD - fire off create group and create domain dn requests at the same time
-    root_id = createObjId("group") 
+    root_id = createObjId("groups") 
     log.info("new root group id: {}".format(root_id))
     group_json = {"id": root_id, "root": root_id, "domain": domain }
     log.info("create group for domain, body: " + json.dumps(group_json))

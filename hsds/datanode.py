@@ -23,6 +23,7 @@ from domain_dn import GET_Domain, PUT_Domain, DELETE_Domain
 from group_dn import GET_Group, POST_Group, DELETE_Group
 from link_dn import GET_Links, GET_Link, PUT_Link, DELETE_Link
 from attr_dn import GET_Attributes, GET_Attribute, PUT_Attribute, DELETE_Attribute
+from ctype_dn import GET_Datatype, POST_Datatype, DELETE_Datatype
 from datanode_lib import s3sync 
 
                
@@ -48,6 +49,13 @@ async def init(loop):
     app.router.add_route('GET', '/groups/{id}/attributes/{name}', GET_Attribute)
     app.router.add_route('DELETE', '/groups/{id}/attributes/{name}', DELETE_Attribute)
     app.router.add_route('PUT', '/groups/{id}/attributes/{name}', PUT_Attribute)
+    app.router.add_route('GET', '/datatypes/{id}', GET_Datatype)
+    app.router.add_route('DELETE', '/datatypes/{id}', DELETE_Datatype)
+    app.router.add_route('POST', '/datatypes', POST_Datatype)
+    app.router.add_route('GET', '/datatypes/{id}/attributes', GET_Attributes)
+    app.router.add_route('GET', '/datatypes/{id}/attributes/{name}', GET_Attribute)
+    app.router.add_route('DELETE', '/datatypes/{id}/attributes/{name}', DELETE_Attribute)
+    app.router.add_route('PUT', '/datatypes/{id}/attributes/{name}', PUT_Attribute)
       
     return app
 

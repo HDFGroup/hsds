@@ -38,7 +38,7 @@ async def healthCheck(app):
 
     # update/initialize root object before starting node updates
     headnode_key = getHeadNodeS3Key()
-    log.info("headnode S3 key".format(headnode_key))
+    log.info("headnode S3 key: {}".format(headnode_key))
     headnode_obj_found = await isS3Obj(app, headnode_key)
 
     head_url = getUrl(app["head_host"], app["head_port"])  

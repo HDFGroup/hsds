@@ -299,6 +299,7 @@ def import_file(filename):
 def print_results():
     log.info("h5path_cache...")
     h5path_cache = globals["h5path_cache"]  
+    elapsed_time = time.time() - globals["start_time"]
     keys = list(h5path_cache.keys())
     keys.sort()
     for key in keys:
@@ -321,14 +322,17 @@ def print_results():
 
     timings = np.array(latencies)
     print("latencies...")
-    print("avg: {}".format(timings.mean()))
-    print("min: {}".format(timings.min()))
-    print("max: {}".format(timings.max()))
-    print("std: {}".format(timings.std()))
+    print("runtime: {0:.2f} s".format(elapsed_time))
+    print("lines/sec: {0:.2f}".format(globals["lines_read"]/elapsed_time))
+    print("avg: {0:.2f} s".format(timings.mean()))
+    print("min: {0:.2f} s".format(timings.min()))
+    print("max: {0:.2f} s".format(timings.max()))
+    print("std: {0:.2f} s".format(timings.std()))
 
 def sig_handler(sig, frame):
-    log.warning('Caught signal: %s', sig)
+    log.warn("Caught signal: {}".format(str(sig)))
     print_results()
+    sys.exit()
 
 
 def main():    
@@ -378,6 +382,7 @@ def main():
     loop.run_until_complete(verifyGroupPath("/data"))
 
     input_files = globals["input_files"]
+    globals["start_time"] = time.time()
     for filename in input_files:
         import_file(filename)
 
