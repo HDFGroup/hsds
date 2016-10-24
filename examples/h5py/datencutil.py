@@ -12,6 +12,7 @@ odd calendars are not available in here.
 import re
 import datetime
 import numpy 
+import math
 
 microsec_units = ['microseconds','microsecond', 'microsec', 'microsecs']
 millisec_units = ['milliseconds', 'millisecond', 'millisec', 'millisecs']
@@ -20,7 +21,7 @@ min_units =      ['minute', 'minutes', 'min', 'mins']
 hr_units =       ['hour', 'hours', 'hr', 'hrs', 'h']
 day_units =      ['day', 'days', 'd']
 _units = microsec_units+millisec_units+sec_units+min_units+hr_units+day_units
-_calendars = ['standard', 'gregorian', 'proleptic_gregorian', 'julian'] 
+_calendars = ['standard', 'gregorian', 'proleptic_gregorian', 'julian', '365_day'] 
 
 # Adapted from http://delete.me.uk/2005/03/iso8601.html (netCDF4)
 ISO8601_REGEX = re.compile(r"(?P<year>[+-]?[0-9]{1,4})(-(?P<month>[0-9]{1,2})(-(?P<day>[0-9]{1,2})"
@@ -308,6 +309,79 @@ def DateFromJulianDay(JD, calendar='standard'):
                             dayofyr[0])
 #DateFromJulianDay
 
+def NoLeapDayFromDate(date):
+    """
+        Creates a Julian Day for a calendar with no leap years from a datetime
+        instance.  Returns the fractional Julian Day (resolution approx 0.1 second).
+    """
+    # Convert time to fractions of a day
+    day = date.day + date.hour / 24.0 + date.minute / 1440.0 + \
+                    (date.second + date.microsecond / 1.e6) / 86400.0
+
+    # Start Meeus algorithm (variables are in his notation)
+    if (date.month < 3):
+        month = date.month + 12
+        year = date.year - 1
+    else:
+        month = date.month
+        year = date.year
+
+    jd = int(365.0 * (year + 4716)) + \
+         int(30.6001 * (month + 1)) + date.day - 1524.5
+
+    return jd
+#NoLeapDayFromDate
+
+
+def DateFromNoLeapDay(JD):
+    """
+        Returns a 'datetime-like' object given Julian Day for a calendar with no leap
+        days. Julian Day is a fractional day with a resolution of approximately 0.1 seconds.
+    """
+
+    # based on redate.py by David Finlayson.
+    if JD < 0:
+        year_offset = int(-JD) // 365 + 1
+        JD += year_offset * 365
+    else:
+        year_offset = 0
+
+    dayofwk = int(math.fmod(int(JD + 1.5), 7))
+    (F, Z) = math.modf(JD + 0.5)
+    Z = int(Z)
+    A = Z
+    B = A + 1524
+    C = int((B - 122.1) / 365.)
+    D = int(365. * C)
+    E = int((B - D) / 30.6001)
+
+    # Convert to date
+    day = B - D - int(30.6001 * E) + F
+    nday = B - D - 123
+    if nday <= 305:
+        dayofyr = nday + 60
+    else:
+        dayofyr = nday - 305
+    if E < 14:
+        month = E - 1
+    else:
+        month = E - 13
+
+    if month > 2:
+        year = C - 4716
+    else:
+        year = C - 4715
+
+    # Convert fractions of a day to time
+    (dfrac, days) = math.modf(day / 1.0)
+    (hfrac, hours) = math.modf(dfrac * 24.0)
+    (mfrac, minutes) = math.modf(hfrac * 60.0)
+    (sfrac, seconds) = math.modf(mfrac * 60.0)
+    microseconds = sfrac*1.e6
+
+    return datetime.datetime(year - year_offset, month, int(days), int(hours), int(minutes), int(seconds), int(microseconds))
+# DateFromNoLeapDay
+
 def num2date(time_value, origin, units, calendar, tzoffset):
     """
     Return a 'datetime' object given a in units described by unit_string using calendar
@@ -373,6 +447,12 @@ def num2date(time_value, origin, units, calendar, tzoffset):
                     date = None
                 else:
                     date = DateFromJulianDay(jd, calendar)
+    elif calendar  == '365_day': 
+        if not isscalar:
+            date = [ DateFromNoLeapDay(j) for j in jd.flat]
+        else:
+            date = DateFromNoLeapDay(jd)
+        
     if isscalar:
         return date
     else:
@@ -391,8 +471,12 @@ def get_origin_num(unit_string, calendar):
         raise ValueError('zero not allowed as a reference year, does not exist in Julian or Gregorian calendars')
     elif origin.year < 0:
         raise ValueError('negative reference year in time units, must be >= 1')
+    
+    if calendar  == '365_day': 
+        jd0 = NoLeapDayFromDate(origin)
+    else:
+        jd0 = JulianDayFromDate(origin, calendar=calendar)
 
-    jd0 = JulianDayFromDate(origin, calendar=calendar)
     return jd0, units, tzoffset, origin 
 #get_origin_num
 
