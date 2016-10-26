@@ -95,7 +95,7 @@ class DatatypeTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue(rspJson is not None)
 
-        # a get for the group should now return 410 (GONE)
+        # a get for the datatype should now return 410 (GONE)
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 410)
 
@@ -246,11 +246,7 @@ class DatatypeTest(unittest.TestCase):
         attr_payload = {'type': 'H5T_STD_I32LE', 'value': 42}
         req = self.endpoint + "/datatypes/" + ctype_id + "/attributes/" + attr_name
         rsp = requests.put(req, data=json.dumps(attr_payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)  # not found
-
-            
-
-         
+        self.assertEqual(rsp.status_code, 201)  # created
 
     
              

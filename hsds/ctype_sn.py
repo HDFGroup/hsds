@@ -11,6 +11,7 @@
 ##############################################################################
 #
 # service node of hsds cluster
+# handles datatypes requests
 # 
  
 import json

@@ -96,7 +96,7 @@ async def getObjectJson(app, obj_id, refresh=False):
     If refresh is False, any data present in the meta_cache will be returned.  If not
     the DN will be queries, and any resultant data added to the meta_cache.  
     Note: meta_cache values may be stale, but use of immutable data (e.g. type of a dataset)
-    is always validateAction
+    is always valid
     """
     meta_cache = app['meta_cache']
     obj_json = None

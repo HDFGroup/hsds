@@ -25,6 +25,7 @@ from group_sn import GET_Group, POST_Group, DELETE_Group
 from link_sn import GET_Links, GET_Link, PUT_Link, DELETE_Link
 from attr_sn import GET_Attributes, GET_Attribute, PUT_Attribute, DELETE_Attribute
 from ctype_sn import GET_Datatype, POST_Datatype, DELETE_Datatype
+from dset_sn import GET_Dataset, POST_Dataset, DELETE_Dataset, GET_DatasetShape, GET_DatasetType
  
 
 async def init(loop):
@@ -55,6 +56,17 @@ async def init(loop):
     app.router.add_route('GET', '/datatypes/{id}/attributes/{name}', GET_Attribute)
     app.router.add_route('DELETE', '/datatypes/{id}/attributes/{name}', DELETE_Attribute)
     app.router.add_route('PUT', '/datatypes/{id}/attributes/{name}', PUT_Attribute)
+    app.router.add_route('GET', '/datasets/{id}', GET_Dataset)
+    app.router.add_route('DELETE', '/datasets/{id}', DELETE_Dataset)
+    app.router.add_route('POST', '/datasets', POST_Dataset)
+    app.router.add_route('GET', '/datasets/{id}/shape', GET_DatasetShape)
+    app.router.add_route('GET', '/datasets/{id}/type', GET_DatasetType)
+    app.router.add_route('GET', '/datasets/{id}/attributes', GET_Attributes)
+    app.router.add_route('GET', '/datasets/{id}/attributes/{name}', GET_Attribute)
+    app.router.add_route('DELETE', '/datasets/{id}/attributes/{name}', DELETE_Attribute)
+    app.router.add_route('PUT', '/datasets/{id}/attributes/{name}', PUT_Attribute)
+
+
       
     return app
 

@@ -15,7 +15,8 @@ import sys
 
 
 unit_tests = ('domainUtilTest', 'idUtilTest', 'hdf5dtypeTest')
-integ_tests = ('uptest', 'domain_test', "group_test", "link_test", "attr_test", "datatype_test" )
+integ_tests = ('uptest', 'domain_test', "group_test", "link_test",
+ "attr_test", "datatype_test", "dataset_test" )
 
 #todo - add spidertest back
 cwd = os.getcwd()
