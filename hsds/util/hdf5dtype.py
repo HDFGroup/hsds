@@ -695,6 +695,43 @@ def validateTypeItem(typeItem):
     except TypeError as ve:
         raise HttpBadRequest(message=str(ve))
 
+"""
+Return JSON representation of a predefined type string
+"""
+def getBaseTypeJson(type_name):
+    predefined_int_types = (
+          'H5T_STD_I8',
+          'H5T_STD_U8',
+          'H5T_STD_I16',
+          'H5T_STD_U16',
+          'H5T_STD_I32',
+          'H5T_STD_U32',
+          'H5T_STD_I64',
+          'H5T_STD_U64'
+    ) 
+    predefined_float_types = (
+          'H5T_IEEE_F32',
+          'H5T_IEEE_F64'
+    )
+    type_json = {}
+    # predefined typenames start with 'H5T' and end with "LE" or "BE"
+    if type_name.startswith("H5T_") and type_name[-1] == 'E' and type_name[-2] in ('L', 'B'):
+        # trime of the "BE/"LE"
+        type_prefix = type_name[:-2]
+        if type_prefix in predefined_int_types:
+            type_json["class"] = "H5T_INTEGER"
+            type_json["base"] = type_name
+        elif type_prefix in predefined_float_types:
+            type_json["class"] = "H5T_FLOAT"
+            type_json["base"] = type_name
+        else:
+            raise TypeError("Invalid type name")
+    else:
+        raise TypeError("Invalid type name")
+    return type_json
+
+
+
 
 
 

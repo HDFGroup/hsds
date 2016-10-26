@@ -243,8 +243,10 @@ class DatasetTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         shape = rspJson['shape']
         self.assertEqual(shape['class'], 'H5S_NULL')
-        # verify type class is string
-        self.assertEqual(rspJson['type'], 'H5T_IEEE_F32LE')
+        # verify type 
+        type_json = rspJson["type"]
+        self.assertEqual(type_json["class"], 'H5T_FLOAT')
+        self.assertEqual(type_json['base'], 'H5T_IEEE_F32LE')
 
     
              

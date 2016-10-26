@@ -21,7 +21,7 @@ from util.httpUtil import http_post, http_delete, jsonResponse
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
-from util.hdf5dtype import validateTypeItem
+from util.hdf5dtype import validateTypeItem, getBaseTypeJson
 from servicenode_lib import getDomainJson, getObjectJson, validateAction
 import hsds_logger as log
 
@@ -176,6 +176,18 @@ async def POST_Dataset(request):
         raise HttpBadRequest(message=msg)   
 
     datatype = body["type"]
+    if isinstance(datatype, str):
+        try:
+            # convert predefined type string (e.g. "H5T_STD_I32LE") to 
+            # corresponding json representation
+            datatype = getBaseTypeJson(datatype)
+            log.info("got datatype: {}".format(datatype))
+        except TypeError:
+            # TBD: Handle the case where the string is a committed type reference
+            msg = "POST Dataset with invalid predefined type"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg) 
+
     validateTypeItem(datatype)
 
     dims = None

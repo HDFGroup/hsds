@@ -62,7 +62,9 @@ class DatatypeTest(unittest.TestCase):
         self.assertTrue("attributeCount" in rspJson)
         self.assertEqual(rspJson["attributeCount"], 0)
         self.assertTrue("type" in rspJson)
-        self.assertEqual(rspJson["type"], "H5T_IEEE_F32LE")
+        type_json = rspJson["type"]
+        self.assertEqual(type_json["class"], "H5T_FLOAT")
+        self.assertEqual(type_json["base"], "H5T_IEEE_F32LE")
 
         # try get with a different user (who has read permission)
         headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
@@ -144,7 +146,8 @@ class DatatypeTest(unittest.TestCase):
             self.assertTrue("attributeCount" in rspJson)
             self.assertEqual(rspJson["attributeCount"], 0)
             self.assertTrue("type" in rspJson)
-            self.assertEqual(rspJson["type"], datatype)
+            type_json = rspJson["type"]
+            self.assertEqual(type_json["base"], datatype)
             
             # link new datatype using the type name
             name = datatype

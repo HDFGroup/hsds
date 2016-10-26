@@ -29,6 +29,27 @@ class Hdf5dtypeTest(unittest.TestCase):
         self.logger = logging.getLogger()
         self.logger.setLevel(logging.INFO)
 
+    def testGetBaseTypeJson(self):
+        type_json = hdf5dtype.getBaseTypeJson("H5T_IEEE_F64LE")
+        self.assertTrue("class" in type_json)
+        self.assertEqual(type_json["class"], "H5T_FLOAT")
+        self.assertTrue("base" in type_json)
+        self.assertEqual(type_json["base"], "H5T_IEEE_F64LE")
+
+        type_json = hdf5dtype.getBaseTypeJson("H5T_STD_I32LE")
+        self.assertTrue("class" in type_json)
+        self.assertEqual(type_json["class"], "H5T_INTEGER")
+        self.assertTrue("base" in type_json)
+        self.assertEqual(type_json["base"], "H5T_STD_I32LE")
+
+        try:
+            hdf5dtype.getBaseTypeJson("foobar")
+            self.assertTrue(False)
+        except TypeError:
+            pass # expected
+
+
+
     def testBaseIntegerTypeItem(self):
         dt = np.dtype('<i1')
         typeItem = hdf5dtype.getTypeItem(dt)

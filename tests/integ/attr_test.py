@@ -76,7 +76,9 @@ class AttributeTest(unittest.TestCase):
             self.assertTrue("name" in attrJson)
             self.assertEqual(attrJson["name"], "attr_{}".format(i))
             self.assertTrue("type" in attrJson)
-            self.assertEqual(attrJson["type"], "H5T_STD_I32LE")
+            type_json = attrJson["type"]
+            self.assertEqual(type_json["class"], "H5T_INTEGER")
+            self.assertEqual(type_json["base"], "H5T_STD_I32LE")
             self.assertTrue("shape" in attrJson)
             shapeJson = attrJson["shape"]
             self.assertEqual(shapeJson["class"], "H5S_SCALAR")
