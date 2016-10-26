@@ -17,7 +17,7 @@
 import json
 from aiohttp.errors import HttpBadRequest 
  
-from util.httpUtil import http_post, http_delete, jsonResponse
+from util.httpUtil import http_post, http_put, http_delete, jsonResponse
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
@@ -113,7 +113,7 @@ async def GET_DatasetType(request):
     return resp
 
 async def GET_DatasetShape(request):
-    """HTTP method to return JSON for dataset's type"""
+    """HTTP method to return JSON for dataset's shape"""
     log.request(request)
     app = request.app 
 
@@ -139,7 +139,7 @@ async def GET_DatasetShape(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     
-    # get authoritative state for group from DN (even if it's in the meta_cache).
+    # get authoritative state for dataset from DN (even if it's in the meta_cache).
     dset_json = await getObjectJson(app, dset_id, refresh=True)  
 
     await validateAction(app, domain, dset_id, username, "read")
@@ -154,6 +154,92 @@ async def GET_DatasetShape(request):
     log.response(request, resp=resp)
     return resp
 
+async def PUT_DatasetShape(request):
+    """HTTP method to update dataset's shape"""
+    log.request(request)
+    app = request.app 
+
+    dset_id = request.match_info.get('id')
+    if not dset_id:
+        msg = "Missing dataset id"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    if not isValidUuid(dset_id, "Dataset"):
+        msg = "Invalid dataset id: {}".format(dset_id)
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+
+    username, pswd = getUserPasswordFromRequest(request)
+    validateUserPassword(username, pswd)
+
+    # validate request
+    if not request.has_body:
+        msg = "PUT shape with no body"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+
+    data = await request.json()
+    if "shape" not in data:
+        msg = "PUT shape has no shape key in body"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)   
+    shape_update = data["shape"]
+    if isinstance(shape_update, int):
+        # convert to a list
+        shape_update = [shape_update,]
+    log.info("shape_update: {}".format(shape_update))
+
+    domain = getDomainFromRequest(request)
+    if not isValidDomain(domain):
+        msg = "Invalid host value: {}".format(domain)
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    
+    # get authoritative state for dataset from DN (even if it's in the meta_cache).
+    dset_json = await getObjectJson(app, dset_id, refresh=True)  
+    shape_orig = dset_json["shape"]
+    log.info("shape_orig: {}".format(shape_orig))
+
+    # verify that the extend request is valid
+    if shape_orig["class"] != "H5S_SIMPLE":
+        msg = "Unable to extend shape of datasets who are not H5S_SIMPLE"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    if "maxdims" not in shape_orig:
+        msg = "Dataset is not extensible"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    dims = shape_orig["dims"]
+    maxdims = shape_orig["maxdims"]
+    if len(shape_update) != len(maxdims):
+        msg = "Extent of update shape request does not match dataset sahpe"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    for i in range(len(dims)):
+        if shape_update[i] < dims[i]:
+            msg = "Dataspace can not be made smaller"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        if maxdims[i] != 'H5S_UNLIMITED' and shape_update[i] > maxdims[i]:
+            msg = "Database can not be extended past max extent"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)  
+    
+    # verify the user has permission to update shape
+    await validateAction(app, domain, dset_id, username, "update")
+
+    # send request onto DN
+    req = getDataNodeUrl(app, dset_id) + "/datasets/" + dset_id + "/shape"
+    
+    data = {"shape": shape_update}
+    await http_put(app, req, data=data)
+    
+    # return resp 
+    json_resp = { "hrefs": []}
+    resp = await jsonResponse(request, json_resp, status=201)
+    log.response(request, resp=resp)
+    return resp
+ 
 
 async def POST_Dataset(request):
     """HTTP method to create a new dataset object"""
@@ -210,7 +296,7 @@ async def POST_Dataset(request):
             shape_json["class"] = "H5S_NULL"
         elif isinstance(shape, list):
             shape_json["class"] = "H5S_SIMPLE"
-            dims = [shape]
+            dims = shape
             shape_json["dims"] = dims
         else:
             msg = "Bad Request: shape is invalid"
@@ -218,7 +304,8 @@ async def POST_Dataset(request):
             raise HttpBadRequest(message=msg)
                 
     if dims is not None:
-        for extent in dims:
+        for i  in range(len(dims)):
+            extent = dims[i]
             if not isinstance(extent, int):
                 msg = "Invalid shape type"
                 log.warn(msg)

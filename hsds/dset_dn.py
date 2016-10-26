@@ -21,7 +21,7 @@ from util.idUtil import validateInPartition, getS3Key, isValidUuid, validateUuid
 from util.httpUtil import jsonResponse
 from util.s3Util import  isS3Obj, deleteS3Obj 
 from util.domainUtil import   validateDomain
-from datanode_lib import get_metadata_obj
+from datanode_lib import get_metadata_obj, save_metadata_obj
 import hsds_logger as log
     
 
@@ -197,6 +197,54 @@ async def DELETE_Dataset(request):
     resp_json = {  } 
       
     resp = await jsonResponse(request, resp_json)
+    log.response(request, resp=resp)
+    return resp
+
+async def PUT_DatasetShape(request):
+    """HTTP method to update dataset's shape"""
+    log.request(request)
+    app = request.app
+    dset_id = request.match_info.get('id')
+    
+    if not isValidUuid(dset_id, obj_class="dataset"):
+        log.error( "Unexpected type_id: {}".format(dset_id))
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+
+    validateInPartition(app, dset_id)
+    
+    dset_json = await get_metadata_obj(app, dset_id)
+
+    data = await request.json()
+     
+    shape_update = data["shape"]
+     
+    log.info("shape_update: {}".format(shape_update))
+
+    
+    shape_orig = dset_json["shape"]
+    log.info("shape_orig: {}".format(shape_orig))
+
+    # verify that the extend request is still valid
+    # e.g. another client has already extended the shape since the SN
+    # verified it
+    dims = shape_orig["dims"]
+      
+    for i in range(len(dims)):
+        if shape_update[i] < dims[i]:
+            msg = "Dataspace can not be made smaller"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+
+    # Update the shape!
+    for i in range(len(dims)):    
+        dims[i] = shape_update[i]
+         
+    # write back to S3, save to metadata cache
+    await save_metadata_obj(app, dset_json)
+ 
+    resp_json = { } 
+
+    resp = await jsonResponse(request, resp_json, status=201)
     log.response(request, resp=resp)
     return resp
    

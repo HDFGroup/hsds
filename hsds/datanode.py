@@ -24,7 +24,7 @@ from group_dn import GET_Group, POST_Group, DELETE_Group
 from link_dn import GET_Links, GET_Link, PUT_Link, DELETE_Link
 from attr_dn import GET_Attributes, GET_Attribute, PUT_Attribute, DELETE_Attribute
 from ctype_dn import GET_Datatype, POST_Datatype, DELETE_Datatype
-from dset_dn import GET_Dataset, POST_Dataset, DELETE_Dataset
+from dset_dn import GET_Dataset, POST_Dataset, DELETE_Dataset, PUT_DatasetShape
 from datanode_lib import s3sync 
 
                
@@ -60,10 +60,12 @@ async def init(loop):
     app.router.add_route('GET', '/datasets/{id}', GET_Dataset)
     app.router.add_route('DELETE', '/datasets/{id}', DELETE_Dataset)
     app.router.add_route('POST', '/datasets', POST_Dataset)
+    app.router.add_route('PUT', '/datasets/{id}/shape', PUT_DatasetShape)
     app.router.add_route('GET', '/datasets/{id}/attributes', GET_Attributes)
     app.router.add_route('GET', '/datasets/{id}/attributes/{name}', GET_Attribute)
     app.router.add_route('DELETE', '/datasets/{id}/attributes/{name}', DELETE_Attribute)
     app.router.add_route('PUT', '/datasets/{id}/attributes/{name}', PUT_Attribute)
+    
       
     return app
 
