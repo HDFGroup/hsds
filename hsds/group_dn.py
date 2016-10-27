@@ -47,8 +47,7 @@ async def GET_Group(request):
     resp_json["lastModified"] = group_json["lastModified"]
     resp_json["linkCount"] = len(group_json["links"])
     resp_json["attributeCount"] = len(group_json["attributes"])
-    if "domain" in group_json:
-        resp_json["domain"] = group_json["domain"]
+    resp_json["domain"] = group_json["domain"]
      
     resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
@@ -65,8 +64,6 @@ async def POST_Group(request):
         raise HttpBadRequest(message=msg)
 
     data = await request.json()
-    #body = await request.read()
-    #data = json.loads(body)
     
     root_id = None
     group_id = None
@@ -75,33 +72,35 @@ async def POST_Group(request):
     if "root" not in data:
         msg = "POST_Group with no root"
         log.error(msg)
-        raise HttpBadRequest(message=msg)
+        raise HttpProcessingError(code=500, message="Unexpected Error")
     root_id = data["root"]
     try:
         validateUuid(root_id, "group")
     except ValueError:
         msg = "Invalid root_id: " + root_id
         log.error(msg)
-        raise HttpBadRequest(message=msg)
+        raise HttpProcessingError(code=500, message="Unexpected Error")
     if "id" not in data:
         msg = "POST_Group with no id"
         log.error(msg)
-        raise HttpBadRequest(message=msg)
+        raise HttpProcessingError(code=500, message="Unexpected Error")
     group_id = data["id"]
     try:
         validateUuid(group_id, "group")
     except ValueError:
         msg = "Invalid group_id: " + group_id
         log.error(msg)
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+    if "domain" not in data:
+        log.error("POST_Group with no domain")
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+    domain = data["domain"]
+    try:
+        validateDomain(domain)
+    except ValueError:
+        msg = "Invalid domain: " + domain
+        log.error(msg)
         raise HttpBadRequest(message=msg)
-    if "domain" in data:
-        domain = data["domain"]
-        try:
-            validateDomain(domain)
-        except ValueError:
-            msg = "Invalid domain: " + domain
-            log.error(msg)
-            raise HttpBadRequest(message=msg)
 
     validateInPartition(app, group_id)
     
@@ -121,10 +120,9 @@ async def POST_Group(request):
     # ok - all set, create group obj
     now = int(time.time())
     
-    group_json = {"id": group_id, "root": root_id, "created": now, "lastModified": now, "links": {}, "attributes": {} }
-    if domain is not None:
-        group_json["domain"] = domain
-
+    group_json = {"id": group_id, "root": root_id, "created": now, "lastModified": now, "domain": domain, 
+        "links": {}, "attributes": {} }
+     
     # await putS3JSONObj(app, s3_key, group_json)  # write to S3
     dirty_ids = app['dirty_ids']
     dirty_ids[group_id] = now  # mark to flush to S3

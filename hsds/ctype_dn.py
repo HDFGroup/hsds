@@ -47,8 +47,7 @@ async def GET_Datatype(request):
     resp_json["lastModified"] = ctype_json["lastModified"]
     resp_json["type"] = ctype_json["type"]
     resp_json["attributeCount"] = len(ctype_json["attributes"])
-    if "domain" in ctype_json:
-        resp_json["domain"] = ctype_json["domain"]
+    resp_json["domain"] = ctype_json["domain"]
      
     resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
@@ -100,14 +99,18 @@ async def POST_Datatype(request):
         msg = "Invalid type_id: " + ctype_id
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
-    if "domain" in data:
-        domain = data["domain"]
-        try:
-            validateDomain(domain)
-        except ValueError:
-            msg = "Invalid domain: " + domain
-            log.error(msg)
-            raise HttpProcessingError(code=500, message="Unexpected Error")
+    if "domain" not in data:
+        msg = "POST_Datatype with no domain key"
+        log.error(msg)
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+
+    domain = data["domain"]
+    try:
+        validateDomain(domain)
+    except ValueError:
+        msg = "Invalid domain: " + domain
+        log.error(msg)
+        raise HttpProcessingError(code=500, message="Unexpected Error")
 
     validateInPartition(app, ctype_id)
     

@@ -128,7 +128,6 @@ class AttributeTest(unittest.TestCase):
         for col_name in ("groups", "datatypes", "datasets"):
             # create a new obj
             req = self.endpoint + '/' + col_name
-            print("req:", req)
             data = None
             if col_name != "groups":
                 # this will work for datasets or datatypes

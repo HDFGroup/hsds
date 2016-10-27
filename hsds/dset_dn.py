@@ -50,8 +50,7 @@ async def GET_Dataset(request):
     resp_json["type"] = dset_json["type"]
     resp_json["shape"] = dset_json["shape"]
     resp_json["attributeCount"] = len(dset_json["attributes"])
-    if "domain" in dset_json:
-        resp_json["domain"] = dset_json["domain"]
+    resp_json["domain"] = dset_json["domain"]
     if "creationProperties" in dset_json:
         resp_json["creationProperties"] = dset_json["creationProperties"]
      
@@ -108,14 +107,17 @@ async def POST_Dataset(request):
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
     shape_json = data["shape"]
-    if "domain" in data:
-        domain = data["domain"]
-        try:
-            validateDomain(domain)
-        except ValueError:
-            msg = "Invalid domain: " + domain
-            log.error(msg)
-            raise HttpProcessingError(code=500, message="Unexpected Error")
+    if "domain" not in data:
+        msg = "POST_Dataset with no domain"
+        log.error(msg)
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+    domain = data["domain"]
+    try:
+        validateDomain(domain)
+    except ValueError:
+        msg = "Invalid domain: " + domain
+        log.error(msg)
+        raise HttpProcessingError(code=500, message="Unexpected Error")
     
 
     validateInPartition(app, dset_id)
