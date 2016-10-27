@@ -294,6 +294,9 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue('maxdims' in shape)
         self.assertEqual(shape['maxdims'][0], 20)
 
+        creationProps = rspJson["creationProperties"]
+        self.assertEqual(creationProps["fillValue"], 3.12)
+
         # verify shape using the GET shape request
         req = req + "/shape"
         rsp = requests.get(req, headers=headers)
@@ -314,7 +317,7 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
 
-        # verify updateed-shape using the GET shape request
+        # verify updated-shape using the GET shape request
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
@@ -398,7 +401,7 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
 
-        # verify updateed-shape using the GET shape request
+        # verify updated-shape using the GET shape request
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)

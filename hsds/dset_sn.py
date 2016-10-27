@@ -55,6 +55,7 @@ async def GET_Dataset(request):
     # get authoritative state for group from DN (even if it's in the meta_cache).
     dset_json = await getObjectJson(app, dset_id, refresh=True)  
 
+    log.info("got dset_json: {}".format(dset_json))
     await validateAction(app, domain, dset_id, username, "read")
 
     resp_json = {}
@@ -391,7 +392,7 @@ async def POST_Dataset(request):
 
     dataset_json = {"id": dset_id, "root": root_id, "domain": domain, "type": datatype, "shape": shape_json }
     if creationProps is not None:
-        dataset_json["creationPropertie"] = creationProps
+        dataset_json["creationProperties"] = creationProps
     
     log.info("create dataset: " + json.dumps(dataset_json))
     req = getDataNodeUrl(app, dset_id) + "/datasets"
