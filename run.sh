@@ -31,6 +31,7 @@ if [ $1 == "head" ]; then
   --env HEAD_PORT=${HEAD_PORT} \
   --env HEAD_HOST="hsds_head" \
   --env NODE_TYPE="head_node"  \
+  --env AWS_S3_GATEWAY=${AWS_S3_GATEWAY} \
   --env AWS_REGION=${AWS_REGION} \
   --env AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
   --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
@@ -45,6 +46,7 @@ elif [ $1 == "dn" ]; then
       docker run -d -p ${DN_PORT}:${DN_PORT} --name $NAME \
         --env DN_PORT=${DN_PORT} \
         --env NODE_TYPE="dn"  \
+        --env AWS_S3_GATEWAY=${AWS_S3_GATEWAY} \
         --env AWS_REGION=${AWS_REGION} \
         --env AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
         --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
@@ -61,6 +63,7 @@ elif [ $1 == "sn" ]; then
       docker run -d -p ${SN_PORT}:${SN_PORT} --name $NAME \
         --env SN_PORT=${SN_PORT} \
         --env NODE_TYPE="sn"  \
+        --env AWS_S3_GATEWAY=${AWS_S3_GATEWAY} \
         --env AWS_REGION=${AWS_REGION} \
         --env AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
         --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
