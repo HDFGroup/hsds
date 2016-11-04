@@ -53,6 +53,37 @@ async def getS3JSONObj(app, key):
     log.info("s3 returned: {}".format(json_dict))
     return json_dict
 
+async def getS3Bytes(app, key):
+    """ Get S3 object identified by key and read as bytes
+    """
+    log.info("getS3Bytes({})".format(key))
+    client = app['s3']
+    bucket = app['bucket_name']
+    try:
+        resp = await client.get_object(Bucket=bucket, Key=key)
+        data = await resp['Body'].read()
+        resp['Body'].close()
+    except ClientError as ce:
+        # key does not exist?
+        # check for not found status
+        is_404 = False
+        if "ResponseMetadata" in ce.response:
+            metadata = ce.response["ResponseMetadata"]
+            if "HTTPStatusCode" in metadata:
+                if metadata["HTTPStatusCode"] == 404:
+                    is_404 = True
+        if is_404:
+            msg = "s3_key: {} not found ".format(key,)
+            log.warn(msg)
+            raise HttpProcessingError(code=404, message=msg)
+        else:
+            log.warn("got ClientError on s3 get: {}".format(str(ce)))
+            msg = "Error getting s3 obj: " + str(ce)
+            log.error(msg)
+            raise HttpProcessingError(code=500, message=msg)
+       
+    return data
+
 async def putS3JSONObj(app, key, json_obj):
     """ Store JSON data as S3 object with given key
     """
@@ -68,6 +99,20 @@ async def putS3JSONObj(app, key, json_obj):
         log.error(msg)
         raise HttpProcessingError(code=500, message=msg)
     log.info("putS3JSONObj complete")
+
+async def putS3Bytes(app, key, data):
+    """ Store byte string as S3 object with given key
+    """
+    log.info("putS3Bytes({})".format(key))
+    client = app['s3']
+    bucket = app['bucket_name']
+    try:
+        await client.put_object(Bucket=bucket, Key=key, Body=data)
+    except ClientError as ce:
+        msg = "Error putting s3 obj: " + str(ce)
+        log.error(msg)
+        raise HttpProcessingError(code=500, message=msg)
+    log.info("putS3Bytes complete")
 
 async def deleteS3Obj(app, key):
     """ Delete S3 object identfied by given key

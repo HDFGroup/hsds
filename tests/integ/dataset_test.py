@@ -25,7 +25,7 @@ class DatasetTest(unittest.TestCase):
         # main
      
     def testScalarDataset(self):
-        # Test creation/deletion of datatype obj
+        # Test creation/deletion of scalar dataset obj
 
         print("testScalarDataset", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)

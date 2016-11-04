@@ -45,6 +45,7 @@ class IdUtilTest(unittest.TestCase):
         group_id = "g-314d61b8-9954-11e6-a733-3c15c2da029e"
         dataset_id = "d-4c48f3ae-9954-11e6-a3cd-3c15c2da029e"
         ctype_id = "t-8c785f1c-9953-11e6-9bc2-0242ac110005"
+        chunk_id = "c-8c785f1c-9953-11e6-9bc2-0242ac110005_7_2"
         bad_ids = ("g-1e76d862",
                    "g-1e76d862/7abe-11e6-8852-3c15c2da029e",
                    "1e76d862-7abe-11e6-8852-3c15c2da029e-g")
@@ -55,7 +56,7 @@ class IdUtilTest(unittest.TestCase):
         self.assertTrue(isValidUuid(group_id, obj_class="groups"))
         self.assertTrue(isValidUuid(dataset_id, obj_class="datasets"))
         self.assertTrue(isValidUuid(ctype_id, obj_class="datatypes"))
-        self.assertTrue(not isValidUuid(id, obj_class="Dataset"))
+        self.assertTrue(isValidUuid(chunk_id, obj_class="chunks"))
         validateUuid(group_id)
         for item in bad_ids:
             self.assertEqual(isValidUuid(item), False)

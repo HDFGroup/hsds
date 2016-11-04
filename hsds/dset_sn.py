@@ -52,7 +52,7 @@ async def GET_Dataset(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     
-    # get authoritative state for group from DN (even if it's in the meta_cache).
+    # get authoritative state for dataset from DN (even if it's in the meta_cache).
     dset_json = await getObjectJson(app, dset_id, refresh=True)  
 
     log.info("got dset_json: {}".format(dset_json))

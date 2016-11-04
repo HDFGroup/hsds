@@ -26,6 +26,7 @@ from link_sn import GET_Links, GET_Link, PUT_Link, DELETE_Link
 from attr_sn import GET_Attributes, GET_Attribute, PUT_Attribute, DELETE_Attribute
 from ctype_sn import GET_Datatype, POST_Datatype, DELETE_Datatype
 from dset_sn import GET_Dataset, POST_Dataset, DELETE_Dataset, GET_DatasetShape, PUT_DatasetShape, GET_DatasetType
+from chunk_sn import PUT_Value, GET_Value
  
 
 async def init(loop):
@@ -66,8 +67,8 @@ async def init(loop):
     app.router.add_route('GET', '/datasets/{id}/attributes/{name}', GET_Attribute)
     app.router.add_route('DELETE', '/datasets/{id}/attributes/{name}', DELETE_Attribute)
     app.router.add_route('PUT', '/datasets/{id}/attributes/{name}', PUT_Attribute)
-
-
+    app.router.add_route('PUT', '/datasets/{id}/value', PUT_Value)
+    app.router.add_route('GET', '/datasets/{id}/value', GET_Value)
       
     return app
 
@@ -89,6 +90,7 @@ if __name__ == '__main__':
     app['client'] = client
     app['domain_cache'] = {}
     app['meta_cache'] = {}
+    app['loop'] = loop
     if config.get("allow_noauth"):
         app['allow_noauth'] = True
     else:
@@ -97,6 +99,7 @@ if __name__ == '__main__':
 
     # run background task
     asyncio.ensure_future(healthCheck(app), loop=loop)
+
    
     # run the app
     port = int(config.get("sn_port"))

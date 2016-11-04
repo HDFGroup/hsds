@@ -16,7 +16,7 @@ import asyncio
 import time 
 from aiohttp import HttpProcessingError   
 from util.idUtil import validateInPartition, getS3Key, isValidUuid
-from util.s3Util import getS3JSONObj, putS3JSONObj
+from util.s3Util import getS3JSONObj, putS3JSONObj, putS3Bytes
 import config
 import hsds_logger as log
     
@@ -92,6 +92,8 @@ async def s3sync(app):
     s3_sync_interval = config.get("s3_sync_interval")
     dirty_ids = app["dirty_ids"]
     meta_cache = app['meta_cache'] 
+    data_cache = app['data_cache'] 
+
     while True:
         keys_to_update = []
         now = int(time.time())
@@ -118,16 +120,31 @@ async def s3sync(app):
                 # write back to S3  
                 s3_key = getS3Key(obj_id)  
                 log.info("s3sync for s3_key: {}".format(s3_key))
-                if obj_id not in meta_cache:
-                    log.error("expected to find obj_id: {} in meta cache".format(obj_id))
-                    retry_keys.append(obj_id)
-                    continue
-                obj_json = meta_cache[obj_id]
-                try:
-                    await putS3JSONObj(app, s3_key, obj_json) 
-                except HttpProcessingError as hpe:
-                    log.error("got S3 error writing obj_id: {} to S3: {}".format(obj_id, str(hpe)))
-                    retry_keys.append(obj_id)
+                if obj_id[0] == 'c':
+                    # chunk update
+                    if obj_id not in data_cache:
+                        log.error("expected to find obj_id: {} in data cache".format(obj_id))
+                        retry_keys.append(obj_id)
+                        continue
+                    chunk_arr = data_cache[obj_id]
+                    chunk_bytes = chunk_arr.tobytes()
+                    try:
+                        await putS3Bytes(app, s3_key, chunk_bytes)
+                    except HttpProcessingError as hpe:
+                        log.error("got S3 error writing obj_id: {} to S3: {}".format(obj_id, str(hpe)))
+                        retry_keys.append(obj_id)
+                else:
+                    # meta data update
+                    if obj_id not in meta_cache:
+                        log.error("expected to find obj_id: {} in meta cache".format(obj_id))
+                        retry_keys.append(obj_id)
+                        continue
+                    obj_json = meta_cache[obj_id]
+                    try:
+                        await putS3JSONObj(app, s3_key, obj_json) 
+                    except HttpProcessingError as hpe:
+                        log.error("got S3 error writing obj_id: {} to S3: {}".format(obj_id, str(hpe)))
+                        retry_keys.append(obj_id)
             
             # add any failed writes back to the dirty queue
             if len(retry_keys) > 0:

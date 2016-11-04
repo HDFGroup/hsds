@@ -20,8 +20,8 @@ from aiohttp.errors import HttpBadRequest
 from util.idUtil import validateInPartition, getS3Key, isValidUuid, validateUuid
 from util.httpUtil import jsonResponse
 from util.s3Util import  isS3Obj, deleteS3Obj 
-from util.domainUtil import   validateDomain
-from util.dsetUtil import guess_chunk
+from util.domainUtil import validateDomain
+from util.chunkUtil import guess_chunk
 from util.hdf5dtype import getItemSize
 from datanode_lib import get_metadata_obj, save_metadata_obj
 import hsds_logger as log

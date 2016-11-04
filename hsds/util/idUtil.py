@@ -72,7 +72,7 @@ def getHeadNodeS3Key():
 def validateUuid(id, obj_class=None):
     if not isinstance(id, str):
         raise ValueError("Expected string type")
-    if len(id) != 38:  
+    if len(id) < 38:  
         # id should be prefix (e.g. "g-") and uuid value
         raise ValueError("Unexpected id length")
     if id[0] not in ('g', 'd', 't', 'c'):
@@ -86,6 +86,16 @@ def validateUuid(id, obj_class=None):
             prefix = 't'
         if id[0] != prefix:
             raise ValueError("Unexpected prefix for class: " + obj_class)
+    if id[0] == 'c':
+        # trim the chunk index for chunk ids
+        index = id.find('_')
+        if index == -1:
+            raise ValueError("Invalid chunk id")
+        id = id[:index]
+    if len(id) != 38:
+        # id should be 38 now
+        raise ValueError("Unexpected id length")
+
     for ch in id:
         if ch.isalnum():
             continue
