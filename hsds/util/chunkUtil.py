@@ -226,7 +226,6 @@ def getDataCoverage(chunk_id, slices, layout):
     """
     Get data-relative selection of the given chunk and selection.
     """
-    chunk_index = getChunkIndex(chunk_id)
     chunk_sel = getChunkSelection(chunk_id, slices, layout)
     rank = len(layout)
     sel = []

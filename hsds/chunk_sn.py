@@ -50,7 +50,7 @@ async def write_chunk_hyperslab(app, chunk_id, type_json, dims, chunk_sel, np_ar
     data = np_arr.tobytes()  # TBD - this makes a copy, use np_arr.data to get memoryview and avoid copy
     # pass itemsize, type, dimensions, and selection as query params
     params = {}
-    params["itemsize"] = np_arr.itemsize
+    params["itemsize"] = str(np_arr.itemsize)
     params["type"] = json.dumps(type_json)
     setSliceQueryParam(params, dims, chunk_sel)   
 
@@ -107,7 +107,7 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr):
     
     # pass itemsize, type, dimensions, and selection as query params
     params = {}
-    params["itemsize"] = np_arr.itemsize
+    params["itemsize"] = str(np_arr.itemsize)
     params["type"] = json.dumps(type_json)
     chunk_shape = getSelectionShape(chunk_sel)
     setSliceQueryParam(params, dims, chunk_sel)  
