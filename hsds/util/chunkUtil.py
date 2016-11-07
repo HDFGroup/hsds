@@ -6,7 +6,7 @@ CHUNK_BASE = 16*1024    # Multiplier by which chunks are adjusted
 CHUNK_MIN = 8*1024      # Soft lower limit (8k)
 CHUNK_MAX = 1024*1024   # Hard upper limit (1M)
 
-def guess_chunk(shape, maxshape, typesize):
+def guess_chunk(shape_json, typesize):
     """ Guess an appropriate chunk layout for a dataset, given its shape and
     the size of each element in bytes.  Will allocate chunks only as large
     as MAX_SIZE.  Chunks are generally close to some power-of-2 fraction of
@@ -14,7 +14,24 @@ def guess_chunk(shape, maxshape, typesize):
 
     Undocumented and subject to change without warning.
     """
-    # pylint: disable=unused-argument
+    if shape_json is None or shape_json["class"] == 'H5S_NULL':
+        return None
+    if shape_json["class"] == 'H5S_SCALAR':
+        return (1,)  # just enough to store one item
+    if "maxdims" in shape_json:
+        shape = [] 
+        maxdims = shape_json["maxdims"]
+        # convert H5S_UNLIIMITED to 0
+        for i in range(len(maxdims)):
+            if maxdims[i] == 'H5S_UNLIMITED':
+                shape.append(0)  
+            else:
+                shape.append(maxdims[i])
+    else:
+        shape = shape_json["dims"]
+
+    if typesize == 'H5T_VARIABLE':
+        typesize = 128  # just take a guess at the item size 
 
     # For unlimited dimensions we have to guess 1024
     shape = tuple((x if x!=0 else 1024) for i, x in enumerate(shape))
@@ -210,9 +227,7 @@ def getDataCoverage(chunk_id, slices, layout):
     Get data-relative selection of the given chunk and selection.
     """
     chunk_index = getChunkIndex(chunk_id)
-    print("chunk_index:", chunk_index)
     chunk_sel = getChunkSelection(chunk_id, slices, layout)
-    print("chunk_sel:", chunk_sel)
     rank = len(layout)
     sel = []
     for dim in range(rank):

@@ -26,21 +26,30 @@ class ChunkUtilTest(unittest.TestCase):
     
 
     def testGuessChunk(self):       
-        shape = [100, 100]
+        shape = {"class": 'H5S_SIMPLE', "dims": [100, 100]}
         typesize = 8
-        layout = guess_chunk(shape, None, typesize)
+        layout = guess_chunk(shape, typesize)
         self.assertEqual(layout, (25, 50))
 
-        shape = [5]
-        layout = guess_chunk(shape, None, typesize)
+        shape = {"class": 'H5S_SIMPLE', "dims": [5]}
+        layout = guess_chunk(shape, typesize)
         self.assertEqual(layout, (5,))
 
-        shape = [100, 100, 100]
-        layout = guess_chunk(shape, None, typesize)
+        shape = {"class": 'H5S_SIMPLE', "dims": [100, 100, 100]}
+        layout = guess_chunk(shape, typesize)
         self.assertEqual(layout, (13,13,25))
 
-        shape = [100, 0]
-        layout = guess_chunk(shape, None, typesize)
+        shape = {"class": 'H5S_SIMPLE', "dims": [100, 0], "maxdims": [100, 'H5S_UNLIMITED']}
+        layout = guess_chunk(shape, typesize)
+        self.assertEqual(layout, (13,128))
+
+        shape = {"class": 'H5S_SCALAR'}
+        layout = guess_chunk(shape, typesize)
+        self.assertEqual(layout, (1,))
+
+        shape = {"class": 'H5S_NULL'}
+        layout = guess_chunk(shape, typesize)
+        self.assertEqual(layout, None)
 
     def testGetNumChunks(self):
         datashape = [100,]
@@ -191,7 +200,6 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[1].step, 1)
 
         chunk_id = chunk_ids[1]
-        print(chunk_id)
         sel = getChunkSelection(chunk_id, selection, layout)
         self.assertEqual(sel[0].start, 42)
         self.assertEqual(sel[0].stop, 50)
@@ -201,7 +209,6 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[1].step, 1) 
 
         chunk_id = chunk_ids[2]
-        print(chunk_id)
         sel = getChunkSelection(chunk_id, selection, layout)
         self.assertEqual(sel[0].start, 50)
         self.assertEqual(sel[0].stop, 52)
@@ -211,7 +218,6 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[1].step, 1)
 
         chunk_id = chunk_ids[3]
-        print(chunk_id)
         sel = getChunkSelection(chunk_id, selection, layout)
         self.assertEqual(sel[0].start, 50)
         self.assertEqual(sel[0].stop, 52)
@@ -228,7 +234,6 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(len(chunk_ids), 2)
 
         chunk_id = chunk_ids[0]
-        print(chunk_id)
         sel = getChunkSelection(chunk_id, selection, layout)
         sel = sel[0]
         self.assertEqual(sel.start, 92)
@@ -236,7 +241,6 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel.step, 1)
 
         chunk_id = chunk_ids[1]
-        print(chunk_id)
         sel = getChunkSelection(chunk_id, selection, layout)
         sel = sel[0]
         self.assertEqual(sel.start, 100)
@@ -290,7 +294,6 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[1].step, 1)
 
         chunk_id = chunk_ids[1]
-        print(chunk_id)
         sel = getChunkCoverage(chunk_id, selection, layout)
         self.assertEqual(sel[0].start, 2)
         self.assertEqual(sel[0].stop, 10)
@@ -300,7 +303,6 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[1].step, 1) 
 
         chunk_id = chunk_ids[2]
-        print(chunk_id)
         sel = getChunkCoverage(chunk_id, selection, layout)
         self.assertEqual(sel[0].start, 0)
         self.assertEqual(sel[0].stop, 2)
@@ -310,7 +312,6 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[1].step, 1)
 
         chunk_id = chunk_ids[3]
-        print(chunk_id)
         sel = getChunkCoverage(chunk_id, selection, layout)
         self.assertEqual(sel[0].start, 0)
         self.assertEqual(sel[0].stop, 2)
@@ -327,7 +328,6 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(len(chunk_ids), 2)
 
         chunk_id = chunk_ids[0]
-        print(chunk_id)
         sel = getChunkCoverage(chunk_id, selection, layout)
         sel = sel[0]
         self.assertEqual(sel.start, 2)
@@ -335,7 +335,6 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel.step, 1)
 
         chunk_id = chunk_ids[1]
-        print(chunk_id)
         sel = getChunkCoverage(chunk_id, selection, layout)
         sel = sel[0]
         self.assertEqual(sel.start, 0)
@@ -389,7 +388,6 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[1].step, 1)
 
         chunk_id = chunk_ids[1]
-        print(chunk_id)
         sel = getDataCoverage(chunk_id, selection, layout)
         self.assertEqual(sel[0].start, 0)
         self.assertEqual(sel[0].stop, 8)
@@ -399,7 +397,6 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[1].step, 1) 
 
         chunk_id = chunk_ids[2]
-        print(chunk_id)
         sel = getDataCoverage(chunk_id, selection, layout)
         self.assertEqual(sel[0].start, 8)
         self.assertEqual(sel[0].stop, 10)
@@ -409,7 +406,6 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[1].step, 1)
 
         chunk_id = chunk_ids[3]
-        print(chunk_id)
         sel = getDataCoverage(chunk_id, selection, layout)
         self.assertEqual(sel[0].start, 8)
         self.assertEqual(sel[0].stop, 10)
@@ -426,7 +422,6 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(len(chunk_ids), 2)
 
         chunk_id = chunk_ids[0]
-        print(chunk_id)
         sel = getDataCoverage(chunk_id, selection, layout)
         sel = sel[0]
         self.assertEqual(sel.start, 0)
@@ -434,7 +429,6 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel.step, 1)
 
         chunk_id = chunk_ids[1]
-        print(chunk_id)
         sel = getDataCoverage(chunk_id, selection, layout)
         sel = sel[0]
         self.assertEqual(sel.start, 8)
@@ -453,61 +447,9 @@ class ChunkUtilTest(unittest.TestCase):
                 dim += 1
             else:
                 break
-        print("dims:", dims)
+         
 
-             
-    """
-    def testGetInputDataSelection(self):
-        # test for logic to determine what part of an input selection to
-        # forward to indvidual chunks
-
-        # 1-d test
-        dset_id = "d-12345678-1234-1234-1234-1234567890ab"
-        datashape = [100,]
-        layout = (10,)
-        import numpy as np
-        arr = np.zeros(shape=(20,))
-        arr[...] = range(20)
-        print(arr)
-        selection = getHyperslabSelection(datashape, 42, 62)
-        print("hyperslabselection:", selection)
-        chunk_ids = getChunkIds(dset_id, selection, layout)
-        self.assertEqual(len(chunk_ids), 3)
-
-        
-        for chunk_id in chunk_ids:
-            print("=========")
-            chunk_sel = getChunkSelection(chunk_id, selection, layout)
-            cc = getChunkCoverage(chunk_id, selection, layout)
-            #coord = getChunkCoordinate(chunk_id, layout)
-            #print("coord:", coord)
-            
-            data_sel = []  # selection to extract from input dataset to write to chunk
-            update_sel = [] # selection to write to the chunk
-            for dim in range(len(datashape)):
-                selection_n = selection[dim]
-                chunk_sel_n = chunk_sel[dim]
-                print("selection_n:", selection_n)
-                print("chunk_sel_n:", chunk_sel_n)
-                start = chunk_sel_n.start % layout[dim]
-                stop = start + (chunk_sel_n.stop - chunk_sel_n.start)
-                step = 1
-                update_sel_n = slice(start, stop, step)
-                update_sel.append(update_sel_n)
-                start = chunk_sel_n.start - selection_n.start
-                stop = chunk_sel_n.stop - selection_n.start
-                step = 1
-                data_sel_n = slice(start, stop, step)
-                print("arr selection:", arr[data_sel_n])
-                data_sel.append(data_sel_n)
-                
-            print("chunk_data:", arr[data_sel])
-            print("chunk_update_sel:", update_sel)
-            print("chunk_cov:", cc)
-
-    """
-
-
+  
                                   
              
 if __name__ == '__main__':

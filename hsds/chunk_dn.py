@@ -229,6 +229,8 @@ async def GET_Chunk(request):
     rank = len(dims)  
 
     # get chunk selection from query params
+    if "select" in request.GET:
+        log.info("select: {}".format(request.GET["select"]))
     selection = []
     for i in range(rank):
         dim_slice = getSliceQueryParam(request, i, dims[i])

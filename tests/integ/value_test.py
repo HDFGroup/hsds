@@ -27,7 +27,6 @@ class ValueTest(unittest.TestCase):
     def testPut1DDataset(self):
         # Test PUT value for 1d dataset
 
-        print("test1DDataset", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
         req = self.endpoint + '/'
 
@@ -42,7 +41,6 @@ class ValueTest(unittest.TestCase):
         data = { "type": "H5T_STD_I32LE", "shape": 10 }
         
         req = self.endpoint + '/datasets' 
-        print("reg:", req)
         rsp = requests.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
@@ -56,8 +54,16 @@ class ValueTest(unittest.TestCase):
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         
-        # write to dset
+        # read values from dset (should be zeros)
         req = self.endpoint + "/datasets/" + dset_id + "/value" 
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], [0,] * data["shape"])
+
+        # write to the dset
         data = list(range(10))  # write 0-9
         payload = { 'value': data }
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
@@ -69,13 +75,21 @@ class ValueTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
-        print("values: ", rspJson["value"])
         self.assertEqual(rspJson["value"], data)
+
+        # read a selection
+        params = {"select": "[2:8]"} # read 6 elements, starting at index 2
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], list(range(2,8)))
+
 
     def testPutSelection1DDataset(self):
         # Test PUT value with selection for 1d dataset
 
-        print("test1DDataset", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
         req = self.endpoint + '/'
 
@@ -90,7 +104,6 @@ class ValueTest(unittest.TestCase):
         data = { "type": "H5T_STD_I32LE", "shape": 10 }
         
         req = self.endpoint + '/datasets' 
-        print("reg:", req)
         rsp = requests.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
@@ -126,10 +139,7 @@ class ValueTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
-        print("values: ", rspJson["value"])
         self.assertEqual(rspJson["value"], data)
-
-    
              
 if __name__ == '__main__':
     #setup test files

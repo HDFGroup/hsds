@@ -21,8 +21,6 @@ from util.idUtil import validateInPartition, getS3Key, isValidUuid, validateUuid
 from util.httpUtil import jsonResponse
 from util.s3Util import  isS3Obj, deleteS3Obj 
 from util.domainUtil import validateDomain
-from util.chunkUtil import guess_chunk
-from util.hdf5dtype import getItemSize
 from datanode_lib import get_metadata_obj, save_metadata_obj
 import hsds_logger as log
     
@@ -53,6 +51,8 @@ async def GET_Dataset(request):
     resp_json["domain"] = dset_json["domain"]
     if "creationProperties" in dset_json:
         resp_json["creationProperties"] = dset_json["creationProperties"]
+    if "layout" in dset_json:
+        resp_json["layout"] = dset_json["layout"]
      
     resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
@@ -118,8 +118,10 @@ async def POST_Dataset(request):
         msg = "Invalid domain: " + domain
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
+    layout = None
+    if "layout" in data:
+        layout = data["layout"]  # client specified chunk layout
     
-
     validateInPartition(app, dset_id)
     
     meta_cache = app['meta_cache'] 
@@ -145,18 +147,8 @@ async def POST_Dataset(request):
         dset_json["domain"] = domain
     if "creationProperties" in data:
         dset_json["creationProperties"] = data["creationProperties"]
-
-    if shape_json["class"] == 'H5S_SIMPLE':
-        # create a chunk layout
-        typeSize = getItemSize(type_json)
-        if typeSize == 'H5T_VARIABLE':
-            # guess a typesize of 128
-            typeSize = 128
-        dims = shape_json["dims"]
-        maxdims = None
-        if "maxdims" in shape_json:
-            maxdims = shape_json["maxdims"]
-        dset_json["layout"] = guess_chunk(dims, maxdims, typeSize)
+    if layout is not None:
+        dset_json["layout"] = layout
 
     # await putS3JSONObj(app, s3_key, group_json)  # write to S3
     dirty_ids = app['dirty_ids']
@@ -173,8 +165,6 @@ async def POST_Dataset(request):
     resp_json["shape"] = shape_json
     resp_json["lastModified"] = dset_json["lastModified"]
     resp_json["attributeCount"] = 0
-
-    
 
     resp = await jsonResponse(request, resp_json, status=201)
     log.response(request, resp=resp)

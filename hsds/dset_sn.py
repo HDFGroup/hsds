@@ -19,11 +19,109 @@ from aiohttp.errors import HttpBadRequest
  
 from util.httpUtil import http_post, http_put, http_delete, jsonResponse
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
+from util.dsetUtil import  getNumElements
+from util.chunkUtil import guess_chunk
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
-from util.hdf5dtype import validateTypeItem, getBaseTypeJson
+from util.hdf5dtype import validateTypeItem, getBaseTypeJson, getItemSize
 from servicenode_lib import getDomainJson, getObjectJson, validateAction
+import config
 import hsds_logger as log
+
+"""
+Use chunk layout given in the creationPropertiesList (if defined and layout is valid).
+Return chunk_layout_json
+"""
+def validateChunkLayout(shape_json, item_size, body):
+    layout = None
+    if "creationProperties" in body:
+        creationProps = body["creationProperties"]
+        if "layout" in creationProps:
+            layout = creationProps["layout"]
+    
+    #
+    # if layout is not provided, return None
+    #
+    if not layout:
+        return None
+
+    if item_size == 'H5T_VARIABLE':
+        item_size = 128  # just take a guess at the item size (used for chunk validation)
+    #
+    # validate provided layout
+    #
+    if "class" not in layout:
+        msg = "class key not found in layout for creation property list"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    if layout["class"] not in ('H5D_CHUNKED', 'H5D_CONTIGUOUS', 'H5D_COMPACT'):
+        msg = "Unknown dataset layout class: {}".format(layout["class"])
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    if layout["class"] != 'H5D_CHUNKED':
+        return None # nothing else to validate
+
+    if "dims" not in layout:
+        msg = "dims key not found in layout for creation property list"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    if shape_json["class"] != 'H5S_SIMPLE':
+        msg = "Bad Request: chunked layout not valid with shape class: {}".format(shape_json["class"])
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    space_dims = shape_json["dims"]
+    chunk_dims = layout["dims"]
+    max_dims = None
+    if "maxdims" in shape_json:
+        max_dims = shape_json["maxdims"]
+    if isinstance(chunk_dims, int):
+        chunk_dims = [chunk_dims,] # promote to array
+    if len(chunk_dims) != len(space_dims):
+        msg = "Layout rank does not match shape rank"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    for i in range(len(chunk_dims)):
+        dim_extent = space_dims[i]
+        chunk_extent = chunk_dims[i]
+        if not isinstance(chunk_extent, int):
+            msg = "Layout dims must be integer or integer array"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        if chunk_extent <= 0:
+            msg = "Invalid layout value"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        if max_dims is None:
+            if chunk_extent > dim_extent:
+                msg = "Invalid layout value"
+                log.warn(msg)
+                raise HttpBadRequest(message=msg)
+        elif max_dims[i] != 'H5S_UNLIMITED':
+            if chunk_extent > max_dims[i]:
+                msg = "Invalid layout value for extensible dimension"
+                log.warn(msg)
+                raise HttpBadRequest(message=msg)
+        else:
+            pass # allow any positive value for unlimited dimensions
+     
+    #
+    # Verify the requested chunk size is within valid range.
+    # If not, ignore client input
+    #
+    if chunk_dims is not None:      
+        chunk_size = getNumElements(chunk_dims) * item_size
+        min_chunk_size = config.get("min_chunk_size")
+        max_chunk_size = config.get("max_chunk_size")
+        if chunk_size < min_chunk_size:
+            log.warn("requested chunk size of {} less than {}, ignoring".format(chunk_size, min_chunk_size))
+            chunk_dims = None
+        elif chunk_size > max_chunk_size:
+            log.warn("requested chunk size of {} less than {}, ignoring".format(chunk_size, max_chunk_size))
+            chunk_dims = None
+        else:
+            log.info("Using client requested chunk layout: {}".format(chunk_dims))  
+    return chunk_dims
+
 
 async def GET_Dataset(request):
     """HTTP method to return JSON for dataset's type"""
@@ -64,6 +162,8 @@ async def GET_Dataset(request):
     resp_json["type"] = dset_json["type"]
     if "creationProperties" in dset_json:
         resp_json["creationProperties"] = dset_json["creationProperties"]
+    if "layout" in dset_json:
+        resp_json["layout"] = dset_json["layout"]
     resp_json["attributeCount"] = dset_json["attributeCount"]
     resp_json["created"] = dset_json["created"]
     resp_json["lastModified"] = dset_json["lastModified"]
@@ -257,6 +357,10 @@ async def POST_Dataset(request):
         raise HttpBadRequest(message=msg)
 
     body = await request.json()
+
+    #
+    # validate type input
+    #
     if "type" not in body:
         msg = "POST Dataset has no type key in body"
         log.warn(msg)
@@ -276,7 +380,12 @@ async def POST_Dataset(request):
             raise HttpBadRequest(message=msg) 
 
     validateTypeItem(datatype)
+    item_size = getItemSize(datatype)
+    
 
+    #
+    # Validate shape input
+    #
     dims = None
     shape_json = {}
 
@@ -363,14 +472,16 @@ async def POST_Dataset(request):
                 log.warn(msg)
                 raise HttpBadRequest(message=msg)
             else:
-                shape_json["maxdims"].append(maxextent)         
+                shape_json["maxdims"].append(maxextent) 
 
-    creationProps = None
-    if "creationProperties" in body:
-        # TBD: Need code to validate creationProperty input
-        creationProps = body["creationProperties"]
+    layout = validateChunkLayout(shape_json, item_size, body) 
+    if layout is None:
+        layout = guess_chunk(shape_json, item_size) 
+        log.info("autochunk layout: {}".format(layout))
+    else:
+        log.info("client layout: {}".format(layout))
 
-
+    
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
@@ -391,8 +502,12 @@ async def POST_Dataset(request):
     log.info("new  dataset id: {}".format(dset_id))
 
     dataset_json = {"id": dset_id, "root": root_id, "domain": domain, "type": datatype, "shape": shape_json }
-    if creationProps is not None:
-        dataset_json["creationProperties"] = creationProps
+
+    if "creationProperties" in body:
+        # TBD - validate creationProperties
+        dataset_json["creationProperties"] = body["creationProperties"]
+    if layout is not None:
+        dataset_json["layout"] = layout
     
     log.info("create dataset: " + json.dumps(dataset_json))
     req = getDataNodeUrl(app, dset_id) + "/datasets"

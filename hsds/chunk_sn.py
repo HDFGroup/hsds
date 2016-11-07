@@ -17,8 +17,8 @@ import asyncio
 import json
 import base64 
 import numpy as np
-from aiohttp.errors import HttpBadRequest, HttpProcessingError
-from util.httpUtil import  jsonResponse, http_put_binary, http_get 
+from aiohttp.errors import HttpBadRequest, HttpProcessingError, ClientError
+from util.httpUtil import  jsonResponse  
 from util.idUtil import   isValidUuid, getDataNodeUrl
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.hdf5dtype import getItemSize, createDataType
@@ -46,6 +46,7 @@ async def write_chunk_hyperslab(app, chunk_id, type_json, dims, chunk_sel, np_ar
     req = getDataNodeUrl(app, chunk_id)
     req += "/chunks/" + chunk_id 
     log.info("PUT chunk req: " + req)
+    client = app['client']
     data = np_arr.tobytes()  # TBD - this makes a copy, use np_arr.data to get memoryview and avoid copy
     # pass itemsize, type, dimensions, and selection as query params
     params = {}
@@ -53,37 +54,88 @@ async def write_chunk_hyperslab(app, chunk_id, type_json, dims, chunk_sel, np_ar
     params["type"] = json.dumps(type_json)
     setSliceQueryParam(params, dims, chunk_sel)   
 
-    json_resp = await http_put_binary(app, req, data, params=params)
+    try:
+        async with client.put(req, data=data, params=params) as rsp:
+            log.info("req: {} status: {}".format(req, rsp.status))
+            if rsp.status != 201:
+                msg = "request error for {}: {}".format(req, str(rsp))
+                log.warn(msg)
+                raise HttpProcessingError(message=msg, code=rsp.status)
+            else:
+                log.info("http_put({}) <201> Updated".format(req))
+    except ClientError as ce:
+        log.error("Error for http_post({}): {} ".format(req, str(ce)))
+        raise HttpProcessingError(message="Unexpected error", code=500)
 
-    return json_resp
 
 """
 Read data from given chunk_id.  Pass in type, dims, and selection area.
-"""
-async def read_chunk_hyperslab(app, chunk_id, type_json, chunk_sel, data_sel, np_arr):
+""" 
+async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr):
     """ read the chunk selection from the DN
     chunk_id: id of chunk to write to
     chunk_sel: chunk-relative selection to read from
     np_arr: numpy array to store read bytes
     """
-    log.info("read_chunk_hyperslab, chunk_id:{}, chunk_sel:{}".format(chunk_id, chunk_sel))
+    msg = "read_chunk_hyperslab, chunk_id:{}, slices: {}".format(chunk_id, slices)
+    log.info(msg)
 
     req = getDataNodeUrl(app, chunk_id)
     req += "/chunks/" + chunk_id 
     log.info("GET chunk req: " + req)
+    client = app['client']
+
+    if "layout" not in dset_json:
+        log.error("No layout found in dset_json: {}".format(dset_json))
+        raise HttpProcessingError(message="Unexpected error", code=500)
+    layout = dset_json["layout"]
+    if "type" not in dset_json:
+        log.error("No type found in dset_json: {}".format(dset_json))
+        raise HttpProcessingError(message="Unexpected error", code=500)
+    type_json = dset_json["type"]
+    if "shape" not in dset_json:
+        log.error("No type found in dset_json: {}".format(dset_json))
+        raise HttpProcessingError(message="Unexpected error", code=500)
+    shape_json = dset_json["shape"]
+    if "dims" not in shape_json:
+        log.error("No dims found in dset_json: {}".format(dset_json))
+        raise HttpProcessingError(message="Unexpected error", code=500)
+    dims = shape_json["dims"]
+
+    chunk_sel = getChunkCoverage(chunk_id, slices, layout)
+    data_sel = getDataCoverage(chunk_id, slices, layout)
+    
     # pass itemsize, type, dimensions, and selection as query params
     params = {}
     params["itemsize"] = np_arr.itemsize
     params["type"] = json.dumps(type_json)
-    dims = np_arr.shape
+    chunk_shape = getSelectionShape(chunk_sel)
     setSliceQueryParam(params, dims, chunk_sel)  
     dt = np_arr.dtype
-
-    data = await http_get(app, req, params=params)
-    chunk_arr = np.fromstring(data, dtype=dt)
-    chunk_shape = getSelectionShape(chunk_sel)
-    chunk_arr.reshape(chunk_shape)
-    log.info("got from DN: {}".format(chunk_arr))
+ 
+    chunk_arr = None
+    try:
+        async with client.get(req, params=params) as rsp:
+            log.info("http_get status: {}".format(rsp.status))
+            if rsp.status == 200:
+                data = await rsp.read()  # read response as bytes
+                chunk_arr = np.fromstring(data, dtype=dt) 
+                chunk_arr.reshape(chunk_shape)
+                log.info("got from DN: {}".format(chunk_arr))
+            elif rsp.status == 404:
+                # no data, return zero array
+                # TBD - use fill value
+                chunk_arr = np.zeros(chunk_shape, dtype=dt)
+            else:
+                msg = "request to {} failed with code: {}".format(req, rsp.status)
+                log.warn(msg)
+                raise HttpProcessingError(message=msg, code=rsp.status)
+            #log.info("http_get({}) response: {}".format(url, rsp))  
+            
+    except ClientError as ce:
+        log.error("Error for http_get({}): {} ".format(req, str(ce)))
+        raise HttpProcessingError(message="Unexpected error", code=500)
+    
     np_arr[data_sel] = chunk_arr
     log.info("updated parent aray: {}".format(np_arr))
 
@@ -141,7 +193,7 @@ async def PUT_Value(request):
     if "layout" in dset_json:
         layout = dset_json["layout"]
     else:
-        log.warn("no layout for dataset")
+        log.warn("no layout for dataset: {}".format(dset_json))
         layout = dims
 
     type_json = dset_json["type"]
@@ -365,9 +417,9 @@ async def GET_Value(request):
     arr = np.zeros(np_shape, dtype=dset_dtype)
     tasks = []
     for chunk_id in chunk_ids:
-        chunk_sel = getChunkCoverage(chunk_id, slices, layout)
-        data_sel = getDataCoverage(chunk_id, slices, layout)
-        task = asyncio.ensure_future(read_chunk_hyperslab(app, chunk_id, type_json, chunk_sel, data_sel, arr))
+        #chunk_sel = getChunkCoverage(chunk_id, slices, layout)
+        #data_sel = getDataCoverage(chunk_id, slices, layout)
+        task = asyncio.ensure_future(read_chunk_hyperslab(app, chunk_id, dset_json, slices, arr))
         tasks.append(task)
     await asyncio.gather(*tasks, loop=loop)
 

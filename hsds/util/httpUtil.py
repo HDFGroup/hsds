@@ -134,9 +134,8 @@ async def http_put_binary(app, url, data, params=None):
         async with client.put(url, data=data, params=params) as rsp:
             log.info("http_put status: {}".format(rsp.status))
             if rsp.status != 201:
-                print("bad response:", str(rsp))
-                msg = "request error"  # tbd - pull error from rsp
-                log.warn(msg)
+                msg = "request error for {}: {}".format(url, str(rsp))
+                log.error(msg)
                 raise HttpProcessingError(message=msg, code=rsp.status)
 
             rsp_json = await rsp.json()
@@ -158,7 +157,6 @@ async def http_delete(app, url, params=None):
         async with client.delete(url, params=params) as rsp:
             log.info("http_delete status: {}".format(rsp.status))
             if rsp.status != 200:
-                print("bad response:", str(rsp))
                 msg = "request error"  # tbd - pull error from rsp
                 log.warn(msg)
                 raise HttpProcessingError(message=msg, code=rsp.status)
