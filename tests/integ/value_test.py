@@ -140,6 +140,57 @@ class ValueTest(unittest.TestCase):
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
         self.assertEqual(rspJson["value"], data)
+
+    def testPutSelection2DDataset(self):
+        # Test PUT value with selection for 1d dataset
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + '/'
+
+        # Get root uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create dataset
+        # pass in layout specification so that we can test selection across chunk boundries
+        data = { "type": "H5T_STD_I32LE", "shape": [45,54] }
+        data['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [10, 10] }}
+        
+        req = self.endpoint + '/datasets' 
+        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        dset_id = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_id))
+
+        # link new dataset as 'dset2d'
+        name = "dset2d"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {"id": dset_id}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        
+        # write a horizontal strip of 22s
+        req = self.endpoint + "/datasets/" + dset_id + "/value" 
+        data = [22,] * 50
+        payload = { 'start': [22, 2], 'stop': [23, 52], 'value': data }
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # read back a vertical strip that crossed the horizontal strip
+        params = {"select": "[20:25,21:22]"} # read 6 elements, starting at index 20
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+        self.assertEqual(len(value), 5)
+        self.assertEqual(value, [[0,],[0,],[22,],[0,],[0,]])
+
              
 if __name__ == '__main__':
     #setup test files

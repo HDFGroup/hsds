@@ -88,6 +88,10 @@ class DsetUtilTest(unittest.TestCase):
         nelements = getNumElements(shape)
         self.assertEqual(nelements, 4)
 
+        shape = [10,]
+        nelements = getNumElements(shape)
+        self.assertEqual(nelements, 10)
+
         shape = (10,8)
         nelements = getNumElements(shape)
         self.assertEqual(nelements, 80)

@@ -35,22 +35,44 @@ import hsds_logger as log
 """
 Write data to given chunk_id.  Pass in type, dims, and selection area.
 """
-async def write_chunk_hyperslab(app, chunk_id, type_json, dims, chunk_sel, np_arr):
+async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr):
     """ write the chunk selection to the DN
     chunk_id: id of chunk to write to
     chunk_sel: chunk-relative selection to write to
     np_arr: numpy array of data to be written
     """
-    log.info("write_chunk_hyperslab, chunk_id:{}, chunk_sel:{}".format(chunk_id, chunk_sel))
+    log.info("write_chunk_hyperslab, chunk_id:{}, slices:{}".format(chunk_id, slices))
+    if "layout" not in dset_json:
+        log.error("No layout found in dset_json: {}".format(dset_json))
+        raise HttpProcessingError(message="Unexpected error", code=500)
+    layout = dset_json["layout"]
+    if "type" not in dset_json:
+        log.error("No type found in dset_json: {}".format(dset_json))
+        raise HttpProcessingError(message="Unexpected error", code=500)
+    type_json = dset_json["type"]
+    if "shape" not in dset_json:
+        log.error("No type found in dset_json: {}".format(dset_json))
+        raise HttpProcessingError(message="Unexpected error", code=500)
+    shape_json = dset_json["shape"]
+    if "dims" not in shape_json:
+        log.error("No dims found in dset_json: {}".format(dset_json))
+        raise HttpProcessingError(message="Unexpected error", code=500)
+    dims = shape_json["dims"]
 
+    chunk_sel = getChunkCoverage(chunk_id, slices, layout)
+    log.info("chunk_sel: {}".format(chunk_sel))
+    data_sel = getDataCoverage(chunk_id, slices, layout)
+    log.info("data_sel: {}".format(data_sel))
+    log.info("arr.shape: {}".format(arr.shape))
+    arr_chunk = arr[data_sel]
     req = getDataNodeUrl(app, chunk_id)
     req += "/chunks/" + chunk_id 
     log.info("PUT chunk req: " + req)
     client = app['client']
-    data = np_arr.tobytes()  # TBD - this makes a copy, use np_arr.data to get memoryview and avoid copy
+    data = arr_chunk.tobytes()  # TBD - this makes a copy, use np_arr.data to get memoryview and avoid copy
     # pass itemsize, type, dimensions, and selection as query params
     params = {}
-    params["itemsize"] = str(np_arr.itemsize)
+    params["itemsize"] = str(arr.itemsize)
     params["type"] = json.dumps(type_json)
     setSliceQueryParam(params, dims, chunk_sel)   
 
@@ -110,18 +132,22 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr):
     params["itemsize"] = str(np_arr.itemsize)
     params["type"] = json.dumps(type_json)
     chunk_shape = getSelectionShape(chunk_sel)
+    log.info("chunk_shape: {}".format(chunk_shape))
     setSliceQueryParam(params, dims, chunk_sel)  
     dt = np_arr.dtype
  
     chunk_arr = None
     try:
         async with client.get(req, params=params) as rsp:
-            log.info("http_get status: {}".format(rsp.status))
+            log.info("http_get {} status: <{}>".format(req, rsp.status))
             if rsp.status == 200:
                 data = await rsp.read()  # read response as bytes
                 chunk_arr = np.fromstring(data, dtype=dt) 
-                chunk_arr.reshape(chunk_shape)
-                log.info("got from DN: {}".format(chunk_arr))
+                npoints_read = getNumElements(chunk_arr.shape)
+                npoints_expected = getNumElements(chunk_shape)
+                if npoints_read != npoints_expected:
+                    msg = "Expected {} points, but got: {}".format(npoints_expected, npoints_read)
+                chunk_arr = chunk_arr.reshape(chunk_shape)
             elif rsp.status == 404:
                 # no data, return zero array
                 # TBD - use fill value
@@ -130,14 +156,16 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr):
                 msg = "request to {} failed with code: {}".format(req, rsp.status)
                 log.warn(msg)
                 raise HttpProcessingError(message=msg, code=rsp.status)
-            #log.info("http_get({}) response: {}".format(url, rsp))  
             
     except ClientError as ce:
         log.error("Error for http_get({}): {} ".format(req, str(ce)))
         raise HttpProcessingError(message="Unexpected error", code=500)
     
+    log.info("chunk_arr shape: {}".format(chunk_arr.shape))
+    log.info("data_sel: {}".format(data_sel))
+
     np_arr[data_sel] = chunk_arr
-    log.info("updated parent aray: {}".format(np_arr))
+    
 
 
 """
@@ -203,8 +231,7 @@ async def PUT_Value(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     dset_dtype = createDataType(type_json)  # np datatype
-
-    log.info("got dset_json: {}".format(dset_json))
+    
     await validateAction(app, domain, dset_id, username, "update")
 
     if not request.has_body:
@@ -248,6 +275,10 @@ async def PUT_Value(request):
 
     npoints = getNumElements(np_shape)
     log.info("selection num points: " + str(npoints))
+    if npoints <= 0:
+        msg = "Selection is empty"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
 
     arr = None  # np array to hold request data
     if binary_data:
@@ -263,11 +294,18 @@ async def PUT_Value(request):
         if npoints == 1 and len(dset_dtype) > 1:
             # convert to tuple for compound singleton writes
             json_data = [tuple(json_data),]
-
         arr = np.array(json_data, dtype=dset_dtype)
         # raise an exception of the array shape doesn't match the selection shape
         # allow if the array is a scalar and the selection shape is one element,
         # numpy is ok with this
+        if arr.size != npoints:
+            msg = "Input data doesn't match selection number of elements"
+            msg += " Expected {}, but received: {}".format(npoints, arr.size)
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        if arr.shape != np_shape:
+            arr = arr.reshape(np_shape)  # reshape to match selection
+
         np_index = 0
         for dim in range(len(arr.shape)):
             data_extent = arr.shape[dim]
@@ -304,11 +342,7 @@ async def PUT_Value(request):
 
     tasks = []
     for chunk_id in chunk_ids:
-        chunk_sel = getChunkCoverage(chunk_id, slices, layout)
-        data_sel = getDataCoverage(chunk_id, slices, layout)
-        arr_chunk = arr[data_sel]
-        # chunk_update = arr[data_sel] # reference data to be passed to DN
-        task = asyncio.ensure_future(write_chunk_hyperslab(app, chunk_id, type_json, dims, chunk_sel, arr_chunk))
+        task = asyncio.ensure_future(write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr))
         tasks.append(task)
     await asyncio.gather(*tasks, loop=loop)
 
@@ -417,14 +451,11 @@ async def GET_Value(request):
     arr = np.zeros(np_shape, dtype=dset_dtype)
     tasks = []
     for chunk_id in chunk_ids:
-        #chunk_sel = getChunkCoverage(chunk_id, slices, layout)
-        #data_sel = getDataCoverage(chunk_id, slices, layout)
         task = asyncio.ensure_future(read_chunk_hyperslab(app, chunk_id, dset_json, slices, arr))
         tasks.append(task)
     await asyncio.gather(*tasks, loop=loop)
 
     log.info("arr shape: {}".format(arr.shape))
-    log.info("arr result: {}".format(arr))
 
     # TBD - Binary response
     resp_json = {}

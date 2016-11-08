@@ -320,6 +320,44 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[1].stop, 8)
         self.assertEqual(sel[1].step, 1)
 
+        # 2-d test - non-even chunks at boundry
+        dset_id = "d-12345678-1234-1234-1234-1234567890ab"
+        datashape = [45,54]
+        layout = (10,10)
+        selection = getHyperslabSelection(datashape, (22, 2), (23, 52))
+        chunk_ids = getChunkIds(dset_id, selection, layout)
+        self.assertEqual(len(chunk_ids), 6)
+
+        chunk_id = chunk_ids[0]
+        sel = getChunkCoverage(chunk_id, selection, layout)
+        self.assertEqual(sel[0].start, 2)
+        self.assertEqual(sel[0].stop, 3)
+        self.assertEqual(sel[0].step, 1)
+        self.assertEqual(sel[1].start, 2)
+        self.assertEqual(sel[1].stop, 10)
+        self.assertEqual(sel[1].step, 1)
+  
+        # the next 4 chunks will have same selection
+        for i in range(1,4):
+            chunk_id = chunk_ids[i]
+            sel = getChunkCoverage(chunk_id, selection, layout)
+            self.assertEqual(sel[0].start, 2)
+            self.assertEqual(sel[0].stop, 3)
+            self.assertEqual(sel[0].step, 1)
+            self.assertEqual(sel[1].start, 0)
+            self.assertEqual(sel[1].stop, 10)
+            self.assertEqual(sel[1].step, 1) 
+
+        chunk_id = chunk_ids[5]
+        sel = getChunkCoverage(chunk_id, selection, layout)
+        self.assertEqual(sel[0].start, 2)
+        self.assertEqual(sel[0].stop, 3)
+        self.assertEqual(sel[0].step, 1)
+        self.assertEqual(sel[1].start, 0)
+        self.assertEqual(sel[1].stop, 2)
+        self.assertEqual(sel[1].step, 1)
+
+
         # 1-d test with fractional chunks
         datashape = [104,]
         layout = (10,)
@@ -413,6 +451,42 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[1].start, 4)
         self.assertEqual(sel[1].stop, 12)
         self.assertEqual(sel[1].step, 1)
+
+        # 2-d test, non-regular chunks
+        dset_id = "d-12345678-1234-1234-1234-1234567890ab"
+        datashape = [45,54]
+        layout = (10,10)
+        selection = getHyperslabSelection(datashape, (22, 2), (23, 52))
+        chunk_ids = getChunkIds(dset_id, selection, layout)
+        self.assertEqual(len(chunk_ids), 6)
+
+        chunk_id = chunk_ids[0]
+        sel = getDataCoverage(chunk_id, selection, layout)
+        self.assertEqual(sel[0].start, 0)
+        self.assertEqual(sel[0].stop, 1)
+        self.assertEqual(sel[0].step, 1)
+        self.assertEqual(sel[1].start, 0)
+        self.assertEqual(sel[1].stop, 8)
+        self.assertEqual(sel[1].step, 1)
+     
+        chunk_id = chunk_ids[1]
+        sel = getDataCoverage(chunk_id, selection, layout)
+        self.assertEqual(sel[0].start, 0)
+        self.assertEqual(sel[0].stop, 1)
+        self.assertEqual(sel[0].step, 1)
+        self.assertEqual(sel[1].start, 8)
+        self.assertEqual(sel[1].stop, 18)
+        self.assertEqual(sel[1].step, 1) 
+
+        chunk_id = chunk_ids[5]
+        sel = getDataCoverage(chunk_id, selection, layout)
+        self.assertEqual(sel[0].start, 0)
+        self.assertEqual(sel[0].stop, 1)
+        self.assertEqual(sel[0].step, 1)
+        self.assertEqual(sel[1].start, 48)
+        self.assertEqual(sel[1].stop, 50)
+        self.assertEqual(sel[1].step, 1)
+
 
         # 1-d test with fractional chunks
         datashape = [104,]
