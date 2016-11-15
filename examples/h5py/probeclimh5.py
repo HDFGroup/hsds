@@ -4,7 +4,7 @@
 # science user doing post processing, viewing and or analyzing data.
 # The hdf5 lib should be complied in threadsafe mode for this. 
 #
-# See the equivalent hsds example version of to contrast timings.
+# Script used for h5py, h5pyd and hsds to contrast timings.
 # 
 # Though the example may seem contrived, the data access pattern 
 # below is common for the workstation bound scientist...
@@ -15,10 +15,12 @@ import logging
 import threading
 import random
 import csv
+import urlparse
+import re
 try:
     import numpy
     import h5py
-    import matplotlib.pyplot as plt
+    import h5pyd
     import datencutil
     import requests
 except ImportError, e:
@@ -35,13 +37,14 @@ MULTI_SERIES_N = 16
 LOGLEVEL = logging.INFO   
 #LOGLEVEL = logging.DEBUG
 
-def timing_tally_init():
+def timing_tally_init(urif, vname):
     '''Routine sets up a timing output csv stream. The lock is used
        because we often have several tests running simultaneously.'''
     global CSV_LOCK, CSV, CSV_HEADING
     CSV_LOCK = threading.Lock()
     nobuf = os.fdopen(sys.stdout.fileno(), 'w', 0)
     CSV = csv.writer(nobuf)
+    CSV.writerow([urif, vname])
     CSV.writerow(CSV_HEADING) 
 
 def tally_write(row):
@@ -100,18 +103,46 @@ def prime_h5_source(fname, vname, tms=None):
         return hfd, fillv
 # prime_h5_source
 
-def spatial_subset(fname, vname, its):
+def prime_h5rest_source(urinm, vname, tms=None):
+    '''Simple routine to open and check for a var and return time step datetimes, if 
+        requested, and a fill value from h5sevr or hsds rest service'''
+    hfd = h5pyd.File(urinm[1], "r", endpoint=urinm[0])
+    if vname not in hfd.keys():
+        logging.error('ERROR : %s not available in %s' % (urinm[2]+'/'+urinm[1], vname) )
+        sys.exit(1)
+
+    fillv = hfd[vname].attrs['_FillValue'] # WARN, this is assumed...
+    if tms != None:
+        # assume time and the required units exists for this example, then convert to "readable" datetimes
+        dtms = nums_2_date( hfd['time'][:], hfd['time'].attrs['units'], hfd['time'].attrs['calendar'] )
+        return hfd, fillv, dtms
+    else:
+        return hfd, fillv
+# prime_h5rest_source
+
+def spatial_subset(fname, vname, its, srctype):
     '''Spatial Subset - Getting one spatial subset out of a set of files (time dimension is fixed)'''
     logging.info('spatial_subset called with (%s, %s), iterations %d' % (fname, vname, its) )
-    hfd, fillv, dtm = prime_h5_source(fname, vname, 1)
+
+    if srctype == 'rest':
+        hfd, fillv, dtm = prime_h5rest_source(fname, vname, 1)
+    else:
+        hfd, fillv, dtm = prime_h5_source(fname, vname, 1)
+
     tmrnge = len(dtm)
 
     for i in range(0, its):
         tmstr = datetime.datetime.now() 
-        box = random_box( hfd['lon'].shape[0], hfd['lat'].shape[0] )
+            
         t = random.randint(0, tmrnge-1)
         # dimension layout assumed for simplicity here... (t,y,x)
-        dat = hfd[vname][t, box[1]:box[3], box[0]:box[2]]
+        if srctype == 'rest':
+            box = random_box( hfd['lon'].shape[0], hfd['lat'].shape[0] )
+            dat = hfd[vname][t, box[1]:box[3], box[0]:box[2]]
+        else:
+            box = random_box( hfd['lon'].shape[0], hfd['lat'].shape[0] )
+            dat = hfd[vname][t, box[1]:box[3], box[0]:box[2]]
+
         dat = numpy.ma.masked_where(dat==fillv, dat)
         m, v = dat.mean(), dat.var()
         logging.debug('spatial_subset called with (%s)[%s] , iteration %d, mean %s, variance %s' % \
@@ -122,10 +153,14 @@ def spatial_subset(fname, vname, its):
     hfd.close()
 #spatial_subset
 
-def single_time_series(fname, vname, its):
+def single_time_series(fname, vname, its, srctype):
     '''Single time-series - Get a single point timeseries (x and y dimensions are fixed)'''
     logging.info('single_time_series called with (%s, %s), iterations %d' % (fname, vname, its) )
-    hfd, fillv, dtm = prime_h5_source(fname, vname, 1)
+    if srctype == 'rest':
+        hfd, fillv, dtm = prime_h5rest_source(fname, vname, 1)
+    else:
+        hfd, fillv, dtm = prime_h5_source(fname, vname, 1)
+
     tmrnge = len(dtm)
 
     for i in range(0, its):
@@ -142,11 +177,15 @@ def single_time_series(fname, vname, its):
     hfd.close()
 #single_time_series
 
-def multiple_time_series(fname, vname, its):
+def multiple_time_series(fname, vname, its, srctype):
     '''Multiple time-series - Get multiple timeseries (x and y are fixed, but there is a set of them)'''
     global MULTI_SERIES_N 
     logging.info('multiple_time_series called with (%s, %s), iterations %d' % (fname, vname, its) )
-    hfd, fillv, dtm = prime_h5_source(fname, vname, 1)
+    if srctype == 'rest':
+        hfd, fillv, dtm = prime_h5rest_source(fname, vname, 1)
+    else:
+        hfd, fillv, dtm = prime_h5_source(fname, vname, 1)
+
     tmrnge = len(dtm)
 
     for i in range(0, its):
@@ -154,7 +193,10 @@ def multiple_time_series(fname, vname, its):
         xyall = random_loc(hfd['lon'].shape[0], hfd['lat'].shape[0], MULTI_SERIES_N)
 
         for xy in xyall: 
-            dat = hfd[vname][ 0:tmrnge-1, xy[1], xy[0] ]
+            if srctype == 'rest':
+                dat = hfd[vname][ 0:tmrnge-1, xy[1], xy[0] ]
+            else:
+                dat = hfd[vname][ 0:tmrnge-1, xy[1], xy[0] ]
             dat = numpy.ma.masked_where(dat==fillv, dat)
             m, v = dat.mean(), dat.var()
             logging.debug("multiple_time_series : %s, mean %s, variance %s " % (str(xy), str(m), str(v)) )
@@ -167,17 +209,22 @@ def multiple_time_series(fname, vname, its):
     hfd.close()
 #multiple_time_series
 
-def space_time_data_cubes(fname, vname, its):
+def space_time_data_cubes(fname, vname, its, srctype):
     '''Space/time data cubes - Get a timeseries of spatial subsets (one or more subsets through time).'''
     logging.info('space_time_data_cubes called with (%s, %s), iterations %d' % (fname, vname, its) )
-    hfd, fillv, dtm = prime_h5_source(fname, vname, 1)
+    if srctype == 'rest':
+        hfd, fillv, dtm = prime_h5rest_source(fname, vname, 1)
+    else:
+        hfd, fillv, dtm = prime_h5_source(fname, vname, 1)
+
     tmrnge = len(dtm)
 
     for i in range(0, its):
         tmstr = datetime.datetime.now() 
-        cube = random_cube( hfd['lon'].shape[0], hfd['lat'].shape[0], tmrnge)
         # dimension layout assumed for simplicity here... (t,y,x)
+        cube = random_cube( hfd['lon'].shape[0], hfd['lat'].shape[0], tmrnge)
         dat = hfd[vname][cube[2]:cube[5], cube[1]:cube[4], cube[0]:cube[3]]
+
         dat = numpy.ma.masked_where(dat==fillv, dat)
         m, v = dat.mean(), dat.var()
         logging.debug('space_time_data_cubes called %s, over times %s to %s, iteration %d, cube mean %s, cube variance %s' % \
@@ -192,10 +239,10 @@ if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)s %(message)s', level=LOGLEVEL)
     tst_routines = [spatial_subset, single_time_series, multiple_time_series, space_time_data_cubes]
     nroutines = len(tst_routines)
-    thrds, nthrds, nits = [], nroutines, 1
+    thrds, nthrds, nits, srctype = [], nroutines, 1, 'file'
 
     if len(sys.argv) < 3:
-        logging.error('probeclimh5.py <clim-file.h5> <var-name> [ <nthreads> ] [iters] ') 
+        logging.error('probeclimh5.py <clim-file.h5 | h5-endoint> <var-name> [ <nthreads> ] [iters] ') 
         sys.exit(1)
     else:
         fname = sys.argv[1]
@@ -204,7 +251,7 @@ if __name__ == '__main__':
         if len(sys.argv) > 4: nits = int(sys.argv[4])
 
     logging.debug("init stdout for results ...")
-    timing_tally_init()
+    timing_tally_init(fname, vname)
 
     if nthrds < nroutines: 
         nthrds = nroutines
@@ -214,12 +261,17 @@ if __name__ == '__main__':
         logging.warn("WARN : number of threads is not evenly divisible by the number of test routines. N threads set to %d for probe fairness" % nthrds)
     
     logging.debug("starting with number of threads %d, number of test routines %d, number of iterations %d" % (nthrds, nroutines, nits))
-        
+
+    uri = urlparse.urlparse(fname)
+    if re.search('http[s]*', uri.scheme): 
+        srctype = 'rest'
+        fname = (uri.scheme+'://'+uri.netloc, uri.path[1:])
+
     tstart = datetime.datetime.now()
 
     for i in range(nthrds):
         func = tst_routines[i%nroutines]
-        t = threading.Thread(target=func, args=(fname, vname, nits))
+        t = threading.Thread(target=func, args=(fname, vname, nits, srctype))
         t.daemon = False
         t.start()
         thrds.append(t)
@@ -233,9 +285,6 @@ if __name__ == '__main__':
         ityp = r.text
     else:
         ityp = 'NA'
-
-    logging.info('example exec ~time : %s : insttype \"%s\"' % (tmtot, ityp))
-    tally_write([])
-    tally_write(['total', tmtot])
+    tally_write(['exec ~time : %s : insttype %s' % (tmtot, ityp)])
 #__main__
 
