@@ -77,7 +77,9 @@ Each high level object (group, dataset, committed type) can be identified by a U
 
 For example, the id used for a group object with the above UUID would be:
 
-```g-0568d8c5-a77e-11e4-9f7a-3c15c2da029e```
+```
+g-0568d8c5-a77e-11e4-9f7a-3c15c2da029e
+```
 
 ### UUID's and storage object keys:
 
