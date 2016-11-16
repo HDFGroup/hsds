@@ -1,5 +1,7 @@
 # Object Storage Schema for HDF5
 
+## John Readey - The HDF Group
+
 ## Intro
 
 This document describes the object storage schema used by the Highly Scalable Data Storage service (hsds). The object storage schema describes a mapping from the HDF5 data model of groups, datasets, committed types to a set of storage objects that would be suitable for use in an object storage system and as the persistent storage layer for hsds.
@@ -63,9 +65,23 @@ This document will describe how each of these entities will be stored as an obje
 
 The goal of the object schema is to be of sufficient fidelity that it should be possible to convert a traditional HDF5 file to a set of objects, and then convert the set of objects to a HDF5 file that is equivalent to the original file.  
 
+### Comparison of managing HDF5 entities in a file vs. an object store
+
+Management of HDF5 entities in an object store brings up a different set of considerations when compared with managing entities within an HDF5 file:
+
+1. The object storage system is itself an efficient key-value store, so there is no need for internal data structures such as btrees
+2. Management of "free space" within a file is not an issue when using an object store
+3. The object storage system doesn't provide the equivalent of an append operation, so the entire object must be re-written for each write
+4. Performance is sensitive to the size of objects in the object store (c.f. http://improve.dk/pushing-the-limits-of-amazon-s3-upload-performance/)
+5. Given that writes to the object store are atomic, there is no possibility that the storage system will be left in an inconsistent state
+6. Certain functions that are typically performed by the filesystem (e.g. listing files, file permissions) we need to be managed by the service (e.g. there needs to be the ability to store the access rights for a given object
+7. Unlike HDF5 entities in a file, the "file" an object store object is contained in is not immediately apparent.  The connection between objects and the "file" they are contained in needs to be explicitly managed.
+
 ### Additions to the HDF5 data model to support the HDF REST API
 
 Several additions to the HDF5 data model have been made in order to support the HDF REST API.  In the reference implementation of the HDF REST API (h5serv), these additions were stored in a hidden group within the traditional HDF5 file managed by the service.  In hsds, these additions can be directly modeled by the schema.
+
+These additions are described in the sub-sections below.
 
 #### UUID
 
@@ -77,13 +93,11 @@ Each high level object (group, dataset, committed type) can be identified by a U
 
 For example, the id used for a group object with the above UUID would be:
 
-```
-g-0568d8c5-a77e-11e4-9f7a-3c15c2da029e
-```
+```g-0568d8c5-a77e-11e4-9f7a-3c15c2da029e```
 
 ### UUID's and storage object keys:
 
-Since storage systems such as AWS S3 use a hash of the first few characters of the object key to determine the storage node used for the object, these characters should be randomly distributed.  UUIDs in general don't have good distribution, so the object key for a specific UUID is formed by prefixing a five character md5 hash to the UUID.
+Since storage systems such as AWS S3 use a hash of the first few characters of the object key to determine the storage node used for the object, these characters should be randomly distributed to ensure thoughput to the storage system is not limited.  UUIDs in general don't have good distribution (i.e. it's very common for the first characters to be repeated), so the object key for a specific UUID is formed by prefixing a five character md5 hash to the UUID.
 
 For example, if the UUID is:
 
@@ -93,25 +107,14 @@ The storage key would be:
 
 ```a860f-g-2428ae0e-a082-11e6-9d93-0242ac110005```
 
-### ACL
+#### ACL
 
 Each high level object can maintain an ACCESS Control List that describes the default and user-specific access permissions for that object (see: http://h5serv.readthedocs.io/en/latest/AclOps/index.html).
 
-### Timestamp
+#### Timestamp
 
 Each high level object has timestamps for create time and last updated time, that can be retrieved using the REST API.
 
-### Comparison of managing HDF5 entities in a file vs. an object store
-
-Management of HDF5 entities in an object store brings up a different set of considerations when compared with managing entities within a file:
-
-1. The object storage system is itself an efficient key-value store, so there is no need for internal data structures such as btrees
-2. Management of "free space" within a file is not an issue when using an object store
-3. The object storage system doesn't provide the equivalent of an append operation, so the entire object must be re-written for each write
-4. Performance is sensitive to the size of objects in the object store (c.f. http://improve.dk/pushing-the-limits-of-amazon-s3-upload-performance/)
-5. Given that writes to the object store are atomic, there is no possibility that the storage system will be left in an inconsistent state
-6. Certain functions that are typically performed by the filesystem (e.g. listing files, file permissions) we need to be managed by the service (e.g. there needs to be the ability to store the access rights for a given object
-7. Unlike HDF5 entities in a file, the "file" an object store object is contained in is not immediately apparent.  The connection between objects and the "file" they are contained in needs to be explicitly managed.
 
 ## Schema Description
 
@@ -123,7 +126,9 @@ The object schema defines the storage for the following entities:
 * datasets
 * chunks
 
-Note: attributes and links are stored as a component of thier parent object.
+Note: attributes and links are stored as a component of their parent object.
+
+Note: all strings used in the schema (e.g. link names) are UTF8 encoded unicode strings.  Strings stored in a dataset will be encoded based on the type description of the dataset.
 
 ### Domains 
 
@@ -166,7 +171,7 @@ Notes:
 * The service layer may impose a policy where domains can only be created if there is an existing domain with the requisite permission ACLs for the requesting user.  One or more "top-level" domains (e.g. "/home") would be created outside the service API (e.g. by an administrator with permissions to create objects in the bucket directly).
 * The owner and root keys can be assumed to be immutable (i.e. these values can be cached)
 * Metadata about the owner (and other usernames referenced in this schema) are assumed to be stored in another system (such as NASA URS)
-* For efficeincy certain properties of the domain (e.g. datasetCount) are assumed to be updated by a background process and hince may not represent the realtime state of the domain
+* For efficeincy certain properties of the domain (e.g. datasetCount) are assumed to be updated by a background process and hince may not represent the current state of the domain
 
 #### Domain object example
 
@@ -251,11 +256,18 @@ The Group object consist of JSON with the following keys:
 * "domain" - the domain which this group is a member of
 * "acls" - access Control List for authorization overrides
 
+There are three types of links that are supported: Hard, Soft, and External.  Each link item is a JSON object with the following keys:
+
+* "class" - the type of link.  Must be one of the values: "H5L_TYPE_HARD", "H5L_TYPE_SOFT", or "H5L_TYPE_EXTERNAL"
+* "created" - timestamp of when the link was created
+* "id" - for hard links, the id value is the id of the dataset or group the link points to
+* "h5path" - for soft or external links, this is a string that gives the HDF5 path the object is expected to be found
+* "domain" - for external links, this is a string that gives the domain which the linked object is a member of
+
 Notes:
 
 * "acls" is an optional key.  If the key is not present (or is present, but the requesting user sub-key is not), the domain ACL will be used (see "Domain ACLs")
 * the attributes collection keys consist of the attribute names.  See "Attributes" for a description of the object schema for attributes
-* the links collection keys consist of the link names.  See "links" for a description of the object schema for links
 * The "id", "root", and "domain" keys can be assumed to be immutable
 
 TBD:
@@ -278,6 +290,17 @@ Object:
             "created": 1478039150.084772, 
             "id": "d-24b14908-a082-11e6-9d93-0242ac110005", 
             "class": "H5L_TYPE_HARD"
+        },
+        "slink": {
+            "created": 1478039189.034954, 
+            "h5path": "/g2/g2.1/dset2.1.1", 
+            "class": "H5L_TYPE_SOFT"
+        },
+        "extlink": {
+            "created": 1478039211.035654, 
+            "h5path": "/a_group/a_dset", 
+            "domain": "/home/test_user2/another_domain",
+            "class": "H5L_TYPE_SOFT"
         }
     }, 
     "created": 1478039149, 
@@ -288,7 +311,7 @@ Object:
 
 ### Committed Type Object
 
-In the HDF data model committed type object is used to provide types that can be shared among datasets and attributes.  In addition, the committed type may contain its own attributes as well.  The object store schema provides keys that describe the type as well as a key/value collection for attributes.
+In the HDF data model the committed type object is used to provide types that can be shared among datasets and attributes.  In addition, the committed type may contain its own attributes as well.  The object store schema provides keys that describe the type as well as a key/value collection for attributes.
 
 #### Committed Type Key 
 
@@ -348,9 +371,9 @@ The dataset also includes information that describe other aspects of the dataset
 
 Also, like groups and committed types, datasets may contain a collection of attributes.
 
-The data values of a dataset are not stored in the storage object, but instead in one or more "chunk" objects.  Chunks are a regular partition (except possibly along the "edges") of the dataspace. The layout key describes how the dataspace is partitioned.  Each chunk is stored (assuming any value has been assigned to it) in a seperate storage object (See "Chunk Object").
+The data values of a dataset are not stored in the storage object, but instead in one or more "chunk" objects.  Chunks are a regular sized partition of the dataspace (except possibly along the "edges").  The layout key describes how the dataspace is partitioned.  Each chunk is stored (assuming any value has been assigned to it) in a seperate storage object (See "Chunk Object").
 
-In traditional HDF5 files, dataset values may be stored in either "chunks" or "contiguous" (the later stores all values in one partition in the file).  By contrast the object storage schema always stores data in chunks (though there may be just one chunk for smaller datasets).  This is so that we can limit the maximum size of objects stored in the system.
+In traditional HDF5 files, dataset values may be stored in either "compact", "chunks" or "contiguous" storage layouts (the later stores all values in one partition in the file).  By contrast the object storage schema always stores data in chunks (though there may be just one chunk for smaller datasets).  This is so that we can limit the maximum size of objects stored in the system.
 
 
 #### Dataset key
@@ -382,7 +405,6 @@ Notes:
 * "creationProperties" may optionaly provide a chunk layout, but "layout" object of dataset may differ from what is provided in "creationProperties"  (for optimization purposes the hsds service may use different layout values)
 * "acls" is an optional key.  If the key is not present (or is present, but the requesting user sub-key is not), the domain ACL will be used (see "Domain ACLs")
 * See "Attributes" for a description of the object schema for attributes
-* See "Links" for a description of the object schema for links
 * See "Types" for a description of the object schema for type
 * The "id", "root", "domain", "creationProperties", "layout", and "type" keys can be assumed to be immutable
 * The "shape" key is immutable unless the dataset is extensible (the shape object contains a "maxdims" key).  In anycase, the shape of the dataset will never shrink
@@ -435,6 +457,8 @@ Chunk objects may not exist for every chunk of a given dataset (i.e. if no data 
 
 A set of filters may be applied when writing and reading the chunk from object storage.  The filters applied to a specific chunk are stored in the object storage metadata (Description TBD). 
 
+Note: There is no explicit linking from the dataset schema to the dataset's chunks.  However, given a dataset shape and layout, the set of possible chunk ids can be determined and then the storage system queried to see if the chunk exists or not.
+
 #### Chunk key
 
 The chunk storage key is of the form:
@@ -444,7 +468,7 @@ The chunk storage key is of the form:
 Where:
 * &lt;hash&gt; is an md5 hash of the chunk id ("c-&lt;uuid&gt;_i_j_k")
 * &lt;uuid&gt; is a standard 36 character UUID
-* Following the &lt;uuid&gt; there are rank (the number of dimensions of the dataset) indexes seperated by '-'
+* Following the &lt;uuid&gt; there is a series of stringified integers seperated by underscores.  The number of integers should be equal to the rank (number of dimensions) of the dataset.
 * The coordinates &lt;i&gt;, &lt;j&gt;, &lt;k&gt;, etc.  identify the coordinate of the chunk (fastest varying dimension last)
 
 #### Object metadata
@@ -470,8 +494,8 @@ If the chunk is not compressed, the size of the object would be 10 \* 10 \* &lt;
 
 ## Sub-object schema description
 
-In this section we define common sub-components of the JSON schema of groups, datasets, and committed types.
-These sub-components will not be stored as separate objects in the object store, but as JSON objects in a top-level object.
+In this section we define common sub-objects of the top-level objects (groups, datasets, and committed types).
+These sub-objects will not be stored as separate objects in the object store, but as JSON objects in a top-level object.
 
 The specification for these borrows heavily from the hdf5-json specification, so we'll refer to this document: http://hdf5-json.readthedocs.io/en/latest/index.html# as appropriate.  
 
@@ -592,7 +616,7 @@ The following example shows properties for "allocTime", "fillValue", and "layout
 }
 ```
 
-## Releated documents
+## Related documents
 
 The following documents provided related material that mayby of use:
 
