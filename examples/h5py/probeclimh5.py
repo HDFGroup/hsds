@@ -236,7 +236,7 @@ def space_time_data_cubes(fname, vname, its, srctype):
 #space_time_data_cubes
 
 if __name__ == '__main__':
-    logging.basicConfig(format='%(asctime)s %(message)s', level=LOGLEVEL)
+    logging.basicConfig(filename='perftest.log', format='%(asctime)s %(message)s', level=LOGLEVEL)
     tst_routines = [spatial_subset, single_time_series, multiple_time_series, space_time_data_cubes]
     nroutines = len(tst_routines)
     thrds, nthrds, nits, srctype = [], nroutines, 1, 'file'
