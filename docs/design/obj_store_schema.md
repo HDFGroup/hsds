@@ -99,7 +99,7 @@ Management of HDF5 entities in an object store brings up a different set of cons
 
 1. The object storage system is itself an efficient key-value store, so there is no need for internal data structures such as btrees
 2. Management of "free space" within a file is not an issue when using an object store
-3. The object storage system doesn't provide the equivalent of an append operation, so the entire object must be re-written for each write
+3. The object storage system doesn't provide the equivalent of an append operation, so the entire object must be re-written for each write (though partial reads are supported)
 4. Performance is sensitive to the size of objects in the object store (c.f. http://improve.dk/pushing-the-limits-of-amazon-s3-upload-performance/)
 5. Given that writes to the object store are atomic, there is no possibility that the storage system will be left in an inconsistent state
 6. Certain functions that are typically performed by the filesystem (e.g. listing files, file permissions) we need to be managed by the service (e.g. there needs to be the ability to store the access rights for a given object
@@ -123,23 +123,6 @@ For example, the id used for a group object with the above UUID would be:
 
 ```g-0568d8c5-a77e-11e4-9f7a-3c15c2da029e```
 
-### Object ids and storage keys:
-
-Since storage systems such as AWS S3 use a hash of the first few characters of the object key to determine the storage node used to store the object, these characters should be randomly distributed to ensure thoughput to the storage system is not limited.  UUIDs in general don't have good distribution (i.e. it's very common for the first characters to be repeated), so the object key for a specific UUID is formed by prefixing a five character md5 hash to the object id.
-
-For example, if the object id is:
-
-```g-2428ae0e-a082-11e6-9d93-0242ac110005```
-
-An md5 hash of the id would be:
-
-```8211ea6301342ba59ee07056cef3e586```
-
-Taking the first five characters and appending to the id with a hyphen seperator gives:
-
-```8211e-g-2428ae0e-a082-11e6-9d93-0242ac110005```
-
-This will then be used as the storage key to store and retrieve the given object.
 
 #### ACL
 
@@ -220,7 +203,7 @@ Object:
             "delete": false,      
             "readACL": false, 
             "updateACL": false
-            }, 
+        }, 
         "test_user1": {
             "create": true, 
             "read": true, 
@@ -232,7 +215,7 @@ Object:
     }, 
     "root": "g-cf4f3baa-956e-11e6-8319-0242ac110005", 
     "owner": "test_user1",
-    "created": 1479168471
+    "created": 1479168471.038638
 }
 ```
 
@@ -315,6 +298,25 @@ The group object storage key is of the form:
 
 Where <hash> is an md5 hash of the group id ("g-&lt;uuid&gt;"). Where &lt;uuid&gt; is a standard 36 character UUID.
 
+Since storage systems such as AWS S3 use a hash of the first few characters of the object key to determine the storage node used to store the object, these characters should be randomly distributed to ensure thoughput to the storage system is not limited.  UUIDs in general don't have good distribution (i.e. it's very common for the first characters to be repeated), so the object key for a specific UUID is formed by prefixing a five character md5 hash to the object id.
+
+For example, if the object id is:
+
+```g-2428ae0e-a082-11e6-9d93-0242ac110005```
+
+An md5 hash of the id would be:
+
+```8211ea6301342ba59ee07056cef3e586```
+
+Taking the first five characters and appending to the id with a hyphen seperator gives:
+
+```8211e-g-2428ae0e-a082-11e6-9d93-0242ac110005```
+
+This will then be used as the storage key to store and retrieve the given object.
+
+The same approach is used for dataset, committed type, and chunk keys.
+
+
 #### Group Specification
 
 The Group object consist of JSON with the following keys:
@@ -368,13 +370,13 @@ Object:
             "class": "H5L_TYPE_SOFT"
         },
         "extlink": {
-            "created": 1478039211.035654, 
+            "created": 1478039211.035682, 
             "h5path": "/a_group/a_dset", 
             "domain": "/home/test_user2/another_domain",
-            "class": "H5L_TYPE_SOFT"
-        }
+            "class": "H5L_TYPE_EXTERNAL"
+        },
     }, 
-    "created": 1478039149, 
+    "created": 1478039149.932783, 
     "root": "g-2428ae0e-a082-11e6-9d93-0242ac110005", 
     "domain": "/home/test_user1/mydomain"
 }
@@ -426,9 +428,9 @@ Object:
     "type": {
         "base": "H5T_STD_U32LE", 
         "class": "H5T_INTEGER"
-        },
+    },
     "attributes": {}
-    "created": 1478039183, 
+    "created": 1478039183.392074, 
     "root": "g-2428ae0e-a082-11e6-9d93-0242ac110005", 
     "domain": "/home/test_user1/mydomain"   
 }
@@ -495,13 +497,16 @@ Object:
     "type": {
         "class": "H5T_FLOAT",
         "base": "H5T_IEEE_F32LE"
-        }, 
+    }, 
     "shape": {
         "class": "H5S_SIMPLE",
         "maxdims": [20], 
         "dims": [10]
-        },
-    "layout": [20],
+    },
+    "layout": { 
+        "class" = "H5D_CHUNKED",
+        "dims" = [20]
+    }
     "creationProperties": { 
         "allocTime": "H5D_ALLOC_TIME_LATE", 
         "fillTime": "H5D_FILL_TIME_IFSET", 
@@ -509,7 +514,7 @@ Object:
             "class": "H5D_CONTIGUOUS"
         }
     },
-    "created": 1477549587, 
+    "created": 1477549587.387293, 
     "root": "g-2428ae0e-a082-11e6-9d93-0242ac110005", 
     "domain": "/home/test_user1/mydomain",
     "attributes": {}
@@ -542,6 +547,9 @@ Where:
 * Following the &lt;uuid&gt; there is a series of stringified integers seperated by underscores.  The number of integers should be equal to the rank (number of dimensions) of the dataset.
 * The coordinates &lt;i&gt;, &lt;j&gt;, &lt;k&gt;, etc.  identify the coordinate of the chunk (fastest varying dimension last)
 
+Note: conceivably there could be a danger of exceeding the maximum key length (1024 characters) if the dataset had hundreds of dimensions, or very large extents.
+ 
+
 #### Object metadata
 
 Information about compression filters applied to the chunk data will be stored as User-defined Metadata of the object (Note: this is limited to 2KB bytes on AWS S3).
@@ -550,7 +558,9 @@ TBD: define metadata keys
 
 #### Chunk Specification
 
-The chunk object is a binary blob for fixed length types, or JSON for varying length types. 
+The chunk object is a binary blob for fixed length types, or a JSON array for varying length types.
+
+TBD: Is there a potential for data loss in converting floating-point data to JSON and back?  Validate that the JSON loader stringifies floating point values with sufficient percision.  
 
 #### Chunk object example
 
