@@ -278,7 +278,7 @@ async def GET_Chunk(request):
         log.info("Reading chunk {} from S3".format(s3_key))
         chunk_bytes = await getS3Bytes(app, s3_key)
         chunk_arr = np.fromstring(chunk_bytes, dtype=dt)
-        data_cache[chunk_id] = chunk_arr
+        data_cache[chunk_id] = chunk_arr  # store in cache
 
     # get requested data
     output_arr = chunk_arr[selection]
