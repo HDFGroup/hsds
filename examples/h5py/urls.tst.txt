@@ -1,0 +1,6 @@
+http://s3-us-west-2.amazonaws.com/nasanex/NEX-DCP30/NEX-quartile/rcp85/mon/atmos/tasmax/r1i1p1/v1.0/CONUS/tasmax_ens-avg_amon_rcp85_CONUS_205101-205512.nc
+http://nasanex.s3.amazonaws.com/LOCA/CESM1-BGC/16th/rcp85/r1i1p1/tasmax/tasmax_day_CESM1-BGC_rcp85_r1i1p1_20500101-20501231.LOCA_2016-04-02.16th.nc
+http://nasanex.s3.amazonaws.com/LOCA/CESM1-BGC/16th/rcp85/r1i1p1/tasmax/tasmax_day_CESM1-BGC_rcp85_r1i1p1_20510101-20511231.LOCA_2016-04-02.16th.nc
+http://nasanex.s3.amazonaws.com/NEX-GDDP/BCSD/rcp45/day/atmos/tasmax/r1i1p1/v1.0/tasmax_day_BCSD_rcp45_r1i1p1_CanESM2_2050.nc
+http://nasanex.s3.amazonaws.com/NEX-GDDP/BCSD/rcp45/day/atmos/tasmax/r1i1p1/v1.0/tasmax_day_BCSD_rcp45_r1i1p1_CanESM2_2051.nc
+http://nasanex.s3.amazonaws.com/NEX-GDDP/BCSD/rcp45/day/atmos/tasmax/r1i1p1/v1.0/tasmax_day_BCSD_rcp45_r1i1p1_CanESM2_2052.nc 
