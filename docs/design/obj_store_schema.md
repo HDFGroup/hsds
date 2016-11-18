@@ -12,23 +12,49 @@ The following goals were a factor in the design of the object storage schema:
 
 1. The schema should be able to represent traditional HDF5 files at a high level of fidelity
 2. The schema should not introduce any performance barriers in the design of hsds 
-3. The schema should result in a cost-effective system (both in terms of overall storage size and request api pricing)
+3. The schema should result in a cost-effective system for public cloud implementations (both in terms of overall storage size and request api pricing)
 4. The schema should be adaptable to other object storage systems (e.g. OpenStack/Swift)
 5. The schema should be usable with other services or applications that desire to represent the HDF5 data model as a set of storage objects
 
-### Object storage background
+### Object Storage
 
-The target object storage system for the object storage schema is AWS Simple Storage Service (AWS S3), but in general the schema should be adaptable to other object data stores such as Google Cloud Storage, Ceph, or OpenStack/Swift.
+This section will provide some over context regarding object storage system.
 
-All these storage systems share some common properties:
+#### Object storage background
+
+An object storage is a storage architecture that manages data as objects rather than files, or blocks.
+
+Compared to other storage technologies object storage has the advantages of:
+
+1. Scalability - It's easier to build out large storage solutions (.e.g AWS S3 manages trillions of objects)
+2. Throughput - Potentially greater aggregate throughput (scales with the number of storage nodes)
+3. Reliability - Objects are automatically replicated to avoid potential data loss
+4. Cost-effective - easier to scale out.  Vendors like AWS provide low-cost, pay-as-you go services
+
+The target object storage system for the object storage schema is AWS Simple Storage Service (AWS S3), but in general the schema should be adaptable to other object storage systems such as Google Cloud Storage, Ceph, or OpenStack/Swift.
+
+Object storage systems share some common properties:
 
 1. Objects stored in the system are identified by a key (a string value)
-2. They are not natively POSIX complient (e.g. there is no way to append to a storage object)
-3. Objects are transparently (to the client) replicated in multiple storage devices for redundancy
-4. Latency is high compared to storage on local disk, but aggregate throughput is potentially much higher
-5. Keys and Objects live in a "bucket".  Permissions to access objects are defined at the bucket level
+2. The object storage system maintains metadata about each object (see next section)
+3. They are not natively POSIX complient (e.g. there is no way to append to a storage object)
+4. Objects are transparently (to the client) replicated in multiple storage devices for redundancy
+5. Latency is high compared to storage on local disk, but aggregate throughput is potentially much higher
+6. Keys and Objects live in a "bucket".  Permissions to access objects are defined at the bucket level
 
-### Object Storage system assumptions
+#### Object Metadata
+
+In an object storage system each object has data, a key, and metadata (a set of properties that pertain to the object).  The metadata can be system or user defined.  The later is typically limited to a fairly small size (2KB in the case of AWS S3).
+
+For the purposes of this document that following metadata properties (as defined for AWS S3) are relevant to the schema design:
+
+1. Content-Length - the size of the object in bytes
+2. Content-MD5 - a checksum of the object data
+3. Last-Modified - the time at which the object was last modified (or created, whichever is later)
+
+In addition, the object storage schema will use define some custom metadata properties such as Compression-State for chunk objects.
+
+#### Object Storage system assumptions
 
 The following constraints and assumptions are given as the basis of the schema design (some of which may need to be re-evaluated for use in non-S3 systems):
 
@@ -45,6 +71,8 @@ The following constraints and assumptions are given as the basis of the schema d
 11. Updates to a storage object are complete (i.e. the entire object is overwritten), atomic (i.e. last writer wins), and either succeed or fail with no update to the object
 12. There is no practical limit to the number of objects that can be stored in a bucket
 13. The object storage system does not provide support for "transactions" (i.e. "all or nothing" update of two or more objects)
+
+
 
 ### The HDF5 data model
 
@@ -71,7 +99,7 @@ Management of HDF5 entities in an object store brings up a different set of cons
 
 1. The object storage system is itself an efficient key-value store, so there is no need for internal data structures such as btrees
 2. Management of "free space" within a file is not an issue when using an object store
-3. The object storage system doesn't provide the equivalent of an append operation, so the entire object must be re-written for each write
+3. The object storage system doesn't provide the equivalent of an append operation, so the entire object must be re-written for each write (though partial reads are supported)
 4. Performance is sensitive to the size of objects in the object store (c.f. http://improve.dk/pushing-the-limits-of-amazon-s3-upload-performance/)
 5. Given that writes to the object store are atomic, there is no possibility that the storage system will be left in an inconsistent state
 6. Certain functions that are typically performed by the filesystem (e.g. listing files, file permissions) we need to be managed by the service (e.g. there needs to be the ability to store the access rights for a given object
@@ -95,17 +123,6 @@ For example, the id used for a group object with the above UUID would be:
 
 ```g-0568d8c5-a77e-11e4-9f7a-3c15c2da029e```
 
-### UUID's and storage object keys:
-
-Since storage systems such as AWS S3 use a hash of the first few characters of the object key to determine the storage node used for the object, these characters should be randomly distributed to ensure thoughput to the storage system is not limited.  UUIDs in general don't have good distribution (i.e. it's very common for the first characters to be repeated), so the object key for a specific UUID is formed by prefixing a five character md5 hash to the UUID.
-
-For example, if the UUID is:
-
-```g-2428ae0e-a082-11e6-9d93-0242ac110005```
-
-The storage key would be:
-
-```a860f-g-2428ae0e-a082-11e6-9d93-0242ac110005```
 
 #### ACL
 
@@ -156,13 +173,8 @@ The domain object contains JSON with the following keys:
 
 * "acls" - Access Control List (user permissions) for actions on domain.  See below for subkeys.
 * "owner" - Username of the owner (user who initially created the domain)
-* "groupCount" - integer value of number of groups in domain [value may not reflect recent changes]
-* "typeCount" - integer value of number of committed type objects in domain [value may not reflect recent changes]
-* "datasetCount" - integer value of number of dataset objects in domain [value may not reflect recent changes]
-* "size" - storage size of all objects in the domain [value may not reflect recent changes]
-* "lastUpdated" - timestamp (seconds since epoch) of last change to an object in the domain [value may not reflect recent changes]
-* "checksum" - a hex string checksum of all objects within the domain [value may not reflect recent changes]
 * "root" - the UUID (not including the md5 hash) of the root group in the domain
+* "created" - the timestamp for when the domain was created
 
 The "owner" and "acls" keys are required, others may not be present.  In particular, if the "root" key is not present, that impies there is no HDF collection associated with this domain.  In this case the domain object can serve as a sort of "directory" for a set of related sub-domains.
 
@@ -171,7 +183,7 @@ Notes:
 * The service layer may impose a policy where domains can only be created if there is an existing domain with the requisite permission ACLs for the requesting user.  One or more "top-level" domains (e.g. "/home") would be created outside the service API (e.g. by an administrator with permissions to create objects in the bucket directly).
 * The owner and root keys can be assumed to be immutable (i.e. these values can be cached)
 * Metadata about the owner (and other usernames referenced in this schema) are assumed to be stored in another system (such as NASA URS)
-* For efficeincy certain properties of the domain (e.g. datasetCount) are assumed to be updated by a background process and hince may not represent the current state of the domain
+
 
 #### Domain object example
 
@@ -191,7 +203,7 @@ Object:
             "delete": false,      
             "readACL": false, 
             "updateACL": false
-            }, 
+        }, 
         "test_user1": {
             "create": true, 
             "read": true, 
@@ -203,12 +215,7 @@ Object:
     }, 
     "root": "g-cf4f3baa-956e-11e6-8319-0242ac110005", 
     "owner": "test_user1",
-    "groupCount": 20,
-    "typeCount": 0,
-    "datasetCount": 67,
-    "lastUpdated": 1479168471,
-    "checksum": "394a7d8d67c7e022490212d6098a2209",
-    "size": 13194139533
+    "created": 1479168471.038638
 }
 ```
 
@@ -232,6 +239,53 @@ Note: optionally, an ACL key can be used in a group, dataset, or committed datat
 
 Example: Using the ACLs defined for the "my_domain" object above, user "test_user1" would be authorized to make any change to objects in the domain, or change the ACL itself.  User "joebob" (not listed in the ACL keys), would have permission to perform any read operation (assuming a more restrictive ACL is not present in the requested object), but not have authority to modify or delete any object.
 
+#### Domain stats
+
+In order to provide summary information about the objects in a domain, an additional object will be used to store this data.  The object will be JSON with the following keys:
+
+* "groupCount" - integer value of number of groups in domain  
+* "typeCount" - integer value of number of committed type objects in domain 
+* "datasetCount" - integer value of number of dataset objects in domain  
+* "logicalSize" - storage size of all entities including non-allocated chunks
+* "allocatedSize" - storage size that of all entities including only allocated chunks
+* "actualSize" - storage size as reported by the storage system (maybe smaller than "allocatedSize" due to compression)
+* "lastUpdated" - the timestamp for the most recent change to any object in the domain
+
+For reasons of efficiency, the summary information will typically be updated asynchronously from changes to object state. Therefore the stats object may not reflect the most recent changes to objects in the domain.  E.g. is a dataset is created using the HDF REST API, the changes in datasetCount and size keys won't be immediately reflected.  The Last-Modified metadata property of the domain stats object can be used to determine when these keys were last updated.
+
+##### Domain stats key
+
+The domain stats key will use the same prefix as the domain key, but with a suffix of "stats.json".
+
+For example, for the domain key:
+
+```/home/test_user1/my_domain/domain.json```
+
+The domain stats key would be:
+
+```/home/test_user1/my_domain/stats.json```
+
+##### Domain stats example
+
+Key:
+
+```/home/test_user1/my_domain/stats.json```
+
+Object:
+
+```
+{
+    "groupCount": 20,
+    "typeCount": 0,
+    "datasetCount": 67,
+    "logicalSize": 13194139533,
+    "allocatedSize": 8456534532,
+    "actualSize": 5457344534,
+    "lastUpdated": 1479168471.548340,
+    "checksum": "394a7d8d67c7e022490212d6098a2209"
+}
+```
+ 
 ### Group object
 
 In the HDF data model group object is used to organize collections of other groups and datasets via describing a set of links (either hard, soft, or external).  In the object store schema, the links contain just information about the link itself, not the linked object.  The group object may also contain a collection of attributes.
@@ -243,6 +297,25 @@ The group object storage key is of the form:
 ```<hash>-g-<uuid>```
 
 Where <hash> is an md5 hash of the group id ("g-&lt;uuid&gt;"). Where &lt;uuid&gt; is a standard 36 character UUID.
+
+Since storage systems such as AWS S3 use a hash of the first few characters of the object key to determine the storage node used to store the object, these characters should be randomly distributed to ensure thoughput to the storage system is not limited.  UUIDs in general don't have good distribution (i.e. it's very common for the first characters to be repeated), so the object key for a specific UUID is formed by prefixing a five character md5 hash to the object id.
+
+For example, if the object id is:
+
+```g-2428ae0e-a082-11e6-9d93-0242ac110005```
+
+An md5 hash of the id would be:
+
+```8211ea6301342ba59ee07056cef3e586```
+
+Taking the first five characters and appending to the id with a hyphen seperator gives:
+
+```8211e-g-2428ae0e-a082-11e6-9d93-0242ac110005```
+
+This will then be used as the storage key to store and retrieve the given object.
+
+The same approach is used for dataset, committed type, and chunk keys.
+
 
 #### Group Specification
 
@@ -271,7 +344,7 @@ Notes:
 * The "id", "root", and "domain" keys can be assumed to be immutable
 
 TBD:
-* A group that contains a large number (roughly > 100K or more) of links or attributes, may present problems when accessed.  If a single storage object is very large, there will be excessive latency in retrieving the object from the object store, and loading the JSON into memory.  Nodes that loading a large group object into an in-memory data structure may have problems with memory over-allocation as well.  To address this, one possiblity would be two shard such large groups into multiple storage objects.
+* A group that contains a large number (roughly > 100K or more) of links or attributes, may present problems when accessed.  If a single storage object is very large, there will be excessive latency in retrieving the object from the object store.  Also applications loading a large JSON string may consume an excessive amount of memory.  To address this, one possiblity would be two shard such large groups into multiple storage objects.
 
 #### Group object example
 
@@ -297,13 +370,13 @@ Object:
             "class": "H5L_TYPE_SOFT"
         },
         "extlink": {
-            "created": 1478039211.035654, 
+            "created": 1478039211.035682, 
             "h5path": "/a_group/a_dset", 
             "domain": "/home/test_user2/another_domain",
-            "class": "H5L_TYPE_SOFT"
-        }
+            "class": "H5L_TYPE_EXTERNAL"
+        },
     }, 
-    "created": 1478039149, 
+    "created": 1478039149.932783, 
     "root": "g-2428ae0e-a082-11e6-9d93-0242ac110005", 
     "domain": "/home/test_user1/mydomain"
 }
@@ -355,9 +428,9 @@ Object:
     "type": {
         "base": "H5T_STD_U32LE", 
         "class": "H5T_INTEGER"
-        },
+    },
     "attributes": {}
-    "created": 1478039183, 
+    "created": 1478039183.392074, 
     "root": "g-2428ae0e-a082-11e6-9d93-0242ac110005", 
     "domain": "/home/test_user1/mydomain"   
 }
@@ -424,13 +497,16 @@ Object:
     "type": {
         "class": "H5T_FLOAT",
         "base": "H5T_IEEE_F32LE"
-        }, 
+    }, 
     "shape": {
         "class": "H5S_SIMPLE",
         "maxdims": [20], 
         "dims": [10]
-        },
-    "layout": [20],
+    },
+    "layout": { 
+        "class" = "H5D_CHUNKED",
+        "dims" = [20]
+    }
     "creationProperties": { 
         "allocTime": "H5D_ALLOC_TIME_LATE", 
         "fillTime": "H5D_FILL_TIME_IFSET", 
@@ -438,7 +514,7 @@ Object:
             "class": "H5D_CONTIGUOUS"
         }
     },
-    "created": 1477549587, 
+    "created": 1477549587.387293, 
     "root": "g-2428ae0e-a082-11e6-9d93-0242ac110005", 
     "domain": "/home/test_user1/mydomain",
     "attributes": {}
@@ -471,6 +547,9 @@ Where:
 * Following the &lt;uuid&gt; there is a series of stringified integers seperated by underscores.  The number of integers should be equal to the rank (number of dimensions) of the dataset.
 * The coordinates &lt;i&gt;, &lt;j&gt;, &lt;k&gt;, etc.  identify the coordinate of the chunk (fastest varying dimension last)
 
+Note: conceivably there could be a danger of exceeding the maximum key length (1024 characters) if the dataset had hundreds of dimensions, or very large extents.
+ 
+
 #### Object metadata
 
 Information about compression filters applied to the chunk data will be stored as User-defined Metadata of the object (Note: this is limited to 2KB bytes on AWS S3).
@@ -479,7 +558,9 @@ TBD: define metadata keys
 
 #### Chunk Specification
 
-The chunk object is a binary blob for fixed length types, or JSON for varying length types. 
+The chunk object is a binary blob for fixed length types, or a JSON array for varying length types.
+
+TBD: Is there a potential for data loss in converting floating-point data to JSON and back?  Validate that the JSON loader stringifies floating point values with sufficient percision.  
 
 #### Chunk object example
 
