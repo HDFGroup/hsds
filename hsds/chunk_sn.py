@@ -26,6 +26,7 @@ from util.hdf5dtype import getItemSize, createDataType
 from util.dsetUtil import getSliceQueryParam, setSliceQueryParam, getSelectionShape, getNumElements
 from util.chunkUtil import getNumChunks, getChunkIds
 from util.chunkUtil import getChunkCoverage, getDataCoverage
+from util.arrayUtil import bytesArrayToList 
 
 from util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from servicenode_lib import getObjectJson, validateAction
@@ -460,7 +461,9 @@ async def GET_Value(request):
     # TBD - Binary response
     resp_json = {}
     resp_json["hrefs"] = []  # TBD
-    resp_json["value"] = arr.tolist()  # TBD - handle byte -> str conversion (c.f. bytesArrayToList in hdf5-json)
+    data = arr.tolist()
+    json_data = bytesArrayToList(data)
+    resp_json["value"] = json_data  
  
     resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
