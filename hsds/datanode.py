@@ -19,7 +19,7 @@ from aiohttp import ClientSession, TCPConnector
 import config
 from basenode import healthCheck, baseInit
 import hsds_logger as log
-from domain_dn import GET_Domain, PUT_Domain, DELETE_Domain
+from domain_dn import GET_Domain, PUT_Domain, DELETE_Domain, PUT_ACL
 from group_dn import GET_Group, POST_Group, DELETE_Group
 from link_dn import GET_Links, GET_Link, PUT_Link, DELETE_Link
 from attr_dn import GET_Attributes, GET_Attribute, PUT_Attribute, DELETE_Attribute
@@ -40,6 +40,7 @@ async def init(loop):
     app.router.add_route('GET', '/domains/{key}', GET_Domain)
     app.router.add_route('PUT', '/domains/{key}', PUT_Domain)
     app.router.add_route('DELETE', '/domains/{key}', DELETE_Domain)
+    app.router.add_route('PUT', '/domains/{key}/acls/{username}', PUT_ACL)
     app.router.add_route('GET', '/groups/{id}', GET_Group)
     app.router.add_route('DELETE', '/groups/{id}', DELETE_Group)
     app.router.add_route('POST', '/groups', POST_Group)

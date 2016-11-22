@@ -17,6 +17,7 @@ import time
 from aiohttp import HttpProcessingError   
 from util.idUtil import validateInPartition, getS3Key, isValidUuid
 from util.s3Util import getS3JSONObj, putS3JSONObj, putS3Bytes
+from util.domainUtil import getS3KeyForDomain
 import config
 import hsds_logger as log
     
@@ -118,9 +119,17 @@ async def s3sync(app):
             retry_keys = []  # add any write failures back here
             for obj_id in keys_to_update:
                 # write back to S3  
-                s3_key = getS3Key(obj_id)  
+                s3_key = None
+                is_chunk = False
+                if obj_id.find('.') > -1:
+                    # this looks like a domain id
+                    s3_key = getS3KeyForDomain(obj_id)
+                else:
+                    s3_key = getS3Key(obj_id)  
+                    if obj_id[0] == 'c':
+                        is_chunk = True
                 log.info("s3sync for s3_key: {}".format(s3_key))
-                if obj_id[0] == 'c':
+                if is_chunk:
                     # chunk update
                     if obj_id not in data_cache:
                         log.error("expected to find obj_id: {} in data cache".format(obj_id))
@@ -140,6 +149,7 @@ async def s3sync(app):
                         retry_keys.append(obj_id)
                         continue
                     obj_json = meta_cache[obj_id]
+                    log.info("writing s3_key: {}".format(s3_key))
                     try:
                         await putS3JSONObj(app, s3_key, obj_json) 
                     except HttpProcessingError as hpe:

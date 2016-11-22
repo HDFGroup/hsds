@@ -132,8 +132,6 @@ async def GET_Link(request):
     log.response(request, resp=resp)
     return resp
 
-
-
 async def PUT_Link(request):
     """ Handler creating a new link"""
     log.request(request)

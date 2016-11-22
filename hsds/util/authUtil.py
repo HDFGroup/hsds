@@ -124,6 +124,10 @@ def aclOpForRequest(request):
         # Treat other operations (e.g. HEAD) as read
         req_action = "read"
     return req_action
+
+def getAclKeys():
+    """ Return the set of ACL keys """
+    return ('create', 'read', 'update', 'delete', 'readACL', 'updateACL')
  
 
 

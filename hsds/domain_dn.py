@@ -12,11 +12,11 @@
 #
 # data node of hsds cluster
 # 
-
+import time
 from aiohttp.errors import HttpBadRequest
 from aiohttp import HttpProcessingError 
- 
 from util.idUtil import   getObjPartition
+from util.authUtil import  getAclKeys
 from util.httpUtil import  jsonResponse
 from util.s3Util import getS3JSONObj, putS3JSONObj, isS3Obj, deleteS3Obj
 from util.domainUtil import getS3KeyForDomain
@@ -57,10 +57,8 @@ async def GET_Domain(request):
     if domain_key in meta_cache:
         log.info("{} found in meta cache".format(domain_key))
         domain_json = meta_cache[domain_key]
-    else:
-        
-        domain_json = await getS3JSONObj(app, s3_key)
-           
+    else:      
+        domain_json = await getS3JSONObj(app, s3_key)  
         meta_cache[domain_key] = domain_json  # save to cache
 
     resp = await jsonResponse(request, domain_json)
@@ -120,7 +118,6 @@ async def PUT_Domain(request):
         msg = "Expected root Key in Body"
         log.warn(msg)
         raise HttpProcessingError(code=500, message=msg) 
-
      
     domain_json = { }
     domain_json["root"] = body_json["root"]
@@ -187,5 +184,78 @@ async def DELETE_Domain(request):
     resp = await jsonResponse(request, json_response, status=200)
     log.response(request, resp=resp)
     return resp
+
+async def PUT_ACL(request):
+    """ Handler creating/update an ACL"""
+    log.request(request)
+    app = request.app
+    domain_key = request.match_info.get('key')
+    log.info("domain: {}".format(domain_key))
+    acl_username = request.match_info.get('username')
+    
+    s3_key = None
+    try:
+        s3_key = getS3KeyForDomain(domain_key)
+        log.info("s3_key for domain {}: {}".format(domain_key, s3_key))
+    except ValueError as ve:
+        msg = "Invalid domain key: {}".format(str(ve))
+        log.warn(msg)
+        raise HttpBadRequest(msg)
+
+    if getObjPartition(domain_key, app['node_count']) != app['node_number']:
+        # The request shouldn't have come to this node'
+        raise HttpBadRequest(message="wrong node for 'key':{}".format(s3_key))
+
+    if not request.has_body:
+        msg = "PUT ACL with no body"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+
+    body = await request.json()   
+    
+    meta_cache = app['meta_cache'] 
+    domain_json = None
+    if domain_key in meta_cache:
+        log.info("{} found in meta cache".format(domain_key))
+        domain_json = meta_cache[domain_key]
+    else:
+        log.info("getS3JSONObj({})".format(domain_key))
+        # read S3 object as JSON
+        domain_json = await getS3JSONObj(app, domain_key)
+         
+        meta_cache[domain_key] = domain_json  # add to cache
+
+    if "acls" not in domain_json:
+        log.error( "unexpected domain data for domain: {}".format(domain_key))
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+
+    acl_keys = getAclKeys()
+    acls = domain_json["acls"]
+    acl = {}
+    if acl_username in acls:
+        acl = acls[acl_username]
+    else:
+        # initialize acl with no perms
+        for k in acl_keys:
+            acl[k] = False
+
+    # replace any permissions given in the body
+    for k in body.keys():
+        acl[k] = body[k]
+
+    # replace/insert the updated/new acl
+    acls[acl_username] = acl
+    
+    # write back to S3
+    now = int(time.time())
+    dirty_ids = app["dirty_ids"]
+    dirty_ids[domain_key] = now
+    
+    resp_json = { } 
+     
+    resp = await jsonResponse(request, resp_json, status=201)
+    log.response(request, resp=resp)
+    return resp
+
 
    
