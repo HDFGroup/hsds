@@ -86,6 +86,18 @@ class ChunkUtilTest(unittest.TestCase):
     def testGetChunkIds(self):
         # getChunkIds(dset_id, selection, layout, dim=0, prefix=None, chunk_ids=None):
         dset_id = "d-12345678-1234-1234-1234-1234567890ab"
+
+        datashape = [1,]
+        layout = (1,)
+        selection = getHyperslabSelection(datashape)
+        chunk_ids = getChunkIds(dset_id, selection, layout)
+        self.assertEqual(len(chunk_ids), 1)
+        chunk_id = chunk_ids[0]
+        self.assertTrue(chunk_id.startswith("c-"))
+        self.assertTrue(chunk_id.endswith('_0'))
+        self.assertEqual(chunk_id[2:-2], dset_id[2:])
+        self.assertEqual(len(chunk_id), 2+36+2)
+
         datashape = [100,]
         layout = (10,)
         selection = getHyperslabSelection(datashape)

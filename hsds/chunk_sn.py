@@ -22,16 +22,16 @@ from util.httpUtil import  jsonResponse
 from util.idUtil import   isValidUuid, getDataNodeUrl
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.hdf5dtype import getItemSize, createDataType
-
-from util.dsetUtil import getSliceQueryParam, setSliceQueryParam, getSelectionShape, getNumElements
+from util.dsetUtil import getSliceQueryParam, setSliceQueryParam 
+from util.dsetUtil import getSelectionShape, getNumElements, getDsetDims
 from util.chunkUtil import getNumChunks, getChunkIds
 from util.chunkUtil import getChunkCoverage, getDataCoverage
 from util.arrayUtil import bytesArrayToList 
-
 from util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from servicenode_lib import getObjectJson, validateAction
 import config
 import hsds_logger as log
+
 
 """
 Write data to given chunk_id.  Pass in type, dims, and selection area.
@@ -54,11 +54,8 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr):
     if "shape" not in dset_json:
         log.error("No type found in dset_json: {}".format(dset_json))
         raise HttpProcessingError(message="Unexpected error", code=500)
-    shape_json = dset_json["shape"]
-    if "dims" not in shape_json:
-        log.error("No dims found in dset_json: {}".format(dset_json))
-        raise HttpProcessingError(message="Unexpected error", code=500)
-    dims = shape_json["dims"]
+    
+    dims = getDsetDims(dset_json)
 
     chunk_sel = getChunkCoverage(chunk_id, slices, layout)
     log.info("chunk_sel: {}".format(chunk_sel))
@@ -116,14 +113,7 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr):
         log.error("No type found in dset_json: {}".format(dset_json))
         raise HttpProcessingError(message="Unexpected error", code=500)
     type_json = dset_json["type"]
-    if "shape" not in dset_json:
-        log.error("No type found in dset_json: {}".format(dset_json))
-        raise HttpProcessingError(message="Unexpected error", code=500)
-    shape_json = dset_json["shape"]
-    if "dims" not in shape_json:
-        log.error("No dims found in dset_json: {}".format(dset_json))
-        raise HttpProcessingError(message="Unexpected error", code=500)
-    dims = shape_json["dims"]
+    dims = getDsetDims(dset_json)
 
     chunk_sel = getChunkCoverage(chunk_id, slices, layout)
     data_sel = getDataCoverage(chunk_id, slices, layout)
@@ -208,17 +198,14 @@ async def PUT_Value(request):
     # get  state for dataset from DN.
     dset_json = await getObjectJson(app, dset_id)  
 
-    dims = None
-    rank = 0
     layout = None 
     datashape = dset_json["shape"]
-    if datashape["class"] == 'H5S_SIMPLE':
-        dims = datashape["dims"]
-        rank = len(dims) 
-    elif datashape["class"] == 'H5S_NULL':
+    if datashape["class"] == 'H5S_NULL':
         msg = "Null space datasets can not be used as target for PUT value"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
+    dims = getDsetDims(dset_json)
+    rank = len(dims)
     if "layout" in dset_json:
         layout = dset_json["layout"]
     else:
@@ -325,8 +312,7 @@ async def PUT_Value(request):
             # selection/data mismatch!
             msg = "data shape doesn't match selection shape"
             msg += "--data shape: " + str(arr.shape)
-            msg += "--selection shape: " + str(np_shape)
-                
+            msg += "--selection shape: " + str(np_shape)         
             log.warn(msg)
             raise HttpBadRequest(message=msg)
 
@@ -349,7 +335,6 @@ async def PUT_Value(request):
 
     resp_json = {}
     resp_json["hrefs"] = []  # TBD
-
 
     resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
@@ -394,13 +379,14 @@ async def GET_Value(request):
     # get  state for dataset from DN.
     dset_json = await getObjectJson(app, dset_id)  
 
-    dims = None
-    rank = 0
     layout = None 
     datashape = dset_json["shape"]
-    if datashape["class"] == 'H5S_SIMPLE':
-        dims = datashape["dims"]
-        rank = len(dims) 
+    if datashape["class"] == 'H5S_NULL':
+        msg = "GET value not supported for datasets with NULL shape"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    dims = getDsetDims(dset_json)
+    rank = len(dims)
      
     if "layout" in dset_json:
         layout = dset_json["layout"]
@@ -463,7 +449,11 @@ async def GET_Value(request):
     resp_json["hrefs"] = []  # TBD
     data = arr.tolist()
     json_data = bytesArrayToList(data)
-    resp_json["value"] = json_data  
+    if datashape["class"] == 'H5S_SCALAR':
+        # convert array response to value
+        resp_json["value"] = json_data[0]
+    else:
+        resp_json["value"] = json_data  
  
     resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)

@@ -10,7 +10,7 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 
-from aiohttp.errors import HttpBadRequest 
+from aiohttp.errors import HttpBadRequest, HttpProcessingError
 import hsds_logger as log
 
 
@@ -326,6 +326,31 @@ def getNumElements(dims):
     else:
         raise ValueError("Unexpected argument")
     return num_elements
+
+
+""" 
+Get dims from a given shape.  Return [1,] for Scalar datasets
+
+Use with H5S_NULL datasets will throw a 500 error.
+"""
+def getDsetDims(dset_json):
+    if "shape" not in dset_json:
+        log.error("No shape found in dset_json")
+        raise HttpProcessingError(message="Unexpected error", code=500)
+    shape_json = dset_json["shape"]
+    dims = None
+    if shape_json['class'] == 'H5S_NULL':
+        msg = "Expected shape class other than H5S_NULL"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    elif shape_json['class'] == 'H5S_SCALAR':
+        dims = [1,]
+    elif shape_json['class'] == 'H5S_SIMPLE':
+        dims = shape_json["dims"]
+    else:
+        log.error("Unexpected shape class: {}".format(shape_json['class']))
+        raise HttpProcessingError(message="Unexpected error", code=500)
+    return dims
 
 
 
