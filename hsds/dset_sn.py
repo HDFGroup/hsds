@@ -507,7 +507,9 @@ async def POST_Dataset(request):
         # TBD - validate creationProperties
         dataset_json["creationProperties"] = body["creationProperties"]
     if layout is not None:
-        dataset_json["layout"] = layout
+        layout_json = {"class": 'H5D_CHUNKED'}
+        layout_json["dims"] = layout
+        dataset_json["layout"] = layout_json
     
     log.info("create dataset: " + json.dumps(dataset_json))
     req = getDataNodeUrl(app, dset_id) + "/datasets"

@@ -22,7 +22,7 @@ from util.httpUtil import  jsonResponse
 from util.idUtil import   isValidUuid, getDataNodeUrl
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.hdf5dtype import getItemSize, createDataType
-from util.dsetUtil import getSliceQueryParam, setSliceQueryParam 
+from util.dsetUtil import getSliceQueryParam, setSliceQueryParam, getChunkLayout 
 from util.dsetUtil import getSelectionShape, getNumElements, getDsetDims
 from util.chunkUtil import getNumChunks, getChunkIds
 from util.chunkUtil import getChunkCoverage, getDataCoverage
@@ -46,16 +46,13 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr):
     if "layout" not in dset_json:
         log.error("No layout found in dset_json: {}".format(dset_json))
         raise HttpProcessingError(message="Unexpected error", code=500)
-    layout = dset_json["layout"]
+     
     if "type" not in dset_json:
         log.error("No type found in dset_json: {}".format(dset_json))
         raise HttpProcessingError(message="Unexpected error", code=500)
     type_json = dset_json["type"]
-    if "shape" not in dset_json:
-        log.error("No type found in dset_json: {}".format(dset_json))
-        raise HttpProcessingError(message="Unexpected error", code=500)
-    
     dims = getDsetDims(dset_json)
+    layout = getChunkLayout(dset_json)
 
     chunk_sel = getChunkCoverage(chunk_id, slices, layout)
     log.info("chunk_sel: {}".format(chunk_sel))
@@ -105,16 +102,12 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr):
     log.info("GET chunk req: " + req)
     client = app['client']
 
-    if "layout" not in dset_json:
-        log.error("No layout found in dset_json: {}".format(dset_json))
-        raise HttpProcessingError(message="Unexpected error", code=500)
-    layout = dset_json["layout"]
     if "type" not in dset_json:
         log.error("No type found in dset_json: {}".format(dset_json))
         raise HttpProcessingError(message="Unexpected error", code=500)
     type_json = dset_json["type"]
     dims = getDsetDims(dset_json)
-
+    layout = getChunkLayout(dset_json)
     chunk_sel = getChunkCoverage(chunk_id, slices, layout)
     data_sel = getDataCoverage(chunk_id, slices, layout)
     
@@ -206,12 +199,8 @@ async def PUT_Value(request):
         raise HttpBadRequest(message=msg)
     dims = getDsetDims(dset_json)
     rank = len(dims)
-    if "layout" in dset_json:
-        layout = dset_json["layout"]
-    else:
-        log.warn("no layout for dataset: {}".format(dset_json))
-        layout = dims
-
+    layout = getChunkLayout(dset_json)
+     
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
     if item_size == 'H5T_VARIABLE' and content_type != "application/json":
@@ -379,7 +368,6 @@ async def GET_Value(request):
     # get  state for dataset from DN.
     dset_json = await getObjectJson(app, dset_id)  
 
-    layout = None 
     datashape = dset_json["shape"]
     if datashape["class"] == 'H5S_NULL':
         msg = "GET value not supported for datasets with NULL shape"
@@ -387,13 +375,8 @@ async def GET_Value(request):
         raise HttpBadRequest(message=msg)
     dims = getDsetDims(dset_json)
     rank = len(dims)
+    layout = getChunkLayout(dset_json)
      
-    if "layout" in dset_json:
-        layout = dset_json["layout"]
-    else:
-        log.warn("no layout for dataset")
-        layout = dims
-
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
     log.info("item size: {}".format(item_size))

@@ -452,8 +452,12 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("layout" in rspJson)
-        layout = rspJson["layout"]
-        self.assertEqual(layout, [10, 10])
+        layout_json = rspJson["layout"]
+        self.assertTrue("class" in layout_json)
+        self.assertEqual(layout_json["class"], 'H5D_CHUNKED')
+        self.assertTrue("dims" in layout_json)
+        self.assertEqual(layout_json["dims"], [10,10])
+         
 
     def testAutoChunkDataset(self):
         # test Dataset where chunk dataset is set automatically
@@ -492,7 +496,11 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("layout" in rspJson)
-        layout = rspJson["layout"]
+        layout_json = rspJson["layout"]
+        self.assertTrue("class" in layout_json)
+        self.assertEqual(layout_json["class"], 'H5D_CHUNKED')
+        self.assertTrue("dims" in layout_json)
+        layout = layout_json["dims"]
         self.assertEqual(len(layout), 2)
         self.assertTrue(layout[0] < dims[0])
         self.assertTrue(layout[1] < dims[1])

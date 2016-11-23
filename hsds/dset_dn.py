@@ -119,7 +119,7 @@ async def POST_Dataset(request):
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
     layout = None
-    if "layout" in data:
+    if "layout" in data:       
         layout = data["layout"]  # client specified chunk layout
     
     validateInPartition(app, dset_id)

@@ -352,6 +352,18 @@ def getDsetDims(dset_json):
         raise HttpProcessingError(message="Unexpected error", code=500)
     return dims
 
+""" Get chunk layout.  Throw 500 if used with non-H5D_CHUNKED layout
+"""
+def getChunkLayout(dset_json):
+    if "layout" not in dset_json:
+        log.error("No layout found in dset_json: {}".format(dset_json))
+        raise HttpProcessingError(message="Unexpected error", code=500)
+    layout_json = dset_json["layout"]
+    if layout_json["class"] != 'H5D_CHUNKED':
+        log.error("Unexpected shape layout: {}".format(layout_json["class"]))
+        raise HttpProcessingError(message="Unexpected error", code=500)
+    layout = layout_json["dims"]
+    return layout
 
 
         
