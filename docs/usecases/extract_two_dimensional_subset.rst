@@ -66,8 +66,7 @@ Success Guarantee
 Main Success Scenario
 ---------------------
 1. The user "connects" to the hsds data service endpoint 
-   1a. The user may determine the bounds and or data set of interest either by querying the hsds service end-point or 
-       through some other means 
+   1a. The user may determine the bounds and or data set of interest either by querying the hsds service end-point or through some other means 
 2. The user requests a subset of the data set based on a set of index parameters. e.g. conn_handle.tasmax[1, 2:4, 2:4].
 3. The HSDS service returns JSON to the client based on the parameters and indices determined above
 4. The users client accepts the JSON data from the hsds service and loads it into the appropriate data structure 
