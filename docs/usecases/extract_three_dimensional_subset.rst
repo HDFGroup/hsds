@@ -1,5 +1,5 @@
-Extract a two dimensional subset from a dataset  
-================================================
+Extract a three dimensional subset from a dataset  
+=================================================
 
 Context of use
 --------------
@@ -13,18 +13,20 @@ some quantity over some time range. The structure is roughly illustrated in the 
 
 Description 
 -------------
-The extraction of the subset is for some time step **t** for all **x** and **y**, highlighted in black below:
+The extraction of the subset is for times **t** between **a** and **b** (t[a:b]), for all **x** and **y**, highlighted 
+in black below:
 
-.. image:: 2d-1.png
+.. image:: 3d-1.png
       :align: center
-      :alt: 2d subset view 
+      :alt: 3d subset view 
 
-The extraction of a subset for some time step **t** for all **x** between **a** and **b** (x[a:b]) and for all **y** between 
-**c** and **d** (y[b:c]), highlighted in black below:
 
-.. image:: 2d-2.png
+The extraction of the subset is for times **t** between **a** and **b** (t[a:b]), for all **x** 
+between **c** and **d** (x[c:d]) and for all **y** between **e** and **f** (y[e:f]), highlighted in black below:
+
+.. image:: 3d-2.png
       :align: center
-      :alt: 2d subset view 2
+      :alt: 3d subset view 2
 
 Scope
 -----
@@ -69,7 +71,7 @@ Main Success Scenario
    
    1a. The user may determine the bounds and or data set of interest either by querying the hsds service end-point or through some other means 
 
-2. The user requests a subset of the data set based on a set of index parameters. e.g. conn_handle.tasmax[1, 2:4, 2:4].
+2. The user requests a subset of the data set based on a set of index parameters. e.g. conn_handle.tasmax[2:4, 2:4, 2:4]].
 3. The HSDS service returns JSON to the client based on the parameters and indices determined above
 4. The user's client accepts the JSON data from the hsds service and loads it into the appropriate data structure 
    for the application used by the user's client.
