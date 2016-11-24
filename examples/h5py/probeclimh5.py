@@ -192,8 +192,8 @@ def multiple_time_series(fname, vname, its, srctype):
         tmstr = datetime.datetime.now() 
         xyall = random_loc(hfd['lon'].shape[0], hfd['lat'].shape[0], MULTI_SERIES_N)
 
-        for xy in xyall: 
-            if srctype == 'rest':
+        for xy in xyall:  # can this be bundled into one call with h5serv / hsds?
+            if srctype == 'rest': 
                 dat = hfd[vname][ 0:tmrnge-1, xy[1], xy[0] ]
             else:
                 dat = hfd[vname][ 0:tmrnge-1, xy[1], xy[0] ]
