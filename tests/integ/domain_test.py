@@ -75,7 +75,7 @@ class DomainTest(unittest.TestCase):
         rsp = requests.put(req, headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
-        for k in ("root", "owner", "acls"):
+        for k in ("root", "owner", "acls", "created", "lastModified"):
              self.assertTrue(k in rspJson)
 
         root_id = rspJson["root"]
@@ -185,7 +185,52 @@ class DomainTest(unittest.TestCase):
         # TBD - try deleting a top-level domain
 
         # TBD - try deleting a domain that has child-domains
+
+    def testDomainCollections(self):
+        print("testDomainCollections", self.base_domain)
+        domain = "domain_collections." + self.base_domain
         
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + '/'
+
+        rsp = requests.put(req, headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        for k in ("root", "owner", "acls", "created", "lastModified"):
+             self.assertTrue(k in rspJson)
+
+        root_id = rspJson["root"]
+
+        # get the datasets collection
+        req = helper.getEndpoint() + '/datasets'
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("datasets in rspJson")
+        datasets = rspJson["datasets"]
+        self.assertEqual(len(datasets), 0)
+
+        # get the groups collection
+        req = helper.getEndpoint() + '/groups'
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("groups in rspJson")
+        groups = rspJson["groups"]
+        self.assertEqual(len(groups), 0)
+
+        # get the datatypes collection
+        req = helper.getEndpoint() + '/datatypes'
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("datatypes in rspJson")
+        datatypes = rspJson["datatypes"]
+        self.assertEqual(len(datatypes), 0)
+
          
     
              

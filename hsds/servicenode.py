@@ -20,7 +20,9 @@ from aiohttp import ClientSession, TCPConnector
 import config
 from basenode import healthCheck,  baseInit
 import hsds_logger as log
-from domain_sn import GET_Domain, PUT_Domain, DELETE_Domain, GET_ACL, GET_ACLs, PUT_ACL
+from domain_sn import GET_Domain, PUT_Domain, DELETE_Domain
+from domain_sn import GET_Datasets, GET_Groups, GET_Datatypes
+from domain_sn import GET_ACL, GET_ACLs, PUT_ACL
 from group_sn import GET_Group, POST_Group, DELETE_Group
 from link_sn import GET_Links, GET_Link, PUT_Link, DELETE_Link
 from attr_sn import GET_Attributes, GET_Attribute, PUT_Attribute, DELETE_Attribute
@@ -43,6 +45,7 @@ async def init(loop):
     app.router.add_route('PUT', '/acls/{username}', PUT_ACL)
     app.router.add_route('GET', '/acls', GET_ACLs)
     app.router.add_route('GET', '/groups/{id}', GET_Group)
+    app.router.add_route('GET', '/groups', GET_Groups)
     app.router.add_route('DELETE', '/groups/{id}', DELETE_Group)
     app.router.add_route('POST', '/groups', POST_Group)
     app.router.add_route('GET', '/groups/{id}/links', GET_Links)
@@ -54,6 +57,7 @@ async def init(loop):
     app.router.add_route('DELETE', '/groups/{id}/attributes/{name}', DELETE_Attribute)
     app.router.add_route('PUT', '/groups/{id}/attributes/{name}', PUT_Attribute)
     app.router.add_route('GET', '/datatypes/{id}', GET_Datatype)
+    app.router.add_route('GET', '/datatypes', GET_Datatypes)
     app.router.add_route('DELETE', '/datatypes/{id}', DELETE_Datatype)
     app.router.add_route('POST', '/datatypes', POST_Datatype)
     app.router.add_route('GET', '/datatypes/{id}/attributes', GET_Attributes)
@@ -61,6 +65,7 @@ async def init(loop):
     app.router.add_route('DELETE', '/datatypes/{id}/attributes/{name}', DELETE_Attribute)
     app.router.add_route('PUT', '/datatypes/{id}/attributes/{name}', PUT_Attribute)
     app.router.add_route('GET', '/datasets/{id}', GET_Dataset)
+    app.router.add_route('GET', '/datasets', GET_Datasets)
     app.router.add_route('DELETE', '/datasets/{id}', DELETE_Dataset)
     app.router.add_route('POST', '/datasets', POST_Dataset)
     app.router.add_route('GET', '/datasets/{id}/shape', GET_DatasetShape)

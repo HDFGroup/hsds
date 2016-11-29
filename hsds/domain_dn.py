@@ -123,6 +123,9 @@ async def PUT_Domain(request):
     domain_json["root"] = body_json["root"]
     domain_json["owner"] = body_json["owner"]
     domain_json["acls"] = body_json["acls"]
+    now = time.time()
+    domain_json["created"] = now
+    domain_json["lastModified"] = now
 
     # write to S3
     await putS3JSONObj(app, s3_key, domain_json)  
@@ -247,9 +250,10 @@ async def PUT_ACL(request):
     acls[acl_username] = acl
     
     # write back to S3
-    now = int(time.time())
+    now = time.time()
     dirty_ids = app["dirty_ids"]
     dirty_ids[domain_key] = now
+    domain_json["lastModified"] = now
     
     resp_json = { } 
      

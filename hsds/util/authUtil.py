@@ -106,7 +106,19 @@ def aclCheck(obj_json, req_action, req_user):
         log.warn("Action: {} not permitted for user: {}".format(req_action, req_user))
         raise HttpProcessingError(code=403, message="Forbidden")
     log.info("action permitted")
-    
+
+def validateAclJson(acl_json):
+    acl_keys = getAclKeys()
+    for username in acl_json.keys():
+        acl = acl_json[username]
+        for acl_key in acl.keys():
+            if acl_key not in acl_keys:
+                msg = "Invalid ACL key: {}".format(acl_key)
+                log.warn(msg)
+                raise HttpBadRequest(msg)
+            acl_value = acl[acl_key]
+            if acl_value not in (True, False):
+                msg = "Invalid ACL value: {}".format(acl_value)   
 
 def aclOpForRequest(request):
     """ return default ACL action for request method

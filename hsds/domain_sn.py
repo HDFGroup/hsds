@@ -19,7 +19,8 @@ from aiohttp.errors import HttpBadRequest
 
 from util.httpUtil import  http_post, http_put, http_get_json, http_delete, jsonResponse
 from util.idUtil import  getDataNodeUrl, createObjId
-from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword, getAclKeys
+from util.authUtil import getUserPasswordFromRequest, aclCheck
+from util.authUtil import validateUserPassword, getAclKeys
 from util.domainUtil import getParentDomain, getDomainFromRequest, isValidDomain
 from servicenode_lib import getDomainJson
 import hsds_logger as log
@@ -68,6 +69,10 @@ async def GET_Domain(request):
         rsp_json["root"] = domain_json["root"]
     if "owner" in domain_json:
         rsp_json["owner"] = domain_json["owner"]
+    if "created" in domain_json:
+        rsp_json["created"] = domain_json["created"]
+    if "lastModified" in domain_json:
+        rsp_json["lastModified"] = domain_json["lastModified"]
 
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
@@ -353,6 +358,149 @@ async def PUT_ACL(request):
     resp = await jsonResponse(request, req_rsp, status=201)
     log.response(request, resp=resp)
     return resp
+
+
+async def GET_Datasets(request):
+    """HTTP method to return dataset collection for given domain"""
+    log.request(request)
+    app = request.app
+
+    (username, pswd) = getUserPasswordFromRequest(request)
+    if username is None and app['allow_noauth']:
+        username = "default"
+    else:
+        validateUserPassword(username, pswd)
+    domain = getDomainFromRequest(request)
+    if not isValidDomain(domain):
+        msg = "Invalid host value: {}".format(domain)
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    
+    # don't use app["domain_cache"]  if a direct domain request is made 
+    # as opposed to an implicit request as with other operations, query
+    # the domain from the authoritative source (the dn node)
+    req = getDataNodeUrl(app, domain)
+    req += "/domains/" + domain 
+    log.info("sending dn req: {}".format(req))
+     
+    domain_json = await http_get_json(app, req)
+     
+    if 'owner' not in domain_json:
+        log.warn("No owner key found in domain")
+        raise HttpProcessingError(code=500, message="Unexpected error")
+
+    if 'acls' not in domain_json:
+        log.warn("No acls key found in domain")
+        raise HttpProcessingError(code=500, message="Unexpected error")
+
+    log.info("got domain_json: {}".format(domain_json))
+    # validate that the requesting user has permission to read this domain
+    aclCheck(domain_json, "read", username)  # throws exception if not authorized
+
+    # TBD: return the actual list of dataset ids.
+    # for now just return empty array and hrefs
+    rsp_json = { }
+    rsp_json["datasets"] = []
+    rsp_json["hrefs"] = []
+     
+    resp = await jsonResponse(request, rsp_json)
+    log.response(request, resp=resp)
+    return resp
+
+async def GET_Groups(request):
+    """HTTP method to return groups collection for given domain"""
+    log.request(request)
+    app = request.app
+
+    (username, pswd) = getUserPasswordFromRequest(request)
+    if username is None and app['allow_noauth']:
+        username = "default"
+    else:
+        validateUserPassword(username, pswd)
+    domain = getDomainFromRequest(request)
+    if not isValidDomain(domain):
+        msg = "Invalid host value: {}".format(domain)
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    
+    # don't use app["domain_cache"]  if a direct domain request is made 
+    # as opposed to an implicit request as with other operations, query
+    # the domain from the authoritative source (the dn node)
+    req = getDataNodeUrl(app, domain)
+    req += "/domains/" + domain 
+    log.info("sending dn req: {}".format(req))
+     
+    domain_json = await http_get_json(app, req)
+     
+    if 'owner' not in domain_json:
+        log.warn("No owner key found in domain")
+        raise HttpProcessingError(code=500, message="Unexpected error")
+
+    if 'acls' not in domain_json:
+        log.warn("No acls key found in domain")
+        raise HttpProcessingError(code=500, message="Unexpected error")
+
+    log.info("got domain_json: {}".format(domain_json))
+    # validate that the requesting user has permission to read this domain
+    aclCheck(domain_json, "read", username)  # throws exception if not authorized
+
+    # TBD: return the actual list of dataset ids.
+    # for now just return empty array and hrefs
+    rsp_json = { }
+    rsp_json["groups"] = []
+    rsp_json["hrefs"] = []
+     
+    resp = await jsonResponse(request, rsp_json)
+    log.response(request, resp=resp)
+    return resp
+
+async def GET_Datatypes(request):
+    """HTTP method to return datatype collection for given domain"""
+    log.request(request)
+    app = request.app
+
+    (username, pswd) = getUserPasswordFromRequest(request)
+    if username is None and app['allow_noauth']:
+        username = "default"
+    else:
+        validateUserPassword(username, pswd)
+    domain = getDomainFromRequest(request)
+    if not isValidDomain(domain):
+        msg = "Invalid host value: {}".format(domain)
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    
+    # don't use app["domain_cache"]  if a direct domain request is made 
+    # as opposed to an implicit request as with other operations, query
+    # the domain from the authoritative source (the dn node)
+    req = getDataNodeUrl(app, domain)
+    req += "/domains/" + domain 
+    log.info("sending dn req: {}".format(req))
+     
+    domain_json = await http_get_json(app, req)
+     
+    if 'owner' not in domain_json:
+        log.warn("No owner key found in domain")
+        raise HttpProcessingError(code=500, message="Unexpected error")
+
+    if 'acls' not in domain_json:
+        log.warn("No acls key found in domain")
+        raise HttpProcessingError(code=500, message="Unexpected error")
+
+    log.info("got domain_json: {}".format(domain_json))
+    # validate that the requesting user has permission to read this domain
+    aclCheck(domain_json, "read", username)  # throws exception if not authorized
+
+    # TBD: return the actual list of datatype ids.
+    # for now just return empty array and hrefs
+    rsp_json = { }
+    rsp_json["datatypes"] = []
+    rsp_json["hrefs"] = []
+     
+    resp = await jsonResponse(request, rsp_json)
+    log.response(request, resp=resp)
+    return resp
+    
 
 
  
