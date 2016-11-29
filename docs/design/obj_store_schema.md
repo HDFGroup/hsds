@@ -175,6 +175,7 @@ The domain object contains JSON with the following keys:
 * "owner" - Username of the owner (user who initially created the domain)
 * "root" - the UUID (not including the md5 hash) of the root group in the domain
 * "created" - the timestamp for when the domain was created
+* "lastModified" - the timestamp for when the domain was last updated
 
 The "owner" and "acls" keys are required, others may not be present.  In particular, if the "root" key is not present, that impies there is no HDF collection associated with this domain.  In this case the domain object can serve as a sort of "directory" for a set of related sub-domains.
 
@@ -215,7 +216,8 @@ Object:
     }, 
     "root": "g-cf4f3baa-956e-11e6-8319-0242ac110005", 
     "owner": "test_user1",
-    "created": 1479168471.038638
+    "created": 1479168471.038638,
+    "lastModified": 1479168471.038638
 }
 ```
 
@@ -249,7 +251,7 @@ In order to provide summary information about the objects in a domain, an additi
 * "logicalSize" - storage size of all entities including non-allocated chunks
 * "allocatedSize" - storage size that of all entities including only allocated chunks
 * "actualSize" - storage size as reported by the storage system (maybe smaller than "allocatedSize" due to compression)
-* "lastUpdated" - the timestamp for the most recent change to any object in the domain
+* "lastModified" - the timestamp for the most recent change to any object in the domain
 
 For reasons of efficiency, the summary information will typically be updated asynchronously from changes to object state. Therefore the stats object may not reflect the most recent changes to objects in the domain.  E.g. is a dataset is created using the HDF REST API, the changes in datasetCount and size keys won't be immediately reflected.  The Last-Modified metadata property of the domain stats object can be used to determine when these keys were last updated.
 
@@ -281,7 +283,7 @@ Object:
     "logicalSize": 13194139533,
     "allocatedSize": 8456534532,
     "actualSize": 5457344534,
-    "lastUpdated": 1479168471.548340,
+    "lastModified": 1479168471.548340,
     "checksum": "394a7d8d67c7e022490212d6098a2209"
 }
 ```
@@ -325,6 +327,7 @@ The Group object consist of JSON with the following keys:
 * "attributes" - a key/value collection of group atttributes
 * "links" - a key/value collection of links
 * "created" - timestamp (since epoch) of when the group was created
+* "lastModified" - timestamp of when the group was last modified
 * "root" - the id of the root group in the domain
 * "domain" - the domain which this group is a member of
 * "acls" - access Control List for authorization overrides
@@ -344,7 +347,7 @@ Notes:
 * The "id", "root", and "domain" keys can be assumed to be immutable
 
 TBD:
-* A group that contains a large number (roughly > 100K or more) of links or attributes, may present problems when accessed.  If a single storage object is very large, there will be excessive latency in retrieving the object from the object store.  Also applications loading a large JSON string may consume an excessive amount of memory.  To address this, one possiblity would be two shard such large groups into multiple storage objects.
+* A group that contains a large number (roughly > 100K or more) of links or attributes, may present problems when accessed.  If a single storage object is very large, there will be excessive latency in retrieving the object from the object store.  Also applications loading a large JSON string may consume an excessive amount of memory.  To address this, one possiblity would be to shard such large groups into multiple storage objects.
 
 #### Group object example
 
@@ -377,6 +380,7 @@ Object:
         },
     }, 
     "created": 1478039149.932783, 
+    "lastModified": 1478039149.932783, 
     "root": "g-2428ae0e-a082-11e6-9d93-0242ac110005", 
     "domain": "/home/test_user1/mydomain"
 }
@@ -402,6 +406,7 @@ The Committed type storage schema consists of JSON with the following keys:
 * "type" - a JSON object (or string for primitive types) representing the type
 * "attributes" - a key/value collection of group atttributes
 * "created" - timestamp (seconds since epoch) of when the committed type was created
+* "lastModified" - timestamp (seconds since epoch) of when the committed type was modified
 * "root" - the id of the root group in the domain
 * "domain" - the domain which this group is a member of
 * "acls" - access Control List for authorization overrides
@@ -430,7 +435,8 @@ Object:
         "class": "H5T_INTEGER"
     },
     "attributes": {}
-    "created": 1478039183.392074, 
+    "created": 1478039183.392074,
+    "lastModified": 1478039183.392074, 
     "root": "g-2428ae0e-a082-11e6-9d93-0242ac110005", 
     "domain": "/home/test_user1/mydomain"   
 }
@@ -468,6 +474,7 @@ The dataset storage schema consists of JSON with the following keys:
 * "creationProperties" - a JSON object representing the dataset creation property list used at dataset creation time 
 * "attributes" - a key/value collection of group atttributes
 * "created" - timestamp (seconds since epoch) of when the dataset was created
+* "lastModified" - timestamp (seconds since epoch) of when the dataset was last modified
 * "root" - the id of the root group in the domain
 * "domain" - the domain which this group is a member of
 * "acls" - access Control List for authorization overrides
@@ -515,6 +522,7 @@ Object:
         }
     },
     "created": 1477549587.387293, 
+    "lastModified": 1477549587.387293, 
     "root": "g-2428ae0e-a082-11e6-9d93-0242ac110005", 
     "domain": "/home/test_user1/mydomain",
     "attributes": {}
