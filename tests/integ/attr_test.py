@@ -109,7 +109,6 @@ class AttributeTest(unittest.TestCase):
             self.assertTrue("shape" in attrJson)
             shapeJson = attrJson["shape"]
             self.assertEqual(shapeJson["class"], "H5S_SCALAR")
-            # self.assertTrue("value" not in attrJson)  # TBD - change api to include value?
             self.assertTrue("created" in attrJson)
             self.assertTrue("href" in attrJson)
             self.assertTrue("value" in attrJson)
