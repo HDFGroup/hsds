@@ -187,13 +187,15 @@ async def jsonResponse(request, data, status=200):
 """
 Convience method to compute href links
 """
-def getHref(request, uri, query=None):
+def getHref(request, uri, query=None, domain=None):
     href = config.get("hsds_endpoint")
     if not href:
         href = request.scheme + "://" + request.host  
     href += uri
     delimiter = '?'
-    if "host" in request.GET:
+    if domain:
+        href += "?host=" + domain
+    elif "host" in request.GET:
         href  += "?host=" + request.GET["host"]
         delimiter = '&'
             

@@ -83,6 +83,10 @@ async def GET_Domain(request):
         hrefs.append({'rel': 'typebase', 'href': getHref(request, '/datatypes')})
         hrefs.append({'rel': 'root', 'href': getHref(request, '/groups/' + root_uuid)})
         hrefs.append({'rel': 'acls', 'href': getHref(request, '/acls')})
+    parent_domain = getParentDomain(domain)
+    if parent_domain and parent_domain.find('.') > 0:
+        hrefs.append({'rel': 'parent', 'href': getHref(request, '/', domain=parent_domain)})
+
     rsp_json["hrefs"] = hrefs
 
     resp = await jsonResponse(request, rsp_json)
@@ -251,6 +255,9 @@ async def GET_ACL(request):
     # return just the keys as per the REST API
     rsp_json = { }
     rsp_json["acl"] = acl
+    hrefs = []
+    hrefs.append({'rel': 'self', 'href': getHref(request, '/acls')})
+    hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
     rsp_json["hrefs"] = []
 
     resp = await jsonResponse(request, rsp_json)

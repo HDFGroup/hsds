@@ -15,7 +15,7 @@
  
 from aiohttp.errors import HttpBadRequest
  
-from util.httpUtil import  http_get_json, http_put, http_delete, jsonResponse
+from util.httpUtil import  http_get_json, http_put, http_delete, jsonResponse, getHref
 from util.idUtil import   isValidUuid, getDataNodeUrl, getCollectionForId
 from util.authUtil import getUserPasswordFromRequest,   validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
@@ -78,14 +78,24 @@ async def GET_Links(request):
     log.info("got links json from dn for group_id: {}".format(group_id)) 
     links = links_json["links"]
 
-    # mix in collection key
+    # mix in collection key, target and hrefs
     for link in links:
         if link["class"] == "H5L_TYPE_HARD": 
-            link["collection"] = getCollectionForId(link["id"])
+            collection_name = getCollectionForId(link["id"])
+            link["collection"] = collection_name
+            target_uri = '/' + collection_name + '/' + link["id"]
+            link["target"] = getHref(request, target_uri)
+        link_uri = '/groups/' + group_id + '/links/' + link['title']
+        link["href"] = getHref(request, link_uri)
  
     resp_json = {}
     resp_json["links"] = links
-    resp_json["hrefs"] = []  # TBD
+    hrefs = []
+    group_uri = '/groups/'+group_id
+    hrefs.append({'rel': 'self', 'href': getHref(request, group_uri+'/links')})
+    hrefs.append({'rel': 'home', 'href': getHref(request, '/')}) 
+    hrefs.append({'rel': 'owner', 'href': getHref(request, group_uri)})     
+    resp_json["hrefs"] = hrefs
  
     resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
@@ -144,7 +154,17 @@ async def GET_Link(request):
     resp_json["created"] = link_json["created"]
     # links don't get modified, so use created timestamp as lastModified
     resp_json["lastModified"] = link_json["created"]  
-    resp_json["hrefs"] = [] # tbd
+
+    hrefs = []
+    group_uri = '/groups/'+group_id
+    hrefs.append({'rel': 'self', 'href': getHref(request, group_uri+'/links/'+link_title)})
+    hrefs.append({'rel': 'home', 'href': getHref(request, '/')}) 
+    hrefs.append({'rel': 'owner', 'href': getHref(request, group_uri)})
+    if link_json["class"] == "H5L_TYPE_HARD":
+        target = '/' + resp_link["collection"] + '/' + resp_link["id"]
+        hrefs.append({'rel': 'target', 'href': getHref(request, target)})
+     
+    resp_json["hrefs"] = hrefs
     
  
     resp = await jsonResponse(request, resp_json)

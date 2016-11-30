@@ -366,4 +366,42 @@ def getChunkLayout(dset_json):
     return layout
 
 
+"""Helper method - return query options for a "reasonable" size
+    data preview selection. Return None if the dataset is small
+    enough that a preview is not needed.
+"""
+def getPreviewQuery(dims):   
+    select = "select=["
+    rank = len(dims)
+
+    ncols = dims[rank-1]
+    if rank > 1:
+        nrows = dims[rank-2]
+    else:
+        nrows = 1
+
+    # use some rough heuristics to define the selection
+    # aim to return no more than 100 elements
+    if ncols > 100:
+        ncols = 100
+    if nrows > 100:
+        nrows = 100
+    if nrows*ncols > 100:
+        if nrows > ncols:
+            nrows = 100 // ncols
+        else:
+            ncols = 100 // nrows
+
+    for i in range(rank):
+        if i == rank-1:
+            select += "0:" + str(ncols)
+        elif i == rank-2:
+            select += "0:" + str(nrows) + ","
+        else:
+            select += "0:1,"
+    select += "]"
+    return select
+
+
+
         

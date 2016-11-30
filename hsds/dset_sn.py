@@ -17,9 +17,9 @@
 import json
 from aiohttp.errors import HttpBadRequest 
  
-from util.httpUtil import http_post, http_put, http_delete, jsonResponse
+from util.httpUtil import http_post, http_put, http_delete, jsonResponse, getHref
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
-from util.dsetUtil import  getNumElements
+from util.dsetUtil import  getNumElements, getPreviewQuery
 from util.chunkUtil import guess_chunk
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
@@ -167,7 +167,33 @@ async def GET_Dataset(request):
     resp_json["attributeCount"] = dset_json["attributeCount"]
     resp_json["created"] = dset_json["created"]
     resp_json["lastModified"] = dset_json["lastModified"]
-    resp_json["hrefs"] = []  # TBD
+    
+    hrefs = []
+    dset_uri = '/datasets/'+dset_id
+    hrefs.append({'rel': 'self', 'href': getHref(request, dset_uri)})
+    root_uri = '/groups/' + dset_json["root"]    
+    hrefs.append({'rel': 'root', 'href': getHref(request, root_uri)})
+    hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
+    hrefs.append({'rel': 'attributes', 'href': getHref(request, dset_uri+'/attributes')})
+
+    # provide a value link if the dataset is relatively small,
+    # otherwise create a preview link that shows a limited number of data values
+    dset_shape = dset_json["shape"]
+    if dset_shape["class"] != 'H5S_NULL':
+        count = 1
+        if dset_shape["class"] == 'H5S_SIMPLE':
+            dims = dset_shape["dims"]
+            count = getNumElements(dims)  
+        if count <= 100:
+            # small number of values, provide link to entire dataset
+            hrefs.append({'rel': 'data', 'href': getHref(request, dset_uri + '/value')})
+        else:
+            # large number of values, create preview link
+            previewQuery = getPreviewQuery(dset_shape["dims"])
+            hrefs.append({'rel': 'preview', 
+                'href': getHref(request, dset_uri + '/value', query=previewQuery)})
+
+    resp_json["hrefs"] = hrefs
 
     resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)

@@ -15,7 +15,7 @@
  
 from aiohttp.errors import HttpBadRequest 
  
-from util.httpUtil import  http_get_json, http_put, http_delete, jsonResponse
+from util.httpUtil import  http_get_json, http_put, http_delete, jsonResponse, getHref
 from util.idUtil import   isValidUuid, getDataNodeUrl
 from util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
@@ -88,10 +88,22 @@ async def GET_Attributes(request):
     dn_json = await http_get_json(app, req, params=params)
     log.info("got attributes json from dn for obj_id: " + str(obj_id)) 
     attributes = dn_json["attributes"]
- 
+
+    # mixin hrefs
+    for attribute in attributes:
+        attr_name = attribute["name"]
+        attr_href = '/' + collection + '/' + obj_id + '/attributes/' + attr_name
+        attribute["href"] = getHref(request, attr_href)
+
     resp_json = {}
     resp_json["attributes"] = attributes
-    resp_json["hrefs"] = []  # TBD
+
+    hrefs = []
+    obj_uri = '/' + collection + '/' + obj_id
+    hrefs.append({'rel': 'self', 'href': getHref(request, obj_uri + '/attributes')})
+    hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
+    hrefs.append({'rel': 'owner', 'href': getHref(request, obj_uri)})
+    resp_json["hrefs"] = hrefs
  
     resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
@@ -152,9 +164,15 @@ async def GET_Attribute(request):
     resp_json["created"] = dn_json["created"]
     # attributes don't get modified, so use created timestamp as lastModified
     resp_json["lastModified"] = dn_json["created"]  
-    resp_json["hrefs"] = [] # tbd
     
- 
+    hrefs = []
+    obj_uri = '/' + collection + '/' + obj_id
+    attr_uri = obj_uri + '/attributes/' + attr_name
+    hrefs.append({'rel': 'self', 'href': getHref(request, attr_uri)})
+    hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
+    hrefs.append({'rel': 'owner', 'href': getHref(request, obj_uri)})
+    resp_json["hrefs"] = hrefs
+    
     resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
     return resp
