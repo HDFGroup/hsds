@@ -194,6 +194,7 @@ The domain object contains JSON with the following keys:
 * "root" - the UUID (not including the md5 hash) of the root group in the domain
 * "created" - the timestamp for when the domain was created
 * "lastModified" - the timestamp for when the domain was last updated
+* "stats" - summary statistics that include all objects in the domain
 
 The "owner" and "acls" keys are required, others may not be present.  In particular, if the "root" key is not present, that impies there is no HDF collection associated with this domain.  In this case the domain object can serve as a sort of "directory" for a set of related sub-domains.
 
@@ -237,7 +238,17 @@ Object:
         "root": "g-cf4f3baa-956e-11e6-8319-0242ac110005", 
         "owner": "test_user1",
         "created": 1479168471.038638,
-        "lastModified": 1479168471.038638
+        "lastModified": 1479168471.038638,
+        "stats": {
+            "groupCount": 20,
+            "typeCount": 0,
+            "datasetCount": 67,
+            "logicalSize": 13194139533,
+            "allocatedSize": 8456534532,
+            "actualSize": 5457344534,
+            "checksum": "394a7d8d67c7e022490212d6098a2209",
+            "lastModified": 14791685671.058672
+        }
     }
 
 
@@ -276,41 +287,6 @@ In order to provide summary information about the objects in a domain, an additi
 * "lastModified" - the timestamp for the most recent change to any object in the domain
 
 For reasons of efficiency, the summary information will typically be updated asynchronously from changes to object state. Therefore the stats object may not reflect the most recent changes to objects in the domain.  E.g. is a dataset is created using the HDF REST API, the changes in datasetCount and size keys won't be immediately reflected.  The Last-Modified metadata property of the domain stats object can be used to determine when these keys were last updated.
-
-Domain stats key
-----------------
-
-The domain stats key will use the same prefix as the domain key, but with a suffix of "stats.json".
-
-For example, for the domain key::
-
-    /home/test_user1/my_domain/domain.json
-
-The domain stats key would be::
-
-    /home/test_user1/my_domain/stats.json
-
-Domain stats example
---------------------
-
-Key::
-
-    /home/test_user1/my_domain/stats.json
-
-Object:
-
-.. code-block:: json
-
-    {
-        "groupCount": 20,
-        "typeCount": 0,
-        "datasetCount": 67,
-        "logicalSize": 13194139533,
-        "allocatedSize": 8456534532,
-        "actualSize": 5457344534,
-        "lastModified": 1479168471.548340,
-        "checksum": "394a7d8d67c7e022490212d6098a2209"
-    }
 
  
 Group object
@@ -517,6 +493,7 @@ The dataset storage schema consists of JSON with the following keys:
 * "root" - the id of the root group in the domain
 * "domain" - the domain which this group is a member of
 * "acls" - access Control List for authorization overrides
+* "stats" - summary statistics for the dataset and chunk data
 
 Notes:
 
@@ -527,7 +504,7 @@ Notes:
 * See "Types" for a description of the object schema for type
 * The "id", "root", "domain", "creationProperties", "layout", and "type" keys can be assumed to be immutable
 * The "shape" key is immutable unless the dataset is extensible (the shape object contains a "maxdims" key).  In anycase, the shape of the dataset will never shrink
-
+* The "stats" object is updated asynchronously from changes to dataset values, so may not reflect the most recent changes to the dataset
 
 Dataset Example
 ---------------
@@ -548,12 +525,12 @@ Object:
         }, 
         "shape": {
             "class": "H5S_SIMPLE",
-            "maxdims": [20], 
-            "dims": [10]
+            "maxdims": [1000,1000,0], 
+            "dims": [1000,1000,243]
         },
         "layout": { 
             "class" = "H5D_CHUNKED",
-            "dims" = [20]
+            "dims" = [100,100,100]
         }
         "creationProperties": { 
             "allocTime": "H5D_ALLOC_TIME_LATE", 
@@ -566,7 +543,16 @@ Object:
         "lastModified": 1477549587.387293, 
         "root": "g-2428ae0e-a082-11e6-9d93-0242ac110005", 
         "domain": "/home/test_user1/mydomain",
-        "attributes": {}
+        "attributes": {},
+        "stats": {
+            "allocatedChunkCount": 122,
+            "logicalChunkCount": 300,
+            "logicalSize": 972000000,
+            "allocatedSize": 488000000,
+            "actualSize": 234586943,
+            "checksum": "394a7d8d67c7e022490212d6098a2209",
+            "lastModified": 14791685671.058672
+        }
     }
 
 Chunk object
