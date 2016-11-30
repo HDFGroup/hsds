@@ -218,7 +218,7 @@ async def PUT_Attribute(request):
         raise HttpProcessingError(code=409, message="Attribute with name: {} already exists".format(attr_name))
 
     # ok - all set, create attribute obj
-    now = int(time.time())
+    now = time.time()
     
     attr_json = {"type": datatype, "shape": shape, "value": value, "created": now }
     attributes[attr_name] = attr_json

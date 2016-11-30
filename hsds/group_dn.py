@@ -118,7 +118,7 @@ async def POST_Group(request):
         raise HttpProcessingError(code=409, message=msg)
 
     # ok - all set, create group obj
-    now = int(time.time())
+    now = time.time()
     
     group_json = {"id": group_id, "root": root_id, "created": now, "lastModified": now, "domain": domain, 
         "links": {}, "attributes": {} }

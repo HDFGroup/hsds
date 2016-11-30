@@ -128,7 +128,7 @@ async def POST_Datatype(request):
         raise HttpProcessingError(code=409, message=msg)
 
     # ok - all set, create committed type obj
-    now = int(time.time())
+    now = time.time()
 
     log.info("POST_datatype, typejson: {}".format(type_json))
     

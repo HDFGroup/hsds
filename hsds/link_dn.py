@@ -182,7 +182,7 @@ async def PUT_Link(request):
         log.warn(msg)
         raise HttpProcessingError(code=409, message=msg)
     
-    now = int(time.time())
+    now = time.time()
     link_json["created"] = now
 
     # add the link
@@ -231,7 +231,7 @@ async def DELETE_Link(request):
     del links[link_title]  # remove the link from dictionary
 
     # update the group lastModified
-    now = int(time.time())
+    now = time.time()
     group_json["lastModified"] = now
 
     # write back to S3
