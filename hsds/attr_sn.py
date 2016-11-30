@@ -87,7 +87,7 @@ async def GET_Attributes(request):
     if marker is not None:
         params["Marker"] = marker
     if include_data:
-        params["IncludeData"] = True
+        params["IncludeData"] = '1'
          
     log.info("get attributes: " + req)
     dn_json = await http_get_json(app, req, params=params)
