@@ -84,6 +84,36 @@ class AttributeTest(unittest.TestCase):
             self.assertEqual(shapeJson["class"], "H5S_SCALAR")
             # self.assertTrue("value" not in attrJson)  # TBD - change api to include value?
             self.assertTrue("created" in attrJson)
+            self.assertTrue("href" in attrJson)
+            self.assertTrue("value" not in attrJson)
+
+        # get all attributes including data
+        req = self.endpoint + "/groups/" + root_uuid + "/attributes?IncludeData=True"
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)  
+        rspJson = json.loads(rsp.text)
+       
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("attributes" in rspJson)
+        attributes = rspJson["attributes"]
+        self.assertTrue(isinstance(attributes, list))
+        self.assertEqual(len(attributes), attr_count)
+        for i in range(attr_count):
+            attrJson = attributes[i]
+            self.assertTrue("name" in attrJson)
+            self.assertEqual(attrJson["name"], "attr_{}".format(i))
+            self.assertTrue("type" in attrJson)
+            type_json = attrJson["type"]
+            self.assertEqual(type_json["class"], "H5T_INTEGER")
+            self.assertEqual(type_json["base"], "H5T_STD_I32LE")
+            self.assertTrue("shape" in attrJson)
+            shapeJson = attrJson["shape"]
+            self.assertEqual(shapeJson["class"], "H5S_SCALAR")
+            # self.assertTrue("value" not in attrJson)  # TBD - change api to include value?
+            self.assertTrue("created" in attrJson)
+            self.assertTrue("href" in attrJson)
+            self.assertTrue("value" in attrJson)
+            self.assertEqual(attrJson["value"], i*2)
 
         # get 3 attributes
         limit = 3

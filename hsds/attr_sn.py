@@ -42,6 +42,9 @@ async def GET_Attributes(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
 
+    include_data = False
+    if "IncludeData" in request.GET and request.GET["IncludeData"]:
+        include_data = True
     limit = None
     if "Limit" in request.GET:
         try:
@@ -83,7 +86,9 @@ async def GET_Attributes(request):
         params["Limit"] = str(limit)
     if marker is not None:
         params["Marker"] = marker
-        
+    if include_data:
+        params["IncludeData"] = True
+         
     log.info("get attributes: " + req)
     dn_json = await http_get_json(app, req, params=params)
     log.info("got attributes json from dn for obj_id: " + str(obj_id)) 
