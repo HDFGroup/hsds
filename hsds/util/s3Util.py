@@ -33,6 +33,7 @@ async def getS3JSONObj(app, key):
     except ClientError as ce:
         # key does not exist?
         # check for not found status
+        log.warn("clientError exception: {}".format(str(ce)))
         is_404 = False
         if "ResponseMetadata" in ce.response:
             metadata = ce.response["ResponseMetadata"]
