@@ -15,6 +15,7 @@
 import asyncio
 import sys
 import time
+import psutil
 from copy import copy
 
 from aiohttp.web import Application, StreamResponse
@@ -162,6 +163,40 @@ async def info(request):
     answer['node_state'] = app['node_state'] 
     answer['node_number'] = app['node_number']
     answer['node_count'] = app['node_count']
+    # psutil info
+    # see: http://pythonhosted.org/psutil/ for description of different fields
+    answer['cpu_percent'] = psutil.cpu_percent()
+    diskio = psutil.disk_io_counters()
+    disk_stats = {}
+    disk_stats["read_count"] = diskio.read_count
+    disk_stats["read_time"] = diskio.read_time
+    disk_stats["read_bytes"] = diskio.read_bytes
+    disk_stats["write_count"] = diskio.write_count
+    disk_stats["write_time"] = diskio.write_time
+    disk_stats["write_bytes"] = diskio.write_bytes
+    answer["diskio"] = disk_stats
+    netio = psutil.net_io_counters()
+    net_stats = {}
+    net_stats["bytes_sent"] = netio.bytes_sent
+    net_stats["bytes_sent"] = netio.bytes_recv
+    net_stats["packets_sent"] = netio.packets_sent
+    net_stats["packets_recv"] = netio.packets_recv
+    net_stats["errin"] = netio.errin
+    net_stats["errout"] = netio.errout
+    net_stats["dropin"] = netio.dropin
+    net_stats["dropout"] = netio.dropout
+    answer["netio"] = net_stats
+    mem_stats = {}
+    svmem = psutil.virtual_memory()
+    mem_stats["phys_total"] = svmem.total
+    mem_stats["phys_available"] = svmem.available
+    sswap = psutil.swap_memory()
+    mem_stats["swap_total"] = sswap.total
+    mem_stats["swap_used"] = sswap.used
+    mem_stats["swap_free"] = sswap.free
+    mem_stats["percent"] = sswap.percent
+
+    answer["mem_stats"] = mem_stats
         
     resp = await jsonResponse(request, answer) 
     log.response(request, resp=resp)
