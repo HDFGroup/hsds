@@ -18,7 +18,7 @@ import json
 import time
 
 from aiohttp.web import Application, StreamResponse, run_app
-from aiohttp import  ClientSession, TCPConnector
+from aiohttp import  ClientSession, TCPConnector, HttpProcessingError
 from aiohttp.errors import HttpBadRequest
 import aiobotocore
 
@@ -85,12 +85,11 @@ async def healthCheck(app):
         await putS3JSONObj(app, headnode_key, head_state)
          
         log.info("putS3JSONObj complete")
-        
+        fail_count = 0
         for node in nodes:         
             if node["host"] is None:
                 continue
             url = getUrl(node["host"], node["port"]) + "/info"  
-            log.info("health check for: ".format(url))
             try:
                 rsp_json = await http_get_json(app, url)
                 if "node" not in rsp_json:
@@ -98,7 +97,7 @@ async def healthCheck(app):
                     continue
                 node_state = rsp_json["node"]
                 node_id = node_state["id"]
-                log.info("get health check response: {}".format(rsp_json))
+                
                 if node_state['id'] != node['id']:
                     log.warn("unexpected node_id: {} (expecting: {})".formatnode_id, (node['id']))
                     node['host'] = None
@@ -116,18 +115,27 @@ async def healthCheck(app):
                 for k in NODE_STAT_KEYS:
                     node_stats[k] = rsp_json[k]
                 app_node_stats[node_id] = node_stats
-                log.info("save node_stats for node_id: {}".format(node_id))
                 # mark the last time we got a response from this node
                 node["healthcheck"] = unixTimeToUTC(int(time.time()))
             except OSError as ose:
-                log.warn("OSError: {}".format(str(ose)))
+                log.warn("OSError for req: {}: {}".format(url, str(ose)))
                 # node has gone away?
                 log.warn("removing {}:{} from active list".format(node["host"], node["port"]))
                 node["host"] = None
-                if app["cluster_state"] == "READY":
-                    # go back to INITIALIZING state until another node is registered
-                    log.warn("Setting cluster_state from READY to INITIALIZING")
-                    app["cluster_state"] = "INITIALIZING"
+                fail_count += 1
+                
+            except HttpProcessingError as hpe:
+                log.warn("HttpProcessingError for req: {}: {}".format(url, str(hpe)))
+                # node has gone away?
+                log.warn("removing {}:{} from active list".format(node["host"], node["port"]))
+                node["host"] = None
+                fail_count += 1
+        if fail_count > 0:
+            if app["cluster_state"] == "READY":
+                # go back to INITIALIZING state until another node is registered
+                log.warn("Setting cluster_state from READY to INITIALIZING")
+                app["cluster_state"] = "INITIALIZING"
+
         
 
 async def info(request):
@@ -280,7 +288,6 @@ async def nodeinfo(request):
         stats = {}
         for node in app["nodes"]:
             node_number = node["node_number"]
-            log.info("node_number: {}".format(node_number))
             node_type = node["node_type"]
             if node_type not in ("sn", "dn"):
                 log.error("unexpected node_type: {}".format(node_type))
@@ -297,10 +304,9 @@ async def nodeinfo(request):
             for k in stats_field:
                 if k not in stats:
                     stats[k] = {}
-                    stats[k]["sn"] = ['_',] * sn_count
-                    stats[k]["dn"] = ['_',] * dn_count
+                    stats[k]["sn"] = [0,] * sn_count
+                    stats[k]["dn"] = [0,] * dn_count
                 stats[k][node_type][node_number] = stats_field[k]
-            log.info("stats: {}".format(stats))
         answer[stat_key] = stats
   
     resp = await jsonResponse(request, answer)
