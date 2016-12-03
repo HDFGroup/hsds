@@ -25,7 +25,7 @@ from aiobotocore import get_session
  
 
 import config
-from util.timeUtil import unixTimeToUTC, elapsedTime
+#from util.timeUtil import unixTimeToUTC, elapsedTime
 from util.httpUtil import http_get_json, http_post, jsonResponse
 from util.idUtil import createNodeId
 from util.s3Util import getS3JSONObj, getS3Client 
@@ -156,16 +156,21 @@ async def info(request):
     resp.headers['Content-Type'] = 'application/json'
     answer = {}
     # copy relevant entries from state dictionary to response
-    answer['id'] = request.app['id']
-    answer['node_type'] = request.app['node_type']
-    answer['start_time'] = unixTimeToUTC(app['start_time'])
-    answer['up_time'] = elapsedTime(app['start_time'])
-    answer['node_state'] = app['node_state'] 
-    answer['node_number'] = app['node_number']
-    answer['node_count'] = app['node_count']
+    node = {}
+    node['id'] = request.app['id']
+    node['type'] = request.app['node_type']
+    node['start_time'] =  app["start_time"] #unixTimeToUTC(app['start_time'])
+    node['up_time'] = app['start_time'] # elapsedTime(app['start_time'])
+    node['state'] = app['node_state'] 
+    node['number'] = app['node_number']
+    node['count'] = app['node_count']
+    answer["node"] = node
     # psutil info
     # see: http://pythonhosted.org/psutil/ for description of different fields
-    answer['cpu_percent'] = psutil.cpu_percent()
+    cpu = {}
+    cpu["percent"] = psutil.cpu_percent()
+    cpu["cores"] = psutil.cpu_count()
+    answer["cpu"] = cpu
     diskio = psutil.disk_io_counters()
     disk_stats = {}
     disk_stats["read_count"] = diskio.read_count
@@ -195,8 +200,16 @@ async def info(request):
     mem_stats["swap_used"] = sswap.used
     mem_stats["swap_free"] = sswap.free
     mem_stats["percent"] = sswap.percent
-
-    answer["mem_stats"] = mem_stats
+    answer["memory"] = mem_stats
+    disk_stats = {}
+    sdiskusage = psutil.disk_usage('/')
+    disk_stats["total"] = sdiskusage.total
+    disk_stats["used"] = sdiskusage.used
+    disk_stats["free"] = sdiskusage.free
+    disk_stats["percent"] = sdiskusage.percent
+    answer["disk"] = disk_stats
+    answer["log_stats"] = app["log_count"]
+    answer["req_count"] = app["req_count"]
         
     resp = await jsonResponse(request, answer) 
     log.response(request, resp=resp)
@@ -225,6 +238,19 @@ def baseInit(loop, node_type):
     app["bucket_name"] = bucket_name
     app["sn_urls"] = {}
     app["dn_urls"] = {}
+    counter = {}
+    counter["GET"] = 0
+    counter["PUT"] = 0
+    counter["POST"] = 0
+    counter["DELETE"] = 0
+    app["req_count"] = counter
+    counter = {}
+    counter["INFO"] = 0
+    counter["WARN"] = 0
+    counter["ERROR"] = 0
+    app["log_count"] = counter
+
+    log.app = app
 
     # create a client Session here so that all client requests 
     #   will share the same connection pool

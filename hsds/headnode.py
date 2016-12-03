@@ -29,6 +29,7 @@ from util.s3Util import  getS3JSONObj, putS3JSONObj, isS3Obj, getS3Client
 from util.idUtil import  createNodeId, getHeadNodeS3Key
 import hsds_logger as log
 
+NODE_STAT_KEYS = ("cpu", "diskio", "memory", "log_stats", "disk", "netio", "req_count")
  
 async def healthCheck(app):
     """ Periodic method that pings each active node and verifies it is still healthy.  
@@ -92,17 +93,30 @@ async def healthCheck(app):
             log.info("health check for: ".format(url))
             try:
                 rsp_json = await http_get_json(app, url)
+                if "node" not in rsp_json:
+                    log.error("Unexpected response from node")
+                    continue
+                node_state = rsp_json["node"]
+                node_id = node_state["id"]
                 log.info("get health check response: {}".format(rsp_json))
-                if rsp_json['id'] != node['id']:
-                    log.warn("unexpected node_id (expecting: {})".format(node['id']))
+                if node_state['id'] != node['id']:
+                    log.warn("unexpected node_id: {} (expecting: {})".formatnode_id, (node['id']))
                     node['host'] = None
                     node['id'] = None
                     app["cluster_state"] = "INITIALIZING"
-                if rsp_json['node_number'] != node['node_number']:
-                    log.warn("unexpected node_number (expecting: {})".format(node['node_number']))
+                if node_state['number'] != node['node_number']:
+                    msg = "unexpected node_number got {} (expecting: {})"
+                    log.warn(msg.format(node_state["number"], node['node_number']))
                     node['host'] = None
                     node['id'] = None
                     app["cluster_state"] = "INITIALIZING"
+                # save off other useful info from the node
+                app_node_stats = app["node_stats"]
+                node_stats = {}
+                for k in NODE_STAT_KEYS:
+                    node_stats[k] = rsp_json[k]
+                app_node_stats[node_id] = node_stats
+                log.info("save node_stats for node_id: {}".format(node_id))
                 # mark the last time we got a response from this node
                 node["healthcheck"] = unixTimeToUTC(int(time.time()))
             except OSError as ose:
@@ -246,6 +260,53 @@ async def nodestate(request):
     log.response(request, resp=resp)
     return resp
 
+
+async def nodeinfo(request):
+    """HTTP method to return node stats (cpu usage, request count, errors, etc.) about registed nodes"""
+    log.request(request) 
+    
+    app = request.app
+    resp = StreamResponse()
+    resp.headers['Content-Type'] = 'application/json'
+    
+    app_node_stats = app["node_stats"]
+    dn_count = app['target_dn_count']
+    sn_count = app['target_sn_count']
+
+    answer = {}
+    # re-assemble the individual node stats to arrays indexed by node number
+    for stat_key in NODE_STAT_KEYS:
+        log.info("stat_key: {}".format(stat_key))
+        stats = {}
+        for node in app["nodes"]:
+            node_number = node["node_number"]
+            log.info("node_number: {}".format(node_number))
+            node_type = node["node_type"]
+            if node_type not in ("sn", "dn"):
+                log.error("unexpected node_type: {}".format(node_type))
+                continue
+            node_id = node["id"]
+            if node_id not in app_node_stats:
+                log.info("node_id: {} not found in node_stats".format(node_id))
+                continue
+            node_stats = app_node_stats[node_id]   
+            if stat_key not in node_stats:
+                log.info("key: {} not found in node_stats for node_id: {}".format(stat_key, node_id))
+                continue
+            stats_field = node_stats[stat_key]
+            for k in stats_field:
+                if k not in stats:
+                    stats[k] = {}
+                    stats[k]["sn"] = ['_',] * sn_count
+                    stats[k]["dn"] = ['_',] * dn_count
+                stats[k][node_type][node_number] = stats_field[k]
+            log.info("stats: {}".format(stats))
+        answer[stat_key] = stats
+  
+    resp = await jsonResponse(request, answer)
+    log.response(request, resp=resp)
+    return resp
+
 def getTargetNodeCount(app, node_type):
     count = None
     if node_type == "dn":
@@ -296,14 +357,17 @@ async def init(loop):
             node = {"node_number": i,
                 "node_type": node_type,
                 "host": None,
-                "port": None}
+                "port": None,
+                "id": None }
             nodes.append(node)
     app["nodes"] = nodes
+    app["node_stats"] = {}  # stats retuned by node/info request.  Keyed by node id
     app["node_ids"] = {}  # dictionary to look up node by id
     app.router.add_get('/', info)
     app.router.add_get('/nodestate', nodestate)
     app.router.add_get('/nodestate/{nodetype}', nodestate)
     app.router.add_get('/nodestate/{nodetype}/{nodenumber}', nodestate)
+    app.router.add_get('/nodeinfo', nodeinfo)
     app.router.add_get('/info', info)
     app.router.add_post('/register', register)
     

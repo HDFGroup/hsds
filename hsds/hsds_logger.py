@@ -13,20 +13,36 @@
 # Simple looger for hsds
 #
 import config
+app = None # global app handle
+
 def info(msg):
 	if config.get("log_level") == "INFO":
 		print("INFO> " + msg)
+	if app:
+		counter = app["log_count"]
+		counter["INFO"] += 1
 
 def warn(msg):
 	if config.get("log_level") != "ERROR":
 		print("WARN> " + msg)
+	if app:
+		counter = app["log_count"]
+		counter["WARN"] += 1
 
 def error(msg):
 	print("ERROR> " + msg)
+	if app:
+		counter = app["log_count"]
+		counter["ERROR"] += 1
 
 def request(req):
 	print("REQ> {}: {} host:[{}]".format(req.method, req.path, req.headers["host"]))
+	if app:
+		counter = app["req_count"]
+		if req.method in ("GET", "POST", "PUT", "DELETE"):
+			counter[req.method] += 1
 
+ 
 def response(req, resp=None, code=None, message=None):
 	level = "INFO"
 	if code is None:
