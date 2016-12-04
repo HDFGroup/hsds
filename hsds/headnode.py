@@ -25,11 +25,11 @@ import aiobotocore
 import config
 from util.timeUtil import unixTimeToUTC, elapsedTime
 from util.httpUtil import http_get_json, jsonResponse, getUrl
-from util.s3Util import  getS3JSONObj, putS3JSONObj, isS3Obj, getS3Client
+from util.s3Util import  getS3JSONObj, putS3JSONObj, isS3Obj, getS3Client, getInitialS3Stats
 from util.idUtil import  createNodeId, getHeadNodeS3Key
 import hsds_logger as log
 
-NODE_STAT_KEYS = ("cpu", "diskio", "memory", "log_stats", "disk", "netio", "req_count")
+NODE_STAT_KEYS = ("cpu", "diskio", "memory", "log_stats", "disk", "netio", "req_count", "s3_stats")
  
 async def healthCheck(app):
     """ Periodic method that pings each active node and verifies it is still healthy.  
@@ -293,6 +293,7 @@ async def nodeinfo(request):
                 log.error("unexpected node_type: {}".format(node_type))
                 continue
             node_id = node["id"]
+            log.info("app_node_stats: {}".format(app_node_stats))
             if node_id not in app_node_stats:
                 log.info("node_id: {} not found in node_stats".format(node_id))
                 continue
@@ -369,6 +370,7 @@ async def init(loop):
     app["nodes"] = nodes
     app["node_stats"] = {}  # stats retuned by node/info request.  Keyed by node id
     app["node_ids"] = {}  # dictionary to look up node by id
+    app["s3_stats"] = getInitialS3Stats()
     app.router.add_get('/', info)
     app.router.add_get('/nodestate', nodestate)
     app.router.add_get('/nodestate/{nodetype}', nodestate)

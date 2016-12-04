@@ -26,6 +26,8 @@ async def getS3JSONObj(app, key):
     log.info("getS3JSONObj({})".format(key))
     client = app['s3']
     bucket = app['bucket_name']
+    s3_stats = app['s3_stats']
+    s3_stats["get_count"] += 1
     try:
         resp = await client.get_object(Bucket=bucket, Key=key)
         data = await resp['Body'].read()
@@ -33,6 +35,7 @@ async def getS3JSONObj(app, key):
     except ClientError as ce:
         # key does not exist?
         # check for not found status
+        s3_stats["error_count"] += 1
         log.warn("clientError exception: {}".format(str(ce)))
         is_404 = False
         if "ResponseMetadata" in ce.response:
@@ -45,11 +48,13 @@ async def getS3JSONObj(app, key):
             log.warn(msg)
             raise HttpProcessingError(code=404, message=msg)
         else:
+            s3_stats["error_count"] += 1
             log.warn("got ClientError on s3 get: {}".format(str(ce)))
             msg = "Error getting s3 obj: " + str(ce)
             log.error(msg)
             raise HttpProcessingError(code=500, message=msg)
-       
+
+    s3_stats["bytes_in"] += len(data)   
     json_dict = json.loads(data.decode('utf8'))
     log.info("s3 returned: {}".format(json_dict))
     return json_dict
@@ -60,6 +65,8 @@ async def getS3Bytes(app, key):
     log.info("getS3Bytes({})".format(key))
     client = app['s3']
     bucket = app['bucket_name']
+    s3_stats = app['s3_stats']
+    s3_stats["get_count"] += 1
     try:
         resp = await client.get_object(Bucket=bucket, Key=key)
         data = await resp['Body'].read()
@@ -78,11 +85,13 @@ async def getS3Bytes(app, key):
             log.warn(msg)
             raise HttpProcessingError(code=404, message=msg)
         else:
+            s3_stats["error_count"] += 1
             log.warn("got ClientError on s3 get: {}".format(str(ce)))
             msg = "Error getting s3 obj: " + str(ce)
             log.error(msg)
             raise HttpProcessingError(code=500, message=msg)
-       
+
+    s3_stats["bytes_in"] += len(data)    
     return data
 
 async def putS3JSONObj(app, key, json_obj):
@@ -91,14 +100,18 @@ async def putS3JSONObj(app, key, json_obj):
     log.info("putS3JSONObj({})".format(key))
     client = app['s3']
     bucket = app['bucket_name']
+    s3_stats = app['s3_stats']
+    s3_stats["put_count"] += 1
     data = json.dumps(json_obj)
     data = data.encode('utf8')
     try:
         await client.put_object(Bucket=bucket, Key=key, Body=data)
     except ClientError as ce:
+        s3_stats["error_count"] += 1
         msg = "Error putting s3 obj: " + str(ce)
         log.error(msg)
         raise HttpProcessingError(code=500, message=msg)
+    s3_stats["bytes_out"] += len(data) 
     log.info("putS3JSONObj complete")
 
 async def putS3Bytes(app, key, data):
@@ -107,12 +120,16 @@ async def putS3Bytes(app, key, data):
     log.info("putS3Bytes({})".format(key))
     client = app['s3']
     bucket = app['bucket_name']
+    s3_stats = app['s3_stats']
+    s3_stats["put_count"] += 1
     try:
         await client.put_object(Bucket=bucket, Key=key, Body=data)
     except ClientError as ce:
+        s3_stats["error_count"] += 1
         msg = "Error putting s3 obj: " + str(ce)
         log.error(msg)
         raise HttpProcessingError(code=500, message=msg)
+    s3_stats["bytes_in"] += len(data) 
     log.info("putS3Bytes complete")
 
 async def deleteS3Obj(app, key):
@@ -121,10 +138,13 @@ async def deleteS3Obj(app, key):
     log.info("deleteS3Obj({})".format(key))
     client = app['s3']
     bucket = app['bucket_name']
+    s3_stats = app['s3_stats']
+    s3_stats["delete_count"] += 1
     try:
         await client.delete_object(Bucket=bucket, Key=key)
     except ClientError as ce:
         # key does not exist? 
+        s3_stats["error_count"] += 1
         msg = "Error deleting s3 obj: " + str(ce)
         log.error(msg)
         raise HttpProcessingError(code=500, message=msg)
@@ -136,10 +156,13 @@ async def isS3Obj(app, key):
     log.info("isS3Obj({})".format(key))
     client = app['s3']
     bucket = app['bucket_name']
+    s3_stats = app['s3_stats']
+    s3_stats["list_count"] += 1
     try:
         resp = await client.list_objects(Bucket=bucket, MaxKeys=1, Prefix=key)
     except ClientError as ce:
         # key does not exist? 
+        s3_stats["error_count"] += 1
         msg = "Error listing s3 obj: " + str(ce)
         log.error(msg)
         raise HttpProcessingError(code=500, message=msg)
@@ -190,3 +213,17 @@ def getS3Client(session):
                                    endpoint_url=s3_gateway,
                                    use_ssl=use_ssl)
     return aws_client
+
+"""
+Initialize the s3 stat collection dict
+"""
+def getInitialS3Stats():
+    s3_stats = {}
+    s3_stats["get_count"] = 0
+    s3_stats["put_count"] = 0
+    s3_stats["delete_count"] = 0
+    s3_stats["list_count"] = 0
+    s3_stats["error_count"] = 0
+    s3_stats["bytes_in"] = 0
+    s3_stats["bytes_out"] = 0
+    return s3_stats

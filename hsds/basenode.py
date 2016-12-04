@@ -28,7 +28,7 @@ import config
 #from util.timeUtil import unixTimeToUTC, elapsedTime
 from util.httpUtil import http_get_json, http_post, jsonResponse
 from util.idUtil import createNodeId
-from util.s3Util import getS3JSONObj, getS3Client 
+from util.s3Util import getS3JSONObj, getS3Client, getInitialS3Stats 
 from util.idUtil import getHeadNodeS3Key
 
 import hsds_logger as log
@@ -210,6 +210,8 @@ async def info(request):
     answer["disk"] = disk_stats
     answer["log_stats"] = app["log_count"]
     answer["req_count"] = app["req_count"]
+    answer["s3_stats"] = app["s3_stats"]
+    
         
     resp = await jsonResponse(request, answer) 
     log.response(request, resp=resp)
@@ -249,9 +251,12 @@ def baseInit(loop, node_type):
     counter["WARN"] = 0
     counter["ERROR"] = 0
     app["log_count"] = counter
+ 
+    app["s3_stats"] = getInitialS3Stats()
+    
 
     log.app = app
-
+    
     # create a client Session here so that all client requests 
     #   will share the same connection pool
     max_tcp_connections = int(config.get("max_tcp_connections"))
