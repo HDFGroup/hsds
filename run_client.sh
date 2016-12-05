@@ -1,6 +1,6 @@
 #!/bin/bash
 if [ $# -eq 1 ] && [ $1 == "--help" ]; then
-   echo "Usage: run_client.sh [sn_host] [head_host]"
+   echo "Usage: run_client.sh [sn_host] [head_host] [count]"
    exit 1
 fi 
 
@@ -11,6 +11,17 @@ fi
 if [ $# -gt  1 ]; then
     HEAD_HOST=$2
 fi
+
+count=4
+if [ $# -gt 2 ]; then 
+  count=$3
+fi
+
+LINK_ARG=""
+for ((i=0; i<${count}; i++)) do
+    LINK_ARG=${LINK_ARG}"--link hsds_sn_${i}:hsds_sn_${i} "
+done
+ 
 
 if [ -z ${HEAD_HOST} ] || [ -z ${SN_HOST} ]; then
      
@@ -25,7 +36,7 @@ if [ -z ${HEAD_HOST} ] || [ -z ${SN_HOST} ]; then
        --env HSDS_ENDPOINT=${HSDS_ENDPOINT} \
        --env HEAD_ENDPOINT=${HEAD_ENDPOINT} \
        --link hsds_head:hsds_head \
-       --link hsds_sn_0:hsds_sn_0 \
+       ${LINK_ARG} \
        -it hdfgroup/hsds   
 else
     HSDS_ENDPOINT='http://'${SN_HOST}':5102'

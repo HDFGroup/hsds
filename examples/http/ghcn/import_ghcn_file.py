@@ -25,7 +25,7 @@ globals = {}
 
 async def getEndpoints():
     docker_machine_ip = config.get("docker_machine_ip")
-    req = "http://{}:{}/nodestate/sn".format(config.get("head_host"), config.get("head_port")) 
+    req = "{}/nodestate/sn".format(config.get("head_endpoint")) 
     client = globals["client"]
     globals["request_count"] += 1
     async with client.get(req) as rsp:
@@ -38,8 +38,8 @@ async def getEndpoints():
             continue
         host = node["host"]
         if docker_machine_ip:
-            # when running in docker, use the machine addres as host
-            host = docker_machine_ip
+            # when running in docker, use the machine address as host
+            host = "hsds_sn_{}".format(node["node_number"])
         url = "http://{}:{}".format(host, node["port"])
         sn_endpoints.append(url)
     log.info("{} endpoints".format(len(sn_endpoints)))

@@ -272,6 +272,12 @@ async def nodestate(request):
 async def nodeinfo(request):
     """HTTP method to return node stats (cpu usage, request count, errors, etc.) about registed nodes"""
     log.request(request) 
+    node_stat_keys = NODE_STAT_KEYS
+    stat_key = request.match_info.get('statkey', '*')
+    if stat_key != '*':
+        if stat_key not in node_stat_keys:
+             raise HttpBadRequest(message="invalid key: {}".format(stat_key))
+        node_stat_keys = (stat_key,)
     
     app = request.app
     resp = StreamResponse()
@@ -283,7 +289,7 @@ async def nodeinfo(request):
 
     answer = {}
     # re-assemble the individual node stats to arrays indexed by node number
-    for stat_key in NODE_STAT_KEYS:
+    for stat_key in node_stat_keys:
         log.info("stat_key: {}".format(stat_key))
         stats = {}
         for node in app["nodes"]:
@@ -376,6 +382,7 @@ async def init(loop):
     app.router.add_get('/nodestate/{nodetype}', nodestate)
     app.router.add_get('/nodestate/{nodetype}/{nodenumber}', nodestate)
     app.router.add_get('/nodeinfo', nodeinfo)
+    app.router.add_get('/nodeinfo/{statkey}', nodeinfo)
     app.router.add_get('/info', info)
     app.router.add_post('/register', register)
     
