@@ -19,7 +19,7 @@ import helper
 class HeadTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(HeadTest, self).__init__(*args, **kwargs)
-        self.endpoint = 'http://' + config.get('head_host') + ':' + str(config.get('head_port'))    
+        self.endpoint =  config.get('head_endpoint')    
        
     def testGetInfo(self):
         req = self.endpoint + "/info"
