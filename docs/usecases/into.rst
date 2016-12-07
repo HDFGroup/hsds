@@ -38,11 +38,25 @@ The system will not attempt to directly compete with common High Performance Com
 system deployments, e.g. parallel POSIX like file systems such as Lustre [#]_ that is interconnected 
 to a large array of compute nodes through high speed InfiniBand [#]_. HSDS will provide and alternative 
 way to provide data at scale across a board range of system environments that is not possible currently 
-with Lustre deployments.
+with Lustre, gluster or nfs deployments. 
+
+The HSDS service is easy to deploy and scale automatically. The service may employ an autoscaling
+service based on immediate usage needs and data provider budgets. Service administrators need only set 
+scaling parameters, e.g. maximum scale-out, minimum availability, etc... giving data providers the 
+ability to tune performance vs costs in near relative with little effort. The test cloud service 
+provider (AWS) currently has this functionality available at low cost [#]_. 
 
 
-References:
-^^^^^^^^^^^
+Terms and definitions
+----------------------
+For the use cases listed here, the terms *reasonable* and *end-point* are often used. We loosely define the 
+term *reasonable* as an average http request timeout interval but the term can take on different meanings based
+on the application context. The term *end-point* is used to note an access point at a given hyperplink, e.g.
+
+::
+
+   https://data.hdfgroup.org/tasmax_day_1950-2100.data.hdfgroup.org
+
 
 .. [#] https://github.com/HDFGroup/hsds
 .. [#] https://en.wikipedia.org/wiki/Object_storage
@@ -55,3 +69,5 @@ References:
 .. [#] http://www.unidata.ucar.edu/software/netcdf/  
 .. [#] http://lustre.org 
 .. [#] https://www.openfabrics.org
+.. [#] https://aws.amazon.com/autoscaling/
+

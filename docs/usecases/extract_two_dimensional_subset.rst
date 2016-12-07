@@ -8,6 +8,7 @@ products are commonly structured on fixed grids, as in x and y or longitude and 
 some quantity over some time range. The structure is roughly illustrated in the following figure:
 
 .. image:: layout.png
+      :height: 800px 
       :align: center
       :alt: data layout example 
 
@@ -16,6 +17,7 @@ Description
 The extraction of the subset is for some time step **t** for all **x** and **y**, highlighted in black below:
 
 .. image:: 2d-1.png
+      :height: 800px 
       :align: center
       :alt: 2d subset view 
 
@@ -23,6 +25,7 @@ The extraction of a subset for some time step **t** for all **x** between **a** 
 **c** and **d** (y[b:c]), highlighted in black below:
 
 .. image:: 2d-2.png
+      :height: 800px 
       :align: center
       :alt: 2d subset view 2
 
@@ -60,7 +63,7 @@ Minimal Guarantee
 Success Guarantee
 ------------------
 1. HSDS accepts and logs the attempted request 
-2. The HSDS service presents `JSON <http://www.json.org/>`_ output to the client based on the parameters and indices 
+2. The HSDS service presents `JSON <http://www.json.org/>`_ or binary output to the client based on the parameters and indices 
    noted above in a *reasonable* response time
 
 Main Success Scenario
@@ -70,7 +73,7 @@ Main Success Scenario
    1a. The user may determine the bounds and or data set of interest either by querying the HSDS service end-point or through some other means 
 
 2. The user requests a subset of the data set based on a set of index parameters. e.g. conn_handle.tasmax[1, 2:4, 2:4].
-3. The HSDS service returns JSON to the client based on the parameters and indices determined above
+3. The HSDS service returns JSON or binary data to the client based on the parameters and indices determined above
 4. The user's client accepts the JSON data from the HSDS service and loads it into the appropriate data structure 
    for the application used by the user's client.
 

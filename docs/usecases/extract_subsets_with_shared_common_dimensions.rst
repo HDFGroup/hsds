@@ -65,7 +65,7 @@ Minimal Guarantee
 Success Guarantee
 ------------------
 1. HSDS accepts and logs the attempted request 
-2. The HSDS service presents `JSON <http://www.json.org/>`_ output to the client based on the parameters and indices 
+2. The HSDS service presents `JSON <http://www.json.org/>`_ or binary output to the client based on the parameters and indices 
    noted above in a *reasonable* response time
 
 Main Success Scenario
@@ -76,7 +76,7 @@ Main Success Scenario
 
 2. The user requests a subset of the data set based on a set of index parameters. e.g. conn_handle.{tasmax, tasmaxQC, ndvi}[1, :, :] or
    conn_handle.{tasmax, tasmaxQC, ndvi}[:, 2, 2], etc... 
-3. The HSDS service returns JSON to the client based on the parameters and indices determined above
+3. The HSDS service returns JSON or binary data to the client based on the parameters and indices determined above
 4. The user's client accepts the JSON data from the HSDS service and loads it into the appropriate data structure 
    for the application used by the user's client.
 
