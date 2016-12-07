@@ -88,7 +88,7 @@ def main():
 
     # finally get the actuall observations
     attrs = None
-    req = helper.getEndpoint() + '/groups/' + obs_uuid + "/attributes"
+    req = helper.getEndpoint() + '/groups/' + obs_uuid + "/attributes?IncludeData=T"
     log.info("Req: " + req)
     rsp = requests.get(req, headers=headers)
     if rsp.status_code == 200:

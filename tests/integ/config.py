@@ -12,10 +12,9 @@
 import os
 
 cfg = {
-    'head_host': '192.168.99.100',
-    #'head_host': '192.168.1.100',
     'head_port': 5100,
     'hsds_endpoint': 'http://192.168.99.100:5102',
+    'head_endpoint': 'http://192.168.99.100:5100',
     #'hsds_endpoint': 'http://192.168.1.100:5102',
     'user_name': 'test_user1',
     'user_password': 'test',

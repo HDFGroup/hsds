@@ -18,17 +18,18 @@ import json
 import time
 
 from aiohttp.web import Application, StreamResponse, run_app
-from aiohttp import  ClientSession, TCPConnector
+from aiohttp import  ClientSession, TCPConnector, HttpProcessingError
 from aiohttp.errors import HttpBadRequest
 import aiobotocore
 
 import config
 from util.timeUtil import unixTimeToUTC, elapsedTime
 from util.httpUtil import http_get_json, jsonResponse, getUrl
-from util.s3Util import  getS3JSONObj, putS3JSONObj, isS3Obj, getS3Client
+from util.s3Util import  getS3JSONObj, putS3JSONObj, isS3Obj, getS3Client, getInitialS3Stats
 from util.idUtil import  createNodeId, getHeadNodeS3Key
 import hsds_logger as log
 
+NODE_STAT_KEYS = ("cpu", "diskio", "memory", "log_stats", "disk", "netio", "req_count", "s3_stats")
  
 async def healthCheck(app):
     """ Periodic method that pings each active node and verifies it is still healthy.  
@@ -84,36 +85,57 @@ async def healthCheck(app):
         await putS3JSONObj(app, headnode_key, head_state)
          
         log.info("putS3JSONObj complete")
-        
+        fail_count = 0
         for node in nodes:         
             if node["host"] is None:
                 continue
             url = getUrl(node["host"], node["port"]) + "/info"  
-            log.info("health check for: ".format(url))
             try:
                 rsp_json = await http_get_json(app, url)
-                log.info("get health check response: {}".format(rsp_json))
-                if rsp_json['id'] != node['id']:
-                    log.warn("unexpected node_id (expecting: {})".format(node['id']))
+                if "node" not in rsp_json:
+                    log.error("Unexpected response from node")
+                    continue
+                node_state = rsp_json["node"]
+                node_id = node_state["id"]
+                
+                if node_state['id'] != node['id']:
+                    log.warn("unexpected node_id: {} (expecting: {})".formatnode_id, (node['id']))
                     node['host'] = None
                     node['id'] = None
                     app["cluster_state"] = "INITIALIZING"
-                if rsp_json['node_number'] != node['node_number']:
-                    log.warn("unexpected node_number (expecting: {})".format(node['node_number']))
+                if node_state['number'] != node['node_number']:
+                    msg = "unexpected node_number got {} (expecting: {})"
+                    log.warn(msg.format(node_state["number"], node['node_number']))
                     node['host'] = None
                     node['id'] = None
                     app["cluster_state"] = "INITIALIZING"
+                # save off other useful info from the node
+                app_node_stats = app["node_stats"]
+                node_stats = {}
+                for k in NODE_STAT_KEYS:
+                    node_stats[k] = rsp_json[k]
+                app_node_stats[node_id] = node_stats
                 # mark the last time we got a response from this node
                 node["healthcheck"] = unixTimeToUTC(int(time.time()))
             except OSError as ose:
-                log.warn("OSError: {}".format(str(ose)))
+                log.warn("OSError for req: {}: {}".format(url, str(ose)))
                 # node has gone away?
                 log.warn("removing {}:{} from active list".format(node["host"], node["port"]))
                 node["host"] = None
-                if app["cluster_state"] == "READY":
-                    # go back to INITIALIZING state until another node is registered
-                    log.warn("Setting cluster_state from READY to INITIALIZING")
-                    app["cluster_state"] = "INITIALIZING"
+                fail_count += 1
+                
+            except HttpProcessingError as hpe:
+                log.warn("HttpProcessingError for req: {}: {}".format(url, str(hpe)))
+                # node has gone away?
+                log.warn("removing {}:{} from active list".format(node["host"], node["port"]))
+                node["host"] = None
+                fail_count += 1
+        if fail_count > 0:
+            if app["cluster_state"] == "READY":
+                # go back to INITIALIZING state until another node is registered
+                log.warn("Setting cluster_state from READY to INITIALIZING")
+                app["cluster_state"] = "INITIALIZING"
+
         
 
 async def info(request):
@@ -246,6 +268,58 @@ async def nodestate(request):
     log.response(request, resp=resp)
     return resp
 
+
+async def nodeinfo(request):
+    """HTTP method to return node stats (cpu usage, request count, errors, etc.) about registed nodes"""
+    log.request(request) 
+    node_stat_keys = NODE_STAT_KEYS
+    stat_key = request.match_info.get('statkey', '*')
+    if stat_key != '*':
+        if stat_key not in node_stat_keys:
+             raise HttpBadRequest(message="invalid key: {}".format(stat_key))
+        node_stat_keys = (stat_key,)
+    
+    app = request.app
+    resp = StreamResponse()
+    resp.headers['Content-Type'] = 'application/json'
+    
+    app_node_stats = app["node_stats"]
+    dn_count = app['target_dn_count']
+    sn_count = app['target_sn_count']
+
+    answer = {}
+    # re-assemble the individual node stats to arrays indexed by node number
+    for stat_key in node_stat_keys:
+        log.info("stat_key: {}".format(stat_key))
+        stats = {}
+        for node in app["nodes"]:
+            node_number = node["node_number"]
+            node_type = node["node_type"]
+            if node_type not in ("sn", "dn"):
+                log.error("unexpected node_type: {}".format(node_type))
+                continue
+            node_id = node["id"]
+            log.info("app_node_stats: {}".format(app_node_stats))
+            if node_id not in app_node_stats:
+                log.info("node_id: {} not found in node_stats".format(node_id))
+                continue
+            node_stats = app_node_stats[node_id]   
+            if stat_key not in node_stats:
+                log.info("key: {} not found in node_stats for node_id: {}".format(stat_key, node_id))
+                continue
+            stats_field = node_stats[stat_key]
+            for k in stats_field:
+                if k not in stats:
+                    stats[k] = {}
+                    stats[k]["sn"] = [0,] * sn_count
+                    stats[k]["dn"] = [0,] * dn_count
+                stats[k][node_type][node_number] = stats_field[k]
+        answer[stat_key] = stats
+  
+    resp = await jsonResponse(request, answer)
+    log.response(request, resp=resp)
+    return resp
+
 def getTargetNodeCount(app, node_type):
     count = None
     if node_type == "dn":
@@ -296,14 +370,19 @@ async def init(loop):
             node = {"node_number": i,
                 "node_type": node_type,
                 "host": None,
-                "port": None}
+                "port": None,
+                "id": None }
             nodes.append(node)
     app["nodes"] = nodes
+    app["node_stats"] = {}  # stats retuned by node/info request.  Keyed by node id
     app["node_ids"] = {}  # dictionary to look up node by id
+    app["s3_stats"] = getInitialS3Stats()
     app.router.add_get('/', info)
     app.router.add_get('/nodestate', nodestate)
     app.router.add_get('/nodestate/{nodetype}', nodestate)
     app.router.add_get('/nodestate/{nodetype}/{nodenumber}', nodestate)
+    app.router.add_get('/nodeinfo', nodeinfo)
+    app.router.add_get('/nodeinfo/{statkey}', nodeinfo)
     app.router.add_get('/info', info)
     app.router.add_post('/register', register)
     

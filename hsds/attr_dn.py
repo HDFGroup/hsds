@@ -13,7 +13,6 @@
 # attribute handling routines
 # 
 import time
-from copy import copy
 from bisect import bisect_left
 
 from aiohttp import HttpProcessingError 
@@ -52,6 +51,9 @@ async def GET_Attributes(request):
         raise HttpProcessingError(code=500, message="Unexpected Error")
 
     validateInPartition(app, obj_id)
+    include_data = False
+    if "IncludeData" in request.GET and request.GET["IncludeData"]:
+        include_data = True
 
     limit = None
     if "Limit" in request.GET:
@@ -98,9 +100,15 @@ async def GET_Attributes(request):
     attr_list = []
     for i in range(start_index, end_index):
         attr_name = attr_names[i]
-        attribute = copy(attr_dict[attr_name])
-        attribute["name"] = attr_name
-        attr_list.append(attribute)
+        src_attr = attr_dict[attr_name]
+        des_attr = {}
+        des_attr["created"] = src_attr["created"]
+        des_attr["type"] = src_attr["type"]
+        des_attr["shape"] = src_attr["shape"]
+        des_attr["name"] = attr_name
+        if include_data:
+            des_attr["value"] = src_attr["value"]
+        attr_list.append(des_attr)
 
     resp_json = {"attributes": attr_list} 
     resp = await jsonResponse(request, resp_json)
@@ -218,7 +226,7 @@ async def PUT_Attribute(request):
         raise HttpProcessingError(code=409, message="Attribute with name: {} already exists".format(attr_name))
 
     # ok - all set, create attribute obj
-    now = int(time.time())
+    now = time.time()
     
     attr_json = {"type": datatype, "shape": shape, "value": value, "created": now }
     attributes[attr_name] = attr_json

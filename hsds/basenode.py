@@ -15,6 +15,7 @@
 import asyncio
 import sys
 import time
+import psutil
 from copy import copy
 
 from aiohttp.web import Application, StreamResponse
@@ -24,10 +25,10 @@ from aiobotocore import get_session
  
 
 import config
-from util.timeUtil import unixTimeToUTC, elapsedTime
+#from util.timeUtil import unixTimeToUTC, elapsedTime
 from util.httpUtil import http_get_json, http_post, jsonResponse
 from util.idUtil import createNodeId
-from util.s3Util import getS3JSONObj, getS3Client 
+from util.s3Util import getS3JSONObj, getS3Client, getInitialS3Stats 
 from util.idUtil import getHeadNodeS3Key
 
 import hsds_logger as log
@@ -155,13 +156,62 @@ async def info(request):
     resp.headers['Content-Type'] = 'application/json'
     answer = {}
     # copy relevant entries from state dictionary to response
-    answer['id'] = request.app['id']
-    answer['node_type'] = request.app['node_type']
-    answer['start_time'] = unixTimeToUTC(app['start_time'])
-    answer['up_time'] = elapsedTime(app['start_time'])
-    answer['node_state'] = app['node_state'] 
-    answer['node_number'] = app['node_number']
-    answer['node_count'] = app['node_count']
+    node = {}
+    node['id'] = request.app['id']
+    node['type'] = request.app['node_type']
+    node['start_time'] =  app["start_time"] #unixTimeToUTC(app['start_time'])
+    node['up_time'] = app['start_time'] # elapsedTime(app['start_time'])
+    node['state'] = app['node_state'] 
+    node['number'] = app['node_number']
+    node['count'] = app['node_count']
+    answer["node"] = node
+    # psutil info
+    # see: http://pythonhosted.org/psutil/ for description of different fields
+    cpu = {}
+    cpu["percent"] = psutil.cpu_percent()
+    cpu["cores"] = psutil.cpu_count()
+    answer["cpu"] = cpu
+    diskio = psutil.disk_io_counters()
+    disk_stats = {}
+    disk_stats["read_count"] = diskio.read_count
+    disk_stats["read_time"] = diskio.read_time
+    disk_stats["read_bytes"] = diskio.read_bytes
+    disk_stats["write_count"] = diskio.write_count
+    disk_stats["write_time"] = diskio.write_time
+    disk_stats["write_bytes"] = diskio.write_bytes
+    answer["diskio"] = disk_stats
+    netio = psutil.net_io_counters()
+    net_stats = {}
+    net_stats["bytes_sent"] = netio.bytes_sent
+    net_stats["bytes_sent"] = netio.bytes_recv
+    net_stats["packets_sent"] = netio.packets_sent
+    net_stats["packets_recv"] = netio.packets_recv
+    net_stats["errin"] = netio.errin
+    net_stats["errout"] = netio.errout
+    net_stats["dropin"] = netio.dropin
+    net_stats["dropout"] = netio.dropout
+    answer["netio"] = net_stats
+    mem_stats = {}
+    svmem = psutil.virtual_memory()
+    mem_stats["phys_total"] = svmem.total
+    mem_stats["phys_available"] = svmem.available
+    sswap = psutil.swap_memory()
+    mem_stats["swap_total"] = sswap.total
+    mem_stats["swap_used"] = sswap.used
+    mem_stats["swap_free"] = sswap.free
+    mem_stats["percent"] = sswap.percent
+    answer["memory"] = mem_stats
+    disk_stats = {}
+    sdiskusage = psutil.disk_usage('/')
+    disk_stats["total"] = sdiskusage.total
+    disk_stats["used"] = sdiskusage.used
+    disk_stats["free"] = sdiskusage.free
+    disk_stats["percent"] = sdiskusage.percent
+    answer["disk"] = disk_stats
+    answer["log_stats"] = app["log_count"]
+    answer["req_count"] = app["req_count"]
+    answer["s3_stats"] = app["s3_stats"]
+    
         
     resp = await jsonResponse(request, answer) 
     log.response(request, resp=resp)
@@ -190,7 +240,23 @@ def baseInit(loop, node_type):
     app["bucket_name"] = bucket_name
     app["sn_urls"] = {}
     app["dn_urls"] = {}
+    counter = {}
+    counter["GET"] = 0
+    counter["PUT"] = 0
+    counter["POST"] = 0
+    counter["DELETE"] = 0
+    app["req_count"] = counter
+    counter = {}
+    counter["INFO"] = 0
+    counter["WARN"] = 0
+    counter["ERROR"] = 0
+    app["log_count"] = counter
+ 
+    app["s3_stats"] = getInitialS3Stats()
+    
 
+    log.app = app
+    
     # create a client Session here so that all client requests 
     #   will share the same connection pool
     max_tcp_connections = int(config.get("max_tcp_connections"))

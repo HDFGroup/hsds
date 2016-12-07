@@ -25,14 +25,16 @@ class UpTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers['content-type'], 'application/json')
         rspJson = json.loads(rsp.text)
-        self.assertTrue("id" in rspJson)
-        self.assertTrue(rspJson["id"].startswith("sn-"))
-        self.assertTrue("node_number" in rspJson)
-        self.assertTrue(rspJson["node_number"] >= 0)
-        self.assertTrue("node_type" in rspJson)
-        self.assertEqual(rspJson["node_type"], "sn")
-        self.assertTrue("node_state" in rspJson)
-        self.assertEqual(rspJson["node_state"], "READY")  
+        self.assertTrue("node" in rspJson)
+        node = rspJson["node"]
+        self.assertTrue("id" in node)
+        self.assertTrue(node["id"].startswith("sn-"))
+        self.assertTrue("number" in node)
+        self.assertTrue(node["number"] >= 0)
+        self.assertTrue("type" in node)
+        self.assertEqual(node["type"], "sn")
+        self.assertTrue("state" in node)
+        self.assertEqual(node["state"], "READY")  
              
 if __name__ == '__main__':
     #setup test files

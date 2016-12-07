@@ -19,6 +19,7 @@ from aiohttp import HttpProcessingError
 from aiohttp.errors import ClientError
 
 import hsds_logger as log
+import config
 
 def isOK(http_response):
     if http_response < 300:
@@ -182,6 +183,31 @@ async def jsonResponse(request, data, status=200):
     resp.write(answer)
     await resp.write_eof()
     return resp
+
+"""
+Convience method to compute href links
+"""
+def getHref(request, uri, query=None, domain=None):
+    href = config.get("hsds_endpoint")
+    if not href:
+        href = request.scheme + "://" + request.host  
+    href += uri
+    delimiter = '?'
+    if domain:
+        href += "?host=" + domain
+    elif "host" in request.GET:
+        href  += "?host=" + request.GET["host"]
+        delimiter = '&'
+            
+    if query is not None:
+        if type(query) is str:
+            href += delimiter + query
+        else:
+            # list or tuple
+            for item in query:
+                href += delimiter + item
+                delimiter = '&'
+    return href
 
 
      

@@ -16,7 +16,7 @@
 import json
 from aiohttp.errors import HttpBadRequest, HttpProcessingError
  
-from util.httpUtil import http_post, http_delete, jsonResponse
+from util.httpUtil import http_post, http_delete, jsonResponse, getHref
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
@@ -54,8 +54,18 @@ async def GET_Group(request):
     
     # get authoritative state for group from DN (even if it's in the meta_cache).
     group_json = await getObjectJson(app, group_id, refresh=True)  
-
+    
     await validateAction(app, domain, group_id, username, "read")
+
+    hrefs = []
+    group_uri = '/groups/'+group_id
+    hrefs.append({'rel': 'self', 'href': getHref(request, group_uri)})
+    hrefs.append({'rel': 'links', 'href': getHref(request, group_uri+'/links')})
+    root_uri = '/groups/' + group_json["root"]    
+    hrefs.append({'rel': 'root', 'href': getHref(request, root_uri)})
+    hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
+    hrefs.append({'rel': 'attributes', 'href': getHref(request, group_uri+'/attributes')})
+    group_json["hrefs"] = hrefs
 
     resp = await jsonResponse(request, group_json)
     log.response(request, resp=resp)

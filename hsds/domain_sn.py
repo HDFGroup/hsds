@@ -17,7 +17,7 @@ import json
 from aiohttp import  HttpProcessingError 
 from aiohttp.errors import HttpBadRequest
 
-from util.httpUtil import  http_post, http_put, http_get_json, http_delete, jsonResponse
+from util.httpUtil import  http_post, http_put, http_get_json, http_delete, jsonResponse, getHref
 from util.idUtil import  getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
@@ -73,6 +73,21 @@ async def GET_Domain(request):
         rsp_json["created"] = domain_json["created"]
     if "lastModified" in domain_json:
         rsp_json["lastModified"] = domain_json["lastModified"]
+     
+    hrefs = []
+    hrefs.append({'rel': 'self', 'href': getHref(request, '/')})
+    if "root" in domain_json:
+        root_uuid = domain_json["root"]
+        hrefs.append({'rel': 'database', 'href': getHref(request, '/datasets')})
+        hrefs.append({'rel': 'groupbase', 'href': getHref(request, '/groups')})
+        hrefs.append({'rel': 'typebase', 'href': getHref(request, '/datatypes')})
+        hrefs.append({'rel': 'root', 'href': getHref(request, '/groups/' + root_uuid)})
+        hrefs.append({'rel': 'acls', 'href': getHref(request, '/acls')})
+    parent_domain = getParentDomain(domain)
+    if parent_domain and parent_domain.find('.') > 0:
+        hrefs.append({'rel': 'parent', 'href': getHref(request, '/', domain=parent_domain)})
+
+    rsp_json["hrefs"] = hrefs
 
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
@@ -240,7 +255,10 @@ async def GET_ACL(request):
     # return just the keys as per the REST API
     rsp_json = { }
     rsp_json["acl"] = acl
-    rsp_json["hrefs"] = []  # TBD
+    hrefs = []
+    hrefs.append({'rel': 'self', 'href': getHref(request, '/acls')})
+    hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
+    rsp_json["hrefs"] = []
 
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)

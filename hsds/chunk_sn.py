@@ -18,7 +18,7 @@ import json
 import base64 
 import numpy as np
 from aiohttp.errors import HttpBadRequest, HttpProcessingError, ClientError
-from util.httpUtil import  jsonResponse  
+from util.httpUtil import  jsonResponse, getHref  
 from util.idUtil import   isValidUuid, getDataNodeUrl
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.hdf5dtype import getItemSize, createDataType
@@ -348,8 +348,11 @@ async def GET_Value(request):
         raise HttpBadRequest(message=msg)
 
     username, pswd = getUserPasswordFromRequest(request)
-    validateUserPassword(username, pswd)
-
+    if username is None and app['allow_noauth']:
+        username = "default"
+    else:
+        validateUserPassword(username, pswd)
+     
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
@@ -429,7 +432,6 @@ async def GET_Value(request):
 
     # TBD - Binary response
     resp_json = {}
-    resp_json["hrefs"] = []  # TBD
     data = arr.tolist()
     json_data = bytesArrayToList(data)
     if datashape["class"] == 'H5S_SCALAR':
@@ -437,6 +439,15 @@ async def GET_Value(request):
         resp_json["value"] = json_data[0]
     else:
         resp_json["value"] = json_data  
+    
+    hrefs = []
+    dset_uri = '/datasets/'+dset_id
+    hrefs.append({'rel': 'self', 'href': getHref(request, dset_uri + '/value')})
+    root_uri = '/groups/' + dset_json["root"]    
+    hrefs.append({'rel': 'root', 'href': getHref(request, root_uri)})
+    hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
+    hrefs.append({'rel': 'owner', 'href': getHref(request, dset_uri)})
+    resp_json["hrefs"] = hrefs
  
     resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)

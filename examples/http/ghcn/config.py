@@ -21,7 +21,8 @@ cfg = {
     'max_tcp_connections': 16,
     'max_concurrent_tasks': 128,
     'docker_machine_ip': "192.168.99.100",
-    'hsds_endpoint': 'http://192.168.99.100:5102'
+    'hsds_endpoint': 'http://192.168.99.100:5102',
+    'head_endpoint': 'http://192.168.99.100:5100'
 }
    
 def get(x):     

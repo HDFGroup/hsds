@@ -17,7 +17,7 @@
 import json
 from aiohttp.errors import HttpBadRequest 
  
-from util.httpUtil import http_post, http_delete, jsonResponse
+from util.httpUtil import http_post, http_delete, jsonResponse, getHref
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
@@ -57,6 +57,15 @@ async def GET_Datatype(request):
     type_json = await getObjectJson(app, ctype_id, refresh=True)  
 
     await validateAction(app, domain, ctype_id, username, "read")
+
+    hrefs = []
+    ctype_uri = '/datatypes/'+ctype_id
+    hrefs.append({'rel': 'self', 'href': getHref(request, ctype_uri)})
+    root_uri = '/groups/' + type_json["root"]    
+    hrefs.append({'rel': 'root', 'href': getHref(request, root_uri)})
+    hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
+    hrefs.append({'rel': 'attributes', 'href': getHref(request, ctype_uri+'/attributes')})
+    type_json["hrefs"] = hrefs
 
     resp = await jsonResponse(request, type_json)
     log.response(request, resp=resp)
