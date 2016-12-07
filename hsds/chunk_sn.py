@@ -26,7 +26,7 @@ from util.dsetUtil import getSliceQueryParam, setSliceQueryParam, getChunkLayout
 from util.dsetUtil import getSelectionShape, getNumElements, getDsetDims
 from util.chunkUtil import getNumChunks, getChunkIds
 from util.chunkUtil import getChunkCoverage, getDataCoverage
-from util.arrayUtil import bytesArrayToList 
+from util.arrayUtil import bytesArrayToList, toTuple 
 from util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from servicenode_lib import getObjectJson, validateAction
 import config
@@ -240,10 +240,6 @@ async def PUT_Value(request):
     slices = tuple(slices)  
     log.info("PUT Value selection: {}".format(slices))   
      
-    if json_data is not None:
-        log.info("json_data: {}".format(json_data))
-    if binary_data is not None:
-        log.info("got binary data: {} bytes".format(len(binary_data)))
     log.info("item size: {}".format(item_size))
 
     np_shape = getSelectionShape(slices)
@@ -268,9 +264,20 @@ async def PUT_Value(request):
                 
     else:
         # data is json
-        if npoints == 1 and len(dset_dtype) > 1:
-            # convert to tuple for compound singleton writes
-            json_data = [tuple(json_data),]
+
+        # need some special conversion for compound types --
+        # each element must be a tuple, but the JSON decoder
+        # gives us a list instead.
+        if len(dset_dtype) > 1 and type(json_data) in (list, tuple):
+            np_shape_rank = len(np_shape)
+            #log.info("np_shape_rank: {}".format(np_shape_rank))
+            converted_data = []
+            if npoints == 1:
+                converted_data.append(toTuple(0, json_data))
+            else:  
+                converted_data = toTuple(np_shape_rank, json_data)
+            json_data = converted_data
+
         arr = np.array(json_data, dtype=dset_dtype)
         # raise an exception of the array shape doesn't match the selection shape
         # allow if the array is a scalar and the selection shape is one element,
@@ -305,7 +312,7 @@ async def PUT_Value(request):
             log.warn(msg)
             raise HttpBadRequest(message=msg)
 
-    log.info("got np array: {}".format(arr))
+    #log.info("got np array: {}".format(arr))
     num_chunks = getNumChunks(slices, layout)
     log.info("num_chunks: {}".format(num_chunks))
     if num_chunks > config.get("max_chunks_per_request"):

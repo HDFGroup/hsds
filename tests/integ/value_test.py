@@ -318,6 +318,160 @@ class ValueTest(unittest.TestCase):
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
         self.assertEqual(rspJson["value"], "Hello, world")
+
+           
+    def testPutCompound(self):
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + '/'
+
+        # Get root uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+        
+        fields = ({'name': 'temp', 'type': 'H5T_STD_I32LE'}, 
+                    {'name': 'pressure', 'type': 'H5T_IEEE_F32LE'}) 
+        datatype = {'class': 'H5T_COMPOUND', 'fields': fields }
+        
+        #
+        #create compound scalar dataset
+        #
+        payload = {'type': datatype}
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+
+        rspJson = json.loads(rsp.text)
+        dset0d_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dset0d_uuid))
+        
+        # verify the shape of the dataset
+        req = self.endpoint + "/datasets/" + dset0d_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # get dataset
+        rspJson = json.loads(rsp.text)
+        shape = rspJson["shape"]
+        self.assertEqual(shape["class"], 'H5S_SCALAR')
+         
+        # link new dataset as 'dset0_compound'
+        name = 'dset0d'
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {"id": dset0d_uuid}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        
+        # write entire array
+        value = (42, 0.42)
+        payload = {'value': value}
+        req = self.endpoint + "/datasets/" + dset0d_uuid + "/value"
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # write value
+        
+        # read back the value
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)         
+        
+        #    
+        #create 1d dataset
+        #
+        num_elements = 10
+        payload = {'type': datatype, 'shape': num_elements}
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        
+        rspJson = json.loads(rsp.text)
+        dset1d_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dset1d_uuid))
+         
+        # link new dataset as 'dset1'
+        name = 'dset1d'
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {"id": dset1d_uuid}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        
+        # write entire array
+        value = [] 
+        for i in range(num_elements):
+            item = (i*10, i*10+i/10.0) 
+            value.append(item)
+        payload = {'value': value}
+        req = self.endpoint + "/datasets/" + dset1d_uuid + "/value"
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # write value
+        
+        # selection write
+        payload = { 'start': 0, 'stop': 1, 'value': (42, .42) }
+        req = self.endpoint + "/datasets/" + dset1d_uuid + "/value"
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # write value
+        
+        # read back the data
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+         
+        readData = rspJson["value"]
+        
+        self.assertEqual(readData[0][0], 42)   
+        self.assertEqual(readData[1][0], 10)
+
+        #    
+        #create 2d dataset
+        #
+        dims = [2,2]
+        payload = {'type': datatype, 'shape': dims}
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        
+        rspJson = json.loads(rsp.text)
+        dset2d_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dset2d_uuid))
+         
+        # link new dataset as 'dset2d'
+        name = 'dset2d'
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {"id": dset2d_uuid}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        
+        # write entire array
+        value = [] 
+        for i in range(dims[0]):
+            row = []
+            for j in range(dims[1]):
+                item = (i*10, i*10+j/2.0) 
+                row.append(item)
+            value.append(row)
+        payload = {'value': value}
+         
+        req = self.endpoint + "/datasets/" + dset2d_uuid + "/value"
+        data = json.dumps(payload)
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # write value
+        
+        # read back the data
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        readData = rspJson["value"]
+        self.assertEqual(readData[0][0], [0, 0.0])   
+        self.assertEqual(readData[1][0], [10, 10.0])  
+        self.assertEqual(readData[0][1], [0, 0.5])  
+        self.assertEqual(readData[1][1], [10, 10.5])   
        
              
 if __name__ == '__main__':

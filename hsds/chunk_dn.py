@@ -118,6 +118,7 @@ async def PUT_Chunk(request):
         log.info("selection[{}]: {}".format(i, s))
 
     input_shape = getSelectionShape(selection)
+    log.info("input_shape: {}".format(input_shape))
     num_elements = 1
     for extent in input_shape:
         num_elements *= extent
@@ -139,6 +140,8 @@ async def PUT_Chunk(request):
         raise HttpProcessingError(code=500, message="Unexpected Error")
         
     input_arr = np.fromstring(input_bytes, dtype=dt)
+    log.info("input arr: {}".format(input_arr))
+    input_arr = input_arr.reshape(input_shape)
 
     chunk_arr = None 
     data_cache = app['data_cache'] 
