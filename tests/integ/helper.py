@@ -68,7 +68,7 @@ def getTestDomainName(name):
 """
 Helper - get default request headers for domain
 """
-def getRequestHeaders(domain=None, username=None, password=None):
+def getRequestHeaders(domain=None, username=None, password=None, **kwargs):
     if username is None:
         username = config.get("user_name")
     if password is None:
@@ -82,6 +82,9 @@ def getRequestHeaders(domain=None, username=None, password=None):
         auth_string = base64.b64encode(auth_string)
         auth_string = b"Basic " + auth_string
         headers['Authorization'] = auth_string
+
+    for k in kwargs.keys():
+        headers[k] = kwargs[k]
     return headers
 
 """

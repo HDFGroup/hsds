@@ -16,7 +16,7 @@
 import json
 from aiohttp.web import StreamResponse
 from aiohttp import HttpProcessingError 
-from aiohttp.errors import ClientError
+from aiohttp.errors import ClientError, HttpBadRequest
 
 import hsds_logger as log
 import config
@@ -209,7 +209,23 @@ def getHref(request, uri, query=None, domain=None):
                 delimiter = '&'
     return href
 
+"""
+Get requested content type.  Returns either "binary" if the accept header is 
+octet stream, otherwise json.
+Currently does not support q fields.
+"""
+def getAcceptType(request):
+    accept_type = "json"  # default to JSON
+    if "accept" in request.headers:
+        if request.headers["accept"] not in ("application/json", "application/octet-stream", "*/*"):
+            msg = "Unexpected accept value: {}".format(accept_type)
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        if request.headers["accept"] == "application/octet-stream":
+            accept_type = "binary"
+    return accept_type
 
+    
      
 
 

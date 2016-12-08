@@ -18,7 +18,8 @@ import json
 import base64 
 import numpy as np
 from aiohttp.errors import HttpBadRequest, HttpProcessingError, ClientError
-from util.httpUtil import  jsonResponse, getHref  
+from aiohttp.web import StreamResponse
+from util.httpUtil import  jsonResponse, getHref, getAcceptType  
 from util.idUtil import   isValidUuid, getDataNodeUrl
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.hdf5dtype import getItemSize, createDataType
@@ -159,6 +160,8 @@ async def PUT_Value(request):
     log.request(request)
     app = request.app 
     loop = app["loop"]
+    body = None
+    json_data = None
 
     dset_id = request.match_info.get('id')
     if not dset_id:
@@ -178,8 +181,8 @@ async def PUT_Value(request):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-
-    content_type = "application/json"
+    
+    request_type = "json"
     if "Content-Type" in request.headers:
         # client should use "application/octet-stream" for binary transfer
         content_type = request.headers["Content-Type"]
@@ -187,6 +190,17 @@ async def PUT_Value(request):
             msg = "Unknown content_type: {}".format(content_type)
             log.warn(msg)
             raise HttpBadRequest(message=msg)
+        if content_type == "application/octet-stream":
+            log.info("request_type is binary")
+            request_type = "binary"
+
+    if not request.has_body:
+        msg = "PUT Value with no body"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    log.info("request_type: {}".format(request_type))
+    if request_type == "json":
+        body = await request.json()
     
     # get  state for dataset from DN.
     dset_json = await getObjectJson(app, dset_id)  
@@ -203,39 +217,23 @@ async def PUT_Value(request):
      
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
-    if item_size == 'H5T_VARIABLE' and content_type != "application/json":
+    if item_size == 'H5T_VARIABLE' and request_type != "json":
         msg = "Only JSON is supported for variable length data types"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     dset_dtype = createDataType(type_json)  # np datatype
     
     await validateAction(app, domain, dset_id, username, "update")
-
-    if not request.has_body:
-        msg = "PUT Value with no body"
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
-    
-    body = None
-    json_data = None
+ 
     binary_data = None
     slices = []  # selection for write 
-    if content_type == "application/json":
-        body = await request.json()
-        if "value" in body:
-            json_data = body["value"]
-        elif "value_base64" in body:
-            base64_data = body["value_base64"]
-            base64_data = base64_data.encode("ascii")
-            binary_data = base64.b64decode(base64_data)
-        else:
-            msg = "PUT value has no value or value_base64 key in body"
-            log.warn(msg)
-            raise HttpBadRequest(message=msg)   
-
+    
     # Get query parameter for selection
     for dim in range(rank):
-        dim_slice = getSliceQueryParam(request, dim, dims[dim], body=body)
+        body_json = None
+        if request_type == "json":
+            body_json = body
+        dim_slice = getSliceQueryParam(request, dim, dims[dim], body=body_json)
         slices.append(dim_slice)   
     slices = tuple(slices)  
     log.info("PUT Value selection: {}".format(slices))   
@@ -252,6 +250,25 @@ async def PUT_Value(request):
         msg = "Selection is empty"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
+
+    if request_type == "json":
+        if "value" in body:
+            json_data = body["value"]
+        elif "value_base64" in body:
+            base64_data = body["value_base64"]
+            base64_data = base64_data.encode("ascii")
+            binary_data = base64.b64decode(base64_data)
+        else:
+            msg = "PUT value has no value or value_base64 key in body"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)   
+    else:
+        # read binary data
+        binary_data = await request.read()
+        if len(binary_data) != request.content_length:
+            msg = "Read {} bytes, expecting: {}".format(len(binary_data), request.content_length)
+            log.error(msg)
+            raise HttpProcessingError(code=500, message="Unexpected Error")
 
     arr = None  # np array to hold request data
     if binary_data:
@@ -278,6 +295,7 @@ async def PUT_Value(request):
                 converted_data = toTuple(np_shape_rank, json_data)
             json_data = converted_data
 
+        log.info("json_data: {}".format(json_data))
         arr = np.array(json_data, dtype=dset_dtype)
         # raise an exception of the array shape doesn't match the selection shape
         # allow if the array is a scalar and the selection shape is one element,
@@ -366,14 +384,8 @@ async def GET_Value(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
 
-    accept_type = "application/json"  # default to return json response
-    if "accept" in request.headers:
-        if accept_type not in ("application/json", "application/octet-stream", "*/*"):
-            msg = "Unexpected accept value: {}".format(accept_type)
-            log.warn(msg)
-            raise HttpBadRequest(message=msg)
-        if request.headers["accept"] == "application/octet-stream":
-            accept_type = "application/octet-stream"
+    accept_type = getAcceptType(request)
+    response_type = accept_type # will adjust later if binary not possible
    
     # get  state for dataset from DN.
     dset_json = await getObjectJson(app, dset_id)  
@@ -395,10 +407,10 @@ async def GET_Value(request):
     log.info("got dset_json: {}".format(dset_json))
     await validateAction(app, domain, dset_id, username, "read")
 
-    if item_size == 'H5T_VARIABLE' and accept_type not in ("application/json", "*/*"):
-        msg = "Only JSON is supported for variable length data types"
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
+    if item_size == 'H5T_VARIABLE' and accept_type != "json":
+        msg = "Client requested binary, but only JSON is supported for variable length data types"
+        log.info(msg)
+        response_type = "json"
 
     slices = []  # selection for read 
      
@@ -437,26 +449,36 @@ async def GET_Value(request):
 
     log.info("arr shape: {}".format(arr.shape))
 
-    # TBD - Binary response
-    resp_json = {}
-    data = arr.tolist()
-    json_data = bytesArrayToList(data)
-    if datashape["class"] == 'H5S_SCALAR':
-        # convert array response to value
-        resp_json["value"] = json_data[0]
+    if response_type == "binary":
+        output_data = arr.tobytes()
+     
+        # write response
+        resp = StreamResponse(status=200)
+        resp.headers['Content-Type'] = "application/octet-stream"
+        resp.content_length = len(output_data)
+        await resp.prepare(request)
+        resp.write(output_data)
+        await resp.write_eof()
     else:
-        resp_json["value"] = json_data  
+        resp_json = {}
+        data = arr.tolist()
+        json_data = bytesArrayToList(data)
+        if datashape["class"] == 'H5S_SCALAR':
+            # convert array response to value
+            resp_json["value"] = json_data[0]
+        else:
+            resp_json["value"] = json_data  
     
-    hrefs = []
-    dset_uri = '/datasets/'+dset_id
-    hrefs.append({'rel': 'self', 'href': getHref(request, dset_uri + '/value')})
-    root_uri = '/groups/' + dset_json["root"]    
-    hrefs.append({'rel': 'root', 'href': getHref(request, root_uri)})
-    hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
-    hrefs.append({'rel': 'owner', 'href': getHref(request, dset_uri)})
-    resp_json["hrefs"] = hrefs
+        hrefs = []
+        dset_uri = '/datasets/'+dset_id
+        hrefs.append({'rel': 'self', 'href': getHref(request, dset_uri + '/value')})
+        root_uri = '/groups/' + dset_json["root"]    
+        hrefs.append({'rel': 'root', 'href': getHref(request, root_uri)})
+        hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
+        hrefs.append({'rel': 'owner', 'href': getHref(request, dset_uri)})
+        resp_json["hrefs"] = hrefs
  
-    resp = await jsonResponse(request, resp_json)
+        resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
     return resp
 

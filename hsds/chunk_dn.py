@@ -140,7 +140,7 @@ async def PUT_Chunk(request):
         raise HttpProcessingError(code=500, message="Unexpected Error")
         
     input_arr = np.fromstring(input_bytes, dtype=dt)
-    log.info("input arr: {}".format(input_arr))
+    #log.info("input arr: {}".format(input_arr))
     input_arr = input_arr.reshape(input_shape)
 
     chunk_arr = None 
