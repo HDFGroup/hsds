@@ -31,7 +31,7 @@ if [ -z ${HEAD_HOST} ] || [ -z ${SN_HOST} ]; then
     echo "hsds_endpoint: " $HSDS_ENDPOINT
     echo "head_endpoint: " $HEAD_ENDPOINT
     echo "run container"
-    docker run --rm  --name hsds_client \
+    docker run --rm  \
        -v ${PWD}:/usr/local/src/work \
        --env HSDS_ENDPOINT=${HSDS_ENDPOINT} \
        --env HEAD_ENDPOINT=${HEAD_ENDPOINT} \
@@ -44,7 +44,7 @@ else
     echo "hsds_endpoint: " $HSDS_ENDPOINT
     echo "head_endpoint: " $HEAD_ENDPOINT
     echo "run container"
-    docker run --rm  --name hsds_client \
+    docker run --rm  \
        -v ${PWD}:/usr/local/src/work \
        --env HSDS_ENDPOINT=${HSDS_ENDPOINT} \
        --env HEAD_ENDPOINT=${HEAD_ENDPOINT} \

@@ -23,6 +23,22 @@ from helper import getRequestHeaders
 
 globals = {}
 
+def checkDockerLink():
+    # scan through /etc/hosts and see if any hsds links have been defined
+    linkfound = False
+    with open('/etc/hosts') as f:
+        lines = f.readlines()
+    for line in lines:
+        fields = line.split('\t')
+        if len(fields) < 2:
+            continue
+        host_name = fields[1]
+        if host_name.startswith("hsds_sn"):
+            linkfound = True
+            break
+    return linkfound
+    
+
 async def getEndpoints():
     docker_machine_ip = config.get("docker_machine_ip")
     req = "{}/nodestate/sn".format(config.get("head_endpoint")) 
@@ -33,13 +49,17 @@ async def getEndpoints():
             rsp_json = await rsp.json()
     nodes = rsp_json["nodes"]
     sn_endpoints = []
+    docker_links = checkDockerLink()
     for node in nodes:
         if not node["host"]:
             continue
-        host = node["host"]
-        if docker_machine_ip:
+        if docker_links:
             # when running in docker, use the machine address as host
             host = "hsds_sn_{}".format(node["node_number"])
+        elif docker_machine_ip:
+            host = docker_machine_ip
+        else:
+            host = node["host"]
         url = "http://{}:{}".format(host, node["port"])
         sn_endpoints.append(url)
     log.info("{} endpoints".format(len(sn_endpoints)))
