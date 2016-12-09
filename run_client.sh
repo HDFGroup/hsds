@@ -44,7 +44,7 @@ if [ -z ${HEAD_HOST} ] || [ -z ${SN_HOST} ]; then
     echo "head_endpoint: " $HEAD_ENDPOINT
     echo "run container"
     docker run  \
-       -v ${PWD}:/usr/local/src/work \
+       -v ${PWD}:/hsds \
        --env HSDS_ENDPOINT=${HSDS_ENDPOINT} \
        --env HEAD_ENDPOINT=${HEAD_ENDPOINT} \
        --link hsds_head:hsds_head \
@@ -60,7 +60,7 @@ else
     echo "head_endpoint: " $HEAD_ENDPOINT
     echo "run container"
     docker run --rm  \
-       -v ${PWD}:/usr/local/src/work \
+       -v ${PWD}:/hsds \
        --env HSDS_ENDPOINT=${HSDS_ENDPOINT} \
        --env HEAD_ENDPOINT=${HEAD_ENDPOINT} \
        ${SHELL_FLAGS} \
