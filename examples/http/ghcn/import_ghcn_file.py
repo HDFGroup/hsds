@@ -101,6 +101,7 @@ async def createGroup(parent_group, group_name):
     params = {"host": domain}
     base_req = getEndpoint()
     headers = getRequestHeaders()
+    timeout = config.get("timeout")
 
     # TBD - replace with atomic create & link operation?
     
@@ -108,7 +109,7 @@ async def createGroup(parent_group, group_name):
     req = base_req + "/groups"
     log.info("POST:" + req)
     globals["request_count"] += 1
-    async with client.post(req, headers=headers, params=params) as rsp:
+    async with client.post(req, headers=headers, params=params, timeout=timeout) as rsp:
         if rsp.status != 201:
             log.error("POST {} failed with status: {}, rsp: {}".format(req, rsp.status, str(rsp)))
             raise HttpProcessingError(code=rsp.status, message="Unexpected error")
@@ -121,7 +122,7 @@ async def createGroup(parent_group, group_name):
     link_created = False
     log.info("PUT " + req)
     globals["request_count"] += 1
-    async with client.put(req, data=json.dumps(data), headers=headers, params=params) as rsp:
+    async with client.put(req, data=json.dumps(data), headers=headers, params=params, timeout=timeout) as rsp:
         if rsp.status == 409:
             # another task has created this link already
             log.warn("got 409 in request: " + req)
@@ -135,7 +136,7 @@ async def createGroup(parent_group, group_name):
         # fetch the existing link and return the group 
         log.info("GET " + req)
         globals["request_count"] += 1
-        async with client.get(req, headers=headers, params=params) as rsp:
+        async with client.get(req, headers=headers, params=params, timeout=timeout) as rsp:
             if rsp.status != 200:
                 log.warn("unexpected error (expected to find link) {} for request: {}".format(rsp.status, req))
                 raise HttpProcessingError(code=rsp.status, message="Unexpected error")
@@ -165,6 +166,7 @@ async def verifyGroupPath(h5path):
     
     base_req = getEndpoint() + '/groups/'
     next_path = '/'
+    timeout = config.get("timeout")
 
     for group_name in group_names:
         if not group_name:
@@ -180,7 +182,7 @@ async def verifyGroupPath(h5path):
         req = base_req + parent_group + "/links/" + group_name
         log.info("GET " + req)
         globals["request_count"] += 1
-        async with client.get(req, headers=headers, params=params) as rsp:
+        async with client.get(req, headers=headers, params=params, timeout=timeout) as rsp:
             if rsp.status == 404:
                 parent_group = await createGroup(parent_group, group_name)
             elif rsp.status != 200:
@@ -206,7 +208,8 @@ async def verifyDomain(domain):
     root_id = None
     log.info("GET " + req)
     globals["request_count"] += 1
-    async with client.get(req, headers=headers, params=params) as rsp:
+    timeout = config.get("timeout")
+    async with client.get(req, headers=headers, params=params, timeout=timeout) as rsp:
         if rsp.status == 200:
             domain_json = await rsp.json()
         else:
@@ -217,13 +220,13 @@ async def verifyDomain(domain):
         # create the domain
         log.info("PUT " + req)
         globals["request_count"] += 1
-        async with client.put(req, headers=headers, params=params) as rsp:
+        async with client.put(req, headers=headers, params=params, timeout=timeout) as rsp:
             if rsp.status != 201:
                 log.error("got status: {} for PUT req: {}".format(rsp.status, req))
                 raise HttpProcessingError(code=rsp.status, message="Unexpected error")
         log.info("GET " + req)
         globals["request_count"] += 1
-        async with client.get(req, headers=headers, params=params) as rsp:
+        async with client.get(req, headers=headers, params=params, timeout=timeout) as rsp:
             if rsp.status == 200:
                 domain_json = await rsp.json()
                 root_id = domain_json["root"]
@@ -284,7 +287,8 @@ async def import_line(line):
     log.info("PUT " + req)
     globals["request_count"] += 1
     task_log["req"] = req
-    async with client.put(req, headers=headers, data=json.dumps(data), params=params) as rsp:
+    timeout = config.get("timeout")
+    async with client.put(req, headers=headers, data=json.dumps(data), params=params, timeout=timeout) as rsp:
         task_log["stop"] = time.time()
         task_log["state"] = "COMPLETE"
         task_log["status"] = rsp.status
