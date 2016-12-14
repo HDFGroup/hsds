@@ -46,7 +46,12 @@ while not is_online:
         time.sleep(5)
         continue
     status = statuses[0]
+    print("instance status: {}".format(status.instance_status.status))
     print("instance: ", instance.id, "status:", status.instance_status.status, "for instance:", tag_name)  # u'ok'
     if status.instance_status.status == u'ok':
         break
+    print("waiting...")
+    time.sleep(5)
+
+print("instance id: {}".format(instance.id))    
 print('done')
