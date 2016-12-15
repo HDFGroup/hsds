@@ -19,7 +19,7 @@ import config
 # This is a utility to dump a JSON obj (group, dataset, ctype) given the
 # the objects UUID
     
-
+# NOTE - this script does not seem to work with minio - see: https://github.com/mozilla/socorro-collector/issues/17
 #
 # Print usage and exit
 #
@@ -36,9 +36,10 @@ def main():
         sys.exit(1)
     
     obj_id = sys.argv[-1]
-     
+    s3_gateway = config.get("aws_s3_gateway")
+    print("aws_s3_gateway:", s3_gateway)
     region = config.get("aws_region")
-    print("region", region)
+    print("region:", region)
     conn = boto.s3.connect_to_region(
         region,
         #aws_access_key_id=awsAccessKeyID,
@@ -52,11 +53,11 @@ def main():
     k = Key(bucket)
     k.key = obj_id
     data = k.get_contents_as_string()
+    if not isinstance(data, str):
+        # Python 3 - convert from bytes to str
+        data = data.decode("utf-8")
     json_data = json.loads(data)
     print(json.dumps(json_data, sort_keys=True, indent=4))
-
- 
-
      
 main()
 

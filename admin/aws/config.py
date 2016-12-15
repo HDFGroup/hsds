@@ -14,6 +14,7 @@ import sys
 
 cfg = {
     'aws_region': 'us-west-2',
+    'aws_s3_gateway': 'https://s3.amazonaws.com',
     'hsds_ami': 'ami-3443eb54',
     'bucket_name': 'nasa.hsdsdev',
     'security_group_id': 'sg-6e384417',
