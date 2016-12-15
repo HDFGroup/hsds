@@ -15,10 +15,11 @@ import sys
 cfg = {
     'aws_region': 'us-west-2',
     'hsds_ami': 'ami-3443eb54',
+    'bucket_name': 'nasa.hsdsdev',
     'security_group_id': 'sg-6e384417',
     'profile_name': 'LimitedEC2', 
     'subnet_id': 'subnet-5b04173f',
-    'key_name': 'ACCESS_keypair',
+    'key_name': 'ACCESS',
     'instance_type': 'm4.large',
     'project_tag': 'ACCESS'
 }
