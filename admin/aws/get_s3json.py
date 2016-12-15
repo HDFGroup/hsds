@@ -12,7 +12,7 @@
 import sys
 import json
 import boto.s3
-from boto.s3.connection import S3Connection
+import boto.s3.connection 
 from boto.s3.key import Key
 import config
  
@@ -38,7 +38,7 @@ def main():
     obj_id = sys.argv[-1]
      
     region = config.get("aws_region")
-    print("aws region: ", region)
+    print("region", region)
     conn = boto.s3.connect_to_region(
         region,
         #aws_access_key_id=awsAccessKeyID,
