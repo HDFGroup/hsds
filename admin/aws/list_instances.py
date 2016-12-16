@@ -5,7 +5,7 @@ region = config.get("aws_region")
 conn = boto.ec2.connect_to_region(region)
 reservations = conn.get_all_instances()
 fields = ("id", "public ip", "private ip", "name", "state")
-format_str = "{:<12} {:<16} {:<16} {:<16} {:<12}"
+format_str = "{:<20} {:<16} {:<16} {:<16} {:<12}"
 print(format_str.format(*fields))
 sep = ('----------',) * 5
 print(format_str.format(*sep))

@@ -18,6 +18,7 @@ cfg = {
     'aws_secret_access_key': 'xxx',    
     'aws_region': 'us-east-1',
     'hsds_endpoint': '', # used for hateos links in response
+    'head_endpoint': '', # optionally used for nodes to register
     'aws_s3_gateway': 'https://s3.amazonaws.com',  
     'bucket_name': 'hdfgroup_hsdsdev',
     'head_host': 'localhost',
