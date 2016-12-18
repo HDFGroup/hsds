@@ -21,7 +21,7 @@ cfg = {
     'profile_name': 'LimitedEC2', 
     'subnet_id': 'subnet-5b04173f',
     'key_name': 'ACCESS',
-    'instance_type': 't2.medium', #m4.large',
+    'instance_type': 'm4.large',
     'project_tag': 'ACCESS'
 }
    
