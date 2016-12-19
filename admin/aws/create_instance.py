@@ -5,14 +5,26 @@ import config
 
 if len(sys.argv) == 1 or sys.argv[1] == "-h" or sys.argv[1] == "--help":
     print("usage: python create_instance.py <name> <count>")
+    print("   Note: if name is 'node', then the hsds_sn and hsds_dn services will be started")
     sys.exit(1)
 
 count = 1
 if len(sys.argv) > 2:
     count = int(sys.argv[2])
+
+status_code = None
+
 tag_name  = sys.argv[1]
 print("count: {}".format(count))
 print("tag_name: {}".format(tag_name))
+startup_script = None
+if tag_name == "node":
+    startup_script = """#!/bin/sh
+#start hsds_dn and hsds_sn services
+systemctl start hsds_sn
+systemctl start hsds_dn
+"""
+
 
 region = config.get("aws_region")
 print("region: {}".format(region))
@@ -26,12 +38,13 @@ subnet_id = config.get("subnet_id")
 print("subnet_id: {}".format(subnet_id))
 key_name = config.get("key_name")
 print("key name: {}".format(key_name))
-instance_type =config.get("instance_type")
+instance_type = config.get("instance_type")
 print("instance type: {}".format(instance_type))
 
 conn = boto.ec2.connect_to_region(region)
 reservation = conn.run_instances(hsds_ami,
     security_group_ids=[security_group_id,],
+    user_data=startup_script,
     instance_profile_name=profile_name, 
     subnet_id=subnet_id,
     key_name=key_name,

@@ -15,14 +15,16 @@ import sys
 cfg = {
     'aws_region': 'us-west-2',
     'aws_s3_gateway': 'https://s3.amazonaws.com',
-    'hsds_ami': 'ami-5ab5013a', # 'ami-3443eb54',
+    'hsds_ami': 'ami-908430f0', # 'ami-3443eb54',
     'bucket_name': 'nasa.hsdsdev',
     'security_group_id': 'sg-6e384417',
     'profile_name': 'LimitedEC2', 
     'subnet_id': 'subnet-5b04173f',
     'key_name': 'ACCESS',
     'instance_type': 'm4.large',
-    'project_tag': 'ACCESS'
+    'project_tag': 'ACCESS',
+    'startup_script': '../systemd/node_startup.sh'
+
 }
    
 def get(x): 
