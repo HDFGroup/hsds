@@ -17,22 +17,14 @@ echo $PYTHON_VERSION
 export HEAD_PORT=5100
 export DN_PORT=5101
 export SN_PORT=5102
-#test
-export AWS_S3_GATEWAY="http://192.168.99.100:9000"
-export AWS_ACCESS_KEY_ID=AKIAINPPCFIN4BJV4YNA
-export AWS_SECRET_ACCESS_KEY=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
-export AWS_REGION=us-east-1
-export BUCKET_NAME="minio.hsdsdev"
-#test end
-#cd ${HOME}/hsds/hsds
-cd ${HOME}/HDFServer/hsds/hsds
+
+cd ${HOME}/hsds/hsds
 echo "cwd:" ${PWD}
 if [ $1 == "head" ]; then
     # magic url which returns local ip when run on EC2 host
-    #export HEAD_HOST=$(curl http://169.254.169.254/latest/meta-data/local-ipv4)
-    export HEAD_HOST=192.168.1.74
+    export HEAD_HOST=$(curl http://169.254.169.254/latest/meta-data/local-ipv4)
     echo "running headnode.py"
-    python -u headnode.py 
+    python -u headnode.py &
 elif [ $1 == "dn" ]; then
     echo "running datanode.py"
     python -u datanode.py &
