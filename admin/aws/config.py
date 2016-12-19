@@ -13,7 +13,7 @@ import os
 import sys
 
 cfg = {
-    'aws_region': 'us-west-2',
+    'aws_region': 'us-west-2',  # use us-west-2a to launch in one AZ
     'aws_s3_gateway': 'https://s3.amazonaws.com',
     'hsds_ami': 'ami-908430f0', # 'ami-3443eb54',
     'bucket_name': 'nasa.hsdsdev',
