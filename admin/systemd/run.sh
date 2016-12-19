@@ -17,6 +17,8 @@ echo $PYTHON_VERSION
 export HEAD_PORT=5100
 export DN_PORT=5101
 export SN_PORT=5102
+# source file that contains aws access keys
+source ${HOME}/.aws_keys
 
 cd ${HOME}/hsds/hsds
 echo "cwd:" ${PWD}

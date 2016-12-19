@@ -16,6 +16,7 @@ Use the following commands to manage the services (using either hsds_sn or hsds_
 * Reload service (say if service file is changed): # systemctl daemon-reload
 * Stop service: # systemctl stop hsds_dn
 * Error info: #  journalctl -xe
+* Python output goes to /var/log/messages
 
 See also:
 
