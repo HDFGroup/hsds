@@ -22,9 +22,7 @@ cfg = {
     'subnet_id': 'subnet-5b04173f',
     'key_name': 'ACCESS',
     'instance_type': 'm4.large',
-    'project_tag': 'ACCESS',
-    'startup_script': '../systemd/node_startup.sh'
-
+    'project_tag': 'ACCESS'
 }
    
 def get(x): 
