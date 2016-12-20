@@ -1,0 +1,13 @@
+[Unit]
+Description=Highly Scalable Data Service HEAD Node
+
+[Service]
+Type=forking
+ExecStart=/home/jreadey/hsds/admin/systemd/run_head.sh
+#Restart=on-abort
+WorkingDirectory=/home/jreadey/hsds/admin/systemd
+User=jreadey
+Group=jreadey
+
+[Install]
+WantedBy=multi-user.target

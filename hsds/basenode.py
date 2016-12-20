@@ -38,7 +38,10 @@ async def getHeadUrl(app):
     head_url = None
     if head_url in app:
         head_url = app["head_url"]
+    elif config.get("head_endpoint"):
+        head_url = config.get("head_endpoint")
     else:
+        # pull url form headnode object in bucket
         headnode_key = getHeadNodeS3Key()
         head_state = await getS3JSONObj(app, headnode_key)
         if "head_url" not in head_state:

@@ -45,3 +45,16 @@ def bytesArrayToList(data):
         out = data
                    
     return out
+
+"""
+Convert a list to a tuple, recursively.
+Example. [[1,2],[3,4]] -> ((1,2),(3,4))
+"""
+def toTuple(rank, data):
+    if type(data) in (list, tuple):
+        if rank > 0:
+            return list(toTuple(rank-1, x) for x in data)
+        else:
+            return tuple(toTuple(rank-1, x) for x in data)
+    else:
+        return data

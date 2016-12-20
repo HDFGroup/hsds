@@ -16,7 +16,7 @@
 import json
 from aiohttp.web import StreamResponse
 from aiohttp import HttpProcessingError 
-from aiohttp.errors import ClientError
+from aiohttp.errors import ClientError, HttpBadRequest
 
 import hsds_logger as log
 import config
@@ -37,8 +37,9 @@ async def http_get(app, url, params=None):
     log.info("http_get('{}')".format(url))
     client = app['client']
     data = None
+    timeout = config.get("timeout")
     try:
-        async with client.get(url, params=params) as rsp:
+        async with client.get(url, params=params, timeout=timeout) as rsp:
             log.info("http_get status: {}".format(rsp.status))
             if rsp.status != 200:
                 msg = "request to {} failed with code: {}".format(url, rsp.status)
@@ -58,9 +59,10 @@ async def http_get_json(app, url, params=None):
     log.info("http_get('{}')".format(url))
     client = app['client']
     rsp_json = None
+    timeout = config.get("timeout")
      
     try:    
-        async with client.get(url, params=params) as rsp:
+        async with client.get(url, params=params, timeout=timeout) as rsp:
             log.info("http_get status: {}".format(rsp.status))
             if rsp.status != 200:
                 msg = "request to {} failed with code: {}".format(url, rsp.status)
@@ -83,9 +85,10 @@ async def http_post(app, url, data=None, params=None):
     log.info("http_post('{}', data)".format(url, data))
     client = app['client']
     rsp_json = None
+    timeout = config.get("timeout")
     
     try:
-        async with client.post(url, data=json.dumps(data), params=params ) as rsp:
+        async with client.post(url, data=json.dumps(data), params=params, timeout=timeout ) as rsp:
             log.info("http_post status: {}".format(rsp.status))
             if rsp.status not in (200, 201):
                 msg = "request error - status: ".format(rsp.status)  # tbd - pull error from rsp
@@ -105,9 +108,10 @@ async def http_put(app, url, data=None, params=None):
     log.info("http_put('{}', data: {})".format(url, data))
     rsp_json = None
     client = app['client']
+    timeout = config.get("timeout")
     
     try:
-        async with client.put(url, data=json.dumps(data), params=params) as rsp:
+        async with client.put(url, data=json.dumps(data), params=params, timeout=timeout) as rsp:
             log.info("http_put status: {}".format(rsp.status))
             if rsp.status != 201:
                 print("bad response:", str(rsp))
@@ -130,9 +134,10 @@ async def http_put_binary(app, url, data, params=None):
     log.info("http_put_binary('{}') nbytes: {}".format(url, len(data)))
     rsp_json = None
     client = app['client']
+    timeout = config.get("timeout")
     
     try:
-        async with client.put(url, data=data, params=params) as rsp:
+        async with client.put(url, data=data, params=params, timeout=timeout) as rsp:
             log.info("http_put status: {}".format(rsp.status))
             if rsp.status != 201:
                 msg = "request error for {}: {}".format(url, str(rsp))
@@ -153,9 +158,10 @@ async def http_delete(app, url, params=None):
     log.info("http_delete('{}')".format(url))
     client = app['client']
     rsp_json = None
+    timeout = config.get("timeout")
     
     try:
-        async with client.delete(url, params=params) as rsp:
+        async with client.delete(url, params=params, timeout=timeout) as rsp:
             log.info("http_delete status: {}".format(rsp.status))
             if rsp.status != 200:
                 msg = "request error"  # tbd - pull error from rsp
@@ -209,7 +215,23 @@ def getHref(request, uri, query=None, domain=None):
                 delimiter = '&'
     return href
 
+"""
+Get requested content type.  Returns either "binary" if the accept header is 
+octet stream, otherwise json.
+Currently does not support q fields.
+"""
+def getAcceptType(request):
+    accept_type = "json"  # default to JSON
+    if "accept" in request.headers:
+        if request.headers["accept"] not in ("application/json", "application/octet-stream", "*/*"):
+            msg = "Unexpected accept value: {}".format(accept_type)
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        if request.headers["accept"] == "application/octet-stream":
+            accept_type = "binary"
+    return accept_type
 
+    
      
 
 

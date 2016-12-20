@@ -10,23 +10,30 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import os
+import sys
 
 cfg = {
-    'domain_name': 'ghcn_test',
-    'head_host': '192.168.99.100',
-    'head_port': 5100,
-    'user_name': 'test_user1',
-    'user_password': 'test',
-    'log_level': 'INFO',   # ERROR, WARNING, INFO, DEBUG, or NOTSET,
-    'max_tcp_connections': 16,
-    'max_concurrent_tasks': 128,
-    'docker_machine_ip': "192.168.99.100",
-    'hsds_endpoint': 'http://192.168.99.100:5102',
-    'head_endpoint': 'http://192.168.99.100:5100',
-    'timeout': 30
+    'aws_region': 'us-west-2',  # use us-west-2a to launch in one AZ
+    'aws_s3_gateway': 'https://s3.amazonaws.com',
+    'hsds_ami': 'ami-908430f0', # 'ami-3443eb54',
+    'bucket_name': 'nasa.hsdsdev',
+    'security_group_id': 'sg-6e384417',
+    'profile_name': 'LimitedEC2', 
+    'subnet_id': 'subnet-5b04173f',
+    'key_name': 'ACCESS',
+    'instance_type': 'm4.large',
+    'project_tag': 'ACCESS'
 }
    
-def get(x):     
+def get(x): 
+    # see if there is a command-line override
+    option = '--'+x+'='
+    for i in range(1, len(sys.argv)):
+        #print i, sys.argv[i]
+        if sys.argv[i].startswith(option):
+            # found an override
+            arg = sys.argv[i]
+            return arg[len(option):]  # return text after option string    
     # see if there are an environment variable override
     if x.upper() in os.environ:
         return os.environ[x.upper()]

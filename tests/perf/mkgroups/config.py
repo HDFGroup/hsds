@@ -12,18 +12,18 @@
 import os
 
 cfg = {
-    'domain_name': 'ghcn_test',
     'head_host': '192.168.99.100',
     'head_port': 5100,
     'user_name': 'test_user1',
     'user_password': 'test',
     'log_level': 'INFO',   # ERROR, WARNING, INFO, DEBUG, or NOTSET,
     'max_tcp_connections': 16,
-    'max_concurrent_tasks': 128,
+    'max_concurrent_tasks': 128, # 16,
     'docker_machine_ip': "192.168.99.100",
     'hsds_endpoint': 'http://192.168.99.100:5102',
     'head_endpoint': 'http://192.168.99.100:5100',
-    'timeout': 30
+    'group_target': 1000,
+    'timeout': 30  # in seconds
 }
    
 def get(x):     

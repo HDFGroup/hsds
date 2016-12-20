@@ -9,29 +9,38 @@
 # distribution tree.  If you do not have access to this file, you may        #
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
-import os
+#
+# Simple looger 
+#
+import config
+def info(msg):
+	if config.get("log_level") == "INFO":
+		print("INFO> " + msg)
 
-cfg = {
-    'domain_name': 'ghcn_test',
-    'head_host': '192.168.99.100',
-    'head_port': 5100,
-    'user_name': 'test_user1',
-    'user_password': 'test',
-    'log_level': 'INFO',   # ERROR, WARNING, INFO, DEBUG, or NOTSET,
-    'max_tcp_connections': 16,
-    'max_concurrent_tasks': 128,
-    'docker_machine_ip': "192.168.99.100",
-    'hsds_endpoint': 'http://192.168.99.100:5102',
-    'head_endpoint': 'http://192.168.99.100:5100',
-    'timeout': 30
-}
-   
-def get(x):     
-    # see if there are an environment variable override
-    if x.upper() in os.environ:
-        return os.environ[x.upper()]
-    # no command line override, just return the cfg value        
-    return cfg[x]
+def warn(msg):
+	if config.get("log_level") != "ERROR":
+		print("WARN> " + msg)
 
-  
-  
+def error(msg):
+	print("ERROR> " + msg)
+
+def request(req):
+	print("REQ> {}: {} host:[{}]".format(req.method, req.path, req.headers["host"]))
+
+def response(req, resp=None, code=None, message=None):
+	level = "INFO"
+	if code is None:
+		# rsp needs to be set otherwise
+		code = resp.status
+	if message is None:
+		message=resp.reason
+	if code > 399:
+		if  code < 500:
+			level = "WARN"
+		else:
+			level = "ERROR"
+	
+	log_level = config.get("log_level")
+	if log_level == "INFO" or (log_level == "WARN" and level != "INFO") or (log_level == "ERROR" and level == "ERROR"):
+		print("{} RSP> <{}> ({}): {}".format(level, code, message, req.path))
+
