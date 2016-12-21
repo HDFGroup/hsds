@@ -14,9 +14,11 @@ import sys
 import logging
 import time
 import ConfigParser
+import socket
 try:
-   import boto3
+   import boto3, botocore
    import paramiko
+   from paramiko.ssh_exception import *
 except ImportError, e:
    sys.stderr.write("Missing module needed to run this example test.\n")
    sys.stderr.write("Maybe try pip install --user "+str(e.args[0].split()[-1])+'\n')
@@ -38,31 +40,34 @@ def run_test(cmd, host, keyfile, uid):
             time.sleep(1)
             ssh.close()
             break
-         except paramiko.ssh_exception.NoValidConnectionsError, e:
+         except (SSHException, socket.error), e:
             rst = 2**t 
             logging.info('WARN : '+str(e)+', retrying in '+str(rst)+'s ...')
             time.sleep(rst)
-   except (paramiko.ssh_exception.SSHException, socket.error), e:
-      logging.warn('WARN : '+str(e))
+   except (BadHostKeyException, AuthenticationException), e: 
+      logging.warn('WARN : '+str(e)+" : for host : "+str(host)+", try # "+str(t))
 #run_test
 
 #---------------------------------------------------------------------------------------
 def spawn_test(rmtscript, itype, region, ami, keypairname, keypairfile, unixid='ec2-user', secgrp=[]):
    logging.info("starting test with type "+itype+" in region "+region+" using "+ami+' security group '+str(secgrp))
-   res = None
-   ec2d = boto3.resource('ec2', region_name=region)
-   rid = ec2d.create_instances( ImageId=ami, InstanceType=itype, MinCount=1, 
-                                 MaxCount=1, SecurityGroupIds=secgrp, KeyName=keypairname)
-   if len(rid) < 1:
-      sys.stderr.write("create_instances didn't return any id's?\n")
-      return
-   else:
-      res = rid[0] 
-   res.wait_until_running()
-   ec2d.create_tags( Resources=[res.id], Tags=[{'Key': 'Name', 'Value': 'probetest'}] )
-   res.reload()
-   run_test(rmtscript, res.public_dns_name, keypairfile, unixid) 
-   res.terminate()
+   try:
+      res = None
+      ec2d = boto3.resource('ec2', region_name=region)
+      rid = ec2d.create_instances( ImageId=ami, InstanceType=itype, MinCount=1, 
+                                    MaxCount=1, SecurityGroupIds=secgrp, KeyName=keypairname)
+      if len(rid) < 1:
+         sys.stderr.write("create_instances didn't return any id's?\n")
+         return
+      else:
+         res = rid[0] 
+      res.wait_until_running()
+      ec2d.create_tags( Resources=[res.id], Tags=[{'Key': 'Name', 'Value': 'probetest'}] )
+      res.reload()
+      run_test(rmtscript, res.public_dns_name, keypairfile, unixid) 
+      res.terminate()
+   except botocore.exceptions.ClientError, e:
+      loging.error(str(e))
 #spawn_test
 
 if __name__ == '__main__':
