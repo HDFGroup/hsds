@@ -98,7 +98,7 @@ The following is some terminology used in this document:
 HSDS Components
 ###############
 
-The HSDS consist of several components that coordinate to process service request efficiently.  Each component runs as a single-threaded Python proceses.  To manage high request volumes, the number of components can be adjust to achieve greater throughput.  The components run on a set of hardware instances, ideally so that each compoenent will have a dedicated core. To enable inter-node communication, all requests between nodes will be through http requests.
+The HSDS consist of several components that coordinate to process service request efficiently.  Each component runs as a single-threaded Python process.  To manage high request volumes, the number of components can be adjusted to achieve greater throughput.  The components run on a set of hardware instances, ideally so that each component will have a dedicated core. To enable inter-node communication, all requests between nodes will be through http requests.
 
 The following diagram shows the logical layout of the components.  The diagram shows 4 SN and 4 DN nodes, but the architecture supports any number of nodes.
 
@@ -111,20 +111,20 @@ Notes:
 
 * Clients can be one or more remote processes sending request serially or asynchronously
 * LB (Load Balancer) is a infrastructure component that round robins request to SN nodes
-* VPC (Virtual Private Cloud) provides security so that access to SN/DN/HN ports is only availalble to load balancer or internal componens
-* SN (Sevice Node) nodes can send requests to any of the DN nodes
+* VPC (Virtual Private Cloud) provides network isolation so that access to SN/DN/HN ports is only available to load balancer or internal components
+* SN (Service Node) nodes can send requests to any of the DN nodes
 * DN (Data Node) nodes get request fro SN nodes, and make requests to object store (but don't talk to each other)
 * Object store is virtually partitioned by the number  of DN nodes
 * HN (Head Node) managed coordination of nodes and overall state of the system
-* AN (Async Node) performs non time sensitive background tasks (e.g. deleting anonymous objects)
-* AN is configured to recieve notifications from any change in the object store
+* AN (Async Node) performs non-time sensitive background tasks (e.g. deleting anonymous objects)
+* AN is configured to receive notifications from any change in the object store
 
 Service Node
 ************
 
 The Service Node (SN) component receives client requests (typically through a load balancer) and forwards requests to 1 or more DN nodes to perform the requested action.
 
-Responsiblities of SN:
+Responsibilities of SN:
 
 #. Validate that the request is well-formed
 #. Authenticate username and password 
@@ -144,10 +144,10 @@ The following is a diagram of the SN:
 Notes:
 
 * Service requests are dispatched by the LB to a known port on the instances
-* The "Service Request Processor" loop handles a requests as a single threaded process (but using async multi-tasking)
+* The "Service Request Processor" loop handles requests as a single threaded process (but using async multi-tasking)
 * One service request (e.g. dataset read) may translate to multiple DN requests
 * Health checks are periodically sent by the HN
-* For efficiency the SN may cache object metadata, rather than fetching from the DN on each access.  For meta data that is immutable (e.g. dataset type) this will always be valid.  For potentially mutable data (e.g. ACLs in the domain JSON), the SN will invalidate the cache value after a small time window (in this case the consequence  being that updates to the ACL may not immediately take effect).  Finally for some meta data items, such as dataset space for an extendible dataset, the SN may use the cached value but refresh if needed (e.g. to confirm that a given selection is valid).
+* For efficiency the SN may cache object metadata, rather than fetching from the DN on each access.  For meta data that is immutable (e.g. dataset type) this will always be valid.  For potentially mutable data (e.g. ACLs in the domain JSON), the SN will invalidate the cache value after a small time window (in this case the consequence being that updates to the ACL may not immediately take effect).  Finally, for some meta data items, such as dataset space for an extendible dataset, the SN may use the cached value but refresh if needed (e.g. to confirm that a given selection is valid).
 * To manage memory efficiently, the metadata cache will have a limit on its maximum size, and a LRU algorithm will be used to eject items from cache as needed
 
 Data Node
@@ -155,7 +155,7 @@ Data Node
 
 The Data Node (DN) component receives requests from SN nodes and services the request based on either data maintained in its local cache or fetched from the object store.
 
-Responsibilities  of DN:
+Responsibilities of DN:
 
 #. Validates that the object key in the request corresponds to the DN's partition of the object space
 #. If the requested object is not in the cache, fetch from object store
@@ -216,7 +216,7 @@ Note: since this node functions outside the request/response logic of service pr
 Data Node Partitioning
 ######################
 
-Each object (Domain/Group/Dataset/Committed Type/Chunk) is a member of a virtual partition of the key space.  For a given key, the partition is determined by taking the numeric hash of the key and then the modulo of the number of DN nodes.  The SN will then use this number to direct request to the given DN.  Hence the state of any object will be managed by a specific DN.  This enables HSDS to limit the number of requests to the object store (since in many cases the object will be held in the local cache)and also to provide read/write consistency over a non-consistent object store.
+Each object (Domain/Group/Dataset/Committed Type/Chunk) is a member of a virtual partition of the key space.  For a given key, the partition is determined by taking the numeric hash of the key and then the modulo of the number of DN nodes.  The SN will then use this number to direct request to the given DN.  Hence the state of any object will be managed by a specific DN.  This enables HSDS to limit the number of requests to the object store (since in many cases the object will be held in the local cache) and also to provide read/write consistency over a non-consistent object store.
 
 Note: When auto-scaling is enabled, the number of nodes (and hence the object id to DN mapping) will change dynamically.  Logic for the management of objects during auto-scale transitions will be documented later in the project.
 
@@ -313,9 +313,30 @@ In general since the read request may overlap multiple chunks owned by different
 Authentication and Authorization
 ################################
 
-Authentication headers for client requests will be authenticated by SNs using the NASA URS service (https://urs.earthdata.nasa.gov/documentation).  For efficiency, the SN will cache validated headers for a given time to avoid latency and load on the URS system.  Details of HSDS/URS integration will be in a separate document.
+Authentication headers for client requests will be authenticated by SNs using the NASA Eathdata Login (formerly URS) service (https://wiki.earthdata.nasa.gov/display/URSFOUR/Earthdata+Login+Overview).  Earthdata login is a user registration and authentication service that is used by many Earth Science applications within NASA.  Currently more than 240,000 users have created accounts with Earthdata login.  By providing a centralized service for account management, applications are freed from implementing their own solutions for user registration/account management and end users benefit from being able to use a single username/password for multiple applications.  
 
-Domain (and optionally group, datasets, and committed datatypes) can provide per-user authorization control lists (ACLs), as described in the HDF REST API (http://h5serv.readthedocs.io/en/latest/AclOps/index.html). 
+For interactive, web-based applications login can be handled using the OAuth2 protocol as described here: https://wiki.earthdata.nasa.gov/display/URSFOUR/SSO+With+URS4. However, since HSDS application may be command-line and/or non-interactive, HSDS will use an alternative protocol "Resource Owner Password Credentials" (ROPC) that is better suited for this type of application.  This protocol is documented here: https://wiki.earthdata.nasa.gov/display/URSFOUR/Resource+Owner+Password+Credentials.    
+
+
+The following diagram shows how the client, HSDS service, and URS coordinate to authenticate user requests:
+
+.. image:: authentication.png
+      :height: 800px 
+      :align: center
+      :alt: Dataset selection
+
+Note: that https is used for all requests from the client to the HSDS service and for requests from HSDS to the URS server.  This ensures that any account information will not be compromised.
+
+The following steps are used to authenticate client requests:
+
+#. The client applications makes a call to the HSDS Client library (Either HDF5Lib with REST VOL, h5pyd Python package, or other HSDS SDK.  The username and password may either be passed directly as parameters in the call, or if not provided in the call, the SDK will query environment variables (HSDS_USERNAME, HSDS_PASSWORD)
+#. The SDK will use the username and password to construct the http Authorization header as part of the https request to the HSDS service  
+#. If the requesting username/password is not present in the cache of authenticated Authorization headers, HSDS will use submit a grant request for the given user to the Earthdata login system
+#. If the username and password is valid and the user has approved the use of HSDS in his profile, the Earthdata login system will return an access token
+#. Requests from HSDS to S3 will use public and private AWS keys maintained by the service
+#. Successful responses will be returned to the client.  In case of failed authorization, a HTTP Status of 401 - Unauthorized will be returned
+
+Once the user request is authenticated, it will be authorized to determine if the user is permitted to perform the requested action.  Authorization is determined by the use of per-user authorization control lists (ACLs), as described in the HDF REST API (http://h5serv.readthedocs.io/en/latest/AclOps/index.html). 
 
 Cluster Startup
 ###############
