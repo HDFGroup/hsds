@@ -2,7 +2,9 @@
 Object Storage Schema for HDF5
 ###############################
 
-John Readey - The HDF Group
+*John Readey - The HDF Group*
+
+.. contents:: Table of contents
 
 Intro
 #####

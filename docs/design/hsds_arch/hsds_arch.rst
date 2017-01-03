@@ -6,24 +6,13 @@ John Readey - The HDF
 
 *jreadey@hdfgroup.org*
 
+.. contents:: Table of contents
+
 Intro
 #####
 
 This document describes the architectural design of the Highly Scalable Data Storage service (HSDS). HSDS is a REST-based service that implements the HDF REST API and uses an object store for persistent data.  
 
-Related Documents
-*****************
-
-* The object storage schema is described in this document: "obj_store_schema.rst" 
-* The HDF REST API is documented here: http://h5serv.readthedocs.io/en/latest/ 
-* Instalation guide for HSDS: https://github.com/HDFGroup/hsds/wiki/Installation
-* URS Authentication design: TBD
-* HSDS Design document: https://s3.amazonaws.com/hdfgroup/docs/HDF+Scalable+Data+Service.pdf
-* H5Serv developer documentation: http://h5serv.readthedocs.io/en/latest/index.html 
-* HDF5/JSON specification: http://hdf5-json.readthedocs.io/en/latest/index.html 
-* HDF REST API Authentication and authorization: https://www.hdfgroup.org/2015/12/serve-protect-web-security-hdf5/ 
-* HDF Server: https://hdfgroup.org/wp/2015/04/hdf5-for-the-web-hdf-server/ 
-* RESTful HDF5: https://support.hdfgroup.org/pubs/papers/RESTful_HDF5.pdf  
 
 Motivation
 ##########
@@ -360,6 +349,19 @@ Description of state values:
 
 See the Installation Guide (https://github.com/HDFGroup/hsds/wiki/Installation) for specifics on bringing up the cluster.
 
+Related Documents
+#################
+
+* The object storage schema is described in this document: "obj_store_schema.rst" 
+* The HDF REST API is documented here: http://h5serv.readthedocs.io/en/latest/ 
+* Instalation guide for HSDS: https://github.com/HDFGroup/hsds/wiki/Installation
+* URS Authentication design: TBD
+* HSDS Design document: https://s3.amazonaws.com/hdfgroup/docs/HDF+Scalable+Data+Service.pdf
+* H5Serv developer documentation: http://h5serv.readthedocs.io/en/latest/index.html 
+* HDF5/JSON specification: http://hdf5-json.readthedocs.io/en/latest/index.html 
+* HDF REST API Authentication and authorization: https://www.hdfgroup.org/2015/12/serve-protect-web-security-hdf5/ 
+* HDF Server: https://hdfgroup.org/wp/2015/04/hdf5-for-the-web-hdf-server/ 
+* RESTful HDF5: https://support.hdfgroup.org/pubs/papers/RESTful_HDF5.pdf  
  
 
 
