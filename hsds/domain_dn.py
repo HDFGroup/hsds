@@ -179,7 +179,16 @@ async def DELETE_Domain(request):
 
     # delete S3 obj 
     await deleteS3Obj(app, s3_key)
-    
+    log.info("checking if s3obj is deleted")
+    domain_exist = await isS3Obj(app, s3_key)
+    if domain_exist:
+        log.error("obj still there")
+        raise HttpProcessingError(code=500, message="unexpected error")
+
+  
+    if domain_key in meta_cache:
+        log.info("removing {} from meta_cache".format(domain_key))  
+        del meta_cache[domain_key]  # delete from the meta cache
     deleted_ids.add(domain_key)
 
     json_response = { "domain": domain_key }

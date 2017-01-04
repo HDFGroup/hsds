@@ -182,6 +182,10 @@ class DomainTest(unittest.TestCase):
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 410)
 
+        # try re-creating a domain
+        rsp = requests.put(req, headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
         # TBD - try deleting a top-level domain
 
         # TBD - try deleting a domain that has child-domains
