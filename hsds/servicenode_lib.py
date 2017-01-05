@@ -22,7 +22,7 @@ from util.httpUtil import http_get_json
 import hsds_logger as log
 
 
-async def getDomainJson(app, domain):
+async def getDomainJson(app, domain, reload=False):
     """ Return domain JSON from cache or fetch from DN if not found
         Note: only call from sn!
     """
@@ -35,8 +35,11 @@ async def getDomainJson(app, domain):
     #domain = getDomainFromRequest(request)
 
     if domain in domain_cache:
-        log.info("returning domain_cache value")
-        return domain_cache[domain]
+        if reload:
+            del domain_cache[domain]
+        else:
+            log.info("returning domain_cache value")
+            return domain_cache[domain]
 
     req = getDataNodeUrl(app, domain)
     req += "/domains/" + domain 
@@ -81,9 +84,12 @@ async def validateAction(app, domain, obj_id, username, action):
         meta_cache[obj_id] = obj_json
 
     if obj_json["root"] != domain_json["root"]:
-        msg = "Object id is not a member of the given domain"
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        log.info("unexpected root, reloading domain")
+        domain_json = await getDomainJson(app, domain, reload=True)
+        if "root" not in domain_json or obj_json["root"] != domain_json["root"]:
+            msg = "Object id is not a member of the given domain"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
 
     if action not in ("create", "read", "update", "delete", "readACL", "updateACL"):
         log.error("unexpected action: {}".format(action))

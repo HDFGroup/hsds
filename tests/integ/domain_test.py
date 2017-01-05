@@ -105,6 +105,12 @@ class DomainTest(unittest.TestCase):
         # we should get the same value for root id
         self.assertEqual(root_id, rspJson["root"])
 
+        # verify we can access root groups
+        root_req =  helper.getEndpoint() + "/groups/" + root_id
+        headers = helper.getRequestHeaders(domain=domain)
+        rsp = requests.get(root_req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
         # try doing a un-authenticated request
         if config.get("test_noauth"):
             headers = helper.getRequestHeaders()
@@ -167,7 +173,15 @@ class DomainTest(unittest.TestCase):
         # create a domain
         rsp = requests.put(req, headers=headers)
         self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        root_id = rspJson["root"]
 
+        # do a get on the domain
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(root_id, rspJson["root"])
+        
         # try deleting the domain with a user who doesn't have permissions'
         headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
         rsp = requests.delete(req, headers=headers)
@@ -185,6 +199,15 @@ class DomainTest(unittest.TestCase):
         # try re-creating a domain
         rsp = requests.put(req, headers=headers)
         self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        new_root_id = rspJson["root"]
+        self.assertTrue(new_root_id != root_id)
+
+        # verify we can access root groups
+        root_req =  helper.getEndpoint() + "/groups/" + root_id
+        headers = helper.getRequestHeaders(domain=domain)
+        rsp = requests.get(root_req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
 
         # TBD - try deleting a top-level domain
 
