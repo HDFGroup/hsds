@@ -136,7 +136,7 @@ class GroupTest(unittest.TestCase):
         self.assertEqual(rspJson["linkCount"], 0)
         
         # create new group  
-        payload = { 'id': root_uuid, 'name': 'linked_group' }
+        payload = { 'link': { 'id': root_uuid, 'name': 'linked_group' } }
         req = helper.getEndpoint() + "/groups"
         rsp = requests.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201) 

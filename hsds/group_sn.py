@@ -100,17 +100,20 @@ async def POST_Group(request):
     link_title = None
     if request.has_body:
         body = await request.json()  
+        log.info("POST Group body: {}".format(body))
         if body:
-            if "id" in body:
-                link_id = body["id"]
-            if "name" in body:
-                link_title = body["name"]
-            if link_id and link_title:
-                log.info("link id: {}".format(link_id))
-                # verify that the referenced id exists and is in this domain
-                # and that the requestor has permissions to create a link
-                await validateAction(app, domain, link_id, username, "create")
-
+            if "link" in body:
+                link_body = body["link"]
+                if "id" in link_body:
+                    link_id = link_body["id"]
+                if "name" in link_body:
+                    link_title = link_body["name"]
+                if link_id and link_title:
+                    log.info("link id: {}".format(link_id))
+                    # verify that the referenced id exists and is in this domain
+                    # and that the requestor has permissions to create a link
+                    await validateAction(app, domain, link_id, username, "create")
+             
     root_id = domain_json["root"]
     group_id = createObjId("groups") 
     log.info("new  group id: {}".format(group_id))
