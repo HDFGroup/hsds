@@ -104,6 +104,7 @@ async def POST_Group(request):
         if body:
             if "link" in body:
                 link_body = body["link"]
+                log.info("link_body: {}".format(link_body))
                 if "id" in link_body:
                     link_id = link_body["id"]
                 if "name" in link_body:
@@ -113,6 +114,8 @@ async def POST_Group(request):
                     # verify that the referenced id exists and is in this domain
                     # and that the requestor has permissions to create a link
                     await validateAction(app, domain, link_id, username, "create")
+            if not link_id or not link_title:
+                log.warn("POST Group body with no link: {}".format(body))
              
     root_id = domain_json["root"]
     group_id = createObjId("groups") 

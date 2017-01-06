@@ -204,7 +204,7 @@ class DomainTest(unittest.TestCase):
         self.assertTrue(new_root_id != root_id)
 
         # verify we can access root groups
-        root_req =  helper.getEndpoint() + "/groups/" + root_id
+        root_req =  helper.getEndpoint() + "/groups/" + new_root_id
         headers = helper.getRequestHeaders(domain=domain)
         rsp = requests.get(root_req, headers=headers)
         self.assertEqual(rsp.status_code, 200)

@@ -14,9 +14,11 @@
 # http-related helper functions
 # 
 import json
+from asyncio import CancelledError
 from aiohttp.web import StreamResponse
 from aiohttp import HttpProcessingError 
 from aiohttp.errors import ClientError, HttpBadRequest
+
 
 import hsds_logger as log
 import config
@@ -50,6 +52,9 @@ async def http_get(app, url, params=None):
     except ClientError as ce:
         log.error("Error for http_get({}): {} ".format(url, str(ce)))
         raise HttpProcessingError(message="Unexpected error", code=500)
+    except CancelledError as cle:
+        log.error("CanceledError for http_get({}): {}".format(url, str(cle)))
+        raise HttpProcessingError(message="Unexpected error", code=500)
     return data
 
 """
@@ -72,6 +77,9 @@ async def http_get_json(app, url, params=None):
             #log.info("http_get({}) response: {}".format(url, rsp_json))  
     except ClientError as ce:
         log.error("Error for http_get_json({}): {} ".format(url, str(ce)))
+        raise HttpProcessingError(message="Unexpected error", code=500)
+    except CancelledError as cle:
+        log.error("CanceledError for http_get_json({}): {}".format(url, str(cle)))
         raise HttpProcessingError(message="Unexpected error", code=500)
     if isinstance(rsp_json, str):
         log.warn("converting str to json")
@@ -99,6 +107,9 @@ async def http_post(app, url, data=None, params=None):
     except ClientError as ce:
         log.error("Error for http_post({}): {} ".format(url, str(ce)))
         raise HttpProcessingError(message="Unexpected error", code=500)
+    except CancelledError as cle:
+        log.error("CanceledError for http_post({}): {}".format(url, str(cle)))
+        raise HttpProcessingError(message="Unexpected error", code=500)
     return rsp_json
 
 """
@@ -106,10 +117,10 @@ Helper function  - async HTTP PUT for json data
 """ 
 async def http_put(app, url, data=None, params=None):
     log.info("http_put('{}', data: {})".format(url, data))
-    rsp_json = None
+    rsp = None
     client = app['client']
     timeout = config.get("timeout")
-    
+      
     try:
         async with client.put(url, data=json.dumps(data), params=params, timeout=timeout) as rsp:
             log.info("http_put status: {}".format(rsp.status))
@@ -122,7 +133,10 @@ async def http_put(app, url, data=None, params=None):
             rsp_json = await rsp.json()
             log.info("http_put({}) response: {}".format(url, rsp_json))
     except ClientError as ce:
-        log.error("Error for http_post({}): {} ".format(url, str(ce)))
+        log.error("ClientError for http_put({}): {} ".format(url, str(ce)))
+        raise HttpProcessingError(message="Unexpected error", code=500)
+    except CancelledError as cle:
+        log.error("CanceledError for http_put({}): {}".format(url, str(cle)))
         raise HttpProcessingError(message="Unexpected error", code=500)
     return rsp_json
 
@@ -147,7 +161,10 @@ async def http_put_binary(app, url, data, params=None):
             rsp_json = await rsp.json()
             log.info("http_put({}) response: {}".format(url, rsp_json))
     except ClientError as ce:
-        log.error("Error for http_post({}): {} ".format(url, str(ce)))
+        log.error("Error for http_put_binary({}): {} ".format(url, str(ce)))
+        raise HttpProcessingError(message="Unexpected error", code=500)
+    except CancelledError as cle:
+        log.error("CanceledError for http_put_binary({}): {}".format(url, str(cle)))
         raise HttpProcessingError(message="Unexpected error", code=500)
     return rsp_json
 
@@ -172,6 +189,9 @@ async def http_delete(app, url, params=None):
             log.info("http_put({}) response: {}".format(url, rsp_json))
     except ClientError as ce:
         log.error("Error for http_delete({}): {} ".format(url, str(ce)))
+        raise HttpProcessingError(message="Unexpected error", code=500)
+    except CancelledError as cle:
+        log.error("CanceledError for http_delete({}): {}".format(url, str(cle)))
         raise HttpProcessingError(message="Unexpected error", code=500)
     return rsp_json
 

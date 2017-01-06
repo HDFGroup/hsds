@@ -22,10 +22,14 @@ from util.httpUtil import http_get_json
 import hsds_logger as log
 
 
-async def getDomainJson(app, domain, reload=False):
+async def getDomainJson(app, domain, reload=True):
     """ Return domain JSON from cache or fetch from DN if not found
         Note: only call from sn!
     """
+    # TBD - default reload to True because some h5pyd tests fail due to
+    # cached values being picked up (test case deletes/re-creates domain)
+    # It would be desirable to use default of False to avoid extra
+    # round-trips to DN node
     log.info("getDomainJson({})".format(domain))
     if app["node_type"] != "sn":
         log.error("wrong node_type")
