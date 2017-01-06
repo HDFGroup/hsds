@@ -504,6 +504,44 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(len(layout), 2)
         self.assertTrue(layout[0] < dims[0])
         self.assertTrue(layout[1] < dims[1])
+
+    def testPostWithLink(self):
+        print("testPostWithLink", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+
+        # get domain
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # get root group and verify link count is 0
+        req = helper.getEndpoint() + '/groups/' + root_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 0)
+        
+        type_vstr = {"charSet": "H5T_CSET_ASCII", 
+            "class": "H5T_STRING", 
+            "strPad": "H5T_STR_NULLTERM", 
+            "length": "H5T_VARIABLE" } 
+        payload = {'type': type_vstr, 'shape': 10,
+             'link': {'id': root_uuid, 'name': 'linked_dset'} }
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dset_uuid))
+
+        # get root group and verify link count is 1
+        req = helper.getEndpoint() + '/groups/' + root_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 1)
          
         
 

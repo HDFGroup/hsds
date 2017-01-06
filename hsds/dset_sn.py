@@ -523,6 +523,20 @@ async def POST_Dataset(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
 
+    link_id = None
+    link_title = None
+    if "link" in body:
+        link_body = body["link"]
+        if "id" in link_body:
+            link_id = link_body["id"]
+        if "name" in link_body:
+            link_title = link_body["name"]
+        if link_id and link_title:
+            log.info("link id: {}".format(link_id))
+            # verify that the referenced id exists and is in this domain
+            # and that the requestor has permissions to create a link
+            await validateAction(app, domain, link_id, username, "create")
+
     root_id = domain_json["root"]
     dset_id = createObjId("datasets") 
     log.info("new  dataset id: {}".format(dset_id))
@@ -545,6 +559,18 @@ async def POST_Dataset(request):
     # dataset creation successful     
     resp = await jsonResponse(request, post_json, status=201)
     log.response(request, resp=resp)
+
+    # create link if requested
+    if link_id and link_title:
+        link_json={}
+        link_json["id"] = link_id
+        link_json["class"] = "H5L_TYPE_HARD"
+        link_req = getDataNodeUrl(app, link_id)
+        link_req += "/groups/" + link_id + "/links/" + link_title
+        log.info("PUT link - : " + link_req)
+        put_rsp = await http_put(app, link_req, data=link_json)
+        log.info("PUT Link resp: {}".format(put_rsp.status))
+
     return resp
 
 async def DELETE_Dataset(request):

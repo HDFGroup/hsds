@@ -251,6 +251,46 @@ class DatatypeTest(unittest.TestCase):
         rsp = requests.put(req, data=json.dumps(attr_payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # created
 
+    def testPostWithLink(self):
+        # test POST with link
+        print("testPutAttributeDatatype", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + '/'
+
+        # Get root uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # get root group and verify link count is 0
+        req = helper.getEndpoint() + '/groups/' + root_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 0)
+        
+        payload = { 
+            'type': 'H5T_IEEE_F64LE', 
+            'link': {'id': root_uuid, 'name': 'linked_dtype'} 
+        }
+         
+        req = self.endpoint + "/datatypes"
+        # create a new ctype
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201) 
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        self.assertTrue(helper.validateId(rspJson["id"]) ) 
+
+        # get root group and verify link count is 1
+        req = helper.getEndpoint() + '/groups/' + root_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 1)
+
     
              
 if __name__ == '__main__':

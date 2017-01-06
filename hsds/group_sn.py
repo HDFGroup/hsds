@@ -16,7 +16,7 @@
 import json
 from aiohttp.errors import HttpBadRequest, HttpProcessingError
  
-from util.httpUtil import http_post, http_delete, jsonResponse, getHref
+from util.httpUtil import http_post, http_put, http_delete, jsonResponse, getHref
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
@@ -95,6 +95,22 @@ async def POST_Group(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
 
+     
+    link_id = None
+    link_title = None
+    if request.has_body:
+        body = await request.json()  
+        if body:
+            if "id" in body:
+                link_id = body["id"]
+            if "name" in body:
+                link_title = body["name"]
+            if link_id and link_title:
+                log.info("link id: {}".format(link_id))
+                # verify that the referenced id exists and is in this domain
+                # and that the requestor has permissions to create a link
+                await validateAction(app, domain, link_id, username, "create")
+
     root_id = domain_json["root"]
     group_id = createObjId("groups") 
     log.info("new  group id: {}".format(group_id))
@@ -107,6 +123,18 @@ async def POST_Group(request):
     # group creation successful     
     resp = await jsonResponse(request, group_json, status=201)
     log.response(request, resp=resp)
+
+    # create link if requested
+    if link_id and link_title:
+        link_json={}
+        link_json["id"] = link_id
+        link_json["class"] = "H5L_TYPE_HARD"
+        link_req = getDataNodeUrl(app, link_id)
+        link_req += "/groups/" + link_id + "/links/" + link_title
+        log.info("PUT link - : " + link_req)
+        put_rsp = await http_put(app, link_req, data=link_json)
+        log.info("PUT Link resp: {}".format(put_rsp.status))
+    
     return resp
 
 async def DELETE_Group(request):

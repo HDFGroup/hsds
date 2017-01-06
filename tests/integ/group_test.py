@@ -87,7 +87,7 @@ class GroupTest(unittest.TestCase):
         print("testPost", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
         req = helper.getEndpoint() + '/groups'  
-        
+
         # create a new group
         rsp = requests.post(req, headers=headers)
         self.assertEqual(rsp.status_code, 201) 
@@ -114,7 +114,43 @@ class GroupTest(unittest.TestCase):
         req = helper.getEndpoint() + '/groups'
         rsp = requests.post(req, headers=headers)
         self.assertEqual(rsp.status_code, 403) # forbidden
+    
+    def testPostWithLink(self):
+        # test PUT_root
+        print("testPostWithLink", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
 
+        # get root id
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # get root group and verify link count is 0
+        req = helper.getEndpoint() + '/groups/' + root_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 0)
+        
+        # create new group  
+        payload = { 'id': root_uuid, 'name': 'linked_group' }
+        req = helper.getEndpoint() + "/groups"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201) 
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 0)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        self.assertTrue(helper.validateId(rspJson["id"]) ) 
+
+        # get root group and verify link count is 1
+        req = helper.getEndpoint() + '/groups/' + root_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 1)
 
     def testDelete(self):
         # test Delete
