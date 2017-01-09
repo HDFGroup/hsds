@@ -140,10 +140,6 @@ async def POST_Datatype(request):
     req = getDataNodeUrl(app, ctype_id) + "/datatypes"
     
     type_json = await http_post(app, req, data=ctype_json)
-    
-    # datatype creation successful     
-    resp = await jsonResponse(request, type_json, status=201)
-    log.response(request, resp=resp)
 
     # create link if requested
     if link_id and link_title:
@@ -154,7 +150,11 @@ async def POST_Datatype(request):
         link_req += "/groups/" + link_id + "/links/" + link_title
         log.info("PUT link - : " + link_req)
         put_rsp = await http_put(app, link_req, data=link_json)
-        log.info("PUT Link resp: {}".format(put_rsp.status))
+        log.info("PUT Link resp: {}".format(put_rsp))
+
+    # datatype creation successful     
+    resp = await jsonResponse(request, type_json, status=201)
+    log.response(request, resp=resp)
 
     return resp
 

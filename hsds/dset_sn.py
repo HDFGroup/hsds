@@ -421,7 +421,7 @@ async def POST_Dataset(request):
         shape = body["shape"]
         if isinstance(shape, int):
             shape_json["class"] = "H5S_SIMPLE"
-            dims = [shape]
+            dims = [shape,]
             shape_json["dims"] = dims
         elif isinstance(shape, str):
             # only valid string value is H5S_NULL
@@ -431,9 +431,12 @@ async def POST_Dataset(request):
                 raise HttpBadRequest(message=msg)
             shape_json["class"] = "H5S_NULL"
         elif isinstance(shape, list):
-            shape_json["class"] = "H5S_SIMPLE"
-            dims = shape
-            shape_json["dims"] = dims
+            if len(shape) == 0:
+                shape_json["class"] = "H5S_SCALAR"
+            else:
+                shape_json["class"] = "H5S_SIMPLE"
+                shape_json["dims"] = shape
+                dims = shape
         else:
             msg = "Bad Request: shape is invalid"
             log.warn(msg)
@@ -555,10 +558,6 @@ async def POST_Dataset(request):
     req = getDataNodeUrl(app, dset_id) + "/datasets"
     
     post_json = await http_post(app, req, data=dataset_json)
-    
-    # dataset creation successful     
-    resp = await jsonResponse(request, post_json, status=201)
-    log.response(request, resp=resp)
 
     # create link if requested
     if link_id and link_title:
@@ -569,7 +568,11 @@ async def POST_Dataset(request):
         link_req += "/groups/" + link_id + "/links/" + link_title
         log.info("PUT link - : " + link_req)
         put_rsp = await http_put(app, link_req, data=link_json)
-        log.info("PUT Link resp: {}".format(put_rsp.status))
+        log.info("PUT Link resp: {}".format(put_rsp))
+
+    # dataset creation successful     
+    resp = await jsonResponse(request, post_json, status=201)
+    log.response(request, resp=resp)
 
     return resp
 

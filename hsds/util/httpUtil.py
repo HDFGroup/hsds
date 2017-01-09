@@ -53,7 +53,7 @@ async def http_get(app, url, params=None):
         log.error("Error for http_get({}): {} ".format(url, str(ce)))
         raise HttpProcessingError(message="Unexpected error", code=500)
     except CancelledError as cle:
-        log.error("CanceledError for http_get({}): {}".format(url, str(cle)))
+        log.error("CancelledError for http_get({}): {}".format(url, str(cle)))
         raise HttpProcessingError(message="Unexpected error", code=500)
     return data
 
@@ -79,7 +79,7 @@ async def http_get_json(app, url, params=None):
         log.error("Error for http_get_json({}): {} ".format(url, str(ce)))
         raise HttpProcessingError(message="Unexpected error", code=500)
     except CancelledError as cle:
-        log.error("CanceledError for http_get_json({}): {}".format(url, str(cle)))
+        log.error("CancelledError for http_get_json({}): {}".format(url, str(cle)))
         raise HttpProcessingError(message="Unexpected error", code=500)
     if isinstance(rsp_json, str):
         log.warn("converting str to json")
@@ -108,7 +108,7 @@ async def http_post(app, url, data=None, params=None):
         log.error("Error for http_post({}): {} ".format(url, str(ce)))
         raise HttpProcessingError(message="Unexpected error", code=500)
     except CancelledError as cle:
-        log.error("CanceledError for http_post({}): {}".format(url, str(cle)))
+        log.error("CancelledError for http_post({}): {}".format(url, str(cle)))
         raise HttpProcessingError(message="Unexpected error", code=500)
     return rsp_json
 
@@ -136,7 +136,7 @@ async def http_put(app, url, data=None, params=None):
         log.error("ClientError for http_put({}): {} ".format(url, str(ce)))
         raise HttpProcessingError(message="Unexpected error", code=500)
     except CancelledError as cle:
-        log.error("CanceledError for http_put({}): {}".format(url, str(cle)))
+        log.error("CancelledError for http_put({}): {}".format(url, str(cle)))
         raise HttpProcessingError(message="Unexpected error", code=500)
     return rsp_json
 
@@ -164,7 +164,7 @@ async def http_put_binary(app, url, data, params=None):
         log.error("Error for http_put_binary({}): {} ".format(url, str(ce)))
         raise HttpProcessingError(message="Unexpected error", code=500)
     except CancelledError as cle:
-        log.error("CanceledError for http_put_binary({}): {}".format(url, str(cle)))
+        log.error("CancelledError for http_put_binary({}): {}".format(url, str(cle)))
         raise HttpProcessingError(message="Unexpected error", code=500)
     return rsp_json
 
@@ -191,7 +191,7 @@ async def http_delete(app, url, params=None):
         log.error("Error for http_delete({}): {} ".format(url, str(ce)))
         raise HttpProcessingError(message="Unexpected error", code=500)
     except CancelledError as cle:
-        log.error("CanceledError for http_delete({}): {}".format(url, str(cle)))
+        log.error("CancelledError for http_delete({}): {}".format(url, str(cle)))
         raise HttpProcessingError(message="Unexpected error", code=500)
     return rsp_json
 

@@ -243,8 +243,79 @@ class AttributeTest(unittest.TestCase):
             rspJson = json.loads(rsp.text)
             self.assertEqual(rspJson["attributeCount"], 0)  # no attributes
 
-     
+    def testEmptyShapeAttr(self):
+        print("testEmptyShapeAttr", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = helper.getEndpoint() + '/'
 
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        attr_name = "attr_empty_shape"
+        attr_payload = {'type': 'H5T_STD_I32LE', 'shape': [], 'value': 42}
+        req = self.endpoint + "/groups/" + root_uuid + "/attributes/" + attr_name
+        rsp = requests.put(req, headers=headers, data=json.dumps(attr_payload))
+        self.assertEqual(rsp.status_code, 201)  # created
+
+        # read back the attribute
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # OK
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("name" in rspJson)
+        self.assertEqual(rspJson["name"], "attr_empty_shape")
+        self.assertTrue("type" in rspJson)
+        attr_type = rspJson["type"]
+        self.assertEqual(attr_type["base"], "H5T_STD_I32LE")
+        self.assertTrue("hrefs" in rspJson)
+        self.assertEqual(len(rspJson["hrefs"]), 3)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], 42)
+        self.assertTrue("shape" in rspJson)
+        attr_shape = rspJson["shape"]
+        self.assertTrue("class" in attr_shape)
+        self.assertEqual(attr_shape["class"], "H5S_SCALAR")
+
+    def testPutFixedString(self):
+        # Test PUT value for 1d dataset with fixed length string types
+        print("testPutFixedString", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + '/'
+
+        # Get root uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create attr
+        words = ["Parting", "is such", "sweet", "sorrow."] 
+        fixed_str_type = {"charSet": "H5T_CSET_ASCII", 
+                "class": "H5T_STRING", 
+                "length": 7, 
+                "strPad": "H5T_STR_NULLPAD" }
+        data = { "type": fixed_str_type, "shape": 4, 
+            "value": words}
+        attr_name = "str_attr"
+        req = self.endpoint + "/groups/" + root_uuid + "/attributes/" + attr_name
+        rsp = requests.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # read attr  
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], words)
+        self.assertTrue("type" in rspJson)
+        type_json = rspJson["type"]
+        self.assertTrue("class" in type_json)
+        self.assertEqual(type_json["class"], "H5T_STRING")
 
     def testPutInvalid(self):
         print("testPutInvalid", self.base_domain)

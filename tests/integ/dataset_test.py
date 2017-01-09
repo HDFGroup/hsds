@@ -121,6 +121,49 @@ class DatasetTest(unittest.TestCase):
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 410)
 
+    def testScalarEmptyDimsDataset(self):
+        # Test creation/deletion of scalar dataset obj
+
+        print("testScalarEmptyDimsDataset", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + '/'
+
+        # Get root uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create a dataset obj
+        data = { "type": "H5T_IEEE_F32LE", "shape": [] }
+        req = self.endpoint + '/datasets' 
+        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["attributeCount"], 0)   
+        dset_id = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_id))
+
+        # read back the obj
+        req = self.endpoint + '/datasets/' + dset_id 
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("id" in rspJson)
+        self.assertEqual(rspJson["id"], dset_id)
+        self.assertTrue("created" in rspJson)
+        self.assertTrue("lastModified" in rspJson)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("attributeCount" in rspJson)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        self.assertTrue("shape" in rspJson)
+        shape_json = rspJson["shape"]
+        self.assertTrue(shape_json["class"], "H5S_SCALAR")
+        self.assertTrue("type" in rspJson)
+        self.assertTrue(rspJson["type"], "H5T_IEEE_F32LE")
+ 
+
     def testDelete(self):
         # test Delete
         print("testDelete", self.base_domain)

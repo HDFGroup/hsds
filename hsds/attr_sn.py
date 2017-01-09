@@ -244,8 +244,13 @@ async def PUT_Attribute(request):
             dims = [shape,]
         elif isinstance(shape, list) or isinstance(shape, tuple):
             dims = shape  # can use as is
-        elif shape == 'H5S_NULL':
-            log.info("Put attribute with NULL shape")
+        elif isinstance(shape, str):
+            # only valid string value is H5S_NULL
+            if shape != "H5S_NULL":
+                msg = "PUT attribute with invalid shape value"
+                log.warn(msg)
+                raise HttpBadRequest(message=msg)
+            dims = None
         else:
             msg = "Bad Request: shape is invalid!"
             log.warn(msg)
@@ -260,13 +265,20 @@ async def PUT_Attribute(request):
         value = body["value"]
         # TBD - validate that the value agrees with type/shape
 
-    if shape is None:
+    shape_json = {}
+    if dims is None:
         # For no shape, if value is supplied, then this is a scalar
         # otherwise a null space attribute
         if value is None:
-            shape = {"class": "H5S_NULL"}
+            shape_json["class"] = "H5S_NULL"
         else:
-            shape = {"class": "H5S_SCALAR"}
+            shape_json["class"] = "H5S_SCALAR"
+    else:
+        if len(dims) == 0:
+            shape_json["class"] = "H5S_SCALAR"
+        else:
+            shape_json["class"] = "H5S_SIMPLE"
+            shape_json["dims"] = dims
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
@@ -290,7 +302,7 @@ async def PUT_Attribute(request):
 
     attr_json = {}
     attr_json["type"] = datatype
-    attr_json["shape"] = shape
+    attr_json["shape"] = shape_json
     attr_json["value"] = value
     
     put_rsp = await http_put(app, req, data=attr_json)

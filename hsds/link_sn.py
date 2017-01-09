@@ -249,7 +249,7 @@ async def PUT_Link(request):
     
     put_rsp = await http_put(app, req, data=link_json)
     log.info("PUT Link resp: " + str(put_rsp))
-    
+
     hrefs = []  # TBD
     req_rsp = { "hrefs": hrefs }
     # link creation successful     

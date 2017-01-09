@@ -116,7 +116,9 @@ async def POST_Group(request):
                     await validateAction(app, domain, link_id, username, "create")
             if not link_id or not link_title:
                 log.warn("POST Group body with no link: {}".format(body))
-             
+
+    domain_json = await getDomainJson(app, domain) # get again in case cache was invalidated
+         
     root_id = domain_json["root"]
     group_id = createObjId("groups") 
     log.info("new  group id: {}".format(group_id))
@@ -125,10 +127,6 @@ async def POST_Group(request):
     req = getDataNodeUrl(app, group_id) + "/groups"
     
     group_json = await http_post(app, req, data=group_json)
-    
-    # group creation successful     
-    resp = await jsonResponse(request, group_json, status=201)
-    log.response(request, resp=resp)
 
     # create link if requested
     if link_id and link_title:
@@ -138,9 +136,12 @@ async def POST_Group(request):
         link_req = getDataNodeUrl(app, link_id)
         link_req += "/groups/" + link_id + "/links/" + link_title
         log.info("PUT link - : " + link_req)
-        put_rsp = await http_put(app, link_req, data=link_json)
-        log.info("PUT Link resp: {}".format(put_rsp.status))
-    
+        put_json_rsp = await http_put(app, link_req, data=link_json)
+        log.info("PUT Link resp: {}".format(put_json_rsp))
+    log.info("returning resp")
+    # group creation successful     
+    resp = await jsonResponse(request, group_json, status=201)
+    log.response(request, resp=resp)
     return resp
 
 async def DELETE_Group(request):

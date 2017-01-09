@@ -14,6 +14,7 @@
 # handles dataset /value requests
 # 
 import asyncio
+from asyncio import CancelledError
 import json
 import base64 
 import numpy as np
@@ -84,6 +85,9 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr):
     except ClientError as ce:
         log.error("Error for http_post({}): {} ".format(req, str(ce)))
         raise HttpProcessingError(message="Unexpected error", code=500)
+    except CancelledError as cle:
+        log.error("CancelledError for http_post({}): {}".format(req, str(cle)))
+        raise HttpProcessingError(message="Unexpected error", code=500)
 
 
 """
@@ -144,6 +148,9 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr):
             
     except ClientError as ce:
         log.error("Error for http_get({}): {} ".format(req, str(ce)))
+        raise HttpProcessingError(message="Unexpected error", code=500)
+    except CancelledError as cle:
+        log.error("CancelledError for http_get({}): {}".format(req, str(cle)))
         raise HttpProcessingError(message="Unexpected error", code=500)
     
     log.info("chunk_arr shape: {}".format(chunk_arr.shape))

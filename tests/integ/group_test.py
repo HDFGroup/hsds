@@ -127,6 +127,24 @@ class GroupTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
         helper.validateId(root_uuid)
+        
+        # delete the domain
+        rsp = requests.delete(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # try getting the domain
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 410)
+
+        # try re-creating a domain
+        rsp = requests.put(req, headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        new_root_id = rspJson["root"]
+        self.assertTrue(new_root_id != root_uuid)
+
+        root_uuid = new_root_id
+        
 
         # get root group and verify link count is 0
         req = helper.getEndpoint() + '/groups/' + root_uuid
