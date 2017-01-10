@@ -162,6 +162,9 @@ async def GET_Dataset(request):
     resp_json["type"] = dset_json["type"]
     if "creationProperties" in dset_json:
         resp_json["creationProperties"] = dset_json["creationProperties"]
+    else:
+        resp_json["creationProperties"] = {}
+        
     if "layout" in dset_json:
         resp_json["layout"] = dset_json["layout"]
     resp_json["attributeCount"] = dset_json["attributeCount"]

@@ -59,6 +59,7 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("lastModified" in rspJson)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("attributeCount" in rspJson)
+        self.assertTrue("creationProperties" in rspJson)
         self.assertEqual(rspJson["attributeCount"], 0)
         self.assertTrue("shape" in rspJson)
         shape_json = rspJson["shape"]
