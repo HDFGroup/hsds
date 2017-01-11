@@ -555,6 +555,55 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(readData[1][0], [10, 10.0])  
         self.assertEqual(readData[0][1], [0, 0.5])  
         self.assertEqual(readData[1][1], [10, 10.5])   
+
+    def testSimpleTypeFillValue(self):
+        # test Dataset with simple type and fill value
+        print("testSimpleTypeFillValue", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+
+        # get domain
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # create the dataset 
+        req = self.endpoint + "/datasets"
+        payload = {'type': 'H5T_STD_I32LE', 'shape': 10}
+        payload['creationProperties'] = {'fill_value': 42 }
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson['id']
+        print(dset_uuid)
+        self.assertTrue(helper.validateId(dset_uuid))
+ 
+        # read back the data
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], [42,]*10)
+
+        # write some values
+        payload = { 'start': 0, 'stop': 5, 'value': [24,]*5 }
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        ret_values = rspJson["value"]
+        for i in range(5):
+            self.assertEqual(ret_values[i], 24)
+            self.assertEqual(ret_values[i+5], 42)
+
        
              
 if __name__ == '__main__':

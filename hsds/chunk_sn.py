@@ -71,6 +71,10 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr):
     params = {}
     params["itemsize"] = str(arr.itemsize)
     params["type"] = json.dumps(type_json)
+    if "creationProperties" in dset_json:
+        cprops = dset_json["creationProperties"]
+        if "fill_value" in cprops:
+            params["fill_value"] = cprops["fill_value"]
     setSliceQueryParam(params, dims, chunk_sel)   
 
     try:
@@ -120,6 +124,13 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr):
     params = {}
     params["itemsize"] = str(np_arr.itemsize)
     params["type"] = json.dumps(type_json)
+    fill_value = None
+    if "creationProperties" in dset_json:
+        cprops = dset_json["creationProperties"]
+        if "fill_value" in cprops:
+            fill_value = cprops["fill_value"]
+            log.info("Using fill_value: {}".format(fill_value))
+
     chunk_shape = getSelectionShape(chunk_sel)
     log.info("chunk_shape: {}".format(chunk_shape))
     setSliceQueryParam(params, dims, chunk_sel)  
@@ -139,8 +150,11 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr):
                 chunk_arr = chunk_arr.reshape(chunk_shape)
             elif rsp.status == 404:
                 # no data, return zero array
-                # TBD - use fill value
-                chunk_arr = np.zeros(chunk_shape, dtype=dt)
+                if fill_value:
+                    chunk_arr = np.empty(chunk_shape, dtype=dt, order='C')
+                    chunk_arr[...] = fill_value
+                else:
+                    chunk_arr = np.zeros(chunk_shape, dtype=dt, order='C')
             else:
                 msg = "request to {} failed with code: {}".format(req, rsp.status)
                 log.warn(msg)
@@ -447,7 +461,7 @@ async def GET_Value(request):
 
     # create array to hold response data
     # TBD: initialize to fill value if not 0
-    arr = np.zeros(np_shape, dtype=dset_dtype)
+    arr = np.zeros(np_shape, dtype=dset_dtype, order='C')
     tasks = []
     for chunk_id in chunk_ids:
         task = asyncio.ensure_future(read_chunk_hyperslab(app, chunk_id, dset_json, slices, arr))

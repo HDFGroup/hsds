@@ -80,6 +80,10 @@ async def PUT_Chunk(request):
         log.error(msg)
         raise HttpBadRequest(message=msg)
 
+    fill_value = None
+    if "fill_value" in request.GET:
+        fill_value = json.loads(request.GET["fill_value"])
+
     dim_param = request.GET["dim"]
     if not dim_param.startswith('[') or not dim_param.endswith(']'):
         msg = "Invalid dim query param"
@@ -158,7 +162,11 @@ async def PUT_Chunk(request):
             chunk_arr = np.fromstring(chunk_bytes, dtype=dt)
         else:
             log.info("Initializing chunk")
-            chunk_arr = np.zeros(dims, dtype=dt)
+            if fill_value:
+                chunk_arr = np.empty(dims, dtype=dt, order='C')
+                chunk_arr[...] = fill_value
+            else:
+                chunk_arr = np.zeros(dims, dtype=dt, order='C')
         data_cache[chunk_id] = chunk_arr
 
     # update chunk array
