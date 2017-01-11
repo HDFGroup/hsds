@@ -681,7 +681,7 @@ class ValueTest(unittest.TestCase):
         # (i.e. a large string)
         print("testBigFillValue", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
-        """
+        
         # get domain
         req = helper.getEndpoint() + '/'
         rsp = requests.get(req, headers=headers)
@@ -689,7 +689,7 @@ class ValueTest(unittest.TestCase):
         self.assertTrue("root" in rspJson)
         root_uuid = rspJson["root"]
 
-        item_length = 8
+        item_length = 1000
         # ASCII fixed width
         str_type = { 'charSet':   'H5T_CSET_ASCII', 
                      'class':  'H5T_STRING', 
@@ -699,7 +699,7 @@ class ValueTest(unittest.TestCase):
         fill_value = 'X'*item_length
         # create the dataset 
         req = self.endpoint + "/datasets"
-        payload = {'type': 'H5T_STD_I32LE', 'shape': 10}
+        payload = {'type': str_type, 'shape': 10}
         payload['creationProperties'] = {'fill_value': fill_value }
         req = self.endpoint + "/datasets"
         rsp = requests.post(req, data=json.dumps(payload), headers=headers)
@@ -707,6 +707,7 @@ class ValueTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
         self.assertTrue(helper.validateId(dset_uuid))
+        print(dset_uuid)
         
         # read back the data
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
@@ -731,7 +732,7 @@ class ValueTest(unittest.TestCase):
         for i in range(5):
             self.assertEqual(ret_values[i], 'hello')
             self.assertEqual(ret_values[i+5], fill_value)
-        """
+    
              
 if __name__ == '__main__':
     #setup test files
