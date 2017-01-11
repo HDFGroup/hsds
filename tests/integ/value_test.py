@@ -577,7 +577,6 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 201)  # create dataset
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
-        print(dset_uuid)
         self.assertTrue(helper.validateId(dset_uuid))
  
         # read back the data
@@ -604,7 +603,78 @@ class ValueTest(unittest.TestCase):
             self.assertEqual(ret_values[i], 24)
             self.assertEqual(ret_values[i+5], 42)
 
-       
+    def testCompoundFillValue(self):
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + '/'
+
+        # Get root uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # ASCII 8-char fixed width
+        str_type = { 'charSet':   'H5T_CSET_ASCII', 
+                     'class':  'H5T_STRING', 
+                     'strPad': 'H5T_STR_NULLPAD', 
+                     'length': 8}
+        
+        fields = ({'name': 'tag', 'type': str_type}, 
+                    {'name': 'value', 'type': 'H5T_STD_I32LE'}) 
+        datatype = {'class': 'H5T_COMPOUND', 'fields': fields }
+        fill_value = ['blank', -999]
+        creationProperties =  {'fill_value': fill_value }
+        
+        #
+        #create compound dataset
+        #
+        payload = {'type': datatype, 'shape': 40, 'creationProperties': creationProperties}
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson['id']
+           
+        # verify the shape of the dataset
+        req = self.endpoint + "/datasets/" + dset_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # get dataset
+        rspJson = json.loads(rsp.text)
+        shape = rspJson["shape"]
+        self.assertEqual(shape["class"], 'H5S_SIMPLE')
+        self.assertEqual(shape["dims"], [40,])
+
+        # read the default values
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # OK
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)  
+        value = rspJson["value"]
+        for i in range(40):
+            self.assertEqual(value[i], fill_value)
+
+        # write some values
+        new_value = ('mytag', 123)
+        data = [new_value,]*20
+        payload = { 'start': 0, 'stop': 20, 'value': [new_value,]*20}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # read the values back
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # OK
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)  
+        value = rspJson["value"]
+        for i in range(20):
+            self.assertEqual(value[i], list(new_value))
+            self.assertEqual(value[i+20], fill_value) 
              
 if __name__ == '__main__':
     #setup test files

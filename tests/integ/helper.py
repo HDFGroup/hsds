@@ -105,7 +105,6 @@ Helper - Create domain (and parent domin if needed)
 """
 def setupDomain(domain):
     endpoint = config.get("hsds_endpoint")
-    print("setupdomain: ", domain)
     headers = getRequestHeaders(domain=domain)
     req = endpoint + "/"
     rsp = requests.get(req, headers=headers)

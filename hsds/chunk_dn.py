@@ -163,6 +163,9 @@ async def PUT_Chunk(request):
         else:
             log.info("Initializing chunk")
             if fill_value:
+                # need to convert list to tuples for numpy broadcast
+                if isinstance(fill_value, list):
+                    fill_value = tuple(fill_value)
                 chunk_arr = np.empty(dims, dtype=dt, order='C')
                 chunk_arr[...] = fill_value
             else:

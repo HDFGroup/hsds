@@ -74,7 +74,7 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr):
     if "creationProperties" in dset_json:
         cprops = dset_json["creationProperties"]
         if "fill_value" in cprops:
-            params["fill_value"] = cprops["fill_value"]
+            params["fill_value"] = json.dumps(cprops["fill_value"])
     setSliceQueryParam(params, dims, chunk_sel)   
 
     try:
@@ -129,6 +129,9 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr):
         cprops = dset_json["creationProperties"]
         if "fill_value" in cprops:
             fill_value = cprops["fill_value"]
+            # need to convert list to tuples for numpy broadcast
+            if isinstance(fill_value, list):
+                fill_value = tuple(fill_value)
             log.info("Using fill_value: {}".format(fill_value))
 
     chunk_shape = getSelectionShape(chunk_sel)
