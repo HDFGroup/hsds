@@ -15,6 +15,7 @@
 # 
  
 import json
+import numpy as np
 from aiohttp.errors import HttpBadRequest 
  
 from util.httpUtil import http_post, http_put, http_delete, jsonResponse, getHref
@@ -23,7 +24,7 @@ from util.dsetUtil import  getNumElements, getPreviewQuery
 from util.chunkUtil import guess_chunk
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
-from util.hdf5dtype import validateTypeItem, getBaseTypeJson, getItemSize
+from util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson, getItemSize
 from servicenode_lib import getDomainJson, getObjectJson, validateAction
 import config
 import hsds_logger as log
@@ -512,7 +513,6 @@ async def POST_Dataset(request):
         log.info("autochunk layout: {}".format(layout))
     else:
         log.info("client layout: {}".format(layout))
-
     
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
@@ -550,8 +550,23 @@ async def POST_Dataset(request):
     dataset_json = {"id": dset_id, "root": root_id, "domain": domain, "type": datatype, "shape": shape_json }
 
     if "creationProperties" in body:
-        # TBD - validate creationProperties
-        dataset_json["creationProperties"] = body["creationProperties"]
+        # TBD - validate all creationProperties
+        creationProperties = body["creationProperties"]
+        if "fill_value" in creationProperties:
+            # validate fill value compatible with type
+            dt = createDataType(datatype)
+            fill_value = creationProperties["fill_value"]
+            if isinstance(fill_value, list):
+                fill_value = tuple(fill_value)
+            try:
+                np.asarray(fill_value, dtype=dt)
+            except (TypeError, ValueError) as e:
+                msg = "Fill value {} not compatible with dataset type: {}".format(fill_value, datatype)
+                log.warn(msg)
+                raise HttpBadRequest(message=msg)
+
+        dataset_json["creationProperties"] = creationProperties
+
     if layout is not None:
         layout_json = {"class": 'H5D_CHUNKED'}
         layout_json["dims"] = layout

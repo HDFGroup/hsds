@@ -675,6 +675,63 @@ class ValueTest(unittest.TestCase):
         for i in range(20):
             self.assertEqual(value[i], list(new_value))
             self.assertEqual(value[i+20], fill_value) 
+
+    def testBigFillValue(self):
+        # test Dataset with simple type and fill value that is very large
+        # (i.e. a large string)
+        print("testBigFillValue", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        """
+        # get domain
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        item_length = 8
+        # ASCII fixed width
+        str_type = { 'charSet':   'H5T_CSET_ASCII', 
+                     'class':  'H5T_STRING', 
+                     'strPad': 'H5T_STR_NULLPAD', 
+                     'length': item_length}
+
+        fill_value = 'X'*item_length
+        # create the dataset 
+        req = self.endpoint + "/datasets"
+        payload = {'type': 'H5T_STD_I32LE', 'shape': 10}
+        payload['creationProperties'] = {'fill_value': fill_value }
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dset_uuid))
+        
+        # read back the data
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], [fill_value,]*10)
+
+        # write some values
+        payload = { 'start': 0, 'stop': 5, 'value': ['hello',]*5 }
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        ret_values = rspJson["value"]
+        for i in range(5):
+            self.assertEqual(ret_values[i], 'hello')
+            self.assertEqual(ret_values[i+5], fill_value)
+        """
              
 if __name__ == '__main__':
     #setup test files

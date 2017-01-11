@@ -501,6 +501,29 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(layout_json["class"], 'H5D_CHUNKED')
         self.assertTrue("dims" in layout_json)
         self.assertEqual(layout_json["dims"], [10,10])
+
+    def testInvalidFillValue(self):
+        # test Dataset with simple type and fill value that is incompatible with the type
+        print("testInvalidFillValue", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+
+        # get domain
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        
+        fill_value = 'XXXX'  # can't convert to int!
+        # create the dataset 
+        req = self.endpoint + "/datasets"
+        payload = {'type': 'H5T_STD_I32LE', 'shape': 10}
+        payload['creationProperties'] = {'fill_value': fill_value }
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 400)  # invalid param
+         
          
 
     def testAutoChunkDataset(self):
