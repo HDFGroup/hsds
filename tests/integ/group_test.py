@@ -161,7 +161,9 @@ class GroupTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["linkCount"], 0)
         self.assertEqual(rspJson["attributeCount"], 0)
-        self.assertTrue(helper.validateId(rspJson["id"]) ) 
+        new_group_id = rspJson["id"]
+        self.assertTrue(helper.validateId(rspJson["id"]) )
+        self.assertTrue(new_group_id != root_uuid)
 
         # get root group and verify link count is 1
         req = helper.getEndpoint() + '/groups/' + root_uuid
@@ -169,6 +171,18 @@ class GroupTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["linkCount"], 1)
+
+        # read the link back and verify
+        req = helper.getEndpoint() + "/groups/" + root_uuid + "/links/linked_group"
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # link doesn't exist yet
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("link" in rspJson)
+        link_json = rspJson["link"]
+        self.assertEqual(link_json["collection"], "groups")
+        self.assertEqual(link_json["class"], "H5L_TYPE_HARD")
+        self.assertEqual(link_json["title"], "linked_group")
+        self.assertEqual(link_json["id"], new_group_id)
 
     def testDelete(self):
         # test Delete

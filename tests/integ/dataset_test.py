@@ -609,13 +609,20 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["linkCount"], 1)
+
+        # read the link back and verify
+        req = helper.getEndpoint() + "/groups/" + root_uuid + "/links/linked_dset"
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # link doesn't exist yet
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("link" in rspJson)
+        link_json = rspJson["link"]
+        self.assertEqual(link_json["collection"], "datasets")
+        self.assertEqual(link_json["class"], "H5L_TYPE_HARD")
+        self.assertEqual(link_json["title"], "linked_dset")
+        self.assertEqual(link_json["id"], dset_uuid)
          
         
-
-        
-
-
-    
              
 if __name__ == '__main__':
     #setup test files

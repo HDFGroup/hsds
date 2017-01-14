@@ -580,7 +580,7 @@ async def POST_Dataset(request):
     # create link if requested
     if link_id and link_title:
         link_json={}
-        link_json["id"] = link_id
+        link_json["id"] = dset_id
         link_json["class"] = "H5L_TYPE_HARD"
         link_req = getDataNodeUrl(app, link_id)
         link_req += "/groups/" + link_id + "/links/" + link_title
