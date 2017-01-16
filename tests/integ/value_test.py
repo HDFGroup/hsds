@@ -571,7 +571,7 @@ class ValueTest(unittest.TestCase):
         # create the dataset 
         req = self.endpoint + "/datasets"
         payload = {'type': 'H5T_STD_I32LE', 'shape': 10}
-        payload['creationProperties'] = {'fill_value': 42 }
+        payload['creationProperties'] = {'fillValue': 42 }
         req = self.endpoint + "/datasets"
         rsp = requests.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
@@ -624,7 +624,7 @@ class ValueTest(unittest.TestCase):
                     {'name': 'value', 'type': 'H5T_STD_I32LE'}) 
         datatype = {'class': 'H5T_COMPOUND', 'fields': fields }
         fill_value = ['blank', -999]
-        creationProperties =  {'fill_value': fill_value }
+        creationProperties =  {'fillValue': fill_value }
         
         #
         #create compound dataset
@@ -700,7 +700,7 @@ class ValueTest(unittest.TestCase):
         # create the dataset 
         req = self.endpoint + "/datasets"
         payload = {'type': str_type, 'shape': 10}
-        payload['creationProperties'] = {'fill_value': fill_value }
+        payload['creationProperties'] = {'fillValue': fill_value }
         req = self.endpoint + "/datasets"
         rsp = requests.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset

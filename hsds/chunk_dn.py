@@ -81,8 +81,8 @@ async def PUT_Chunk(request):
         raise HttpBadRequest(message=msg)
 
     fill_value = None
-    if "fill_value" in request.GET:
-        fill_value = json.loads(request.GET["fill_value"])
+    if "fillValue" in request.GET:
+        fill_value = json.loads(request.GET["fillValue"])
 
     dim_param = request.GET["dim"]
     if not dim_param.startswith('[') or not dim_param.endswith(']'):

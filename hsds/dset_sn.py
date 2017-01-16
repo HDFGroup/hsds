@@ -552,10 +552,10 @@ async def POST_Dataset(request):
     if "creationProperties" in body:
         # TBD - validate all creationProperties
         creationProperties = body["creationProperties"]
-        if "fill_value" in creationProperties:
+        if "fillValue" in creationProperties:
             # validate fill value compatible with type
             dt = createDataType(datatype)
-            fill_value = creationProperties["fill_value"]
+            fill_value = creationProperties["fillValue"]
             if isinstance(fill_value, list):
                 fill_value = tuple(fill_value)
             try:

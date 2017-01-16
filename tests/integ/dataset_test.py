@@ -519,7 +519,7 @@ class DatasetTest(unittest.TestCase):
         # create the dataset 
         req = self.endpoint + "/datasets"
         payload = {'type': 'H5T_STD_I32LE', 'shape': 10}
-        payload['creationProperties'] = {'fill_value': fill_value }
+        payload['creationProperties'] = {'fillValue': fill_value }
         req = self.endpoint + "/datasets"
         rsp = requests.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 400)  # invalid param
