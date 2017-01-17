@@ -21,7 +21,7 @@ from util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.attrUtil import  validateAttributeName, getRequestCollectionName
 from util.hdf5dtype import validateTypeItem, getBaseTypeJson
-from servicenode_lib import getDomainJson, validateAction
+from servicenode_lib import getDomainJson, getObjectJson, validateAction
 import hsds_logger as log
 
 
@@ -213,6 +213,22 @@ async def PUT_Attribute(request):
 
     body = await request.json()   
 
+    domain = getDomainFromRequest(request)
+    if not isValidDomain(domain):
+        msg = "Invalid host value: {}".format(domain)
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    
+    # get domain JSON
+    domain_json = await getDomainJson(app, domain)
+    if "root" not in domain_json:
+        log.error("Expected root key for domain: {}".format(domain))
+        raise HttpBadRequest(message="Unexpected Error")
+    root_id = domain_json["root"]
+
+    # TBD - verify that the obj_id belongs to the given domain
+    await validateAction(app, domain, obj_id, username, "create")
+
     dims = None
     datatype = None
     shape = None
@@ -223,14 +239,26 @@ async def PUT_Attribute(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     datatype = body["type"]
-    if isinstance(datatype, str):
+    if isinstance(datatype, str) and datatype.startswith("t-"):
+        # Committed type - fetch type json from DN
+        ctype_id = datatype
+        log.info("got ctypeid: {}".format(ctype_id)) 
+        ctype_json = await getObjectJson(app, ctype_id)  
+        log.info("ctype: {}".format(ctype_json))
+        if ctype_json["root"] != root_id:
+            msg = "Referenced committed datatype must belong in same domain"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        datatype = ctype_json["type"]
+        # add the ctype_id to type type
+        datatype["id"] = ctype_id
+    elif isinstance(datatype, str):
         try:
             # convert predefined type string (e.g. "H5T_STD_I32LE") to 
             # corresponding json representation
             datatype = getBaseTypeJson(datatype)
             log.info("got datatype: {}".format(datatype))
         except TypeError:
-            # TBD: Handle the case where the string is a committed type reference
             msg = "POST Dataset with invalid predefined type"
             log.warn(msg)
             raise HttpBadRequest(message=msg) 
@@ -279,21 +307,6 @@ async def PUT_Attribute(request):
         else:
             shape_json["class"] = "H5S_SIMPLE"
             shape_json["dims"] = dims
-
-    domain = getDomainFromRequest(request)
-    if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
-    
-    # get domain JSON
-    domain_json = await getDomainJson(app, domain)
-    if "root" not in domain_json:
-        log.error("Expected root key for domain: {}".format(domain))
-        raise HttpBadRequest(message="Unexpected Error")
-
-    # TBD - verify that the obj_id belongs to the given domain
-    await validateAction(app, domain, obj_id, username, "create")
      
     # ready to add attribute now
     req = getDataNodeUrl(app, obj_id)

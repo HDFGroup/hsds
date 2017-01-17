@@ -87,8 +87,6 @@ async def POST_Dataset(request):
         msg = "POST_Dataset with no id"
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
-    
-    type_json = data["type"]
     dset_id = data["id"]
     try:
         validateUuid(dset_id, "dataset")

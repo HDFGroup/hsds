@@ -334,6 +334,58 @@ class AttributeTest(unittest.TestCase):
         rsp = requests.put(req, data=json.dumps(attr_payload), headers=headers)
         self.assertEqual(rsp.status_code, 400)  # invalid request 
 
+    def testPutCommittedType(self):
+        print("testPutCommittedType", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + '/'
+
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_id = rspJson["root"]
+        print("root_id:", root_id)
+        
+        # create the datatype
+        payload = {'type': 'H5T_IEEE_F32LE'}
+        req = self.endpoint + "/datatypes"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create datatype
+        rspJson = json.loads(rsp.text)
+        dtype_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dtype_uuid))
+         
+        # link new datatype as 'dtype1'
+        name = 'dtype1'
+        req = self.endpoint + "/groups/" + root_id + "/links/" + name 
+        payload = {'id': dtype_uuid}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        
+        # create the attribute using the type created above
+        attr_name = "attr1"
+        value = []
+        for i in range(10):
+            value.append(i*0.5) 
+        payload = {'type': dtype_uuid, 'shape': 10, 'value': value}
+        req = self.endpoint + "/groups/" + root_id + "/attributes/" + attr_name
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create attribute
+
+        # read back the attribute and verify the type
+        req = self.endpoint + "/groups/" + root_id + "/attributes/attr1"
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("type" in rspJson)
+        rsp_type = rspJson["type"]
+        self.assertTrue("base" in rsp_type)
+        self.assertEqual(rsp_type["base"], 'H5T_IEEE_F32LE')
+        self.assertTrue("class" in rsp_type)
+        self.assertTrue(rsp_type["class"], 'H5T_FLOAT')
+        self.assertTrue("id" in rsp_type)
+        self.assertTrue(rsp_type["id"], dtype_uuid)
+
+        
 
 if __name__ == '__main__':
     #setup test files

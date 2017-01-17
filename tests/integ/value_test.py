@@ -707,7 +707,6 @@ class ValueTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
         self.assertTrue(helper.validateId(dset_uuid))
-        print(dset_uuid)
         
         # read back the data
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"

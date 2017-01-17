@@ -235,9 +235,18 @@ async def GET_DatasetType(request):
 
     await validateAction(app, domain, dset_id, username, "read")
 
+    hrefs = []
+    dset_uri = '/datasets/'+dset_id
+    self_uri = dset_uri + "/type"
+    hrefs.append({'rel': 'self', 'href': getHref(request, self_uri)})
+    dset_uri = '/datasets/'+dset_id
+    hrefs.append({'rel': 'owner', 'href': getHref(request, dset_uri)})
+    root_uri = '/groups/' + dset_json["root"]    
+    hrefs.append({'rel': 'root', 'href': getHref(request, root_uri)})
+
     resp_json = {}
     resp_json["type"] = dset_json["type"]
-    resp_json["hrefs"] = []  # TBD
+    resp_json["hrefs"] = hrefs
 
     resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
@@ -275,9 +284,18 @@ async def GET_DatasetShape(request):
 
     await validateAction(app, domain, dset_id, username, "read")
 
+    hrefs = []
+    dset_uri = '/datasets/'+dset_id
+    self_uri = dset_uri + "/shape"
+    hrefs.append({'rel': 'self', 'href': getHref(request, self_uri)})
+    dset_uri = '/datasets/'+dset_id
+    hrefs.append({'rel': 'owner', 'href': getHref(request, dset_uri)})
+    root_uri = '/groups/' + dset_json["root"]    
+    hrefs.append({'rel': 'root', 'href': getHref(request, root_uri)})
+
     resp_json = {}
     resp_json["shape"] = dset_json["shape"]
-    resp_json["hrefs"] = []  # TBD
+    resp_json["hrefs"] = hrefs
     resp_json["created"] = dset_json["created"]
     resp_json["lastModified"] = dset_json["lastModified"]
 
@@ -388,6 +406,23 @@ async def POST_Dataset(request):
 
     body = await request.json()
 
+    # get domain, check authorization
+    domain = getDomainFromRequest(request)
+    if not isValidDomain(domain):
+        msg = "Invalid host value: {}".format(domain)
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    
+    domain_json = await getDomainJson(app, domain)
+    root_id = domain_json["root"]
+
+    aclCheck(domain_json, "create", username)  # throws exception if not allowed
+
+    if "root" not in domain_json:
+        msg = "Expected root key for domain: {}".format(domain)
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+
     #
     # validate type input
     #
@@ -397,14 +432,26 @@ async def POST_Dataset(request):
         raise HttpBadRequest(message=msg)   
 
     datatype = body["type"]
-    if isinstance(datatype, str):
+    if isinstance(datatype, str) and datatype.startswith("t-"):
+        # Committed type - fetch type json from DN
+        ctype_id = datatype
+        log.info("got ctypeid: {}".format(ctype_id)) 
+        ctype_json = await getObjectJson(app, ctype_id)  
+        log.info("ctype: {}".format(ctype_json))
+        if ctype_json["root"] != root_id:
+            msg = "Referenced committed datatype must belong in same domain"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        datatype = ctype_json["type"]
+        # add the ctype_id to type type
+        datatype["id"] = ctype_id
+    elif isinstance(datatype, str):
         try:
             # convert predefined type string (e.g. "H5T_STD_I32LE") to 
             # corresponding json representation
             datatype = getBaseTypeJson(datatype)
             log.info("got datatype: {}".format(datatype))
         except TypeError:
-            # TBD: Handle the case where the string is a committed type reference
             msg = "POST Dataset with invalid predefined type"
             log.warn(msg)
             raise HttpBadRequest(message=msg) 
@@ -513,21 +560,6 @@ async def POST_Dataset(request):
         log.info("autochunk layout: {}".format(layout))
     else:
         log.info("client layout: {}".format(layout))
-    
-    domain = getDomainFromRequest(request)
-    if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
-    
-    domain_json = await getDomainJson(app, domain)
-
-    aclCheck(domain_json, "create", username)  # throws exception if not allowed
-
-    if "root" not in domain_json:
-        msg = "Expected root key for domain: {}".format(domain)
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
 
     link_id = None
     link_title = None
@@ -543,7 +575,6 @@ async def POST_Dataset(request):
             # and that the requestor has permissions to create a link
             await validateAction(app, domain, link_id, username, "create")
 
-    root_id = domain_json["root"]
     dset_id = createObjId("datasets") 
     log.info("new  dataset id: {}".format(dset_id))
 
