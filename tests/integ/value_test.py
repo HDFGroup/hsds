@@ -89,7 +89,7 @@ class ValueTest(unittest.TestCase):
 
     def testPut1DDatasetBinary(self):
         # Test PUT value for 1d dataset using binary data
-        print("testPut1DDataset", self.base_domain)
+        print("testPut1DDatasetBinary", self.base_domain)
 
         headers = helper.getRequestHeaders(domain=self.base_domain)
         headers_bin_req = helper.getRequestHeaders(domain=self.base_domain) 
@@ -157,18 +157,33 @@ class ValueTest(unittest.TestCase):
             self.assertEqual(data[offset+2], 0)
             self.assertEqual(data[offset+3], 0)
 
+        # write a selection
+        params = {"select": "[4:6]"}  #4th and 5th elements
+        data = bytearray(4*2)
+        for i in range(2):
+            data[i*4] = 255
+        rsp = requests.put(req, data=data, params=params, headers=headers_bin_req)
+        self.assertEqual(rsp.status_code, 200)
+        
+
         # read a selection
-        params = {"select": "[2:8]"} # read 6 elements, starting at index 2
+        params = {"select": "[0:6]"} # read first 6 elements 
         rsp = requests.get(req, params=params, headers=headers_bin_rsp)
         self.assertEqual(rsp.status_code, 200)
         data = rsp.content
         self.assertEqual(len(data), 24)
         for i in range(6):
             offset = i*4
-            self.assertEqual(data[offset+0], i+2)
+            if i>=4:
+                # these were updated by the previous selection
+                self.assertEqual(data[offset+0], 255)
+            else:
+                self.assertEqual(data[offset+0], i)
             self.assertEqual(data[offset+1], 0)
             self.assertEqual(data[offset+2], 0)
             self.assertEqual(data[offset+3], 0)
+
+        
 
 
     def testPutSelection1DDataset(self):
