@@ -12,7 +12,6 @@
 import unittest
 import requests
 import json
-import numpy as np
 import helper
  
 
@@ -559,7 +558,6 @@ class ValueTest(unittest.TestCase):
         payload = {'value': value}
          
         req = self.endpoint + "/datasets/" + dset2d_uuid + "/value"
-        data = json.dumps(payload)
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
         
@@ -597,6 +595,13 @@ class ValueTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
         self.assertTrue(helper.validateId(dset_uuid))
+
+        # link new dataset as 'dset'
+        name = 'dset'
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {"id": dset_uuid}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
  
         # read back the data
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
@@ -678,7 +683,6 @@ class ValueTest(unittest.TestCase):
 
         # write some values
         new_value = ('mytag', 123)
-        data = [new_value,]*20
         payload = { 'start': 0, 'stop': 20, 'value': [new_value,]*20}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -726,6 +730,13 @@ class ValueTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
         self.assertTrue(helper.validateId(dset_uuid))
+
+        # link new dataset as 'dset'
+        name = 'dset'
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {"id": dset_uuid}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
         
         # read back the data
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"

@@ -177,7 +177,6 @@ class DatasetTest(unittest.TestCase):
         rsp = requests.get(req, headers=headers)
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
-        root_id = rspJson["root"]
   
         # create a new dataset
         req = helper.getEndpoint() + '/datasets'  
@@ -514,8 +513,6 @@ class DatasetTest(unittest.TestCase):
         rsp = requests.get(req, headers=headers)
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
-        root_uuid = rspJson["root"]
-
         
         fill_value = 'XXXX'  # can't convert to int!
         # create the dataset 

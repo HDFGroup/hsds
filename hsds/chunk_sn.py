@@ -206,7 +206,6 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_a
             if rsp.status == 200:
                 rsp_data = await rsp.read()  # read response as bytes         
                 np_arr_rsp = np.fromstring(rsp_data, dtype=dt) 
-                log.info("got np_ar_rsp: {}".format(np_arr_rsp))
                 npoints_read = len(np_arr_rsp)
                 if npoints_read != num_points:
                     msg = "Expected {} points, but got: {}".format(num_points, npoints_read)
@@ -236,7 +235,6 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_a
     # Fill in the return array based on passed in index values
     for i in range(num_points):
         index = point_index[i]
-        log.info("set nparr {} to {}".format(index, np_arr_rsp[i]))
         np_arr[index] = np_arr_rsp[i]
 
 
@@ -383,7 +381,6 @@ async def PUT_Value(request):
                 converted_data = toTuple(np_shape_rank, json_data)
             json_data = converted_data
 
-        log.info("json_data: {}".format(json_data))
         arr = np.array(json_data, dtype=dset_dtype)
         # raise an exception of the array shape doesn't match the selection shape
         # allow if the array is a scalar and the selection shape is one element,

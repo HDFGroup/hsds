@@ -250,9 +250,7 @@ async def GET_Chunk(request):
         chunk_bytes = await getS3Bytes(app, s3_key)
         chunk_arr = np.fromstring(chunk_bytes, dtype=dt)
         log.info("chunk size: {}".format(chunk_arr.size))
-        log.info("chunk_arr before reshape: {}".format(chunk_arr))
         chunk_arr = chunk_arr.reshape(dims)
-        log.info("got chunk array: {}".format(chunk_arr))
         data_cache[chunk_id] = chunk_arr  # store in cache
 
     # get requested data
@@ -367,20 +365,14 @@ async def POST_Chunk(request):
     num_points = len(point_arr) // rank
     log.info("got {} points".format(num_points))
 
-    point_arr = point_arr.reshape((num_points, rank))
-    log.info("reshaped point array: {}".format(point_arr))
-    
+    point_arr = point_arr.reshape((num_points, rank))    
     output_arr = np.zeros((num_points,), dtype=dt)
     
     for i in range(num_points):
         point = point_arr[i,:]
-        log.info("point: {}".format(point))
         tr_point = getChunkRelativePoint(chunk_coord, point)
-        log.info("tr_point: {}".format(tr_point))
         val = chunk_arr[tuple(tr_point)]
-        log.info("chunk val: {}".format(val))
         output_arr[i] = val
-        log.info("processing point: {}".format(point))
      
     # write response
     resp = StreamResponse(status=200)

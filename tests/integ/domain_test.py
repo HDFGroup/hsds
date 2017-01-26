@@ -227,6 +227,7 @@ class DomainTest(unittest.TestCase):
              self.assertTrue(k in rspJson)
 
         root_id = rspJson["root"]
+        helper.validateId(root_id)
 
         # get the datasets collection
         req = helper.getEndpoint() + '/datasets'
