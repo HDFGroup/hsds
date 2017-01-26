@@ -12,6 +12,7 @@
 import unittest
 import requests
 import json
+import numpy as np
 import helper
  
 
@@ -242,10 +243,11 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(rspJson["value"], data)
 
     def testPutSelection2DDataset(self):
-        # Test PUT value with selection for 1d dataset
+        # Test PUT value with selection for 2d dataset
         print("testPutSelection2DDataset", self.base_domain)
 
         headers = helper.getRequestHeaders(domain=self.base_domain)
+        
         req = self.endpoint + '/'
 
         # Get root uuid
@@ -254,7 +256,7 @@ class ValueTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
         helper.validateId(root_uuid)
-
+        
         # create dataset
         # pass in layout specification so that we can test selection across chunk boundries
         data = { "type": "H5T_STD_I32LE", "shape": [45,54] }
@@ -280,8 +282,9 @@ class ValueTest(unittest.TestCase):
         payload = { 'start': [22, 2], 'stop': [23, 52], 'value': data }
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
-
+        
         # read back a vertical strip that crossed the horizontal strip
+        req = self.endpoint + "/datasets/" + dset_id + "/value"  # test
         params = {"select": "[20:25,21:22]"} # read 6 elements, starting at index 20
         rsp = requests.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -291,6 +294,7 @@ class ValueTest(unittest.TestCase):
         value = rspJson["value"]
         self.assertEqual(len(value), 5)
         self.assertEqual(value, [[0,],[0,],[22,],[0,],[0,]])
+        
 
     def testPutFixedString(self):
         # Test PUT value for 1d dataset with fixed length string types
@@ -745,8 +749,9 @@ class ValueTest(unittest.TestCase):
         ret_values = rspJson["value"]
         for i in range(5):
             self.assertEqual(ret_values[i], 'hello')
+            self.assertEqual(len(ret_values[i+5]), len(fill_value))
             self.assertEqual(ret_values[i+5], fill_value)
-    
+ 
              
 if __name__ == '__main__':
     #setup test files

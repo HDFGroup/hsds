@@ -107,7 +107,27 @@ def getNumChunks(selection, layout):
         num_chunks *= count
     return num_chunks
             
-            
+def getChunkId(dset_id, point, layout):
+    """ get chunkid for given point in the dataset
+    """
+    
+    chunk_id = "c-" + dset_id[2:] + '_'
+    rank = len(layout)
+    for dim in range(rank):
+        coord = None
+        if rank == 1:
+            coord = point  # integer for 1d dataset
+        else:
+            coord = point[dim]
+    
+        c = layout[dim]
+        chunk_index= coord // c
+        chunk_id +=  str(chunk_index)
+        if dim + 1 < rank:
+            chunk_id += '_' # seperate dimensions with underscores
+    # got the complete chunk_id
+    return chunk_id
+
 def getChunkIds(dset_id, selection, layout, dim=0, prefix=None, chunk_ids=None):
     num_chunks = getNumChunks(selection, layout)
     if num_chunks == 0:
@@ -238,4 +258,19 @@ def getDataCoverage(chunk_id, slices, layout):
         sel.append(slice(start, stop, step))
             
     return sel
+
+def getChunkRelativePoint(chunkCoord, point):
+    """
+    Get chunk-relative coordinate of the given point
+
+       chunkIndex: ndarray of chunk coordinates
+       point: ndarray of element in dset
+    Return: chunk-relative coordinates of point
+    """
+    tr = point.copy()
+    for i in range(len(point)):
+        tr[i] = point[i] - chunkCoord[i]
+    return tr
+
+ 
 

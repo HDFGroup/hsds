@@ -28,7 +28,7 @@ from link_sn import GET_Links, GET_Link, PUT_Link, DELETE_Link
 from attr_sn import GET_Attributes, GET_Attribute, PUT_Attribute, DELETE_Attribute
 from ctype_sn import GET_Datatype, POST_Datatype, DELETE_Datatype
 from dset_sn import GET_Dataset, POST_Dataset, DELETE_Dataset, GET_DatasetShape, PUT_DatasetShape, GET_DatasetType
-from chunk_sn import PUT_Value, GET_Value
+from chunk_sn import PUT_Value, GET_Value, POST_Value
  
 
 async def init(loop):
@@ -77,6 +77,7 @@ async def init(loop):
     app.router.add_route('PUT', '/datasets/{id}/attributes/{name}', PUT_Attribute)
     app.router.add_route('PUT', '/datasets/{id}/value', PUT_Value)
     app.router.add_route('GET', '/datasets/{id}/value', GET_Value)
+    app.router.add_route('POST', '/datasets/{id}/value', POST_Value)
       
     return app
 

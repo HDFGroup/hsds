@@ -15,7 +15,7 @@ import sys
 sys.path.append('../../hsds/util')
 sys.path.append('../../hsds')
 from dsetUtil import getHyperslabSelection
-from chunkUtil import guess_chunk, getNumChunks, getChunkCoordinate, getChunkIds
+from chunkUtil import guess_chunk, getNumChunks, getChunkCoordinate, getChunkIds, getChunkId
 from chunkUtil import getChunkIndex, getChunkSelection, getChunkCoverage, getDataCoverage
 
 
@@ -520,6 +520,35 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel.start, 8)
         self.assertEqual(sel.stop, 10)
         self.assertEqual(sel.step, 1)  
+
+    def testGetChunkId(self):
+        # getChunkIds(dset_id, selection, layout, dim=0, prefix=None, chunk_ids=None):
+        dset_id = "d-12345678-1234-1234-1234-1234567890ab"
+
+        datashape = [1,]
+        layout = (1,)        
+        chunk_id = getChunkId(dset_id, 0, layout)
+        self.assertTrue(chunk_id.startswith("c-"))
+        self.assertTrue(chunk_id.endswith('_0'))
+        self.assertEqual(chunk_id[2:-2], dset_id[2:])
+        self.assertEqual(len(chunk_id), 2+36+2)
+
+        datashape = [100,]
+        layout = (10,)
+        chunk_id = getChunkId(dset_id, 23, layout)
+        self.assertTrue(chunk_id.startswith("c-"))
+        self.assertTrue(chunk_id.endswith('_2'))
+        self.assertEqual(chunk_id[2:-2], dset_id[2:])
+        self.assertEqual(len(chunk_id), 2+36+2)
+
+        datashape = [100,100]
+        layout = (10,20)
+        chunk_id = getChunkId(dset_id, (23,61), layout)
+        self.assertTrue(chunk_id.startswith("c-"))
+        self.assertTrue(chunk_id.endswith('_2_3'))
+        self.assertEqual(chunk_id[2:-4], dset_id[2:])
+        self.assertEqual(len(chunk_id), 2+36+4)
+         
 
     def testDimQuery(self):
         request = {"dim_0": 23, "dim_1": 54, "dim_2": 2}

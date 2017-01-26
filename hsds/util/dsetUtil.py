@@ -283,16 +283,13 @@ Helper method - set query parameter for given shape + selection
             start and end: n:m
             start, end, and stride: n:m:s
 """
-def setSliceQueryParam(params, dims, sel):  
+def setSliceQueryParam(params, sel):  
     # pass dimensions, and selection as query params
-    rank = len(dims)
+    rank = len(sel)
     if rank > 0:
-        dim_param="["
         sel_param="["
         for i in range(rank):
-            extent = dims[i]
             s = sel[i]
-            dim_param += str(extent)
             sel_param += str(s.start)
             sel_param += ':'
             sel_param += str(s.stop)
@@ -300,16 +297,32 @@ def setSliceQueryParam(params, dims, sel):
                 sel_param += ':'
                 sel_param += str(s.step)
             if i < rank - 1:
-                dim_param += ','
                 sel_param += ','
-        dim_param += ']'
         sel_param += ']'
-        log.info("dim query param: {}".format(dim_param))
-        params["dim"] = dim_param
         log.info("select query param: {}".format(sel_param))
         params["select"] = sel_param
 
-
+"""
+Helper method - set chunk dim param
+    Send the chunk dimensions as a query param
+    Query arg should be in the form: [<dim1>, <dim2>, ... , <dimn>]
+        brackets are optional for one dimensional arrays.
+         Each dimension, valid formats are:
+            single integer: n
+            start and end: n:m
+            start, end, and stride: n:m:s
+"""
+def setChunkDimQueryParam(params, dims):  
+    # pass dimensions, and selection as query params
+    rank = len(dims)
+    if rank > 0:
+        dim_param="["
+        for i in range(rank):
+            extent = dims[i]
+            dim_param += str(extent)
+        dim_param += ']'
+        log.info("dim query param: {}".format(dim_param))
+        params["dim"] = dim_param
  
 
 """
@@ -401,6 +414,19 @@ def getPreviewQuery(dims):
             select += "0:1,"
     select += "]"
     return select
+
+"""
+Return fill value if defined, otherwise 0 elements
+"""
+def getFillValue(dset_json):
+    fill_value = None
+    if "creationProperties" in dset_json:
+        cprops = dset_json["creationProperties"]
+        if "fillValue" in cprops:
+            fill_value = cprops["fillValue"]
+            if isinstance(fill_value, list):
+                fill_value = tuple(fill_value)
+    return fill_value
 
 
 

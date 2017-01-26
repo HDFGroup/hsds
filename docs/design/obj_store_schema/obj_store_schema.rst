@@ -531,8 +531,8 @@ Object:
             "dims": [1000,1000,243]
         },
         "layout": { 
-            "class" = "H5D_CHUNKED",
-            "dims" = [100,100,100]
+            "class": "H5D_CHUNKED",
+            "dims": [100,100,100]
         }
         "creationProperties": { 
             "allocTime": "H5D_ALLOC_TIME_LATE", 
