@@ -16,7 +16,7 @@ sys.path.append('../../hsds/util')
 sys.path.append('../../hsds')
 from dsetUtil import getHyperslabSelection
 from chunkUtil import guess_chunk, getNumChunks, getChunkCoordinate, getChunkIds, getChunkId
-from chunkUtil import getChunkIndex, getChunkSelection, getChunkCoverage, getDataCoverage
+from chunkUtil import getChunkIndex, getChunkSelection, getChunkCoverage, getDataCoverage, ChunkIterator
 
 
 class ChunkUtilTest(unittest.TestCase):
@@ -562,6 +562,73 @@ class ChunkUtilTest(unittest.TestCase):
                 dim += 1
             else:
                 break
+
+
+    def testChunkIterator1d(self):
+        dset_id = "d-12345678-1234-1234-1234-1234567890ab"
+        dims = [100]
+        layout = [10,]
+         
+        selection = getHyperslabSelection(dims)
+        it = ChunkIterator(dset_id, selection, layout)
+        chunk_ids = set(getChunkIds(dset_id, selection, layout))
+        count = 0
+        
+        while True:
+            try:
+                chunk_id = it.next()
+                self.assertTrue(chunk_id) in chunk_ids
+                count += 1
+            except StopIteration:
+                break
+         
+        self.assertEqual(count, 10)
+
+    def testChunkIterator2d(self):
+        dset_id = "d-12345678-1234-1234-1234-1234567890ab"
+        dims = [100, 100,]
+        layout = [50,50]    
+        selection = getHyperslabSelection(dims)         
+        it = ChunkIterator(dset_id, selection, layout)
+
+        chunk_ids = set(getChunkIds(dset_id, selection, layout))
+        count = 0
+        
+        while True:
+            try:
+                chunk_id = it.next()
+                self.assertTrue(chunk_id) in chunk_ids
+                count += 1
+            except StopIteration:
+                break
+       
+        self.assertEqual(count, 4)
+
+    def testChunkIterator3d(self):
+        dset_id = "d-12345678-1234-1234-1234-1234567890ab"
+        dims = [100, 100, 20]
+        layout = [50,50,5]    
+        selection = getHyperslabSelection(dims)         
+        it = ChunkIterator(dset_id, selection, layout)
+
+        chunk_ids = set(getChunkIds(dset_id, selection, layout))
+        count = 0
+        
+        while True:
+            try:
+                chunk_id = it.next()
+                self.assertTrue(chunk_id) in chunk_ids
+                count += 1
+            except StopIteration:
+                break
+       
+        self.assertEqual(count, 16)
+         
+         
+            
+        
+            
+          
          
 
   
