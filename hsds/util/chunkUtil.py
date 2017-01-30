@@ -82,6 +82,7 @@ def getNumChunks(selection, layout):
     If selection is provided (a list of slices), return the number
     of chunks that intersect with the selection.
     """
+
     # do a quick check that we don't have a null selection space'
     # TBD: this needs to be revise to do the right think with stride > 1
     for s in selection:
@@ -271,6 +272,55 @@ def getChunkRelativePoint(chunkCoord, point):
     for i in range(len(point)):
         tr[i] = point[i] - chunkCoord[i]
     return tr
+
+class ChunkIterator:
+    """
+    Class to iterate through list of chunks given dset_id, selection, 
+    and layout.
+    """
+    def __init__(self, dset_id, selection, layout):       
+        self._prefix = "c-" + dset_id[2:] 
+        self._layout = layout
+        self._selection = selection
+        self._rank = len(selection)
+        self._chunk_index = [0,] * self._rank
+        for i in range(self._rank):
+            s = selection[i]
+            c = layout[i]
+            self._chunk_index[i] = s.start // c
+        
+    
+    def __iter__(self):
+        return self
+
+    def next(self):
+        if self._chunk_index[0] * self._layout[0] >= self._selection[0].stop:
+            # ran past the last chunk, end iteration
+            raise StopIteration()
+        chunk_id = self._prefix
+        # init to minimum chunk index for each dimension
+        for i in range(self._rank):
+            chunk_id += '_'
+            chunk_id += str(self._chunk_index[i])
+        # bump up the last index and carry forward if we run outside the selection
+        dim = self._rank - 1
+        while dim >= 0:
+            c = self._layout[dim]
+            s = self._selection[dim]
+            self._chunk_index[dim] += 1
+            
+            chunk_end = self._chunk_index[dim] * c
+            if chunk_end < s.stop:
+                # we still have room to extend along this dimensions
+                return chunk_id
+             
+            if dim > 0:
+                # reset to the start and continue iterating with higher dimension
+                self._chunk_index[dim] = s.start // c 
+            dim -= 1
+        return chunk_id
+        
+         
 
  
 
