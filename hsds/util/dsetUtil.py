@@ -428,6 +428,127 @@ def getFillValue(dset_json):
                 fill_value = tuple(fill_value)
     return fill_value
 
+"""
+getEvalStr: Get eval string for given query
+     
+    Gets Eval string to use with numpy where method.
+"""    
+def getEvalStr(query, arr_name, field_names):
+    i = 0
+    eval_str = ""
+    var_name = None
+    end_quote_char = None
+    var_count = 0
+    paren_count = 0
+    black_list = ( "import", ) # field names that are not allowed
+    #log.info("getEvalStr(" + query + ")")
+    for item in black_list:
+        if item in field_names:
+            msg = "invalid field name"
+            #log.warn("Bad query: " + msg)
+            raise HttpBadRequest(message=msg)
+    while i < len(query):
+        ch = query[i]
+        if (i+1) < len(query):
+            ch_next = query[i+1]
+        else:
+            ch_next = None
+        if var_name and not ch.isalnum():
+            # end of variable
+            if var_name not in field_names:
+                # invalid
+                msg = "unknown field name"
+                #log.warn("Bad query: " + msg)
+                raise HttpBadRequest(message=msg)
+            eval_str += arr_name + "['" + var_name + "']"
+            var_name = None
+            var_count += 1
+            
+        if end_quote_char:
+            if ch == end_quote_char:
+                # end of literal
+                end_quote_char = None
+            eval_str += ch
+        elif ch in ("'", '"'):
+            end_quote_char = ch
+            eval_str += ch
+        elif ch.isalpha():
+            if ch == 'b' and ch_next in ("'", '"'):
+                eval_str += 'b' # start of a byte string literal
+            elif var_name is None:
+                var_name = ch  # start of a variable
+            else:
+                var_name += ch
+        elif ch == '(' and end_quote_char is None:
+            paren_count += 1
+            eval_str += ch
+        elif ch == ')' and end_quote_char is None:
+            paren_count -= 1
+            if paren_count < 0:
+                msg = "Mismatched paren"
+                #log.warn("Bad query: " + msg)
+                raise HttpBadRequest(message=msg)
+            eval_str += ch
+        else:
+            # just add to eval_str
+            eval_str += ch
+        i = i+1
+    if end_quote_char:
+        msg = "no matching quote character"
+        #log.warn("Bad Query: " + msg)
+        raise HttpBadRequest(message=msg)
+    if var_count == 0:
+        msg = "No field value"
+        #log.warn("Bad query: " + msg)
+        raise HttpBadRequest(message=msg)
+    if paren_count != 0:
+        msg = "Mismatched paren"
+        #log.warn("Bad query: " + msg)
+        raise HttpBadRequest(message=msg)
+    #log.info("eval_str: {}".format(eval_str))       
+    return eval_str
+
+"""
+Class to iterator through items in a selection
+"""
+class ItemIterator:
+   
+    def __init__(self, selection):
+        self._selection = selection
+        self._rank = len(selection)
+        self._index = [0,] * self._rank
+        for i in range(self._rank):
+            s = self._selection[i]
+            self._index[i] = s.start
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        if self._index[0] >= self._selection[0].stop:
+            # ran past last item, end iteration
+            raise StopIteration()
+        dim = self._rank - 1
+    
+        index = [0,] * self._rank
+        for i in range(self._rank):
+            index[i] = self._index[i]
+        while dim >= 0:
+            s = self._selection[dim]
+            self._index[dim] += s.step
+            if self._index[dim] < s.stop:
+                if self._rank == 1:
+                    index = index[0]
+                return index
+            if dim > 0:
+                self._index[dim] = s.start
+            dim -= 1
+        if self._rank == 1:
+            index = index[0]  # return int, not list
+        return index
+
+
+
 
 
         

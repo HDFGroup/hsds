@@ -20,11 +20,13 @@ import numpy as np
 from aiohttp.errors import HttpBadRequest 
 from aiohttp import HttpProcessingError 
 from aiohttp.web import StreamResponse
+from util.arrayUtil import bytesArrayToList
 from util.httpUtil import  jsonResponse
 from util.idUtil import getS3Key, validateInPartition, isValidUuid
 from util.s3Util import  isS3Obj, getS3Bytes   
 from util.hdf5dtype import createDataType
-from util.dsetUtil import  getSelectionShape, getSliceQueryParam, getFillValue, getChunkLayout
+from util.dsetUtil import  getSelectionShape, getSliceQueryParam
+from util.dsetUtil import getFillValue, getChunkLayout, getEvalStr
 from util.chunkUtil import getChunkIndex, getChunkCoordinate, getChunkRelativePoint
 
 import hsds_logger as log
@@ -225,11 +227,7 @@ async def GET_Chunk(request):
         s = selection[i]
         log.info("selection[{}]: {}".format(i, s))
 
-    input_shape = getSelectionShape(selection)
-    num_elements = 1
-    for extent in input_shape:
-        num_elements *= extent
-
+    # get numpy array of chunk
     chunk_arr = None 
     data_cache = app['data_cache'] 
     
@@ -252,18 +250,71 @@ async def GET_Chunk(request):
         log.info("chunk size: {}".format(chunk_arr.size))
         chunk_arr = chunk_arr.reshape(dims)
         data_cache[chunk_id] = chunk_arr  # store in cache
-
-    # get requested data
-    output_arr = chunk_arr[selection]
-    output_data = output_arr.tobytes()
      
-    # write response
-    resp = StreamResponse(status=200)
-    resp.headers['Content-Type'] = "application/octet-stream"
-    resp.content_length = len(output_data)
-    await resp.prepare(request)
-    resp.write(output_data)
-    await resp.write_eof()
+    resp = None
+    
+    if "query" in request.GET:
+        # do query selection
+        query = request.GET["query"]
+        log.info("query: {}".format(query))
+        if rank != 1:
+            msg = "Query selection only supported for one dimensional arrays"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+
+        limit = 0
+        if "Limit" in request.GET:
+            limit = int(request.GET["Limit"])
+
+        values = []
+        indices = []
+        field_names = [] 
+        if dt.fields:
+            field_names = list(dt.fields.keys())
+
+        x = chunk_arr[selection]
+        log.info("x: {}".format(x))
+        eval_str = getEvalStr(query, "x", field_names)
+        log.info("eval_str: {}".format(eval_str))
+        where_result = np.where(eval(eval_str))
+        log.info("where_result: {}".format(where_result))
+        where_result_index = where_result[0]
+        log.info("whare_result index: {}".format(where_result_index))
+        log.info("boolean selection: {}".format(x[where_result_index]))
+        s = selection[0]
+        count = 0
+        for index in where_result_index:
+            log.info("index: {}".format(index))
+            value = x[index].tolist()
+            log.info("value: {}".format(value))
+            json_val = bytesArrayToList(value)
+            log.info("json_value: {}".format(json_val))
+            json_index = index.tolist() * s.step + s.start  # adjust for selection
+            indices.append(json_index)
+            values.append(json_val)
+            count += 1
+            if limit > 0 and count >= limit:
+                log.info("got limit items")
+                break
+         
+        query_result = {}
+        query_result["index"] = indices
+        query_result["value"] = values
+        log.info("query_result: {}".format(query_result))
+        resp = await jsonResponse(request, query_result)
+    else:
+        # get requested data
+        resp = StreamResponse(status=200)
+        resp.headers['Content-Type'] = "application/octet-stream" #binary response
+        output_arr = chunk_arr[selection]
+        output_data = output_arr.tobytes()
+        resp = StreamResponse(status=200)
+     
+        # write response    
+        resp.content_length = len(output_data)
+        await resp.prepare(request)
+        resp.write(output_data)
+        await resp.write_eof()
     return resp
 
 """

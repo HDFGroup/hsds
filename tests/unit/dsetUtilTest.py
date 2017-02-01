@@ -14,7 +14,9 @@ import sys
  
 sys.path.append('../../hsds/util')
 sys.path.append('../../hsds')
-from dsetUtil import  getHyperslabSelection, getSelectionShape, getNumElements
+from aiohttp.errors import HttpBadRequest
+from dsetUtil import  getHyperslabSelection, getSelectionShape
+from dsetUtil import  getNumElements, ItemIterator, getEvalStr
 
 class DsetUtilTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -96,7 +98,77 @@ class DsetUtilTest(unittest.TestCase):
         nelements = getNumElements(shape)
         self.assertEqual(nelements, 80)
 
-                                         
+    def testGetEvalStr(self):
+        queries = { "date == 23": "rows['date'] == 23",
+                    "wind == b'W 5'": "rows['wind'] == b'W 5'",
+                    "temp > 61": "rows['temp'] > 61",
+                    "(date >=22) & (date <= 24)": "(rows['date'] >=22) & (rows['date'] <= 24)",
+                    "(date == 21) & (temp > 70)": "(rows['date'] == 21) & (rows['temp'] > 70)",
+                    "(wind == b'E 7') | (wind == b'S 7')": "(rows['wind'] == b'E 7') | (rows['wind'] == b'S 7')" }
+                    
+        fields = ["date", "wind", "temp"]  
+             
+        for query in queries.keys():
+            eval_str = getEvalStr(query, "rows", fields)
+            self.assertEqual(eval_str, queries[query])
+                #print(query, "->", eval_str)
+                
+    def testBadQuery(self):
+        queries = ( "foobar",    # no variable used
+                "wind = b'abc",  # non-closed literal
+                "(wind = b'N') & (temp = 32",  # missing paren
+                "foobar > 42",                 # invalid field name
+                "import subprocess; subprocess.call(['ls', '/'])")  # injection attack
+                         
+        fields = ("date", "wind", "temp" )  
+            
+        for query in queries:
+            try:
+                eval_str = getEvalStr(query, "x", fields)
+                self.assertTrue(False)  # shouldn't get here
+            except HttpBadRequest as e:
+                pass  # ok
+
+    def testItemIterator(self):
+        # 1-D case
+        datashape = [10,]
+        slices = getHyperslabSelection(datashape)
+        it = ItemIterator(slices)
+
+        indices = []
+        count = 0
+        
+        while True:
+            try:
+                index = it.next()
+                count += 1
+                indices.append(index)
+            except StopIteration:
+                break
+        self.assertEqual(count, 10)
+        self.assertEqual(indices, list(range(10)))
+
+        # 2-D case
+        datashape = [4, 5]
+        slices = getHyperslabSelection(datashape)
+        it = ItemIterator(slices)
+
+        indices = []
+        count = 0
+        while True:
+            try:
+                index = it.next()
+                self.assertTrue(len(index), 2)
+                self.assertTrue(index[0] >= 0)
+                self.assertTrue(index[0] < 4)
+                self.assertTrue(index[1] >= 0)
+                self.assertTrue(index[1] < 5)
+                count += 1
+                indices.append(index)
+            except StopIteration:
+                break
+        self.assertEqual(count, 20)
+                                       
              
 if __name__ == '__main__':
     #setup test files

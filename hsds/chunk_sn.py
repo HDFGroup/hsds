@@ -237,6 +237,60 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_a
         index = point_index[i]
         np_arr[index] = np_arr_rsp[i]
 
+"""
+Query for a given chunk_id.  Pass in type, dims, selection area, and query.
+""" 
+async def read_chunk_query(app, chunk_id, dset_json, slices, query, limit, rsp_dict):
+    """ read the chunk selection from the DN
+    chunk_id: id of chunk to write to
+    chunk_sel: chunk-relative selection to read from
+    np_arr: numpy array to store read bytes
+    """
+    msg = "read_chunk_query, chunk_id:{}, slices: {}, query: {}".format(chunk_id, slices, query)
+    log.info(msg)
+
+    req = getDataNodeUrl(app, chunk_id)
+    req += "/chunks/" + chunk_id 
+    log.info("GET chunk req: " + req)
+    client = app['client']
+  
+    layout = getChunkLayout(dset_json)
+    chunk_sel = getChunkCoverage(chunk_id, slices, layout)
+    
+    # pass dset json and selection as query params
+    params = {}
+    params["dset"] = json.dumps(dset_json)
+    params["query"] = query
+    if limit > 0:
+        params["Limit"] = limit
+          
+    chunk_shape = getSelectionShape(chunk_sel)
+    log.info("chunk_shape: {}".format(chunk_shape))
+    setSliceQueryParam(params, chunk_sel)  
+    dn_rsp = None
+    try:
+        async with client.get(req, params=params) as rsp:
+            log.info("http_get {} status: <{}>".format(req, rsp.status))
+            if rsp.status == 200:
+                dn_rsp = await rsp.json()  # read response as json
+                log.info("got query data: {}".format(dn_rsp))
+            elif rsp.status == 404:
+                # no data, don't return any results
+                dn_rsp = {"index": [], "value": []}
+            else:
+                msg = "request to {} failed with code: {}".format(req, rsp.status)
+                log.warn(msg)
+                raise HttpProcessingError(message=msg, code=rsp.status)
+            
+    except ClientError as ce:
+        log.error("Error for http_get({}): {} ".format(req, str(ce)))
+        raise HttpProcessingError(message="Unexpected error", code=500)
+    except CancelledError as cle:
+        log.error("CancelledError for http_get({}): {}".format(req, str(cle)))
+        raise HttpProcessingError(message="Unexpected error", code=500)
+    
+    rsp_dict[chunk_id] = dn_rsp
+
 
 """
  Handler for PUT /<dset_uuid>/value request
@@ -439,12 +493,25 @@ async def PUT_Value(request):
     return resp
 
 """
+ Convience function to set up hrefs for GET
+"""
+def get_hrefs(request, dset_json):
+    hrefs = []
+    dset_id = dset_json["id"]
+    dset_uri = '/datasets/'+dset_id
+    hrefs.append({'rel': 'self', 'href': getHref(request, dset_uri + '/value')})
+    root_uri = '/groups/' + dset_json["root"]    
+    hrefs.append({'rel': 'root', 'href': getHref(request, root_uri)})
+    hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
+    hrefs.append({'rel': 'owner', 'href': getHref(request, dset_uri)})
+    return hrefs
+
+"""
  Handler for GET /<dset_uuid>/value request
 """
 async def GET_Value(request):
     log.request(request)
     app = request.app 
-    loop = app["loop"]
 
     dset_id = request.match_info.get('id')
     if not dset_id:
@@ -466,13 +533,11 @@ async def GET_Value(request):
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
-
-    accept_type = getAcceptType(request)
-    response_type = accept_type # will adjust later if binary not possible
+        raise HttpBadRequest(message=msg)  
    
-    # get  state for dataset from DN.
+    # get state for dataset from DN.
     dset_json = await getObjectJson(app, dset_id)  
+    log.info("got dset_json: {}".format(dset_json))
 
     datashape = dset_json["shape"]
     if datashape["class"] == 'H5S_NULL':
@@ -482,19 +547,8 @@ async def GET_Value(request):
     dims = getDsetDims(dset_json)
     rank = len(dims)
     layout = getChunkLayout(dset_json)
-     
-    type_json = dset_json["type"]
-    item_size = getItemSize(type_json)
-    log.info("item size: {}".format(item_size))
-    dset_dtype = createDataType(type_json)  # np datatype
-
-    log.info("got dset_json: {}".format(dset_json))
+    
     await validateAction(app, domain, dset_id, username, "read")
-
-    if item_size == 'H5T_VARIABLE' and accept_type != "json":
-        msg = "Client requested binary, but only JSON is supported for variable length data types"
-        log.info(msg)
-        response_type = "json"
 
     slices = []  # selection for read 
      
@@ -518,12 +572,97 @@ async def GET_Value(request):
         msg = "PUT value request too large"
         log.warn(msg)
         raise HttpProcessingError(code=413, message=msg)
-
     chunk_ids = getChunkIds(dset_id, slices, layout)
-    log.info("chunk_ids: {}".format(chunk_ids))
+
+    if "query" in request.GET:
+        if rank > 1:
+            msg = "Query string is not supported for multidimensional arrays"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+
+        resp = await doQueryRead(request, chunk_ids, dset_json, slices)
+    else:
+        log.info("chunk_ids: {}".format(chunk_ids))
+        resp = await doHyperSlabRead(request, chunk_ids, dset_json, slices)
+    log.response(request, resp=resp)
+    return resp
+
+async def doQueryRead(request, chunk_ids, dset_json,  slices):
+    query = request.GET["query"]
+    log.info("Query request: {}".format(query))
+    
+    app = request.app 
+    loop = app["loop"]
+
+    type_json = dset_json["type"]
+    item_size = getItemSize(type_json)
+    query = request.GET["query"]
+    log.info("item size: {}".format(item_size))
+    
+    limit = 0
+    if "Limit" in request.GET:
+        try:
+            limit = int(request.GET["Limit"])
+        except ValueError:
+            msg = "Invalid Limit query param"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+
+    tasks = []
+    node_count = app['node_count']
+    log.info("node_count:  {}".format(node_count))
+    chunk_index = 0
+    resp_index = [] 
+    resp_value = []
+    num_chunks = len(chunk_ids)
+
+    while chunk_index < num_chunks:
+        next_chunks = []
+        for i in range(node_count):
+            next_chunks.append(chunk_ids[chunk_index])
+            chunk_index += 1
+            if chunk_index >= num_chunks:
+                break
+        log.info("next chunk ids: {}".format(next_chunks))
+        # run query on DN nodes
+        dn_rsp = {} # dictionary keyed by chunk_id
+        for chunk_id in next_chunks:
+            task = asyncio.ensure_future(read_chunk_query(app, chunk_id, dset_json, slices, query, limit, dn_rsp))
+            tasks.append(task)
+        await asyncio.gather(*tasks, loop=loop)
+    
+        for chunk_id in next_chunks:
+            chunk_rsp = dn_rsp[chunk_id]
+            resp_index.extend(chunk_rsp["index"])
+            resp_value.extend(chunk_rsp["value"])
+        # trim response if we're over limit
+        if limit > 0 and len(resp_index) > limit:
+            resp_index = resp_index[0:limit]
+            resp_value = resp_index[0:limit]
+            break  # don't need any more DN queries
+    resp_json = { "index": resp_index, "value": resp_value}
+    resp_json["hrefs"] = get_hrefs(request, dset_json)
+    resp = await jsonResponse(request, resp_json)
+    return resp
+
+async def doHyperSlabRead(request, chunk_ids, dset_json, slices):
+    app = request.app 
+    loop = app["loop"]
+
+    accept_type = getAcceptType(request)
+    response_type = accept_type    # will adjust later if binary not possible
+
+    type_json = dset_json["type"]
+    item_size = getItemSize(type_json)
+    log.info("item size: {}".format(item_size))
+    dset_dtype = createDataType(type_json)  # np datatype
+    if item_size == 'H5T_VARIABLE' and accept_type != "json":
+        msg = "Client requested binary, but only JSON is supported for variable length data types"
+        log.info(msg)
+        response_type = "json"
 
     # create array to hold response data
-    # TBD: initialize to fill value if not 0
+    np_shape = getSelectionShape(slices)   
     arr = np.zeros(np_shape, dtype=dset_dtype, order='C')
     tasks = []
     for chunk_id in chunk_ids:
@@ -549,23 +688,15 @@ async def GET_Value(request):
         resp_json = {}
         data = arr.tolist()
         json_data = bytesArrayToList(data)
+        datashape = dset_json["shape"]
         if datashape["class"] == 'H5S_SCALAR':
             # convert array response to value
             resp_json["value"] = json_data[0]
         else:
             resp_json["value"] = json_data  
-    
-        hrefs = []
-        dset_uri = '/datasets/'+dset_id
-        hrefs.append({'rel': 'self', 'href': getHref(request, dset_uri + '/value')})
-        root_uri = '/groups/' + dset_json["root"]    
-        hrefs.append({'rel': 'root', 'href': getHref(request, root_uri)})
-        hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
-        hrefs.append({'rel': 'owner', 'href': getHref(request, dset_uri)})
-        resp_json["hrefs"] = hrefs
+        resp_json["hrefs"] = get_hrefs(request, dset_json)
  
         resp = await jsonResponse(request, resp_json)
-    log.response(request, resp=resp)
     return resp
 
 
