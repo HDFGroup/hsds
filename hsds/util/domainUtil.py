@@ -10,7 +10,7 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 
-
+import os.path as op
 #
 # Domain utilities
 # 
@@ -39,16 +39,16 @@ def getParentDomain(domain):
     E.g. getParentDomain("www.hdfgroup.org") returns "hdfgroup.org"
     Return None if the given domain is already a top-level domain.
     """
-    indx = domain.find('.')
-    if indx < 0:
-        return None  # already at top-level domain
-    if indx == len(domain) - 1:
-        raise ValueError("Invalid domain") # can't end with dot
-    indx += 1
-    parent = domain[indx:]
+    if domain.endswith("/domain.json"):
+        n = len("/domain.json")
+        domain = domain[:-n]
+    parent = op.dirname(domain)
+    
+    if not parent:
+        parent = None
     return parent
 
-def validateDomain(id):
+def validateHostDomain(id):
     if not isinstance(id, str):
         raise ValueError("Expected string type")
     if len(id) < 3:
@@ -72,6 +72,20 @@ def validateDomain(id):
     if id.find('/') >= 0:
         raise ValueError("Domain cannot contain slash")
 
+def isValidHostDomain(id):
+    try:
+        validateHostDomain(id)
+        return True
+    except ValueError:
+        return False
+
+def validateDomain(id):
+    if not isinstance(id, str):
+        raise ValueError("Expected string type")
+    if id[-1] ==  '/':
+        raise ValueError("Slash at end not allowed")
+    
+
 def isValidDomain(id):
     try:
         validateDomain(id)
@@ -79,8 +93,12 @@ def isValidDomain(id):
     except ValueError:
         return False
 
+def validateDomainKey(domain_key):
+    if not domain_key.endswith("/domain.json"):
+        raise ValueError("Invalid domain key")
 
-def getS3KeyForDomain(host_value):
+
+def getDomainForHost(host_value):
     # Convert domain paths to S3 keys
     npos = host_value.rfind(':')
     if npos > 0:
@@ -98,28 +116,40 @@ def getS3KeyForDomain(host_value):
 
     dns_path = host.split('.')
     dns_path.reverse()  # flip to filesystem ordering
-    s3Path = ''
+    domain = ''
     for field in dns_path:      
         if len(field) == 0:   
             # consecutive dots are not allowed
             raise ValueError('domain name is not valid')
-        s3Path += field
-        s3Path += '/'
+        domain += field
+        domain += '/'
 
-    #s3Path = s3Path[:-1]  # remove trailing slash
-    s3Path += "domain.json"  # add a json suffix
+    domain = domain[:-1]  # remove trailing slash
      
-    return s3Path
+    return domain
 
 def getDomainFromRequest(request):
-    host = None
-    if 'host' in request.GET:
-        host = request.GET['host']
+    #domain = request.match_info.get()
+    domain = None
+    if "domain" in request.GET:
+        domain = request.GET["domain"]
     else:
-        host = request.host
-        if "X-Forwarded-Host" in request.headers:
-            host = request.headers["X-Forwarded-Host"]
-    return host
+        host = None
+        if 'host' in request.GET:
+            host = request.GET['host']
+        else:
+            host = request.host
+            if "X-Forwarded-Host" in request.headers:
+                host = request.headers["X-Forwarded-Host"]
+
+        validateDomain(host) # throw ValueError if invalid
+
+        domain = getDomainForHost(host)  # convert to s3 path
+    return domain
+
+def getS3KeyForDomain(domain):
+    s3_key = op.join(domain, "domain.json")
+    return s3_key
 
 
 

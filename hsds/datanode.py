@@ -37,10 +37,10 @@ async def init(loop):
     #
     # call app.router.add_get() here to add node-specific routes
     #
-    app.router.add_route('GET', '/domains/{key}', GET_Domain)
-    app.router.add_route('PUT', '/domains/{key}', PUT_Domain)
-    app.router.add_route('DELETE', '/domains/{key}', DELETE_Domain)
-    app.router.add_route('PUT', '/domains/{key}/acls/{username}', PUT_ACL)
+    app.router.add_route('GET', '/domains', GET_Domain)
+    app.router.add_route('PUT', '/domains', PUT_Domain)
+    app.router.add_route('DELETE', '/domains', DELETE_Domain)
+    app.router.add_route('PUT', '/acls/{username}', PUT_ACL)
     app.router.add_route('GET', '/groups/{id}', GET_Group)
     app.router.add_route('DELETE', '/groups/{id}', DELETE_Group)
     app.router.add_route('POST', '/groups', POST_Group)

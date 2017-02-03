@@ -125,7 +125,6 @@ async def http_put(app, url, data=None, params=None):
         async with client.put(url, data=json.dumps(data), params=params, timeout=timeout) as rsp:
             log.info("http_put status: {}".format(rsp.status))
             if rsp.status != 201:
-                print("bad response:", str(rsp))
                 msg = "request error"  # tbd - pull error from rsp
                 log.warn(msg)
                 raise HttpProcessingError(message=msg, code=rsp.status)
@@ -144,7 +143,7 @@ async def http_put(app, url, data=None, params=None):
 Helper function  - async HTTP PUT for binary data
 """ 
 
-async def http_put_binary(app, url, data, params=None):
+async def http_put_binary(app, url, data=None, params=None):
     log.info("http_put_binary('{}') nbytes: {}".format(url, len(data)))
     rsp_json = None
     client = app['client']
@@ -171,14 +170,14 @@ async def http_put_binary(app, url, data, params=None):
 """
 Helper function  - async HTTP DELETE
 """ 
-async def http_delete(app, url, params=None):
+async def http_delete(app, url, data=None, params=None):
     log.info("http_delete('{}')".format(url))
     client = app['client']
     rsp_json = None
     timeout = config.get("timeout")
     
     try:
-        async with client.delete(url, params=params, timeout=timeout) as rsp:
+        async with client.delete(url, data=json.dumps(data), params=params, timeout=timeout) as rsp:
             log.info("http_delete status: {}".format(rsp.status))
             if rsp.status != 200:
                 msg = "request error"  # tbd - pull error from rsp
@@ -220,7 +219,11 @@ def getHref(request, uri, query=None, domain=None):
     href += uri
     delimiter = '?'
     if domain:
-        href += "?host=" + domain
+        href += "?domain=" + domain
+        delimiter = '&'
+    elif "domain" in request.GET:
+        href += "?domain=" + request.GET["domain"]
+        delimiter = '&'
     elif "host" in request.GET:
         href  += "?host=" + request.GET["host"]
         delimiter = '&'

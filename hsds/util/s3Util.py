@@ -38,9 +38,12 @@ def s3_stats_increment(app, counter, inc=1):
 async def getS3JSONObj(app, key):
     """ Get S3 object identified by key and read as JSON
     """
-    log.info("getS3JSONObj({})".format(key))
+    
     client = app['s3']
     bucket = app['bucket_name']
+    if key[0] == '/':
+        key = key[1:]  # no leading slash
+    log.info("getS3JSONObj({})".format(key))
     s3_stats_increment(app, "get_count")
     try:
         resp = await client.get_object(Bucket=bucket, Key=key)
@@ -76,9 +79,12 @@ async def getS3JSONObj(app, key):
 async def getS3Bytes(app, key):
     """ Get S3 object identified by key and read as bytes
     """
-    log.info("getS3Bytes({})".format(key))
+    
     client = app['s3']
     bucket = app['bucket_name']
+    if key[0] == '/':
+        key = key[1:]  # no leading slash
+    log.info("getS3Bytes({})".format(key))
     s3_stats_increment(app, "get_count")
     try:
         resp = await client.get_object(Bucket=bucket, Key=key)
@@ -110,9 +116,12 @@ async def getS3Bytes(app, key):
 async def putS3JSONObj(app, key, json_obj):
     """ Store JSON data as S3 object with given key
     """
-    log.info("putS3JSONObj({})".format(key))
+   
     client = app['s3']
     bucket = app['bucket_name']
+    if key[0] == '/':
+        key = key[1:]  # no leading slash
+    log.info("putS3JSONObj({})".format(key))
     s3_stats_increment(app, "put_count")
     data = json.dumps(json_obj)
     data = data.encode('utf8')
@@ -129,9 +138,12 @@ async def putS3JSONObj(app, key, json_obj):
 async def putS3Bytes(app, key, data):
     """ Store byte string as S3 object with given key
     """
-    log.info("putS3Bytes({})".format(key))
+    
     client = app['s3']
     bucket = app['bucket_name']
+    if key[0] == '/':
+        key = key[1:]  # no leading slash
+    log.info("putS3Bytes({})".format(key))
     s3_stats_increment(app, "put_count")
     try:
         await client.put_object(Bucket=bucket, Key=key, Body=data)
@@ -146,9 +158,12 @@ async def putS3Bytes(app, key, data):
 async def deleteS3Obj(app, key):
     """ Delete S3 object identfied by given key
     """
-    log.info("deleteS3Obj({})".format(key))
+    
     client = app['s3']
     bucket = app['bucket_name']
+    if key[0] == '/':
+        key = key[1:]  # no leading slash
+    log.info("deleteS3Obj({})".format(key))
     s3_stats_increment(app, "delete_count")
     try:
         await client.delete_object(Bucket=bucket, Key=key)
@@ -165,9 +180,13 @@ async def deleteS3Obj(app, key):
 async def isS3Obj(app, key):
     """ Test if the given key maps to S3 object
     """
-    log.info("isS3Obj({})".format(key))
+    
     client = app['s3']
     bucket = app['bucket_name']
+
+    if key[0] == '/':
+        key = key[1:]  # no leading slash
+    log.info("isS3Obj({})".format(key))
     
     s3_stats_increment(app, "list_count")
     try:

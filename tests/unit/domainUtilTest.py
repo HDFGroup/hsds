@@ -16,7 +16,7 @@ import os
 
 sys.path.append('../../hsds/util')
 sys.path.append('../../hsds')
-from domainUtil import getParentDomain, isValidDomain, getS3KeyForDomain
+from domainUtil import getParentDomain, isValidDomain, isValidHostDomain, getS3KeyForDomain, getDomainForHost
 
 class DomainUtilTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -24,7 +24,7 @@ class DomainUtilTest(unittest.TestCase):
         # main
     
 
-    def testValidDomain(self):       
+    def testValidHostDomain(self):       
         # test invalid dns names
         invalid_domains = ('x',       # too short
                            '.x.y.z',  # period in front
@@ -33,25 +33,39 @@ class DomainUtilTest(unittest.TestCase):
                            '192.168.1.100',  # looks like IP
                            'mydomain/foobar') # has a slash
         for domain in invalid_domains:
-            self.assertEqual(isValidDomain(domain), False)  
+            self.assertEqual(isValidHostDomain(domain), False)  
 
         valid_domains = ("nex.nasa.gov", "home")
+        for domain in valid_domains:
+            self.assertTrue(isValidHostDomain(domain))  
+
+    def testValidDomain(self):
+        invalid_domains = (123, 'abc/')
+        for domain in invalid_domains:
+            self.assertEqual(isValidDomain(domain), False)  
+
+        valid_domains = ("gov/nasa/nex", "home")
         for domain in valid_domains:
             self.assertTrue(isValidDomain(domain))  
 
 
     def testGetS3KeyForDomain(self):
-        s3path = getS3KeyForDomain("nex.nasa.gov")
+        s3path = getS3KeyForDomain("gov/nasa/nex")
         self.assertEqual(s3path, "gov/nasa/nex/domain.json")
-        s3path = getS3KeyForDomain("my-data.nex.nasa.gov")  # hyphen ok
+        s3path = getS3KeyForDomain("gov/nasa/nex/my-data")  # hyphen ok
         self.assertEqual(s3path, "gov/nasa/nex/my-data/domain.json")
          
-              
+    def testGetDomainForHost(self):
+        domain = getDomainForHost("nex.nasa.gov")
+        self.assertEqual(domain, "gov/nasa/nex")
+        domain = getDomainForHost("my-data.nex.nasa.gov")
+        self.assertEqual(domain, "gov/nasa/nex/my-data")
+
 
     def testGetParentDomain(self):
-        domain = "nex.nasa.gov"
+        domain = "gov/nasa/ne"
         parent = getParentDomain(domain)
-        self.assertEqual(parent, "nasa.gov")
+        self.assertEqual(parent, "gov/nasa")
         domain = "gov"
         parent = getParentDomain(domain)
         self.assertEqual(parent, None)

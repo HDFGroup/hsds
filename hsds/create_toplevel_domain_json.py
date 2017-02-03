@@ -31,12 +31,12 @@ import hsds_logger as log
 #
 def printUsage():
     print("usage: python create_toplevel_domain_json.py --user=<username> [--private] --domain=<domain> ")
-    print("  options --username: user who will be owner of the domain (will have full permissions)")
+    print("  options --usern: user who will be owner of the domain (will have full permissions)")
     print("  options --private: if set, private for all other users, otherwise public read")
     print("  options --domain: domain to be assigned for the user.  If not set, the domain of <username>.home will be used")
     print(" ------------------------------------------------------------------------------")
     print("  Example - ")
-    print("       python create_toplevel_domain_json.py --user=joebob --domain=joebob.home ")
+    print("       python create_toplevel_domain_json.py --user=joebob --domain=/home/joebob ")
     sys.exit(); 
     
 async def createDomain(app, domain, domain_json):
@@ -101,7 +101,7 @@ def main():
     if len(username) < 3:
         raise ValueError("username must have at least three characters")
     if domain is None:
-        domain = username + ".home"
+        domain = "home/" + username
     #print("domain:", domain)
     #print("default_perm:", default_perm)
     #print("owner_perm:", owner_perm)

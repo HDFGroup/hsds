@@ -19,7 +19,7 @@ from util.idUtil import   getObjPartition
 from util.authUtil import  getAclKeys
 from util.httpUtil import  jsonResponse
 from util.s3Util import getS3JSONObj, putS3JSONObj, isS3Obj, deleteS3Obj
-from util.domainUtil import getS3KeyForDomain
+from util.domainUtil import getS3KeyForDomain, validateDomainKey
 import hsds_logger as log
 
 async def GET_Domain(request):
@@ -27,23 +27,31 @@ async def GET_Domain(request):
     """
     log.request(request)
     app = request.app
-    domain_key = request.match_info.get('key')
-    log.info("domain: {}".format(domain_key))
-    
-    s3_key = None
+
+    domain = None
+    if "domain" in request.GET:
+        domain = request.GET["domain"]
+        log.info("got domain param: {}".format(domain))
+    else: 
+        msg = "No domain provided"  
+        log.error(msg)
+        raise HttpProcessingError(code=500, message=msg) 
+
+    domain_key = getS3KeyForDomain(domain)
     try:
-        s3_key = getS3KeyForDomain(domain_key)
-        log.info("s3_key for domain {}: {}".format(domain_key, s3_key))
-    except ValueError as ve:
-        msg = "Invalid domain: {}".format(str(ve))
-        log.warn(msg)
-        raise HttpBadRequest(msg)
+        validateDomainKey(domain_key)
+    except ValueError:
+        msg = "Invalid domain key"
+        log.error(msg)
+        raise HttpProcessingError(code=500, message=msg) 
+
+    log.info("s3 domain key: {}".format(domain_key))
 
     if getObjPartition(domain_key, app['node_count']) != app['node_number']:
         # The request shouldn't have come to this node'
         msg = "wrong node for domain: {}".format(domain_key)
         log.error(msg)
-        raise HttpBadRequest(message=msg)
+        raise HttpProcessingError(code=500, message=msg) 
 
     meta_cache = app['meta_cache'] 
     deleted_ids = app['deleted_ids']
@@ -58,7 +66,7 @@ async def GET_Domain(request):
         log.info("{} found in meta cache".format(domain_key))
         domain_json = meta_cache[domain_key]
     else:      
-        domain_json = await getS3JSONObj(app, s3_key)  
+        domain_json = await getS3JSONObj(app, domain_key)  
         meta_cache[domain_key] = domain_json  # save to cache
 
     resp = await jsonResponse(request, domain_json)
@@ -70,20 +78,28 @@ async def PUT_Domain(request):
     """
     log.request(request)
     app = request.app
-    domain_key = request.match_info.get('key')
-    log.info("domain: {}".format(domain_key))
-    s3_key = None
-    try:
-        s3_key = getS3KeyForDomain(domain_key)
-        log.info("s3_key for domain {}: {}".format(domain_key, s3_key))
-    except ValueError as ve:
-        msg = "Invalid domain key: {}".format(str(ve))
-        log.warn(msg)
-        raise HttpBadRequest(msg)
+
+    if not request.has_body:
+        msg = "Expected Body to be in request"
+        log.error(msg)
+        raise HttpProcessingError(code=500, message=msg) 
+
+    body_json = await request.json()
+
+    if "domain" not in body_json:
+        msg = "Missing domain"
+        log.error(msg)
+        raise HttpProcessingError(code=500, message=msg) 
+
+    domain = body_json["domain"]
+    log.info("domain: {}".format(domain))
+     
+    domain_key = getS3KeyForDomain(domain)
+    log.info("s3 domain key: {}".format(domain))
 
     if getObjPartition(domain_key, app['node_count']) != app['node_number']:
         # The request shouldn't have come to this node'
-        raise HttpBadRequest(message="wrong node for 'key':{}".format(s3_key))
+        raise HttpBadRequest(message="wrong node for 'key':{}".format(domain))
 
     meta_cache = app['meta_cache'] 
     deleted_ids = app['deleted_ids']
@@ -93,19 +109,13 @@ async def PUT_Domain(request):
         log.info("{} found in meta cache".format(domain_key))
         domain_exist = True
     else:
-        domain_exist = await isS3Obj(app, s3_key)
+        domain_exist = await isS3Obj(app, domain_key)
     if domain_exist:
         # this domain already exists, client must delete it first
-        msg = "Conflict: resource exists: " + domain_key
+        msg = "Conflict: resource exists: " + domain
         log.info(msg)
         raise HttpProcessingError(code=409, message=msg)   
-
-    if not request.has_body:
-        msg = "Expected Body to be in request"
-        log.warn(msg)
-        raise HttpProcessingError(code=500, message=msg) 
-
-    body_json = await request.json()
+    
     if "owner" not in body_json:
         msg = "Expected Owner Key in Body"
         log.warn(msg)
@@ -128,11 +138,11 @@ async def PUT_Domain(request):
     domain_json["lastModified"] = now
 
     # write to S3
-    await putS3JSONObj(app, s3_key, domain_json)  
+    await putS3JSONObj(app, domain_key, domain_json)  
      
     # read back from S3 (will add timestamps metakeys) 
-    log.info("getS3JSONObj({})".format(s3_key))
-    domain_json = await getS3JSONObj(app, s3_key)
+    log.info("getS3JSONObj({})".format(domain_key))
+    domain_json = await getS3JSONObj(app, domain_key)
      
     meta_cache[domain_key] = domain_json
     if domain_key in deleted_ids:
@@ -147,20 +157,28 @@ async def DELETE_Domain(request):
     """
     log.request(request)
     app = request.app
-    domain_key = request.match_info.get('key')
-    log.info("domain: {}".format(domain_key))
-    s3_key = None
-    try:
-        s3_key = getS3KeyForDomain(domain_key)
-        log.info("s3_key for domain {}: {}".format(domain_key, s3_key))
-    except ValueError as ve:
-        msg = "Invalid domain key: {}".format(str(ve))
+
+    if not request.has_body:
+        msg = "Expected Body to be in request"
+        log.warn(msg)
+        raise HttpProcessingError(code=500, message=msg) 
+
+    body_json = await request.json()
+
+    if "domain" not in body_json:
+        msg = "Missing domain"
         log.warn(msg)
         raise HttpBadRequest(msg)
 
+    domain = body_json["domain"]
+    log.info("domain: {}".format(domain))
+
+    domain_key = getS3KeyForDomain(domain)
+    log.info("domain key: {}".format(domain_key))
+
     if getObjPartition(domain_key, app['node_count']) != app['node_number']:
         # The request shouldn't have come to this node'
-        raise HttpBadRequest(message="wrong node for 'key':{}".format(s3_key))
+        raise HttpBadRequest(message="wrong node for 'key':{}".format(domain_key))
 
     meta_cache = app['meta_cache'] 
     deleted_ids = app['deleted_ids']
@@ -170,17 +188,17 @@ async def DELETE_Domain(request):
         log.info("{} found in meta cache".format(domain_key))
         domain_exist = True
     else:
-        domain_exist = await isS3Obj(app, s3_key)
+        domain_exist = await isS3Obj(app, domain_key)
     if not domain_exist:
         # if the domain is not found, return a 404
-        msg = "Domain {} not found".format(domain_key)
+        msg = "Domain {} not found".format(domain)
         log.info(msg)
         raise HttpProcessingError(code=404, message=msg) 
 
     # delete S3 obj 
-    await deleteS3Obj(app, s3_key)
+    await deleteS3Obj(app, domain_key)
     log.info("checking if s3obj is deleted")
-    domain_exist = await isS3Obj(app, s3_key)
+    domain_exist = await isS3Obj(app, domain_key)
     if domain_exist:
         log.error("obj still there")
         raise HttpProcessingError(code=500, message="unexpected error")
@@ -191,7 +209,7 @@ async def DELETE_Domain(request):
         del meta_cache[domain_key]  # delete from the meta cache
     deleted_ids.add(domain_key)
 
-    json_response = { "domain": domain_key }
+    json_response = { "domain": domain }
 
     resp = await jsonResponse(request, json_response, status=200)
     log.response(request, resp=resp)
@@ -201,29 +219,29 @@ async def PUT_ACL(request):
     """ Handler creating/update an ACL"""
     log.request(request)
     app = request.app
-    domain_key = request.match_info.get('key')
-    log.info("domain: {}".format(domain_key))
     acl_username = request.match_info.get('username')
-    
-    s3_key = None
-    try:
-        s3_key = getS3KeyForDomain(domain_key)
-        log.info("s3_key for domain {}: {}".format(domain_key, s3_key))
-    except ValueError as ve:
-        msg = "Invalid domain key: {}".format(str(ve))
+
+    if not request.has_body:
+        msg = "Expected Body to be in request"
+        log.warn(msg)
+        raise HttpProcessingError(code=500, message=msg) 
+
+    body_json = await request.json()
+
+    if "domain" not in body_json:
+        msg = "Missing domain"
         log.warn(msg)
         raise HttpBadRequest(msg)
 
+    domain = body_json["domain"]
+    log.info("domain: {}".format(domain))
+
+    domain_key = getS3KeyForDomain(domain)
+    log.info("domain key: {}".format(domain_key))
+
     if getObjPartition(domain_key, app['node_count']) != app['node_number']:
         # The request shouldn't have come to this node'
-        raise HttpBadRequest(message="wrong node for 'key':{}".format(s3_key))
-
-    if not request.has_body:
-        msg = "PUT ACL with no body"
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
-
-    body = await request.json()   
+        raise HttpProcessingError(code=500, message="wrong node for 'key':{}".format(domain_key))
     
     meta_cache = app['meta_cache'] 
     domain_json = None
@@ -238,7 +256,7 @@ async def PUT_ACL(request):
         meta_cache[domain_key] = domain_json  # add to cache
 
     if "acls" not in domain_json:
-        log.error( "unexpected domain data for domain: {}".format(domain_key))
+        log.error( "unexpected domain data for domain: {}".format(domain))
         raise HttpProcessingError(code=500, message="Unexpected Error")
 
     acl_keys = getAclKeys()
@@ -252,8 +270,8 @@ async def PUT_ACL(request):
             acl[k] = False
 
     # replace any permissions given in the body
-    for k in body.keys():
-        acl[k] = body[k]
+    for k in body_json.keys():
+        acl[k] = body_json[k]
 
     # replace/insert the updated/new acl
     acls[acl_username] = acl

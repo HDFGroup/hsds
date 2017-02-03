@@ -46,6 +46,25 @@ class DomainTest(unittest.TestCase):
         root_uuid_2 = rspJson["root"]
         self.assertEqual(root_uuid, root_uuid_2)
 
+        # try using domain query param
+        names = self.base_domain.split('.')
+        names.reverse()
+        domain = '/'
+        for name in names:
+            domain += name
+            domain += '/'
+        domain = domain[:-1]  # str trailing slash
+        params = { "domain": domain }
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(rsp.headers['content-type'], 'application/json')
+        rspJson = json.loads(rsp.text)
+        root_uuid_3 = rspJson["root"]
+        self.assertEqual(root_uuid, root_uuid_3)
+        
+
+
+
 
 
     def testGetTopLevelDomain(self):
