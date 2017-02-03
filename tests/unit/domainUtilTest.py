@@ -35,7 +35,7 @@ class DomainUtilTest(unittest.TestCase):
         for domain in invalid_domains:
             self.assertEqual(isValidHostDomain(domain), False)  
 
-        valid_domains = ("nex.nasa.gov", "home")
+        valid_domains =  ("nex.nasa.gov", "home")
         for domain in valid_domains:
             self.assertTrue(isValidHostDomain(domain))  
 
@@ -44,7 +44,7 @@ class DomainUtilTest(unittest.TestCase):
         for domain in invalid_domains:
             self.assertEqual(isValidDomain(domain), False)  
 
-        valid_domains = ("gov/nasa/nex", "home")
+        valid_domains = ("/home/test_user1/hsds_test/domaintest/20170203T183027_507564Z",)  #("gov/nasa/nex", "home")
         for domain in valid_domains:
             self.assertTrue(isValidDomain(domain))  
 

@@ -20,7 +20,6 @@ class LinkTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(LinkTest, self).__init__(*args, **kwargs)
         self.base_domain = helper.getTestDomainName(self.__class__.__name__)
-        print(self.base_domain)
         helper.setupDomain(self.base_domain)
         
         # main

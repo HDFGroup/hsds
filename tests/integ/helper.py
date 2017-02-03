@@ -11,6 +11,7 @@
 ##############################################################################
 import requests
 import json
+import os.path as op
 from datetime import datetime
 import time
 import pytz
@@ -44,7 +45,6 @@ def getActiveNodeCount():
     req = getEndpoint("head") + "/info"
     rsp = requests.get(req)   
     rsp_json = json.loads(rsp.text)
-    print("rsp_json", rsp_json)
     sn_count = rsp_json["active_sn_count"]
     dn_count = rsp_json["active_dn_count"]
     return sn_count, dn_count
@@ -55,15 +55,15 @@ Helper - get base domain to use for test_cases
 def getTestDomainName(name):
     now = time.time()
     dt = datetime.fromtimestamp(now, pytz.utc)
-    domain = "{:04d}{:02d}{:02d}T{:02d}{:02d}{:02d}_{:06d}Z".format(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, dt.microsecond)  
-    domain += '.' 
-    domain += name.lower()
-    domain += '.'
+    domain = "/home/"
     domain += config.get('user_name')
-    domain += '.home'
+    domain += '/' 
+    domain += 'hsds_test'
+    domain += '/' 
+    domain += name.lower()
+    domain += '/' 
+    domain += "{:04d}{:02d}{:02d}T{:02d}{:02d}{:02d}_{:06d}Z".format(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, dt.microsecond)  
     return domain
-
-
 
 """
 Helper - get default request headers for domain
@@ -91,14 +91,24 @@ def getRequestHeaders(domain=None, username=None, password=None, **kwargs):
 Helper - Get parent domain of given domain.
 """
 def getParentDomain(domain):
-    indx = domain.find('.')
-    if indx < 0:
-        return None  # already at top-level domain
-    if indx == len(domain) - 1:
+    parent = op.dirname(domain)
+    if not parent:
         raise ValueError("Invalid domain") # can't end with dot
-    indx += 1
-    parent = domain[indx:]
     return parent
+
+"""
+Helper - Get DNS-style domain name given a filepath domain
+"""
+def getDNSDomain(domain):
+    names = domain.split('/')
+    names.reverse()
+    dns_domain = ''
+    for name in names:
+        if name:
+            dns_domain += name
+            dns_domain += '.'
+    dns_domain = dns_domain[:-1]  # str trailing dot
+    return dns_domain
 
 """
 Helper - Create domain (and parent domin if needed)
@@ -113,7 +123,6 @@ def setupDomain(domain):
     if rsp.status_code != 404:
         # something other than "not found"
         raise ValueError("Unexpected get domain error: {}".format(rsp.status_code))
-
     parent_domain = getParentDomain(domain)
     if parent_domain is None:
         raise ValueError("Invalid parent domain: {}".format(domain))
