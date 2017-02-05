@@ -40,7 +40,7 @@ async def domain_query(app, domain, rsp_dict):
     rsp_dict[domain] = domain_json
 
 async def GET_Domains(request):
-    """HTTP method to return JSON for given domain"""
+    """HTTP method to return JSON for child domains of given domain"""
     log.request(request)
     app = request.app
     loop = app["loop"]
