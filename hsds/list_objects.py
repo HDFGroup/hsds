@@ -24,7 +24,7 @@ import config
 #
 def printUsage():
      
-    print("       python list_objects.py [prefix]")
+    print("       python list_objects.py [prefix] [deliminator]")
     sys.exit(); 
 
 async def fetch_all(pages):
@@ -46,7 +46,7 @@ async def listObjects(app, prefix='', deliminator=''):
     print("got {} responses".format(len(responses)))
     
     for response in responses:
-        #print(response)
+        print(response)
         if 'Contents' in response:
             contents = response['Contents']
             for item in contents:
@@ -64,6 +64,9 @@ def main():
     deliminator = '' 
     if len(sys.argv) > 1:
         prefix = sys.argv[1]
+
+    if len(sys.argv) > 2:
+        deliminator = sys.argv[2]
 
      
     

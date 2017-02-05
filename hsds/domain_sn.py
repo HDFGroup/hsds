@@ -12,6 +12,7 @@
 #
 # service node of hsds cluster
 # 
+import asyncio 
 import json
 from aiohttp import  HttpProcessingError 
 from aiohttp.errors import HttpBadRequest
@@ -21,8 +22,110 @@ from util.idUtil import  getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
 from util.domainUtil import getParentDomain, getDomainFromRequest, getS3KeyForDomain
+from util.s3Util import getS3Keys
 from servicenode_lib import getDomainJson
 import hsds_logger as log
+
+async def get_domain_json(app, domain):
+    domain_key = getS3KeyForDomain(domain)  # adds "/domain.json" to domain name
+    req = getDataNodeUrl(app, domain_key)
+    req += "/domains" 
+    params = {"domain": domain}
+    log.info("sending dn req: {}".format(req))
+    domain_json = await http_get_json(app, req, params=params)
+    return domain_json
+
+async def domain_query(app, domain, rsp_dict):
+    domain_json = await get_domain_json(app, domain)
+    rsp_dict[domain] = domain_json
+
+async def GET_Domains(request):
+    """HTTP method to return JSON for given domain"""
+    log.request(request)
+    app = request.app
+    loop = app["loop"]
+
+    (username, pswd) = getUserPasswordFromRequest(request)
+    if username is None and app['allow_noauth']:
+        username = "default"
+    else:
+        validateUserPassword(username, pswd)
+
+    try:
+        domain = getDomainFromRequest(request)
+    except ValueError:
+        msg = "Invalid domain"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+
+    log.info("got domain: {}".format(domain))
+
+    if not domain.startswith('/'):
+        domain = domain[1:]  # s3 keys don't start with slash
+
+    limit = None
+    if "Limit" in request.GET:
+        try:
+            limit = int(request.GET["Limit"])
+            log.info("GET_Domainss - using Limit: {}".format(limit))
+        except ValueError:
+            msg = "Bad Request: Expected int type for limit"
+            log.error(msg)  # should be validated by SN
+            raise HttpBadRequest(message=msg)
+    marker = None
+    if "Marker" in request.GET:
+        marker = request.GET["Marker"]
+        log.info("GET_Domains - using Marker: {}".format(marker))
+
+    keys = await getS3Keys(app, prefix=domain, deliminator='/', suffix="domain.json")
+    log.info("got {} keys".format(len(keys)))
+    if marker:
+        # trim everything up to and including marker
+        index = 0
+        for key in keys:
+            index += 1
+            if key == marker:
+                break
+        if index > 0:
+            keys = keys[index:]
+
+    if limit and len(keys) > limit:
+        keys = keys[:limit]  
+
+    log.info("s3keys: {}".format(keys))
+    
+    dn_rsp = {} # dictionary keyed by chunk_id
+    tasks = []
+    for key in keys:
+        sub_domain = domain + '/' + key 
+        log.info("query for subdomain: {}".format(sub_domain))
+        task = asyncio.ensure_future(domain_query(app, sub_domain, dn_rsp))
+        tasks.append(task)
+    await asyncio.gather(*tasks, loop=loop)
+
+    domains = []
+    for key in keys:
+        sub_domain = domain + '/' + key 
+        log.info("sub_domain: {}".format(sub_domain))
+        if sub_domain not in dn_rsp:
+            log.warn("expected to find sub-domain: {} in dn_rsp".format(sub_domain))
+            continue
+        sub_domain_json = dn_rsp[sub_domain]
+        domain_rsp = {"name": key}
+        if "owner" in sub_domain_json:
+            domain_rsp["owner"] = sub_domain_json["owner"]
+        if "created" in sub_domain_json:
+            domain_rsp["created"] = sub_domain_json["created"]
+        if "lastModified" in sub_domain_json:
+            domain_rsp["lastModified"] = sub_domain_json["lastModified"]
+        domains.append(domain_rsp)
+    rsp_json = {}
+    rsp_json["domains"] = domains
+    rsp_json["href"] = [] # TBD
+
+    resp = await jsonResponse(request, rsp_json)
+    log.response(request, resp=resp)
+    return resp
  
 async def GET_Domain(request):
     """HTTP method to return JSON for given domain"""
@@ -43,17 +146,12 @@ async def GET_Domain(request):
         raise HttpBadRequest(message=msg)
 
     log.info("got domain: {}".format(domain))
+   
+    domain_json = await get_domain_json(app, domain)
 
-    domain_key = getS3KeyForDomain(domain)  # adds "/domain.json" to domain name
-    # don't use app["domain_cache"]  if a direct domain request is made 
-    # as opposed to an implicit request as with other operations, query
-    # the domain from the authoritative source (the dn node)
-    req = getDataNodeUrl(app, domain_key)
-    req += "/domains" 
-    params = {"domain": domain}
-    log.info("sending dn req: {}".format(req))
-     
-    domain_json = await http_get_json(app, req, params=params)
+    if domain_json is None:
+        log.warn("domain: {} not found".format(domain))
+        raise HttpProcessingError(code=404, message="Not Found")
      
     if 'owner' not in domain_json:
         log.warn("No owner key found in domain")
