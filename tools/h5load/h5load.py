@@ -29,13 +29,12 @@ __version__ = '0.0.1'
 BASIC_LOAD, = range(1) # add more here later
 
 #----------------------------------------------------------------------------------
-def hsds_basic_load(fls, endpnt, url, nthrds, usr=None, passwd=None, journal=None):
+def hsds_basic_load(fls, endpnt, url, nprocs, usr=None, passwd=None, journal=None):
    if len(fls) > 1:
       logging.warn("multi-file merging into one endpoint/url not supported yet, using first h5 file %s" % fls[0])
-
    try:
       h5fd = h5py.File(fls[0], 'r')
-      for grp in h5fd: logging.debug("found %s group" % grp)
+      for grp in h5fd: logging.debug("found %s group" % grp) 
       h5fd.close() 
       return 0
    except IOError, e: 
@@ -55,7 +54,7 @@ def usage():
    print("     -u | --user <username>   :: User name credential")
    print("     -p | --passwd <password> :: Password credential")
    print("     -c | --conf <file.cnf>  :: A credential and config file")
-   print("     -t | --threads <n>   :: The number of threads to use")
+   print("     -t | --nprocs <n>   :: The number of processes to use.")
    print("     --account <name> :: The name of the config file account section")
    print("                for the credentials in -c file.cnf (Default is [default])" )
    print("     --cnf-eg        :: Print a config file and then exit")
@@ -69,7 +68,7 @@ def usage():
 #end print_usage
 
 #----------------------------------------------------------------------------------
-def load_config(urinm):  #TODO: add more handleing..
+def load_config(urinm):  #TODO: add more error handleing..
    uri = urlparse.urlparse(urinm)
    if re.search('http[s]*', uri.scheme): 
       try:
@@ -93,15 +92,15 @@ def print_config_example():
    print("[default]")
    print("user = <uid>")
    print("password = <passwd>")
-   print("endpoint = http://example.com")
+   print("endpoint = https://example.com")
 #print_config_example
 
 #----------------------------------------------------------------------------------
 if __name__ == "__main__":
    longOpts=[ 'help', 'verbose=', 'endpoint=', 'user=', 'source=', 'password=', \
-              'threads=', "conf=", "account=", 'cnf-eg', 'log=', 'url=', 'journal=', \
+              'nprocs=', "conf=", "account=", 'cnf-eg', 'log=', 'url=', 'journal=', \
               'load-type=']
-   verbose, nthrds, loadtype = 0, 1, BASIC_LOAD
+   verbose, nprcs, loadtype = 0, 1, BASIC_LOAD
    endpnt, usr, passwd, cnfg, logfname, desturl, journal = [None]*7
    credCnfDefaultSec = 'default'
    srcfls = []
@@ -124,7 +123,7 @@ if __name__ == "__main__":
          elif  o == '--load-type':
             try: loadtype = int(v)
             except ValueError, e:
-               sys.stderr.write('WARN load-type '+str(nthrds)+'?, setting to default value to BASIC_LOAD\n')
+               sys.stderr.write('WARN load-type is '+str(loadtype)+'? Setting to default value of BASIC_LOAD\n')
                loadtype = BASIC_LOAD
          elif o == "-d" or o == '--url':
             desturl = v
@@ -141,11 +140,11 @@ if __name__ == "__main__":
             credCnfDefaultSec = v
          elif o == '--log':
             logfname = v
-         elif o == "-t" or o == '--threads':
-            try: nthrds = int(v)
+         elif o == "-t" or o == '--nprocs':
+            try: nprcs = int(v)
             except ValueError, e:
-               sys.stderr.write('WARN threads '+str(nthrds)+'?, setting to default value of 1\n')
-               nthrds = 1
+               sys.stderr.write('WARN num procs '+str(nprcs)+'?, setting to default value of 1\n')
+               nprcs = 1
    except(getopt.GetoptError), e:
       sys.stderr.write(str(e)+"\n")
       sys.exit(1)
@@ -172,15 +171,15 @@ if __name__ == "__main__":
 
    try:
       if len(srcfls) == 0:
-         logging.info("build h5 file list from stdin...")
+         logging.info("building h5 file list from stdin...")
          srcfls = [ f.strip() for f in sys.stdin ]
 
       logging.info("loading %d source files to %s" % (len(srcfls), os.path.join(endpnt, desturl)))
       if journal: logging.info("using journal %s" % journal)
-      logging.debug("user=%s, passwd=%s, threads=%d" % (str(usr), str(passwd), nthrds))
+      logging.debug("user=%s, passwd=%s, nprcs=%d" % (str(usr), str(passwd), nprcs))
 
       if loadtype == BASIC_LOAD:
-         r = hsds_basic_load(srcfls, endpnt, desturl, nthrds, usr, passwd, journal)
+         r = hsds_basic_load(srcfls, endpnt, desturl, nprcs, usr, passwd, journal)
          sys.exit(r)
       else:
          logging.error("load type %d unknown" % loadtype )
