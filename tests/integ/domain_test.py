@@ -282,7 +282,60 @@ class DomainTest(unittest.TestCase):
         datatypes = rspJson["datatypes"]
         self.assertEqual(len(datatypes), 0)
 
-         
+    def testGetDomains(self):
+        print("testGetDomains", self.base_domain)
+        import os.path as op
+        # back up to levels
+        domain = op.dirname(self.base_domain)
+        domain = op.dirname(domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + '/domains'
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(rsp.headers['content-type'], 'application/json')
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("domains" in rspJson)
+        domains = rspJson["domains"]
+        
+        domain_count = len(domains)
+        if domain_count < 9:
+            # this should only happen in the very first test run
+            print("Expected to find more domains!")
+            return
+
+        for item in domains:
+            self.assertTrue("name" in item)
+            self.assertTrue("owner" in item)
+            self.assertTrue("created" in item)
+            self.assertTrue("lastModified" in item)
+             
+
+        # try getting the first 4 domains
+        params = {"Limit": 4}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("domains" in rspJson)
+        part1 = rspJson["domains"]
+        
+        self.assertEqual(len(part1), 4)
+        for item in part1:
+            self.assertTrue("name" in item)
+            name = item["name"]
+             
+        # get next batch of 4
+        params["Marker"] = name
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("domains" in rspJson)
+        part2 = rspJson["domains"]
+        self.assertEqual(len(part2), 4)
+        for item in part2:
+            self.assertTrue("name" in item)
+            name = item["name"]
+            self.assertTrue(name != params["Marker"])
+   
     
              
 if __name__ == '__main__':
