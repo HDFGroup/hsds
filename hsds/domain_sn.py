@@ -382,8 +382,11 @@ async def GET_ACL(request):
     rsp_json["acl"] = acl
     hrefs = []
     hrefs.append({'rel': 'self', 'href': getHref(request, '/acls')})
+    if "root" in domain_json:
+        hrefs.append({'rel': 'root', 'href': getHref(request, '/groups/' + domain_json["root"])})
     hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
-    rsp_json["hrefs"] = []
+    hrefs.append({'rel': 'owner', 'href': getHref(request, '/')})
+    rsp_json["hrefs"] = hrefs
 
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
@@ -442,7 +445,14 @@ async def GET_ACLs(request):
     # return just the keys as per the REST API
     rsp_json = { }
     rsp_json["acls"] = acl_list
-    rsp_json["hrefs"] = []  # TBD
+
+    hrefs = []
+    hrefs.append({'rel': 'self', 'href': getHref(request, '/acls')})
+    if "root" in domain_json:
+        hrefs.append({'rel': 'root', 'href': getHref(request, '/groups/' + domain_json["root"])})
+    hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
+    hrefs.append({'rel': 'owner', 'href': getHref(request, '/')})
+    rsp_json["hrefs"] = hrefs
 
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)

@@ -57,6 +57,9 @@ async def init(loop):
     app.router.add_route('GET', '/groups/{id}/attributes/{name}', GET_Attribute)
     app.router.add_route('DELETE', '/groups/{id}/attributes/{name}', DELETE_Attribute)
     app.router.add_route('PUT', '/groups/{id}/attributes/{name}', PUT_Attribute)
+    app.router.add_route('GET', '/groups/{id}/acls/{username}', GET_ACL)
+    app.router.add_route('PUT', '/groups/{id}/acls/{username}', PUT_ACL)
+    app.router.add_route('GET', '/groups/{id}/acls', GET_ACLs)
     app.router.add_route('GET', '/datatypes/{id}', GET_Datatype)
     app.router.add_route('GET', '/datatypes', GET_Datatypes)
     app.router.add_route('DELETE', '/datatypes/{id}', DELETE_Datatype)
@@ -65,6 +68,9 @@ async def init(loop):
     app.router.add_route('GET', '/datatypes/{id}/attributes/{name}', GET_Attribute)
     app.router.add_route('DELETE', '/datatypes/{id}/attributes/{name}', DELETE_Attribute)
     app.router.add_route('PUT', '/datatypes/{id}/attributes/{name}', PUT_Attribute)
+    app.router.add_route('GET', '/datatypes/{id}/acls/{username}', GET_ACL)
+    app.router.add_route('PUT', '/datatypes/{id}/acls/{username}', PUT_ACL)
+    app.router.add_route('GET', '/datatypes/{id}/acls', GET_ACLs)
     app.router.add_route('GET', '/datasets/{id}', GET_Dataset)
     app.router.add_route('GET', '/datasets', GET_Datasets)
     app.router.add_route('DELETE', '/datasets/{id}', DELETE_Dataset)
@@ -79,6 +85,9 @@ async def init(loop):
     app.router.add_route('PUT', '/datasets/{id}/value', PUT_Value)
     app.router.add_route('GET', '/datasets/{id}/value', GET_Value)
     app.router.add_route('POST', '/datasets/{id}/value', POST_Value)
+    app.router.add_route('GET', '/datasets/{id}/acls/{username}', GET_ACL)
+    app.router.add_route('PUT', '/datasets/{id}/acls/{username}', PUT_ACL)
+    app.router.add_route('GET', '/datasets/{id}/acls', GET_ACLs)
       
     return app
 
