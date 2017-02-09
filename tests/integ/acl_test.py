@@ -72,7 +72,6 @@ class AclTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers['content-type'], 'application/json')
         rsp_json = json.loads(rsp.text)
-        print(rsp_json)
         self.assertTrue("acl" in rsp_json)
         self.assertTrue("hrefs" in rsp_json)
         acl = rsp_json["acl"]
@@ -147,7 +146,6 @@ class AclTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers['content-type'], 'application/json')
         rsp_json = json.loads(rsp.text)
-        print(rsp_json)
         self.assertTrue("acls" in rsp_json)
         self.assertTrue("hrefs" in rsp_json)
         acls = rsp_json["acls"]
@@ -170,7 +168,6 @@ class AclTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers['content-type'], 'application/json')
         rsp_json = json.loads(rsp.text)
-        print(rsp_json)
         self.assertTrue("acls" in rsp_json)
         self.assertTrue("hrefs" in rsp_json)
         acls = rsp_json["acls"]
@@ -182,7 +179,7 @@ class AclTest(unittest.TestCase):
             'link': {'id': root_uuid, 'name': 'dtype'} 
         }
          
-        req = self.endpoint + "/datatypes"
+        req = helper.getEndpoint() + "/datatypes"
         # create a new ctype
         rsp = requests.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201) 
@@ -192,7 +189,7 @@ class AclTest(unittest.TestCase):
         self.assertTrue(helper.validateId(dtype_uuid) ) 
 
         # now try getting the ACLs for the datatype
-        req = helper.getEndpoint() + '/datatype/' + dtype_uuid + "/acls"
+        req = helper.getEndpoint() + '/datatypes/' + dtype_uuid + "/acls"
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers['content-type'], 'application/json')
@@ -228,7 +225,7 @@ class AclTest(unittest.TestCase):
         self.assertTrue("acl" in rsp_json)
         self.assertTrue("hrefs" in rsp_json)
         acl = rsp_json["acl"]
-        self.assertEqual(len(acl.keys()), len(acl_keys))
+        self.assertEqual(len(acl.keys()), len(acl_keys) + 1)  # acl_keys + "domain"
         for k in acl_keys:
             self.assertTrue(k in acl)
             if k in ("read", "update"):
