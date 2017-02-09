@@ -356,7 +356,11 @@ async def GET_ACL(request):
         raise HttpProcessingError(code=404, message=msg)
      
     # validate that the requesting user has permission to read ACLs in this domain
-    aclCheck(domain_json, "readACL", username)  # throws exception if not authorized
+    if acl_username in (username, "default"):
+        # allow read access for a users on ACL, or default
+        aclCheck(domain_json, "read", username)  # throws exception if not authorized
+    else:
+        aclCheck(domain_json, "readACL", username)  # throws exception if not authorized
      
     if 'owner' not in domain_json:
         log.warn("No owner key found in domain")
@@ -483,7 +487,7 @@ async def PUT_ACL(request):
     for k in body.keys():
         if k not in acl_keys:
             msg = "Unexpected key in request body: {}".format(k)
-            log.warn(k)
+            log.warn(msg)
             raise HttpBadRequest(message=msg)
         if body[k] not in (True, False):
             msg = "Unexpected value for key in request body: {}".format(k)
