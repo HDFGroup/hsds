@@ -22,7 +22,8 @@ def validateUserPassword(user_name, password):
     """
 
     # just hard-code a couple of users for now
-    user_db = { "test_user1": {"pwd": "test" },
+    user_db = { "admin": {"pwd": "admin"}, 
+                "test_user1": {"pwd": "test" },
                 "test_user2": {"pwd": "test" } }
     
     if not user_name:

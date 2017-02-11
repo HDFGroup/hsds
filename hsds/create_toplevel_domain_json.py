@@ -11,6 +11,7 @@
 ##############################################################################
 import asyncio
 import sys
+import time
 from aiobotocore import get_session
 from aiohttp.errors import ClientOSError
 from util.domainUtil import validateDomain, getS3KeyForDomain, getParentDomain
@@ -31,7 +32,7 @@ import hsds_logger as log
 #
 def printUsage():
     print("usage: python create_toplevel_domain_json.py --user=<username> [--private] --domain=<domain> ")
-    print("  options --usern: user who will be owner of the domain (will have full permissions)")
+    print("  options --user: username of who will be owner of the domain (will have full permissions)")
     print("  options --private: if set, private for all other users, otherwise public read")
     print("  options --domain: domain to be assigned for the user.  If not set, the domain of <username>.home will be used")
     print(" ------------------------------------------------------------------------------")
@@ -48,10 +49,6 @@ async def createDomain(app, domain, domain_json):
         parent_domain = getParentDomain(domain)
         if parent_domain is None:
             raise ValueError("Domain must have a parent")
-        s3_parent_key = getS3KeyForDomain(parent_domain)
-        parent_domain_exists = await isS3Obj(app, s3_parent_key)
-        if parent_domain_exists:
-            raise ValueError("parent domain exists -- s3_key: {}".format(s3_parent_key))
         
         log.info("writing domain")
         await putS3JSONObj(app, s3_key, domain_json)
@@ -109,6 +106,7 @@ def main():
     if domain != domain.lower():
         raise ValueError("top-level domains must be all lowercase")
     
+    now = time.time()
 
     # construct the json obj
     domain_json = {}
@@ -117,6 +115,8 @@ def main():
     acls["default"] = default_perm
     acls[username] = owner_perm
     domain_json["acls"] = acls
+    domain_json["lastModified"] = now
+    domain_json["created"] = now
 
     #print(domain_json)
 

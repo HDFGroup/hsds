@@ -64,7 +64,11 @@ class DomainTest(unittest.TestCase):
         
         req = helper.getEndpoint() + '/'
         rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 404)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertFalse("root" in rspJson)  # no root group for folder domain
+        self.assertTrue("owner" in rspJson)
+        self.assertTrue("hrefs" in rspJson)
         domain = "test_user1.home"
         headers = helper.getRequestHeaders(domain=domain)
         

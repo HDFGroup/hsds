@@ -14,6 +14,9 @@ import os.path as op
 #
 # Domain utilities
 # 
+
+DOMAIN_NAME = "/.domain.json"  # key suffix used to hold domain info
+
 def isIPAddress(s):
     """Return True if the string looks like an IP address:
         n.n.n.n where n is between 0 and 255 """
@@ -39,8 +42,8 @@ def getParentDomain(domain):
     E.g. getParentDomain("www.hdfgroup.org") returns "hdfgroup.org"
     Return None if the given domain is already a top-level domain.
     """
-    if domain.endswith("/domain.json"):
-        n = len("/domain.json")
+    if domain.endswith(DOMAIN_NAME):
+        n = len(DOMAIN_NAME)
         domain = domain[:-n]
     parent = op.dirname(domain)
     
@@ -94,7 +97,7 @@ def isValidDomain(id):
         return False
 
 def validateDomainKey(domain_key):
-    if not domain_key.endswith("/domain.json"):
+    if not domain_key.endswith(DOMAIN_NAME):
         raise ValueError("Invalid domain key")
 
 
@@ -152,7 +155,7 @@ def getDomainFromRequest(request):
     return domain
 
 def getS3KeyForDomain(domain):
-    s3_key = op.join(domain, "domain.json")
+    s3_key = domain + DOMAIN_NAME
     return s3_key
 
 

@@ -172,15 +172,15 @@ The domain entity is similar to traditional HDF5 files in that they are containe
 Domain key
 ----------
 
-Domain keys end with "/domain.json" and can have an arbitrary prefix. Unlike other entities in the object storage schema, domain keys are stored hierarchaly (as with files in a file system), delimited using the '/' character.  This enables domain keys to be listed by prefix and provides a cannonical key for the parent domain of a domain.
+Domain keys end with "/.domain.json" and can have an arbitrary prefix. Unlike other entities in the object storage schema, domain keys are stored hierarchaly (as with files in a file system), delimited using the '/' character.  This enables domain keys to be listed by prefix and provides a cannonical key for the parent domain of a domain.
 
 For example, the domain key::
 
-    /home/test_user1/my_domain/domain.json
+    /home/test_user1/my_domain/.domain.json
 
 Would have a parent domain of::
 
-    /home/test_user1/domain.json
+    /home/test_user1/.domain.json
 
 Sub-domains of the domain could be found by listing all keys with the prefix of::
 
@@ -205,14 +205,14 @@ Notes:
 * The service layer may impose a policy where domains can only be created if there is an existing domain with the requisite permission ACLs for the requesting user.  One or more "top-level" domains (e.g. "/home") would be created outside the service API (e.g. by an administrator with permissions to create objects in the bucket directly).
 * The owner and root keys can be assumed to be immutable (i.e. these values can be cached)
 * Metadata about the owner (and other usernames referenced in this schema) are assumed to be stored in another system (such as NASA URS)
-
+* The "root" key is optional.  If not present, the domain doesn't have an associatted root group (but can server as a place-holder for sub-domains)
 
 Domain object example
 ---------------------
 
 Key::
 
-    /home/test_user1/my_domain/domain.json
+    /home/test_user1/my_domain/.domain.json
 
 Object:
 

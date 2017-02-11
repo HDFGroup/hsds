@@ -27,7 +27,7 @@ from servicenode_lib import getDomainJson
 import hsds_logger as log
 
 async def get_domain_json(app, domain):
-    domain_key = getS3KeyForDomain(domain)  # adds "/domain.json" to domain name
+    domain_key = getS3KeyForDomain(domain)  # adds "/.domain.json" to domain name
     req = getDataNodeUrl(app, domain_key)
     req += "/domains" 
     params = {"domain": domain}
@@ -77,7 +77,7 @@ async def GET_Domains(request):
         marker = request.GET["Marker"]
         log.info("GET_Domains - using Marker: {}".format(marker))
 
-    keys = await getS3Keys(app, prefix=domain, deliminator='/', suffix="domain.json")
+    keys = await getS3Keys(app, prefix=domain, deliminator='/', suffix=".domain.json")
     log.info("got {} keys".format(len(keys)))
     if marker:
         # trim everything up to and including marker

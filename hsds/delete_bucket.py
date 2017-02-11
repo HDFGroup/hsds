@@ -24,7 +24,7 @@ import config
 #
 def printUsage():
      
-    print(" python delete_bucket.py")
+    print("python delete_bucket.py")
     print("Removes all objects in the bucket!")
     sys.exit(); 
 
