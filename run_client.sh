@@ -51,7 +51,7 @@ if [ -z ${HEAD_HOST} ] || [ -z ${SN_HOST} ]; then
        --name ${CONTAINER_NAME} \
        ${LINK_ARG} \
        ${SHELL_FLAGS} \
-       hdfgroup/python:3.5 /bin/sh -c "$CMD"
+       hdfgroup/hsds /bin/sh -c "$CMD"
 else
     echo "running cmd: " ${CMD}
     HSDS_ENDPOINT='http://'${SN_HOST}':5102'
@@ -64,7 +64,7 @@ else
        --env HSDS_ENDPOINT=${HSDS_ENDPOINT} \
        --env HEAD_ENDPOINT=${HEAD_ENDPOINT} \
        ${SHELL_FLAGS} \
-       hdfgroup/python:3.5 /bin/sh -c "$CMD"
+       hdfgroup/hsds /bin/sh -c "$CMD"
 fi
  
 
