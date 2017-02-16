@@ -2,7 +2,7 @@
 HSDS Architectural Design
 ###############################
 
-John Readey - The HDF 
+John Readey - The HDF Group
 
 *jreadey@hdfgroup.org*
 
