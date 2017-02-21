@@ -360,7 +360,7 @@ def sig_handler(sig, frame):
 
 
 def main():    
-    domain = config.get("domain_name") + '.' + config.get("user_name") + ".home"
+    domain = "/home/" + config.get("user_name") + "/"  + config.get("domain_name") 
     print("domain: {}".format(domain) )
     
     getFileList() # populates file_list global

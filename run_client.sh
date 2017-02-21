@@ -59,7 +59,7 @@ else
     echo "hsds_endpoint: " $HSDS_ENDPOINT
     echo "head_endpoint: " $HEAD_ENDPOINT
     echo "run container"
-    docker run --rm  \
+    docker run  \
        -v ${PWD}:/hsds \
        --env HSDS_ENDPOINT=${HSDS_ENDPOINT} \
        --env HEAD_ENDPOINT=${HEAD_ENDPOINT} \

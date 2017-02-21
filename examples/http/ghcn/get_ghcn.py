@@ -14,7 +14,7 @@ def printUsage():
     print("       obstype=TMAX")
 
 def main():    
-    domain = config.get("domain_name") + '.' + config.get("user_name") + ".home"
+    domain = "/home/" + config.get("user_name") + "/"  + config.get("domain_name")
     print("domain: {}".format(domain) )
     station = "ITE00100554"
     obstype = "TMAX"
@@ -86,7 +86,7 @@ def main():
         sys.exit()
     log.info("obs uuid: " + obs_uuid)
 
-    # finally get the actuall observations
+    # finally get the actual observations
     attrs = None
     req = helper.getEndpoint() + '/groups/' + obs_uuid + "/attributes?IncludeData=T"
     log.info("Req: " + req)
@@ -109,14 +109,7 @@ def main():
     keys.sort()
     for k in keys:
         print("{}: {}".format(k, data[k]))
-
-
-
-    
-
-
-
-    
+ 
 
 
 main()
