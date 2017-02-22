@@ -14,17 +14,59 @@ import binascii
 from aiohttp.errors import HttpBadRequest, HttpProcessingError
 import hsds_logger as log
 
-def validateUserPassword(user_name, password):
+def initUserDB(app, password_file):
+    """
+    Called at startup to initialize user/passwd dictionary from a password text file
+    """
+    log.info("initUserDB")
+    if "user_db" in app:
+        msg = "user_db already initilized"
+        log.warn(msg)
+        return
+    line_number = 0
+    user_count = 0
+    user_db = {}
+    try:
+        with open(password_file) as f:
+            for line in f:
+                line_number += 1
+                s = line.strip()
+                if not s:
+                    continue
+                if s[0] == '#':
+                    # comment line
+                    continue
+                fields = s.split(':')
+                if len(fields) < 2:
+                    msg = "line: {} is not valid".format(line_number)
+                    log.warn(msg)
+                    continue
+                username = fields[0]
+                passwd = fields[1]
+                if len(username) < 3 or len(passwd) < 3:
+                    msg = "line: {} is not valid, username and password must be 3 characters are longer".format(line_number)
+                    log.warn(msg)
+                    continue
+                if username in user_db:
+                    msg = "line: {}, username is repated".format(line_number)
+                    log.warn(msg)
+                    continue
+                user_db[username] = {"pwd": passwd}                
+                log.info("added user: {}, passwd: {}".format(username, passwd))
+                user_count += 1
+    except FileNotFoundError:
+        log.error("unable to open password file")
+    app["user_db"] = user_db
+    log.info("added: {} users".format(user_count))
+    
+
+
+def validateUserPassword(app, user_name, password):
     """
     validateUserPassword: verify user and password.
         throws exception if not valid
     Note: make this async since we'll eventually need some sort of http request to validate user/passwords
     """
-
-    # just hard-code a couple of users for now
-    user_db = { "admin": {"pwd": "admin"}, 
-                "test_user1": {"pwd": "test" },
-                "test_user2": {"pwd": "test" } }
     
     if not user_name:
         log.info('validateUserPassword - null user')
@@ -34,6 +76,11 @@ def validateUserPassword(user_name, password):
         raise HttpBadRequest("provide  password")
 
     log.info("looking up username: {}".format(user_name))
+    if "user_db" not in app:
+        msg = "user_db not intialized"
+        log.error(msg)
+        raise HttpProcessingError(code=500, message=msg)
+    user_db = app["user_db"]    
     if user_name not in user_db:
         log.info("user not found")
         raise HttpProcessingError(code=401, message="provide user and password")

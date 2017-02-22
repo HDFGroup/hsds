@@ -49,7 +49,7 @@ async def GET_Domains(request):
     if username is None and app['allow_noauth']:
         username = "default"
     else:
-        validateUserPassword(username, pswd)
+        validateUserPassword(app, username, pswd)
 
     try:
         domain = getDomainFromRequest(request)
@@ -136,7 +136,7 @@ async def GET_Domain(request):
     if username is None and app['allow_noauth']:
         username = "default"
     else:
-        validateUserPassword(username, pswd)
+        validateUserPassword(app, username, pswd)
 
     try:
         domain = getDomainFromRequest(request)
@@ -203,7 +203,7 @@ async def PUT_Domain(request):
     app = request.app
     # yet exist
     username, pswd = getUserPasswordFromRequest(request) # throws exception if user/password is not valid
-    validateUserPassword(username, pswd)
+    validateUserPassword(app, username, pswd)
     log.info("PUT domain request from: {}".format(username))
     
     try:
@@ -283,7 +283,7 @@ async def DELETE_Domain(request):
         raise HttpBadRequest(message=msg)
  
     username, pswd = getUserPasswordFromRequest(request)
-    validateUserPassword(username, pswd)
+    validateUserPassword(app, username, pswd)
 
     parent_domain = getParentDomain(domain)
 
@@ -338,7 +338,7 @@ async def GET_ACL(request):
     if username is None and app['allow_noauth']:
         username = "default"
     else:
-        validateUserPassword(username, pswd)
+        validateUserPassword(app, username, pswd)
 
     try:
         domain = getDomainFromRequest(request)
@@ -405,7 +405,7 @@ async def GET_ACLs(request):
     if username is None and app['allow_noauth']:
         username = "default"
     else:
-        validateUserPassword(username, pswd)
+        validateUserPassword(app, username, pswd)
 
     try:
         domain = getDomainFromRequest(request)
@@ -474,7 +474,7 @@ async def PUT_ACL(request):
         raise HttpBadRequest(message=msg)
 
     (username, pswd) = getUserPasswordFromRequest(request)
-    validateUserPassword(username, pswd)
+    validateUserPassword(app, username, pswd)
 
     if not request.has_body:
         msg = "PUT ACL with no body"
@@ -529,7 +529,7 @@ async def GET_Datasets(request):
     if username is None and app['allow_noauth']:
         username = "default"
     else:
-        validateUserPassword(username, pswd)
+        validateUserPassword(app, username, pswd)
 
     try:
         domain = getDomainFromRequest(request)
@@ -577,7 +577,7 @@ async def GET_Groups(request):
     if username is None and app['allow_noauth']:
         username = "default"
     else:
-        validateUserPassword(username, pswd)
+        validateUserPassword(app, username, pswd)
     
     try:
         domain = getDomainFromRequest(request)
@@ -625,7 +625,7 @@ async def GET_Datatypes(request):
     if username is None and app['allow_noauth']:
         username = "default"
     else:
-        validateUserPassword(username, pswd)
+        validateUserPassword(app, username, pswd)
     
     try:
         domain = getDomainFromRequest(request)

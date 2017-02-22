@@ -61,7 +61,7 @@ async def GET_Attributes(request):
     if username is None and app['allow_noauth']:
         username = "default"
     else:
-        validateUserPassword(username, pswd)
+        validateUserPassword(app, username, pswd)
     
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
@@ -136,7 +136,7 @@ async def GET_Attribute(request):
     if username is None and app['allow_noauth']:
         username = "default"
     else:
-        validateUserPassword(username, pswd)
+        validateUserPassword(app, username, pswd)
     
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
@@ -204,7 +204,7 @@ async def PUT_Attribute(request):
     log.info("PUT Attribute id: {} name: {}".format(obj_id, attr_name))
     username, pswd = getUserPasswordFromRequest(request)
     # write actions need auth
-    validateUserPassword(username, pswd)
+    validateUserPassword(app, username, pswd)
 
     if not request.has_body:
         msg = "PUT Attribute with no body"
@@ -348,7 +348,7 @@ async def DELETE_Attribute(request):
     validateAttributeName(attr_name)
 
     username, pswd = getUserPasswordFromRequest(request)
-    validateUserPassword(username, pswd)
+    validateUserPassword(app, username, pswd)
     
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):

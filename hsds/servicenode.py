@@ -20,6 +20,7 @@ from aiohttp import ClientSession, TCPConnector
 import config
 from basenode import healthCheck,  baseInit
 import hsds_logger as log
+from util.authUtil import initUserDB
 from domain_sn import GET_Domain, PUT_Domain, DELETE_Domain, GET_Domains 
 from domain_sn import GET_Datasets, GET_Groups, GET_Datatypes
 from domain_sn import GET_ACL, GET_ACLs, PUT_ACL
@@ -114,7 +115,7 @@ if __name__ == '__main__':
         app['allow_noauth'] = True
     else:
         app['allow_noauth'] = False
-
+    initUserDB(app, config.get("password_file"))
 
     # run background task
     asyncio.ensure_future(healthCheck(app), loop=loop)

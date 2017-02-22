@@ -68,6 +68,7 @@ elif [ $1 == "sn" ]; then
         --env AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
         --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
         --env BUCKET_NAME=${BUCKET_NAME} \
+        --env PASSWORD_FILE=${PASSWORD_FILE} \
         --link hsds_head:hsds_head \
         hdfgroup/hsds
       SN_PORT=$(($SN_PORT+2))

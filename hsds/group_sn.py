@@ -44,7 +44,7 @@ async def GET_Group(request):
     if username is None and app['allow_noauth']:
         username = "default"
     else:
-        validateUserPassword(username, pswd)
+        validateUserPassword(app, username, pswd)
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
@@ -78,7 +78,7 @@ async def POST_Group(request):
 
     username, pswd = getUserPasswordFromRequest(request)
     # write actions need auth
-    validateUserPassword(username, pswd)
+    validateUserPassword(app, username, pswd)
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
@@ -161,7 +161,7 @@ async def DELETE_Group(request):
         raise HttpBadRequest(message=msg)
 
     username, pswd = getUserPasswordFromRequest(request)
-    validateUserPassword(username, pswd)
+    validateUserPassword(app, username, pswd)
     
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):

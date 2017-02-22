@@ -143,7 +143,7 @@ async def GET_Dataset(request):
     if username is None and app['allow_noauth']:
         username = "default"
     else:
-        validateUserPassword(username, pswd)
+        validateUserPassword(app, username, pswd)
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
@@ -222,7 +222,7 @@ async def GET_DatasetType(request):
     if username is None and app['allow_noauth']:
         username = "default"
     else:
-        validateUserPassword(username, pswd)
+        validateUserPassword(app, username, pswd)
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
@@ -271,7 +271,7 @@ async def GET_DatasetShape(request):
     if username is None and app['allow_noauth']:
         username = "default"
     else:
-        validateUserPassword(username, pswd)
+        validateUserPassword(app, username, pswd)
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
@@ -319,7 +319,7 @@ async def PUT_DatasetShape(request):
         raise HttpBadRequest(message=msg)
 
     username, pswd = getUserPasswordFromRequest(request)
-    validateUserPassword(username, pswd)
+    validateUserPassword(app, username, pswd)
 
     # validate request
     if not request.has_body:
@@ -397,7 +397,7 @@ async def POST_Dataset(request):
 
     username, pswd = getUserPasswordFromRequest(request)
     # write actions need auth
-    validateUserPassword(username, pswd)
+    validateUserPassword(app, username, pswd)
 
     if not request.has_body:
         msg = "POST Datasets with no body"
@@ -642,7 +642,7 @@ async def DELETE_Dataset(request):
         raise HttpBadRequest(message=msg)
 
     username, pswd = getUserPasswordFromRequest(request)
-    validateUserPassword(username, pswd)
+    validateUserPassword(app, username, pswd)
     
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):

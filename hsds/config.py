@@ -38,7 +38,8 @@ cfg = {
     'max_chunks_per_request': 1000,  # maximum number of chunks to be serviced by one request
     'min_chunk_size': 40,  # for testing only, make bigger for production
     'max_chunk_size': 4*1024*1024,  # 4 MB
-    'timeout': 30  # http timeout - 30 sec
+    'timeout': 30,  # http timeout - 30 sec
+    'password_file': 'xxx'  # filepath to a text file of username/passwords
 }
    
 def get(x): 
