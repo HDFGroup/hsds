@@ -1,9 +1,11 @@
-# HSDS password file
+# HSDS password file template
 # 
+#
 # This file contians a list of usernames/passwords that will be used to authenticate
 # requests to HSDS.
+# Copy file to "passwd.txt" in the same directory before building and deploying HSDS.
 # For production use, replace the "test" password below with secret passwords and add
-# and any new accounts desired
+# and any new accounts desired.
 # Text file get's copied to image at build time, so any changes require a new build/deployment.
 test_user1:test
 test_user2:test
