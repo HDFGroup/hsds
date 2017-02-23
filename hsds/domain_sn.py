@@ -380,10 +380,14 @@ async def GET_ACL(request):
         raise HttpProcessingError(code=404, message=msg)
 
     acl = acls[acl_username]
+    acl_rsp = {}
+    for k in acl.keys():
+        acl_rsp[k] = acl[k]
+    acl_rsp["userName"] = acl_username
 
     # return just the keys as per the REST API
     rsp_json = { }
-    rsp_json["acl"] = acl
+    rsp_json["acl"] = acl_rsp
     hrefs = []
     hrefs.append({'rel': 'self', 'href': getHref(request, '/acls')})
     if "root" in domain_json:

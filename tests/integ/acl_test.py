@@ -37,7 +37,8 @@ class AclTest(unittest.TestCase):
         self.assertTrue("acl" in rsp_json)
         self.assertTrue("hrefs" in rsp_json)
         acl = rsp_json["acl"]
-        self.assertEqual(len(acl.keys()), len(acl_keys))
+        self.assertEqual(len(acl.keys()), len(acl_keys) + 1)
+        self.assertEqual(acl["userName"], "test_user1")
         for k in acl_keys:
             self.assertTrue(k in acl)
             self.assertTrue(acl[k])
@@ -51,7 +52,7 @@ class AclTest(unittest.TestCase):
         self.assertTrue("acl" in rsp_json)
         self.assertTrue("hrefs" in rsp_json)
         acl = rsp_json["acl"]
-        self.assertEqual(len(acl.keys()), len(acl_keys))
+        self.assertEqual(len(acl.keys()), len(acl_keys) + 1)
         for k in acl_keys:
             self.assertTrue(k in acl)
             if k == 'read':
@@ -75,7 +76,7 @@ class AclTest(unittest.TestCase):
         self.assertTrue("acl" in rsp_json)
         self.assertTrue("hrefs" in rsp_json)
         acl = rsp_json["acl"]
-        self.assertEqual(len(acl.keys()), len(acl_keys))
+        self.assertEqual(len(acl.keys()), len(acl_keys) + 1)
         for k in acl_keys:
             self.assertTrue(k in acl)
             if k == 'read':
@@ -207,7 +208,6 @@ class AclTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 403) # forbidden
 
 
-
     def testPutAcl(self):
         print("testPutAcl", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
@@ -226,7 +226,7 @@ class AclTest(unittest.TestCase):
         self.assertTrue("acl" in rsp_json)
         self.assertTrue("hrefs" in rsp_json)
         acl = rsp_json["acl"]
-        self.assertEqual(len(acl.keys()), len(acl_keys) + 1)  # acl_keys + "domain"
+        self.assertEqual(len(acl.keys()), len(acl_keys) + 2)  # acl_keys + "domain" + "username"
         for k in acl_keys:
             self.assertTrue(k in acl)
             if k in ("read", "update"):
