@@ -120,6 +120,20 @@ class Hdf5dtypeTest(unittest.TestCase):
         self.assertEqual(typeItem['mapping']['GREEN'], 1)
         self.assertEqual(typeSize, 1)
 
+    def testBaseBoolTypeItem(self):
+        typeItem = hdf5dtype.getTypeItem(np.dtype('bool'))
+        typeSize = hdf5dtype.getItemSize(typeItem)
+        self.assertEqual(typeItem['class'], 'H5T_ENUM')
+        baseItem = typeItem['base']
+        self.assertEqual(baseItem['class'], 'H5T_INTEGER')
+        self.assertEqual(baseItem['base'], 'H5T_STD_I8LE')
+        self.assertTrue('mapping' in typeItem)
+        mapping = typeItem['mapping']
+        self.assertEqual(len(mapping), 2)
+        self.assertEqual(mapping['FALSE'], 0)
+        self.assertEqual(mapping['TRUE'], 1)
+        self.assertEqual(typeSize, 1)
+
     def testBaseArrayTypeItem(self):
         dt = np.dtype('(2,2)<int32')
         typeItem = hdf5dtype.getTypeItem(dt)
@@ -373,6 +387,52 @@ class Hdf5dtypeTest(unittest.TestCase):
         self.assertEqual(dt.name, 'void1600')
         self.assertEqual(dt.kind, 'V')
         self.assertEqual(typeSize, 200)
+
+    def testCreateEnumType(self):
+        typeItem = {
+                "class": "H5T_ENUM",
+                "base": {
+                    "base": "H5T_STD_I16LE",
+                    "class": "H5T_INTEGER"
+                }, 
+                "mapping": {
+                    "GAS": 2,
+                    "LIQUID": 1,
+                    "PLASMA": 3,
+                    "SOLID": 0
+                }
+            }
+
+        typeSize = hdf5dtype.getItemSize(typeItem)
+        self.assertEqual(typeSize, 2)
+        dt = hdf5dtype.createDataType(typeItem)
+        self.assertEqual(dt.name, 'int16')
+        self.assertEqual(dt.kind, 'i')    
+        mapping = check_dtype(enum=dt)
+        self.assertTrue(isinstance(mapping, dict))
+        self.assertEqual(mapping["SOLID"], 0)
+        self.assertEqual(mapping["LIQUID"], 1)
+        self.assertEqual(mapping["GAS"], 2)
+        self.assertEqual(mapping["PLASMA"], 3)
+
+    def testCreateBoolType(self):
+        typeItem = {
+                "class": "H5T_ENUM",
+                "base": {
+                    "base": "H5T_STD_I8LE",
+                    "class": "H5T_INTEGER"
+                }, 
+                "mapping": {
+                    "TRUE": 1,
+                    "FALSE": 0
+                }
+            }
+
+        typeSize = hdf5dtype.getItemSize(typeItem)
+        self.assertEqual(typeSize, 1)
+        dt = hdf5dtype.createDataType(typeItem)
+        self.assertEqual(dt.name, 'bool')
+        self.assertEqual(dt.kind, 'b')
 
     def testCreateCompoundType(self):
         typeItem = {
