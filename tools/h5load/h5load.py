@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 ##############################################################################
 # Copyright by The HDF Group.                                                #
 # All rights reserved.                                                       #
@@ -151,7 +150,7 @@ def h5open(objname, endpoint, mode, usr=None, passwd=None):
          tempfile name will be returned.
 
       Returns:
-        A file descsriptor and a fname or endpoint/url name
+        A file descriptor and a fname or endpoint/url name
    """
    global ISHTTP 
    fd, fname = [None]*2
@@ -384,10 +383,10 @@ def usage():
    print("                for the credentials in -c file.cnf (Default is [default])" )
    print("     --cnf-eg        :: Print a config file and then exit")
    print("     --log <logfile> :: logfile path")
-   print(("     --load-type <n> :: How to perform \"copy objects to hsds\" (default is basic=%d)" % (1) ))
-   print("     -j | --journal <file> :: Journaling file for object integrity tracking," )
+   print(("     --load-type <n> :: How to perform \"copy objects to hsds\" (default is basic=%d)" % (BASIC_LOAD) ))
+   print("     -j | --journal <file> :: A journaling file for object integrity tracking," )
    print("                              preforms chunk-level crc32'ing or md5'ing (default crc32)")
-   print("     --md5 :: With journal'ing use chunk-level md5 instead of crc32")
+   print("     --md5 :: With journaling use chunk-level md5 instead of crc32")
    print("     --jz :: use gzip to compress the journal file. Output file is gzip compatible.")
    print("     -v | --verbose :: Change log level to DEBUG.")
    print("     -h | --help    :: This message.")
