@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 ##############################################################################
 # Copyright by The HDF Group.                                                #
 # All rights reserved.                                                       #
@@ -10,75 +10,191 @@
 # distribution tree.  If you do not have access to this file, you may        #
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
+
 import sys
 import os
 import re
 import math
 import time
-import urllib2
 import getopt
 import threading
 import logging
-import ConfigParser
-import urlparse
-import Queue
 import itertools 
-import numpy
-import h5py 
-import h5pyd 
+import tempfile
+import zlib
+import gzip
+import hashlib
 from operator import add
 
-UTILNAME = 'h5load'
+if sys.version_info >= (3, 0):
+   import configparser
+   import queue
+   import urllib.parse as urlparsesh
+else:
+   import ConfigParser as configparser
+   import Queue as queue
+   import urlparse as urlparsesh
+
+try:
+   import numpy
+   import pycurl
+   import h5py 
+   import h5pyd 
+except ImportError as e:
+   sys.stderr.write("ERROR : %s : install it to use this utility...\n" % str(e)) 
+   sys.exit(1)
+
 __version__ = '0.0.1'
-BASIC_LOAD, = range(1) # add more here later
+
+UTILNAME = 'h5load'
+BASIC_LOAD, = list(range(1)) # add more here later
 PUTBLK = 2**20 * 4  # 4 MB
+ISHTTP = re.compile('http[s]*')
 
 #----------------------------------------------------------------------------------
 class pushItem:
    def __init__(self, fname, objname, offset, blocksize):
       self.fname, self.objname, self.offset, self.blocksize = fname, objname, offset, blocksize
-      self.slices = None
+      self.slices, self.md5 = [None]*2
+      self.crc32 = 0
 
    def get_slices(self):
       if self.slices == None:
-         end = map(add, self.offset, self.blocksize)
-         self.slices = tuple(map(slice, self.offset, end))
+         ends = tuple(map(add, self.offset, self.blocksize))
+         self.slices = tuple( map(slice, self.offset, ends) )
       return self.slices 
 
    def __str__(self):
-      tmp = "fname=%s, objname=%s, offset=%s, size=%s, slices=%s" % (self.fname, self.objname, str(self.offset), str(self.blocksize), str(self.slices))
-      return tmp
+      return "fname=%s, objname=%s, offset=%s, size=%s, slices=%s, crc32=%s, md5=%s" % \
+             (self.fname, self.objname, str(self.offset), str(self.blocksize), str(self.slices), str(self.crc32 & 0xffffffff), self.md5)
+   
+   def __repr__(self):
+      # TODO: optimize
+      t = '('
+      for s in self.slices:
+         t+= "%d:%d " % (s.start, s.stop)
+      t= t[:-1]+')'
+      return "%s,%s,%s,%s,%s,%s\n" % \
+             (self.objname, str(self.offset), str(self.blocksize), t, str(self.crc32 & 0xffffffff), self.md5)
+   
+   def set_chunk_crc32(self, data):
+      self.crc32 = zlib.crc32(data) 
+   
+   def set_chunk_md5(self, data):
+      self.md5 = hashlib.md5(data).hexdigest()
 # pushItem 
 
 #----------------------------------------------------------------------------------
-def h5open(endpoint, objname, mode, usr=None, passwd=None, journal=None):
-   '''Opens an hdf5 file or an hsds endpoint. For the open file 
-      case, the endpoint could just be a directory. '''
-   uri, jout = [None]*2
-   if endpoint != None:
-      fnm = os.path.join(endpoint, objname)
-      uri = urlparse.urlparse(fnm)
-   else:
-      fnm = objname
-   if uri != None and re.search('http[s]*', uri.scheme): 
-      fd = h5pyd.File(objname, mode, endpoint=endpoint, username=usr, password=passwd)
-   else:
-      fd = h5py.File(fnm, mode)
+class Journal:
+   JOURNAL_LOCK = threading.Lock()
 
-   if journal:
-      if os.path.exists(journal):
+   def __init__(self, fname, libzd=False):
+      self.fname, self.libzd = fname, libzd
+      self.fd = None 
+      self.fopen()
+
+   def fopen(self):
+      if os.path.exists(self.fname):
          logging.warn("WARN: journal file %s exists, over writing..." % journal)
-      jout = open(journal, "w")
 
-   return fnm, fd, jout 
+      if self.libzd:
+         logging.debug("journal file will be gzip'ed...") 
+         self.fd = gzip.open(self.fname, 'wb')
+      else:
+         self.fd = open(self.fname, "wb")
+   
+   def write_pitem(self, pi):
+      self.JOURNAL_LOCK.acquire()
+      self.fd.write(repr(pi).encode())
+      self.JOURNAL_LOCK.release()
+   
+   def write_raw(self, s):
+      self.JOURNAL_LOCK.acquire()
+      self.fd.write(s)
+      self.JOURNAL_LOCK.release()
+   
+   def close(self):
+      if self.fd != None:
+         self.fd.close()
+
+   def __str__(self):
+      return "fname=%s, append=%r, fd=%s, lock=%s" % (self.fname, self.append, str(self.fd), str(self.lock))
+
+   def __del__(self):
+      self.close()
+# Journal
+
+#----------------------------------------------------------------------------------
+def h5open(objname, endpoint, mode, usr=None, passwd=None):
+   """Opens an hdf5 file or hsds endpoint. 
+
+      This routine will open an hdf5 file, which could be netcdf 4 file, or an hsds endpoint/url
+
+      Args:
+         objname: The name url or file, e.g. 
+                  /foo/bar/tasmax_day_BCSD_rcp45_r1i1p1_CanESM2_2050.nasa.data.hdfgroup.org 
+                  or foobar.h5
+         endpoint: The endpoint of the service, e.g. https://www.example.com
+                   This could be None, a directory or the path to an external http link.
+         mode: The open mode, r, r+, w, etc...
+         usr: A user name if needed
+         passwd: A password associated with the user name.
+
+      Note:
+         objname and endpoint are related in that if something like 
+         objname=data.h5 and endpoint=./ it is assumed that this is a 
+         local file and h5py is used, if objname=data.h5 and endpoint=http://www.example.com 
+         with a mode "w", "a" or "r+" it is assumed that this is an hsds endpoint url and 
+         h5pyd is used (for an hsds write/load). If objname=data.h5 and endpoint=http://www.example.com 
+         with mode "r" then it is assumed that this is an external file posted somewhere and the 
+         file will be downloaded to a temp file location, opened and it's tempfile file handle and 
+         tempfile name will be returned.
+
+      Returns:
+        A file descsriptor and a fname or endpoint/url name
+   """
+   global ISHTTP 
+   fd, fname = [None]*2
+   if endpoint:
+      uri = urlparsesh.urlparse(endpoint)
+   else:
+      uri = urlparsesh.urlparse(objname)
+
+   if uri != None and uri.netloc == '':
+      fname = objname
+      logging.debug("opening local file \"%s\" (h5py) ...", fname)
+      fd = h5py.File(objname, mode)
+   elif uri != None and uri.netloc != '' and mode in ['r', 'rb']:
+      tfile = tempfile.NamedTemporaryFile(suffix='.h5', delete=False, mode="wb")
+      logging.debug("staging in file \"%s\" to \"%s\" (h5py) ...", objname, tfile.name)
+      crl = pycurl.Curl()
+      crl.setopt(crl.USERAGENT, 'h5load utility')
+      crl.setopt(crl.URL, objname)
+      crl.setopt(crl.FOLLOWLOCATION, True)
+      crl.setopt(crl.WRITEDATA, tfile)
+      crl.perform()
+      crl.close()
+      tfile.close()
+      fd = h5py.File(tfile.name, mode)
+      fname = tfile.name 
+   elif uri != None and uri.netloc != '' and mode in ['w', 'r+', 'a']:
+      fname = os.path.join(endpoint, objname)
+      logging.debug("opening hsds/h5serv on \"%s\" (h5pyd) ...", fname)
+      try:
+         fd = h5pyd.File(objname, mode, endpoint=endpoint, username=usr, password=passwd)
+      except ValueError as e:
+         logging.error("ERROR : opening hsds/h5serv on \"%s\" failed (h5pyd) %s ...", fname, str(e))
+         sys.exit(1)
+
+   return fname, fd 
 # h5open
 
 #---------------------------------------------------------------------------------
-def push_items(queue, endpoint, url, usr, password):
+def push_items(iqueue, endpoint, url, usr, password, jfl=None, domd5=None):
    thrd = threading.current_thread()
    logging.info('starting thread '+str(thrd.ident)+' ...')
 
-   fname, fdo, d = h5open(endpoint, url, "r+", usr, password) 
+   fname, fdo = h5open(url, endpoint, "r+", usr, password) 
 
    # Attempt to cache these (input file handle and dataset handle) but we can't 
    # expect the input file will always be the same due to file merging. Note, 
@@ -87,10 +203,10 @@ def push_items(queue, endpoint, url, usr, password):
 
    try:
       while True:
-         if queue.empty() == True: 
+         if iqueue.empty() == True: 
             break
 
-         itm = queue.get()
+         itm = iqueue.get()
          if curfname != itm.fname:
             if curfin != None: 
                curfin.close()
@@ -100,15 +216,24 @@ def push_items(queue, endpoint, url, usr, password):
             curfname = itm.fname
          
          slc = itm.get_slices()
-         logging.debug(str(thrd.ident)+' :' +str(itm)+' --> '+fname+":"+itm.objname+', '+str(curdata)+' --> '+str(curdataout)) 
          # finally, write/upload the data
          try:
+            if jfl:
+               byts = curdata[slc].tostring(order='C')
+               if domd5:
+                  itm.set_chunk_md5(byts)
+               else:
+                  itm.set_chunk_crc32(byts)
+               jfl.write_pitem(itm)
+         
+            logging.debug(str(thrd.ident)+' :' +str(itm)+' --> '+fname+":"+itm.objname+', '+str(curdata)+' --> '+str(curdataout)) 
+
             curdataout[slc] = curdata[slc] 
-         except TypeError, e:
+         except TypeError as e:
             logging.error(str(e)+' : '+str(slc))
 
-         queue.task_done()
-   except Queue.Empty: 
+         iqueue.task_done()
+   except iqueue.Empty: 
       pass
    fdo.close()
    logging.info('thread '+str(thrd.ident)+' done...') 
@@ -133,7 +258,7 @@ def create_dataset_basic(fd, dobj):
       if dobj.chunks == None:
          try:
             adpchunk = h5py.filters.guess_chunk(dobj.shape, dobj.maxshape, dobj.dtype.itemsize)
-         except ValueError, e:
+         except ValueError as e:
             logging.warn("WARN : a rechunk guess on dataset %s failed, leaving as is" % (dobj.name)) 
             adpchunk = None
       else: 
@@ -157,7 +282,7 @@ def create_dataset_basic(fd, dobj):
          logging.debug("building %s offsets..." % (dobj.name))
          rngs = []
          for i, d in enumerate(dobj.shape): 
-            rngs.append( range(0, d, adpchunk[i]) )
+            rngs.append( list(range(0, d, adpchunk[i])) )
          # Note, the last dimension specified is the fastest changing on disk (hdf5lib). 
          offsets = itertools.product(*rngs)
       else:
@@ -165,7 +290,7 @@ def create_dataset_basic(fd, dobj):
          adpchunk = dobj.shape
 
       return dobj.name, adpchunk, offsets 
-   except Exception, e:
+   except Exception as e:
       logging.error("ERROR : failed to creating dataset in create_dataset_basic : "+str(e))
       return None
 # create_dataset_basic
@@ -179,14 +304,17 @@ def create_group(fd, gobj):
 # create_group
       
 #----------------------------------------------------------------------------------
-def hsds_basic_load(fls, endpnt, url, maxthrds, usr=None, passwd=None, journal=None):
+def hsds_basic_load(fls, endpnt, url, maxthrds, usr=None, passwd=None, journal=None, domd5=None, gzjourn=None):
    if len(fls) > 1:
       logging.warn("multi-file merging into one endpoint/url not supported yet, using first h5 file %s" % fls[0])
 
-   datsets = []
+   datsets, journfl  = [], None
    try:
-      finname, finfd, jrnfout  = h5open(None, fls[0], "r", journal=journal)
-      foutname, foutfd, d = h5open(endpnt, url, "w", usr=usr, passwd=passwd)
+      if journal:
+         journfl = Journal(journal, libzd=gzjourn)
+         
+      finname, finfd, = h5open(fls[0], None, "r")
+      foutname, foutfd = h5open(url, endpnt, "w", usr=usr, passwd=passwd)
 
       def object_create_helper(name, obj):
          if isinstance(obj, h5py.Dataset):
@@ -208,22 +336,23 @@ def hsds_basic_load(fls, endpnt, url, maxthrds, usr=None, passwd=None, journal=N
 
       for d in datsets:
          name, chunks, offsets = d
+         
          # queue up chunk metadata, chunks that will be delivered to hsds
-         queue = Queue.Queue()
+         iqueue = queue.Queue()
          for of in offsets: 
-            queue.put( pushItem(finname, name, of, chunks) ) 
+            iqueue.put( pushItem(finname, name, of, chunks) ) 
 
          # Init thread set for this batch. Note, we force the file 
          # handles into their own thread for safety (hence new threads
          # for each dataset), it adds minimal overhead. 
          thrds = []
-         if queue.qsize() < maxthrds:
-            nthrds = queue.qsize()
+         if iqueue.qsize() < maxthrds:
+            nthrds = iqueue.qsize()
          else:
             nthrds = maxthrds
          logging.debug("using %d threads for %s" % (nthrds, d[0]))
          for i in range(nthrds):
-            t = threading.Thread(target=push_items, args=(queue, endpnt, url, usr, passwd) )
+            t = threading.Thread(target=push_items, args=(iqueue, endpnt, url, usr, passwd, journfl, domd5) )
             t.daemon = False
             t.start()
             thrds.append(t)
@@ -232,14 +361,14 @@ def hsds_basic_load(fls, endpnt, url, maxthrds, usr=None, passwd=None, journal=N
       # for datsets
 
       return 0
-   except IOError, e: 
+   except IOError as e: 
       logging.error(str(e))
       return 1
 # hsds_basic_load
 
 #----------------------------------------------------------------------------------
 def usage():
-   print("\n  %s [ OPTIONS ] -d <url>" % UTILNAME)
+   print(("\n  %s [ OPTIONS ] -d <url>" % UTILNAME))
    print("    OPTIONS:")
    print("     -s | --source <file.h5> :: The hdf5 source file. There can be")
    print("                   multiple -s options for file merging (TBI). If")
@@ -255,30 +384,41 @@ def usage():
    print("                for the credentials in -c file.cnf (Default is [default])" )
    print("     --cnf-eg        :: Print a config file and then exit")
    print("     --log <logfile> :: logfile path")
-   print("     --load-type <n> :: How to perform \"copy objects to hsds\" (default is basic=%d)" % () )
-   print("     --journal <file> :: Journaling file for object integrity tracking (TBI)," )
-   print("                         preforms object checksum-ing")
+   print(("     --load-type <n> :: How to perform \"copy objects to hsds\" (default is basic=%d)" % (1) ))
+   print("     -j | --journal <file> :: Journaling file for object integrity tracking," )
+   print("                              preforms chunk-level crc32'ing or md5'ing (default crc32)")
+   print("     --md5 :: With journal'ing use chunk-level md5 instead of crc32")
+   print("     --jz :: use gzip to compress the journal file. Output file is gzip compatible.")
    print("     -v | --verbose :: Change log level to DEBUG.")
    print("     -h | --help    :: This message.")
-   print("     %s version %s\n" % (UTILNAME, __version__))
+   print(("     %s version %s\n" % (UTILNAME, __version__)))
 #end print_usage
 
 #----------------------------------------------------------------------------------
 def load_config(urinm):  #TODO: add more error handling..
-   uri = urlparse.urlparse(urinm)
+   uri = urlparsesh.urlparse(urinm)
    if re.search('http[s]*', uri.scheme): 
       try:
          fname = os.path.split(urinm)[1]
-         fout = open(fname, "w")
-         fout.write( urllib2.urlopen(urinm).read() )
+         fout = open(fname, "wb")
+         crl = pycurl.Curl()
+         crl.setopt(crl.USERAGENT, 'h5load utility')
+         crl.setopt(crl.URL, urinm)
+         crl.setopt(crl.WRITEDATA, fout)
+         crl.perform()
+         if crl.getinfo(pycurl.HTTP_CODE) != 200:
+            sys.stderr.write('ERROR : failed to get '+urinm+'\n') # logger not initialize yet.
+            crl.close()
+            sys.exit(1)
+         crl.close()
          fout.close()
-      except urllib2.URLError, e:
-         sys.stderr.write(urinm+' : '+str(e)+'\n') # logger not initialize yet.
-         os.unlink(fname)
+      except IOError as e:
+         sys.stderr.write('ERROR : '+fname+' : '+str(e)+'\n') # logger not initialize yet.
+         if os.path.exists(fname): os.unlink(fname)
          sys.exit(1)
    else:
       fname = urinm
-   config = ConfigParser.SafeConfigParser()
+   config = configparser.SafeConfigParser()
    config.read(fname)
    return config 
 #load_config
@@ -295,15 +435,15 @@ def print_config_example():
 if __name__ == "__main__":
    longOpts=[ 'help', 'verbose=', 'endpoint=', 'user=', 'source=', 'password=', \
               'nthreads=', "conf=", "account=", 'cnf-eg', 'log=', 'url=', 'journal=', \
-              'load-type=']
+              'load-type=', "md5", "jz"]
    verbose, nthrds, loadtype = 0, 1, BASIC_LOAD
-   endpnt, usr, passwd, cnfg, logfname, desturl, journal = [None]*7
+   endpnt, usr, passwd, cnfg, logfname, desturl, journal, domd5, gzpd = [None]*9
    credCnfDefaultSec = 'default'
    srcfls = []
    loglevel = logging.INFO
 
    try:
-      opts, args = getopt.getopt(sys.argv[1:], "hve:u:s:p:t:c:d:", longOpts)
+      opts, args = getopt.getopt(sys.argv[1:], "hve:u:s:p:t:c:d:j:", longOpts)
       for o, v in opts:
          if o == "-h" or o == '--help':
             usage()
@@ -314,11 +454,13 @@ if __name__ == "__main__":
             srcfls.append(v)
          elif o == "-e" or o == '--endpoint':
             endpnt = v
-         elif  o == '--journal':
+         elif o == '--md5':
+            domd5 = 1
+         elif  o == '-j' or o == '--journal':
             journal = v
          elif  o == '--load-type':
             try: loadtype = int(v)
-            except ValueError, e:
+            except ValueError as e:
                sys.stderr.write('WARN load-type is '+str(loadtype)+'? Setting to default value of BASIC_LOAD\n')
                loadtype = BASIC_LOAD
          elif o == "-d" or o == '--url':
@@ -329,6 +471,8 @@ if __name__ == "__main__":
             passwd = v
          elif o == "-c" or o == '--conf':
             cnfg = v
+         elif  o == '--jz':
+            gzpd = 1
          elif o == '--cnf-eg':
             print_config_example()
             sys.exit(0)
@@ -338,10 +482,10 @@ if __name__ == "__main__":
             logfname = v
          elif o == "-t" or o == '--nthreads':
             try: nthrds = int(v)
-            except ValueError, e:
+            except ValueError as e:
                sys.stderr.write('WARN num threads '+str(nthrds)+'?, setting to default value of 1\n')
                nthrds = 1
-   except(getopt.GetoptError), e:
+   except(getopt.GetoptError) as e:
       sys.stderr.write(str(e)+"\n")
       sys.exit(1)
 
@@ -355,7 +499,7 @@ if __name__ == "__main__":
             passwd = config.get(credCnfDefaultSec, 'password')
          if endpnt == None and config.get(credCnfDefaultSec, 'endpoint'):
             endpnt = config.get(credCnfDefaultSec, 'endpoint')
-      except ConfigParser.NoSectionError, e:
+      except configparser.NoSectionError as e:
          sys.stderr.write('ConfigParser error : '+str(e)+'\n')
          sys.exit(1)
 
@@ -375,11 +519,16 @@ if __name__ == "__main__":
          srcfls = [ f.strip() for f in sys.stdin ]
 
       logging.info("loading %d source files to %s" % (len(srcfls), os.path.join(endpnt, desturl)))
-      if journal: logging.info("using journal %s" % journal)
+
+      if journal: 
+         if gzpd: gzpdn = 'yes'
+         else: gzpdn = 'no'
+         logging.info("using journal %s (libz\'d = %s)" % (journal, gzpdn))
+
       logging.debug("user=%s, passwd=%s, max thrds=%d" % (str(usr), str(passwd), nthrds))
 
       if loadtype == BASIC_LOAD:
-         r = hsds_basic_load(srcfls, endpnt, desturl, nthrds, usr, passwd, journal)
+         r = hsds_basic_load(srcfls, endpnt, desturl, nthrds, usr, passwd, journal, domd5, gzpd)
          sys.exit(r)
       else:
          logging.error("load type %d unknown" % loadtype )
