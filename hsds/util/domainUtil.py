@@ -155,7 +155,10 @@ def getDomainFromRequest(request):
     return domain
 
 def getS3KeyForDomain(domain):
-    s3_key = domain + DOMAIN_NAME
+    if domain.endswith(DOMAIN_NAME):
+        s3_key = domain
+    else:
+        s3_key = domain + DOMAIN_NAME
     return s3_key
 
 

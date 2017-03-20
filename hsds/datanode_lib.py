@@ -121,6 +121,7 @@ async def s3sync(app):
                 # write back to S3  
                 s3_key = None
                 is_chunk = False
+                log.info("s3sync for obj_id: {}".format(obj_id))
                 if obj_id.find('.') > -1:
                     # this looks like a domain id
                     s3_key = getS3KeyForDomain(obj_id)
