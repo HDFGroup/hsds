@@ -145,7 +145,6 @@ def getDomainFromRequest(request):
             host = request.host
             if "X-Forwarded-Host" in request.headers:
                 host = request.headers["X-Forwarded-Host"]
-        print("getDomainFromRequest, host: {}".format(host))
         if host[0] == '/':  # path style host
             domain = host
             validateDomain(domain)
