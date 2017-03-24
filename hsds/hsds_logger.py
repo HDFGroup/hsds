@@ -29,6 +29,13 @@ def warn(msg):
 		counter = app["log_count"]
 		counter["WARN"] += 1
 
+def warning(msg):
+	if config.get("log_level") != "ERROR":
+		print("WARN> " + msg)
+	if app:
+		counter = app["log_count"]
+		counter["WARN"] += 1
+
 def error(msg):
 	print("ERROR> " + msg)
 	if app:
