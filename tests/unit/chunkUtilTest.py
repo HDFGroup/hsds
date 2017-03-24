@@ -15,8 +15,9 @@ import sys
 sys.path.append('../../hsds/util')
 sys.path.append('../../hsds')
 from dsetUtil import getHyperslabSelection
-from chunkUtil import guess_chunk, getNumChunks, getChunkCoordinate, getChunkIds, getChunkId
+from chunkUtil import guessChunk, getNumChunks, getChunkCoordinate, getChunkIds, getChunkId
 from chunkUtil import getChunkIndex, getChunkSelection, getChunkCoverage, getDataCoverage, ChunkIterator
+from chunkUtil import CHUNK_MIN, CHUNK_MAX, getChunkSize, shrinkChunk, expandChunk
 
 
 class ChunkUtilTest(unittest.TestCase):
@@ -25,31 +26,139 @@ class ChunkUtilTest(unittest.TestCase):
         # main
     
 
-    def testGuessChunk(self):       
-        shape = {"class": 'H5S_SIMPLE', "dims": [100, 100]}
-        typesize = 8
-        layout = guess_chunk(shape, typesize)
-        self.assertEqual(layout, (25, 50))
+    def testGuessChunk(self):      
+        
+        typesize = 'H5T_VARIABLE'
 
+        shape = {"class": 'H5S_NULL' }
+        layout = guessChunk(shape, typesize)
+        self.assertTrue(layout is None)
+
+        shape = {"class": 'H5S_SCALAR' }
+        layout = guessChunk(shape, typesize)
+        self.assertEqual(layout, (1,))
+
+        shape = {"class": 'H5S_SIMPLE', "dims": [100, 100]}
+        layout = guessChunk(shape, typesize)
+        self.assertTrue(len(layout), 2)
+        for i in range(2):
+            self.assertTrue(layout[i] >= 1)
+            self.assertTrue(layout[i] <= 100)
+
+        typesize = 8
+        layout = guessChunk(shape, typesize)
+        self.assertTrue(len(layout), 2)
+        for i in range(2):
+            self.assertTrue(layout[i] >= 1)
+            self.assertTrue(layout[i] <= 100)
+         
         shape = {"class": 'H5S_SIMPLE', "dims": [5]}
-        layout = guess_chunk(shape, typesize)
+        layout = guessChunk(shape, typesize)
         self.assertEqual(layout, (5,))
 
         shape = {"class": 'H5S_SIMPLE', "dims": [100, 100, 100]}
-        layout = guess_chunk(shape, typesize)
-        self.assertEqual(layout, (13,13,25))
-
+        layout = guessChunk(shape, typesize)
+        self.assertTrue(len(layout), 3)
+        for i in range(3):
+            self.assertTrue(layout[i] >= 1)
+            self.assertTrue(layout[i] <= 100)
+        
         shape = {"class": 'H5S_SIMPLE', "dims": [100, 0], "maxdims": [100, 'H5S_UNLIMITED']}
-        layout = guess_chunk(shape, typesize)
-        self.assertEqual(layout, (13,128))
-
+        layout = guessChunk(shape, typesize)
+        self.assertTrue(len(layout), 2)
+        for i in range(2):
+            self.assertTrue(layout[i] >= 1)
+            self.assertTrue(layout[i] <= 1024)
+         
         shape = {"class": 'H5S_SCALAR'}
-        layout = guess_chunk(shape, typesize)
+        layout = guessChunk(shape, typesize)
         self.assertEqual(layout, (1,))
 
         shape = {"class": 'H5S_NULL'}
-        layout = guess_chunk(shape, typesize)
+        layout = guessChunk(shape, typesize)
         self.assertEqual(layout, None)
+
+    def testShrinkChunk(self):
+        typesize = 1
+        layout = (1, 2, 3)
+        shrunk = shrinkChunk(layout, typesize)
+        self.assertEqual(shrunk, layout)
+
+        layout = (1000, 2000, 3000)
+        num_bytes = getChunkSize(layout, typesize)
+        self.assertTrue(num_bytes > CHUNK_MAX)
+        shrunk = shrinkChunk(layout, typesize)
+        rank = len(layout)
+        for i in range(rank):
+            self.assertTrue(shrunk[i] >= 1)
+            self.assertTrue(shrunk[i] <= 1000*(i+1))
+        num_bytes = getChunkSize(shrunk, typesize)
+        self.assertTrue(num_bytes > CHUNK_MIN)
+        self.assertTrue(num_bytes < CHUNK_MAX)
+
+        layout = (3000, 2000, 1000)
+        num_bytes = getChunkSize(layout, typesize)
+        self.assertTrue(num_bytes > CHUNK_MAX)
+        shrunk = shrinkChunk(layout, typesize)
+        rank = len(layout)
+        for i in range(rank):
+            self.assertTrue(shrunk[i] >= 1)
+            self.assertTrue(shrunk[i] <= 1000*(3-i))
+        num_bytes = getChunkSize(shrunk, typesize)
+        self.assertTrue(num_bytes > CHUNK_MIN)
+        self.assertTrue(num_bytes < CHUNK_MAX)
+
+    def testExpandChunk(self):
+        typesize = 1
+        shape = {"class": 'H5S_SIMPLE', "dims": [10, 10, 10]}
+        layout = (10, 10, 10)
+        num_bytes = getChunkSize(layout, typesize)
+        self.assertTrue(num_bytes < CHUNK_MIN)
+        expanded = expandChunk(layout, typesize, shape)
+        num_bytes = getChunkSize(expanded, typesize)
+        # chunk layout can't be larger than dataspace
+        self.assertTrue(num_bytes < CHUNK_MIN)
+        self.assertEqual(expanded, (10, 10, 10))
+         
+
+        shape = {"class": 'H5S_SIMPLE', "dims": [1000, 2000, 3000]}
+        layout = (10, 10, 10)
+        num_bytes = getChunkSize(layout, typesize)
+        self.assertTrue(num_bytes < CHUNK_MIN)
+        expanded = expandChunk(layout, typesize, shape)
+        num_bytes = getChunkSize(expanded, typesize)
+        self.assertTrue(num_bytes > CHUNK_MIN)
+        self.assertTrue(num_bytes < CHUNK_MAX)
+         
+
+        shape = {"class": 'H5S_SIMPLE', "dims": [1000, 10, 1000], "maxdims": [1000, 100, 1000]}
+        layout = (10, 10, 10)
+        num_bytes = getChunkSize(layout, typesize)
+        self.assertTrue(num_bytes < CHUNK_MIN)
+        expanded = expandChunk(layout, typesize, shape)
+        num_bytes = getChunkSize(expanded, typesize)
+        self.assertTrue(num_bytes > CHUNK_MIN)
+        self.assertTrue(num_bytes < CHUNK_MAX)
+
+        shape = {"class": 'H5S_SIMPLE', "dims": [1000, 0, 1000], "maxdims": [1000, 100, 1000]}
+        layout = (10, 10, 10)
+        num_bytes = getChunkSize(layout, typesize)
+        self.assertTrue(num_bytes < CHUNK_MIN)
+        expanded = expandChunk(layout, typesize, shape)
+        num_bytes = getChunkSize(expanded, typesize)
+        self.assertTrue(num_bytes > CHUNK_MIN)
+        self.assertTrue(num_bytes < CHUNK_MAX)
+
+        shape = {"class": 'H5S_SIMPLE', "dims": [1000, 10, 1000], "maxdims": [1000, 'H5S_UNLIMITED', 1000]}
+        layout = (10, 10, 10)
+        num_bytes = getChunkSize(layout, typesize)
+        self.assertTrue(num_bytes < CHUNK_MIN)
+        expanded = expandChunk(layout, typesize, shape)
+        num_bytes = getChunkSize(expanded, typesize)
+        self.assertTrue(num_bytes > CHUNK_MIN)
+        self.assertTrue(num_bytes < CHUNK_MAX)
+
+         
 
     def testGetNumChunks(self):
         datashape = [100,]

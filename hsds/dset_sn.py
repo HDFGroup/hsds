@@ -21,11 +21,12 @@ from aiohttp.errors import HttpBadRequest
 from util.httpUtil import http_post, http_put, http_delete, jsonResponse, getHref
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
 from util.dsetUtil import  getNumElements, getPreviewQuery
-from util.chunkUtil import guess_chunk
+from util.chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson, getItemSize
 from servicenode_lib import getDomainJson, getObjectJson, validateAction
+from util.chunkUtil import CHUNK_MIN, CHUNK_MAX
 import config
 import hsds_logger as log
 
@@ -554,13 +555,24 @@ async def POST_Dataset(request):
             else:
                 shape_json["maxdims"].append(maxextent) 
 
+    # get the chunk layout and create/adjust if needed
     layout = validateChunkLayout(shape_json, item_size, body) 
-    if layout is None:
-        layout = guess_chunk(shape_json, item_size) 
-        log.info("autochunk layout: {}".format(layout))
-    else:
+    if layout is not None:
         log.info("client layout: {}".format(layout))
-
+    else:
+        layout = guessChunk(shape_json, item_size) 
+        log.info("initial autochunk layout: {}".format(layout))
+    
+    if layout is not None:
+        chunk_size = getChunkSize(layout, item_size)
+        # adjust the layout if chunk size is too small or too big
+        if chunk_size <= CHUNK_MIN:
+            layout = expandChunk(layout, item_size, shape_json)
+        elif chunk_size >= CHUNK_MAX:
+            layout = shrinkChunk(layout, item_size)
+        if layout is not None:
+            log.info("chunk_layout: {}".format(layout))
+        
     link_id = None
     link_title = None
     if "link" in body:

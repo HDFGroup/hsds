@@ -1,12 +1,153 @@
-import numpy as np
 from aiohttp.errors import HttpBadRequest 
 import hsds_logger as log
 
 CHUNK_BASE = 16*1024    # Multiplier by which chunks are adjusted
-CHUNK_MIN = 8*1024      # Soft lower limit (8k)
+CHUNK_MIN = 32*1024     # Soft lower limit (32k)
 CHUNK_MAX = 1024*1024   # Hard upper limit (1M)
+DEFAULT_TYPE_SIZE = 128 # Type size case when it is variable
 
-def guess_chunk(shape_json, typesize):
+def getChunkSize(layout, type_size):
+    """ Return chunk size given layout.
+    i.e. just the product of the values in the list.
+    """
+    if type_size == 'H5T_VARIABLE':
+        type_size = DEFAULT_TYPE_SIZE 
+    
+    chunk_size = type_size
+    for n in layout:
+        if n <= 0:
+            raise ValueError("Invalid chunk layout")
+        chunk_size *= n
+    return chunk_size
+
+def get_dset_size(shape_json, typesize):
+    """ Return the size of the dataspace.  For
+        any unlimited dimensions, assume a value of 1.
+        (so the return size will be the absolute minimum)
+    """
+    if shape_json is None or shape_json["class"] == 'H5S_NULL':
+        return None
+    if shape_json["class"] == 'H5S_SCALAR':
+        return typesize  # just return size for one item
+    if typesize == 'H5T_VARIABLE':
+        typesize = DEFAULT_TYPE_SIZE  # just take a guess at the item size 
+    dset_size = typesize
+    shape = shape_json["dims"]
+    rank = len(shape)
+   
+    for n in range(rank):
+        if shape[n] == 0:
+            # extendable extent with value of 0
+            continue  # assume this is one
+        dset_size *= shape[n]
+    return dset_size
+
+def expandChunk(layout, typesize, shape_json):
+    """ Extend the chunk shape until it is above the MIN target.
+    """
+    if shape_json is None or shape_json["class"] == 'H5S_NULL':
+        return None
+    if shape_json["class"] == 'H5S_SCALAR':
+        return (1,)  # just enough to store one item
+
+    layout = list(layout)
+    dims = shape_json["dims"]
+    rank = len(dims)
+    extendable_dims = 0  # number of dimensions that are extenable
+    maxdims = None
+    if "maxdims" in shape_json:
+        maxdims = shape_json["maxdims"]
+        for n in range(rank):
+            if maxdims[n] == 'H5S_UNLIMITED' or maxdims[n] > dims[n]:
+                extendable_dims += 1
+                 
+    dset_size = get_dset_size(shape_json, typesize)
+    if dset_size <= CHUNK_MIN and extendable_dims == 0:
+        # just use the entire dataspace shape as one big chunk
+        return tuple(dims)
+
+    chunk_size = getChunkSize(layout, typesize)
+    if chunk_size >= CHUNK_MIN:
+        return tuple(layout)  # good already
+    while chunk_size < CHUNK_MIN:
+        # just adjust along extendable dimensions first
+        old_chunk_size = chunk_size
+        for n in range(rank):
+            dim = rank - n - 1 # start from 
+            
+            if extendable_dims > 0:
+                if maxdims[dim] == 'H5S_UNLIMITED':
+                    # infinately extendable dimensions
+                    layout[dim] *= 2
+                    chunk_size = getChunkSize(layout, typesize)
+                    if chunk_size > CHUNK_MIN:
+                        break
+                elif maxdims[dim] > layout[dim]:
+                    # can only be extended so much
+                    layout[dim] *= 2
+                    if layout[dim] >= dims[dim]:
+                        layout[dim] = maxdims[dim]  # trim back
+                        extendable_dims -= 1  # one less extenable dimension
+                    
+                    chunk_size = getChunkSize(layout, typesize)
+                    if chunk_size > CHUNK_MIN:
+                        break
+                    else:
+                        pass # ignore non-extensible for now
+            else:
+                # no extendable dimensions
+                if dims[dim] > layout[dim]:
+                    # can expand chunk along this dimension
+                    layout[dim] *= 2
+                    if layout[dim] > dims[dim]:
+                        layout[dim] = dims[dim]  # trim back
+                    chunk_size = getChunkSize(layout, typesize)
+                    if chunk_size > CHUNK_MIN:
+                        break
+                else:
+                    pass # can't extend chunk along this dimension
+        if chunk_size <= old_chunk_size:
+            # reality check to see if we'll ever break out of the while loop
+            log.warn("Unexpected error in guess_chunk size")
+             
+            break
+        elif chunk_size > CHUNK_MIN:
+            break  # we're good
+        else:
+            pass  # do another round
+    return tuple(layout)
+
+def shrinkChunk(layout, typesize):
+    """ Shrink the chunk shape until it is less than the MAX target.
+    """  
+    layout = list(layout)
+    chunk_size = getChunkSize(layout, typesize)
+    if chunk_size <= CHUNK_MAX:
+        return tuple(layout)  # good already
+    rank = len(layout)
+     
+    while chunk_size > CHUNK_MAX:
+        # just adjust along extendable dimensions first
+        old_chunk_size = chunk_size
+        for dim in range(rank):
+            if layout[dim] > 1:
+                layout[dim] //= 2
+                chunk_size = getChunkSize(layout, typesize)
+                if chunk_size <= CHUNK_MAX:
+                    break
+            else:
+                pass # can't shrink chunk along this dimension
+        if chunk_size >= old_chunk_size:
+            # reality check to see if we'll ever break out of the while loop
+            log.warning("Unexpected error in shrink_chunk")
+            break
+        elif chunk_size <= CHUNK_MAX:
+            break  # we're good
+        else:
+            pass   # do another round
+    return tuple(layout)
+
+def guessChunk(shape_json, typesize):
     """ Guess an appropriate chunk layout for a dataset, given its shape and
     the size of each element in bytes.  Will allocate chunks only as large
     as MAX_SIZE.  Chunks are generally close to some power-of-2 fraction of
@@ -18,6 +159,7 @@ def guess_chunk(shape_json, typesize):
         return None
     if shape_json["class"] == 'H5S_SCALAR':
         return (1,)  # just enough to store one item
+    
     if "maxdims" in shape_json:
         shape = [] 
         maxdims = shape_json["maxdims"]
@@ -33,9 +175,12 @@ def guess_chunk(shape_json, typesize):
     if typesize == 'H5T_VARIABLE':
         typesize = 128  # just take a guess at the item size 
 
-    # For unlimited dimensions we have to guess 1024
+
+    # For unlimited dimensions we have to guess. use 1024
     shape = tuple((x if x!=0 else 1024) for i, x in enumerate(shape))
 
+    return shape
+"""
     ndims = len(shape)
     if ndims == 0:
         raise ValueError("Chunks not allowed for scalar datasets.")
@@ -75,6 +220,7 @@ def guess_chunk(shape_json, typesize):
         idx += 1
 
     return tuple(int(x) for x in chunks)
+"""
 
 def getNumChunks(selection, layout):
     """
@@ -107,6 +253,10 @@ def getNumChunks(selection, layout):
             count += 1
         num_chunks *= count
     return num_chunks
+
+
+
+
             
 def getChunkId(dset_id, point, layout):
     """ get chunkid for given point in the dataset
@@ -137,7 +287,7 @@ def getChunkIds(dset_id, selection, layout, dim=0, prefix=None, chunk_ids=None):
         # construct a prefix using "c-" with the uuid of the dset_id
         if not dset_id.startswith("d-"):
             msg = "Bad Request: invalid dset id: {}".format(dset_id)
-            log.warn(msg)
+            log.warning(msg)
             raise HttpBadRequest(message=msg)
         prefix = "c-" + dset_id[2:] + '_'
     rank = len(selection)

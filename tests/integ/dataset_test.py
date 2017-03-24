@@ -13,7 +13,10 @@ import unittest
 import requests
 import json
 import helper
- 
+
+# min/max chunk size - copied from chunkUtil.py
+CHUNK_MIN = 32*1024     # Soft lower limit (32k)
+CHUNK_MAX = 1024*1024   # Hard upper limit (1M) 
 
 class DatasetTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -465,7 +468,6 @@ class DatasetTest(unittest.TestCase):
         # test Dataset with creation property list
         print("testCreationPropertiesLayoutDataset", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
-
         # get domain
         req = helper.getEndpoint() + '/'
         rsp = requests.get(req, headers=headers)
@@ -475,8 +477,11 @@ class DatasetTest(unittest.TestCase):
 
         # create the dataset 
         req = self.endpoint + "/datasets"
-        payload = {'type': 'H5T_IEEE_F32LE', 'shape': [100, 200], 'maxdims': [100, 0]}
-        payload['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [10, 10] }}
+        # Create ~1GB dataset
+        payload = {'type': 'H5T_IEEE_F32LE', 'shape': [365, 780, 1024], 'maxdims': [0, 780, 1024]}
+        # define a chunk layout with 4 chunks per 'slice'
+        # chunk size is 798720 bytes
+        payload['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [1, 390, 512] }}
         req = self.endpoint + "/datasets"
         rsp = requests.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
@@ -490,7 +495,6 @@ class DatasetTest(unittest.TestCase):
         payload = {"id": dset_uuid}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
-
         # verify layout
         req = helper.getEndpoint() + "/datasets/" + dset_uuid
         rsp = requests.get(req, headers=headers)
@@ -501,8 +505,9 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("class" in layout_json)
         self.assertEqual(layout_json["class"], 'H5D_CHUNKED')
         self.assertTrue("dims" in layout_json)
-        self.assertEqual(layout_json["dims"], [10,10])
+        self.assertEqual(layout_json["dims"], [1, 390, 512])
 
+    
     def testInvalidFillValue(self):
         # test Dataset with simple type and fill value that is incompatible with the type
         print("testInvalidFillValue", self.base_domain)
@@ -523,13 +528,11 @@ class DatasetTest(unittest.TestCase):
         rsp = requests.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 400)  # invalid param
          
-         
-
+    
     def testAutoChunkDataset(self):
-        # test Dataset where chunk dataset is set automatically
+        # test Dataset where chunk layout is set automatically
         print("testAutoChunkDataset", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
-
         # get domain
         req = helper.getEndpoint() + '/'
         rsp = requests.get(req, headers=headers)
@@ -546,11 +549,12 @@ class DatasetTest(unittest.TestCase):
         rsp = requests.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
         rspJson = json.loads(rsp.text)
+         
         dset_uuid = rspJson['id']
         self.assertTrue(helper.validateId(dset_uuid))
          
-        # link new dataset as 'autochunktest'
-        name = 'autochunktest'
+        # link new dataset as 'dset'
+        name = 'dset'
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
         payload = {"id": dset_uuid}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
@@ -570,6 +574,64 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(len(layout), 2)
         self.assertTrue(layout[0] < dims[0])
         self.assertTrue(layout[1] < dims[1])
+        chunk_size = layout[0] * layout[1] * 4
+        # chunk size should be between chunk min and max
+        self.assertTrue(chunk_size >= CHUNK_MIN)
+        self.assertTrue(chunk_size <= CHUNK_MAX)
+
+    def testMinChunkSizeDataset(self):
+        # test Dataset where chunk layout is adjusted if provided
+        # layout is too small
+        print("testMinChunkSizeDataset", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        # get domain
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # create the dataset 
+        req = self.endpoint + "/datasets"
+        # 50K x 80K dataset
+        dims = [50000, 80000]
+        payload = {'type': 'H5T_IEEE_F32LE', 'shape': dims }
+        # define a chunk layout with lots of small chunks
+        payload['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [10, 10] }}
+      
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dset_uuid))
+         
+        # link new dataset as 'dset'
+        name = 'dset'
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {"id": dset_uuid}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # verify layout
+        req = helper.getEndpoint() + "/datasets/" + dset_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("layout" in rspJson)
+        layout_json = rspJson["layout"]
+        self.assertTrue("class" in layout_json)
+        self.assertEqual(layout_json["class"], 'H5D_CHUNKED')
+        self.assertTrue("dims" in layout_json)
+        layout = layout_json["dims"]
+        self.assertEqual(len(layout), 2)
+        self.assertTrue(layout[0] < dims[0])
+        self.assertTrue(layout[1] < dims[1])
+        chunk_size = layout[0] * layout[1] * 4
+        # chunk size should be between chunk min and max
+        self.assertTrue(chunk_size >= CHUNK_MIN)
+        self.assertTrue(chunk_size <= CHUNK_MAX)
+
 
     def testPostWithLink(self):
         print("testPostWithLink", self.base_domain)
