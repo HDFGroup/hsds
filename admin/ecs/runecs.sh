@@ -66,6 +66,7 @@ function make_local_container_network {
    docker network ls
    echo "== The $CONT_NETWORK docker network =="
    docker network inspect $CONT_NETWORK
+   sleep 4
 }
 
 #---------------------------------------------------------------------------
@@ -133,8 +134,25 @@ function run_servicenode  {
 # can add/manipulate any other domain; here by domain we're refering to
 # the hdf5 REST definition, not a network def'n.
 function init_h5_root_domain_local {
-   docker exec hsds_head \
-   python3 /usr/local/src/hsds/create_toplevel_domain_json.py --user=$HSDS_ADMIN  --domain=$ROOT_DOMAIN
+   mylocalip 
+   ison=
+   for i in `seq 1 10`; do
+      ISREADY=`curl -s http://$HOSTIP:$HEAD_PORT/info | grep READY`
+      if  [ ! -z "$ISREADY" ]; then
+         ison="1"
+         break
+      fi
+      echo "waiting for local hsds to be ready..."
+      sleep 2
+   done
+
+   if [ ! -z  "$ison" ]; then
+      docker exec hsds_head \
+      python3 /usr/local/src/hsds/create_toplevel_domain_json.py --user=$HSDS_ADMIN  --domain=$ROOT_DOMAIN
+   else
+      echo "local hsds failed to get to ready state..."
+      exit 1
+   fi
 }
 
 if [ "$CLUST" == "yes" ]; then
