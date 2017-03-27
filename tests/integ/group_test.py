@@ -59,7 +59,6 @@ class GroupTest(unittest.TestCase):
 
         # try to do a GET with a different domain (should fail)
         another_domain = helper.getParentDomain(self.base_domain)
-        print("another_domain:", another_domain)
         headers = helper.getRequestHeaders(domain=another_domain)
         req = helper.getEndpoint() + '/groups/' + root_uuid
         rsp = requests.get(req, headers=headers)
