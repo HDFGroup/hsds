@@ -53,7 +53,7 @@ Running the containers, runecs.sh (locally using the aws repository)
 #### Notes
 
 * If you see the error 'docker: Error response from daemon: Conflict. The name "/hsds_head"' this suggests you may need to do some cleanup 
-  from a previous hsds instantiation. Once can do a cleanup via `$ docker ps -aq --filter name="hsds\*" |  xargs docker rm`
+  from a previous hsds instantiation. One can do a cleanup via `$ docker ps -aq --filter name="hsds\*" |  xargs docker rm`
 
 * The runecs.sh script will attempt to create a root hsds domain via the create_toplevel_domain_json.py (in ../../hsds/create_toplevel_domain_json.py 
   relative to this README), via a docker exec into the head. 
