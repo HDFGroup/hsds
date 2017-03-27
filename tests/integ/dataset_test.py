@@ -601,7 +601,6 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(len(layout), 1)
         self.assertTrue(layout[0] < dims[0])
         chunk_size = layout[0] * 8 * 3  # three 64bit 
-        print(chunk_size)
         # chunk size should be between chunk min and max
         self.assertTrue(chunk_size >= CHUNK_MIN)
         self.assertTrue(chunk_size <= CHUNK_MAX)
