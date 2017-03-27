@@ -316,6 +316,50 @@ class AttributeTest(unittest.TestCase):
         type_json = rspJson["type"]
         self.assertTrue("class" in type_json)
         self.assertEqual(type_json["class"], "H5T_STRING")
+        self.assertTrue("length" in type_json)
+        self.assertEqual(type_json["length"], 7)
+
+
+    def testPutVLenString(self):
+        # Test PUT value for 1d dataset with fixed length string types
+        print("testPutVLenString", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + '/'
+
+        # Get root uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create attr
+        words = ["Parting", "is such", "sweet", "sorrow."] 
+        fixed_str_type = {"charSet": "H5T_CSET_ASCII", 
+                "class": "H5T_STRING", 
+                "length": "H5T_VARIABLE", 
+                "strPad": "H5T_STR_NULLTERM" }
+        data = { "type": fixed_str_type, "shape": 4, 
+            "value": words}
+        attr_name = "str_attr"
+        req = self.endpoint + "/groups/" + root_uuid + "/attributes/" + attr_name
+        rsp = requests.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # read attr  
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], words)
+        self.assertTrue("type" in rspJson)
+        type_json = rspJson["type"]
+        self.assertTrue("class" in type_json)
+        self.assertEqual(type_json["class"], "H5T_STRING")
+        self.assertTrue("length" in type_json)
+        self.assertEqual(type_json["length"], "H5T_VARIABLE")
 
     def testPutInvalid(self):
         print("testPutInvalid", self.base_domain)
@@ -343,7 +387,6 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_id = rspJson["root"]
-        print("root_id:", root_id)
         
         # create the datatype
         payload = {'type': 'H5T_IEEE_F32LE'}
