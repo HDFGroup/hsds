@@ -360,7 +360,7 @@ async def PUT_Value(request):
 
     if item_size == 'H5T_VARIABLE':
         # keep this check until we have variable length supported
-        msg = "Only JSON is supported for variable length data types"
+        msg = "variable length data types not yet supported"
         log.warn(msg)
         raise HttpProcessingError(code=501, message="Variable length data not yet supported")
       
@@ -552,7 +552,7 @@ async def GET_Value(request):
 
     if item_size == 'H5T_VARIABLE':
         # keep this check until we have variable length supported
-        msg = "Only JSON is supported for variable length data types"
+        msg = "variable length data types not yet supported"
         log.warn(msg)
         raise HttpProcessingError(code=501, message="Variable length data not yet supported")
 
