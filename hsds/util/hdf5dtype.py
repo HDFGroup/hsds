@@ -721,10 +721,9 @@ def validateTypeItem(typeItem):
     try:
         dt = createDataType(typeItem)
         log.info("got numpy type: {}".format(str(dt)))
-    except KeyError as ke:
-        raise HttpBadRequest(message=str(ke))
-    except TypeError as ve:
-        raise HttpBadRequest(message=str(ve))
+    except (KeyError, TypeError, ValueError) as e:
+        raise HttpBadRequest(message=str(e))
+     
 
 """
 Return JSON representation of a predefined type string
