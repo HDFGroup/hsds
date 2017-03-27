@@ -1,9 +1,9 @@
 from aiohttp.errors import HttpBadRequest 
 import hsds_logger as log
 
-CHUNK_BASE = 16*1024    # Multiplier by which chunks are adjusted
-CHUNK_MIN = 32*1024     # Soft lower limit (32k)
-CHUNK_MAX = 1024*1024   # Hard upper limit (1M)
+CHUNK_BASE =  16*1024    # Multiplier by which chunks are adjusted
+CHUNK_MIN =  512*1024      # Soft lower limit (512k)
+CHUNK_MAX = 2048*1024   # Hard upper limit (2M) 
 DEFAULT_TYPE_SIZE = 128 # Type size case when it is variable
 
 def getChunkSize(layout, type_size):

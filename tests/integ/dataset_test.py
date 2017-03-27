@@ -15,8 +15,8 @@ import json
 import helper
 
 # min/max chunk size - copied from chunkUtil.py
-CHUNK_MIN = 32*1024     # Soft lower limit (32k)
-CHUNK_MAX = 1024*1024   # Hard upper limit (1M) 
+CHUNK_MIN = 512*1024      # Soft lower limit (512k)
+CHUNK_MAX = 2*1024*1024   # Hard upper limit (2M) 
 
 class DatasetTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -575,6 +575,7 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue(layout[0] < dims[0])
         self.assertTrue(layout[1] < dims[1])
         chunk_size = layout[0] * layout[1] * 4
+        print("chunk_size", chunk_size)
         # chunk size should be between chunk min and max
         self.assertTrue(chunk_size >= CHUNK_MIN)
         self.assertTrue(chunk_size <= CHUNK_MAX)
