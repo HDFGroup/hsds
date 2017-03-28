@@ -147,6 +147,58 @@ def getRootUUID(domain, username=None, password=None):
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
     return root_uuid
+
+
+"""
+Helper function - get a domain for one of the test files
+"""
+def getTestDomain(name):
+    folder = '/home/test_user1/test/'
+    return folder + name
+
+"""
+Helper function - get uuid for a given path
+"""
+def getUUIDByPath(domain, path, username=None, password=None):
+    if path[0] != '/':
+        raise KeyError("only abs paths") # only abs paths
+            
+    parent_uuid = getRootUUID(domain, username=username, password=password)  
+     
+    if path == '/':
+        return parent_uuid
+
+    headers = getRequestHeaders(domain=domain)
+          
+    # make a fake tgt_json to represent 'link' to root group
+    tgt_json = {'collection': "groups", 'class': "H5L_TYPE_HARD", 'id': parent_uuid }
+    tgt_uuid = None
+            
+    names = path.split('/')         
+                      
+    for name in names:
+        if not name: 
+            continue
+        if parent_uuid is None:
+            raise KeyError("not found")
+                 
+        req = getEndpoint() + "/groups/" + parent_uuid + "/links/" + name
+        rsp = requests.get(req, headers=headers)
+        if rsp.status_code != 200:
+            raise KeyError("not found")
+        rsp_json = json.loads(rsp.text)    
+        tgt_json = rsp_json['link']
+            
+        if tgt_json['class'] == 'H5L_TYPE_HARD':
+            if tgt_json['collection'] == 'groups':
+                parent_uuid = tgt_json['id']    
+            else:
+                parent_uuid = None
+            tgt_uuid = tgt_json['id']
+        else:
+            raise KeyError("non-hard link")
+    return tgt_uuid
+
        
 
      

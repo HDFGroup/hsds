@@ -12,6 +12,7 @@
 import unittest
 import requests
 import json
+import time
 import helper
 
 # min/max chunk size - copied from chunkUtil.py
@@ -56,18 +57,15 @@ class DatasetTest(unittest.TestCase):
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        self.assertTrue("id" in rspJson)
+        for name in ("id", "shape", "hrefs", "layout", "creationProperties", 
+            "attributeCount", "created", "lastModified", "root", "domain"):
+            self.assertTrue(name in rspJson)
         self.assertEqual(rspJson["id"], dset_id)
-        self.assertTrue("created" in rspJson)
-        self.assertTrue("lastModified" in rspJson)
-        self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("attributeCount" in rspJson)
-        self.assertTrue("creationProperties" in rspJson)
+        self.assertEqual(rspJson["root"], root_uuid) 
+        self.assertEqual(rspJson["domain"], self.base_domain) 
         self.assertEqual(rspJson["attributeCount"], 0)
-        self.assertTrue("shape" in rspJson)
         shape_json = rspJson["shape"]
         self.assertTrue(shape_json["class"], "H5S_SCALAR")
-        self.assertTrue("type" in rspJson)
         self.assertTrue(rspJson["type"], "H5T_IEEE_F32LE")
 
         # Get the type
@@ -168,6 +166,68 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue(shape_json["class"], "H5S_SCALAR")
         self.assertTrue("type" in rspJson)
         self.assertTrue(rspJson["type"], "H5T_IEEE_F32LE")
+
+    def testGet(self):
+        domain = helper.getTestDomain("tall.h5")
+        print("testGetDomain", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        
+        # verify domain exists
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        if rsp.status_code != 200:
+            print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
+            return  # abort rest of test
+        domainJson = json.loads(rsp.text)
+        root_uuid = domainJson["root"]
+         
+        # get the dataset uuid 
+        dset_uuid = helper.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1")
+        self.assertTrue(dset_uuid.startswith("d-"))
+
+        # get the dataset json
+        req = helper.getEndpoint() + '/datasets/' + dset_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        for name in ("id", "shape", "hrefs", "layout", "creationProperties", 
+            "attributeCount", "created", "lastModified", "root", "domain"):
+            self.assertTrue(name in rspJson)
+         
+        self.assertEqual(rspJson["id"], dset_uuid) 
+        self.assertEqual(rspJson["root"], root_uuid) 
+        self.assertEqual(rspJson["domain"], domain) 
+        hrefs = rspJson["hrefs"]
+        self.assertEqual(len(hrefs), 5)
+        self.assertEqual(rspJson["id"], dset_uuid)
+
+        shape = rspJson["shape"]
+        for name in ("class", "dims", "maxdims"):
+            self.assertTrue(name in shape)
+        self.assertEqual(shape["class"], 'H5S_SIMPLE')
+        self.assertEqual(shape["dims"], [10,10])
+        self.assertEqual(shape["maxdims"], [10,10])
+
+        layout = rspJson["layout"]
+        self.assertEqual(layout["class"], 'H5D_CHUNKED')
+        self.assertEqual(layout["dims"], [10,10])
+         
+        type = rspJson["type"]
+        for name in ("base", "class"):
+            self.assertTrue(name in type)
+        self.assertEqual(type["class"], 'H5T_INTEGER')
+        self.assertEqual(type["base"], 'H5T_STD_I32BE')
+
+        cpl = rspJson["creationProperties"]
+        for name in ("layout", "fillTime"):
+            self.assertTrue(name in cpl)
+
+        self.assertEqual(rspJson["attributeCount"], 2)
+
+        now = time.time()
+        # the object shouldn't have been just created or updated
+        self.assertTrue(rspJson["created"] < now - 60 * 5)
+        self.assertTrue(rspJson["lastModified"] < now - 60 * 5)
  
 
     def testDelete(self):

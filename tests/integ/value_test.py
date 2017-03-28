@@ -762,6 +762,51 @@ class ValueTest(unittest.TestCase):
             self.assertEqual(ret_values[i], 'hello')
             self.assertEqual(len(ret_values[i+5]), len(fill_value))
             self.assertEqual(ret_values[i+5], fill_value)
+
+    def testGet(self):
+        domain = helper.getTestDomain("tall.h5")
+        print("testGetDomain", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        
+        # verify domain exists
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        if rsp.status_code != 200:
+            print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
+            return  # abort rest of test
+        domainJson = json.loads(rsp.text)
+        root_uuid = domainJson["root"]
+         
+        # get the dataset uuid 
+        dset1_uuid = helper.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1")
+
+        # read all the dataset values
+        req = helper.getEndpoint() + "/datasets/" + dset1_uuid + "/value"
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        
+        hrefs = rspJson["hrefs"]
+        self.assertEqual(len(hrefs), 4)
+        self.assertTrue("value" in rspJson)
+        data = rspJson["value"]  # should be 10 x 10 array
+        for j in range(10):
+            row = data[j]
+            for i in range(10):
+                self.assertEqual(row[i], i*j)
+
+        # read 4x4 block from dataset
+        params = {"select": "[0:4, 0:4]"}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        data = rspJson["value"]  # should be 4 x 4 array
+        for j in range(4):
+            row = data[j]
+            for i in range(4):
+                self.assertEqual(row[i], i*j)
  
              
 if __name__ == '__main__':

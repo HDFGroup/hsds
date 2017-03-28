@@ -11,6 +11,7 @@
 ##############################################################################
 from copy import copy
 import unittest
+import time
 import requests
 import json
 import helper
@@ -360,6 +361,98 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(len(links), 3)  #  "sixth", "tenth", "third" 
         last_link = links[-1]
         self.assertEqual(last_link["title"], "third")    
+
+    def testGet(self):
+        # test getting links from an existing domain
+        domain = helper.getTestDomain("tall.h5")
+        print("testGetDomain", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        
+        # verify domain exists
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        if rsp.status_code != 200:
+            print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
+            return  # abort rest of test
+         
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        self.assertTrue(root_uuid.startswith("g-"))
+
+        # get the "/g1" group
+        g1_2_uuid = helper.getUUIDByPath(domain, "/g1/g1.2")
+
+        now = time.time()
+
+        # get links for /g1/g1.2:
+        req = helper.getEndpoint() + '/groups/' + g1_2_uuid + '/links'
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        hrefs = rspJson["hrefs"]
+        self.assertEqual(len(hrefs), 3)
+        self.assertTrue("links" in rspJson)
+        links = rspJson["links"]
+        self.assertEqual(len(links), 2)
+        g1_2_1_uuid = None
+        extlink_file = None
+        for link in links:
+            self.assertTrue("class" in link)
+            link_class = link["class"]
+            if link_class == 'H5L_TYPE_HARD':
+                for name in ("target", "created", "collection", "class", "id", 
+                    "title", "href"):
+                    self.assertTrue(name in link)
+                g1_2_1_uuid = link["id"]
+                self.assertTrue(g1_2_1_uuid.startswith("g-"))
+                self.assertEqual(link["title"], "g1.2.1")
+                self.assertTrue(link["created"] < now - 60 * 5)
+            else:
+                self.assertEqual(link_class, 'H5L_TYPE_EXTERNAL')
+                for name in ("created", "class", "h5domain", "h5path", 
+                    "title", "href"):
+                    self.assertTrue(name in link)
+                self.assertEqual(link["title"], "extlink")
+                extlink_file = link["h5domain"]
+                self.assertEqual(extlink_file, "somefile")
+                self.assertEqual(link["h5path"], "somepath")
+                self.assertTrue(link["created"] < now - 60 * 5)
+         
+        self.assertTrue(g1_2_1_uuid is not None)
+        self.assertTrue(extlink_file is not None)
+        self.assertEqual(helper.getUUIDByPath(domain, "/g1/g1.2/g1.2.1"), g1_2_1_uuid)
+
+        # get link by title
+        req = helper.getEndpoint() + '/groups/' + g1_2_1_uuid + '/links/slink'
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        for name in ("created", "lastModified", "link", "hrefs"):
+            self.assertTrue(name in rspJson)
+        # created should be same as lastModified for links 
+        self.assertEqual(rspJson["created"], rspJson["lastModified"])
+        self.assertTrue(rspJson["created"] < now - 60 * 5)
+        hrefs = rspJson["hrefs"]
+        self.assertEqual(len(hrefs), 3)
+
+        link = rspJson["link"]
+        for name in ("title", "h5path", "class"):
+            self.assertTrue(name in link)
+
+        self.assertEqual(link["class"], 'H5L_TYPE_SOFT')
+        self.assertFalse("h5domain" in link)  # only for external links
+        self.assertEqual(link["title"], "slink")
+        self.assertEqual(link["h5path"], "somevalue")
+        
+
+
+
+
+
+
+        
+ 
              
 if __name__ == '__main__':
     #setup test files

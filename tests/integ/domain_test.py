@@ -11,6 +11,7 @@
 ##############################################################################
 import unittest
 import requests
+import time
 import json
 import config
 import helper
@@ -49,6 +50,51 @@ class DomainTest(unittest.TestCase):
         # try using DNS-style domain name  
         domain = helper.getDNSDomain(self.base_domain)
         params = { "host": domain }
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(rsp.headers['content-type'], 'application/json')
+        rspJson = json.loads(rsp.text)
+        root_uuid_3 = rspJson["root"]
+        self.assertEqual(root_uuid, root_uuid_3)
+
+
+    def testGetDomain(self):
+        domain = helper.getTestDomain("tall.h5")
+        print("testGetDomain", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        if rsp.status_code != 200:
+            print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
+            return  # abort rest of test
+        self.assertEqual(rsp.headers['content-type'], 'application/json')
+        rspJson = json.loads(rsp.text)
+        
+        for name in ("lastModified", "created", "hrefs", "root", "owner"):
+            self.assertTrue(name in rspJson)
+        now = time.time()
+        self.assertTrue(rspJson["created"] < now - 60 * 5)
+        self.assertTrue(rspJson["lastModified"] < now - 60 * 5)
+        self.assertEqual(len(rspJson["hrefs"]), 7)
+        self.assertTrue(rspJson["root"].startswith("g-"))
+        self.assertTrue(rspJson["owner"])
+        
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # verify that passing domain as query string works as well
+        del headers["host"]
+        params = {"host": domain}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(rsp.headers['content-type'], 'application/json')
+        rspJson = json.loads(rsp.text)
+        root_uuid_2 = rspJson["root"]
+        self.assertEqual(root_uuid, root_uuid_2)
+
+        # same deal using the "domain" param
+        params = {"domain": domain}
         rsp = requests.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers['content-type'], 'application/json')

@@ -11,6 +11,7 @@
 ##############################################################################
 import unittest
 import requests
+import time
 import json
 import helper
  
@@ -63,6 +64,46 @@ class GroupTest(unittest.TestCase):
         req = helper.getEndpoint() + '/groups/' + root_uuid
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 400)
+
+    def testGet(self):
+        domain = helper.getTestDomain("tall.h5")
+        print("testGetDomain", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        
+        # verify domain exists
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        if rsp.status_code != 200:
+            print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
+            return  # abort rest of test
+         
+        rspJson = json.loads(rsp.text)
+        grp_uuid = root_uuid = rspJson["root"]
+        self.assertTrue(grp_uuid.startswith("g-"))
+
+        # get the group json
+        req = helper.getEndpoint() + '/groups/' + grp_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        for name in ("id", "hrefs", "attributeCount", "linkCount", 
+            "domain", "root", "created", "lastModified"):
+            self.assertTrue(name in rspJson)
+         
+        self.assertEqual(rspJson["id"], grp_uuid) 
+
+        hrefs = rspJson["hrefs"]
+        self.assertEqual(len(hrefs), 5)
+        self.assertEqual(rspJson["id"], grp_uuid)
+        self.assertEqual(rspJson["attributeCount"], 2)
+        self.assertEqual(rspJson["linkCount"], 2)
+        self.assertEqual(rspJson["root"], root_uuid)
+        self.assertEqual(rspJson["domain"], domain)
+        now = time.time()
+        # the object shouldn't have been just created or updated
+        self.assertTrue(rspJson["created"] < now - 60 * 5)
+        self.assertTrue(rspJson["lastModified"] < now - 60 * 5)
+
          
 
     def testGetInvalidUUID(self):

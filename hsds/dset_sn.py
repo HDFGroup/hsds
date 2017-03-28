@@ -160,6 +160,8 @@ async def GET_Dataset(request):
 
     resp_json = {}
     resp_json["id"] = dset_json["id"]
+    resp_json["root"] = dset_json["root"]
+    resp_json["domain"] = dset_json["domain"]
     resp_json["shape"] = dset_json["shape"]
     resp_json["type"] = dset_json["type"]
     if "creationProperties" in dset_json:

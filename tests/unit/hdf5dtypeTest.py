@@ -20,6 +20,8 @@ sys.path.append('../../hsds/util')
 import hdf5dtype
 from hdf5dtype import special_dtype
 from hdf5dtype import check_dtype
+from hdf5dtype import Reference
+from hdf5dtype import RegionReference
 
 
 class Hdf5dtypeTest(unittest.TestCase):
@@ -143,6 +145,25 @@ class Hdf5dtypeTest(unittest.TestCase):
         self.assertEqual(baseItem['class'], 'H5T_INTEGER')
         self.assertEqual(baseItem['base'], 'H5T_STD_I32LE')
         self.assertEqual(typeSize, 16)
+
+    def testObjReferenceTypeItem(self):
+        dt = special_dtype(ref=Reference)
+        typeItem = hdf5dtype.getTypeItem(dt)
+        typeSize = hdf5dtype.getItemSize(typeItem)
+        self.assertEqual(typeItem['class'], 'H5T_STRING')
+        # TBD - FIXME: this should return the commented out values below
+        #self.assertEqual(typeItem['class'], 'H5T_REFERENCE')  
+        #self.assertEqual(typeItem['base'], 'H5T_STD_REF_OBJ')
+        #self.assertEqual(typeSize, 'H5T_VARIABLE')
+
+    def testRegionReferenceTypeItem(self):
+        dt = special_dtype(ref=RegionReference)
+        typeItem = hdf5dtype.getTypeItem(dt)
+        typeSize = hdf5dtype.getItemSize(typeItem)
+        self.assertEqual(typeItem['class'], 'H5T_STRING')
+        #self.assertEqual(typeItem['class'], 'H5T_REFERENCE')
+        #self.assertEqual(typeItem['base'], 'H5T_STD_REF_DSETREG')
+        #self.assertEqual(typeSize, 'H5T_VARIABLE')
 
     def testCompoundArrayTypeItem(self):
         dt = np.dtype([('a', '<i1'), ('b', 'S1', (10,))])
