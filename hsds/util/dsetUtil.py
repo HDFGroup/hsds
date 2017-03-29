@@ -344,7 +344,7 @@ def getNumElements(dims):
 """ 
 Get dims from a given shape.  Return [1,] for Scalar datasets
 
-Use with H5S_NULL datasets will throw a 500 error.
+Use with H5S_NULL datasets will throw a 400 error.
 """
 def getDsetDims(dset_json):
     if "shape" not in dset_json:
@@ -364,6 +364,32 @@ def getDsetDims(dset_json):
         log.error("Unexpected shape class: {}".format(shape_json['class']))
         raise HttpProcessingError(message="Unexpected error", code=500)
     return dims
+
+
+""" 
+Get maxdims from a given shape.  Return [1,] for Scalar datasets
+
+Use with H5S_NULL datasets will throw a 400 error.
+"""
+def getDsetMaxDims(dset_json):
+    if "shape" not in dset_json:
+        log.error("No shape found in dset_json")
+        raise HttpProcessingError(message="Unexpected error", code=500)
+    shape_json = dset_json["shape"]
+    maxdims = None
+    if shape_json['class'] == 'H5S_NULL':
+        msg = "Expected shape class other than H5S_NULL"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    elif shape_json['class'] == 'H5S_SCALAR':
+        maxdims = [1,]
+    elif shape_json['class'] == 'H5S_SIMPLE':
+        if "maxdims" in shape_json:
+            maxdims = shape_json["maxdims"]
+    else:
+        log.error("Unexpected shape class: {}".format(shape_json['class']))
+        raise HttpProcessingError(message="Unexpected error", code=500)
+    return maxdims
 
 """ Get chunk layout.  Throw 500 if used with non-H5D_CHUNKED layout
 """
@@ -507,6 +533,20 @@ def getEvalStr(query, arr_name, field_names):
         raise HttpBadRequest(message=msg)
     #log.info("eval_str: {}".format(eval_str))       
     return eval_str
+
+"""
+Determine if the dataset can be extended
+"""
+def isExtensible(dims, maxdims):
+    if maxdims is None or len(dims) == 0:
+        return False
+    rank = len(dims)
+    if len(maxdims) != rank:
+        raise ValueError("rank of maxdims does not match dataset")
+    for n in range(rank):
+        if maxdims[n] == 0 or maxdims[n] > dims[n]:
+            return True
+    return False
 
 """
 Class to iterator through items in a selection

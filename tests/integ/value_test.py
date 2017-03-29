@@ -87,6 +87,11 @@ class ValueTest(unittest.TestCase):
         self.assertTrue("value" in rspJson)
         self.assertEqual(rspJson["value"], list(range(2,8)))
 
+        # try to read beyond the bounds of the array
+        params = {"select": "[2:18]"} # read 6 elements, starting at index 2
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+
     def testPut1DDatasetBinary(self):
         # Test PUT value for 1d dataset using binary data
         print("testPut1DDatasetBinary", self.base_domain)
@@ -807,6 +812,84 @@ class ValueTest(unittest.TestCase):
             row = data[j]
             for i in range(4):
                 self.assertEqual(row[i], i*j)
+
+        # try reading a selection that is out of bounds
+        params = {"select": "[0:12, 0:12]"}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+         
+
+    def testResizable1DValue(self):
+        # test read/write to resizable dataset
+        print("testResizable1DValue", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+
+        # get domain
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # create the dataset 
+        num_elements = 10
+        req = self.endpoint + "/datasets"
+        payload = {'type': 'H5T_STD_I32LE', 'shape': [num_elements,], 'maxdims': [0,]}
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dset_uuid))
+         
+        # link new dataset as 'dset'
+        name = 'dset'
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {"id": dset_uuid}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # write entire array
+        value = list(range(num_elements))
+        payload = {'value': value}
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # write value
+
+        # resize the datasets elements
+        orig_extent = num_elements
+        num_elements *= 2  # double the extent
+        req = self.endpoint + "/datasets/" + dset_uuid + "/shape"
+        payload = {"shape": [num_elements,]}
+
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+    
+        # read values from the extended region
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        params = {"select": "[{}:{}]".format(orig_extent, num_elements)}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        data = rspJson["value"]
+        self.assertEqual(len(data), num_elements-orig_extent)
+         
+        # read all values back  
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        data = rspJson["value"]
+        # value handler still thinks there are num_elements
+        self.assertEqual(len(data), num_elements)
+        self.assertEqual(data[0:orig_extent], list(range(orig_extent)))
+        # the extended area should be all zeros
+        self.assertEqual(data[orig_extent:num_elements], [0,]*(num_elements-orig_extent))
+            
  
              
 if __name__ == '__main__':

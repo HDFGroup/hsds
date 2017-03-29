@@ -458,8 +458,8 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(shape['maxdims'][0], 20)
 
     def testResizableUnlimitedDataset(self):
-        # test Dataset with null dataspace type
-        print("testtestResizableUnlimitedDataset", self.base_domain)
+        # test Dataset with unlimited dimension
+        print("testResizableUnlimitedDataset", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
         # get domain
@@ -503,7 +503,7 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(shape['dims'][1], 20)  
         self.assertTrue('maxdims' in shape)
         self.assertEqual(shape['maxdims'][0], 30)
-        self.assertEqual(shape['maxdims'][1], 'H5S_UNLIMITED')
+        self.assertEqual(shape['maxdims'][1], 0)
 
         # verify shape using the GET shape request
         req = req + "/shape"
@@ -520,7 +520,7 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue('maxdims' in shape)
         self.assertEqual(len(shape['maxdims']), 2)
         self.assertEqual(shape['maxdims'][0], 30)
-        self.assertEqual(shape['maxdims'][1], 'H5S_UNLIMITED')
+        self.assertEqual(shape['maxdims'][1], 0)
 
         # resize the second dimension  to 500 elements
         payload = {"shape": [10, 500]}
@@ -542,7 +542,7 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue('maxdims' in shape)
         self.assertEqual(len(shape['maxdims']), 2)
         self.assertEqual(shape['maxdims'][0], 30)
-        self.assertEqual(shape['maxdims'][1], 'H5S_UNLIMITED')
+        self.assertEqual(shape['maxdims'][1], 0)
 
     def testCreationPropertiesLayoutDataset(self):
         # test Dataset with creation property list

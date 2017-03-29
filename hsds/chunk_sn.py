@@ -24,8 +24,8 @@ from util.httpUtil import  jsonResponse, getHref, getAcceptType
 from util.idUtil import   isValidUuid, getDataNodeUrl
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.hdf5dtype import getItemSize, createDataType
-from util.dsetUtil import getSliceQueryParam, setSliceQueryParam, getFillValue  #, setChunkDimQueryParam 
-from util.dsetUtil import getSelectionShape, getNumElements, getDsetDims, getChunkLayout
+from util.dsetUtil import getSliceQueryParam, setSliceQueryParam, getFillValue, isExtensible 
+from util.dsetUtil import getSelectionShape, getNumElements, getDsetDims, getDsetMaxDims, getChunkLayout
 from util.chunkUtil import getNumChunks, getChunkIds, getChunkId
 from util.chunkUtil import getChunkCoverage, getDataCoverage
 from util.arrayUtil import bytesArrayToList, toTuple 
@@ -556,24 +556,40 @@ async def GET_Value(request):
         log.warn(msg)
         raise HttpProcessingError(code=501, message="Variable length data not yet supported")
 
-    datashape = dset_json["shape"]
-    if datashape["class"] == 'H5S_NULL':
-        msg = "GET value not supported for datasets with NULL shape"
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
-    dims = getDsetDims(dset_json)
+    dims = getDsetDims(dset_json)  # throws 400 for HS_NULL dsets
+    maxdims = getDsetMaxDims(dset_json)
     rank = len(dims)
     layout = getChunkLayout(dset_json)
     
     await validateAction(app, domain, dset_id, username, "read")
 
-    slices = []  # selection for read 
+    # refetch the dims if the dataset is extensible and requestor hasn't provided 
+    # an explicit region
+    if isExtensible(dims, maxdims) and "select" not in request.GET:
+        dset_json = await getObjectJson(app, dset_id, refresh=True)
+        dims = getDsetDims(dset_json)  
+
+    slices = None  # selection for read 
      
     # Get query parameter for selection
-    for dim in range(rank):
-        dim_slice = getSliceQueryParam(request, dim, dims[dim])
-        slices.append(dim_slice)   
-
+    if isExtensible:
+        slices = []
+        try:
+            for dim in range(rank):
+                dim_slice = getSliceQueryParam(request, dim, dims[dim])
+                slices.append(dim_slice)   
+        except HttpBadRequest:
+            # exception might be due to us having stale version of dims, refresh
+            dset_json = await getObjectJson(app, dset_id, refresh=True)
+            dims = getDsetDims(dset_json) 
+            slices = None  # retry below
+            
+    if slices is None:
+        slices = []
+        for dim in range(rank):
+            dim_slice = getSliceQueryParam(request, dim, dims[dim])
+            slices.append(dim_slice)  
+            
     slices = tuple(slices)  
     log.info("GET Value selection: {}".format(slices))   
      

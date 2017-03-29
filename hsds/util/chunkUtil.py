@@ -58,7 +58,7 @@ def expandChunk(layout, typesize, shape_json):
     if "maxdims" in shape_json:
         maxdims = shape_json["maxdims"]
         for n in range(rank):
-            if maxdims[n] == 'H5S_UNLIMITED' or maxdims[n] > dims[n]:
+            if maxdims[n] == 0 or maxdims[n] > dims[n]:
                 extendable_dims += 1
                  
     dset_size = get_dset_size(shape_json, typesize)
@@ -76,7 +76,7 @@ def expandChunk(layout, typesize, shape_json):
             dim = rank - n - 1 # start from 
             
             if extendable_dims > 0:
-                if maxdims[dim] == 'H5S_UNLIMITED':
+                if maxdims[dim] == 0:
                     # infinately extendable dimensions
                     layout[dim] *= 2
                     chunk_size = getChunkSize(layout, typesize)
@@ -161,14 +161,7 @@ def guessChunk(shape_json, typesize):
         return (1,)  # just enough to store one item
     
     if "maxdims" in shape_json:
-        shape = [] 
-        maxdims = shape_json["maxdims"]
-        # convert H5S_UNLIIMITED to 0
-        for i in range(len(maxdims)):
-            if maxdims[i] == 'H5S_UNLIMITED':
-                shape.append(0)  
-            else:
-                shape.append(maxdims[i])
+        shape = shape_json["maxdims"]
     else:
         shape = shape_json["dims"]
 

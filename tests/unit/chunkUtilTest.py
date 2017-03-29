@@ -63,7 +63,7 @@ class ChunkUtilTest(unittest.TestCase):
             self.assertTrue(layout[i] >= 1)
             self.assertTrue(layout[i] <= 100)
         
-        shape = {"class": 'H5S_SIMPLE', "dims": [100, 0], "maxdims": [100, 'H5S_UNLIMITED']}
+        shape = {"class": 'H5S_SIMPLE', "dims": [100, 0], "maxdims": [100, 0]}
         layout = guessChunk(shape, typesize)
         self.assertTrue(len(layout), 2)
         for i in range(2):
@@ -149,7 +149,7 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertTrue(num_bytes > CHUNK_MIN)
         self.assertTrue(num_bytes < CHUNK_MAX)
 
-        shape = {"class": 'H5S_SIMPLE', "dims": [1000, 10, 1000], "maxdims": [1000, 'H5S_UNLIMITED', 1000]}
+        shape = {"class": 'H5S_SIMPLE', "dims": [1000, 10, 1000], "maxdims": [1000, 0, 1000]}
         layout = (10, 10, 10)
         num_bytes = getChunkSize(layout, typesize)
         self.assertTrue(num_bytes < CHUNK_MIN)

@@ -98,7 +98,7 @@ def validateChunkLayout(shape_json, item_size, body):
                 msg = "Invalid layout value"
                 log.warn(msg)
                 raise HttpBadRequest(message=msg)
-        elif max_dims[i] != 'H5S_UNLIMITED':
+        elif max_dims[i] != 0:
             if chunk_extent > max_dims[i]:
                 msg = "Invalid layout value for extensible dimension"
                 log.warn(msg)
@@ -372,7 +372,7 @@ async def PUT_DatasetShape(request):
             msg = "Dataspace can not be made smaller"
             log.warn(msg)
             raise HttpBadRequest(message=msg)
-        if maxdims[i] != 'H5S_UNLIMITED' and shape_update[i] > maxdims[i]:
+        if maxdims[i] != 0 and shape_update[i] > maxdims[i]:
             msg = "Database can not be extended past max extent"
             log.warn(msg)
             raise HttpBadRequest(message=msg)  
@@ -547,9 +547,13 @@ async def POST_Dataset(request):
         shape_json["maxdims"] = []
         for i in range(len(dims)):
             maxextent = maxdims[i]
-            if maxextent == 0:
+            if not isinstance(maxextent, int):
+                msg = "Bad Request: maxdims must be integer type"
+                log.warn(msg)
+                raise HttpBadRequest(message=msg)
+            elif maxextent == 0:
                 # unlimited dimension
-                shape_json["maxdims"].append("H5S_UNLIMITED")
+                shape_json["maxdims"].append(0)
             elif maxextent < dims[i]:
                 msg = "Bad Request: maxdims extent can't be smaller than shape extent"
                 log.warn(msg)
