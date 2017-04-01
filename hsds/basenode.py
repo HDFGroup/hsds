@@ -214,7 +214,15 @@ async def info(request):
     answer["log_stats"] = app["log_count"]
     answer["req_count"] = app["req_count"]
     answer["s3_stats"] = app["s3_stats"]
-    
+    cc_stats = {}
+    if "chunk_cache" in app:
+        cc = app["chunk_cache"]  # only DN nodes have this
+        cc_stats["count"] = len(cc)
+        cc_stats["dirty_count"] = cc.dirtyCount
+        cc_stats["utililization_per"] = cc.cacheUtilizationPercent
+        cc_stats["mem_used"] = cc.memUsed
+        cc_stats["mem_target"] = cc.memTarget
+    answer["chunk_cache_stats"] = cc_stats
         
     resp = await jsonResponse(request, answer) 
     log.response(request, resp=resp)

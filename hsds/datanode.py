@@ -17,6 +17,7 @@ import asyncio
 from aiohttp.web import run_app
 from aiohttp import ClientSession, TCPConnector 
 import config
+from util.chunkCache import ChunkCache
 from basenode import healthCheck, baseInit
 import hsds_logger as log
 from domain_dn import GET_Domain, PUT_Domain, DELETE_Domain, PUT_ACL
@@ -87,11 +88,14 @@ if __name__ == '__main__':
     max_tcp_connections = int(config.get("max_tcp_connections"))
     client = ClientSession(loop=loop, connector=TCPConnector(limit=max_tcp_connections))
 
+    chunk_mem_cache_size = int(config.get("chunk_mem_cache_size"))
+    log.info("Using chunk memory cache size of: {}".format(chunk_mem_cache_size))
+
     #create the app object
     app = loop.run_until_complete(init(loop))
     app['client'] = client
     app['meta_cache'] = {}
-    app['data_cache'] = {}
+    app['chunk_cache'] = ChunkCache(mem_target=chunk_mem_cache_size)
     app['deleted_ids'] = set()
     app['dirty_ids'] = {}
 

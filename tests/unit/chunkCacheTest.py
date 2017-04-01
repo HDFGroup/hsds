@@ -27,7 +27,7 @@ class ChunkCacheTest(unittest.TestCase):
 
     def testSimple(self):
         """ check basic functions by adding one chunk to cache """
-        cc = ChunkCache(1000*1000*10)
+        cc = ChunkCache(mem_target=1000*1000*10)
         cc.consistencyCheck()
 
         self.assertEqual(len(cc), 0)
@@ -93,7 +93,7 @@ class ChunkCacheTest(unittest.TestCase):
     
     def testLRU(self):
         """ Check LRU replacement logic """
-        cc = ChunkCache(1024*1024*1024) # big enough that there shouldn't be any cleanup
+        cc = ChunkCache(mem_target=1024*1024*1024) # big enough that there shouldn't be any cleanup
         self.assertEqual(len(cc), 0)
         ids = []
         # add chunks to the cache
@@ -153,7 +153,7 @@ class ChunkCacheTest(unittest.TestCase):
 
     def testMemUtil(self):   
         """ Test memory usage tracks target """          
-        cc = ChunkCache(5000)
+        cc = ChunkCache(mem_target=5000)
         self.assertEqual(len(cc), 0)
         ids = set()
         for i in range(10):

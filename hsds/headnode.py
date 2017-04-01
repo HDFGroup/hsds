@@ -29,7 +29,8 @@ from util.s3Util import  getS3JSONObj, putS3JSONObj, isS3Obj, getS3Client, getIn
 from util.idUtil import  createNodeId, getHeadNodeS3Key
 import hsds_logger as log
 
-NODE_STAT_KEYS = ("cpu", "diskio", "memory", "log_stats", "disk", "netio", "req_count", "s3_stats")
+NODE_STAT_KEYS = ("cpu", "diskio", "memory", "log_stats", "disk", "netio", 
+    "req_count", "s3_stats", "chunk_cache_stats")
  
 async def healthCheck(app):
     """ Periodic method that pings each active node and verifies it is still healthy.  

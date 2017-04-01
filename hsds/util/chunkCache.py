@@ -33,7 +33,7 @@ class ChunkNode(object):
 class ChunkCache(object):
     """ LRU cache for Numpy arrays that are read/written from S3
     """
-    def __init__(self, mem_target=1024):
+    def __init__(self, mem_target=32*1024*1024):
         self._hash = {}
         self._lru_head = None
         self._lru_tail = None
@@ -70,7 +70,6 @@ class ChunkCache(object):
 
     def _moveToFront(self, chunk_id):
         # move this node to the front of LRU list
-        self.consistencyCheck()
         node = self._getNode(chunk_id)
         if self._lru_head == node:
             # already the front
@@ -91,7 +90,6 @@ class ChunkCache(object):
             self._lru_tail = prev
         self._lru_head = node
         log.info("new chunkcache headnode: {}".format(node._id))
-        self.consistencyCheck()
         return node
 
     def __delitem__(self, chunk_id):
@@ -158,7 +156,6 @@ class ChunkCache(object):
         self._hash[chunk_id] = node
         self._mem_size += node._mem_size
         log.info("added new node to cache: {} [{} bytes]".format(chunk_id, node._mem_size))
-        
         
         if self._mem_size > self._mem_target:
             # set dirty temporarily so we can't remove this node in reduceCache 

@@ -93,7 +93,7 @@ async def s3sync(app):
     s3_sync_interval = config.get("s3_sync_interval")
     dirty_ids = app["dirty_ids"]
     meta_cache = app['meta_cache'] 
-    data_cache = app['data_cache'] 
+    chunk_cache = app['chunk_cache'] 
 
     while True:
         keys_to_update = []
@@ -132,17 +132,22 @@ async def s3sync(app):
                 log.info("s3sync for s3_key: {}".format(s3_key))
                 if is_chunk:
                     # chunk update
-                    if obj_id not in data_cache:
+                    if obj_id not in chunk_cache:
                         log.error("expected to find obj_id: {} in data cache".format(obj_id))
                         retry_keys.append(obj_id)
                         continue
-                    chunk_arr = data_cache[obj_id]
+                    chunk_arr = chunk_cache[obj_id]
+                    chunk_cache.clearDirty(obj_id)  # chunk may get evicted from cache now
                     chunk_bytes = chunk_arr.tobytes()
                     try:
                         await putS3Bytes(app, s3_key, chunk_bytes)
                     except HttpProcessingError as hpe:
                         log.error("got S3 error writing obj_id: {} to S3: {}".format(obj_id, str(hpe)))
                         retry_keys.append(obj_id)
+                        # re-add chunk to cache if it had gotten evicted
+                        if obj_id not in chunk_cache:
+                            chunk_cache[obj_id] = chunk_arr
+                        chunk_cache.setDirty(obj_id)  # pin to cache
                 else:
                     # meta data update
                     if obj_id not in meta_cache:

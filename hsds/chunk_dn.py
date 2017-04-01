@@ -129,11 +129,11 @@ async def PUT_Chunk(request):
     input_arr = input_arr.reshape(input_shape)
 
     chunk_arr = None 
-    data_cache = app['data_cache'] 
+    chunk_cache = app['chunk_cache'] 
     s3_key = getS3Key(chunk_id)
     log.info("PUT_Chunks s3_key: {}".format(s3_key))
-    if chunk_id in data_cache:
-        chunk_arr = data_cache[chunk_id]
+    if chunk_id in chunk_cache:
+        chunk_arr = chunk_cache[chunk_id]
     else:
         obj_exists = await isS3Obj(app, s3_key)
         # TBD - potential race condition?
@@ -152,7 +152,8 @@ async def PUT_Chunk(request):
                 chunk_arr[...] = fill_value
             else:
                 chunk_arr = np.zeros(dims, dtype=dt, order='C')
-        data_cache[chunk_id] = chunk_arr
+        chunk_cache[chunk_id] = chunk_arr
+        chunk_cache.setDirty(chunk_id)
 
     # update chunk array
     chunk_arr[selection] = input_arr
@@ -229,10 +230,10 @@ async def GET_Chunk(request):
 
     # get numpy array of chunk
     chunk_arr = None 
-    data_cache = app['data_cache'] 
+    chunk_cache = app['chunk_cache'] 
     
-    if chunk_id in data_cache:
-        chunk_arr = data_cache[chunk_id]
+    if chunk_id in chunk_cache:
+        chunk_arr = chunk_cache[chunk_id]
     else:
         s3_key = getS3Key(chunk_id)
         log.info("GET_Chunks s3_key: {}".format(s3_key))
@@ -249,7 +250,7 @@ async def GET_Chunk(request):
         chunk_arr = np.fromstring(chunk_bytes, dtype=dt)
         log.info("chunk size: {}".format(chunk_arr.size))
         chunk_arr = chunk_arr.reshape(dims)
-        data_cache[chunk_id] = chunk_arr  # store in cache
+        chunk_cache[chunk_id] = chunk_arr  # store in cache
      
     resp = None
     
@@ -381,10 +382,10 @@ async def POST_Chunk(request):
         raise HttpBadRequest(message=msg)
 
     chunk_arr = None 
-    data_cache = app['data_cache'] 
+    chunk_cache = app['chunk_cache'] 
     
-    if chunk_id in data_cache:
-        chunk_arr = data_cache[chunk_id]
+    if chunk_id in chunk_cache:
+        chunk_arr = chunk_cache[chunk_id]
     else:
         s3_key = getS3Key(chunk_id)
         log.info("GET_Chunks s3_key: {}".format(s3_key))
@@ -400,7 +401,7 @@ async def POST_Chunk(request):
         chunk_bytes = await getS3Bytes(app, s3_key)
         chunk_arr = np.fromstring(chunk_bytes, dtype=dt)
         chunk_arr = chunk_arr.reshape(dims)
-        data_cache[chunk_id] = chunk_arr  # store in cache
+        chunk_cache[chunk_id] = chunk_arr  # store in cache
     # create a numpy array for incoming points
     input_bytes = await request.read()  # TBD - will it cause problems when failures are raised before reading data?
     if len(input_bytes) != request.content_length:
