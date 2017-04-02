@@ -18,8 +18,8 @@ import json
 import time
 
 from aiohttp.web import Application, StreamResponse, run_app
-from aiohttp import  ClientSession, TCPConnector, HttpProcessingError
-from aiohttp.errors import HttpBadRequest
+from aiohttp import  ClientSession, TCPConnector
+from aiohttp.errors import HttpBadRequest, HttpProcessingError
 import aiobotocore
 
 import config

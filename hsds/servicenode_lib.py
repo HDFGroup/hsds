@@ -12,8 +12,7 @@
 #
 # service node of hsds cluster
 #  
-from aiohttp import HttpProcessingError 
-from aiohttp.errors import HttpBadRequest
+from aiohttp.errors import HttpBadRequest, HttpProcessingError
 
 from util.idUtil import getDataNodeUrl, getCollectionForId
 from util.authUtil import aclCheck

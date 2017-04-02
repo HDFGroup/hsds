@@ -14,8 +14,7 @@
 # 
 import time
 
-from aiohttp import HttpProcessingError  
-from aiohttp.errors import HttpBadRequest
+from aiohttp.errors import HttpBadRequest, HttpProcessingError
  
 from util.idUtil import validateInPartition, getS3Key, isValidUuid, validateUuid
 from util.httpUtil import jsonResponse

@@ -16,8 +16,7 @@ import time
 from copy import copy
 from bisect import bisect_left
 
-from aiohttp import HttpProcessingError 
-from aiohttp.errors import HttpBadRequest 
+from aiohttp.errors import HttpBadRequest, HttpProcessingError 
  
 from util.idUtil import  isValidUuid, validateInPartition
 from util.httpUtil import jsonResponse

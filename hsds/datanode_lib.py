@@ -14,7 +14,7 @@
 # 
 import asyncio
 import time 
-from aiohttp import HttpProcessingError   
+from aiohttp.errors import HttpProcessingError   
 from util.idUtil import validateInPartition, getS3Key, isValidUuid
 from util.s3Util import getS3JSONObj, putS3JSONObj, putS3Bytes
 from util.domainUtil import getS3KeyForDomain

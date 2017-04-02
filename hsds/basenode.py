@@ -19,8 +19,8 @@ import psutil
 from copy import copy
 
 from aiohttp.web import Application, StreamResponse
-from aiohttp import ClientSession, TCPConnector,  HttpProcessingError  
-from aiohttp.errors import ClientError
+from aiohttp import ClientSession, TCPConnector   
+from aiohttp.errors import ClientError, HttpProcessingError
 from aiobotocore import get_session
  
 

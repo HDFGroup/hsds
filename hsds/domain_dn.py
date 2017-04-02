@@ -13,8 +13,7 @@
 # data node of hsds cluster
 # 
 import time
-from aiohttp.errors import HttpBadRequest
-from aiohttp import HttpProcessingError 
+from aiohttp.errors import HttpBadRequest, HttpProcessingError
 from util.idUtil import   getObjPartition
 from util.authUtil import  getAclKeys
 from util.httpUtil import  jsonResponse

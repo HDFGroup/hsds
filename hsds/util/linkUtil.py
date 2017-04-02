@@ -13,7 +13,7 @@
 # linkdUtil:
 # link related functions
 # 
-from aiohttp import HttpBadRequest
+from aiohttp.errors import HttpBadRequest
 import hsds_logger as log
 
 def validateLinkName(name):

@@ -15,7 +15,7 @@
 # 
 import json
 from botocore.exceptions import ClientError
-from aiohttp import HttpProcessingError 
+from aiohttp.errors import HttpProcessingError 
 
 import hsds_logger as log
 import config
