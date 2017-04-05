@@ -115,6 +115,8 @@ class DomainTest(unittest.TestCase):
         self.assertFalse("root" in rspJson)  # no root group for folder domain
         self.assertTrue("owner" in rspJson)
         self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("class" in rspJson)
+        self.assertEqual(rspJson["class"], "folder")
         domain = "test_user1.home"
         headers = helper.getRequestHeaders(domain=domain)
         
@@ -181,6 +183,45 @@ class DomainTest(unittest.TestCase):
                 self.assertTrue(k in rspJson)
             # we should get the same value for root id
             self.assertEqual(root_id, rspJson["root"])
+
+    def testCreateFolder(self):
+        domain = self.base_domain + "/newfolder"
+        print("testCreateFolder", domain)        
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + '/'
+        body = {"folder": True}
+        rsp = requests.put(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        for k in ("owner", "acls", "created", "lastModified"):
+             self.assertTrue(k in rspJson)
+        self.assertFalse("root" in rspJson)  # no root -> folder
+ 
+        # verify that putting the same domain again fails with a 409 error
+        rsp = requests.put(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 409)
+
+        # do a get on the new folder
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+         
+        self.assertTrue("owner" in rspJson)
+        self.assertTrue("class" in rspJson)
+        self.assertEqual(rspJson["class"], "folder")
+         
+
+        # try doing a un-authenticated request
+        if config.get("test_noauth"):
+            headers = helper.getRequestHeaders()
+            req = helper.getEndpoint() + "/?host=" + domain
+            # do a get on the folder with a query arg for host
+            rsp = requests.get(req)
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+            for k in ("class", "owner"):
+                self.assertTrue(k in rspJson)
+            self.assertFalse("root" in rspJson)   
 
 
     def testGetNotFound(self):
@@ -334,6 +375,7 @@ class DomainTest(unittest.TestCase):
 
     def testGetDomains(self):
         print("testGetDomains", self.base_domain)
+    
         import os.path as op
         # back up to levels
         domain = op.dirname(self.base_domain)
@@ -347,6 +389,7 @@ class DomainTest(unittest.TestCase):
         self.assertTrue("domains" in rspJson)
         domains = rspJson["domains"]
         
+        
         domain_count = len(domains)
         if domain_count < 9:
             # this should only happen in the very first test run
@@ -358,6 +401,8 @@ class DomainTest(unittest.TestCase):
             self.assertTrue("owner" in item)
             self.assertTrue("created" in item)
             self.assertTrue("lastModified" in item)
+            self.assertTrue("class") in item
+            self.assertTrue(item["class"] in ("domain", "folder"))
              
 
         # try getting the first 4 domains

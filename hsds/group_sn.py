@@ -24,7 +24,6 @@ from servicenode_lib import getDomainJson, getObjectJson, validateAction
 import hsds_logger as log
 
 
-
 async def GET_Group(request):
     """HTTP method to return JSON for group"""
     log.request(request)

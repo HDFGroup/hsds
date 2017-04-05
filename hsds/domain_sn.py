@@ -117,6 +117,10 @@ async def GET_Domains(request):
             domain_rsp["created"] = sub_domain_json["created"]
         if "lastModified" in sub_domain_json:
             domain_rsp["lastModified"] = sub_domain_json["lastModified"]
+        if "root" in sub_domain_json:
+            domain_rsp["class"] = "domain"
+        else:
+            domain_rsp["class"] = "folder"
         domains.append(domain_rsp)
     rsp_json = {}
     rsp_json["domains"] = domains
@@ -168,6 +172,9 @@ async def GET_Domain(request):
     rsp_json = { }
     if "root" in domain_json:
         rsp_json["root"] = domain_json["root"]
+        rsp_json["class"] = "domain"
+    else:
+        rsp_json["class"] = "folder"
     if "owner" in domain_json:
         rsp_json["owner"] = domain_json["owner"]
     if "created" in domain_json:
@@ -230,22 +237,33 @@ async def PUT_Domain(request):
         log.warn(msg)
         raise HttpProcessingError(code=404, message=msg)
 
+    body = None
+    is_folder = False
+    if request.has_body:
+        body = await request.json()   
+        if "folder" in body:
+            if body["folder"]:
+                is_folder = True
+
     aclCheck(parent_json, "create", username)  # throws exception if not allowed
     
-    # create a root group for the new domain
-    root_id = createObjId("groups") 
-    log.info("new root group id: {}".format(root_id))
-    group_json = {"id": root_id, "root": root_id, "domain": domain }
-    log.info("create group for domain, body: " + json.dumps(group_json))
-
-    # create root group
-    req = getDataNodeUrl(app, root_id) + "/groups"
-    try:
-        group_json = await http_post(app, req, data=group_json)
-    except HttpProcessingError as ce:
-        msg="Error creating root group for domain -- " + str(ce)
-        log.error(msg)
-        raise ce
+    if not is_folder:
+        # create a root group for the new domain
+        root_id = createObjId("groups") 
+        log.info("new root group id: {}".format(root_id))
+        group_json = {"id": root_id, "root": root_id, "domain": domain }
+        log.info("create group for domain, body: " + json.dumps(group_json))
+    
+        # create root group
+        req = getDataNodeUrl(app, root_id) + "/groups"
+        try:
+            group_json = await http_post(app, req, data=group_json)
+        except HttpProcessingError as ce:
+            msg="Error creating root group for domain -- " + str(ce)
+            log.error(msg)
+            raise ce
+    else:
+        log.info("no root group, creating folder")
  
     domain_json = { }
 
@@ -255,8 +273,9 @@ async def PUT_Domain(request):
     req += "/domains" 
     body = { "owner": username, "domain": domain }
     body["acls"] = parent_json["acls"]  # copy parent acls to new domain
-    body["root"] = root_id
 
+    if not is_folder:
+        body["root"] = root_id
     try:
         domain_json = await http_put(app, req, data=body)
     except HttpProcessingError as ce:

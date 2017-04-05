@@ -123,13 +123,12 @@ async def PUT_Domain(request):
         msg = "Expected Owner Key in Body"
         log.warn(msg)
         raise HttpProcessingError(code=500, message=msg) 
-    if "root" not in body_json:
-        msg = "Expected root Key in Body"
-        log.warn(msg)
-        raise HttpProcessingError(code=500, message=msg) 
-     
+       
     domain_json = { }
-    domain_json["root"] = body_json["root"]
+    if "root" in body_json:
+        domain_json["root"] = body_json["root"]
+    else:
+        log.info("no root id, creating folder")
     domain_json["owner"] = body_json["owner"]
     domain_json["acls"] = body_json["acls"]
     now = time.time()
