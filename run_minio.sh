@@ -21,7 +21,6 @@ DN_PORT=5101
 SN_PORT=5102
 MINIO_BASE="http://minio:9000"
 BUCKET_NAME="minio.hsdsdev"  # use a difrent bucket name to avoid any confusion with AWS S3
-PASSWORD_FILE="/usr/local/src/hsds/passwd.txt"  # SN's nodes will look here for password file'
 
 #
 # run container given in arguments
@@ -70,7 +69,6 @@ elif [ $1 == "sn" ]; then
         --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
         --env AWS_S3_GATEWAY=${MINIO_BASE} \
         --env BUCKET_NAME=${BUCKET_NAME} \
-        --env PASSWORD_FILE=${PASSWORD_FILE} \
         --link hsds_head:hsds_head \
         --link minio:minio \
         hdfgroup/hsds

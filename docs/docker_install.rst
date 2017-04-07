@@ -12,7 +12,7 @@ Installation with Docker
 7. Create an enviroment variable to pass the bucket name: `$ export BUCKET_NAME=<your_bucket>`
 8. Build docker image:  `$ ./build.sh --nolint`
 9. Export environment variables for AWS_ACCESS_KEY and AWS_SECRET_KEY, and AWS_REGION
-10. Run the docker containers: `$ ./runall.sh`
+10. Run the docker containers: `$ ./runall.sh 4 s3`  For Minio, just: `$ ./runall.sh` 
 11. Run `$ docker ps` and verify that 9 containers are running: hsds_head, hsds_sn[0-4], hsds_dn[0-4]
 12. Get the external IP for the docker containers (just 127.0.0.1 if running directly on host, otherwise run: `$docker-machine ip`
 13. Enter: `http://<docker_ip>:5100/` and verify that "cluster_state" is "READY" (might need to give it a minute or two)
@@ -21,7 +21,7 @@ Installation with Docker
 16. For each username in the passwd file, create a top-level domain:  `# python create_toplevel_domain_json.py --user=<username>`
 17. Exit out of the container: `# exit`
 18. If the docker ip is not: 192.168.99.100, run this: `$ export HSDS_ENDPOINT=http://<docker_machine_ip>:5102`
-19. Set the HSDS_HEAD environment variable to be the docker-machine ip: `$ export HSDS_HEAD=<docker_machine_ip>`
+19. Set the HSDS_HEAD environment variable to be the docker-machine ip: `$ export HSDS_HEAD=http://<docker_machine_ip>:5100`
 20. From a Python 3.5 environment, run the test suite: `$ python testall.py`
 21. Shutdown cluster when you are done: `$ ./stopall.sh`
 

@@ -23,6 +23,7 @@ def initUserDB(app, password_file):
         msg = "user_db already initilized"
         log.warn(msg)
         return
+    log.info("using password file: {}".format(password_file))
     line_number = 0
     user_count = 0
     user_db = {}
@@ -52,7 +53,7 @@ def initUserDB(app, password_file):
                     log.warn(msg)
                     continue
                 user_db[username] = {"pwd": passwd}                
-                log.info("added user: {}, passwd: {}".format(username, passwd))
+                log.info("added user: {}".format(username))
                 user_count += 1
     except FileNotFoundError:
         log.error("unable to open password file")

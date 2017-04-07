@@ -26,7 +26,7 @@ cfg = {
     'dn_host': 'localhost',
     'dn_port' : 5101,  # run multiple dn nodes on odd ports
     'sn_host': 'localhost',
-    'sn_port': 5102,   # run multipe sn nodes on even ports
+    'sn_port': 5102,   # run multiple sn nodes on even ports
     'target_sn_count': 4,
     'target_dn_count': 4,
     'log_file': 'head.log',
@@ -40,7 +40,7 @@ cfg = {
     'max_chunk_size': 4*1024*1024,  # 4 MB
     'chunk_mem_cache_size': 128*1024*1024,  # 128 MB
     'timeout': 30,  # http timeout - 30 sec
-    'password_file': 'xxx'  # filepath to a text file of username/passwords
+    'password_file': '/usr/local/src/hsds/passwd.txt'  # filepath to a text file of username/passwords
 }
    
 def get(x): 
