@@ -35,8 +35,11 @@ async def get_domain_json(app, domain):
     return domain_json
 
 async def domain_query(app, domain, rsp_dict):
-    domain_json = await get_domain_json(app, domain)
-    rsp_dict[domain] = domain_json
+    try :
+        domain_json = await get_domain_json(app, domain)
+        rsp_dict[domain] = domain_json
+    except HttpProcessingError as hpe:
+        rsp_dict[domain] = { "status_code": hpe.code}
 
 async def GET_Domains(request):
     """HTTP method to return JSON for child domains of given domain"""
@@ -95,12 +98,15 @@ async def GET_Domains(request):
     
     dn_rsp = {} # dictionary keyed by chunk_id
     tasks = []
+    log.info("async query with {} domain keys".format(len(keys)))
     for key in keys:
         sub_domain = domain + '/' + key 
         log.info("query for subdomain: {}".format(sub_domain))
         task = asyncio.ensure_future(domain_query(app, sub_domain, dn_rsp))
         tasks.append(task)
     await asyncio.gather(*tasks, loop=loop)
+
+    log.info("async query complete")
 
     domains = []
     for key in keys:
@@ -110,6 +116,20 @@ async def GET_Domains(request):
             log.warn("expected to find sub-domain: {} in dn_rsp".format(sub_domain))
             continue
         sub_domain_json = dn_rsp[sub_domain]
+        if "status_code" in sub_domain_json:
+            # some error happened for this request
+            status_code = sub_domain_json["status_code"]
+            if status_code == 401:
+                log.warn("No permission for reading sub_domain: {}".format(sub_domain))
+            elif status_code == 404:
+                log.warn("Not found error for sub_domain: {}".format(sub_domain))
+            elif status_code == 410:
+                log.info("Key removed error for sub_domain: {}".format(sub_domain))
+            else:
+                msg = "Unexpected error: {}".format(status_code)
+                log.warn(msg)
+                raise HttpProcessingError(code=status_code, message=msg)
+            continue  # go on to next key
         domain_rsp = {"name": key}
         if "owner" in sub_domain_json:
             domain_rsp["owner"] = sub_domain_json["owner"]
@@ -241,7 +261,8 @@ async def PUT_Domain(request):
     is_folder = False
     if request.has_body:
         body = await request.json()   
-        if "folder" in body:
+        log.info("PUT domain with body: {}".format(body))
+        if body and "folder" in body:
             if body["folder"]:
                 is_folder = True
 
