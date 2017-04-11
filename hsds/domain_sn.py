@@ -64,6 +64,8 @@ async def GET_Domains(request):
 
     if not domain.startswith('/'):
         domain = domain[1:]  # s3 keys don't start with slash
+    if domain != '/' and not domain.endswith('/'):
+        domain += '/'
 
     limit = None
     if "Limit" in request.GET:
@@ -81,6 +83,7 @@ async def GET_Domains(request):
 
     keys = await getS3Keys(app, prefix=domain, deliminator='/', suffix=".domain.json")
     log.info("got {} keys".format(len(keys)))
+    log.info("s3keys: {}".format(keys))
     if marker:
         # trim everything up to and including marker
         index = 0
