@@ -85,13 +85,34 @@ def isValidHostDomain(id):
 def validateDomain(id):
     if not isinstance(id, str):
         raise ValueError("Expected string type")
+    if len(id) < 3:
+        raise ValueError("Domain name too short")
+    if id[0] != '/':
+        raise ValueError("Domain names should start with '/'")
     if id[-1] ==  '/':
-        raise ValueError("Slash at end not allowed")
-    
+        raise ValueError("Slash at end not allowed")    
 
 def isValidDomain(id):
     try:
         validateDomain(id)
+        return True
+    except ValueError:
+        return False
+
+
+def validateDomainPath(path):
+    if not isinstance(path, str):
+        raise ValueError("Expected string type")
+    if len(path) < 3:
+        raise ValueError("Domain path too short")
+    if path[0] != '/':
+        raise ValueError("Domain path should start with '/'")
+    if path[-1] !=  '/':
+        raise ValueError("Domain path must end with '/'")
+
+def isValidDomainPath(path):
+    try:
+        validateDomainPath(path)
         return True
     except ValueError:
         return False
@@ -119,7 +140,7 @@ def getDomainForHost(host_value):
 
     dns_path = host.split('.')
     dns_path.reverse()  # flip to filesystem ordering
-    domain = ''
+    domain = '/'
     for field in dns_path:      
         if len(field) == 0:   
             # consecutive dots are not allowed
@@ -131,7 +152,7 @@ def getDomainForHost(host_value):
      
     return domain
 
-def getDomainFromRequest(request):
+def getDomainFromRequest(request, domain_path = False):
     #domain = request.match_info.get()
     domain = None
     if "domain" in request.GET:
@@ -145,19 +166,33 @@ def getDomainFromRequest(request):
             host = request.host
             if "X-Forwarded-Host" in request.headers:
                 host = request.headers["X-Forwarded-Host"]
-        if host[0] == '/':  # path style host
+        if host.find('/') > -1:  # path style host
             domain = host
-            validateDomain(domain)
+            if domain_path:
+                validateDomainPath(domain)
+            else:
+                validateDomain(domain)
         else:  # DNS style host
+            if domain_path:
+                raise ValueError("Domain paths can not be DNS-style")
             validateHostDomain(host) # throw ValueError if invalid
             domain = getDomainForHost(host)  # convert to s3 path
+            validateDomain(domain)
     return domain
 
 def getS3KeyForDomain(domain):
+    validateDomain(domain)
     if domain.endswith(DOMAIN_NAME):
-        s3_key = domain
+        s3_key = domain[1:]   # don't include leading slash
     else:
-        s3_key = domain + DOMAIN_NAME
+        s3_key = domain[1:] + DOMAIN_NAME
+    return s3_key
+
+def getS3KeyForDomainPath(domain):
+    validateDomainPath(domain)
+
+    s3_key = domain[1:]   # don't include leading slash
+    
     return s3_key
 
 

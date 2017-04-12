@@ -197,14 +197,12 @@ async def isS3Obj(app, key):
         msg = "Error listing s3 obj: " + str(ce)
         log.error(msg)
         raise HttpProcessingError(code=500, message=msg)
-    #print("list_object resp: {}".format(resp))
     if 'Contents' not in resp:
         return False
     contents = resp['Contents']
     
     found = False
     if len(contents) > 0:
-        #print("list_objects contents:", contents)
         item = contents[0]
         if item["Key"] == key:
             # if the key is a S3 folder, the key will be the first object in the folder,
@@ -229,19 +227,19 @@ async def getS3Keys(app, prefix='', deliminator='', suffix=''):
     # return keys matching the arguments
     s3_client = app['s3']
     bucket_name = app['bucket_name']
-    log.info("getS3Keys({},{},{})".format(prefix, deliminator, suffix))
+    log.info("getS3Keys('{}','{}','{}')".format(prefix, deliminator, suffix))
     paginator = s3_client.get_paginator('list_objects')
      
     # TBD - how to paginate when more than 1000 keys are present
     # TBD - for some reason passing in non-null deliminator doesn't work
-    pages = paginator.paginate(MaxKeys=1000, Bucket=bucket_name, Prefix=prefix, Delimiter='')
+    pages = paginator.paginate(MaxKeys=1000, Bucket=bucket_name, Prefix=prefix, Delimiter=deliminator)
     responses = await _fetch_all(pages)
     log.info("getS3Keys, got {} responses".format(len(responses)))
     key_names = []
     last_key = None
     for response in responses:
         if 'CommonPrefixes' in response:
-            log.info("got common prefixes in s3 response")
+            log.info("got CommonPrefixes in s3 response")
             common = response["CommonPrefixes"]
             for item in common:
                 if 'Prefix' in item:
@@ -255,6 +253,7 @@ async def getS3Keys(app, prefix='', deliminator='', suffix=''):
                 key_name = item['Key']
                 log.info("got s3key: {}".format(key_name))
                 if suffix and not key_name.endswith(suffix):
+                    log.info("got s3key without suffix")
                     continue
                 
                 if prefix:

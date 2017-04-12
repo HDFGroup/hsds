@@ -20,7 +20,7 @@ from util.httpUtil import  http_post, http_put, http_get_json, http_delete, json
 from util.idUtil import  getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
-from util.domainUtil import getParentDomain, getDomainFromRequest, getS3KeyForDomain
+from util.domainUtil import getParentDomain, getDomainFromRequest, getS3KeyForDomain, getS3KeyForDomainPath
 from util.s3Util import getS3Keys
 from servicenode_lib import getDomainJson
 import hsds_logger as log
@@ -54,7 +54,7 @@ async def GET_Domains(request):
         validateUserPassword(app, username, pswd)
 
     try:
-        domain = getDomainFromRequest(request)
+        domain = getDomainFromRequest(request, domain_path=True)
     except ValueError:
         msg = "Invalid domain"
         log.warn(msg)
@@ -62,16 +62,18 @@ async def GET_Domains(request):
 
     log.info("got domain: {}".format(domain))
 
-    if not domain.startswith('/'):
-        domain = domain[1:]  # s3 keys don't start with slash
-    if domain != '/' and not domain.endswith('/'):
-        domain += '/'
+    try:
+        domain_key = getS3KeyForDomainPath(domain)
+    except ValueError:
+        msg = "Invalid domain path"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
 
     limit = None
     if "Limit" in request.GET:
         try:
             limit = int(request.GET["Limit"])
-            log.info("GET_Domainss - using Limit: {}".format(limit))
+            log.info("GET_Domains - using Limit: {}".format(limit))
         except ValueError:
             msg = "Bad Request: Expected int type for limit"
             log.error(msg)  # should be validated by SN
@@ -81,7 +83,7 @@ async def GET_Domains(request):
         marker = request.GET["Marker"]
         log.info("GET_Domains - using Marker: {}".format(marker))
 
-    keys = await getS3Keys(app, prefix=domain, deliminator='/', suffix=".domain.json")
+    keys = await getS3Keys(app, prefix=domain_key, deliminator='/')
     log.info("got {} keys".format(len(keys)))
     log.info("s3keys: {}".format(keys))
     if marker:
@@ -103,7 +105,9 @@ async def GET_Domains(request):
     tasks = []
     log.info("async query with {} domain keys".format(len(keys)))
     for key in keys:
-        sub_domain = domain + '/' + key 
+        sub_domain = '/' + key
+        if sub_domain[-1] == '/':
+            sub_domain = sub_domain[:-1]  # specific sub-domains don't have trailing slash
         log.info("query for subdomain: {}".format(sub_domain))
         task = asyncio.ensure_future(domain_query(app, sub_domain, dn_rsp))
         tasks.append(task)
@@ -113,7 +117,9 @@ async def GET_Domains(request):
 
     domains = []
     for key in keys:
-        sub_domain = domain + '/' + key 
+        sub_domain = '/' + key  
+        if sub_domain[-1] == '/':
+            sub_domain = sub_domain[:-1]  # specific sub-domains don't have trailing slash
         log.info("sub_domain: {}".format(sub_domain))
         if sub_domain not in dn_rsp:
             log.warn("expected to find sub-domain: {} in dn_rsp".format(sub_domain))

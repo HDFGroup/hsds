@@ -101,6 +101,14 @@ class DomainTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         root_uuid_3 = rspJson["root"]
         self.assertEqual(root_uuid, root_uuid_3)
+
+        # verify that invalid domain fails
+        domain = domain[1:]  # strip off the '/'
+        params = {"domain": domain}
+
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+
         
 
     def testGetTopLevelDomain(self):
@@ -379,7 +387,8 @@ class DomainTest(unittest.TestCase):
         import os.path as op
         # back up to levels
         domain = op.dirname(self.base_domain)
-        domain = op.dirname(domain)
+        domain = op.dirname(domain) + '/'
+        print("domain:", domain)
         headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/domains'
         rsp = requests.get(req, headers=headers)
@@ -391,6 +400,7 @@ class DomainTest(unittest.TestCase):
         
         
         domain_count = len(domains)
+        print("got {} domains".format(domain_count))
         if domain_count < 9:
             # this should only happen in the very first test run
             print("Expected to find more domains!")
@@ -398,11 +408,13 @@ class DomainTest(unittest.TestCase):
 
         for item in domains:
             self.assertTrue("name" in item)
+            print("domain: {}".format(item["name"]))
             self.assertTrue("owner" in item)
             self.assertTrue("created" in item)
             self.assertTrue("lastModified" in item)
             self.assertTrue("class") in item
             self.assertTrue(item["class"] in ("domain", "folder"))
+        return
              
 
         # try getting the first 4 domains
