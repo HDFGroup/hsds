@@ -157,7 +157,6 @@ def getDomainFromRequest(request, domain_path = False):
     domain = None
     if "domain" in request.GET:
         domain = request.GET["domain"]
-        validateDomain(domain)
     else:
         host = None
         if 'host' in request.GET:
@@ -168,16 +167,17 @@ def getDomainFromRequest(request, domain_path = False):
                 host = request.headers["X-Forwarded-Host"]
         if host.find('/') > -1:  # path style host
             domain = host
-            if domain_path:
-                validateDomainPath(domain)
-            else:
-                validateDomain(domain)
+            
         else:  # DNS style host
             if domain_path:
                 raise ValueError("Domain paths can not be DNS-style")
             validateHostDomain(host) # throw ValueError if invalid
             domain = getDomainForHost(host)  # convert to s3 path
-            validateDomain(domain)
+    # now validate that its a properly formed domain
+    if domain_path:
+        validateDomainPath(domain)
+    else:
+        validateDomain(domain)
     return domain
 
 def getS3KeyForDomain(domain):

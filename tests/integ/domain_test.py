@@ -70,8 +70,8 @@ class DomainTest(unittest.TestCase):
             return  # abort rest of test
         self.assertEqual(rsp.headers['content-type'], 'application/json')
         rspJson = json.loads(rsp.text)
-        
-        for name in ("lastModified", "created", "hrefs", "root", "owner"):
+         
+        for name in ("lastModified", "created", "hrefs", "root", "owner", "class"):
             self.assertTrue(name in rspJson)
         now = time.time()
         self.assertTrue(rspJson["created"] < now - 60 * 5)
@@ -79,6 +79,7 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(len(rspJson["hrefs"]), 7)
         self.assertTrue(rspJson["root"].startswith("g-"))
         self.assertTrue(rspJson["owner"])
+        self.assertEqual(rspJson["class"], "domain")
         
         root_uuid = rspJson["root"]
         helper.validateId(root_uuid)
@@ -388,7 +389,6 @@ class DomainTest(unittest.TestCase):
         # back up to levels
         domain = op.dirname(self.base_domain)
         domain = op.dirname(domain) + '/'
-        print("domain:", domain)
         headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/domains'
         rsp = requests.get(req, headers=headers)
@@ -398,9 +398,7 @@ class DomainTest(unittest.TestCase):
         self.assertTrue("domains" in rspJson)
         domains = rspJson["domains"]
         
-        
         domain_count = len(domains)
-        print("got {} domains".format(domain_count))
         if domain_count < 9:
             # this should only happen in the very first test run
             print("Expected to find more domains!")
@@ -408,17 +406,17 @@ class DomainTest(unittest.TestCase):
 
         for item in domains:
             self.assertTrue("name" in item)
-            print("domain: {}".format(item["name"]))
+            name = item["name"]
+            self.assertEqual(name[0], '/')
+            self.assertTrue(name[-1] != '/')
             self.assertTrue("owner" in item)
             self.assertTrue("created" in item)
             self.assertTrue("lastModified" in item)
             self.assertTrue("class") in item
             self.assertTrue(item["class"] in ("domain", "folder"))
-        return
-             
-
+       
         # try getting the first 4 domains
-        params = {"Limit": 4}
+        params = {"domain": domain, "Limit": 4}
         rsp = requests.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
@@ -429,9 +427,11 @@ class DomainTest(unittest.TestCase):
         for item in part1:
             self.assertTrue("name" in item)
             name = item["name"]
+            self.assertEqual(name[0], '/')
+            self.assertTrue(name[-1] != '/')
              
         # get next batch of 4
-        params["Marker"] = name
+        params = {"domain": domain, "Marker": name, "Limit": 4}
         rsp = requests.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
@@ -442,6 +442,17 @@ class DomainTest(unittest.TestCase):
             self.assertTrue("name" in item)
             name = item["name"]
             self.assertTrue(name != params["Marker"])
+
+        # empty sub-domains
+        domain = helper.getTestDomain("tall.h5") + '/'
+        params = {"domain": domain}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("domains" in rspJson)
+        domains = rspJson["domains"]
+        self.assertEqual(len(domains), 0)
+
    
     
              

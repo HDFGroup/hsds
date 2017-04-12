@@ -20,7 +20,8 @@ from util.httpUtil import  http_post, http_put, http_get_json, http_delete, json
 from util.idUtil import  getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
-from util.domainUtil import getParentDomain, getDomainFromRequest, getS3KeyForDomain, getS3KeyForDomainPath
+from util.domainUtil import getParentDomain, getDomainFromRequest, getS3KeyForDomain
+from util.domainUtil import getS3KeyForDomainPath, validateDomainPath
 from util.s3Util import getS3Keys
 from servicenode_lib import getDomainJson
 import hsds_logger as log
@@ -78,20 +79,45 @@ async def GET_Domains(request):
             msg = "Bad Request: Expected int type for limit"
             log.error(msg)  # should be validated by SN
             raise HttpBadRequest(message=msg)
-    marker = None
+    marker_key = None
     if "Marker" in request.GET:
         marker = request.GET["Marker"]
         log.info("GET_Domains - using Marker: {}".format(marker))
+        if marker[-1] != '/':
+            marker += '/'  # use a domain path
+        try:
+            validateDomainPath(marker)
+        except ValueError:
+            msg = "Bad Request: Invalid domain for Marker param"
+            log.error(msg)  # should be validated by SN
+            raise HttpBadRequest(message=msg)
+        marker_key = getS3KeyForDomainPath(marker)
+         
+        if marker_key[-1] != '/':
+            # the get s3 keys will return with trailing slash
+            marker_key += '/'
 
-    keys = await getS3Keys(app, prefix=domain_key, deliminator='/')
-    log.info("got {} keys".format(len(keys)))
+        
+    s3_keys = await getS3Keys(app, prefix=domain_key, deliminator='/')
+    log.info("got {} keys".format(len(s3_keys)))
+    # filter out anything without a '/' in the key
+    # note: sometimes a ".domain.json" key shows up, not sure why
+    keys = []
+    for key in s3_keys:
+        if key.find('/') == -1:
+            log.info('skipping key: {}'.format(key))
+            continue
+        keys.append(key)
+
     log.info("s3keys: {}".format(keys))
-    if marker:
+    if marker_key:
         # trim everything up to and including marker
+        log.info("using marker key: {}".format(marker_key))
         index = 0
         for key in keys:
             index += 1
-            if key == marker:
+            log.info("compare {} to {}".format(key, marker_key))
+            if key == marker_key:
                 break
         if index > 0:
             keys = keys[index:]
@@ -101,19 +127,19 @@ async def GET_Domains(request):
 
     log.info("s3keys: {}".format(keys))
     
-    dn_rsp = {} # dictionary keyed by chunk_id
-    tasks = []
-    log.info("async query with {} domain keys".format(len(keys)))
-    for key in keys:
-        sub_domain = '/' + key
-        if sub_domain[-1] == '/':
-            sub_domain = sub_domain[:-1]  # specific sub-domains don't have trailing slash
-        log.info("query for subdomain: {}".format(sub_domain))
-        task = asyncio.ensure_future(domain_query(app, sub_domain, dn_rsp))
-        tasks.append(task)
-    await asyncio.gather(*tasks, loop=loop)
-
-    log.info("async query complete")
+    if len(keys) > 0:
+        dn_rsp = {} # dictionary keyed by chunk_id
+        tasks = []
+        log.info("async query with {} domain keys".format(len(keys)))
+        for key in keys:
+            sub_domain = '/' + key
+            if sub_domain[-1] == '/':
+                sub_domain = sub_domain[:-1]  # specific sub-domains don't have trailing slash
+            log.info("query for subdomain: {}".format(sub_domain))
+            task = asyncio.ensure_future(domain_query(app, sub_domain, dn_rsp))
+            tasks.append(task)
+        await asyncio.gather(*tasks, loop=loop)
+        log.info("async query complete")
 
     domains = []
     for key in keys:
@@ -139,7 +165,7 @@ async def GET_Domains(request):
                 log.warn(msg)
                 raise HttpProcessingError(code=status_code, message=msg)
             continue  # go on to next key
-        domain_rsp = {"name": key}
+        domain_rsp = {"name": sub_domain}
         if "owner" in sub_domain_json:
             domain_rsp["owner"] = sub_domain_json["owner"]
         if "created" in sub_domain_json:

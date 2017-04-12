@@ -32,7 +32,8 @@ class DomainUtilTest(unittest.TestCase):
                            'x.y.z.',  # period in back
                            'x.y..z',  # consecutive periods
                            '192.168.1.100',  # looks like IP
-                           'mydomain/foobar') # has a slash
+                           'mydomain/foobar', # has a slash
+                           None)      # none
         for domain in invalid_domains:
             self.assertEqual(isValidHostDomain(domain), False)  
 
@@ -41,7 +42,7 @@ class DomainUtilTest(unittest.TestCase):
             self.assertTrue(isValidHostDomain(domain))  
 
     def testValidDomain(self):
-        invalid_domains = (123, 'abc/')
+        invalid_domains = (123, 'abc/', '', None)
         for domain in invalid_domains:
             self.assertEqual(isValidDomain(domain), False)  
 
