@@ -14,7 +14,6 @@ import sys
  
 sys.path.append('../../hsds/util')
 sys.path.append('../../hsds')
-from aiohttp.errors import HttpBadRequest
 from dsetUtil import  getHyperslabSelection, getSelectionShape
 from dsetUtil import  getNumElements, ItemIterator, getEvalStr
 
@@ -126,7 +125,7 @@ class DsetUtilTest(unittest.TestCase):
             try:
                 eval_str = getEvalStr(query, "x", fields)
                 self.assertTrue(False)  # shouldn't get here
-            except HttpBadRequest as e:
+            except Exception:
                 pass  # ok
 
     def testItemIterator(self):
