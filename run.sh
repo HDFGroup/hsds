@@ -75,13 +75,13 @@ elif [ $1 == "sn" ]; then
 elif [ $1 == "stopdn" ]; then
    for i in $(seq 1 $count);
      do    
-        DN_NAME="hsds_dn_"$($i)   
+        DN_NAME="hsds_dn_"$(($i))   
         docker stop $DN_NAME &
      done
 elif [ $1 == "stopsn" ]; then
    for i in $(seq 1 $count);
      do    
-        SN_NAME="hsds_sn_"$($i)
+        SN_NAME="hsds_sn_"$(($i))
         docker stop $SN_NAME &
      done
 elif [ $1 == "clean" ]; then
