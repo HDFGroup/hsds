@@ -42,7 +42,7 @@ elif [ $1 == "dn" ]; then
   
   for i in $(seq 1 $count);
     do    
-      NAME="hsds_dn_"$($i)
+      NAME="hsds_dn_"$(($i))
       docker run -d -p ${DN_PORT}:${DN_PORT} --name $NAME \
         --env DN_PORT=${DN_PORT} \
         --env NODE_TYPE="dn"  \
@@ -59,7 +59,7 @@ elif [ $1 == "sn" ]; then
   echo "run sn"
   for i in $(seq 1 $count);
     do    
-      NAME="hsds_sn_"$($i)
+      NAME="hsds_sn_"$(($i))
       docker run -d -p ${SN_PORT}:${SN_PORT} --name $NAME \
         --env SN_PORT=${SN_PORT} \
         --env NODE_TYPE="sn"  \
