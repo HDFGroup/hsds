@@ -19,6 +19,16 @@ unit_tests = ('domainUtilTest', 'idUtilTest', 'hdf5dtypeTest', 'dsetUtilTest',
 integ_tests = ('uptest', 'domain_test', 'group_test', 'link_test',
  'attr_test', 'datatype_test', 'dataset_test', 'acl_test', 'value_test', 'pointsel_test', 'query_test' )
 
+skip_unit = False
+if len(sys.argv) > 1:
+    arg = sys.argv[1]
+    if arg == "--skip_unit":
+        skip_unit = True
+    else:
+        print("Usage: python testall.py [--skip_unit]")
+        sys.exit(0)
+
+    
 cwd = os.getcwd()
 no_server = False
 if len(sys.argv) > 1:
@@ -37,16 +47,18 @@ os.chdir(test_dir)
 #
 # Run all hsds tests
 #
-os.chdir('unit')
-for file_name in unit_tests:
-    print(file_name)
-    rc = os.system('python ' + file_name + '.py')
-    if rc != 0:
-        os.chdir(cwd)
-        sys.exit("Failed")
+if not skip_unit:
+    os.chdir('unit')
+    for file_name in unit_tests:
+        print(file_name)
+        rc = os.system('python ' + file_name + '.py')
+        if rc != 0:
+            os.chdir(cwd)
+            sys.exit("Failed")
+    os.chdir("..")
  
 print("cwd", os.getcwd()) 
-os.chdir('../integ')
+os.chdir('integ')
  
 for file_name in integ_tests:
     print(file_name)
