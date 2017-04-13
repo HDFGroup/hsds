@@ -17,8 +17,8 @@ fi
 #
 NODE_TYPE="head_node"
 HEAD_PORT=5100
-DN_PORT=5101
-SN_PORT=5102
+SN_PORT=5101
+DN_PORT=6101
 
 #
 # run container given in arguments
@@ -42,7 +42,7 @@ elif [ $1 == "dn" ]; then
   
   for i in $(seq 1 $count);
     do    
-      NAME="hsds_dn_"$(($i-1))
+      NAME="hsds_dn_"$($i)
       docker run -d -p ${DN_PORT}:${DN_PORT} --name $NAME \
         --env DN_PORT=${DN_PORT} \
         --env NODE_TYPE="dn"  \
@@ -53,13 +53,13 @@ elif [ $1 == "dn" ]; then
         --env BUCKET_NAME=${BUCKET_NAME} \
         --link hsds_head:hsds_head \
         hdfgroup/hsds
-      DN_PORT=$(($DN_PORT+2))
+      DN_PORT=$(($DN_PORT+1))
     done
 elif [ $1 == "sn" ]; then
   echo "run sn"
   for i in $(seq 1 $count);
     do    
-      NAME="hsds_sn_"$(($i-1))
+      NAME="hsds_sn_"$($i)
       docker run -d -p ${SN_PORT}:${SN_PORT} --name $NAME \
         --env SN_PORT=${SN_PORT} \
         --env NODE_TYPE="sn"  \
@@ -70,18 +70,18 @@ elif [ $1 == "sn" ]; then
         --env BUCKET_NAME=${BUCKET_NAME} \
         --link hsds_head:hsds_head \
         hdfgroup/hsds
-      SN_PORT=$(($SN_PORT+2))
+      SN_PORT=$(($SN_PORT+1))
     done    
 elif [ $1 == "stopdn" ]; then
    for i in $(seq 1 $count);
      do    
-        DN_NAME="hsds_dn_"$(($i-1))   
+        DN_NAME="hsds_dn_"$($i)   
         docker stop $DN_NAME &
      done
 elif [ $1 == "stopsn" ]; then
    for i in $(seq 1 $count);
      do    
-        SN_NAME="hsds_sn_"$(($i-1))
+        SN_NAME="hsds_sn_"$($i)
         docker stop $SN_NAME &
      done
 elif [ $1 == "clean" ]; then
