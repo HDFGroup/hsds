@@ -1,9 +1,0 @@
-[params]
-itypes = t2.small, m4.xlarge,  m4.16xlarge, i2.xlarge, i2.8xlarge
-ami = ami-c12345a6 
-remotescript = ./runprobes.sh 
-keypairname = <name>
-keypairfile = <file>
-region = us-west-2 
-securitygroup = sg-123c456f
-unixid = ec2-user

@@ -1,6 +1,0 @@
-https://data.hdfgroup.org:7258/tasmax_ens-avg_amon_rcp85_CONUS_205101-205512.nasa.data.hdfgroup.org
-https://data.hdfgroup.org:7258/tasmax_day_CESM1-BGC_rcp85_r1i1p1_20500101-20501231%2ELOCA_2016-04-02%2E16th.nasa.data.hdfgroup.org
-https://data.hdfgroup.org:7258/tasmax_day_CESM1-BGC_rcp85_r1i1p1_20510101-20511231%2ELOCA_2016-04-02%2E16th.nasa.data.hdfgroup.org
-https://data.hdfgroup.org:7258/tasmax_day_BCSD_rcp45_r1i1p1_CanESM2_2050.nasa.data.hdfgroup.org
-https://data.hdfgroup.org:7258/tasmax_day_BCSD_rcp45_r1i1p1_CanESM2_2051.nasa.data.hdfgroup.org 
-https://data.hdfgroup.org:7258/tasmax_day_BCSD_rcp45_r1i1p1_CanESM2_2052.nasa.data.hdfgroup.org
