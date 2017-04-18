@@ -17,7 +17,6 @@ from aiohttp.errors import HttpBadRequest, HttpProcessingError
 from util.idUtil import getDataNodeUrl, getCollectionForId
 from util.authUtil import aclCheck
 from util.httpUtil import http_get_json
-from util.domainUtil import getS3KeyForDomain
 
 import hsds_logger as log
 
@@ -45,8 +44,8 @@ async def getDomainJson(app, domain, reload=True):
             log.info("returning domain_cache value")
             return domain_cache[domain]
 
-    domain_key = getS3KeyForDomain(domain)
-    req = getDataNodeUrl(app, domain_key)
+     
+    req = getDataNodeUrl(app, domain)
     req += "/domains"
     params = { "domain": domain } 
     log.info("sending dn req: {}".format(req))

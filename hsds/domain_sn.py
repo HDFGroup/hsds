@@ -17,18 +17,16 @@ import json
 from aiohttp.errors import HttpBadRequest, HttpProcessingError
 
 from util.httpUtil import  http_post, http_put, http_get_json, http_delete, jsonResponse, getHref
-from util.idUtil import  getDataNodeUrl, createObjId
+from util.idUtil import  getDataNodeUrl, createObjId, getS3Key
+from util.s3Util import getS3Keys
 from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
-from util.domainUtil import getParentDomain, getDomainFromRequest, getS3KeyForDomain
-from util.domainUtil import getS3KeyForDomainPath, validateDomainPath
-from util.s3Util import getS3Keys
+from util.domainUtil import getParentDomain, getDomainFromRequest, getS3PrefixForDomain, validateDomain
 from servicenode_lib import getDomainJson
 import hsds_logger as log
 
 async def get_domain_json(app, domain):
-    domain_key = getS3KeyForDomain(domain)  # adds "/.domain.json" to domain name
-    req = getDataNodeUrl(app, domain_key)
+    req = getDataNodeUrl(app, domain)
     req += "/domains" 
     params = {"domain": domain}
     log.info("sending dn req: {}".format(req))
@@ -61,15 +59,11 @@ async def GET_Domains(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
 
-    log.info("got domain: {}".format(domain))
+    log.info("got domain: [{}]".format(domain))
 
-    try:
-        domain_key = getS3KeyForDomainPath(domain)
-    except ValueError:
-        msg = "Invalid domain path"
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
-
+    domain_prefix = getS3PrefixForDomain(domain)
+    log.info("using domain prefix: {}".format(domain_prefix))
+     
     limit = None
     if "Limit" in request.GET:
         try:
@@ -82,23 +76,18 @@ async def GET_Domains(request):
     marker_key = None
     if "Marker" in request.GET:
         marker = request.GET["Marker"]
-        log.info("GET_Domains - using Marker: {}".format(marker))
-        if marker[-1] != '/':
-            marker += '/'  # use a domain path
+        log.info("got Marker request param: {}".format(marker))
         try:
-            validateDomainPath(marker)
+            # marker should be a valid domain
+            validateDomain(marker)
         except ValueError:
-            msg = "Bad Request: Invalid domain for Marker param"
-            log.error(msg)  # should be validated by SN
+            msg = "Invalid marker value: {}".format(marker)
+            log.warn(msg)
             raise HttpBadRequest(message=msg)
-        marker_key = getS3KeyForDomainPath(marker)
-         
-        if marker_key[-1] != '/':
-            # the get s3 keys will return with trailing slash
-            marker_key += '/'
+        marker_key = getS3Key(marker)
+        log.info("GET_Domains - using Marker key: {}".format(marker_key))
 
-        
-    s3_keys = await getS3Keys(app, prefix=domain_key, deliminator='/')
+    s3_keys = await getS3Keys(app, prefix=domain_prefix, deliminator='/')
     log.info("got {} keys".format(len(s3_keys)))
     # filter out anything without a '/' in the key
     # note: sometimes a ".domain.json" key shows up, not sure why
@@ -119,13 +108,18 @@ async def GET_Domains(request):
             log.info("compare {} to {}".format(key, marker_key))
             if key == marker_key:
                 break
+            # also check if this matches key with ".domain.json" appended
+            if key + ".domain.json" == marker_key:
+                break
+
         if index > 0:
             keys = keys[index:]
 
     if limit and len(keys) > limit:
         keys = keys[:limit]  
+        log.info("restricting number of keys returned to limit value")
 
-    log.info("s3keys: {}".format(keys))
+    log.info("s3keys trim to marker and limit: {}".format(keys))
     
     if len(keys) > 0:
         dn_rsp = {} # dictionary keyed by chunk_id
@@ -324,8 +318,7 @@ async def PUT_Domain(request):
     domain_json = { }
 
     # construct dn request to create new domain
-    domain_key = getS3KeyForDomain(domain)
-    req = getDataNodeUrl(app, domain_key)
+    req = getDataNodeUrl(app, domain)
     req += "/domains" 
     body = { "owner": username, "domain": domain }
     body["acls"] = parent_json["acls"]  # copy parent acls to new domain
@@ -384,10 +377,9 @@ async def DELETE_Domain(request):
         log.warn(msg)
         raise HttpProcessingError(code=404, message=msg)
 
-    domain_key = getS3KeyForDomain(domain)
     aclCheck(domain_json, "delete", username)  # throws exception if not allowed
 
-    req = getDataNodeUrl(app, domain_key)
+    req = getDataNodeUrl(app, domain)
     req += "/domains" 
     body = { "domain": domain }
     
@@ -579,12 +571,11 @@ async def PUT_ACL(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
 
-    domain_key = getS3KeyForDomain(domain)
-    
+     
     # don't use app["domain_cache"]  if a direct domain request is made 
     # as opposed to an implicit request as with other operations, query
     # the domain from the authoritative source (the dn node)
-    req = getDataNodeUrl(app, domain_key)
+    req = getDataNodeUrl(app, domain)
     req += "/acls/" + acl_username
     log.info("sending dn req: {}".format(req))    
     body["domain"] = domain

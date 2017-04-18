@@ -14,7 +14,8 @@ import sys
 import time
 from aiobotocore import get_session
 from aiohttp.errors import ClientOSError
-from util.domainUtil import validateDomain, getS3KeyForDomain, getParentDomain
+from util.domainUtil import validateDomain, getParentDomain
+from util.idUtil import getS3Key
 from util.s3Util import putS3JSONObj, isS3Obj, getS3Client
 import config
 import hsds_logger as log
@@ -42,7 +43,7 @@ def printUsage():
     
 async def createDomain(app, domain, domain_json):
     try:
-        s3_key = getS3KeyForDomain(domain)
+        s3_key = getS3Key(domain)
         domain_exists = await isS3Obj(app, s3_key)
         if domain_exists:
             raise ValueError("Domain already exists")

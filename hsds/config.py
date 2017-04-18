@@ -38,6 +38,7 @@ cfg = {
     'max_chunks_per_request': 1000,  # maximum number of chunks to be serviced by one request
     'min_chunk_size': 40,  # for testing only, make bigger for production
     'max_chunk_size': 4*1024*1024,  # 4 MB
+    'metadata_mem_cache_size': 128*1024*1024,  # 128 MB
     'chunk_mem_cache_size': 128*1024*1024,  # 128 MB
     'timeout': 30,  # http timeout - 30 sec
     'password_file': '/usr/local/src/hsds/passwd.txt'  # filepath to a text file of username/passwords

@@ -58,3 +58,12 @@ def toTuple(rank, data):
             return tuple(toTuple(rank-1, x) for x in data)
     else:
         return data
+
+"""
+Get size in bytes of a numpy array.
+"""
+def getArraySize(arr):
+    nbytes = arr.dtype.itemsize
+    for n in arr.shape:
+        nbytes *= n
+    return nbytes

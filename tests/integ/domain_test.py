@@ -235,7 +235,7 @@ class DomainTest(unittest.TestCase):
 
     def testGetNotFound(self):
         domain =  self.base_domain + "/doesnotexist.h6" 
-        print("testGetNotFOund", domain)
+        print("testGetNotFound", domain)
         headers = helper.getRequestHeaders(domain=domain) 
         req = helper.getEndpoint() + '/'
         
@@ -399,6 +399,7 @@ class DomainTest(unittest.TestCase):
         domains = rspJson["domains"]
         
         domain_count = len(domains)
+        print("domain_count:", domain_count)
         if domain_count < 9:
             # this should only happen in the very first test run
             print("Expected to find more domains!")

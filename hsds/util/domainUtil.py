@@ -15,7 +15,7 @@ import os.path as op
 # Domain utilities
 # 
 
-DOMAIN_NAME = "/.domain.json"  # key suffix used to hold domain info
+DOMAIN_SUFFIX = "/.domain.json"  # key suffix used to hold domain info
 
 def isIPAddress(s):
     """Return True if the string looks like an IP address:
@@ -42,8 +42,8 @@ def getParentDomain(domain):
     E.g. getParentDomain("www.hdfgroup.org") returns "hdfgroup.org"
     Return None if the given domain is already a top-level domain.
     """
-    if domain.endswith(DOMAIN_NAME):
-        n = len(DOMAIN_NAME)
+    if domain.endswith(DOMAIN_SUFFIX):
+        n = len(DOMAIN_SUFFIX)
         domain = domain[:-n]
     parent = op.dirname(domain)
     
@@ -108,7 +108,7 @@ def validateDomainPath(path):
     if path[0] != '/':
         raise ValueError("Domain path should start with '/'")
     if path[-1] !=  '/':
-        raise ValueError("Domain path must end with '/'")
+        raise ValueError("Domain path must not end with '/'")
 
 def isValidDomainPath(path):
     try:
@@ -118,7 +118,7 @@ def isValidDomainPath(path):
         return False
 
 def validateDomainKey(domain_key):
-    if not domain_key.endswith(DOMAIN_NAME):
+    if not domain_key.endswith(DOMAIN_SUFFIX):
         raise ValueError("Invalid domain key")
 
 
@@ -180,20 +180,17 @@ def getDomainFromRequest(request, domain_path = False):
         validateDomain(domain)
     return domain
 
-def getS3KeyForDomain(domain):
-    validateDomain(domain)
-    if domain.endswith(DOMAIN_NAME):
-        s3_key = domain[1:]   # don't include leading slash
-    else:
-        s3_key = domain[1:] + DOMAIN_NAME
-    return s3_key
 
-def getS3KeyForDomainPath(domain):
-    validateDomainPath(domain)
-
-    s3_key = domain[1:]   # don't include leading slash
+def getS3PrefixForDomain(domain):
+    domain_key = domain[1:]  # strip off leading slash
+    if domain_key.endswith(DOMAIN_SUFFIX):
+        path_len = len(domain_key) - len(DOMAIN_SUFFIX)
+        domain_key = domain_key[:path_len]
+    if not domain_key[-1] == '/':
+        domain_key += '/'
+    return domain_key
     
-    return s3_key
+
 
 
 

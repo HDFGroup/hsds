@@ -16,11 +16,10 @@ import time
 
 from aiohttp.errors import HttpBadRequest, HttpProcessingError
  
-from util.idUtil import validateInPartition, getS3Key, isValidUuid, validateUuid
+from util.idUtil import isValidUuid, validateUuid
 from util.httpUtil import jsonResponse
-from util.s3Util import  isS3Obj, deleteS3Obj 
-from util.domainUtil import   validateDomain
-from datanode_lib import get_metadata_obj
+from util.domainUtil import validateDomain
+from datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj, delete_metadata_obj, check_metadata_obj
 import hsds_logger as log
     
 
@@ -29,13 +28,11 @@ async def GET_Datatype(request):
     """
     log.request(request)
     app = request.app
-    ctype_id = request.match_info.get('id')
+    ctype_id = get_obj_id(request)  
     
     if not isValidUuid(ctype_id, obj_class="type"):
         log.error( "Unexpected type_id: {}".format(ctype_id))
         raise HttpProcessingError(code=500, message="Unexpected Error")
-
-    validateInPartition(app, ctype_id)
     
     ctype_json = await get_metadata_obj(app, ctype_id)
 
@@ -63,47 +60,48 @@ async def POST_Datatype(request):
         log.error(msg)
         raise HttpBadRequest(message=msg)
 
-    data = await request.json()
-    #body = await request.read()
-    #data = json.loads(body)
+    body = await request.json()
     
+    ctype_id = get_obj_id(request, body=body)
+    if not isValidUuid(ctype_id, obj_class="datatype"):
+        log.error( "Unexpected type_id: {}".format(ctype_id))
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+
+    try:
+        # verify the id doesn't already exist
+        await check_metadata_obj(app, ctype_id)
+        log.error( "Post with existing type_id: {}".format(ctype_id))
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+    except HttpProcessingError:
+        pass  # expected
+
     root_id = None
-    ctype_id = None
     domain = None
     
-    if "root" not in data:
+    if "root" not in body:
         msg = "POST_Datatype with no root"
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
-    root_id = data["root"]
+    root_id = body["root"]
     try:
         validateUuid(root_id, "group")
     except ValueError:
         msg = "Invalid root_id: " + root_id
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
-    if "id" not in data:
-        msg = "POST_Dataset with no id"
-        log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
-    if "type" not in data:
+     
+    if "type" not in body:
         msg = "POST_Datatype with no type"
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
-    type_json = data["type"]
-    ctype_id = data["id"]
-    try:
-        validateUuid(ctype_id, "type")
-    except ValueError:
-        msg = "Invalid type_id: " + ctype_id
-        log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
-    if "domain" not in data:
+    type_json = body["type"]
+     
+    if "domain" not in body:
         msg = "POST_Datatype with no domain key"
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
 
-    domain = data["domain"]
+    domain = body["domain"]
     try:
         validateDomain(domain)
     except ValueError:
@@ -111,36 +109,15 @@ async def POST_Datatype(request):
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
 
-    validateInPartition(app, ctype_id)
-    
-    meta_cache = app['meta_cache'] 
-    s3_key = getS3Key(ctype_id)
-    obj_exists = False
-    if ctype_id in meta_cache:
-        obj_exists = True
-    else:
-        obj_exists = await isS3Obj(app, s3_key)
-    if obj_exists:
-        # duplicate uuid?
-        msg = "Conflict: resource exists: " + ctype_id
-        log.error(msg)
-        raise HttpProcessingError(code=409, message=msg)
-
     # ok - all set, create committed type obj
     now = time.time()
 
-    log.info("POST_datatype, typejson: {}".format(type_json))
+    log.info("POST_datatype, typejson: {}". format(type_json))
     
-    ctype_json = {"id": ctype_id, "root": root_id, "created": now, "lastModified": now, "type": type_json, "attributes": {} }
-    if domain is not None:
-        ctype_json["domain"] = domain
-
-    # await putS3JSONObj(app, s3_key, group_json)  # write to S3
-    dirty_ids = app['dirty_ids']
-    dirty_ids[ctype_id] = now  # mark to flush to S3
-
-    # save the object to cache
-    meta_cache[ctype_id] = ctype_json
+    ctype_json = {"id": ctype_id, "root": root_id, "created": now, 
+        "lastModified": now, "type": type_json, "attributes": {}, "domain": domain }
+     
+    save_metadata_obj(app, ctype_id, ctype_json)
 
     resp_json = {} 
     resp_json["id"] = ctype_id 
@@ -159,38 +136,17 @@ async def DELETE_Datatype(request):
     """
     log.request(request)
     app = request.app
-    ctype_id = request.match_info.get('id')
-
-    if not isValidUuid(ctype_id, obj_class="type"):
-        log.error( "Unexpected datatype_id: {}".format(ctype_id))
-        raise HttpProcessingError(code=500, message="Unexpected Error")
-
-    validateInPartition(app, ctype_id)
-
-    meta_cache = app['meta_cache'] 
-    deleted_ids = app['deleted_ids']
-    dirty_ids = app['dirty_ids']
-    deleted_ids.add(ctype_id)
     
-    s3_key = getS3Key(ctype_id)
-    obj_exists = False
-    if ctype_id in meta_cache:
-        obj_exists = True
-    else:
-        obj_exists = await isS3Obj(app, s3_key)
-    if not obj_exists:
-        # duplicate uuid?
-        msg = "{} not found".format(ctype_id)
-        log.response(request, code=404, message=msg)
-        raise HttpProcessingError(code=404, message=msg)
-    
-    await deleteS3Obj(app, s3_key)
-     
-    if ctype_id in meta_cache:
-        del meta_cache[ctype_id]
-    if ctype_id in dirty_ids:
-        del dirty_ids[ctype_id]  # TBD - possible race condition?
+    ctype_id = get_obj_id(request)
+    log.info("DELETE ctype: {}".format(ctype_id))
 
+    # verify the id  exist
+    await check_metadata_obj(app, ctype_id)
+        
+    log.info("deleting ctype: {}".format(ctype_id))
+
+    await delete_metadata_obj(app, ctype_id)
+ 
     resp_json = {  } 
       
     resp = await jsonResponse(request, resp_json)

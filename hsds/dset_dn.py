@@ -16,11 +16,10 @@ import time
 
 from aiohttp.errors import HttpBadRequest, HttpProcessingError
  
-from util.idUtil import validateInPartition, getS3Key, isValidUuid, validateUuid
+from util.idUtil import isValidUuid, validateUuid
 from util.httpUtil import jsonResponse
-from util.s3Util import  isS3Obj, deleteS3Obj 
 from util.domainUtil import validateDomain
-from datanode_lib import get_metadata_obj, save_metadata_obj
+from datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj, save_metadata_obj, delete_metadata_obj
 import hsds_logger as log
     
 
@@ -29,13 +28,11 @@ async def GET_Dataset(request):
     """
     log.request(request)
     app = request.app
-    dset_id = request.match_info.get('id')
+    dset_id = get_obj_id(request)
     
     if not isValidUuid(dset_id, obj_class="dataset"):
         log.error( "Unexpected type_id: {}".format(dset_id))
         raise HttpProcessingError(code=500, message="Unexpected Error")
-
-    validateInPartition(app, dset_id)
     
     dset_json = await get_metadata_obj(app, dset_id)
 
@@ -68,47 +65,49 @@ async def POST_Dataset(request):
         log.error(msg)
         raise HttpBadRequest(message=msg)
 
-    data = await request.json()
-    log.info("POST_Dataset, body: {}".format(data))
+    body = await request.json()
+    log.info("POST_Dataset, body: {}".format(body))
+
+    dset_id = get_obj_id(request, body=body)
+    if not isValidUuid(dset_id, obj_class="dataset"):
+        log.error( "Unexpected dataset_id: {}".format(dset_id))
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+
+    try:
+        # verify the id doesn't already exist
+        await check_metadata_obj(app, dset_id)
+        log.error( "Post with existing dset_id: {}".format(dset_id))
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+    except HttpProcessingError:
+        pass  # expected
        
-    if "root" not in data:
+    if "root" not in body:
         msg = "POST_Dataset with no root"
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
-    root_id = data["root"]
+    root_id = body["root"]
     try:
         validateUuid(root_id, "group")
     except ValueError:
         msg = "Invalid root_id: " + root_id
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
-    if "id" not in data:
-        msg = "POST_Dataset with no id"
-        log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
-    dset_id = data["id"]
-    try:
-        validateUuid(dset_id, "dataset")
-    except ValueError:
-        msg = "Invalid type_id: " + dset_id
-        log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
     
-    if "type" not in data:
+    if "type" not in body:
         msg = "POST_Dataset with no type"
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
-    type_json = data["type"]
-    if "shape" not in data:
+    type_json = body["type"]
+    if "shape" not in body:
         msg = "POST_Dataset with no shape"
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
-    shape_json = data["shape"]
-    if "domain" not in data:
+    shape_json = body["shape"]
+    if "domain" not in body:
         msg = "POST_Dataset with no domain"
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
-    domain = data["domain"]
+    domain = body["domain"]
     try:
         validateDomain(domain)
     except ValueError:
@@ -116,24 +115,9 @@ async def POST_Dataset(request):
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
     layout = None
-    if "layout" in data:       
-        layout = data["layout"]  # client specified chunk layout
+    if "layout" in body:       
+        layout = body["layout"]  # client specified chunk layout
     
-    validateInPartition(app, dset_id)
-    
-    meta_cache = app['meta_cache'] 
-    s3_key = getS3Key(dset_id)
-    obj_exists = False
-    if dset_id in meta_cache:
-        obj_exists = True
-    else:
-        obj_exists = await isS3Obj(app, s3_key)
-    if obj_exists:
-        # duplicate uuid?
-        msg = "Conflict: resource exists: " + dset_id
-        log.error(msg)
-        raise HttpProcessingError(code=409, message=msg)
-
     # ok - all set, create committed type obj
     now = int(time.time())
 
@@ -142,18 +126,13 @@ async def POST_Dataset(request):
     dset_json = {"id": dset_id, "root": root_id, "created": now, "lastModified": now, "type": type_json, "shape": shape_json, "attributes": {} }
     if domain is not None:
         dset_json["domain"] = domain
-    if "creationProperties" in data:
-        dset_json["creationProperties"] = data["creationProperties"]
+    if "creationProperties" in body:
+        dset_json["creationProperties"] = body["creationProperties"]
     if layout is not None:
         dset_json["layout"] = layout
 
-    # await putS3JSONObj(app, s3_key, group_json)  # write to S3
-    dirty_ids = app['dirty_ids']
-    dirty_ids[dset_id] = now  # mark to flush to S3
-
-    # save the object to cache
-    meta_cache[dset_id] = dset_json
-
+    save_metadata_obj(app, dset_id, dset_json)
+     
     resp_json = {} 
     resp_json["id"] = dset_id 
     resp_json["root"] = root_id
@@ -174,36 +153,18 @@ async def DELETE_Dataset(request):
     log.request(request)
     app = request.app
     dset_id = request.match_info.get('id')
+    log.info("DELETE dataset: {}".format(dset_id))
 
     if not isValidUuid(dset_id, obj_class="dataset"):
         log.error( "Unexpected dataset id: {}".format(dset_id))
         raise HttpProcessingError(code=500, message="Unexpected Error")
 
-    validateInPartition(app, dset_id)
+    # verify the id  exist
+    await check_metadata_obj(app, dset_id) 
 
-    meta_cache = app['meta_cache'] 
-    deleted_ids = app['deleted_ids']
-    dirty_ids = app['dirty_ids']
-    deleted_ids.add(dset_id)
-    
-    s3_key = getS3Key(dset_id)
-    obj_exists = False
-    if dset_id in meta_cache:
-        obj_exists = True
-    else:
-        obj_exists = await isS3Obj(app, s3_key)
-    if not obj_exists:
-        # duplicate uuid?
-        msg = "{} not found".format(dset_id)
-        log.response(request, code=404, message=msg)
-        raise HttpProcessingError(code=404, message=msg)
-    
-    await deleteS3Obj(app, s3_key)
-     
-    if dset_id in meta_cache:
-        del meta_cache[dset_id]
-    if dset_id in dirty_ids:
-        del dirty_ids[dset_id]  # TBD - possible race condition?
+    log.info("deleting dataset: {}".format(dset_id))
+
+    await delete_metadata_obj(app, dset_id)
 
     resp_json = {  } 
       
@@ -221,17 +182,16 @@ async def PUT_DatasetShape(request):
         log.error( "Unexpected type_id: {}".format(dset_id))
         raise HttpProcessingError(code=500, message="Unexpected Error")
 
-    validateInPartition(app, dset_id)
-    
+    body = await request.json()
+
+    log.info("PUT datasetshape: {}, body: {}".format(dset_id, body))
+
     dset_json = await get_metadata_obj(app, dset_id)
 
-    data = await request.json()
-     
-    shape_update = data["shape"]
+    shape_update = body["shape"]
      
     log.info("shape_update: {}".format(shape_update))
 
-    
     shape_orig = dset_json["shape"]
     log.info("shape_orig: {}".format(shape_orig))
 
@@ -251,7 +211,7 @@ async def PUT_DatasetShape(request):
         dims[i] = shape_update[i]
          
     # write back to S3, save to metadata cache
-    await save_metadata_obj(app, dset_json)
+    save_metadata_obj(app, dset_id, dset_json)
  
     resp_json = { } 
 

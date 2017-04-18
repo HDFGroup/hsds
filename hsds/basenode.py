@@ -214,6 +214,15 @@ async def info(request):
     answer["log_stats"] = app["log_count"]
     answer["req_count"] = app["req_count"]
     answer["s3_stats"] = app["s3_stats"]
+    mc_stats = {}
+    if "meta_cache" in app:
+        mc = app["meta_cache"]  # only DN nodes have this
+        mc_stats["count"] = len(mc)
+        mc_stats["dirty_count"] = mc.dirtyCount
+        mc_stats["utililization_per"] = mc.cacheUtilizationPercent
+        mc_stats["mem_used"] = mc.memUsed
+        mc_stats["mem_target"] = mc.memTarget
+    answer["meta_cache_stats"] = mc_stats
     cc_stats = {}
     if "chunk_cache" in app:
         cc = app["chunk_cache"]  # only DN nodes have this
@@ -223,6 +232,15 @@ async def info(request):
         cc_stats["mem_used"] = cc.memUsed
         cc_stats["mem_target"] = cc.memTarget
     answer["chunk_cache_stats"] = cc_stats
+    dc_stats = {}
+    if "domain_cache" in app:
+        dc = app["domain_cache"]  # only DN nodes have this
+        dc_stats["count"] = len(dc)
+        dc_stats["dirty_count"] = dc.dirtyCount
+        dc_stats["utililization_per"] = dc.cacheUtilizationPercent
+        dc_stats["mem_used"] = dc.memUsed
+        dc_stats["mem_target"] = dc.memTarget
+    answer["domain_cache_stats"] = dc_stats
         
     resp = await jsonResponse(request, answer) 
     log.response(request, resp=resp)

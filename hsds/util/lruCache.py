@@ -19,37 +19,42 @@ def getArraySize(arr):
         nbytes *= n
     return nbytes
 
-
-class ChunkNode(object):
-    def __init__(self, id, nparr, isdirty=False, prev=None, next=None):
+class Node(object):
+    def __init__(self, id, data, mem_size=1024, isdirty=False, prev=None, next=None):
         self._id = id
-        self._nparr = nparr
+        self._data = data
+        self._mem_size = mem_size
         self._isdirty = isdirty
         self._prev = prev
         self._next = next
-        self._mem_size = getArraySize(nparr)
+         
 
 
-class ChunkCache(object):
+class LruCache(object):
     """ LRU cache for Numpy arrays that are read/written from S3
     """
-    def __init__(self, mem_target=32*1024*1024):
+    def __init__(self, mem_target=32*1024*1024, chunk_cache=True):
         self._hash = {}
         self._lru_head = None
         self._lru_tail = None
         self._mem_size = 0
         self._mem_target = mem_target
+        self._chunk_cache = chunk_cache
+        if chunk_cache:
+            self._name = "ChunkCache"
+        else:
+            self._name = "MetaCache"
         self._dirty_set = set()
 
-    def _getNode(self, chunk_id):
+    def _getNode(self, key):
         """ Return node  """
-        if chunk_id not in self._hash:
-            raise KeyError(chunk_id)
-        return self._hash[chunk_id]
+        if key not in self._hash:
+            raise KeyError(key)
+        return self._hash[key]
 
-    def _delNode(self, chunk_id):
+    def _delNode(self, key):
         # remove from LRU
-        node = self._getNode(chunk_id)
+        node = self._getNode(key)
         prev = node._prev
         next = node._next
         if prev is None:
@@ -65,12 +70,12 @@ class ChunkCache(object):
         else:
             next._prev = prev
         node._next = node._prev = None
-        log.info("chunk {} removed from chunk cache".format(node._id))
+        log.info("node {} removed from {}".format(node._id, self._name))
         return node
 
-    def _moveToFront(self, chunk_id):
+    def _moveToFront(self, key):
         # move this node to the front of LRU list
-        node = self._getNode(chunk_id)
+        node = self._getNode(key)
         if self._lru_head == node:
             # already the front
             return node
@@ -89,59 +94,62 @@ class ChunkCache(object):
                 raise KeyError("unexpected error")
             self._lru_tail = prev
         self._lru_head = node
-        log.info("new chunkcache headnode: {}".format(node._id))
+        log.info("new {} headnode: {}".format(self._name, node._id))
         return node
 
-    def __delitem__(self, chunk_id):
-        node = self._delNode(chunk_id) # remove from LRU
-        del self._hash[chunk_id]       # remove from hash
+    def __delitem__(self, key):
+        node = self._delNode(key) # remove from LRU
+        del self._hash[key]       # remove from hash
         # remove from LRU list
         
         self._mem_size -= node._mem_size
-        if chunk_id in self._dirty_set:
-            log.warning("removing dirty chunk from cache: {}".format(chunk_id))
-            self._dirty_set.remove(chunk_id)
+        if key in self._dirty_set:
+            log.warning("removing dirty node from {}: {}".format(key, self._name))
+            self._dirty_set.remove(key)
 
     def __len__(self):
-        """ Number of chunks in the cache """
+        """ Number of nodes in the cache """
         return len(self._hash)
 
     def __iter__(self):
-        """ Iterate over chunk ids """
+        """ Iterate over node ids """
         node = self._lru_head
         while node is not None:
             yield node._id
             node = node._next  
 
-    def __contains__(self, chunk_id):
-        """ Test if a chunk_id is in the cache """
-        if chunk_id in self._hash:
+    def __contains__(self, key):
+        """ Test if key is in the cache """
+        if key in self._hash:
             return True
         else:
             return False
 
-    def __getitem__(self, chunk_id):
+    def __getitem__(self, key):
         """ Return numpy array from cache """
         # doing a getitem has the side effect of moving this node 
         # up in the LRU list
-        node = self._moveToFront(chunk_id)
-        return node._nparr
+        node = self._moveToFront(key)
+        return node._data
 
 
-    def __setitem__(self, chunk_id, arr):
-        if not isinstance(arr, numpy.ndarray):
-            raise TypeError("Expected numpy array")
-        if not isinstance(chunk_id, str):
-            raise TypeError("Expected string type")
-        if len(chunk_id) < 38:  
-            # id should be prefix (e.g. "c-") and uuid value + chunk_index
-            raise ValueError("Unexpected id length")
-        if not chunk_id.startswith("c-"):
-            raise ValueError("Unexpected prefix")
-        if chunk_id in self._hash:
-            raise KeyError("item already present in chunk cache")
-
-        node = ChunkNode(chunk_id, arr)
+    def __setitem__(self, key, data):
+        if self._chunk_cache:
+            if not isinstance(data, numpy.ndarray):
+                raise TypeError("Expected ndarray but got type: {}".format(type(data)))
+            if len(key) < 38:  
+                # id should be prefix (e.g. "c-") and uuid value + chunk_index
+                raise ValueError("Unexpected id length")
+            if not key.startswith("c-"):
+                raise ValueError("Unexpected prefix")
+            mem_size = getArraySize(data)  # can just compute size for numpy array
+        else:
+            if not isinstance(data, dict):
+                raise TypeError("Expected dict but got type: {}".format(type(data)))
+            # TBD - come up with a way to get the actual data size for dict objects
+            mem_size = 1024
+  
+        node = Node(key, data, mem_size=mem_size)
         if self._lru_head is None:
             self._lru_head = self._lru_tail = node
         else:
@@ -153,9 +161,17 @@ class ChunkCache(object):
             next._prev = node  
             self._lru_head = node
 
-        self._hash[chunk_id] = node
-        self._mem_size += node._mem_size
-        log.info("added new node to cache: {} [{} bytes]".format(chunk_id, node._mem_size))
+        
+        if key in self._hash:
+            old_size = self._hash[key]._mem_size
+            mem_delta = node._mem_size - old_size
+            self._hash[key] = node
+            self._mem_size += mem_delta
+            log.info("updated node in {}: {} [was {} bytes now {} bytes]".format(self._name, key, old_size, node._mem_size))
+        else:
+            self._hash[key] = node
+            self._mem_size += node._mem_size
+            log.info("added new node to {}: {} [{} bytes]".format(self._name, key, node._mem_size))
         
         if self._mem_size > self._mem_target:
             # set dirty temporarily so we can't remove this node in reduceCache 
@@ -164,8 +180,8 @@ class ChunkCache(object):
             node._isdirty = False
              
     def _reduceCache(self):
-        # remove chunks from cache (if not dirty) until we are under memory mem_target
-        log.info("reduceCache")
+        # remove nodes from cache (if not dirty) until we are under memory mem_target
+        log.info("reduce {}".format(self._name))
         
         node = self._lru_tail  # start from the back
         while node is not None:
@@ -175,10 +191,10 @@ class ChunkCache(object):
                 log.info("removing node: {}".format(node._id))
                 self.__delitem__(node._id)
                 if self._mem_size < self._mem_target:
-                    log.info("mem_sized reduced below target")
+                    log.info("{} mem_sized reduced below target".format(self._name))
                     break
             else:
-                log.info("chunk: {} is dirty".format(node._id))
+                log.info("node: {} is dirty".format(node._id))
                 pass # can't remove dirty nodes
             node = next
         # done reduceCache
@@ -199,14 +215,14 @@ class ChunkCache(object):
                 if node._id not in self._dirty_set:
                     raise ValueError("expected to find id: {} in dirty set".format(node._id))
             mem_usage += node._mem_size
-            if not isinstance(node._nparr, numpy.ndarray):
-                raise TypeError("Expected numpy array")
+            if self._chunk_cache and not isinstance(node._data, numpy.ndarray):
+                raise TypeError("Unexpected datatype")
             node = node._next
         # finish forward iteration
         if len(id_list) != len(self._hash):
             raise ValueError("unexpected number of elements in forward LRU list")
         if dirty_count != len(self._dirty_set):
-            raise ValueError("unexpected number of dirty chunks")
+            raise ValueError("unexpected number of dirty nodes")
         if mem_usage != self._mem_size:
             raise ValueError("unexpected memory size")
         # go back through list
@@ -226,32 +242,32 @@ class ChunkCache(object):
         # done - consistencyCheck
 
 
-    def setDirty(self, chunk_id):
+    def setDirty(self, key):
         # setting dirty flag has the side effect of moving this node 
         # up in the LRU list
-        log.info("set dirty cache node id: {}".format(chunk_id))
+        log.info("set dirty {} node id: {}".format(self._name, key))
                    
-        node = self._moveToFront(chunk_id)
+        node = self._moveToFront(key)
         node._isdirty = True
         
-        self._dirty_set.add(chunk_id)
+        self._dirty_set.add(key)
 
 
-    def clearDirty(self, chunk_id):
+    def clearDirty(self, key):
         # clearing dirty flag has the side effect of moving this node 
         # up in the LRU list
         # also, may trigger a memory cleanup
-        log.info("clear dirty for node:    {}".format(chunk_id))
-        node = self._moveToFront(chunk_id)
+        log.info("clear dirty for {} node: {}".format(self._name, key))
+        node = self._moveToFront(key)
         node._isdirty = False
-        self._dirty_set.remove(chunk_id)
+        self._dirty_set.remove(key)
         if self._mem_size > self._mem_target:
             # maybe we can free up some memory now
             self._reduceCache()
 
-    def isDirty(self, chunk_id):
+    def isDirty(self, key):
         # don't adjust LRU position
-        return chunk_id in self._dirty_set
+        return key in self._dirty_set
 
     def dump_lru(self):
         """ Return LRU list as a string

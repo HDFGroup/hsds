@@ -18,10 +18,10 @@ from bisect import bisect_left
 
 from aiohttp.errors import HttpBadRequest, HttpProcessingError 
  
-from util.idUtil import  isValidUuid, validateInPartition
+from util.idUtil import  isValidUuid
 from util.httpUtil import jsonResponse
 from util.linkUtil import validateLinkName
-from datanode_lib import get_metadata_obj, save_metadata_obj
+from datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
 import hsds_logger as log
 
 def index(a, x):
@@ -37,14 +37,12 @@ async def GET_Links(request):
     """
     log.request(request)
     app = request.app
-    group_id = request.match_info.get('id')
-
+    group_id = get_obj_id(request)  
+    log.info("GET links: {}".format(group_id))
     if not isValidUuid(group_id, obj_class="group"):
         log.error( "Unexpected group_id: {}".format(group_id))
         raise HttpProcessingError(code=500, message="Unexpected Error")
-
-    validateInPartition(app, group_id)
-
+ 
     limit = None
     if "Limit" in request.GET:
         try:
@@ -102,13 +100,12 @@ async def GET_Link(request):
     """
     log.request(request)
     app = request.app
-    group_id = request.match_info.get('id')
+    group_id = get_obj_id(request)
+    log.info("GET link: {}".format(group_id))
 
     if not isValidUuid(group_id, obj_class="group"):
         log.error( "Unexpected group_id: {}".format(group_id))
         raise HttpProcessingError(code=500, message="Unexpected Error")
-
-    validateInPartition(app, group_id)
 
     link_title = request.match_info.get('title')
 
@@ -135,13 +132,11 @@ async def PUT_Link(request):
     """ Handler creating a new link"""
     log.request(request)
     app = request.app
-    group_id = request.match_info.get('id')
-    
+    group_id = get_obj_id(request)
+    log.info("PUT link: {}".format(group_id))
     if not isValidUuid(group_id, obj_class="group"):
         log.error( "Unexpected group_id: {}".format(group_id))
         raise HttpProcessingError(code=500, message="Unexpected Error")
-
-    validateInPartition(app, group_id)
 
     link_title = request.match_info.get('title')
     validateLinkName(link_title)
@@ -150,7 +145,7 @@ async def PUT_Link(request):
 
     if not request.has_body:
         msg = "PUT Link with no body"
-        log.warn(msg)
+        log.error(msg)
         raise HttpBadRequest(message=msg)
 
     body = await request.json()   
@@ -191,7 +186,7 @@ async def PUT_Link(request):
     group_json["lastModified"] = now
 
     # write back to S3, save to metadata cache
-    await save_metadata_obj(app, group_json)
+    save_metadata_obj(app, group_id, group_json)
     
     resp_json = { } 
      
@@ -205,18 +200,18 @@ async def DELETE_Link(request):
     """
     log.request(request)
     app = request.app
-    group_id = request.match_info.get('id')
+    group_id = get_obj_id(request)
+    log.info("DELETE link: {}".format(group_id))
 
     if not isValidUuid(group_id, obj_class="group"):
         log.error( "Unexpected group_id: {}".format(group_id))
         raise HttpProcessingError(code=500, message="Unexpected Error")
-
-    validateInPartition(app, group_id)
-
+ 
     link_title = request.match_info.get('title')
     validateLinkName(link_title)
 
     group_json = await get_metadata_obj(app, group_id)
+    # TBD: Possible race condition
     if "links" not in group_json:
         log.error("unexpected group data for id: {}".format(group_id))
         raise HttpProcessingError(code=500, message="Unexpected Error")
@@ -234,7 +229,7 @@ async def DELETE_Link(request):
     group_json["lastModified"] = now
 
     # write back to S3
-    await save_metadata_obj(app, group_json)
+    save_metadata_obj(app, group_id, group_json)
 
     hrefs = []  # TBD
     resp_json = {"href":  hrefs} 

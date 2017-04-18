@@ -26,11 +26,22 @@ def getIdHash(id):
     return hexdigest[:5]
 
 def getS3Key(id):
-    """ Return s3 key based on uuid and class char.
-    Add a md5 prefix in front of the returned key to better 
-    distribute S3 objects"""
-    idhash = getIdHash(id)
-    key = "{}-{}".format(idhash, id)
+    """ Return s3 key for given id. 
+    For uuid id's, add a md5 prefix in front of the returned key to better 
+    distribute S3 objects.
+    For domain id's return a key with the .domain suffix and no preceeding slash
+    """
+    if id[0] == '/':
+        # a domain id
+        domain_suffix = ".domain.json"
+        key = id[1:]
+        if not key.endswith(domain_suffix):
+            if key[-1] != '/':
+                key += '/'
+            key += domain_suffix
+    else:
+        idhash = getIdHash(id)
+        key = "{}-{}".format(idhash, id)
     return key
 
 def createNodeId(prefix):
@@ -121,6 +132,7 @@ def getObjPartition(id, count):
     hash_code = getIdHash(id)
     hash_value = int(hash_code, 16)
     number = hash_value % count
+    log.info("getObjPartition for key: {} got: {}".format(id, number))
     return number
 
 def validateInPartition(app, obj_id):
@@ -129,7 +141,7 @@ def validateInPartition(app, obj_id):
         expected_node = getObjPartition(obj_id, app['node_count'])
         msg = "wrong node for 'id':{}, expected node {} got {}".format(obj_id, expected_node, app['node_number'])
         log.error(msg)
-        raise HttpProcessingError(message=msg, code=500)
+        raise KeyError(msg)
 
 def getDataNodeUrl(app, obj_id):
     """ Return host/port for datanode for given obj_id.

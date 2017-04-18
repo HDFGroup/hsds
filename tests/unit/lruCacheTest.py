@@ -17,17 +17,17 @@ import numpy as np
 sys.path.append('../../hsds/util')
 sys.path.append('../../hsds')
 
-from chunkCache import ChunkCache 
+from lruCache import LruCache 
 from idUtil import createObjId
 
-class ChunkCacheTest(unittest.TestCase):
+class LruCacheTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
-        super(ChunkCacheTest, self).__init__(*args, **kwargs)
+        super(LruCacheTest, self).__init__(*args, **kwargs)
         # main
 
     def testSimple(self):
         """ check basic functions by adding one chunk to cache """
-        cc = ChunkCache(mem_target=1000*1000*10)
+        cc = LruCache(mem_target=1000*1000*10)
         cc.consistencyCheck()
 
         self.assertEqual(len(cc), 0)
@@ -35,7 +35,7 @@ class ChunkCacheTest(unittest.TestCase):
 
         id = createObjId("chunks")
         try:
-            # only numpy arrays an be added
+            # only dict objects can be added
             cc[id] = list(range(20))
             self.assertTrue(False)
         except TypeError:
@@ -89,11 +89,10 @@ class ChunkCacheTest(unittest.TestCase):
         mem_per = cc.cacheUtilizationPercent
         self.assertEqual(mem_per, 0)   # no memory used
 
-
     
     def testLRU(self):
         """ Check LRU replacement logic """
-        cc = ChunkCache(mem_target=1024*1024*1024) # big enough that there shouldn't be any cleanup
+        cc = LruCache(mem_target=1024*1024*1024) # big enough that there shouldn't be any cleanup
         self.assertEqual(len(cc), 0)
         ids = []
         # add chunks to the cache
@@ -153,7 +152,7 @@ class ChunkCacheTest(unittest.TestCase):
 
     def testMemUtil(self):   
         """ Test memory usage tracks target """          
-        cc = ChunkCache(mem_target=5000)
+        cc = LruCache(mem_target=5000)
         self.assertEqual(len(cc), 0)
         ids = set()
         for i in range(10):
@@ -205,6 +204,71 @@ class ChunkCacheTest(unittest.TestCase):
         # mem percent should be less than 100 now
 
         self.assertTrue(mem_per <= 100)        
+
+    def testMetaDataCache(self):
+        """ check metadata cache functionality """
+        cc = LruCache(mem_target=1024*10, chunk_cache=False)
+        cc.consistencyCheck()
+
+        self.assertEqual(len(cc), 0)
+        self.assertEqual(cc.dump_lru(), "->\n<-\n")
+
+        id = createObjId("datasets")
+        try:
+            # only numpy arrays an be added
+            cc[id] = np.zeros((3,4))
+            self.assertTrue(False)
+        except TypeError:
+            pass # expected
+        data = { "x": 123, "y": 456}
+        arr = np.zeros((10,))
+        id = createObjId("chunks")
+        try:
+            cc[id] = arr
+            self.assertTrue(False)
+        except TypeError:
+            pass # expected - not a dict
+
+        rand_id = createObjId("groups")
+        data = {"foo": "bar"}
+        cc[rand_id] = data  # add to cache
+        cc.consistencyCheck()
+        self.assertEqual(len(cc), 1)
+        self.assertTrue(rand_id in cc)
+        lru_str = "->" + rand_id + "\n<-" + rand_id + "\n"
+        mem_tgt = cc.memTarget
+        self.assertEqual(mem_tgt, 1024*10)
+        mem_used = cc.memUsed
+        self.assertEqual(mem_used, 1024)  # not based on actual size
+        mem_per = cc.cacheUtilizationPercent
+        self.assertEqual(mem_per, 10)   # have used 10% of target memory
+        # try out the dirty flags
+        self.assertFalse(cc.isDirty(rand_id))
+        self.assertEqual(cc.dirtyCount, 0)
+        cc.setDirty(rand_id)
+        cc.consistencyCheck()
+        self.assertTrue(cc.isDirty(rand_id))
+        self.assertEqual(cc.dirtyCount, 1)
+        self.assertEqual(cc.dump_lru(), lru_str)
+        cc.clearDirty(rand_id)
+        cc.consistencyCheck()
+        self.assertFalse(cc.isDirty(rand_id))
+        self.assertEqual(cc.dirtyCount, 0)
+        # chunk should not have been evicted from cache
+        self.assertEqual(len(cc), 1)
+        self.assertTrue(rand_id in cc)
+        # delete from cache
+        del cc[rand_id]
+        cc.consistencyCheck()
+        # check cache is empty
+        self.assertEqual(len(cc), 0)
+        self.assertFalse(rand_id in cc)
+        mem_tgt = cc.memTarget
+        self.assertEqual(mem_tgt, 1024*10)
+        mem_used = cc.memUsed
+        self.assertEqual(mem_used, 0)
+        mem_per = cc.cacheUtilizationPercent
+        self.assertEqual(mem_per, 0)   # no memory used
                          
              
 if __name__ == '__main__':

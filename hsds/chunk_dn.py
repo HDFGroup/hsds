@@ -152,10 +152,11 @@ async def PUT_Chunk(request):
             else:
                 chunk_arr = np.zeros(dims, dtype=dt, order='C')
         chunk_cache[chunk_id] = chunk_arr
-        chunk_cache.setDirty(chunk_id)
+        
 
     # update chunk array
     chunk_arr[selection] = input_arr
+    chunk_cache.setDirty(chunk_id)
 
     # async write to S3   
     dirty_ids = app["dirty_ids"]

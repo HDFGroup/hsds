@@ -17,10 +17,9 @@ from bisect import bisect_left
 
 from aiohttp.errors import HttpBadRequest, HttpProcessingError
  
-from util.idUtil import validateInPartition, isValidUuid
 from util.httpUtil import jsonResponse
-from util.attrUtil import validateAttributeName, getRequestCollectionName
-from datanode_lib import get_metadata_obj, save_metadata_obj
+from util.attrUtil import validateAttributeName
+from datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
 import hsds_logger as log
 
 def index(a, x):
@@ -36,20 +35,9 @@ async def GET_Attributes(request):
     """
     log.request(request)
     app = request.app
-    collection = getRequestCollectionName(request) # returns datasets|groups|datatypes
 
-    obj_id = request.match_info.get('id')
-    if not obj_id:
-        msg = "Missing object id"
-        log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
-
-    if not isValidUuid(obj_id, obj_class=collection):
-        msg = "Invalid obj id: {}".format(obj_id)
-        log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
-
-    validateInPartition(app, obj_id)
+    obj_id = get_obj_id(request)  
+     
     include_data = False
     if "IncludeData" in request.GET and request.GET["IncludeData"]:
         include_data = True
@@ -120,26 +108,13 @@ async def GET_Attribute(request):
     log.request(request)
     app = request.app
 
-    collection = getRequestCollectionName(request) # returns datasets|groups|datatypes
-
-    obj_id = request.match_info.get('id')
-    if not obj_id:
-        msg = "Missing object id"
-        log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
-
-    if not isValidUuid(obj_id, obj_class=collection):
-        msg = "Invalid obj id: {}".format(obj_id)
-        log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
-
-    validateInPartition(app, obj_id)
+    obj_id = get_obj_id(request)  
 
     attr_name = request.match_info.get('name')
     validateAttributeName(attr_name)
         
     obj_json = await get_metadata_obj(app, obj_id)
-    log.info("GET attribute obj_id: {} got json".format(obj_id))
+    log.info("GET attribute obj_id: {} name: {}".format(obj_id, attr_name))
 
     if "attributes" not in obj_json:
         log.error("unexpected obj data for id: {}".format(obj_id))
@@ -147,7 +122,7 @@ async def GET_Attribute(request):
 
     attributes = obj_json["attributes"]
     if attr_name not in attributes:
-        msg = "Attribute  {} not found in {} with id: {}".format(attr_name, collection, obj_id)
+        msg = "Attribute  {} not with id: {}".format(attr_name, obj_id)
         log.warn(msg)
         raise HttpProcessingError(code=404, message=msg)
 
@@ -163,23 +138,10 @@ async def PUT_Attribute(request):
     log.info("put_attribute dn")
     log.request(request)
     app = request.app
-
-    collection = getRequestCollectionName(request) # returns datasets|groups|datatypes
-
-    obj_id = request.match_info.get('id')
-    if not obj_id:
-        msg = "Missing object id"
-        log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
-
-    if not isValidUuid(obj_id, obj_class=collection):
-        msg = "Invalid obj id: {}".format(obj_id)
-        log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
-
-    validateInPartition(app, obj_id)
+    obj_id = get_obj_id(request) 
 
     attr_name = request.match_info.get('name')
+    log.info("PUT attribute {} in {}".format(attr_name, obj_id))
     validateAttributeName(attr_name)
         
     if not request.has_body:
@@ -231,7 +193,7 @@ async def PUT_Attribute(request):
     attributes[attr_name] = attr_json
      
     # write back to S3, save to metadata cache
-    await save_metadata_obj(app, obj_json)
+    save_metadata_obj(app, obj_id, obj_json)
  
     resp_json = { } 
 
@@ -245,22 +207,11 @@ async def DELETE_Attribute(request):
     """
     log.request(request)
     app = request.app
-    collection = getRequestCollectionName(request) # returns datasets|groups|datatypes
-
-    obj_id = request.match_info.get('id')
-    if not obj_id:
-        msg = "Missing object id"
-        log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
-
-    if not isValidUuid(obj_id, obj_class=collection):
-        msg = "Invalid obj id: {}".format(obj_id)
-        log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
-
-    validateInPartition(app, obj_id)
+    
+    obj_id = get_obj_id(request) 
 
     attr_name = request.match_info.get('name')
+    log.info("DELETE attribute {} in {}".format(attr_name, obj_id))
     validateAttributeName(attr_name)
 
     obj_json = await get_metadata_obj(app, obj_id)
@@ -275,11 +226,13 @@ async def DELETE_Attribute(request):
     attributes = obj_json["attributes"]
 
     if attr_name not in attributes:
-        msg = "Attribute  {} not found in {} with id: {}".format(attr_name, collection, obj_id)
+        msg = "Attribute  {} not found in id: {}".format(attr_name, obj_id)
         log.warn(msg)
         raise HttpProcessingError(code=404, message=msg)
 
     del attributes[attr_name] 
+
+    save_metadata_obj(app, obj_id, obj_json)
 
     resp_json = { } 
     resp = await jsonResponse(request, resp_json)

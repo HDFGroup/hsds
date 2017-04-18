@@ -16,11 +16,10 @@ import time
 
 from aiohttp.errors import HttpBadRequest, HttpProcessingError
  
-from util.idUtil import validateInPartition, getS3Key, isValidUuid, validateUuid
+from util.idUtil import isValidUuid 
 from util.httpUtil import jsonResponse
-from util.s3Util import  isS3Obj, deleteS3Obj 
-from util.domainUtil import   validateDomain
-from datanode_lib import get_metadata_obj
+from util.domainUtil import validateDomain
+from datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj, save_metadata_obj, delete_metadata_obj
 import hsds_logger as log
     
 
@@ -29,13 +28,12 @@ async def GET_Group(request):
     """
     log.request(request)
     app = request.app
-    group_id = request.match_info.get('id')
+    group_id = get_obj_id(request)
+    log.info("GET group: {}".format(group_id))
     
     if not isValidUuid(group_id, obj_class="group"):
         log.error( "Unexpected group_id: {}".format(group_id))
         raise HttpProcessingError(code=500, message="Unexpected Error")
-
-    validateInPartition(app, group_id)
     
     group_json = await get_metadata_obj(app, group_id)
 
@@ -62,38 +60,40 @@ async def POST_Group(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
 
-    data = await request.json()
+    body = await request.json()
+
+    group_id = get_obj_id(request, body=body)
+    log.info("POST group: {}".format(group_id))
+    if not isValidUuid(group_id, obj_class="group"):
+        log.error( "Unexpected group_id: {}".format(group_id))
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+
+    try:
+        # verify the id doesn't already exist
+        await check_metadata_obj(app, group_id)
+        log.error( "Post with existing group_id: {}".format(group_id))
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+    except HttpProcessingError:
+        pass  # expected
     
     root_id = None
-    group_id = None
     domain = None
     
-    if "root" not in data:
+    if "root" not in body:
         msg = "POST_Group with no root"
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
-    root_id = data["root"]
-    try:
-        validateUuid(root_id, "group")
-    except ValueError:
+    root_id = body["root"]
+    
+    if not isValidUuid(root_id, obj_class="group"):
         msg = "Invalid root_id: " + root_id
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
-    if "id" not in data:
-        msg = "POST_Group with no id"
-        log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
-    group_id = data["id"]
-    try:
-        validateUuid(group_id, "group")
-    except ValueError:
-        msg = "Invalid group_id: " + group_id
-        log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
-    if "domain" not in data:
+     
+    if "domain" not in body:
         log.error("POST_Group with no domain")
         raise HttpProcessingError(code=500, message="Unexpected Error")
-    domain = data["domain"]
+    domain = body["domain"]
     try:
         validateDomain(domain)
     except ValueError:
@@ -101,34 +101,15 @@ async def POST_Group(request):
         log.error(msg)
         raise HttpBadRequest(message=msg)
 
-    validateInPartition(app, group_id)
-    
-    meta_cache = app['meta_cache'] 
-    s3_key = getS3Key(group_id)
-    obj_exists = False
-    if group_id in meta_cache:
-        obj_exists = True
-    else:
-        obj_exists = await isS3Obj(app, s3_key)
-    if obj_exists:
-        # duplicate uuid?
-        msg = "Conflict: resource exists: " + group_id
-        log.error(msg)
-        raise HttpProcessingError(code=409, message=msg)
-
     # ok - all set, create group obj
     now = time.time()
     
     group_json = {"id": group_id, "root": root_id, "created": now, "lastModified": now, "domain": domain, 
         "links": {}, "attributes": {} }
+
+    save_metadata_obj(app, group_id, group_json)
      
-    # await putS3JSONObj(app, s3_key, group_json)  # write to S3
-    dirty_ids = app['dirty_ids']
-    dirty_ids[group_id] = now  # mark to flush to S3
-
-    # save the object to cache
-    meta_cache[group_id] = group_json
-
+    # formulate response 
     resp_json = {} 
     resp_json["id"] = group_id 
     resp_json["root"] = root_id
@@ -147,37 +128,19 @@ async def DELETE_Group(request):
     """
     log.request(request)
     app = request.app
-    group_id = request.match_info.get('id')
+    group_id = get_obj_id(request)
+    log.info("DELETE group: {}".format(group_id))
 
     if not isValidUuid(group_id, obj_class="group"):
         log.error( "Unexpected group_id: {}".format(group_id))
         raise HttpProcessingError(code=500, message="Unexpected Error")
 
-    validateInPartition(app, group_id)
+    # verify the id  exist
+    await check_metadata_obj(app, group_id)
+        
+    log.info("deleting group: {}".format(group_id))
 
-    meta_cache = app['meta_cache'] 
-    deleted_ids = app['deleted_ids']
-    dirty_ids = app['dirty_ids']
-    deleted_ids.add(group_id)
-    
-    s3_key = getS3Key(group_id)
-    obj_exists = False
-    if group_id in meta_cache:
-        obj_exists = True
-    else:
-        obj_exists = await isS3Obj(app, s3_key)
-    if not obj_exists:
-        # duplicate uuid?
-        msg = "{} not found".format(group_id)
-        log.response(request, code=404, message=msg)
-        raise HttpProcessingError(code=404, message=msg)
-    
-    await deleteS3Obj(app, s3_key)
-     
-    if group_id in meta_cache:
-        del meta_cache[group_id]
-    if group_id in dirty_ids:
-        del dirty_ids[group_id]  # TBD - possible race condition?
+    await delete_metadata_obj(app, group_id)
 
     resp_json = {  } 
       

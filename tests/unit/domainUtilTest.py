@@ -17,7 +17,7 @@ import os
 sys.path.append('../../hsds/util')
 sys.path.append('../../hsds')
 from domainUtil import getParentDomain, isValidDomain, isValidHostDomain
-from domainUtil import getS3KeyForDomain, getS3KeyForDomainPath, getDomainForHost
+from domainUtil import getDomainForHost, getS3PrefixForDomain
 
 class DomainUtilTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -49,32 +49,7 @@ class DomainUtilTest(unittest.TestCase):
         valid_domains = ("/gov/nasa/nex", "/home")
         for domain in valid_domains:
             self.assertTrue(isValidDomain(domain))  
-
-
-    def testGetS3KeyForDomain(self):
-        s3path = getS3KeyForDomain("/gov/nasa/nex")
-        self.assertEqual(s3path, "gov/nasa/nex/.domain.json")
-        s3path = getS3KeyForDomain("/gov/nasa/nex/.domain.json")  # no harm adding the .domain.json
-        self.assertEqual(s3path, "gov/nasa/nex/.domain.json")
-        s3path = getS3KeyForDomain("/gov/nasa/nex/my-data")  # hyphen ok
-        self.assertEqual(s3path, "gov/nasa/nex/my-data/.domain.json")
-
-    def testGetS3KeyForDomainPath(self):
-        s3path = getS3KeyForDomainPath("/gov/nasa/nex/")
-        self.assertEqual(s3path, "gov/nasa/nex/")
-        s3path = getS3KeyForDomainPath("/gov/nasa/nex/my-data/")  # hyphen ok
-        self.assertEqual(s3path, "gov/nasa/nex/my-data/")
-
-        invalid_domain_paths = ["gov/nasa/nex/",
-                                "/gov/nasa/nex",
-                                "/"]
-        for invalid_domain_path in invalid_domain_paths:
-            try:
-                getS3KeyForDomainPath(invalid_domain_path)
-                self.assertTrue(False)  # expected exception
-            except ValueError:
-                pass # expected
-         
+    
     def testGetDomainForHost(self):
         domain = getDomainForHost("nex.nasa.gov")
         self.assertEqual(domain, "/gov/nasa/nex")
@@ -90,6 +65,13 @@ class DomainUtilTest(unittest.TestCase):
         parent = getParentDomain(domain)
         self.assertEqual(parent, None)
 
+    def TestGetS3PrefixForDomain(self):
+        domain = "/gov/nasa/nex/climate.h5"
+        s3prefix = getS3PrefixForDomain(domain)
+        self.assertEqual(s3prefix, "gov/nasa/nex/")
+        domain = "/home/test_user1/hsds_test/"
+        s3prefix = getS3PrefixForDomain(domain)
+        self.assertEqual(s3prefix, "home/test_user1/")
                                   
              
 if __name__ == '__main__':
