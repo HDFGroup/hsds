@@ -399,7 +399,6 @@ class DomainTest(unittest.TestCase):
         domains = rspJson["domains"]
         
         domain_count = len(domains)
-        print("domain_count:", domain_count)
         if domain_count < 9:
             # this should only happen in the very first test run
             print("Expected to find more domains!")

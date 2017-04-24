@@ -173,47 +173,23 @@ def guessChunk(shape_json, typesize):
     shape = tuple((x if x!=0 else 1024) for i, x in enumerate(shape))
 
     return shape
-"""
-    ndims = len(shape)
-    if ndims == 0:
-        raise ValueError("Chunks not allowed for scalar datasets.")
 
-    chunks = np.array(shape, dtype='=f8')
-    if not np.all(np.isfinite(chunks)):
-        raise ValueError("Illegal value in chunk tuple")
+def frac(x, d):
+    """
+    Utility func -- Works like fractional div, but returns ceiling rather than floor
+    """
+    return (x + (d-1)) // d
 
-    # Determine the optimal chunk size in bytes using a PyTables expression.
-    # This is kept as a float.
-    dset_size = np.product(chunks)*typesize
-    target_size = CHUNK_BASE * (2**np.log10(dset_size/(1024.*1024)))
-
-    if target_size > CHUNK_MAX:
-        target_size = CHUNK_MAX
-    elif target_size < CHUNK_MIN:
-        target_size = CHUNK_MIN
-
-    idx = 0
-    while True:
-        # Repeatedly loop over the axes, dividing them by 2.  Stop when:
-        # 1a. We're smaller than the target chunk size, OR
-        # 1b. We're within 50% of the target chunk size, AND
-        #  2. The chunk is smaller than the maximum chunk size
-
-        chunk_bytes = np.product(chunks)*typesize
-
-        if (chunk_bytes < target_size or \
-         abs(chunk_bytes-target_size)/target_size < 0.5) and \
-         chunk_bytes < CHUNK_MAX:
-            break
-
-        if np.product(chunks) == 1:
-            break  # Element size larger than CHUNK_MAX
-
-        chunks[idx%ndims] = np.ceil(chunks[idx%ndims] / 2.0)
-        idx += 1
-
-    return tuple(int(x) for x in chunks)
-"""
+def slice_stop(s):
+    """ Return the end of slice, accounting that for steps > 1, this may not
+        be the slice stop value.
+    """
+    if s.step > 1:
+        num_points = frac((s.stop-s.start), s.step)
+        w = num_points * s.step - (s.step - 1) 
+    else:
+        w = s.stop - s.start # selection width (>0)
+    return s.start + w
 
 def getNumChunks(selection, layout):
     """
@@ -231,24 +207,34 @@ def getNumChunks(selection, layout):
     num_chunks = 1
     for i in range(len(selection)): 
         s = selection[i]
-        w = s.stop - s.start # selection width (>0)
+         
+        if s.step > 1:
+            num_points = frac((s.stop-s.start), s.step)
+            w = num_points * s.step - (s.step - 1) 
+        else:
+            w = s.stop - s.start # selection width (>0)
+        
         c = layout[i]   # chunk size
-        partial_left = (c - (s.start % c)) % c
-        remainder = w - partial_left
-        if remainder == 0:
-            # if raminder is 0, then we just cross one chunk along this dimensions
+
+        lc = frac(s.start, c) * c
+
+        if s.start + w <= lc:
+            # looks like just we cross just one chunk along this deminsion
             continue
-        partial_right = remainder % c
-        count = (remainder - partial_right) // c
-        if partial_right > 0:
-            count += 1
-        if partial_left > 0:
-            count += 1
+
+        rc = ((s.start + w) // c) * c
+        m = rc - lc
+        if c > s.step:
+            count = m // c
+        else:
+            count = m // s.step
+        if s.start < lc:
+            count += 1  # hit one chunk on the left
+        if s.start + w > rc:
+            count += 1  # hit one chunk on the right
+
         num_chunks *= count
     return num_chunks
-
-
-
 
             
 def getChunkId(dset_id, point, layout):
@@ -273,6 +259,9 @@ def getChunkId(dset_id, point, layout):
     return chunk_id
 
 def getChunkIds(dset_id, selection, layout, dim=0, prefix=None, chunk_ids=None):
+    """ Get the all the chunk ids for chunks that lie in the selection of the 
+    given dataset.
+    """
     num_chunks = getNumChunks(selection, layout)
     if num_chunks == 0:
         return []  # empty list
@@ -288,19 +277,40 @@ def getChunkIds(dset_id, selection, layout, dim=0, prefix=None, chunk_ids=None):
         chunk_ids = []
     s = selection[dim]
     c = layout[dim]
-    chunk_index_start = s.start // c
-    chunk_index_end = s.stop // c
-    if s.stop % c != 0:
-        chunk_index_end += 1
-    for i in range(chunk_index_start, chunk_index_end):
-        chunk_id = prefix + str(i)
-        if dim + 1 == rank:
-            # we've gone through all the dimensions, add this id to the list
-            chunk_ids.append(chunk_id)
+    
+    if s.step > c:
+        # chunks may not be contiguous,  skip along the selection and add
+        # whatever chunks we land in
+        for i in range(s.start, s.stop, s.step):
+            chunk_index = i // c
+            chunk_id = prefix + str(chunk_index)
+            if dim + 1 == rank:
+                # we've gone through all the dimensions, add this id to the list
+                chunk_ids.append(chunk_id)
+            else:
+                chunk_id += '_'  # seperator between dimensions
+                # recursive call
+                getChunkIds(dset_id, selection, layout, dim+1, chunk_id, chunk_ids)
+    else:
+        # get a contiguous set of chunks along the selection
+        if s.step > 1:
+            num_points = frac((s.stop-s.start), s.step)
+            w = num_points * s.step - (s.step - 1) 
         else:
-            chunk_id += '_'  # seperator between dimensions
-            # recursive call
-            getChunkIds(dset_id, selection, layout, dim+1, chunk_id, chunk_ids)
+            w = s.stop - s.start # selection width (>0)
+
+        chunk_index_start = s.start // c
+        chunk_index_end = frac((s.start + w), c)
+        
+        for i in range(chunk_index_start, chunk_index_end):
+            chunk_id = prefix + str(i)
+            if dim + 1 == rank:
+                # we've gone through all the dimensions, add this id to the list
+                chunk_ids.append(chunk_id)
+            else:
+                chunk_id += '_'  # seperator between dimensions
+                # recursive call
+                getChunkIds(dset_id, selection, layout, dim+1, chunk_id, chunk_ids)
     # got the complete list, return it!
     return chunk_ids
 
@@ -343,20 +353,27 @@ def getChunkSelection(chunk_id, slices, layout):
     sel = []
     for dim in range(rank):
         s = slices[dim]
-        w = layout[dim]
-        n = chunk_index[dim] * w 
-        if s.start < n:
-            start = n
-        else:
-            start = s.start
-        if s.start >= n + w:
+        c = layout[dim]
+        n = chunk_index[dim] * c 
+        if s.start >= n + c:
             return None  # null intersection
-        if s.stop >= n + w:
-            stop = n + w
+        #s_stop = slice_stop(s)
+        if s.stop < n:
+            return None  # null intersection
+        if s.stop > n + c:
+            stop = n + c
         else:
             stop = s.stop
-
-        step = 1 # TBD - deal with steps > 1
+        w = n - s.start
+        if s.start < n:
+            start = frac(w, s.step) * s.step + s.start
+        else:
+            start = s.start
+        step = s.step 
+        cs = slice(start, stop, step)
+        stop = slice_stop(cs)        
+         
+         
         sel.append(slice(start, stop, step))
     return sel
 
@@ -382,7 +399,7 @@ def getChunkCoverage(chunk_id, slices, layout):
             msg = "Unexpected chunk selection"
             log.error(msg)
             raise ValueError(msg)
-        step = 1  # TBD - update for step > 1
+        step = s.step
         sel.append(slice(start, stop, step))
     return sel
 
@@ -396,8 +413,10 @@ def getDataCoverage(chunk_id, slices, layout):
     for dim in range(rank):
         c = chunk_sel[dim]
         s = slices[dim]
-        start = c.start - s.start
-        stop = c.stop - s.start
+        if c.step != s.step:
+            raise ValueError("expecting step for chunk selection to be the same as data selection")
+        start = (c.start - s.start) // s.step
+        stop = frac((c.stop - s.start), s.step)
         step = 1
         sel.append(slice(start, stop, step))
             

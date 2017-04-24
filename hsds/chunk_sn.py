@@ -137,6 +137,7 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr):
                 if npoints_read != npoints_expected:
                     msg = "Expected {} points, but got: {}".format(npoints_expected, npoints_read)
                 chunk_arr = chunk_arr.reshape(chunk_shape)
+                log.info("chunk_arr: {}".format(chunk_arr))
             elif rsp.status == 404:
                 # no data, return zero array
                 if fill_value:
@@ -696,6 +697,7 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices):
 
     # create array to hold response data
     np_shape = getSelectionShape(slices)   
+    log.info("selection shape: {}".format(np_shape))
     arr = np.zeros(np_shape, dtype=dset_dtype, order='C')
     tasks = []
     for chunk_id in chunk_ids:

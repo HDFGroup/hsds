@@ -540,11 +540,14 @@ Determine if the dataset can be extended
 def isExtensible(dims, maxdims):
     if maxdims is None or len(dims) == 0:
         return False
+    log.info("isExtensible - dims: {} maxdims: {}".format(dims, maxdims))
     rank = len(dims)
     if len(maxdims) != rank:
         raise ValueError("rank of maxdims does not match dataset")
     for n in range(rank):
-        if maxdims[n] == 0 or maxdims[n] > dims[n]:
+        # TBD - shouldn't have H5S_UNLIMITED in any new files.
+        # Remove check once this is confirmed
+        if maxdims[n] == 0 or maxdims[n] == 'H5S_UNLIMITED' or maxdims[n] > dims[n]:
             return True
     return False
 

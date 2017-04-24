@@ -813,6 +813,18 @@ class ValueTest(unittest.TestCase):
             for i in range(4):
                 self.assertEqual(row[i], i*j)
 
+        # read 2x2 block from dataset with step of 2
+        params = {"select": "[0:4:2, 0:4:2]"}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        data = rspJson["value"]  # should be 2 x 2 array
+        for j in range(2):
+            row = data[j]
+            for i in range(2):
+                self.assertEqual(row[i], (i*2)*(j*2))
+
         # try reading a selection that is out of bounds
         params = {"select": "[0:12, 0:12]"}
         rsp = requests.get(req, params=params, headers=headers)
