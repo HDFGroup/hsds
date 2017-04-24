@@ -137,7 +137,6 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr):
                 if npoints_read != npoints_expected:
                     msg = "Expected {} points, but got: {}".format(npoints_expected, npoints_read)
                 chunk_arr = chunk_arr.reshape(chunk_shape)
-                log.info("chunk_arr: {}".format(chunk_arr))
             elif rsp.status == 404:
                 # no data, return zero array
                 if fill_value:
