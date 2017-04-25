@@ -356,6 +356,38 @@ class ChunkUtilTest(unittest.TestCase):
                 self.assertEqual(index1, xindex[i])
                 self.assertEqual(index2, yindex[j])
 
+        # 3d test
+        datashape = [365, 720, 1440]
+        layout = (2, 180, 720)
+        selection = getHyperslabSelection(datashape, (0, 0, 0), (1, 720, 1440))
+        chunk_ids = getChunkIds(dset_id, selection, layout)
+        self.assertEqual(len(chunk_ids), 8)
+        chunk_ids.reverse() # so we can pop off the front
+        for i in range(4):
+            for j in range(2):
+                chunk_id = chunk_ids.pop()     
+                self.assertTrue(chunk_id.startswith("c-"))
+                index1 = int(chunk_id[-3])
+                index2 = int(chunk_id[-1])
+                self.assertEqual(index1, i)
+                self.assertEqual(index2, j)
+
+        selection = getHyperslabSelection(datashape, (0, 0, 0), (1, 720, 1440), (1, 25, 25))
+        chunk_ids = getChunkIds(dset_id, selection, layout)
+        self.assertEqual(len(chunk_ids), 8)
+        chunk_ids.reverse() # so we can pop off the front
+        for i in range(4):
+            for j in range(2):
+                chunk_id = chunk_ids.pop()     
+                self.assertTrue(chunk_id.startswith("c-"))
+                index1 = int(chunk_id[-3])
+                index2 = int(chunk_id[-1])
+                self.assertEqual(index1, i)
+                self.assertEqual(index2, j)
+
+
+
+
     def testGetChunkIndex(self):
         chunk_id = "c-12345678-1234-1234-1234-1234567890ab_6_4"
         index = getChunkIndex(chunk_id)
@@ -456,7 +488,6 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[0].step, 15)
  
         # 2-d test
-        dset_id = "d-12345678-1234-1234-1234-1234567890ab"
         datashape = [100,100]
         layout = (10,10)
         selection = getHyperslabSelection(datashape, (42, 46), (52, 58))
@@ -519,6 +550,36 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel.start, 100)
         self.assertEqual(sel.stop, 102)
         self.assertEqual(sel.step, 1)
+
+        # 3d test
+        datashape = [365, 720, 1440]
+        layout = (2, 180, 720)
+        selection = getHyperslabSelection(datashape, (0, 0, 0), (1, 200, 300))
+        chunk_ids = getChunkIds(dset_id, selection, layout)
+        self.assertEqual(len(chunk_ids), 2)
+
+        chunk_id = chunk_ids[0]
+        sel = getChunkSelection(chunk_id, selection, layout)
+        self.assertEqual(sel[0].start, 0)
+        self.assertEqual(sel[0].stop, 1)
+        self.assertEqual(sel[0].step, 1)
+        self.assertEqual(sel[1].start, 0)
+        self.assertEqual(sel[1].stop, 180)
+        self.assertEqual(sel[1].step, 1)
+        self.assertEqual(sel[2].start, 0)
+        self.assertEqual(sel[2].stop, 300)
+        self.assertEqual(sel[2].step, 1)
+        chunk_id = chunk_ids[1]
+        sel = getChunkSelection(chunk_id, selection, layout)
+        self.assertEqual(sel[0].start, 0)
+        self.assertEqual(sel[0].stop, 1)
+        self.assertEqual(sel[0].step, 1)
+        self.assertEqual(sel[1].start, 180)
+        self.assertEqual(sel[1].stop, 200)
+        self.assertEqual(sel[1].step, 1)
+        self.assertEqual(sel[2].start, 0)
+        self.assertEqual(sel[2].stop, 300)
+        self.assertEqual(sel[2].step, 1)
 
 
     def testGetChunkCoverage(self):
