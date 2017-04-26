@@ -258,6 +258,14 @@ def getChunkId(dset_id, point, layout):
     # got the complete chunk_id
     return chunk_id
 
+def getDatasetId(chunk_id):
+    """ Get dataset id given a chunk id
+    """
+    obj_uuid = chunk_id[2:38]
+    dset_id = "d-" + obj_uuid
+    return dset_id
+ 
+
 def getChunkIds(dset_id, selection, layout, dim=0, prefix=None, chunk_ids=None):
     """ Get the all the chunk ids for chunks that lie in the selection of the 
     given dataset.

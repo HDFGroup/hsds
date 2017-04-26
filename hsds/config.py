@@ -23,10 +23,11 @@ cfg = {
     'bucket_name': 'hdfgroup_hsdsdev',
     'head_host': 'localhost',
     'head_port': 5100,
+    'async_port': 6100,
     'dn_host': 'localhost',
-    'dn_port' : 5101,  # run multiple dn nodes on odd ports
+    'dn_port' : 6101,  # Start dn ports at 6101
     'sn_host': 'localhost',
-    'sn_port': 5102,   # run multiple sn nodes on even ports
+    'sn_port': 5101,   # Start sn ports at 5101
     'target_sn_count': 4,
     'target_dn_count': 4,
     'log_file': 'head.log',

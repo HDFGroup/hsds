@@ -17,7 +17,7 @@ sys.path.append('../../hsds')
 from dsetUtil import getHyperslabSelection
 from chunkUtil import guessChunk, getNumChunks, getChunkCoordinate, getChunkIds, getChunkId
 from chunkUtil import getChunkIndex, getChunkSelection, getChunkCoverage, getDataCoverage, ChunkIterator
-from chunkUtil import CHUNK_MIN, CHUNK_MAX, getChunkSize, shrinkChunk, expandChunk
+from chunkUtil import CHUNK_MIN, CHUNK_MAX, getChunkSize, shrinkChunk, expandChunk, getDatasetId
 
 
 class ChunkUtilTest(unittest.TestCase):
@@ -234,6 +234,7 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertTrue(chunk_id.endswith('_0'))
         self.assertEqual(chunk_id[2:-2], dset_id[2:])
         self.assertEqual(len(chunk_id), 2+36+2)
+        self.assertEqual(getDatasetId(chunk_id), dset_id)
 
         datashape = [100,]
         layout = (10,)
