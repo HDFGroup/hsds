@@ -206,10 +206,10 @@ class ValueTest(unittest.TestCase):
         helper.validateId(root_uuid)
 
         # create dataset
-        data = { "type": "H5T_STD_I32LE", "shape": 10 }
+        dset_body = { "type": "H5T_STD_I32LE", "shape": 10 }
         
         req = self.endpoint + '/datasets' 
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = requests.post(req, data=json.dumps(dset_body), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -245,6 +245,30 @@ class ValueTest(unittest.TestCase):
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
         self.assertEqual(rspJson["value"], data)
+
+        # write data with a step of 2
+        payload = { 'start': 0, 'stop': 10,  'step': 2, 'value': data_part1 }
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        payload = { 'start': 1, 'stop': 10,  'step': 2, 'value': data_part2 }
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # read back the data
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+        for i in range(10):
+            if i % 2 == 0:
+                self.assertEqual(value[i], i // 2)
+            else:
+                self.assertEqual(value[i], (i // 2) + 5)
+         
+        
 
     def testPutSelection2DDataset(self):
         # Test PUT value with selection for 2d dataset
@@ -298,6 +322,27 @@ class ValueTest(unittest.TestCase):
         value = rspJson["value"]
         self.assertEqual(len(value), 5)
         self.assertEqual(value, [[0,],[0,],[22,],[0,],[0,]])
+
+        # write 44's to a region with a step value of 2 and 3
+        req = self.endpoint + "/datasets/" + dset_id + "/value" 
+        data = [44,] * 20
+        payload = { 'start': [10, 20], 'stop': [20, 32], 'step': [2, 3], 'value': data }
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # read back a sub-block
+        req = self.endpoint + "/datasets/" + dset_id + "/value"  # test
+        params = {"select": "[12:13,23:26]"} # read 6 elements, starting at index (12,14)
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+        self.assertEqual(len(value), 1)
+        value = value[0]
+        self.assertEqual(len(value), 3)
+        self.assertEqual(value, [44, 0, 0])
         
 
     def testPutFixedString(self):
