@@ -15,7 +15,6 @@
 import asyncio
  
 from aiohttp.web import  run_app
-from aiohttp import ClientSession, TCPConnector 
 from util.lruCache import LruCache
  
 import config
@@ -101,15 +100,10 @@ if __name__ == '__main__':
     log.info("Servicenode initializing")
     loop = asyncio.get_event_loop()
 
-    # create a client Session here so that all client requests 
-    #   will share the same connection pool
-    max_tcp_connections = int(config.get("max_tcp_connections"))
-    client = ClientSession(loop=loop, connector=TCPConnector(limit=max_tcp_connections))
     metadata_mem_cache_size = int(config.get("metadata_mem_cache_size"))
     log.info("Using metadata memory cache size of: {}".format(metadata_mem_cache_size))
     #create the app object
     app = loop.run_until_complete(init(loop))
-    app['client'] = client
     app['meta_cache'] = LruCache(mem_target=metadata_mem_cache_size, chunk_cache=False)
     app['domain_cache'] = LruCache(mem_target=metadata_mem_cache_size, chunk_cache=False)
      

@@ -20,7 +20,7 @@ import base64
 import numpy as np
 from aiohttp.errors import HttpBadRequest, HttpProcessingError, ClientError
 from aiohttp.web import StreamResponse
-from util.httpUtil import  jsonResponse, getHref, getAcceptType  
+from util.httpUtil import  jsonResponse, getHref, getAcceptType, get_http_client  
 from util.idUtil import   isValidUuid, getDataNodeUrl
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.hdf5dtype import getItemSize, createDataType
@@ -65,7 +65,7 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr):
     req = getDataNodeUrl(app, chunk_id)
     req += "/chunks/" + chunk_id 
     log.info("PUT chunk req: " + req)
-    client = app['client']
+    client = get_http_client(app)
     data = arr_chunk.tobytes()  # TBD - this makes a copy, use np_arr.data to get memoryview and avoid copy
     # pass itemsize, type, dimensions, and selection as query params
     params = {}
@@ -104,7 +104,7 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr):
     req = getDataNodeUrl(app, chunk_id)
     req += "/chunks/" + chunk_id 
     log.info("GET chunk req: " + req)
-    client = app['client']
+    client = get_http_client(app)
 
     if "type" not in dset_json:
         log.error("No type found in dset_json: {}".format(dset_json))
@@ -180,7 +180,7 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_a
     req = getDataNodeUrl(app, chunk_id)
     req += "/chunks/" + chunk_id 
     log.info("POST chunk req: " + req)
-    client = app['client']
+    client = get_http_client(app)
     point_dt = np.dtype('u8')  # use unsigned long for point index
 
     if "type" not in dset_json:
@@ -252,7 +252,7 @@ async def read_chunk_query(app, chunk_id, dset_json, slices, query, limit, rsp_d
     req = getDataNodeUrl(app, chunk_id)
     req += "/chunks/" + chunk_id 
     log.info("GET chunk req: " + req)
-    client = app['client']
+    client = get_http_client(app)
   
     layout = getChunkLayout(dset_json)
     chunk_sel = getChunkCoverage(chunk_id, slices, layout)

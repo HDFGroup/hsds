@@ -19,7 +19,6 @@ import psutil
 from copy import copy
 
 from aiohttp.web import Application, StreamResponse
-from aiohttp import ClientSession, TCPConnector   
 from aiohttp.errors import ClientError, HttpProcessingError
 from aiobotocore import get_session
  
@@ -28,7 +27,7 @@ import config
 #from util.timeUtil import unixTimeToUTC, elapsedTime
 from util.httpUtil import http_get_json, http_post, jsonResponse
 from util.idUtil import createNodeId
-from util.s3Util import getS3JSONObj, getS3Client, getInitialS3Stats 
+from util.s3Util import getS3JSONObj, getInitialS3Stats 
 from util.idUtil import getHeadNodeS3Key
 
 import hsds_logger as log
@@ -51,6 +50,7 @@ async def getHeadUrl(app):
             head_url = head_state["head_url"]
             app["head_url"] = head_url  # so we don't need to check S3 next time
     return head_url
+
 
 async def register(app):
     """ register node with headnode
@@ -283,20 +283,11 @@ def baseInit(loop, node_type):
  
     app["s3_stats"] = getInitialS3Stats()
     
-
     log.app = app
-    
-    # create a client Session here so that all client requests 
-    #   will share the same connection pool
-    max_tcp_connections = int(config.get("max_tcp_connections"))
-    client = ClientSession(loop=loop, connector=TCPConnector(limit=max_tcp_connections))
-
-    # get connection to S3
+    # save session object
     session = get_session(loop=loop)
-     
-    app['s3'] = getS3Client(session)
-
-    app['client'] = client
+    app["session"] = session
+    app["loop"] = loop
 
     app.router.add_get('/info', info)
       

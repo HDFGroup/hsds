@@ -25,7 +25,7 @@ import aiobotocore
 import config
 from util.timeUtil import unixTimeToUTC, elapsedTime
 from util.httpUtil import http_get_json, jsonResponse, getUrl
-from util.s3Util import  getS3JSONObj, putS3JSONObj, isS3Obj, getS3Client, getInitialS3Stats
+from util.s3Util import  getS3JSONObj, putS3JSONObj, isS3Obj, getInitialS3Stats
 from util.idUtil import  createNodeId, getHeadNodeS3Key
 import hsds_logger as log
 
@@ -403,8 +403,8 @@ if __name__ == '__main__':
     app['client'] = ClientSession(loop=loop, connector=TCPConnector(limit=max_tcp_connections))
      
     session = aiobotocore.get_session(loop=loop)
-
-    app['s3'] = getS3Client(session)
+    app["session"] = session
+    app["loop"] = loop
       
     asyncio.ensure_future(healthCheck(app), loop=loop)
     head_port = config.get("head_port")

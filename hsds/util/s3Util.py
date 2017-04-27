@@ -20,6 +20,45 @@ from aiohttp.errors import HttpProcessingError
 import hsds_logger as log
 import config
 
+def getS3Client(app):
+    """ Return s3client handle
+    """
+    if "s3" in app:
+        return app["s3"]
+    # first time setup of s3 client
+    if "session" not in app:
+        raise KeyError("Session not initialized")
+    session = app["session"]
+    aws_region = config.get("aws_region")
+    aws_secret_access_key = config.get("aws_secret_access_key")
+    if not aws_secret_access_key or aws_secret_access_key == 'xxx':
+        msg="Invalid aws secret access key, using None"
+        log.info(msg)
+    aws_access_key_id = config.get("aws_access_key_id")
+    if not aws_access_key_id or aws_access_key_id == 'xxx':
+        msg="Invalid aws access key, using None"
+        log.info(msg)
+
+    s3_gateway = config.get('aws_s3_gateway')
+    if not s3_gateway:
+        msg="Invalid aws s3 gateway"
+        log.error(msg)
+        raise ValueError(msg)
+    log.info("s3_gateway: {}".format(s3_gateway))
+
+    use_ssl = False
+    if s3_gateway.startswith("https"):
+        use_ssl = True
+    s3 = session.create_client('s3', region_name=aws_region,
+                                   aws_secret_access_key=aws_secret_access_key,
+                                   aws_access_key_id=aws_access_key_id,
+                                   endpoint_url=s3_gateway,
+                                   use_ssl=use_ssl)
+
+    app['s3'] = s3  # save so same client can be returned in subsiquent calls
+
+    return s3
+
 def s3_stats_increment(app, counter, inc=1):
     """ Incremenet the indicated connter
     """
@@ -39,7 +78,7 @@ async def getS3JSONObj(app, key):
     """ Get S3 object identified by key and read as JSON
     """
     
-    client = app['s3']
+    client = getS3Client(app)
     bucket = app['bucket_name']
     if key[0] == '/':
         key = key[1:]  # no leading slash
@@ -80,7 +119,7 @@ async def getS3Bytes(app, key):
     """ Get S3 object identified by key and read as bytes
     """
     
-    client = app['s3']
+    client = getS3Client(app)
     bucket = app['bucket_name']
     if key[0] == '/':
         key = key[1:]  # no leading slash
@@ -117,7 +156,7 @@ async def putS3JSONObj(app, key, json_obj):
     """ Store JSON data as S3 object with given key
     """
    
-    client = app['s3']
+    client = getS3Client(app)
     bucket = app['bucket_name']
     if key[0] == '/':
         key = key[1:]  # no leading slash
@@ -139,7 +178,7 @@ async def putS3Bytes(app, key, data):
     """ Store byte string as S3 object with given key
     """
     
-    client = app['s3']
+    client = getS3Client(app)
     bucket = app['bucket_name']
     if key[0] == '/':
         key = key[1:]  # no leading slash
@@ -159,7 +198,7 @@ async def deleteS3Obj(app, key):
     """ Delete S3 object identfied by given key
     """
     
-    client = app['s3']
+    client = getS3Client(app)
     bucket = app['bucket_name']
     if key[0] == '/':
         key = key[1:]  # no leading slash
@@ -181,7 +220,7 @@ async def isS3Obj(app, key):
     """ Test if the given key maps to S3 object
     """
     
-    client = app['s3']
+    client = getS3Client(app)
     bucket = app['bucket_name']
 
     if key[0] == '/':
@@ -225,7 +264,7 @@ async def _fetch_all(pages):
 
 async def getS3Keys(app, prefix='', deliminator='', suffix=''):
     # return keys matching the arguments
-    s3_client = app['s3']
+    s3_client = getS3Client(app)
     bucket_name = app['bucket_name']
     log.info("getS3Keys('{}','{}','{}')".format(prefix, deliminator, suffix))
     paginator = s3_client.get_paginator('list_objects')
@@ -279,36 +318,7 @@ async def getS3Keys(app, prefix='', deliminator='', suffix=''):
                 
     return key_names
 
-def getS3Client(session):
-    """ Return s3client handle
-    """
 
-    aws_region = config.get("aws_region")
-    aws_secret_access_key = config.get("aws_secret_access_key")
-    if not aws_secret_access_key or aws_secret_access_key == 'xxx':
-        msg="Invalid aws secret access key, using None"
-        log.info(msg)
-    aws_access_key_id = config.get("aws_access_key_id")
-    if not aws_access_key_id or aws_access_key_id == 'xxx':
-        msg="Invalid aws access key, using None"
-        log.info(msg)
-
-    s3_gateway = config.get('aws_s3_gateway')
-    if not s3_gateway:
-        msg="Invalid aws s3 gateway"
-        log.error(msg)
-        raise ValueError(msg)
-    log.info("s3_gateway: {}".format(s3_gateway))
-
-    use_ssl = False
-    if s3_gateway.startswith("https"):
-        use_ssl = True
-    aws_client = session.create_client('s3', region_name=aws_region,
-                                   aws_secret_access_key=aws_secret_access_key,
-                                   aws_access_key_id=aws_access_key_id,
-                                   endpoint_url=s3_gateway,
-                                   use_ssl=use_ssl)
-    return aws_client
 
 """
 Initialize the s3 stat collection dict

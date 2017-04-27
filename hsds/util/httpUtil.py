@@ -16,6 +16,7 @@
 import json
 from asyncio import CancelledError
 from aiohttp.web import StreamResponse
+from aiohttp import  ClientSession, TCPConnector
 from aiohttp.errors import ClientError, HttpBadRequest, HttpProcessingError
 
 
@@ -31,12 +32,30 @@ def isOK(http_response):
 def getUrl(host, port):
     return "http://{}:{}".format(host, port)
 
+
+def get_http_client(app):
+    """ get http client """
+    if "client" in app:
+        return app["client"]
+    
+    # first time call, create client interface
+    # use shared client so that all client requests 
+    #   will share the same connection pool
+    if "loop" not in app:
+        raise KeyError("loop not initialized")
+    loop = app["loop"]
+    max_tcp_connections = int(config.get("max_tcp_connections"))
+    client = ClientSession(loop=loop, connector=TCPConnector(limit=max_tcp_connections))
+    #create the app object
+    app['client'] = client
+    return client
+
 """
 Helper function  - async HTTP GET
 """ 
 async def http_get(app, url, params=None):
     log.info("http_get('{}')".format(url))
-    client = app['client']
+    client = get_http_client(app)
     data = None
     timeout = config.get("timeout")
     try:
@@ -61,7 +80,7 @@ Helper function  - async HTTP GET, return response as JSON
 """ 
 async def http_get_json(app, url, params=None):
     log.info("http_get('{}')".format(url))
-    client = app['client']
+    client = get_http_client(app)
     rsp_json = None
     timeout = config.get("timeout")
      
@@ -90,7 +109,7 @@ Helper function  - async HTTP POST
 """ 
 async def http_post(app, url, data=None, params=None):
     log.info("http_post('{}', data)".format(url, data))
-    client = app['client']
+    client = get_http_client(app)
     rsp_json = None
     timeout = config.get("timeout")
     
@@ -117,7 +136,7 @@ Helper function  - async HTTP PUT for json data
 async def http_put(app, url, data=None, params=None):
     log.info("http_put('{}', data: {})".format(url, data))
     rsp = None
-    client = app['client']
+    client = get_http_client(app)
     timeout = config.get("timeout")
       
     try:
@@ -145,7 +164,7 @@ Helper function  - async HTTP PUT for binary data
 async def http_put_binary(app, url, data=None, params=None):
     log.info("http_put_binary('{}') nbytes: {}".format(url, len(data)))
     rsp_json = None
-    client = app['client']
+    client = get_http_client(app)
     timeout = config.get("timeout")
     
     try:
@@ -171,7 +190,7 @@ Helper function  - async HTTP DELETE
 """ 
 async def http_delete(app, url, data=None, params=None):
     log.info("http_delete('{}')".format(url))
-    client = app['client']
+    client = get_http_client(app)
     rsp_json = None
     timeout = config.get("timeout")
     

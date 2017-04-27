@@ -17,7 +17,6 @@ import sys
 import time
 
 from aiohttp.web import Application, StreamResponse, run_app
-from aiohttp import  ClientSession, TCPConnector
 #from aiohttp.errors import HttpBadRequest, HttpProcessingError
 import aiobotocore
 
@@ -192,9 +191,7 @@ async def bucketCheck(app):
     """ Periodic method that iterates through all keys in the bucket  
     If node doesn't respond, free up the node slot (the node can re-register if it comes back)'"""
     #initialize these objecs here rather than in main to avoid "ouside of coroutine" errors
-    if 'client' not in app:
-        log.info("creating ClientSession")
-        app['client'] = ClientSession(loop=loop, connector=TCPConnector(limit=max_tcp_connections))
+    
     if 's3' not in app:
         log.info("creating S3 client")
         session = app["session"]
