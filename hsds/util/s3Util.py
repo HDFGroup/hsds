@@ -214,18 +214,21 @@ async def deleteS3Obj(app, key):
         raise HttpProcessingError(code=500, message=msg)
     log.info("deleteS3Obj complete")
 
-
-    
-async def isS3Obj(app, key):
-    """ Test if the given key maps to S3 object
+async def getS3ObjStats(app, key):
+    """ Return etag, size, and last modified time for given object
     """
     
     client = getS3Client(app)
     bucket = app['bucket_name']
-
+    stats = {}
+    
     if key[0] == '/':
-        key = key[1:]  # no leading slash
-    log.info("isS3Obj({})".format(key))
+        #key = key[1:]  # no leading slash
+        msg = "key with leading slash: {}".format(key)
+        log.error(msg)
+        raise KeyError(msg)
+
+    log.info("getS3ObjStats({})".format(key))
     
     s3_stats_increment(app, "list_count")
     try:
@@ -237,8 +240,11 @@ async def isS3Obj(app, key):
         log.error(msg)
         raise HttpProcessingError(code=500, message=msg)
     if 'Contents' not in resp:
-        return False
+        msg = "key: {} not found".format(key)
+        log.info(msg)
+        raise HttpProcessingError(code=404, message=msg)
     contents = resp['Contents']
+    log.info("s3_contents: {}".format(contents))
     
     found = False
     if len(contents) > 0:
@@ -247,8 +253,39 @@ async def isS3Obj(app, key):
             # if the key is a S3 folder, the key will be the first object in the folder,
             # not the requested object
             found = True
+            if item["ETag"]:
+                stats["ETag"] = item["ETag"]
+            else:
+                if "Owner" in item and "ID" in item["Owner"] and item["Owner"]["ID"] == "minio":
+                    pass # minio is not creating ETags...
+                else:
+                    log.warn("No ETag for key: {}".format(key))
+                # If no ETAG put in a fake one
+                stats["ETag"] = "9999"
+            stats["Size"] = item["Size"]
+            stats["LastModified"] = int(item["LastModified"].timestamp())
+    if not found:
+        msg = "key: {} not found".format(key)
+        log.info(msg)
+        raise HttpProcessingError(code=404, message=msg)
+
+    return stats
+    
+async def isS3Obj(app, key):
+    """ Test if the given key maps to S3 object
+    """
+    found = False
+    try:
+        stats = await getS3ObjStats(app, key)
+        if stats:
+            found = True
+    except HttpProcessingError as hpe:
+        if hpe.code != 404:
+            # something other than not found, surface exception
+            raise hpe
     return found
 
+     
 """
 Helper function for getKeys
 """
@@ -262,7 +299,7 @@ async def _fetch_all(pages):
     return responses
     
 
-async def getS3Keys(app, prefix='', deliminator='', suffix=''):
+async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=False):
     # return keys matching the arguments
     s3_client = getS3Client(app)
     bucket_name = app['bucket_name']
@@ -274,7 +311,12 @@ async def getS3Keys(app, prefix='', deliminator='', suffix=''):
     pages = paginator.paginate(MaxKeys=1000, Bucket=bucket_name, Prefix=prefix, Delimiter=deliminator)
     responses = await _fetch_all(pages)
     log.info("getS3Keys, got {} responses".format(len(responses)))
-    key_names = []
+    if include_stats:
+        # use a dictionary to hold return values
+        key_names = {}
+    else:
+        # just use a list
+        key_names = []
     last_key = None
     for response in responses:
         if 'CommonPrefixes' in response:
@@ -283,7 +325,11 @@ async def getS3Keys(app, prefix='', deliminator='', suffix=''):
             for item in common:
                 if 'Prefix' in item:
                     log.info("got s3 prefix: {}".format(item['Prefix']))
-                    key_names.append(item['Prefix'])
+                    if include_stats:
+                        # TBD: not sure what makes sense to include for stats here
+                        key_names[item['Prefix']] = {}
+                    else:
+                        key_names.append(item['Prefix'])
 
         elif 'Contents' in response:
             log.info("got Contents in s3 response")
@@ -314,7 +360,28 @@ async def getS3Keys(app, prefix='', deliminator='', suffix=''):
                     if last_key and key_name == last_key:
                         continue  # not unique
                     last_key = key_name
-                key_names.append(key_name)
+                if include_stats:
+                    stats = {}
+                    if item["ETag"]:
+                        stats["Etag"] = item["Etag"]
+                    else:
+                        if "Owner" in item and "ID" in item["Owner"] and item["Owner"]["ID"] == "minio":
+                            pass # minio is not creating ETags...
+                        else:
+                            log.warn("No ETag for key: {}".format(key_name))
+                        # If no ETAG put in a fake one
+                        stats["ETag"] = "9999"
+                    if "Size" in item:
+                        stats["Size"] = item["Size"]
+                    else:
+                        log.warn("No Size for key: {}".format(key_name))
+                    if "LastModified" in item:
+                        stats["LastModified"] = int(item["LastModified"].timestamp())
+                    else:
+                        log.warn("No LastModified for key: {}".format(key_name))
+                    key_names[key_name] = stats
+                else:
+                    key_names.append(key_name)
                 
     return key_names
 

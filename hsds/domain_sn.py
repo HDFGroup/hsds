@@ -17,8 +17,8 @@ import json
 from aiohttp.errors import HttpBadRequest, HttpProcessingError
 
 from util.httpUtil import  http_post, http_put, http_get_json, http_delete, jsonResponse, getHref
-from util.idUtil import  getDataNodeUrl, createObjId, getS3Key
-from util.s3Util import getS3Keys
+from util.idUtil import  getDataNodeUrl, createObjId, getS3Key, getCollectionForId
+from util.s3Util import getS3Keys, isS3Obj, getS3Bytes
 from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
 from util.domainUtil import getParentDomain, getDomainFromRequest, getS3PrefixForDomain, validateDomain
@@ -39,6 +39,63 @@ async def domain_query(app, domain, rsp_dict):
         rsp_dict[domain] = domain_json
     except HttpProcessingError as hpe:
         rsp_dict[domain] = { "status_code": hpe.code}
+
+async def get_collection(request, collection):
+    """ Return the object ids from the collections.txt obj for given collection.
+    """
+    app = request.app
+    domain = getDomainFromRequest(request)
+    limit = None
+    if "Limit" in request.GET:
+        try:
+            limit = int(request.GET["Limit"])
+        except ValueError:
+            msg = "Bad Request: Expected int type for limit"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+    marker = None
+    if "Marker" in request.GET:
+        marker = request.GET["Marker"]
+
+    col_s3key = domain[1:] + "/." + collection + ".txt"  
+    log.info("get collection list: {}".format(col_s3key))
+    col_found = await isS3Obj(app, col_s3key)
+    if not col_found:
+        return []
+    objids = []
+    
+    data = await getS3Bytes(app, col_s3key)
+    data = data.decode('utf8')
+    lines = data.split('\n')
+    for line in lines:
+        # format is: 
+        # <objid> <size>\n
+        if not line:
+            continue
+        fields = line.split(' ')
+        objid = fields[0]
+        if not objid:
+            continue
+        try:
+            if getCollectionForId(objid) != collection:
+                log.warn("unexpected objectid: {}".format(objid))
+                continue
+        except ValueError as ve:
+            log.warn("unexpected exception for get collections: {}".format(str(ve)))
+            continue
+
+        if marker:
+            if marker == objid:
+                # got to the marker, clear it so we will start 
+                # return ids on the next iteration
+                marker = None
+        else:
+            objids.append(objid)
+            if limit is not None and len(objids) == limit:
+                log.info("got to limit, breaking")
+                break
+    return objids
+        
 
 async def GET_Domains(request):
     """HTTP method to return JSON for child domains of given domain"""
@@ -606,10 +663,10 @@ async def GET_Datasets(request):
         msg = "Invalid domain"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-    
-    # use reload to get authoritative domain json
+
+    # verify the domain 
     try:
-        domain_json = await getDomainJson(app, domain, reload=True)
+        domain_json = await getDomainJson(app, domain)
     except HttpProcessingError as hpe:
         msg = "domain not found"
         log.warn(msg)
@@ -627,11 +684,21 @@ async def GET_Datasets(request):
     # validate that the requesting user has permission to read this domain
     aclCheck(domain_json, "read", username)  # throws exception if not authorized
 
-    # TBD: return the actual list of dataset ids.
-    # for now just return empty array and hrefs
+    # get the dataset collection list
+    datasets = await get_collection(request, "datasets")
+     
+    # create hrefs 
+    hrefs = []
+    hrefs.append({'rel': 'self', 'href': getHref(request, '/datasets')})
+    if "root" in domain_json:
+        root_uuid = domain_json["root"]
+        hrefs.append({'rel': 'root', 'href': getHref(request, '/groups/' + root_uuid)})
+    hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
+
+    # return obj ids and hrefs
     rsp_json = { }
-    rsp_json["datasets"] = []
-    rsp_json["hrefs"] = []
+    rsp_json["datasets"] = datasets
+    rsp_json["hrefs"] = hrefs
      
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
@@ -675,11 +742,21 @@ async def GET_Groups(request):
     # validate that the requesting user has permission to read this domain
     aclCheck(domain_json, "read", username)  # throws exception if not authorized
 
-    # TBD: return the actual list of dataset ids.
-    # for now just return empty array and hrefs
+    # get the groups collection list
+    groups = await get_collection(request, "groups")
+     
+    # create hrefs 
+    hrefs = []
+    hrefs.append({'rel': 'self', 'href': getHref(request, '/groups')})
+    if "root" in domain_json:
+        root_uuid = domain_json["root"]
+        hrefs.append({'rel': 'root', 'href': getHref(request, '/groups/' + root_uuid)})
+    hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
+
+    # return obj ids and hrefs
     rsp_json = { }
-    rsp_json["groups"] = []
-    rsp_json["hrefs"] = []
+    rsp_json["groups"] = groups
+    rsp_json["hrefs"] = hrefs
      
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
@@ -723,11 +800,21 @@ async def GET_Datatypes(request):
     # validate that the requesting user has permission to read this domain
     aclCheck(domain_json, "read", username)  # throws exception if not authorized
 
-    # TBD: return the actual list of datatype ids.
-    # for now just return empty array and hrefs
+    # get the datatypes collection list
+    datatypes = await get_collection(request, "datatypes")
+     
+    # create hrefs 
+    hrefs = []
+    hrefs.append({'rel': 'self', 'href': getHref(request, '/datatypes')})
+    if "root" in domain_json:
+        root_uuid = domain_json["root"]
+        hrefs.append({'rel': 'root', 'href': getHref(request, '/groups/' + root_uuid)})
+    hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
+
+    # return obj ids and hrefs
     rsp_json = { }
-    rsp_json["datatypes"] = []
-    rsp_json["hrefs"] = []
+    rsp_json["datatypes"] = datatypes
+    rsp_json["hrefs"] = hrefs
      
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)

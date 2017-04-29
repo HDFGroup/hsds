@@ -23,7 +23,7 @@ cfg = {
     'bucket_name': 'hdfgroup_hsdsdev',
     'head_host': 'localhost',
     'head_port': 5100,
-    'async_port': 6100,
+    'an_port': 6100,
     'dn_host': 'localhost',
     'dn_port' : 6101,  # Start dn ports at 6101
     'sn_host': 'localhost',
@@ -35,6 +35,7 @@ cfg = {
     'max_tcp_connections': 16,
     'head_sleep_time': 10,
     'node_sleep_time': 10,
+    'async_sleep_time': 600,
     's3_sync_interval': 30,  # time to wait to write object data to S3 (in sec)     
     'max_chunks_per_request': 1000,  # maximum number of chunks to be serviced by one request
     'min_chunk_size': 40,  # for testing only, make bigger for production

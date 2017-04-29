@@ -11,6 +11,9 @@ elif [ $NODE_TYPE == "dn" ]; then
 elif [ $NODE_TYPE == "sn" ]; then
   echo "running servicenode.py"
   python -u servicenode.py 
+elif [ $NODE_TYPE == "an" ]; then
+  echo "running asyncnode.py"
+  python -u asyncnode.py
 elif [ $NODE_TYPE == "head_node" ]; then
   echo "running headnode.py"
   python -u headnode.py 

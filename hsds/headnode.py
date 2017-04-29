@@ -25,7 +25,7 @@ import aiobotocore
 import config
 from util.timeUtil import unixTimeToUTC, elapsedTime
 from util.httpUtil import http_get_json, jsonResponse, getUrl
-from util.s3Util import  getS3JSONObj, putS3JSONObj, isS3Obj, getInitialS3Stats
+from util.s3Util import  getS3JSONObj, putS3JSONObj, isS3Obj, getInitialS3Stats, getS3ObjStats
 from util.idUtil import  createNodeId, getHeadNodeS3Key
 import hsds_logger as log
 
@@ -55,6 +55,9 @@ async def healthCheck(app):
         head_state["head_url"] = head_url
         log.info("write head_state to S3: {}".format(head_state))
         await putS3JSONObj(app, headnode_key, head_state)
+
+    headnode_stats = await getS3ObjStats(app, headnode_key)
+    log.info("headnode_stats: {}".format(headnode_stats))
 
     nodes = app["nodes"]
     while True:
@@ -180,7 +183,7 @@ async def register(request):
         raise HttpBadRequest(message=msg)
     if 'node_type' not in body:
         raise HttpBadRequest(message="missing key 'node_type'")
-    if body['node_type'] not in ('sn', 'dn'):
+    if body['node_type'] not in ('sn', 'dn', 'an'):
         msg="invalid node_type"
         log.response(request, code=400, message=msg)
         raise HttpBadRequest(message=msg)
@@ -327,6 +330,8 @@ def getTargetNodeCount(app, node_type):
         count = app['target_dn_count']
     elif node_type == "sn":
         count = app['target_sn_count']
+    elif node_type == "an":
+        count = 1   # async node is a singleton
     return count
 
 def getActiveNodeCount(app, node_type):
@@ -365,7 +370,7 @@ async def init(loop):
     app["head_port"] = config.get("head_port")
     
     nodes = []
-    for node_type in ("dn", "sn"):
+    for node_type in ("dn", "sn", "an"):
         target_count = getTargetNodeCount(app, node_type)
         for i in range(target_count):
             node = {"node_number": i,
@@ -374,6 +379,8 @@ async def init(loop):
                 "port": None,
                 "id": None }
             nodes.append(node)
+     
+
     app["nodes"] = nodes
     app["node_stats"] = {}  # stats retuned by node/info request.  Keyed by node id
     app["node_ids"] = {}  # dictionary to look up node by id

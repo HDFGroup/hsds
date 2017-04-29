@@ -15,6 +15,9 @@ fi
 echo "stopping headnode"
 docker stop hsds_head &
 
+echo "stoping asyncnode"
+docker stop hsds_async &
+
 echo "stopping datanodes"
 ./run.sh stopdn $count &
 

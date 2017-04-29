@@ -13,18 +13,19 @@
 # Head node of hsds cluster
 # 
 import asyncio
-import sys
 import time
+import json
 
-from aiohttp.web import Application, StreamResponse, run_app
-#from aiohttp.errors import HttpBadRequest, HttpProcessingError
-import aiobotocore
+from aiohttp.web import StreamResponse, run_app
+
+from aiohttp.errors import HttpProcessingError
 
 import config
+from basenode import baseInit, healthCheck
 from util.timeUtil import unixTimeToUTC
-from util.httpUtil import  jsonResponse, getUrl
-from util.s3Util import  isS3Obj, getS3Client, getS3Keys, getS3JSONObj
-from util.idUtil import  createNodeId, getHeadNodeS3Key, getCollectionForId, getS3Key
+from util.httpUtil import  jsonResponse
+from util.s3Util import  getS3Keys, getS3JSONObj, getS3Bytes, putS3Bytes, isS3Obj, getS3ObjStats
+from util.idUtil import getCollectionForId, getS3Key
 from util.chunkUtil import getDatasetId #, getChunkIndex
 import hsds_logger as log
 
@@ -61,9 +62,10 @@ async def listKeys(app):
                 chunk_cnt += 1
         elif s3key == "headnode":
             pass
-        elif s3key.endswith(".domain.json"):
-            domain_cnt += 1
-            domains[s3key] = {}
+        elif s3key.endswith(".txt"):
+            # ignore collection files
+            pass
+        elif s3key.endswith("/.domain.json"):
             n = s3key.index('/')
             if n == 0:
                 log.warn("unexpected domain name (leading slash): {}".format(s3key))
@@ -73,6 +75,10 @@ async def listKeys(app):
                 tld = s3key[:n]
                 if tld not in top_level_domains:
                     top_level_domains[tld] = {}
+                domain_cnt += 1
+                # TBD - add a domainUtil func for this
+                domain = '/' + s3key[:-(len("/.domain.json"))]
+                domains[domain] = {"groups": {}, "datasets": {}, "datatypes": {}}
             
         else:
             log.warn("unknown object: {}".format(s3key))
@@ -113,8 +119,9 @@ async def listKeys(app):
     log.info("listKeys done")
 
 async def markObj(app, obj_id):
-    """ Mark obj as in-use and for group objs, recursively call for hardline objects 
+    """ Mark obj as in-use and for group objs, recursively call for hardlink objects 
     """
+    domains = app["domains"]
     collection = getCollectionForId(obj_id)
     obj_ids = app[collection]
     if obj_id not in obj_ids:
@@ -122,10 +129,30 @@ async def markObj(app, obj_id):
         return
     obj = obj_ids[obj_id]
     obj["u"] = True  # in use
+    #if collection == "groups":
+    # add the objid to our domain list by collection type
+    s3key = getS3Key(obj_id)
+    try:
+        data = await getS3Bytes(app, s3key)
+    except HttpProcessingError as hpe:
+        log.error("Error {} reading S3 key: {} ".format(hpe.code, s3key))
+        return
+    num_bytes = len(data)
+    obj_json = json.loads(data.decode('utf8'))
+    if "domain" not in obj_json:
+        log.warn("Expected to find domain key for obj: {}".format(obj_id))
+        return
+    domain = obj_json["domain"]
+    if domain in domains:
+        domain_obj = domains[domain] 
+        domain_col = domain_obj[collection]
+        domain_col[obj_id] = { "size": num_bytes }
+        log.info("added {} to domain collection: {}".format(obj_id, collection))
+    else:
+        log.warn("domain {} for group: {} not found".format(domain, obj_id))
     if collection == "groups":
-        s3Key = getS3Key(obj_id)
-        grp_json = await getS3JSONObj(app, s3Key)
-        links = grp_json["links"]
+        # For group objects, iteratore through all the hard lines and mark those objects
+        links = obj_json["links"]
         for link_name in links:
             link_json = links[link_name]
             if link_json["class"] == "H5L_TYPE_HARD":
@@ -154,10 +181,14 @@ async def markAndSweep(app):
     # now iterate through domains
     log.info("mark domain objects start")
     for domain_key in domains:
-        domain = domains[domain_key] 
-        obj_json = await getS3JSONObj(app, domain_key)
+        s3key = getS3Key(domain_key)
+        try:
+            obj_json = await getS3JSONObj(app, s3key)
+        except HttpProcessingError:
+            log.warn("domain object: {} not found".format(s3key))
+            continue
         if "root" not in obj_json:
-            log.info("no root for {}".format(domain))
+            log.info("no root for {}".format(domain_key))
             continue
         root_id = obj_json["root"]
         log.info("{} root: {}".format(domain_key, root_id))
@@ -185,44 +216,122 @@ async def markAndSweep(app):
                 log.info("delete {}".format(chunkid))
     log.info("delete unmarked objects done")
 
+async def updateDatasetContents(app, domain, dsetid):
+    """ Create a object listing all the chunks for given dataset
+    """
+    log.info("updateDatasetContents: {}".format(dsetid))
+    datasets = app["datasets"]
+    if dsetid not in datasets:
+        log.error("expected to find dsetid")
+        return
+    dset_obj = datasets[dsetid]
+    chunks = dset_obj["chunks"]
+    if len(chunks) == 0:
+        log.info("no chunks for dataset")
+        return
+    col_s3key = domain[1:] + "/." + dsetid + ".chunks.txt"  
+    if await isS3Obj(app, col_s3key):
+        # contents already exist, return
+        # TBD: Add an option to force re-creation of index?
+        return
+         
+    # collect s3 stats for all the chunk objects
+    for chunk_id in chunks:
+        try:
+            # TBD - do this in batches for efficiency
+            chunk_stats = await getS3ObjStats(app, getS3Key(chunk_id))
+        except HttpProcessingError as hpe:
+            log.error("error getting chunk stats for chunk: {}".format(chunk_id))
+            continue
+        chunks[chunk_id] = chunk_stats 
+    chunk_ids = list(chunks.keys())
+    chunk_ids.sort()
+    text_data = b""
+    for chunk_id in chunk_ids:
+        log.info("getting chunk_obj for {}".format(chunk_id))
+        chunk_obj = chunks[chunk_id]
+        # chunk_obj should have keys: ETag, Size, and LastModified 
+        if "ETag" not in chunk_obj:
+            log.warn("chunk_obj for {} not initialized".format(chunk_id))
+            continue
+        line = "{} {} {} {}\n".format(chunk_id[39:], chunk_obj["ETag"], chunk_obj["LastModified"], chunk_obj["Size"])
+        log.info("chunk contents: {}".format(line))
+        line = line.encode('utf8')
+        text_data += line
+    log.info("write chunk collection key: {}, count: {}".format(col_s3key, len(chunk_ids)))
+    try:
+        await putS3Bytes(app, col_s3key, text_data)
+    except HttpProcessingError:
+        log.error("S3 Error writing chunk collection key: {}".format(col_s3key))
+    
+    
+
+async def updateDomainContents(app):
+    """ For each domain, create context files listing objids and size for objects in the domain.
+    """
+    log.info("updateDomainContents start")
+     
+    domains = app["domains"]
+    log.info("{} domains".format(len(domains)))
+    for domain in domains:
+        log.info("domain: {}".format(domain))
+        domain_obj = domains[domain]
+        for collection in ("groups", "datatypes", "datasets"):
+            domain_col = domain_obj[collection]
+            log.info("domain_{} count: {}".format(collection, len(domain_col)))
+            col_s3key = domain[1:] + "/." + collection + ".txt"  
+            if await isS3Obj(app, col_s3key):
+                # Domain collection already exist
+                # TBD: add option to force re-creation?
+                #continue
+                return
+            if len(domain_col) > 0:
+                col_ids = list(domain_col.keys())
+                col_ids.sort()
+                text_data = b""
+                for obj_id in col_ids:
+                    col_obj = domain_col[obj_id]
+                    line = "{} {}\n".format(obj_id, col_obj["size"])
+                    line = line.encode('utf8')
+                    text_data += line
+                    if getCollectionForId(obj_id) == "datasets":
+                        # create chunk listing
+                        await updateDatasetContents(app, domain, obj_id)
+                log.info("write collection key: {}, count: {}".format(col_s3key, len(col_ids)))
+                try:
+                    await putS3Bytes(app, col_s3key, text_data)
+                except HttpProcessingError:
+                    log.error("S3 Error writing {}.json key: {}".format(collection, col_s3key))
+            
 
 
 async def bucketCheck(app):
     """ Periodic method that iterates through all keys in the bucket  
-    If node doesn't respond, free up the node slot (the node can re-register if it comes back)'"""
+    """
+
     #initialize these objecs here rather than in main to avoid "ouside of coroutine" errors
-    
-    if 's3' not in app:
-        log.info("creating S3 client")
-        session = app["session"]
-        app['s3'] = getS3Client(session)
 
     app["last_bucket_check"] = int(time.time())
 
     # update/initialize root object before starting node updates
-    headnode_key = getHeadNodeS3Key()
-    log.info("headnode S3 key: {}".format(headnode_key))
-    headnode_obj_found = await isS3Obj(app, headnode_key)
-
-    head_url = getUrl(app["head_host"], app["head_port"])  
-    log.info("hear_url: {}".format(head_url))
-    
-    if not headnode_obj_found:
-        # first time hsds has run with this bucket name?
-        log.warn("headnode not found")
-    else:
-        log.info("headnode found")
-
-
-    while True:
-        # sleep for a bit
-        sleep_secs = config.get("head_sleep_time")
-        await  asyncio.sleep(sleep_secs)
+ 
+    while True:  
+        if app["node_state"] != "READY":
+            log.info("bucketCheck waiting for Node state to be READY")
+            await  asyncio.sleep(1)
+            continue
 
         now = int(time.time())
         log.info("bucket check {}".format(unixTimeToUTC(now)))
-        await listKeys(app)
+        if "domains" not in app:
+            # haven't run listKeys yet - create a dict of all keys in the bucket
+            await listKeys(app)
         await markAndSweep(app)
+        await updateDomainContents(app)
+
+        # sleep for a bit
+        sleep_secs = config.get("async_sleep_time")
+        await  asyncio.sleep(sleep_secs)
         
 
 async def info(request):
@@ -243,19 +352,9 @@ async def info(request):
 
 async def init(loop):
     """Intitialize application and return app object"""
-    app = Application(loop=loop)
+    
+    app = baseInit(loop, 'an')
 
-    # set a bunch of global state 
-    app["id"] = createNodeId("async")
-    app["start_time"] = int(time.time())  # seconds after epoch 
-    bucket_name = config.get("bucket_name")
-    if not bucket_name:
-        log.error("BUCKET_NAME environment variable not set")
-        sys.exit()
-    log.info("using bucket: {}".format(bucket_name))
-    app["bucket_name"] = bucket_name     
-    app["head_host"] = config.get("head_host")
-    app["head_port"] = config.get("head_port")
     app.router.add_get('/', info)
     app.router.add_get('/info', info)
     
@@ -267,14 +366,13 @@ async def init(loop):
 #
 
 if __name__ == '__main__':
+    log.info("AsyncNode initializing")
+    
     loop = asyncio.get_event_loop()
     app = loop.run_until_complete(init(loop))   
-
-    # create a client Session here so that all client requests 
-    #   will share the same connection pool
-    max_tcp_connections = int(config.get("max_tcp_connections")) 
-    app["session"] = aiobotocore.get_session(loop=loop)   
+    # run background tasks
     asyncio.ensure_future(bucketCheck(app), loop=loop)
-    async_port = config.get("async_port")
+    asyncio.ensure_future(healthCheck(app), loop=loop)
+    async_port = config.get("an_port")
     log.info("Starting service on port: {}".format(async_port))
     run_app(app, port=int(async_port))

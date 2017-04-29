@@ -49,6 +49,7 @@ async def getHeadUrl(app):
         else:
             head_url = head_state["head_url"]
             app["head_url"] = head_url  # so we don't need to check S3 next time
+    log.info("head_url: {}".format(head_url))
     return head_url
 
 

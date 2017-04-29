@@ -17,6 +17,7 @@ fi
 #
 NODE_TYPE="head_node"
 HEAD_PORT=5100
+AN_PORT=6100
 SN_PORT=5101
 DN_PORT=6101
 
@@ -37,6 +38,17 @@ if [ $1 == "head" ]; then
   --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
   --env BUCKET_NAME=${BUCKET_NAME} \
   hdfgroup/hsds  
+elif [ $1 == "an" ]; then
+  echo "run async_node - ${AN_PORT}"
+  docker run -d -p ${AN_PORT}:${AN_PORT} --name hsds_async \
+  --env AN_PORT=${AN_PORT} \
+  --env NODE_TYPE="an"  \
+  --env AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
+  --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
+  --env AWS_S3_GATEWAY=${MINIO_BASE} \
+  --env BUCKET_NAME=${BUCKET_NAME} \
+  --link hsds_head:hsds_head \
+  hdfgroup/hsds
 elif [ $1 == "dn" ]; then
   echo "run dn"
   

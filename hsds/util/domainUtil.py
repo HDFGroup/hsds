@@ -187,7 +187,8 @@ def getS3PrefixForDomain(domain):
         path_len = len(domain_key) - len(DOMAIN_SUFFIX)
         domain_key = domain_key[:path_len]
     if not domain_key[-1] == '/':
-        domain_key += '/'
+        #domain_key += '/'
+        domain_key = domain_key[:-1]
     return domain_key
     
 

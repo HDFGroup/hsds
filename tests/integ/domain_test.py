@@ -338,15 +338,18 @@ class DomainTest(unittest.TestCase):
         # TBD - try deleting a domain that has child-domains
 
     def testDomainCollections(self):
-        domain = self.base_domain + "/domain_collections.h6"
+        domain = helper.getTestDomain("tall.h5")
         print("testDomainCollections", domain)
         headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/'
 
-        rsp = requests.put(req, headers=headers)
-        self.assertEqual(rsp.status_code, 201)
+        rsp = requests.get(req, headers=headers)
+        if rsp.status_code != 200:
+            print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
+            return  # abort rest of test
+
         rspJson = json.loads(rsp.text)
-        for k in ("root", "owner", "acls", "created", "lastModified"):
+        for k in ("root", "owner", "created", "lastModified"):
              self.assertTrue(k in rspJson)
 
         root_id = rspJson["root"]
@@ -360,7 +363,36 @@ class DomainTest(unittest.TestCase):
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("datasets in rspJson")
         datasets = rspJson["datasets"]
-        self.assertEqual(len(datasets), 0)
+        for objid in datasets:
+            helper.validateId(objid)
+        self.assertEqual(len(datasets), 4)
+
+        # get the first 2 datasets
+        params = {"Limit": 2}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("datasets in rspJson")
+        batch = rspJson["datasets"]
+        self.assertEqual(len(batch), 2)
+        helper.validateId(batch[0])
+        self.assertEqual(batch[0], datasets[0])
+        helper.validateId(batch[1])
+        self.assertEqual(batch[1], datasets[1])
+        # next batch
+        params["Marker"] = batch[1]
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("datasets in rspJson")
+        batch = rspJson["datasets"]
+        self.assertEqual(len(batch), 2)
+        helper.validateId(batch[0])
+        self.assertEqual(batch[0], datasets[2])
+        helper.validateId(batch[1])
+        self.assertEqual(batch[1], datasets[3])
 
         # get the groups collection
         req = helper.getEndpoint() + '/groups'
@@ -370,8 +402,34 @@ class DomainTest(unittest.TestCase):
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("groups in rspJson")
         groups = rspJson["groups"]
-        self.assertEqual(len(groups), 0)
-
+        self.assertEqual(len(groups), 6)
+        # get the first 2 groups
+        params = {"Limit": 2}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("groups in rspJson")
+        batch = rspJson["groups"]
+        self.assertEqual(len(batch), 2)
+        helper.validateId(batch[0])
+        self.assertEqual(batch[0], groups[0])
+        helper.validateId(batch[1])
+        self.assertEqual(batch[1], groups[1])
+        # next batch
+        params["Marker"] = batch[1]
+        params["Limit"] = 100
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("groups in rspJson")
+        batch = rspJson["groups"]
+        self.assertEqual(len(batch), 4)
+        for i in range(4):
+            helper.validateId(batch[i])
+            self.assertEqual(batch[i], groups[2+i])
+         
         # get the datatypes collection
         req = helper.getEndpoint() + '/datatypes'
         rsp = requests.get(req, headers=headers)
@@ -380,7 +438,7 @@ class DomainTest(unittest.TestCase):
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("datatypes in rspJson")
         datatypes = rspJson["datatypes"]
-        self.assertEqual(len(datatypes), 0)
+        self.assertEqual(len(datatypes), 0)  # no datatypes in this domain
 
     def testGetDomains(self):
         print("testGetDomains", self.base_domain)

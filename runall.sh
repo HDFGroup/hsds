@@ -36,6 +36,8 @@ else
   echo "using minio"
   echo "starting headnode"
   ./run_minio.sh head $count
+  echo "starting asyncnode"
+  ./run_minio.sh an
   echo "starting datanodes"
   ./run_minio.sh dn $count
   echo "starting service nodes"

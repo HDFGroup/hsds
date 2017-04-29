@@ -99,11 +99,11 @@ async def init(loop):
 if __name__ == '__main__':
     log.info("Servicenode initializing")
     loop = asyncio.get_event_loop()
+    #create the app object
+    app = loop.run_until_complete(init(loop))
 
     metadata_mem_cache_size = int(config.get("metadata_mem_cache_size"))
     log.info("Using metadata memory cache size of: {}".format(metadata_mem_cache_size))
-    #create the app object
-    app = loop.run_until_complete(init(loop))
     app['meta_cache'] = LruCache(mem_target=metadata_mem_cache_size, chunk_cache=False)
     app['domain_cache'] = LruCache(mem_target=metadata_mem_cache_size, chunk_cache=False)
      
@@ -117,7 +117,6 @@ if __name__ == '__main__':
     # run background task
     asyncio.ensure_future(healthCheck(app), loop=loop)
 
-   
     # run the app
     port = int(config.get("sn_port"))
     run_app(app, port=port)
