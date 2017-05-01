@@ -298,6 +298,25 @@ In general since the read request may overlap multiple chunks owned by different
 #. DN responds OK to requestor
 #. Once SN gets OK response for all effected chunks, returns OK to client
 
+Async Node processing
+#####################
+
+At startup the Async node will perorm the following actions:
+
+#. Iterate across every key in the S3 Bucket and create a dictionary of s3keys where the key value will consist of: Used - boolean, ETag - the object ETag, LastModified - the last modified date, Size - the size of the object
+#. From the S3 keys, a dictionary of domains will be created.  Each dictionary entry will const of sub-dictinaries for groups, datasets, and datatypes.  Members of these dictionaries will point back to the dictionary of s3 keys
+#. For each dataset, a list of chunks that belong to that dataset will be added to the dataset entry
+#. A mark and sweep algorithim will be run across the s3keys to idientify any objects that are not a member of any domain
+#. Objects that do not belong to any current domain will be deleted
+#. For each domain, content object will be created that list the groups/datasets/datatypes of the domain
+#. For each dataset in each domain, a content object will be created that list the chunks that belong to that dataset 
+
+Once the startup task is completed, the following request processing will occur:
+
+#. DN nodes will post a list of recently created, deleted, or updated S3 objects to the Async node
+#. For domain deletions, the Async node will delete any objects belonging to that node
+#. For chunk creations, the relevant chunk content object will be updated
+#. For group updates, a Mark and Sweep will be performed over the objects in the domain and unlinked objects will be deleted
 
 Authentication and Authorization
 ################################
