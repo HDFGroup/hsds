@@ -12,7 +12,7 @@
 import asyncio
 import sys
 from aiobotocore import get_session
-from util.s3Util import getS3Client
+from util.s3Util import getS3Keys, releaseClient
 import config
 
  
@@ -26,33 +26,14 @@ def printUsage():
      
     print("       python list_objects.py [prefix] [deliminator]")
     sys.exit(); 
-
-async def fetch_all(pages):
-    responses = []
-    while True:
-        n = await pages.next_page()
-        if n is None:
-            break
-        responses.append(n)
-    return responses
-    
+  
 async def listObjects(app, prefix='', deliminator=''):
-    s3_client = app['s3']
-    paginator = s3_client.get_paginator('list_objects')
-    bucket_name = app["bucket_name"]
-    print("bucket:", bucket_name)
-    pages = paginator.paginate(MaxKeys=1000, Bucket=bucket_name, Prefix=prefix, Delimiter=deliminator)
-    responses = await fetch_all(pages)
-    print("got {} responses".format(len(responses)))
+    s3keys = await getS3Keys(app, prefix=prefix, deliminator=deliminator)
     
-    for response in responses:
-        print(response)
-        if 'Contents' in response:
-            contents = response['Contents']
-            for item in contents:
-                key_names = item['Key']
-                print(key_names)
-     
+    print("got {} responses".format(len(s3keys)))
+    for s3key in s3keys:
+        print(s3key)
+   
                
 def main():
      
@@ -67,24 +48,18 @@ def main():
 
     if len(sys.argv) > 2:
         deliminator = sys.argv[2]
-
-     
     
     # we need to setup a asyncio loop to query s3
     loop = asyncio.get_event_loop()
-    #loop.run_until_complete(init(loop))   
-    session = get_session(loop=loop)
-
-    s3client = getS3Client(session)
-
-    app = {}
-    app['s3'] = s3client
-    app['bucket_name'] = config.get("bucket_name")
-
-    loop.run_until_complete(listObjects(app, prefix=prefix, deliminator=deliminator))
     
+    app = {}
+    app["bucket_name"] = config.get("bucket_name")
+    app["loop"] = loop
+    session = get_session(loop=loop)
+    app["session"] = session
+    loop.run_until_complete(listObjects(app, prefix=prefix, deliminator=deliminator))
+    releaseClient(app)
     loop.close()
-    s3client.close()
 
     print("done!")
 

@@ -135,15 +135,20 @@ async def listKeys(app):
 async def markObj(app, domain, objid=None):
     """ Mark obj as in-use and for group objs, recursively call for hardlink objects 
     """
-
+    
+    domains = app["domains"]
+    if domain not in domains:
+        log.error("Expected to find domain: {} in domains collection".format(domain))
+        return
+    domain_obj = domains[domain]
+    
     # if no objid, start with the root
-    if objid is None:
-        domains = app["domains"]
-        domain_obj = domains[domain]
+    if objid is None:        
         s3key = getS3Key(domain)
         obj_json = await getS3JSONObj(app, s3key)
         if "root" not in obj_json:
-            log.warn("no root for {} (domain folder)".format(domain))
+            # Skip folder domains
+            log.info("no root for {} (domain folder)".format(domain))
             return
         # create groups, datasets, and datatypes collection
         domain_obj["groups"] = {}
@@ -163,6 +168,9 @@ async def markObj(app, domain, objid=None):
         log.warn("Expected to find {} in domain: {}".format(objid, domain))
      
     log.info("markObj: {}".format(objid))
+    if objid not in bucket_ids:
+        log.warn("Expected to find id: {} in bucket (s3key: {})".format(objid, getS3Key(objid)))
+        return
     obj = bucket_ids[objid]
     if obj["used"]:
         # we must have already visited this object and its children before
@@ -179,17 +187,17 @@ async def markObj(app, domain, objid=None):
         except HttpProcessingError as hpe:
             log.warn("Got error retrieving key {}: {}".format(s3key, hpe))
             return
-        if "domain" not in obj_json:
-            log.warn("Expected to find domain key for obj: {}".format(objid))
+        if "domain" not in group_json:
+            log.warn("Expected to find domain key for obj: {} (s3key: {})".format(objid, getS3Key(objid)))
             return
-        if group_json[domain] != domain:
-            log.warn("Unexpected domain for obj: {}".format(objid))
+        if group_json["domain"] != domain:
+            log.warn("Unexpected domain for obj {}: {}".format(objid, group_json["domain"]))
             return
         # For group objects, iteratore through all the hard lines and mark those objects
         if "links"  not in group_json:
-            log.warn("Expected to find links key in groupjson for obj: {}".formt(objid))
+            log.warn("Expected to find links key in groupjson for obj: {} (s3key: {})".formt(objid, getS3Key(objid)))
             return
-        links = obj_json["links"]
+        links = group_json["links"]
         for link_name in links:
             link_json = links[link_name]
             if "class" not in link_json:
@@ -197,7 +205,7 @@ async def markObj(app, domain, objid=None):
                 continue
             if link_json["class"] == "H5L_TYPE_HARD":
                 link_id = link_json["id"]
-                markObj(app, domain, link_id)  
+                await markObj(app, domain, link_id)  
 
 async def bucketCheck(app):
     """ Verify that contents of bucket are self-consistent

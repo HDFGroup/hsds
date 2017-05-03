@@ -59,6 +59,15 @@ def getS3Client(app):
 
     return s3
 
+def releaseClient(app):
+    """ release the client collection to s3
+     (Used for cleanup on application exit)
+    """
+    if 's3' in app:
+        client = app['s3']
+        client.close()
+        del app['s3']
+
 def s3_stats_increment(app, counter, inc=1):
     """ Incremenet the indicated connter
     """

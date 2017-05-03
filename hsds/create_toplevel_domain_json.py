@@ -16,7 +16,7 @@ from aiobotocore import get_session
 from aiohttp.errors import ClientOSError
 from util.domainUtil import validateDomain, getParentDomain
 from util.idUtil import getS3Key
-from util.s3Util import putS3JSONObj, isS3Obj, getS3Client
+from util.s3Util import putS3JSONObj, isS3Obj, releaseClient
 import config
 import hsds_logger as log
 
@@ -99,7 +99,7 @@ def main():
     if len(username) < 3:
         raise ValueError("username must have at least three characters")
     if domain is None:
-        domain = "home/" + username
+        domain = "/home/" + username
     #print("domain:", domain)
     #print("default_perm:", default_perm)
     #print("owner_perm:", owner_perm)
@@ -119,23 +119,18 @@ def main():
     domain_json["lastModified"] = now
     domain_json["created"] = now
 
-    #print(domain_json)
-
     # we need to setup a asyncio loop to query s3
     loop = asyncio.get_event_loop()
-    #loop.run_until_complete(init(loop))   
     session = get_session(loop=loop)
-
-    s3client = getS3Client(session)
-
     app = {}
-    app['s3'] = s3client
-    app['bucket_name'] = config.get("bucket_name")
+    app["session"] = session
+    app["loop"] = loop
+    app["bucket_name"] = config.get("bucket_name")
 
     loop.run_until_complete(createDomain(app, domain, domain_json))
+    releaseClient(app)
     
     loop.close()
-    s3client.close()
 
     print("done!")
 
