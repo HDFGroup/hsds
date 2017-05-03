@@ -242,6 +242,10 @@ async def info(request):
         dc_stats["mem_used"] = dc.memUsed
         dc_stats["mem_target"] = dc.memTarget
     answer["domain_cache_stats"] = dc_stats
+
+    if "bucket_stats" in app:
+        # this key is filled in by the async node
+        answer["bucket_stats"] = app["bucket_stats"]
         
     resp = await jsonResponse(request, answer) 
     log.response(request, resp=resp)

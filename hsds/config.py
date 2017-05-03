@@ -43,6 +43,7 @@ cfg = {
     'metadata_mem_cache_size': 128*1024*1024,  # 128 MB
     'chunk_mem_cache_size': 128*1024*1024,  # 128 MB
     'timeout': 30,  # http timeout - 30 sec
+    'anonymous_ttl': 10*60,  # time after which anonymous objects will be deleted - 10 m
     'password_file': '/usr/local/src/hsds/passwd.txt'  # filepath to a text file of username/passwords
 }
    

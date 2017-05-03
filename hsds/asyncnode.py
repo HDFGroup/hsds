@@ -14,270 +14,20 @@
 # 
 import asyncio
 import time
-import json
 
-from aiohttp.web import StreamResponse, run_app
-
+from aiohttp.web import run_app
 from aiohttp.errors import HttpProcessingError
 
 import config
 from basenode import baseInit, healthCheck
 from util.timeUtil import unixTimeToUTC
-from util.httpUtil import  jsonResponse
-from util.s3Util import  getS3Keys, getS3JSONObj, getS3Bytes, putS3Bytes, isS3Obj
+from util.s3Util import putS3Bytes, isS3Obj, deleteS3Obj
 from util.idUtil import getCollectionForId, getS3Key
-from util.chunkUtil import getDatasetId #, getChunkIndex
+from asyncnode_lib import listKeys, markObj
 import hsds_logger as log
-
-async def listKeys(app):
-    """ Get all s3 keys in the bucket and create list of objkeys and domain keys """
-    log.info("listKeys start")
-    # Get all the keys for the bucket
-    # request include_stats, so that for each key we get the ETag, LastModified, and Size values.
-    s3keys = await getS3Keys(app, include_stats=True)
-    log.info("got: {} keys".format(len(s3keys)))
-    domains = {}
-    groups = {}
-    datasets = {}
-    datatypes = {}
-    top_level_domains = {}
-    group_cnt = 0
-    dset_cnt = 0
-    datatype_cnt = 0
-    chunk_cnt = 0
-    domain_cnt = 0
-    other_cnt = 0
-    # 24693-g-ccd7e104-f86c-11e6-8f7b-0242ac110009
-    for s3key in s3keys:
-        log.info("next key: {}".format(s3key))
-        if len(s3key) >= 44 and s3key[0:5].isalnum() and s3key[5] == '-' and s3key[6] in ('g', 'd', 'c', 't'):
-            objid = s3key[6:]
-            item = s3keys[s3key]  # Dictionary of ETag, LastModified, and Size
-            item["used"] = False   # Mixin "Used" flag of false
-            if objid[0] == 'g':
-                groups[objid] = item
-                group_cnt += 1
-            elif objid[0] == 'd':
-                # add a cunks dictionary that we'll use to store chunk keys later
-                item["chunks"] = {}
-                datasets[objid] = item
-                dset_cnt += 1
-            elif objid[0] == 't':
-                datatypes[objid] = item
-                datatype_cnt += 1
-            elif objid[0] == 'c':
-                chunk_cnt += 1
-        elif s3key == "headnode":
-            pass
-        elif s3key.endswith(".txt"):
-            # ignore collection files
-            pass
-        elif s3key.endswith("/.domain.json"):
-            n = s3key.index('/')
-            if n == 0:
-                log.warn("unexpected domain name (leading slash): {}".format(s3key))
-            elif n == -1:
-                log.warn("unexpected domain name (no slash): {}".format(s3key))
-            else:
-                tld = s3key[:n]
-                if tld not in top_level_domains:
-                    top_level_domains[tld] = {}
-                domain_cnt += 1
-                # TBD - add a domainUtil func for this
-                domain = '/' + s3key[:-(len("/.domain.json"))]
-                domains[domain] = {}
-                #domains[domain] = {"groups": {}, "datasets": {}, "datatypes": {}}
-            
-        else:
-            log.warn("unknown object: {}".format(s3key))
-    log.info("domain_cnt: {}".format(domain_cnt))
-    log.info("group_cnt: {}".format(group_cnt))
-    log.info("dset_cnt: {}".format(dset_cnt))
-    log.info("datatype_cnt: {}".format(datatype_cnt))
-    log.info("chunk_cnt: {}".format(chunk_cnt))
-    log.info("other_cnt: {}".format(other_cnt))
-    log.info("top_level_domains:")
-    for tld in top_level_domains:
-        log.info(tld)    
-    
-    app["domains"] = domains
-    app["groups"] = groups
-    app["datasets"] = datasets
-    app["datatypes"] = datatypes
-
-    chunk_del = []  # list of chunk ids that no longer have a dataset
-
-    # iterate through s3keys again and add any chunks to the corresponding dataset
-    for s3key in s3keys:
-        if len(s3key) >= 44 and s3key[0:5].isalnum() and s3key[5] == '-' and s3key[6] == 'c':
-            chunk_id = s3key[6:]
-            dset_id = getDatasetId(chunk_id)
-            if dset_id not in datasets:
-                chunk_del.append(chunk_id)
-            else:
-                item = s3keys[s3key]  # Dictionary of ETag, LastModified, and Size
-                dset = datasets[dset_id]
-                dset_chunks = dset["chunks"]
-                dset_chunks[chunk_id] = item
-
-    log.info("chunk delete list ({} items):".format(len(chunk_del)))
-    for chunk_id in chunk_del:
-        #log.info(chunk_id)
-        pass
-
-    log.info("listKeys done")
-
-async def markObj(app, domain_obj, obj_id):
-    """ Mark obj as in-use and for group objs, recursively call for hardlink objects 
-    """
-    log.info("markObj: {}".format(obj_id))
-    collection = getCollectionForId(obj_id)
-    obj_ids = domain_obj[collection]
-    if obj_id not in obj_ids:
-        log.warn("markObj: key {} not found s3_key: {}".format(obj_id, getS3Key(obj_id)))
-        return
-    log.info("markObj: {}".format(obj_id))
-    obj = obj_ids[obj_id]
-    if obj["used"]:
-        # we must have already visited this object and its children before
-        # i.e. through a loop in the graph, so just return here
-        return
-    obj["used"] = True  # in use
-    if collection == "groups":
-        # add the objid to our domain list by collection type
-        s3key = getS3Key(obj_id)
-        try:
-            data = await getS3Bytes(app, s3key)
-        except HttpProcessingError as hpe:
-            log.error("Error {} reading S3 key: {} ".format(hpe.code, s3key))
-            return
-        obj_json = json.loads(data.decode('utf8'))
-        if "domain" not in obj_json:
-            log.warn("Expected to find domain key for obj: {}".format(obj_id))
-            return
-    domain = obj_json["domain"]
-    domains = app["domains"]
-    if domain in domains:
-        domain_obj = domains[domain] 
-        domain_col = domain_obj[collection]
-        domain_col[obj_id] = obj
-        log.info("added {} to domain collection: {}".format(obj_id, collection))
-    else:
-        log.warn("domain {} for group: {} not found".format(domain, obj_id))
-    if collection == "groups":
-        # For group objects, iteratore through all the hard lines and mark those objects
-        links = obj_json["links"]
-        for link_name in links:
-            link_json = links[link_name]
-            if link_json["class"] == "H5L_TYPE_HARD":
-                link_id = link_json["id"]
-                await markObj(app, link_id)  # recursive call
-
-async def initializeDomainCollections(app, domain, objid=None):
-    """ File in the domain structure by recrusively reading each group and 
-    add any hardlinked items to the appropriate collection.
-    """
-    log.info("initializeDomainCollections for domain: {}".format(domain))
-    domains = app["domains"]
-    if domain not in domains:
-        log.warn("initializeDomainCollections - didn't find domain: {} in domains".format(domain))
-        return
-    domain_obj = domains[domain]
-     
-    # if no objid, start with the root
-    if objid is None:
-        s3key = getS3Key(domain)
-        obj_json = await getS3JSONObj(app, s3key)
-        if "root" not in obj_json:
-            msg = "no root for {}".format(domain)
-            log.info("no root for {} (domain folder)".format(domain))
-            return
-        # create groups, datasets, and datatypes collection
-        domain_obj["groups"] = {}
-        domain_obj["datasets"] = {}
-        domain_obj["datatypes"] = {}
-        objid = obj_json["root"]
-        log.info("{} root: {}".format(domain, objid))
-
-    collection = getCollectionForId(objid)
-    domain_collection = domain_obj[collection]
-    if objid in domain_collection:
-        # we've already processed this object
-        return
-
-    # check to see if the id is in the global collection
-    global_collection = app[collection]
-    if objid not in global_collection:
-        msg = "Expected to find: {} in global collection".format(objid)
-        log.warn(msg)
-        raise KeyError(msg)
-    obj = global_collection[objid]
-    domain_collection[objid] = obj  # reference object in domain collection
-    if collection == "groups":
-        # recurse through hard links in group objecct
-        group_json = await getS3JSONObj(app, getS3Key(objid))
-        if "links" not in group_json:
-            msg = "Expected to find links member of group: {}".format(objid)
-            log.error(msg)
-            raise KeyError(msg)
-        links = group_json["links"]
-        for link_name in links:
-            link_json = links[link_name]
-            if link_json["class"] == "H5L_TYPE_HARD":
-                link_id = link_json["id"]
-                await initializeDomainCollections(app, domain, link_id)  # recursive call
  
-
-
-async def markAndSweep(app, domain):
-    """ Implement classic mark and sweep algorithm. """
-    domains = app["domains"]
-    if domain not in domains:
-        log.warn("markAndSweep - didn't find domain: {} in domains".format(domain))
-        return
-    domain_obj = domains[domain]
-    groups = domain_obj["groups"]
-    datasets = domain_obj["datasets"]
-    datatypes = domain_obj["datatypes"]
-    log.info("markAndSweep start")
-    
-    # now iterate through domain
-    log.info("mark domain objects start")
-    s3key = getS3Key(domain)
-    root_id = None
-    try:
-        obj_json = await getS3JSONObj(app, s3key)
-        if "root" not in obj_json:
-            log.info("no root for {}".format(domain))
-        else:
-            root_id = obj_json["root"]
-            log.info("{} root: {}".format(domain, root_id))
-            await markObj(app, root_id)  # this will recurse through object tree
-    except HttpProcessingError:
-        log.warn("domain object: {} not found".format(s3key))
-    log.info("mark domain objects done for domain: {}".format(domain))
-
-    # delete any objects that are not in use
-    log.info("delete unmarked objects start for domain: {}".format(domain))
-    delete_count = 0
-    for objid in groups:
-        obj = groups[objid]
-        if obj["used"] is False:
-            delete_count += 1
-            log.info("delete {}".format(objid))
-    for objid in datatypes:
-        obj = datatypes[objid]
-        if obj["used"] is False:
-            delete_count += 1
-            log.info("delete {}".format(objid))
-    for objid in datasets:
-        obj = datasets[objid]
-        if obj["used"] is False:
-            chunks = obj["chunks"]
-            for chunkid in chunks:
-                log.info("delete {}".format(chunkid))
-    log.info("delete unmarked objects done")
-
+FORCE_CONTENT_LIST_CREATION = True
+ 
 async def updateDatasetContents(app, domain, dsetid):
     """ Create a object listing all the chunks for given dataset
     """
@@ -296,8 +46,8 @@ async def updateDatasetContents(app, domain, dsetid):
     if await isS3Obj(app, col_s3key):
         # contents already exist, return
         # TBD: Add an option to force re-creation of index?
-        #return
-        pass
+        if not FORCE_CONTENT_LIST_CREATION:
+            return
          
     chunk_ids = list(chunks.keys())
     chunk_ids.sort()
@@ -330,7 +80,8 @@ async def updateDomainContent(app, domain):
      
     domain_obj = domains[domain]
     # for folder objects, the domain_obj won't have a groups key
-    if "groups" not in domain_obj:
+    if "groups" not in domain_obj or len(domain_obj["groups"]) == 0:
+        log.info("Folder domain skipping: {}".format(domain))
         return  # just a folder domain
     for collection in ("groups", "datatypes", "datasets"):
         domain_col = domain_obj[collection]
@@ -339,8 +90,8 @@ async def updateDomainContent(app, domain):
         if await isS3Obj(app, col_s3key):
             # Domain collection already exist
             # TBD: add option to force re-creation?
-            #continue
-            pass
+            if not FORCE_CONTENT_LIST_CREATION:
+                continue
         if len(domain_col) > 0:
             col_ids = list(domain_col.keys())
             col_ids.sort()
@@ -360,6 +111,100 @@ async def updateDomainContent(app, domain):
                 log.error("S3 Error writing {}.json key: {}".format(collection, col_s3key))
 
     log.info("updateDomainContent: {} Done".format(domain))
+
+async def deleteObj(app, objid):
+    """ Delete the given object if it has been created more the x seconds ago.
+    Log S3 errors, but don't raise an exception. """
+    s3keys = app["s3keys"]
+    log.info("deleteObj {}".format(objid))
+    s3key = getS3Key(objid)
+    if s3key not in s3keys:
+        log.error("deleteObj, key: {} not found".format(s3key))
+        return False
+    obj = s3keys[s3key]
+    if "LastModified" not in obj:
+        log.error("Expected LastModified in s3key dict")
+        return False
+    lastModified = obj["LastModified"]
+    now = time.time()
+    if now - lastModified < app["anonymous_ttl"]:
+        log.info("obj: {} isn't old enough to delete yet".format(objid))
+        return False
+
+    if "Size" not in obj:
+        log.error("Expected Size is s3key dict")
+        return False
+    num_bytes = obj["Size"]
+    log.info("Remove s3key: {}, [{} bytes]".format(s3key, num_bytes))
+    del s3keys[s3key]  # remove from global key list
+    try:
+        await deleteS3Obj(app, s3key)
+        bucket_stats = app["bucket_stats"]
+        if "deleted_count" not in bucket_stats:
+            bucket_stats["deleted_count"] = 0
+        bucket_stats["deleted_count"] = bucket_stats["deleted_count"] + 1
+    except HttpProcessingError as hpe:
+        log.warn("Error deleting s3 obj: {}".format(hpe.code))
+        # TBD: add back to s3keys?
+    await  asyncio.sleep(0)
+    return True
+
+async def sweepObjs(app):
+    """ Iterate through the object tree and delete any unlinked objects """
+    #s3keys = app["s3keys"]
+    groups = app["groups"]
+    datasets = app["datasets"]
+    datatypes = app["datatypes"]
+    chunks = app["chunks"]
+    bucket_stats = app["bucket_stats"]
+    if "deleted_count" not in bucket_stats:
+        bucket_stats["deleted_count"] = 0
+    log.info("sweepObjs")
+    deleted_count = bucket_stats["deleted_count"]
+
+    deleted_ids = []
+    for dsetid in datasets:
+        dset_obj = datasets[dsetid]
+        if dset_obj["used"]:
+            continue  # in use
+        if await deleteObj(app, dsetid):
+            deleted_ids.append(dsetid)
+
+        # delete any chunks
+        if "chunks" in dset_obj:
+            deleted_chunk_ids = []
+            dset_chunks = dset_obj["chunks"]
+            for chunkid in dset_chunks:
+                if await deleteObj(app, chunkid):
+                    deleted_chunk_ids.append(chunkid)
+            for chunkid in deleted_chunk_ids:
+                del dset_chunks[chunkid]
+                del chunks[chunkid]
+    # nor delete the dataset ids            
+    for objid in deleted_ids:
+        del datasets[objid]
+
+    deleted_ids = []
+    for datatypeid in datatypes:
+        datatype_obj = datatypes[datatypeid]
+        if datatype_obj["used"]:
+            continue  # in use
+        if await deleteObj(app, datatypeid):
+            deleted_ids.append(datatypeid)
+    for objid in deleted_ids:
+        del datatypes[objid]
+    deleted_ids = []
+    for groupid in groups:
+        group_obj = groups[groupid]
+        if group_obj["used"]:
+            continue  # in use
+        if await deleteObj(app, groupid):
+            deleted_ids.append(groupid)
+    for objid in deleted_ids:
+        del groups[objid]
+    # iteratate through 
+    log.info("SweepObj done")
+
 
 
 async def bucketCheck(app):
@@ -383,67 +228,68 @@ async def bucketCheck(app):
     log.info("bucket check {}".format(unixTimeToUTC(now)))
     # do initial listKeys
     await listKeys(app)
-    groups = app["groups"]
-    for key in groups:
-        log.info("found group id: {}".format(key))
-
+     
+    log.info("Mark domain objects")
     domains = app["domains"]
+    # check each domain
+    for domain in domains:
+        await markObj(app, domain)
+    # remove any unlinked objects
+    await sweepObjs(app)
+    updateBucketStats(app)
 
     # do GC for all domains at startup
     for domain in domains:
         log.info("domain: {}".format(domain))
-        
-    cnt = 0
+
     for domain in domains:
         log.info("domain: {}".format(domain))
         # organize collections of groups/datasets/and datatypes for each domain
-        try:
-            await initializeDomainCollections(app, domain)
-        except Exception as e:
-            log.warn("got exception in initializeDomainCollections for domain: {}: {}".format(domain, e))
-            continue
-        # await markAndSweep(app, domain)
-        # update the domain contents files
+
+        await updateDomainContent(app, domain)
+        """ 
         try:
             await updateDomainContent(app, domain)
         except Exception  as e:
             log.warn("got exception in updateDomainContent for domain: {}: {}".format(domain, e))
-            continue
-        cnt += 1
-        if cnt == 5:
-            break
+            continue 
+        """
 
     while True:
         # sleep for a bit
         sleep_secs = config.get("async_sleep_time")
         await  asyncio.sleep(sleep_secs)
-        
 
-async def info(request):
-    """HTTP Method to return node state to caller"""
-    log.request(request) 
-    app = request.app
-    resp = StreamResponse()
-    resp.headers['Content-Type'] = 'application/json'
-    answer = {}
-    # copy relevant entries from state dictionary to response
-    answer['id'] = request.app['id']
-    answer['start_time'] = unixTimeToUTC(app['start_time'])
-     
-    resp = await jsonResponse(request, answer)
-    log.response(request, resp=resp)
-    return resp
- 
+def updateBucketStats(app):  
+    """ Collect some high level stats for use by the info request """
+    bucket_stats = app["bucket_stats"]
+    if "s3keys" in app:
+        s3keys = app["s3keys"]
+        bucket_stats["object_count"] = len(s3keys)
+    if "domains" in app:
+        domains = app["domains"]
+        bucket_stats["domain_count"] = len(domains)
+    if "groups" in app:
+        groups = app["groups"]
+        bucket_stats["group_count"] = len(groups)
+    if "datasets" in app:
+        datasets = app["datasets"]
+        bucket_stats["dataset_count"] = len(datasets)
+    if "datatypes" in app:
+        datatypes = app["datatypes"]
+        bucket_stats["datatype_count"] = len(datatypes)
+    if "chunks" in app:
+        chunks = app["chunks"]
+        bucket_stats["chunk_count"] = len(chunks)
+    if "bytes_in_bucket" in app:
+        bucket_stats["storage_size"] = app["bytes_in_bucket"] 
 
 async def init(loop):
     """Intitialize application and return app object"""
     
     app = baseInit(loop, 'an')
-
-    app.router.add_get('/', info)
-    app.router.add_get('/info', info)
-    
-    
+    app["bucket_stats"] = {}
+     
     return app
 
 #
@@ -459,5 +305,6 @@ if __name__ == '__main__':
     asyncio.ensure_future(bucketCheck(app), loop=loop)
     asyncio.ensure_future(healthCheck(app), loop=loop)
     async_port = config.get("an_port")
+    app["anonymous_ttl"] = config.get("anonymous_ttl")
     log.info("Starting service on port: {}".format(async_port))
     run_app(app, port=int(async_port))
