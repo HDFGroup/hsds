@@ -22,7 +22,7 @@ import config
 from basenode import baseInit, healthCheck
 from util.timeUtil import unixTimeToUTC
 from util.s3Util import putS3Bytes, isS3Obj
-from util.idUtil import getCollectionForId, getS3Key, getDataNodeUrl
+from util.idUtil import getCollectionForId, getS3Key, getDataNodeUrl, isValidChunkId
 from util.httpUtil import http_delete
 from asyncnode_lib import listKeys, markObj
 import hsds_logger as log
@@ -139,7 +139,7 @@ async def deleteObj(app, objid):
 
     req = getDataNodeUrl(app, objid)
     collection = "chunks"
-    if objid[0] != 'c':
+    if isValidChunkId(objid):
         collection = getCollectionForId(objid)
 
     req += '/' + collection + '/' + objid

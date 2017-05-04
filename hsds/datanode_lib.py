@@ -15,7 +15,7 @@
 import asyncio
 import time 
 from aiohttp.errors import HttpProcessingError   
-from util.idUtil import validateInPartition, getS3Key, isValidUuid
+from util.idUtil import validateInPartition, getS3Key, isValidUuid, isValidChunkId
 from util.s3Util import getS3JSONObj, putS3JSONObj, putS3Bytes, isS3Obj, deleteS3Obj
 from util.domainUtil import isValidDomain
 from util.attrUtil import getRequestCollectionName
@@ -130,6 +130,7 @@ async def get_metadata_obj(app, obj_id):
     return obj_json
 
 def save_metadata_obj(app, obj_id, obj_json):
+    """ Persist the given object """
     if not isValidDomain(obj_id) and not isValidUuid(obj_id):
         msg = "Invalid obj id: {}".format(obj_id)
         log.error(msg)
@@ -168,6 +169,7 @@ def save_metadata_obj(app, obj_id, obj_json):
 
 
 async def delete_metadata_obj(app, obj_id):
+    """ Delete the given object """
     meta_cache = app['meta_cache'] 
     dirty_ids = app["dirty_ids"]
     if not isValidDomain(obj_id) and not isValidUuid(obj_id):
@@ -222,7 +224,7 @@ async def s3sync(app):
             await asyncio.sleep(sleep_secs)
         else:
             # some objects need to be flushed to S3
-            log.info("{} objects to be syncd to S3".format(len(keys_to_update)))
+            log.info("{} objects to be synced to S3".format(len(keys_to_update)))
 
             # first clear the dirty bit (before we hit the first await) to
             # avoid a race condition where the object gets marked as dirty again
@@ -234,14 +236,10 @@ async def s3sync(app):
             for obj_id in keys_to_update:
                 # write back to S3  
                 s3_key = None
-                is_chunk = False
                 log.info("s3sync for obj_id: {}".format(obj_id))
-                 
                 s3_key = getS3Key(obj_id)  
-                if obj_id[0] == 'c':
-                    is_chunk = True
                 log.info("s3sync for s3_key: {}".format(s3_key))
-                if is_chunk:
+                if isValidChunkId(obj_id):
                     # chunk update
                     if obj_id not in chunk_cache:
                         log.error("expected to find obj_id: {} in data cache".format(obj_id))

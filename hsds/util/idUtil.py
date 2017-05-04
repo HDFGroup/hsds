@@ -76,7 +76,7 @@ def getCollectionForId(obj_id):
         raise ValueError("not a collection id")
     return collection
 
-    
+
 def getHeadNodeS3Key():
     return "headnode"
 
@@ -120,6 +120,14 @@ def isValidUuid(id, obj_class=None):
         return True
     except ValueError:
         return False
+
+def isValidChunkId(id):
+    if not isValidUuid(id):
+        return False
+    if id[0] != 'c':
+        return False
+    return True
+
 
 def getUuidFromId(id):
     """ strip off the type prefix ('g-' or 'd-', or 't-')
