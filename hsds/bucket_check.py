@@ -51,7 +51,7 @@ async def bucketCheck(app):
     print("Num groups: {}".format(len(app["groups"])))
     print("Num datatypes: {}".format(len(app["datatypes"])))
     print("Num datasets: {}".format(len(app["datasets"])))
-    print("Num chunks: {}".format(app["chunk_count"]))
+    print("Num chunks: {}".format(len(app["chunks"])))
     print("Unlinked objects: {}".format(unlink_count))
  
 

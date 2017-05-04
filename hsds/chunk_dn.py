@@ -22,7 +22,7 @@ from aiohttp.web import StreamResponse
 from util.arrayUtil import bytesArrayToList
 from util.httpUtil import  jsonResponse
 from util.idUtil import getS3Key, validateInPartition, isValidUuid
-from util.s3Util import  isS3Obj, getS3Bytes   
+from util.s3Util import  isS3Obj, getS3Bytes, deleteS3Obj   
 from util.hdf5dtype import createDataType
 from util.dsetUtil import  getSelectionShape, getSliceQueryParam
 from util.dsetUtil import getFillValue, getChunkLayout, getEvalStr
@@ -434,6 +434,42 @@ async def POST_Chunk(request):
     await resp.prepare(request)
     resp.write(output_data)
     await resp.write_eof()
+    return resp
+
+async def DELETE_Chunk(request):
+    """HTTP DELETE method for /chunks/
+    Note: clients (i.e. SN nodes) don't directly delete chunks.  This method should
+    only be called by the AN node.
+    """
+    log.request(request)
+    app = request.app
+    chunk_id = request.match_info.get('id')
+    if not chunk_id:
+        msg = "Missing chunk id"
+        log.error(msg)
+        raise HttpBadRequest(message=msg)
+    log.info("DELETE chunk: {}".format(chunk_id))
+
+    if not isValidUuid(chunk_id, "Chunk"):
+        msg = "Invalid chunk id: {}".format(chunk_id)
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+
+    validateInPartition(app, chunk_id)
+
+    chunk_cache = app['chunk_cache'] 
+    s3_key = getS3Key(chunk_id)
+    log.info("DELETE_Chunk s3_key: {}".format(s3_key))
+
+    if chunk_id in chunk_cache:
+        del chunk_cache[chunk_id]
+    
+    await deleteS3Obj(app, s3_key)
+        
+    resp_json = {  } 
+      
+    resp = await jsonResponse(request, resp_json)
+    log.response(request, resp=resp)
     return resp
  
  

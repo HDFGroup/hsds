@@ -25,7 +25,7 @@ from link_dn import GET_Links, GET_Link, PUT_Link, DELETE_Link
 from attr_dn import GET_Attributes, GET_Attribute, PUT_Attribute, DELETE_Attribute
 from ctype_dn import GET_Datatype, POST_Datatype, DELETE_Datatype
 from dset_dn import GET_Dataset, POST_Dataset, DELETE_Dataset, PUT_DatasetShape
-from chunk_dn import PUT_Chunk, GET_Chunk, POST_Chunk
+from chunk_dn import PUT_Chunk, GET_Chunk, POST_Chunk, DELETE_Chunk
 from datanode_lib import s3sync 
 
                
@@ -70,6 +70,7 @@ async def init(loop):
     app.router.add_route('PUT', '/chunks/{id}', PUT_Chunk)
     app.router.add_route('GET', '/chunks/{id}', GET_Chunk)
     app.router.add_route('POST', '/chunks/{id}', POST_Chunk)
+    app.router.add_route('DELETE', '/chunks/{id}', DELETE_Chunk)
     
       
     return app

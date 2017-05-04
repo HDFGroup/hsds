@@ -135,7 +135,7 @@ async def DELETE_Group(request):
         log.error( "Unexpected group_id: {}".format(group_id))
         raise HttpProcessingError(code=500, message="Unexpected Error")
 
-    # verify the id  exist
+    # verify the id exist
     await check_metadata_obj(app, group_id)
         
     log.info("deleting group: {}".format(group_id))

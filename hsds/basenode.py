@@ -105,6 +105,7 @@ async def healthCheck(app):
                     # save the url's to each of the active nodes'
                     sn_urls = {}
                     dn_urls = {}
+                    an_url = None
                     #  or rsp_json["host"] is None or rsp_json["id"] != app["id"]
                     this_node = None
                     for node in rsp_json["nodes"]:
@@ -130,10 +131,17 @@ async def healthCheck(app):
                         node_number = node["node_number"]
                         if node["node_type"] == "dn":
                             dn_urls[node_number] = url
-                        else: 
+                        elif node["node_type"] == "sn":
                             sn_urls[node_number] = url
+                        elif node["node_type"] == "an":
+                            an_url = url
+                        else:
+                            log.error("Unexpected node_type for node: {}".format(node))
+                    log.info("sn_urls: {}".format(sn_urls))
+                    log.info("dn_urls: {}".format(dn_urls))
                     app["sn_urls"] = sn_urls
                     app["dn_urls"] = dn_urls
+                    app["an_url"] = an_url
                      
                     if this_node is None  and rsp_json["cluster_state"] != "READY":
                         log.warn("this node not found, re-initialize")

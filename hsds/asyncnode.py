@@ -21,8 +21,9 @@ from aiohttp.errors import HttpProcessingError
 import config
 from basenode import baseInit, healthCheck
 from util.timeUtil import unixTimeToUTC
-from util.s3Util import putS3Bytes, isS3Obj, deleteS3Obj
-from util.idUtil import getCollectionForId, getS3Key
+from util.s3Util import putS3Bytes, isS3Obj
+from util.idUtil import getCollectionForId, getS3Key, getDataNodeUrl
+from util.httpUtil import http_delete
 from asyncnode_lib import listKeys, markObj
 import hsds_logger as log
  
@@ -135,19 +136,22 @@ async def deleteObj(app, objid):
         log.error("Expected Size is s3key dict")
         return False
     num_bytes = obj["Size"]
-    log.info("Remove s3key: {}, [{} bytes]".format(s3key, num_bytes))
-    del s3keys[s3key]  # remove from global key list
+
+    req = getDataNodeUrl(app, objid)
+    collection = "chunks"
+    if objid[0] != 'c':
+        collection = getCollectionForId(objid)
+
+    req += '/' + collection + '/' + objid
+    log.info("Delete object {}, [{} bytes]".format(objid, num_bytes))
     try:
-        await deleteS3Obj(app, s3key)
-        bucket_stats = app["bucket_stats"]
-        if "deleted_count" not in bucket_stats:
-            bucket_stats["deleted_count"] = 0
-        bucket_stats["deleted_count"] = bucket_stats["deleted_count"] + 1
+        await http_delete(app, req)
+        success = True
     except HttpProcessingError as hpe:
-        log.warn("Error deleting s3 obj: {}".format(hpe.code))
+        log.warn("Error deleting obj {}: {}".format(objid, hpe.code))
+        success = False
         # TBD: add back to s3keys?
-    await  asyncio.sleep(0)
-    return True
+    return success
 
 async def sweepObjs(app):
     """ Iterate through the object tree and delete any unlinked objects """
@@ -167,6 +171,7 @@ async def sweepObjs(app):
         dset_obj = datasets[dsetid]
         if dset_obj["used"]:
             continue  # in use
+        
         if await deleteObj(app, dsetid):
             deleted_ids.append(dsetid)
 
@@ -180,9 +185,11 @@ async def sweepObjs(app):
             for chunkid in deleted_chunk_ids:
                 del dset_chunks[chunkid]
                 del chunks[chunkid]
+            deleted_count += len(deleted_chunk_ids)
     # nor delete the dataset ids            
     for objid in deleted_ids:
         del datasets[objid]
+    deleted_count += len(deleted_ids)
 
     deleted_ids = []
     for datatypeid in datatypes:
@@ -193,6 +200,7 @@ async def sweepObjs(app):
             deleted_ids.append(datatypeid)
     for objid in deleted_ids:
         del datatypes[objid]
+    deleted_count += len(deleted_ids)
     deleted_ids = []
     for groupid in groups:
         group_obj = groups[groupid]
@@ -202,6 +210,9 @@ async def sweepObjs(app):
             deleted_ids.append(groupid)
     for objid in deleted_ids:
         del groups[objid]
+    deleted_count += len(deleted_ids)
+    
+    bucket_stats["deleted_count"] = deleted_count
     # iteratate through 
     log.info("SweepObj done")
 

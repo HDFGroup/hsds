@@ -58,7 +58,7 @@ def get_obj_id(request, body=None):
 async def check_metadata_obj(app, obj_id):
     """Raise Http 404 or 410 if not found (or recently removed)
     """
-    if not isValidDomainPath and not isValidUuid(obj_id):
+    if not isValidDomainPath(obj_id) and not isValidUuid(obj_id):
         msg = "Invalid obj id: {}".format(obj_id)
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
@@ -94,7 +94,7 @@ async def get_metadata_obj(app, obj_id):
     """ Get object from metadata cache (if present).
         Otherwise fetch from S3 and add to cache
     """
-    if not isValidDomainPath and not isValidUuid(obj_id):
+    if not isValidDomainPath(obj_id) and not isValidUuid(obj_id):
         msg = "Invalid obj id: {}".format(obj_id)
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
@@ -129,7 +129,7 @@ async def get_metadata_obj(app, obj_id):
     return obj_json
 
 def save_metadata_obj(app, obj_id, obj_json):
-    if not isValidDomainPath and not isValidUuid(obj_id):
+    if not isValidDomainPath(obj_id) and not isValidUuid(obj_id):
         msg = "Invalid obj id: {}".format(obj_id)
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
@@ -169,7 +169,7 @@ def save_metadata_obj(app, obj_id, obj_json):
 async def delete_metadata_obj(app, obj_id):
     meta_cache = app['meta_cache'] 
     dirty_ids = app["dirty_ids"]
-    if not isValidDomainPath and not isValidUuid(obj_id):
+    if not isValidDomainPath(obj_id) and not isValidUuid(obj_id):
         msg = "Invalid obj id: {}".format(obj_id)
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
