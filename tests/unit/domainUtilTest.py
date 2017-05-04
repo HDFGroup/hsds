@@ -17,7 +17,7 @@ import os
 sys.path.append('../../hsds/util')
 sys.path.append('../../hsds')
 from domainUtil import getParentDomain, isValidDomain, isValidHostDomain
-from domainUtil import getDomainForHost, getS3PrefixForDomain
+from domainUtil import getDomainForHost, getS3PrefixForDomain, isValidDomainPath
 
 class DomainUtilTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -35,7 +35,7 @@ class DomainUtilTest(unittest.TestCase):
                            'mydomain/foobar', # has a slash
                            None)      # none
         for domain in invalid_domains:
-            self.assertEqual(isValidHostDomain(domain), False)  
+            self.assertFalse(isValidHostDomain(domain))  
 
         valid_domains =  ("nex.nasa.gov", "home")
         for domain in valid_domains:
@@ -44,11 +44,20 @@ class DomainUtilTest(unittest.TestCase):
     def testValidDomain(self):
         invalid_domains = (123, 'abc/', '', None)
         for domain in invalid_domains:
-            self.assertEqual(isValidDomain(domain), False)  
+            self.assertFalse(isValidDomain(domain))  
 
         valid_domains = ("/gov/nasa/nex", "/home")
         for domain in valid_domains:
             self.assertTrue(isValidDomain(domain))  
+
+    def testValidDomainPath(self):
+        invalid_domains = (123, "home/test/", "/home/test")
+        for domain in invalid_domains:
+            self.assertFalse(isValidDomainPath(domain))
+
+        valid_domains = ("/home/test_user1/mytests/",)
+        for domain in valid_domains:
+            self.assertTrue(isValidDomainPath(domain))
     
     def testGetDomainForHost(self):
         domain = getDomainForHost("nex.nasa.gov")

@@ -17,7 +17,7 @@ import time
 from aiohttp.errors import HttpProcessingError   
 from util.idUtil import validateInPartition, getS3Key, isValidUuid
 from util.s3Util import getS3JSONObj, putS3JSONObj, putS3Bytes, isS3Obj, deleteS3Obj
-from util.domainUtil import isValidDomainPath
+from util.domainUtil import isValidDomain
 from util.attrUtil import getRequestCollectionName
 import config
 import hsds_logger as log
@@ -58,7 +58,7 @@ def get_obj_id(request, body=None):
 async def check_metadata_obj(app, obj_id):
     """Raise Http 404 or 410 if not found (or recently removed)
     """
-    if not isValidDomainPath and not isValidUuid(obj_id):
+    if not isValidDomain(obj_id) and not isValidUuid(obj_id):
         msg = "Invalid obj id: {}".format(obj_id)
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
@@ -94,7 +94,8 @@ async def get_metadata_obj(app, obj_id):
     """ Get object from metadata cache (if present).
         Otherwise fetch from S3 and add to cache
     """
-    if not isValidDomainPath and not isValidUuid(obj_id):
+    log.info("get_metadata_obj: {}".format(obj_id))
+    if not isValidDomain(obj_id) and not isValidUuid(obj_id):
         msg = "Invalid obj id: {}".format(obj_id)
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
@@ -129,7 +130,7 @@ async def get_metadata_obj(app, obj_id):
     return obj_json
 
 def save_metadata_obj(app, obj_id, obj_json):
-    if not isValidDomainPath and not isValidUuid(obj_id):
+    if not isValidDomain(obj_id) and not isValidUuid(obj_id):
         msg = "Invalid obj id: {}".format(obj_id)
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
@@ -169,7 +170,7 @@ def save_metadata_obj(app, obj_id, obj_json):
 async def delete_metadata_obj(app, obj_id):
     meta_cache = app['meta_cache'] 
     dirty_ids = app["dirty_ids"]
-    if not isValidDomainPath and not isValidUuid(obj_id):
+    if not isValidDomain(obj_id) and not isValidUuid(obj_id):
         msg = "Invalid obj id: {}".format(obj_id)
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")

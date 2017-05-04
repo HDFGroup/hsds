@@ -108,7 +108,7 @@ def validateDomainPath(path):
     if path[0] != '/':
         raise ValueError("Domain path should start with '/'")
     if path[-1] !=  '/':
-        raise ValueError("Domain path must not end with '/'")
+        raise ValueError("Domain path must end with '/'")
 
 def isValidDomainPath(path):
     try:
