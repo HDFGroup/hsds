@@ -53,6 +53,7 @@ async def getHeadUrl(app):
     return head_url
 
 
+
 async def register(app):
     """ register node with headnode
     OK to call idempotently (e.g. if the headnode seems to have forgotten us)"""
@@ -137,8 +138,6 @@ async def healthCheck(app):
                             an_url = url
                         else:
                             log.error("Unexpected node_type for node: {}".format(node))
-                    log.info("sn_urls: {}".format(sn_urls))
-                    log.info("dn_urls: {}".format(dn_urls))
                     app["sn_urls"] = sn_urls
                     app["dn_urls"] = dn_urls
                     app["an_url"] = an_url
@@ -250,10 +249,6 @@ async def info(request):
         dc_stats["mem_used"] = dc.memUsed
         dc_stats["mem_target"] = dc.memTarget
     answer["domain_cache_stats"] = dc_stats
-
-    if "bucket_stats" in app:
-        # this key is filled in by the async node
-        answer["bucket_stats"] = app["bucket_stats"]
         
     resp = await jsonResponse(request, answer) 
     log.response(request, resp=resp)

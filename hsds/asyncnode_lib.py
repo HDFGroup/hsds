@@ -130,6 +130,7 @@ async def markObj(app, domain, objid=None):
     # if no objid, start with the root
     if objid is None:        
         s3key = getS3Key(domain)
+        # TBD - use LRU Cache to avoid repeated lookups?
         obj_json = await getS3JSONObj(app, s3key)
         if "root" not in obj_json:
             # Skip folder domains

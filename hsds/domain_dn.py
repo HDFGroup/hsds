@@ -103,7 +103,7 @@ async def PUT_Domain(request):
             raise HttpProcessingError(code=500, message=msg)
 
     if domain_json != None:
-        # duplicate uuid?
+        # domain already exists
         msg = "Conflict: resource exists: " + domain
         log.error(msg)
         raise HttpProcessingError(code=409, message=msg)

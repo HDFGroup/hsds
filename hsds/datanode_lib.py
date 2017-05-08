@@ -19,8 +19,22 @@ from util.idUtil import validateInPartition, getS3Key, isValidUuid, isValidChunk
 from util.s3Util import getS3JSONObj, putS3JSONObj, putS3Bytes, isS3Obj, deleteS3Obj
 from util.domainUtil import isValidDomain
 from util.attrUtil import getRequestCollectionName
+from util.httpUtil import http_put, http_delete
 import config
 import hsds_logger as log
+
+
+def getAsyncNodeUrl(app):
+    """ Return host/port for async node
+    Throw exception if service is not ready"""
+    if "an_url" not in app or not app["an_url"]:
+        msg="Service not ready"
+        log.warn(msg)
+        raise HttpProcessingError(message=msg, code=503)
+
+    an_url = app["an_url"]
+    log.info("got an url: {}".format(an_url))
+    return an_url
 
 def get_obj_id(request, body=None):
     """ Get object id from request 
@@ -200,6 +214,18 @@ async def delete_metadata_obj(app, obj_id):
     # remove from meta cache  
     await deleteS3Obj(app, s3_key)
     # TBD - anything special to do if this fails? 
+
+    # notify AN of metadata deletion
+    an_url = getAsyncNodeUrl(app)
+    log.info("got asyncnodeurl: {}".format(an_url))
+    body = { "objids": [obj_id,] }
+    req = an_url + "/objects"
+    try:
+        await http_delete(app, req, data=body)
+    except HttpProcessingError as hpe:
+        msg = "got error notifying async node: {}".format(hpe.code)
+        log.error(msg)
+    
     
 
 async def s3sync(app):
@@ -233,6 +259,7 @@ async def s3sync(app):
                 del dirty_ids[obj_id]
             
             retry_keys = []  # add any write failures back here
+            success_keys = [] # keys we successfully wrote to S3
             for obj_id in keys_to_update:
                 # write back to S3  
                 s3_key = None
@@ -250,6 +277,7 @@ async def s3sync(app):
                     chunk_bytes = chunk_arr.tobytes()
                     try:
                         await putS3Bytes(app, s3_key, chunk_bytes)
+                        success_keys.append(obj_id)
                     except HttpProcessingError as hpe:
                         log.error("got S3 error writing obj_id: {} to S3: {}".format(obj_id, str(hpe)))
                         retry_keys.append(obj_id)
@@ -257,6 +285,7 @@ async def s3sync(app):
                         if obj_id not in chunk_cache:
                             chunk_cache[obj_id] = chunk_arr
                         chunk_cache.setDirty(obj_id)  # pin to cache
+                        
                 else:
                     # meta data update
                     if obj_id not in meta_cache:
@@ -268,14 +297,14 @@ async def s3sync(app):
                     log.info("writing s3_key: {}".format(s3_key))
                     try:
                         await putS3JSONObj(app, s3_key, obj_json) 
+                        success_keys.append(obj_id)
                     except HttpProcessingError as hpe:
                         log.error("got S3 error writing obj_id: {} to S3: {}".format(obj_id, str(hpe)))
                         retry_keys.append(obj_id)
                         # re-add chunk to cache if it had gotten evicted
                         if obj_id not in meta_cache:
                             meta_cache[obj_id] = obj_json
-                        meta_cache.setDirty(obj_id)  # pin to cache
-                 
+                        meta_cache.setDirty(obj_id)  # pin to cache            
             
             # add any failed writes back to the dirty queue
             if len(retry_keys) > 0:
@@ -284,6 +313,19 @@ async def s3sync(app):
                 now = int(time.time())
                 for obj_id in retry_keys:
                     dirty_ids[obj_id] = now
+
+            # notify AN of key updates 
+            an_url = getAsyncNodeUrl(app)
+            if len(success_keys) > 0:
+                body = { "objids": success_keys }
+                req = an_url + "/objects"
+                try:
+                    await http_put(app, req, data=body)
+                except HttpProcessingError as hpe:
+                    msg = "got error notifying async node: {}".format(hpe.code)
+                    log.error(msg)
+
+            
 
 
 
