@@ -164,7 +164,10 @@ async def DELETE_Dataset(request):
 
     log.info("deleting dataset: {}".format(dset_id))
 
-    await delete_metadata_obj(app, dset_id)
+    notify=True
+    if "Notify" in request.GET and not request.GET["Notify"]:
+        notify=False
+    await delete_metadata_obj(app, dset_id, notify=notify)
 
     resp_json = {  } 
       

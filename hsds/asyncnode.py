@@ -73,13 +73,15 @@ async def updateDatasetContents(app, domain, dsetid):
         log.error("S3 Error writing chunk collection key: {}".format(col_s3key))
   
 
-async def updateDomainContent(app, domain):
+async def updateDomainContent(app, domain, objs_updated=None):
     """ Create/update context files listing objids and size for objects in the domain.
     """
     log.info("updateDomainContent: {}".format(domain))
      
     domains = app["domains"]
     log.info("{} domains".format(len(domains)))
+    if objs_updated is not None:
+        log.info("objs_updated: {}".format(objs_updated))
      
     domain_obj = domains[domain]
     # for folder objects, the domain_obj won't have a groups key
@@ -87,8 +89,24 @@ async def updateDomainContent(app, domain):
         log.info("Folder domain skipping: {}".format(domain))
         return  # just a folder domain
     for collection in ("groups", "datatypes", "datasets"):
+        # if objs_updated is passed in, check that at least one of the relevant object types
+        # is included, otherwise skip
+        if objs_updated is not None:
+            collection_included = False
+            for objid in objs_updated:
+                if isValidChunkId(objid) and collection == "datasets":
+                    # if a chunk is updated, recalculate the datasets list
+                    collection_included = True
+                    break
+                elif getCollectionForId(objid) == collection:
+                    collection_included = True
+                    break
+            if not collection_included:
+                log.info("no updated for collection: {}".format(collection))
+                continue  # go on to next collection
         domain_col = domain_obj[collection]
         log.info("domain_{} count: {}".format(collection, len(domain_col)))
+        log.info("domain_{} items: {}".format(collection, domain_col))
         col_s3key = domain[1:] + "/." + collection + ".txt"  
         if await isS3Obj(app, col_s3key):
             # Domain collection already exist
@@ -96,6 +114,7 @@ async def updateDomainContent(app, domain):
             if not FORCE_CONTENT_LIST_CREATION:
                 continue
         if len(domain_col) > 0:
+            log.info("updating domain collection: {} for domain: {}".format(domain_col, domain))
             col_ids = list(domain_col.keys())
             col_ids.sort()
             text_data = b""
@@ -106,7 +125,16 @@ async def updateDomainContent(app, domain):
                 text_data += line
                 if getCollectionForId(obj_id) == "datasets":
                     # create chunk listing
-                    await updateDatasetContents(app, domain, obj_id)
+                    if objs_updated is None:
+                        await updateDatasetContents(app, domain, obj_id)
+                    else:
+                        # if objs_updated is passed in, only update if at least one chunk in
+                        # the dataset has been updated
+                        for updated_id in objs_updated:
+                            if isValidChunkId(updated_id) and getDatasetId(updated_id) == obj_id:
+                                await updateDatasetContents(app, domain, obj_id)
+                                break
+
             log.info("write collection key: {}, count: {}".format(col_s3key, len(col_ids)))
             try:
                 await putS3Bytes(app, col_s3key, text_data)
@@ -146,8 +174,9 @@ async def sweepObj(app, objid, force=False):
 
     req += '/' + collection + '/' + objid
     log.info("Delete object {}, [{} bytes]".format(objid, num_bytes))
+    params = {"Notify": 0}  # Let the DN not to notify the AN node about this action
     try:
-        await http_delete(app, req)
+        await http_delete(app, req, params=params)
         success = True
     except HttpProcessingError as hpe:
         log.warn("Error deleting obj {}: {}".format(objid, hpe.code))
@@ -164,7 +193,7 @@ async def sweepObj(app, objid, force=False):
         else:
             del s3keys[s3key]
         app["bytes_in_bucket"] -= num_bytes
-        
+    log.info("sweepObj {} done".format(objid))    
     return success
 
 async def sweepObjs(app):
@@ -173,22 +202,23 @@ async def sweepObjs(app):
     groups = app["groups"]
     datasets = app["datasets"]
     datatypes = app["datatypes"]
-    chunks = app["chunks"]
     bucket_stats = app["bucket_stats"]
     if "deleted_count" not in bucket_stats:
         bucket_stats["deleted_count"] = 0
     log.info("sweepObjs")
     deleted_count = bucket_stats["deleted_count"]
 
+    # datasets
     deleted_ids = []
     for dsetid in datasets:
         dset_obj = datasets[dsetid]
         if not dset_obj["used"]:
             deleted_ids.append(dsetid)
     
-    for objid in deleted_ids:    
-        if await sweepObj(app, dsetid):
-            deleted_ids.append(dsetid)
+    for dsetid in deleted_ids:    
+        dset_obj = datasets[dsetid]
+        if await sweepObj(app, dsetid):  
+            deleted_count += 1
 
             # delete any chunks
             if "chunks" not in dset_obj:
@@ -202,35 +232,30 @@ async def sweepObjs(app):
                     deleted_chunk_ids.append(chunkid)
             for chunkid in deleted_chunk_ids:
                 del dset_chunks[chunkid]
-                del chunks[chunkid]
             deleted_count += len(deleted_chunk_ids)
-    # now delete the dataset ids            
-    for objid in deleted_ids:
-        if await sweepObj(app, objid):
-            del datasets[objid]
-            deleted_count += 1
-
+    
+    # datatypes
     deleted_ids = []
     for datatypeid in datatypes:
         datatype_obj = datatypes[datatypeid]
         if not datatype_obj["used"]:
             deleted_ids.append(datatypeid)
 
-    for objid in deleted_ids:
-        if await sweepObj(app, objid):
-            del datatypes[objid]
+    for datatypeid in deleted_ids:
+        if await sweepObj(app, datatypeid):
             deleted_count += 1
+
+    # groups
     deleted_ids = []
     for groupid in groups:
         group_obj = groups[groupid]
         if not group_obj["used"]:
             deleted_ids.append(groupid)
-    for objid in deleted_ids:
-        if await sweepObj(app, objid):
-            del groups[objid]
+    for groupid in deleted_ids:
+        if await sweepObj(app, groupid):
             deleted_count += 1
     
-    bucket_stats["deleted_count"] = deleted_count
+    bucket_stats["deleted_count"] += deleted_count
     # iteratate through 
     log.info("SweepObjs done")
 
@@ -323,7 +348,7 @@ async def getDomainCollectionForObjId(app, objid):
     domains = app["domains"]
     if domain not in domains:
         log.warn("expected to find domain: {} in domains set".format(domain))
-        return None
+        return  
     domain_obj = domains[domain]
     domain_col = None
 
@@ -331,23 +356,23 @@ async def getDomainCollectionForObjId(app, objid):
         # chunks are members of their dataset
         if "datasets" not in domain_obj:
             log.warn("expected to find datasets collection in domain obj :{}".format(domain))
-            return None
+            return  
         domain_datasets = domain_obj["datasets"]
         dsetid = getDatasetId(objid)  # dataset id for this chunk
         if dsetid not in domain_datasets:
             log.warn("expected to find dataset: {} in domain collection for: {}".format(dsetid, domain))
-            return None
+            return  
         dset_obj = domain_datasets[dsetid]
         if "chunks" not in dset_obj:
             log.warn("expected to find chunks collection in dataset: {}".format(dsetid))
-            return None
+            return  
         domain_col = dset_obj["chunks"]
     else:
         # dataset/group/datatype obj  
         collection = getCollectionForId(objid)     
         if collection not in domain_obj:
             log.warn("expected to find {} collection in domain obj :{}".format(collection, domain))
-            return None
+            return  
         domain_col = domain_obj[collection]
     return domain_col
 
@@ -415,7 +440,8 @@ async def objDelete(app, objid):
     else:
         log.error("Got unexpected objid: {}".format(objid))
         return
-
+    deleted_objids = app["deleted_objids"]
+    deleted_objids.add(objid)  
     s3key = getS3Key(objid) 
     s3keys = app["s3keys"]
     if s3key not in s3keys:
@@ -423,6 +449,7 @@ async def objDelete(app, objid):
         return
     s3stats = s3keys[s3key]
     del s3keys[s3key]  # remove from s3key collection
+    
     
     # adjust the total size of the bucket
     app["bytes_in_bucket"] -= s3stats["Size"]
@@ -466,7 +493,8 @@ async def bucketCheck(app):
     domains = app["domains"]
     # check each domain
     for domain in domains:
-        await markObj(app, domain)
+        # mark objects that are linked
+        await markObj(app, domain, updateLinks=True)
     log.info("Mark donain objects done")
     # remove any unlinked objects
     log.info("sweepObjs start")
@@ -496,11 +524,13 @@ async def bucketCheck(app):
         now = int(time.time())
         log.info("bucket check {}".format(unixTimeToUTC(now)))
         pending_queue = app["pending_queue"]
+        domains_updated = {}
         while len(pending_queue) > 0:
             item = pending_queue.pop(0)  # remove from the front
             objid = item["objid"]
             action = item["action"]
             log.info("pop from pending queue: obj: {} action: {}".format(objid, action))
+            
             if isValidDomain(objid):
                 if action == "DELETE":
                     await domainDelete(app, objid)
@@ -508,21 +538,36 @@ async def bucketCheck(app):
                     await domainCreate(app, objid)
                 else:
                     log.error("Unexpected action: {}".format(action))
-            elif isValidChunkId(objid):
+            elif isValidChunkId(objid) or isValidUuid(objid):
                 if action == "PUT":
                     await objUpdate(app, objid)
-                else:
-                    log.error("Unexpected action: {}".format(action))
-            elif isValidUuid(objid):
-                if action == "DELETE":
+                elif action == "DELETE":
                     await objDelete(app, objid)
-                elif action == "PUT":
-                    await objUpdate(app, objid)
                 else:
                     log.error("Unexpected action: {}".format(action))
+                    continue
+                domain = await getDomainForObjid(app, objid)
+                log.info("domain: {}".format(domain))
+                
+                if domains is None:
+                    log.warn("coudn't find domain for objid: {}".format(objid))
+                elif domain in domains_updated:
+                    objids = domains_updated[domain]
+                    objids.add(objid)
+                else:
+                    objids = set()
+                    objids.add(objid)
+                    domains_updated[domain] = objids
             else:
                 log.error("Unexpected objid: {}".format(objid))
-                
+        log.info("finished processing pending queue")
+        # For each updated domain, do a mark and sweep
+        log.info("{} domains will be updated".format(len(domains_updated)))
+        for domain in domains_updated:
+            objs_updated = domains_updated[domain]
+            log.info("updateDomainContent - domain: {} objs_updated: {}".format(domain, objs_updated))
+            #await updateDomainContent(app, domain, objs_updated=objs_updated)
+        log.info("finished updating domain contents")
 
 
 def updateBucketStats(app):  
@@ -642,6 +687,7 @@ async def init(loop):
     app["bucket_stats"] = {}
     # object and domain updates will be posted here to be worked on offline
     app["pending_queue"] = [] 
+    app["deleted_objids"] = set()
      
     return app
 
@@ -659,5 +705,6 @@ if __name__ == '__main__':
     asyncio.ensure_future(healthCheck(app), loop=loop)
     async_port = config.get("an_port")
     app["anonymous_ttl"] = config.get("anonymous_ttl")
+    app["s3_sync_interval"] = config.get("s3_sync_interval")
     log.info("Starting service on port: {}".format(async_port))
     run_app(app, port=int(async_port))

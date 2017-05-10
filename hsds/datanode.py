@@ -93,6 +93,7 @@ if __name__ == '__main__':
     app['meta_cache'] = LruCache(mem_target=metadata_mem_cache_size, chunk_cache=False)
     app['chunk_cache'] = LruCache(mem_target=chunk_mem_cache_size, chunk_cache=True)
     app['deleted_ids'] = set()
+    app['notify_ids'] = set()
     app['dirty_ids'] = {}
 
     # run background tasks

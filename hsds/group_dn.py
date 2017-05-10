@@ -140,7 +140,10 @@ async def DELETE_Group(request):
         
     log.info("deleting group: {}".format(group_id))
 
-    await delete_metadata_obj(app, group_id)
+    notify=True
+    if "Notify" in request.GET and not request.GET["Notify"]:
+        notify=False
+    await delete_metadata_obj(app, group_id, notify=notify)
 
     resp_json = {  } 
       

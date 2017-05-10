@@ -13,10 +13,12 @@
 # Head node of hsds cluster
 # 
 
+import time
 from aiohttp.errors import HttpProcessingError
 
 from util.s3Util import  getS3Keys, getS3JSONObj
-from util.idUtil import getCollectionForId, getS3Key
+from util.idUtil import getCollectionForId, getS3Key, getDataNodeUrl
+from util.httpUtil import http_delete
 from util.chunkUtil import getDatasetId 
 import hsds_logger as log
 
@@ -80,6 +82,7 @@ async def listKeys(app):
                 domain_cnt += 1
                 # TBD - add a domainUtil func for this
                 domain = '/' + s3key[:-(len("/.domain.json"))]
+                log.info("adding domain: {} to domains list".format(domain))
                 domains[domain] = {}
                 #domains[domain] = {"groups": {}, "datasets": {}, "datatypes": {}}
             
@@ -117,10 +120,29 @@ async def listKeys(app):
      
     log.info("listKeys done")
 
-async def markObj(app, domain, objid=None):
+async def removeLink(app, grpid, link_name):
+    """ Remove the given link """
+    log.info("removeLink {} from group: {}".format(link_name, grpid))
+    if getCollectionForId(grpid) != "groups":
+        log.error("Expected groups id for removeLink call")
+        return False
+    req = getDataNodeUrl(app, grpid)
+
+    req += "/groups/" + grpid + "/links/" + link_name
+    log.info("Delete request: {}".format(req))
+    params = {"Notify": 0}  # Let the DN not to notify the AN node about this action
+    try:
+        await http_delete(app, req, params=params)
+        success = True
+    except HttpProcessingError as hpe:
+        log.warn("Error deleting link {}: {}".format(grpid, hpe.code))
+        success = False
+    return success
+
+async def markObj(app, domain, objid=None, updateLinks=False):
     """ Mark obj as in-use and for group objs, recursively call for hardlink objects 
     """
-    
+    log.info("markObj domain: {} objid: {}".format(domain, objid))
     domains = app["domains"]
     if domain not in domains:
         log.error("Expected to find domain: {} in domains collection".format(domain))
@@ -155,7 +177,7 @@ async def markObj(app, domain, objid=None):
      
     log.info("markObj: {}".format(objid))
     if objid not in bucket_ids:
-        log.warn("Expected to find id: {} in bucket (s3key: {})".format(objid, getS3Key(objid)))
+        log.warn("Expected to find id: {} in bucket (s3key: {}) for domain: {}".format(objid, getS3Key(objid), domain))
         return
     obj = bucket_ids[objid]
     if obj["used"]:
@@ -191,6 +213,24 @@ async def markObj(app, domain, objid=None):
                 continue
             if link_json["class"] == "H5L_TYPE_HARD":
                 link_id = link_json["id"]
-                await markObj(app, domain, link_id)  
+                try:
+                    linkee_collection = getCollectionForId(link_id)
+                except ValueError:
+                    log.warn("got unexpected collection type for link id: {}".format(link_id))
+                    continue
+                
+                collection_ids = app[linkee_collection]
+                if link_id not in collection_ids:
+                    log.warn("linked obj: {} not found".format(link_id))
+                    lastModified = obj["LastModified"]
+                    now = time.time()
+                    if updateLinks and now - lastModified > app["anonymous_ttl"]:
+                        # the linkee should have been written to s3 by now, so this must be
+                        # a bogus link
+                        await removeLink(app, objid, link_name)
+                    else:
+                        log.warn("missing linkee: {} but group recently modified".format(link_id))
+                else:
+                    await markObj(app, domain, link_id)  
 
  

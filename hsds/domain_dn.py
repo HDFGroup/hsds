@@ -145,7 +145,11 @@ async def DELETE_Domain(request):
     if domain_json:
         log.info("got domain json")
     # delete domain
-    await delete_metadata_obj(app, domain)
+    notify=True
+    if "Notify" in request.GET and not request.GET["Notify"]:
+        notify=False
+    await delete_metadata_obj(app, domain, notify=notify)
+
  
     json_response = { "domain": domain }
 

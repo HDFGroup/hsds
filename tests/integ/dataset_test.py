@@ -50,6 +50,7 @@ class DatasetTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["attributeCount"], 0)   
         dset_id = rspJson["id"]
+        print("created dset: {}".format(dset_id))
         self.assertTrue(helper.validateId(dset_id))
 
         # read back the obj
@@ -113,7 +114,7 @@ class DatasetTest(unittest.TestCase):
         headers = helper.getRequestHeaders(domain=another_domain)
         rsp = requests.delete(req, headers=headers)
         self.assertEqual(rsp.status_code, 400)   
-        
+        """
         # delete the dataset
         headers = helper.getRequestHeaders(domain=self.base_domain)
         rsp = requests.delete(req, headers=headers)
@@ -124,6 +125,7 @@ class DatasetTest(unittest.TestCase):
         # a get for the dataset should now return 410 (GONE)
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 410)
+        """
 
     def testScalarEmptyDimsDataset(self):
         # Test creation/deletion of scalar dataset obj

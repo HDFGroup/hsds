@@ -169,14 +169,14 @@ async def http_put_binary(app, url, data=None, params=None):
     
     try:
         async with client.put(url, data=data, params=params, timeout=timeout) as rsp:
-            log.info("http_put status: {}".format(rsp.status))
+            log.info("http_put_binary status: {}".format(rsp.status))
             if rsp.status != 201:
                 msg = "request error for {}: {}".format(url, str(rsp))
                 log.error(msg)
                 raise HttpProcessingError(message=msg, code=rsp.status)
 
             rsp_json = await rsp.json()
-            log.info("http_put({}) response: {}".format(url, rsp_json))
+            log.info("http_put_binary({}) response: {}".format(url, rsp_json))
     except ClientError as ce:
         log.error("Error for http_put_binary({}): {} ".format(url, str(ce)))
         raise HttpProcessingError(message="Unexpected error", code=500)
@@ -203,7 +203,7 @@ async def http_delete(app, url, data=None, params=None):
                 raise HttpProcessingError(message=msg, code=rsp.status)
 
             rsp_json = await rsp.json()
-            log.info("http_put({}) response: {}".format(url, rsp_json))
+            log.info("http_delete({}) response: {}".format(url, rsp_json))
     except ClientError as ce:
         log.error("Error for http_delete({}): {} ".format(url, str(ce)))
         raise HttpProcessingError(message="Unexpected error", code=500)

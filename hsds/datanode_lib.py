@@ -143,7 +143,7 @@ async def get_metadata_obj(app, obj_id):
         meta_cache[obj_id] = obj_json  # add to cache
     return obj_json
 
-def save_metadata_obj(app, obj_id, obj_json):
+def save_metadata_obj(app, obj_id, obj_json, notify=True):
     """ Persist the given object """
     if not isValidDomain(obj_id) and not isValidUuid(obj_id):
         msg = "Invalid obj id: {}".format(obj_id)
@@ -181,8 +181,13 @@ def save_metadata_obj(app, obj_id, obj_json):
     dirty_ids = app["dirty_ids"]
     dirty_ids[obj_id] = now
 
+    # set flag if AN should be notified on S3 write
+    if notify:
+        notify_ids = app['notify_ids']
+        notify_ids.add(obj_id)
 
-async def delete_metadata_obj(app, obj_id):
+
+async def delete_metadata_obj(app, obj_id, notify=True):
     """ Delete the given object """
     meta_cache = app['meta_cache'] 
     dirty_ids = app["dirty_ids"]
@@ -203,14 +208,17 @@ async def delete_metadata_obj(app, obj_id):
         log.warn("{} has already been deleted".format(obj_id))
     else:
         deleted_ids.add(obj_id)
-
-    s3_key = getS3Key(obj_id)
-      
+     
     if obj_id in meta_cache:
         del meta_cache[obj_id]
-    if obj_id in dirty_ids:
-        del dirty_ids[obj_id]  # TBD - possible race condition?
-         
+    if obj_id not in dirty_ids:
+        now = time.time()
+        dirty_ids[obj_id] = now
+    if notify:
+        notify_ids = app['notify_ids']
+        notify_ids.add(obj_id)
+
+    """     
     # remove from meta cache  
     await deleteS3Obj(app, s3_key)
     # TBD - anything special to do if this fails? 
@@ -225,6 +233,7 @@ async def delete_metadata_obj(app, obj_id):
     except HttpProcessingError as hpe:
         msg = "got error notifying async node: {}".format(hpe.code)
         log.error(msg)
+    """
     
     
 
@@ -234,14 +243,19 @@ async def s3sync(app):
     sleep_secs = config.get("node_sleep_time")
     s3_sync_interval = config.get("s3_sync_interval")
     dirty_ids = app["dirty_ids"]
-    meta_cache = app['meta_cache'] 
-    chunk_cache = app['chunk_cache'] 
+    deleted_ids = app["deleted_ids"]
+    notify_ids = app["notify_ids"]
+    meta_cache = app["meta_cache"] 
+    chunk_cache = app["chunk_cache"] 
 
     while True:
+        while app["node_state"] != "READY":
+            log.info("s3sync - clusterstate is not ready, sleeping")
+            await asyncio.sleep(sleep_secs)
         keys_to_update = []
         now = int(time.time())
         for obj_id in dirty_ids:
-            if dirty_ids[obj_id] + s3_sync_interval < now:
+            if obj_id in deleted_ids or dirty_ids[obj_id] + s3_sync_interval < now:
                 # time to write to S3
                 keys_to_update.append(obj_id)
 
@@ -266,7 +280,15 @@ async def s3sync(app):
                 log.info("s3sync for obj_id: {}".format(obj_id))
                 s3_key = getS3Key(obj_id)  
                 log.info("s3sync for s3_key: {}".format(s3_key))
-                if isValidChunkId(obj_id):
+                if obj_id in deleted_ids:
+                    # delete the s3 obj
+                    try:
+                        await deleteS3Obj(app, s3_key)
+                        success_keys.append(obj_id)
+                    except HttpProcessingError as hpe:
+                        log.error("got S3 error deleting obj_id: {} to S3: {}".format(obj_id, str(hpe)))
+                        retry_keys.append(obj_id)
+                elif isValidChunkId(obj_id):
                     # chunk update
                     if obj_id not in chunk_cache:
                         log.error("expected to find obj_id: {} in data cache".format(obj_id))
@@ -284,8 +306,7 @@ async def s3sync(app):
                         # re-add chunk to cache if it had gotten evicted
                         if obj_id not in chunk_cache:
                             chunk_cache[obj_id] = chunk_arr
-                        chunk_cache.setDirty(obj_id)  # pin to cache
-                        
+                        chunk_cache.setDirty(obj_id)  # pin to cache        
                 else:
                     # meta data update
                     if obj_id not in meta_cache:
@@ -316,14 +337,43 @@ async def s3sync(app):
 
             # notify AN of key updates 
             an_url = getAsyncNodeUrl(app)
-            if len(success_keys) > 0:
-                body = { "objids": success_keys }
-                req = an_url + "/objects"
-                try:
-                    await http_put(app, req, data=body)
-                except HttpProcessingError as hpe:
-                    msg = "got error notifying async node: {}".format(hpe.code)
-                    log.error(msg)
+            while len(success_keys) > 0:
+                # package multiple updates or multiple deletes together as much
+                # as possible
+                action = None
+                keys = []
+                while len(success_keys) > 0:
+                    key = success_keys.pop(0)
+                    if key in notify_ids:
+                        notify_ids.remove(key)
+                    else:
+                        log.info("notify not set for key: {}".format(key))
+                        continue
+                    if key in deleted_ids:
+                        if action is None:
+                            action = "DELETE"
+                        else:
+                            break
+                    else:
+                        if action is None:
+                            action = "PUT"
+                        else:
+                            break
+                    keys.append(key)
+
+                if len(keys) > 0:
+                    body = { "objids": keys }
+                    req = an_url + "/objects"
+                    try:
+                        if action == "PUT":
+                            log.info("ASync PUT notify: {} body: {}".format(req, body))
+                            await http_put(app, req, data=body)
+                        else:
+                            log.info("ASync DELETE notify: {} body: {}".format(req, body))
+                            await http_delete(app, req, data=body)
+                    except HttpProcessingError as hpe:
+                        msg = "got error notifying async node: {}".format(hpe.code)
+                        log.error(msg)
 
             
 
