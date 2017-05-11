@@ -85,9 +85,15 @@ async def updateDomainContent(app, domain, objs_updated=None):
      
     domain_obj = domains[domain]
     # for folder objects, the domain_obj won't have a groups key
-    if "groups" not in domain_obj or len(domain_obj["groups"]) == 0:
+    if "root" not in domain_obj:
         log.info("Folder domain skipping: {}".format(domain))
         return  # just a folder domain
+    rootid = domain_obj["root"]
+    roots = app["roots"]
+    if rootid not in roots:
+        log.warn("expected to find root: {} in roots collection".format(rootid))
+        return
+    root_obj = roots[rootid]
     for collection in ("groups", "datatypes", "datasets"):
         # if objs_updated is passed in, check that at least one of the relevant object types
         # is included, otherwise skip
@@ -104,7 +110,7 @@ async def updateDomainContent(app, domain, objs_updated=None):
             if not collection_included:
                 log.info("no updated for collection: {}".format(collection))
                 continue  # go on to next collection
-        domain_col = domain_obj[collection]
+        domain_col = root_obj[collection]
         log.info("domain_{} count: {}".format(collection, len(domain_col)))
         log.info("domain_{} items: {}".format(collection, domain_col))
         col_s3key = domain[1:] + "/." + collection + ".txt"  
@@ -269,34 +275,44 @@ async def domainDelete(app, domain):
     if domain not in domains:
         log.warn("Expected to find domain: {} in collection".format(domain))
         return
-    domain_obj = domain[domain]
-    # delete all groups of domain
-    domain_groups = domain_obj["groups"]
-    for grpid in domain_groups:
-        await sweepObj(app, grpid, force=True)
-    # delete all types of domain
-    domain_datatypes = domain_obj["datatypes"]
-    for datatypeid in domain_datatypes:
-        await sweepObj(app, datatypeid, force=True)
-    # delete all datasets of domain
-    domain_datasets = domain_obj["datasets"]
-    for dsetid in domain_datasets:
-        dataset_obj = domain_datasets[dsetid]
-        # for each dataset, delete all its chunks
-        domain_chunks = dataset_obj["chunks"]
-        for chunkid in domain_chunks:
-            await sweepObj(app, chunkid, force=True)
-        await sweepObj(app, dsetid, force=True)
     s3keys = app["s3keys"]
     domain_key = getS3Key(domain)
+    num_bytes = 0
     if domain_key not in s3keys:
         log.warn("expected to find domain key: {} in s3keys".format(domain_key))
     else:
+        domain_obj = s3keys[domain_key]
         del s3keys[domain_key]
-    num_bytes = domain_obj["Size"]
+        num_bytes = domain_obj["Size"]
     app["bytes_in_bucket"] -= num_bytes
+
     del domains[domain]
-     
+    await asyncio.sleep(0)
+
+async def rootDelete(app, rootid):
+    """ get root obj for rootid """
+    roots = app["roots"]
+    if rootid not in roots:
+        log.warn("expected to find: {} in roots collection".format(rootid))
+
+    root_obj = roots[rootid]
+    root_groups = root_obj["groups"]
+    for grpid in root_groups:
+        await sweepObj(app, grpid, force=True)
+    # delete all types of domain
+    root_datatypes = root_obj["datatypes"]
+    for datatypeid in root_datatypes:
+        await sweepObj(app, datatypeid, force=True)
+    # delete all datasets of domain
+    root_datasets = root_obj["datasets"]
+    for dsetid in root_datasets:
+        dataset_obj = root_datasets[dsetid]
+        # for each dataset, delete all its chunks
+        dataset_chunks = dataset_obj["chunks"]
+        for chunkid in dataset_chunks:
+            await sweepObj(app, chunkid, force=True)
+        await sweepObj(app, dsetid, force=True)
+    
 
 async def domainCreate(app, domain):
     """ Process domain creation event """
@@ -310,15 +326,22 @@ async def domainCreate(app, domain):
     if domain in domains:
         log.warn("domain: {} not expected in domains".format(domain))
         return
-    domain_obj = await getS3ObjStats(app, domain_key)
-    # add empty collection classes
-    domain_obj["groups"] = {}
-    domain_obj["datasets"] = {}
-    domain_obj["datatypes"] = {}
+
+    domain_obj = await getS3ObjStats(app, domain_key) # ETag, LastModified, Size
+    domain_json = await getS3JSONObj(app, domain_key)
+
+    if "root" in domain_json:
+        rootid = domain_json["root"]
+    else:
+        rootid = None
+    if rootid:
+        domain_obj["root"] = rootid
     num_bytes = domain_obj["Size"]
     app["bytes_in_bucket"] += num_bytes
     s3keys[domain_key] = domain_obj
     domains[domain] = domain_obj
+
+    
 
 async def getDomainForObjid(app, objid):
     """ get domain for the object """
@@ -338,42 +361,82 @@ async def getDomainForObjid(app, objid):
     log.info("Got domain: {} for objid: {}".format(domain, objid))
     return domain
 
+async def getRootForObjid(app, objid):
+    """ get root id for the object """
+    if isValidChunkId(objid):
+        domain_item_id = getDatasetId(objid)
+    else:
+        domain_item_id = objid  # groups/datatypes/datsaets will have domain key
+    try:
+        obj_json = await getS3JSONObj(app, getS3Key(domain_item_id))
+    except HttpProcessingError as hpe:
+        log.warn("got {} fetching obj: {}".format(hpe.code, domain_item_id))
+        return None
+    if "root" not in obj_json:
+        log.warn("expected to find domain key in dataset: {}".format(objid))
+        return None
+    rootid = obj_json["rootid"]
+    log.info("Got root: {} for objid: {}".format(rootid, objid))
+    return rootid
+
 async def getDomainCollectionForObjId(app, objid):
     """ Return the domain collection for the given objid """
-    domain = await getDomainForObjid(app, objid)
-    if domain is None:
+    rootid = await getRootForObjid(app, objid)
+    if rootid is None:
         log.warn("couldn't get domain for objid: {}".format(objid))
         return
-    
-    domains = app["domains"]
-    if domain not in domains:
-        log.warn("expected to find domain: {} in domains set".format(domain))
-        return  
-    domain_obj = domains[domain]
-    domain_col = None
+
+    roots = app["roots"]
+    if rootid in roots:
+        root_obj = roots[rootid]
+    else:
+        s3key = getS3Key(rootid)
+        s3keys = app["s3keys"]
+        if s3key not in s3keys:
+            # object not yet loaded?
+            root_obj = { }
+            s3keys[s3key] = root_obj
+        else:
+            root_obj = s3keys[s3key]
+        if "datasets" not in root_obj:
+            root_obj["datasets"] = {}
+        if "datatypes" not in root_obj:
+            root_obj["datatypes"] = {}
+        if "groups" not in root_obj:
+            root_obj["groups"] = {}
+        
+        roots[rootid] = root_obj
 
     if isValidChunkId(objid):
         # chunks are members of their dataset
-        if "datasets" not in domain_obj:
-            log.warn("expected to find datasets collection in domain obj :{}".format(domain))
+        if "datasets" not in root_obj:
+            log.warn("expected to find datasets collection in root obj :{}".format(rootid))
             return  
-        domain_datasets = domain_obj["datasets"]
+        domain_datasets = root_obj["datasets"]
         dsetid = getDatasetId(objid)  # dataset id for this chunk
         if dsetid not in domain_datasets:
-            log.warn("expected to find dataset: {} in domain collection for: {}".format(dsetid, domain))
-            return  
-        dset_obj = domain_datasets[dsetid]
+            log.warn("expected to find dataset: {} in domain collection for: {}".format(dsetid, rootid))
+            s3key = getS3Key(dsetid) 
+            s3keys = app["s3keys"]
+            if s3key not in s3keys:
+                dset_obj = {}
+                s3keys[s3key] = dset_obj
+            else:
+                dset_obj = s3keys[s3key]
+            domain_datasets[dsetid] = dset_obj
+        else:
+            dset_obj = domain_datasets[dsetid]
         if "chunks" not in dset_obj:
-            log.warn("expected to find chunks collection in dataset: {}".format(dsetid))
-            return  
+            dset_obj["chunks"] = {}
+ 
         domain_col = dset_obj["chunks"]
     else:
         # dataset/group/datatype obj  
         collection = getCollectionForId(objid)     
-        if collection not in domain_obj:
-            log.warn("expected to find {} collection in domain obj :{}".format(collection, domain))
+        if collection not in root_obj:
+            log.warn("expected to find {} collection in domain obj :{}".format(collection, rootid))
             return  
-        domain_col = domain_obj[collection]
+        domain_col = root_obj[collection]
     return domain_col
 
 async def objUpdate(app, objid):
@@ -392,7 +455,7 @@ async def objUpdate(app, objid):
     try:
         s3stats = await getS3ObjStats(app, s3key)
     except HttpProcessingError as hpe:
-        log.warn("Get error: {} for key: {}".format(hpe.code, s3key))
+        log.warn("objUpdate - getS3ObjStats error: {} for key: {}".format(hpe.code, s3key))
         return
     s3keys = app["s3keys"]
     old_size = 0
@@ -480,7 +543,7 @@ async def bucketCheck(app):
     while True:  
         if app["node_state"] != "READY":
             log.info("bucketCheck waiting for Node state to be READY")
-            await  asyncio.sleep(1)
+            await asyncio.sleep(1)
         else:
             break
 
@@ -579,6 +642,9 @@ def updateBucketStats(app):
     if "domains" in app:
         domains = app["domains"]
         bucket_stats["domain_count"] = len(domains)
+    if "root" in app:
+        roots = app["roots"]
+        bucket_stats["root_count"] = len(roots)
     if "groups" in app:
         groups = app["groups"]
         bucket_stats["group_count"] = len(groups)
@@ -614,7 +680,7 @@ async def PUT_Objects(request):
     """HTTP method to notify creation/update of objid"""
     log.request(request)
     app = request.app
-
+    log.info("PUT_Objects")
     if not request.has_body:
         msg = "PUT objects with no body"
         log.warn(msg)
@@ -634,6 +700,9 @@ async def PUT_Objects(request):
 
     pending_queue = app["pending_queue"]
     for objid in objids:
+        if isValidDomain(objid):
+            # ignore domain events
+            continue
         item = {"objid": objid, "action": "PUT"}
         log.info("adding item: {} to pending queue".format(item))
         pending_queue.append(item)
@@ -647,6 +716,7 @@ async def DELETE_Objects(request):
     """HTTP method to notify deletion of objid"""
     log.request(request)
     app = request.app
+    log.info("DELETE_Objects")
 
     if not request.has_body:
         msg = "PUT objects with no body"
@@ -667,6 +737,9 @@ async def DELETE_Objects(request):
 
     pending_queue = app["pending_queue"]
     for objid in objids:
+        if isValidDomain(objid):
+            # ignore domain events
+            continue
         item = {"objid": objid, "action": "DELETE"}
         log.info("adding item: {} to pending queue".format(item))
         pending_queue.append(item)

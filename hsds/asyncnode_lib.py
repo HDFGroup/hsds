@@ -105,6 +105,7 @@ async def listKeys(app):
     app["datatypes"] = datatypes
     app["chunks"] = chunks
     app["bytes_in_bucket"] = bytes_in_bucket
+    app["roots"] = {}  # will be filled in by markObj
 
     # iterate through s3keys again and add any chunks to the corresponding dataset
     for chunkid in chunks:
@@ -139,7 +140,7 @@ async def removeLink(app, grpid, link_name):
         success = False
     return success
 
-async def markObj(app, domain, objid=None, updateLinks=False):
+async def markObj(app, domain, objid=None, rootid=None, updateLinks=False):
     """ Mark obj as in-use and for group objs, recursively call for hardlink objects 
     """
     log.info("markObj domain: {} objid: {}".format(domain, objid))
@@ -147,6 +148,7 @@ async def markObj(app, domain, objid=None, updateLinks=False):
     if domain not in domains:
         log.error("Expected to find domain: {} in domains collection".format(domain))
         return
+    roots = app["roots"]
     domain_obj = domains[domain]
     
     # if no objid, start with the root
@@ -158,24 +160,34 @@ async def markObj(app, domain, objid=None, updateLinks=False):
             # Skip folder domains
             log.info("no root for {} (domain folder)".format(domain))
             return
-        # create groups, datasets, and datatypes collection
-        domain_obj["groups"] = {}
-        domain_obj["datasets"] = {}
-        domain_obj["datatypes"] = {}
-        objid = obj_json["root"]
+        rootid = obj_json["root"]
+        domain_obj["root"] = rootid
+        # create new root collection
+        root_obj = {}
+        root_obj["groups"] = {}
+        root_obj["datasets"] = {}
+        root_obj["datatypes"] = {}
+        
+        roots[rootid] = root_obj
+        objid = rootid
         log.info("{} root: {}".format(domain, objid))
+    else:
+        if rootid is None:
+            log.error("expected root id for markobj")
+            return
+        if rootid not in roots:
+            log.error("expected to find root id: {} in roots collection".format(rootid))
+            return
+        root_obj = roots[rootid]
 
-    log.info("markObj: {}".format(objid))
+    log.info("markObj: {} root: {}".format(objid, rootid))
     collection = getCollectionForId(objid)
-    domain_ids = domain_obj[collection]
+    domain_ids = root_obj[collection]
     if objid in domain_ids:
         log.warn("already visited obj {}".format(objid))
         return
     bucket_ids = app[collection]
-    if objid not in bucket_ids:
-        log.warn("Expected to find {} in domain: {}".format(objid, domain))
      
-    log.info("markObj: {}".format(objid))
     if objid not in bucket_ids:
         log.warn("Expected to find id: {} in bucket (s3key: {}) for domain: {}".format(objid, getS3Key(objid), domain))
         return
@@ -201,7 +213,7 @@ async def markObj(app, domain, objid=None, updateLinks=False):
         if group_json["domain"] != domain:
             log.warn("Unexpected domain for obj {}: {}".format(objid, group_json["domain"]))
             return
-        # For group objects, iteratore through all the hard lines and mark those objects
+        # For group objects, iteratore through all the hard links and mark those objects
         if "links"  not in group_json:
             log.warn("Expected to find links key in groupjson for obj: {} (s3key: {})".formt(objid, getS3Key(objid)))
             return
@@ -212,16 +224,16 @@ async def markObj(app, domain, objid=None, updateLinks=False):
                 log.warn("Expected to find class key for link: {} in obj: {}".format(link_name, objid))
                 continue
             if link_json["class"] == "H5L_TYPE_HARD":
-                link_id = link_json["id"]
+                linkid = link_json["id"]
                 try:
-                    linkee_collection = getCollectionForId(link_id)
+                    linkee_collection = getCollectionForId(linkid)
                 except ValueError:
-                    log.warn("got unexpected collection type for link id: {}".format(link_id))
+                    log.warn("got unexpected collection type for link id: {}".format(linkid))
                     continue
                 
                 collection_ids = app[linkee_collection]
-                if link_id not in collection_ids:
-                    log.warn("linked obj: {} not found".format(link_id))
+                if linkid not in collection_ids:
+                    log.warn("linked obj: {} not found".format(linkid))
                     lastModified = obj["LastModified"]
                     now = time.time()
                     if updateLinks and now - lastModified > app["anonymous_ttl"]:
@@ -229,8 +241,8 @@ async def markObj(app, domain, objid=None, updateLinks=False):
                         # a bogus link
                         await removeLink(app, objid, link_name)
                     else:
-                        log.warn("missing linkee: {} but group recently modified".format(link_id))
+                        log.warn("missing linkee: {} but group recently modified".format(linkid))
                 else:
-                    await markObj(app, domain, link_id)  
+                    await markObj(app, domain, objid=linkid, rootid=rootid)  
 
  

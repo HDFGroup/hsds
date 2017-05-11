@@ -48,6 +48,7 @@ async def bucketCheck(app):
 
     print("total storage: {}".format(app["bytes_in_bucket"]))
     print("Num domains: {}".format(len(app["domains"])))
+    print("Num root groups: {}".format(len(app["roots"])))
     print("Num groups: {}".format(len(app["groups"])))
     print("Num datatypes: {}".format(len(app["datatypes"])))
     print("Num datasets: {}".format(len(app["datasets"])))
