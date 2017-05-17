@@ -44,6 +44,27 @@ def getS3Key(id):
         key = "{}-{}".format(idhash, id)
     return key
 
+def getObjId(s3key):
+    """ Return object id given valid s3key """
+    if len(s3key) >= 44 and s3key[0:5].isalnum() and s3key[5] == '-' and s3key[6] in ('g', 'd', 'c', 't'):
+        objid = s3key[6:]
+    elif s3key.endswith("/.domain.json"):
+        objid = '/' + s3key[:-(len("/.domain.json"))]
+    else:
+        raise KeyError("Unexpected s3key: {}".format(s3key))
+    return objid
+
+
+def isS3ObjKey(s3key):
+    valid = False
+    try:
+        objid = getObjId(s3key)
+        if objid:
+            valid = True
+    except KeyError:
+        pass # ignore
+    return valid
+
 def createNodeId(prefix):
     """ Create a random id used to identify nodes"""
     node_uuid = str(uuid.uuid1())
@@ -63,6 +84,7 @@ def createObjId(obj_type):
     return id
 
 def getCollectionForId(obj_id):
+    """ return groups/datasets/datatypes based on id """
     if not isinstance(obj_id, str):
         raise ValueError("invalid object id")
     collection = None
@@ -127,6 +149,27 @@ def isValidChunkId(id):
     if id[0] != 'c':
         return False
     return True
+
+def getClassForObjId(id):
+    """ return domains/chunks/groups/datasets/datatypes based on id """
+    if not isinstance(id, str):
+        raise ValueError("Expected string type")
+    if len(id) == 0:
+        raise ValueError("Empty string")
+    if id[0] == '/':
+        return "domains"
+    if isValidChunkId(id):
+        return "chunks"
+    else:
+        return getCollectionForId(id) 
+
+def isObjId(id):
+    """ return true if uuid or domain """
+    if not isinstance(id, str) or len(id) == 0:
+        return False
+    if id[0] == '/':
+        return True  # domain id is any string that starts with '/'
+    return isValidUuid(id)
 
 
 def getUuidFromId(id):

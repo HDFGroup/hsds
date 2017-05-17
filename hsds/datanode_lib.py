@@ -145,6 +145,7 @@ async def get_metadata_obj(app, obj_id):
 
 def save_metadata_obj(app, obj_id, obj_json, notify=True):
     """ Persist the given object """
+    log.info("save_metadata_obj {} notify={}".format(obj_id, notify))
     if not isValidDomain(obj_id) and not isValidUuid(obj_id):
         msg = "Invalid obj id: {}".format(obj_id)
         log.error(msg)
@@ -218,23 +219,6 @@ async def delete_metadata_obj(app, obj_id, notify=True):
         notify_ids = app['notify_ids']
         notify_ids.add(obj_id)
 
-    """     
-    # remove from meta cache  
-    await deleteS3Obj(app, s3_key)
-    # TBD - anything special to do if this fails? 
-
-    # notify AN of metadata deletion
-    an_url = getAsyncNodeUrl(app)
-    log.info("got asyncnodeurl: {}".format(an_url))
-    body = { "objids": [obj_id,] }
-    req = an_url + "/objects"
-    try:
-        await http_delete(app, req, data=body)
-    except HttpProcessingError as hpe:
-        msg = "got error notifying async node: {}".format(hpe.code)
-        log.error(msg)
-    """
-    
     
 
 async def s3sync(app):

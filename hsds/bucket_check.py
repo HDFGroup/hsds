@@ -16,11 +16,13 @@ import asyncio
 import time
 
 from aiobotocore import get_session
+from aiohttp.errors import HttpProcessingError
 
 import config
 from util.timeUtil import unixTimeToUTC
 from util.s3Util import releaseClient
-from asyncnode_lib import listKeys, markObj
+from util.idUtil import isValidUuid, isValidChunkId
+from asyncnode_lib import listKeys, getS3Obj, clearUsedFlags, markObjs
 import hsds_logger as log
  
 
@@ -32,28 +34,38 @@ async def bucketCheck(app):
     log.info("bucket check {}".format(unixTimeToUTC(now)))
     # do initial listKeys
     await listKeys(app)
+
+    # clear used flags
+    clearUsedFlags(app)
+
+    # mark objs
+    await markObjs(app)
      
+    unlinked_count = 0
+    s3objs = app["s3objs"]
+    for objid in s3objs:
+        if isValidUuid(objid) and not isValidChunkId(objid):
+            try:
+                s3obj = await getS3Obj(app, objid)
+                if s3obj.used is False:
+                    unlinked_count += 1
+            except HttpProcessingError as hpe:
+                log.warn("got error retreiving {}: {}".format(objid, hpe.code))
+                
     domains = app["domains"]
-    # check each domain
     for domain in domains:
-        await markObj(app, domain)
-
-    s3keys = app["s3keys"]
-    unlink_count = 0
-    for s3key in s3keys:
-        obj = s3keys[s3key]
-        if not obj["used"]:
-            print("Key: {} not linked".format(s3key))
-            unlink_count += 1
-
+        print("domain:", domain)
+    roots = app["roots"]
+    for root in roots:
+        print("root:", root)    
+ 
     print("total storage: {}".format(app["bytes_in_bucket"]))
+    print("Num objects: {}".format(len(app["s3objs"])))
     print("Num domains: {}".format(len(app["domains"])))
     print("Num root groups: {}".format(len(app["roots"])))
-    print("Num groups: {}".format(len(app["groups"])))
-    print("Num datatypes: {}".format(len(app["datatypes"])))
-    print("Num datasets: {}".format(len(app["datasets"])))
-    print("Num chunks: {}".format(len(app["chunks"])))
-    print("Unlinked objects: {}".format(unlink_count))
+    print("Unlinked objects: {}".format(unlinked_count))
+
+
  
 
 #
@@ -65,6 +77,12 @@ if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     app = {}
     app["bucket_name"] = config.get("bucket_name")
+    app["anonymous_ttl"] = config.get("anonymous_ttl")
+    app["s3objs"] = {}
+    app["domains"] = set()
+    app["roots"] = set()
+    app["deleted_ids"] = set()
+    app["bytes_in_bucket"] = 0
     app["loop"] = loop
     session = get_session(loop=loop)
     app["session"] = session

@@ -113,7 +113,7 @@ def getDNSDomain(domain):
 """
 Helper - Create domain (and parent domin if needed)
 """
-def setupDomain(domain):
+def setupDomain(domain, folder=False):
     endpoint = config.get("hsds_endpoint")
     headers = getRequestHeaders(domain=domain)
     req = endpoint + "/"
@@ -130,7 +130,12 @@ def setupDomain(domain):
     setupDomain(parent_domain)  
      
     headers = getRequestHeaders(domain=domain)
-    rsp = requests.put(req, headers=headers)
+    body=None
+    if folder:
+        body = {"folder": True}
+        rsp = requests.put(req, data=json.dumps(body), headers=headers)
+    else:
+        rsp = requests.put(req, headers=headers)
     if rsp.status_code != 201:
         raise ValueError("Unexpected put domain error: {}".format(rsp.status_code))
 
