@@ -21,7 +21,7 @@ from aiohttp.errors import HttpProcessingError, HttpBadRequest
 import config
 from basenode import baseInit, healthCheck
 from util.timeUtil import unixTimeToUTC
-from util.s3Util import putS3Bytes, isS3Obj
+from util.s3Util import putS3Bytes, isS3Obj, deleteS3Obj
 from util.idUtil import getCollectionForId, isValidChunkId, isValidUuid, getClassForObjId
 from util.domainUtil import isValidDomain
 from util.httpUtil import jsonResponse, StreamResponse
@@ -126,10 +126,14 @@ async def updateDomainContent(app, domain, objs_updated=None):
         log.info("domain_{} items: {}".format(collection, domain_col))
         col_s3key = domain[1:] + "/." + collection + ".txt"  
         if await isS3Obj(app, col_s3key):
-            # Domain collection already exist
-            # TBD: add option to force re-creation?
-            if not FORCE_CONTENT_LIST_CREATION:
-                continue
+            if len(domain_col) == 0:
+                # no ids - delete the contents file
+                await deleteS3Obj(app, col_s3key)
+            else:
+                # Domain collection already exist
+                # TBD: add option to force re-creation?
+                if not FORCE_CONTENT_LIST_CREATION:
+                    continue
         if len(domain_col) > 0:
             log.info("updating domain collection: {} for domain: {}".format(domain_col, domain))
             col_ids = list(domain_col)
@@ -142,6 +146,7 @@ async def updateDomainContent(app, domain, objs_updated=None):
                 col_obj = s3objs[obj_id]
                 if col_obj.etag is None or col_obj.lastModified is None or col_obj.size is None:
                     log.warn("updateDomainContent - s3 properties not set for {}".format(obj_id))
+                    log.info("id: {} etag: {}, lastModified: {} size: {}".format(col_obj.id, col_obj.etag, col_obj.lastModified, col_obj.size))
                     continue
 
                 line = "{} {} {} {}\n".format(obj_id, col_obj.etag, col_obj.lastModified, col_obj.size)
@@ -489,11 +494,12 @@ async def bucketCheck(app):
             except Exception as e:
                 log.warn("bucketCheck - got exception from gcsweep: {}".format(e))
         
-       
-        try:
-            await processPendingQueue(app)
-        except Exception as e:
-            log.warn("bucketCheck - got exception from processPendingQueue: {}".format(e))
+        pending_queue = app["pending_queue"]
+        if len(pending_queue) > 0:
+            try:
+                await processPendingQueue(app)
+            except Exception as e:
+                log.warn("bucketCheck - got exception from processPendingQueue: {}".format(e))
 
         # set of domains that will need the contents files updated
         updated_domains = app["updated_domains"]
@@ -567,9 +573,6 @@ async def PUT_Objects(request):
 
     pending_queue = app["pending_queue"]
     for objid in objids:
-        if isValidDomain(objid):
-            # ignore domain events
-            continue
         item = {"objid": objid, "action": "PUT"}
         log.info("adding item: {} to pending queue".format(item))
         pending_queue.append(item)

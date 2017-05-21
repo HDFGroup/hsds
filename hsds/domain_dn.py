@@ -105,7 +105,7 @@ async def PUT_Domain(request):
     if domain_json != None:
         # domain already exists
         msg = "Conflict: resource exists: " + domain
-        log.error(msg)
+        log.info(msg)
         raise HttpProcessingError(code=409, message=msg)
 
           

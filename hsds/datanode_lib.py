@@ -100,7 +100,7 @@ async def check_metadata_obj(app, obj_id):
         # does key exist?
         found = await isS3Obj(app, s3_key)
         if not found:
-            raise HttpProcessingError(code=404, message="Object not foun")
+            raise HttpProcessingError(code=404, message="Object not found")
  
     return obj_json
 
@@ -302,6 +302,7 @@ async def s3sync(app):
                     log.info("writing s3_key: {}".format(s3_key))
                     try:
                         await putS3JSONObj(app, s3_key, obj_json) 
+                        log.info("adding {} to success_keys".format(obj_id))
                         success_keys.append(obj_id)
                     except HttpProcessingError as hpe:
                         log.error("got S3 error writing obj_id: {} to S3: {}".format(obj_id, str(hpe)))
@@ -321,6 +322,7 @@ async def s3sync(app):
 
             # notify AN of key updates 
             an_url = getAsyncNodeUrl(app)
+            log.info("processing success_keys: {}".format(success_keys))
             while len(success_keys) > 0:
                 # package multiple updates or multiple deletes together as much
                 # as possible
@@ -328,6 +330,7 @@ async def s3sync(app):
                 keys = []
                 while len(success_keys) > 0:
                     key = success_keys.pop(0)
+                    log.info("pop success_key: {}".format(key))
                     if key in notify_ids:
                         notify_ids.remove(key)
                     else:
@@ -336,14 +339,19 @@ async def s3sync(app):
                     if key in deleted_ids:
                         if action is None:
                             action = "DELETE"
+                        elif action == "DELETE":
+                            pass # keep going
                         else:
                             break
                     else:
                         if action is None:
                             action = "PUT"
+                        elif action == "PUT":
+                            pass # keep going
                         else:
                             break
                     keys.append(key)
+                    log.info("appended_keys: {}".format(keys))
 
                 if len(keys) > 0:
                     body = { "objids": keys }

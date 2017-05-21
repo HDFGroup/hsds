@@ -304,21 +304,25 @@ async def getS3Obj(app, id, *args, **kwds):
         s3obj = S3Obj(id, **kwds)
 
     if eTag is not None:
+        log.info("s3obj {} set etag: {}".format(id, eTag))
         s3obj.setETag(eTag)
 
     if lastModified is not None:
-        s3obj.setLastModified = lastModified
+        log.info("s3obj {} set lastModified: {}".format(id, lastModified))
+        s3obj.setLastModified(lastModified)
 
     if s3size != 0:
+        log.info("s3obj {} set size: {}".format(id, s3size))
         s3obj.setSize(s3size)
         app["bytes_in_bucket"] += (s3size - old_size)
 
     if "root" in kwds:
         s3obj.setRoot(kwds["root"])
 
-    if id not in s3objs:         
+    if id not in s3objs: 
+        log.info("adding {} to s3objs - size: {}".format(id, s3obj.size))        
         s3objs[id] = s3obj
-        
+
     if isValidDomain(id):
         if id in deleted_ids:
             # domain objects can be re-created

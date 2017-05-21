@@ -100,8 +100,7 @@ async def getS3JSONObj(app, key):
     except ClientError as ce:
         # key does not exist?
         # check for not found status
-        s3_stats_increment(app, "error_count")
-        log.warn("clientError exception: {}".format(str(ce)))
+        # Note: Error.Code should always exist - cf https://github.com/boto/botocore/issues/885
         is_404 = False
         if "ResponseMetadata" in ce.response:
             metadata = ce.response["ResponseMetadata"]
@@ -110,7 +109,7 @@ async def getS3JSONObj(app, key):
                     is_404 = True
         if is_404:
             msg = "s3_key: {} not found ".format(key,)
-            log.warn(msg)
+            log.info(msg)
             raise HttpProcessingError(code=404, message=msg)
         else:
             s3_stats_increment(app, "error_count")
@@ -158,7 +157,8 @@ async def getS3Bytes(app, key):
             log.error(msg)
             raise HttpProcessingError(code=500, message=msg)
 
-    s3_stats_increment(app, "bytes_in", inc=len(data))
+    if data and len(data) > 0:
+        s3_stats_increment(app, "bytes_in", inc=len(data))
     return data
 
 async def putS3JSONObj(app, key, json_obj):
@@ -180,7 +180,8 @@ async def putS3JSONObj(app, key, json_obj):
         msg = "Error putting s3 obj: " + str(ce)
         log.error(msg)
         raise HttpProcessingError(code=500, message=msg)
-    s3_stats_increment(app, "bytes_out", inc=len(data))
+    if data and len(data) > 0:
+        s3_stats_increment(app, "bytes_out", inc=len(data))
     log.info("putS3JSONObj complete")
 
 async def putS3Bytes(app, key, data):
@@ -200,7 +201,8 @@ async def putS3Bytes(app, key, data):
         msg = "Error putting s3 obj: " + str(ce)
         log.error(msg)
         raise HttpProcessingError(code=500, message=msg)
-    s3_stats_increment(app, "bytes_in", inc=len(data))
+    if data and len(data) > 0:
+        s3_stats_increment(app, "bytes_in", inc=len(data))
     log.info("putS3Bytes complete")
 
 async def deleteS3Obj(app, key):
@@ -284,16 +286,32 @@ async def isS3Obj(app, key):
     """ Test if the given key maps to S3 object
     """
     found = False
+    client = getS3Client(app)
+    bucket = app['bucket_name']
+    log.info("isS3Obj {}".format(key))
+    s3_stats_increment(app, "list_count")
     try:
-        stats = await getS3ObjStats(app, key)
-        if stats:
+        resp = await client.list_objects(Bucket=bucket, MaxKeys=1, Prefix=key)
+    except ClientError as ce:
+        # key does not exist? 
+        # TBD - does this ever get triggered when the key is present?
+        log.warn("isS3Obj {} client error: {}".format(key, str(ce)))
+        s3_stats_increment(app, "error_count")
+        return False
+    if 'Contents' not in resp:
+        log.info("isS3Obj {} not found (no Contents)".format(key))
+        return False
+    contents = resp['Contents']
+    if len(contents) > 0:
+        item = contents[0]
+        if item["Key"] == key:
+            # if the key is a S3 folder, the key will be the first object in the folder,
+            # not the requested object
             found = True
-    except HttpProcessingError as hpe:
-        if hpe.code != 404:
-            # something other than not found, surface exception
-            raise hpe
+    log.info("isS3Obj {} returning {}".format(key, found))
     return found
 
+        
      
 """
 Helper function for getKeys
