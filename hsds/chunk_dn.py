@@ -162,6 +162,10 @@ async def PUT_Chunk(request):
     dirty_ids = app["dirty_ids"]
     now = int(time.time())
     dirty_ids[chunk_id] = now
+
+    # set notify flag for AN
+    notify_ids = app['notify_ids']
+    notify_ids.add(chunk_id)
     
     # chunk update successful     
     resp = await jsonResponse(request, {}, status=201)

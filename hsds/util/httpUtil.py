@@ -117,7 +117,7 @@ async def http_post(app, url, data=None, params=None):
         async with client.post(url, data=json.dumps(data), params=params, timeout=timeout ) as rsp:
             log.info("http_post status: {}".format(rsp.status))
             if rsp.status not in (200, 201):
-                msg = "request error - status: ".format(rsp.status)  # tbd - pull error from rsp
+                msg = "POST request error for url: {} - status: {}".format(url, rsp.status)   
                 log.warn(msg)
                 raise HttpProcessingError(message=msg, code=rsp.status)
             rsp_json = await rsp.json()
@@ -143,7 +143,7 @@ async def http_put(app, url, data=None, params=None):
         async with client.put(url, data=json.dumps(data), params=params, timeout=timeout) as rsp:
             log.info("http_put status: {}".format(rsp.status))
             if rsp.status != 201:
-                msg = "request error"  # tbd - pull error from rsp
+                msg = "PUT request error for url: {} - status: {}".format(url, rsp.status)
                 log.warn(msg)
                 raise HttpProcessingError(message=msg, code=rsp.status)
 
@@ -171,7 +171,7 @@ async def http_put_binary(app, url, data=None, params=None):
         async with client.put(url, data=data, params=params, timeout=timeout) as rsp:
             log.info("http_put_binary status: {}".format(rsp.status))
             if rsp.status != 201:
-                msg = "request error for {}: {}".format(url, str(rsp))
+                msg = "PUT (binary) request error for {}: status {}".format(url, rsp.status)
                 log.error(msg)
                 raise HttpProcessingError(message=msg, code=rsp.status)
 
@@ -198,7 +198,7 @@ async def http_delete(app, url, data=None, params=None):
         async with client.delete(url, data=json.dumps(data), params=params, timeout=timeout) as rsp:
             log.info("http_delete status: {}".format(rsp.status))
             if rsp.status != 200:
-                msg = "request error"  # tbd - pull error from rsp
+                msg = "DELETE request error for url: {} - status: {}".format(url, rsp.status)
                 log.warn(msg)
                 raise HttpProcessingError(message=msg, code=rsp.status)
 

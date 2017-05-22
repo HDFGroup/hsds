@@ -162,57 +162,6 @@ class S3Obj():
             chunks = self._chunks
         return chunks
 
-    @property
-    def datasets(self):
-        if not self.isRoot:
-            raise KeyError("not a root object")
-
-        datasets = None
-        try:
-            datasets = self._datasets
-        except AttributeError:
-            # datasets hasn't been initialized
-            self._datasets = set()
-            datasets = self._datasets
-        return datasets
-    
-    @property
-    def datatypes(self):
-        if not self.isRoot:
-            raise KeyError("not a root object")
-
-        datatypes = None
-        try:
-            datatypes = self._datatypes
-        except AttributeError:
-            # datasets hasn't been initialized
-            self._datatypes = set()
-            datatypes = self._datatypes
-        return datatypes
-
-    @property
-    def groups(self):
-        if not self.isRoot:
-            raise KeyError("not a root object")
-
-        groups = None
-        try:
-            groups = self._groups
-        except AttributeError:
-            # datasets hasn't been initialized
-            self._groups = set()
-            groups = self._groups
-        return groups
-
-    def get_collection(self, collection):
-        if collection not in ("groups", "datatypes", "datasets"):
-            raise KeyError("unexpected argument")
-        if collection == "groups":
-            return self.groups
-        elif collection == "datatypes":
-            return self.datatypes
-        return self.datasets
-
 # End S3Obj class
     
 
@@ -245,19 +194,63 @@ async def getRootProperty(app, s3obj):
     s3key = getS3Key(s3obj.id)
     obj_json = await getS3JSONObj(app, s3key)
     rootid = None
+    domain = None
+    roots = app["roots"]
+    domains = app["domains"]
     if "root" not in obj_json:
         if isValidDomain(s3obj.id):
             log.info("No root for folder domain: {}".format(s3obj.id))
+            # add a null domain to the global domains dict
+            domains[s3obj.id] = None
         else:
             log.warn("no root for {}".format(s3obj.id))
     else:
         rootid = obj_json["root"]
         log.info("got rootid {} for obj: {}".format(rootid, s3obj.id))
         s3obj.setRoot(obj_json["root"])
-        if s3obj.root is None:
-            log.error("unable to set root property")
-    return rootid
+        if isValidDomain(s3obj.id):
+            domain = s3obj.id
+        elif "domain" not in obj_json:
+            log.error("expected to find domain property in object: {}".format(s3obj.id))
+        else:
+            domain = obj_json["domain"]
 
+    if rootid and domain:
+        # update the root and domain global dictionaries if needed
+        
+        if rootid not in roots:
+            rootObj = {"domain": domain}
+            rootObj["groups"] = set()
+            rootObj["datasets"] = set()
+            rootObj["datatypes"] = set()
+            roots[rootid] = rootObj
+        else:
+            rootObj = roots[rootid]
+            if rootObj["domain"] != domain:
+                log.error("Expected roots[{}] to be {} but was {}".format(rootid, domain, rootObj["domain"]))
+                return
+        if domain not in domains:
+            domains[domain] = rootid
+        elif domains[domain] != rootid:
+            if isValidDomain(s3obj.id):
+                # update the domain to point to new rootid
+                log.warn("replacing root obj of domain: to be: {}".format(s3obj.id, rootid))
+                domains[domain] = rootid
+            else:
+                # this can happen when the AN gets an objectUpdate before the domain create event comes in
+                log.warn("object {} has domain property of {} but that domain is using different root".format(s3obj.id, domain))
+
+        # add non-root objects to the root collection
+        if not isValidDomain(s3obj.id) and not s3obj.isRoot:
+            obj_collection = getCollectionForId(s3obj.id)
+            if obj_collection not in rootObj:
+                log.error("expected collection: {} in rootObj: {}".format(obj_collection, rootid))
+            else:
+                root_collection = rootObj[obj_collection]
+                if s3obj.id not in root_collection:
+                    log.info("adding {} to collection {} of root {}".format(s3obj.id, obj_collection, rootid))
+                    root_collection.add(s3obj.id)  
+ 
      
 
 async def getS3Obj(app, id, *args, **kwds):
@@ -323,17 +316,6 @@ async def getS3Obj(app, id, *args, **kwds):
         log.info("adding {} to s3objs - size: {}".format(id, s3obj.size))        
         s3objs[id] = s3obj
 
-    if isValidDomain(id):
-        if id in deleted_ids:
-            # domain objects can be re-created
-            deleted_ids.remove(id)
-        # add to domain set
-        domains = app["domains"]
-        domains.add(id)
-    elif s3obj.isRoot:
-        roots = app["roots"]
-        roots.add(id)
-    
      
     return s3obj
 
@@ -361,21 +343,15 @@ def getDomainForObjId(app, objid):
     if rootid is None:
         return None
 
-    s3objs = app["s3objs"]
-    
-    domains = app["domains"]
-    # Do a linear search for the given root 
-    # TBD: create a reverse lookup of root -> domain
-    for domain in domains:
-        if domain not in s3objs:
-            log.warn("domain in domains set not found in s3objs: {}".format(domain))
-            continue
-        domainS3Obj = s3objs[domain]
-        if domainS3Obj.root == rootid:
-            # found it
-            return domain  
-    log.info("getDomainForObjId - domain not found objid: {}".format(objid))
-    return None
+    roots = app["roots"]
+    if rootid not in roots:
+        return None
+    rootObj = roots[rootid]
+    if "domain" not in rootObj:
+        log.warn("expected to find domain key in rootObj {}".format(rootid))
+        return None
+    return rootObj["domain"]
+ 
 
 async def deleteObj(app, objid, notify=True):
     """ delete the object from S3 
@@ -391,6 +367,7 @@ async def deleteObj(app, objid, notify=True):
 
     deleted_ids = app["deleted_ids"]
     roots = app["roots"]
+    domains = app["domains"]
 
     if objid not in s3objs:
         log.error("deleteObj - {} not found in s3objs".format(objid))
@@ -402,17 +379,20 @@ async def deleteObj(app, objid, notify=True):
     if notify:
         req = getDataNodeUrl(app, objid)
         collection = getClassForObjId(objid)
-
-        req += '/' + collection + '/' + objid
-        log.info("Delete object {}, [{} bytes]".format(objid, num_bytes))
-     
         params = {"Notify": 0}  # Let the DN not to notify the AN node about this action
+        if isValidDomain(objid):
+            req += '/' + collection
+            params["domain"] = objid 
+        else:
+            req += '/' + collection + '/' + objid
+        log.info("Delete object {}, [{} bytes]".format(objid, num_bytes))
+        
         try:
             await http_delete(app, req, params=params)
             success = True
         except HttpProcessingError as hpe:
         
-            if hpe.code == 410:
+            if hpe.code in (404, 410):
                 log.info("http_delete {} - object is already GONE".format(objid))
                 success = True
             else:
@@ -426,17 +406,27 @@ async def deleteObj(app, objid, notify=True):
         del s3objs[objid]
         deleted_ids.add(objid)
         if objid in roots:
-            roots.remove(objid)
+            del roots[objid]
         elif isValidChunkId(objid):
             log.info("delete for chunk: {}".format(objid))
-        elif isValidUuid(objid) and s3obj.root is not None and s3obj.root in s3objs:
+        elif isValidUuid(objid) and s3obj.root is not None and s3obj.root in roots:
             # remove groups/datasets/datatypes from their domain collection
-            s3root = s3objs[s3obj.root]
+            rootObj = roots[objid]
             obj_collection = getCollectionForId(objid)
-            root_collection = s3root.get_collection(obj_collection)
-            if objid in root_collection:
-                log.info("removing {} from collection {} of root {}".format(objid, obj_collection, s3obj.root))
-                root_collection.remove(objid)  
+            if obj_collection not in rootObj:
+                log.error("expected collection: {} in rootObj: {}".format(obj_collection, s3obj.root))
+            else:
+                root_collection = rootObj[obj_collection]
+                if objid in root_collection:
+                    log.info("removing {} from collection {} of root {}".format(objid, obj_collection, s3obj.root))
+                    root_collection.remove(objid)  
+        elif isValidDomain(objid):
+            if objid in domains:
+                log.info("removing {} from domains global".format(objid))
+                del domains[objid]
+            else:
+                log.warn("expected to find domain {} in domains global".format(objid))
+
 
         app["bytes_in_bucket"] -= num_bytes
 
@@ -490,46 +480,19 @@ async def listKeys(app):
     # get root properties
     log.info("listKeys: get root properties")
     for objid in s3objs:
-        log.info("listKeys getRootProperty: {}".format(objid))
+        
         if isValidChunkId(objid):
             continue  # no root for chunks
-        if isValidDomain(objid):
-            if objid not in domains:
-                log.error("Expected to find domain: {} in the domains set".format(objid))
         s3obj = s3objs[objid]
         if s3obj.root is None:
+            log.info("listKeys getRootProperty: {}".format(objid))
             try:
                 log.info("listKeys: getRootProperty for {}".format(objid))
                 await getRootProperty(app, s3obj)
-                
-                s3obj_check = s3objs[objid]
-                log.info("root property for {} set to {}".format(objid, s3obj_check.root))
+                log.info("listKeys: gotRootProperty {} for {}".format(s3obj.root, objid))
             except HttpProcessingError as hpe:
                 log.warn("Got error getting root property of {}: {}".format(objid, hpe.code))
                 continue
-            
-        if s3obj.isRoot:
-            # add to roots set
-            roots.add(objid)
-
-    # iterate again and add non-root objects the root collection
-    log.info("listKeys: add objects to root collections")
-    for objid in s3objs:
-        if isValidDomain(objid) or isValidChunkId(objid):
-            continue
-        # group/dataset or chunk
-        s3obj = s3objs[objid]
-        if s3obj.root is None:
-            log.info("no rootid for id: {}".objid)
-            continue
-        if s3obj.isRoot:
-            continue  # a root group doesn't belong to its own collection
-        if s3obj.root not in s3objs:
-            log.info("root obj {} for id: {} not found".format(objid, s3obj.root))
-            continue
-        s3root = s3objs[s3obj.root]
-        root_collection = s3root.get_collection(getCollectionForId(objid))
-        root_collection.add(objid)
         
         
     log.info("list keys done")
@@ -652,7 +615,7 @@ async def markObj(app, objid, updateLinks=False):
                 log.info("markObj: recursive call from group: {} to link id: {}".format(objid, linkid))
                 await markObj(app, linkid, updateLinks=updateLinks)
 
-async def markObjs(app):
+async def markObjs(app, removeInvalidDomains=False):
     """ Set Used flag for all objects that are linked from a domain """
     log.info("Mark objects")
     domains = app["domains"]
@@ -661,18 +624,18 @@ async def markObjs(app):
     for domain in domains:
         log.info("domain: {}".format(domain))
     s3objs = app["s3objs"]
+    invalid_domains = set()
     for domain in domains:
-        if domain not in s3objs:
-            log.warn("markObjs: expected to find domain {} in s3objs".format(domain))
+        rootid = domains[domain]
+        if rootid is None:
+            log.info("markObj: skipping folder domain {}".format(domain))
             continue
-        s3obj = s3objs[domain]
-        if s3obj.root is None:
-            log.info("markObjs: skipping folder domain: {}".format(domain))
+         
+        if rootid not in s3objs:
+            log.warn("markObjs: root {} for domain {} not found in s3objs".format(rootid, domain))
+            invalid_domains.add(domain)
             continue
-        if s3obj.root not in s3objs:
-            log.warn("markObjs: root {} for domain not found in s3objs".format(s3obj.root, s3obj.id))
-            continue
-        s3root = s3objs[s3obj.root]
+        s3root = s3objs[rootid]
         if not s3root.isRoot:
             log.warn("markObjs: Expected to find {} to be root for domain: {}".format(s3root.id, domain))
             continue
@@ -680,8 +643,14 @@ async def markObjs(app):
             log.warn("markObjs: Expected to find {} in roots set for domain: {}".format())
             continue
         # this will recurse into each linked object
-        log.info("markObjs domain: {} root: {}".format(domain, s3obj.root))
-        await markObj(app, s3obj.root)
+        log.info("markObjs domain: {} root: {}".format(domain, rootid))
+        await markObj(app, rootid)
+    if len(invalid_domains) > 0 and removeInvalidDomains:
+        log.info("removing {} invalid domains".format(len(invalid_domains)))
+        for domain in invalid_domains:
+            log.info("remove: {}".format(domain))
+            await deleteObj(app, domain)
+
        
 
  

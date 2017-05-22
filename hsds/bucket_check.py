@@ -66,8 +66,6 @@ async def bucketCheck(app):
     print("Unlinked objects: {}".format(unlinked_count))
 
 
- 
-
 #
 # Main
 #
@@ -79,8 +77,8 @@ if __name__ == '__main__':
     app["bucket_name"] = config.get("bucket_name")
     app["anonymous_ttl"] = config.get("anonymous_ttl")
     app["s3objs"] = {}
-    app["domains"] = set()
-    app["roots"] = set()
+    app["domains"] = {}  # domain to root map
+    app["roots"] = {}    # root obj to domain map
     app["deleted_ids"] = set()
     app["bytes_in_bucket"] = 0
     app["loop"] = loop

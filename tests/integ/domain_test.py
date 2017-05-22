@@ -402,7 +402,7 @@ class DomainTest(unittest.TestCase):
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("groups in rspJson")
         groups = rspJson["groups"]
-        self.assertEqual(len(groups), 6)
+        self.assertEqual(len(groups), 5)
         # get the first 2 groups
         params = {"Limit": 2}
         rsp = requests.get(req, params=params, headers=headers)
@@ -425,8 +425,8 @@ class DomainTest(unittest.TestCase):
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("groups in rspJson")
         batch = rspJson["groups"]
-        self.assertEqual(len(batch), 4)
-        for i in range(4):
+        self.assertEqual(len(batch), 3)
+        for i in range(3):
             helper.validateId(batch[i])
             self.assertEqual(batch[i], groups[2+i])
          

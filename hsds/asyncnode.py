@@ -104,7 +104,7 @@ async def updateDomainContent(app, domain, objs_updated=None):
     if rootid not in s3objs:
         log.warn("expected to find root: {} in s3objs collection".format(rootid))
         return
-    rootS3Obj = s3objs[rootid]
+    rootObj = roots[rootid]
     for collection in ("groups", "datatypes", "datasets"):
         # if objs_updated is passed in, check that at least one of the relevant object types
         # is included, otherwise skip
@@ -121,7 +121,7 @@ async def updateDomainContent(app, domain, objs_updated=None):
             if not collection_included:
                 log.info("no updated for collection: {}".format(collection))
                 continue  # go on to next collection
-        domain_col = rootS3Obj.get_collection(collection)
+        domain_col = rootObj[collection]
         log.info("domain_{} count: {}".format(collection, len(domain_col)))
         log.info("domain_{} items: {}".format(collection, domain_col))
         col_s3key = domain[1:] + "/." + collection + ".txt"  
@@ -246,26 +246,26 @@ async def sweepObjs(app):
 
 async def rootDelete(app, rootid):
     """ get root obj for rootid """
-    log.info("rootDelte {}".format(rootid))
+    log.info("rootDelete {}".format(rootid))
     s3objs = app["s3objs"]
     roots = app["roots"]
     if rootid not in roots:
-        log.warn("expected to find: {} in roots set".format(rootid))
+        log.warn("expected to find: {} in roots".format(rootid))
         return
     if rootid not in s3objs:
         log.warn("expected to find: {} in s3objs".format(rootid))
         return
-    rootS3Obj = s3objs[rootid]
+    rootObj = roots[rootid]
 
-    root_groups = rootS3Obj["groups"]
+    root_groups = rootObj["groups"]
     for grpid in root_groups:
         await deleteObj(app, grpid, notify=False)
     # delete all types of domain
-    root_datatypes = rootS3Obj["datatypes"]
+    root_datatypes = rootObj["datatypes"]
     for datatypeid in root_datatypes:
         await deleteObj(app, datatypeid, notify=False)
     # delete all datasets of domain
-    root_datasets = rootS3Obj["datasets"]
+    root_datasets = rootObj["datasets"]
     for dsetid in root_datasets:
         if dsetid not in s3objs:
             log.warn("Expected to find {} in s3objs".format(dsetid))
@@ -276,9 +276,9 @@ async def rootDelete(app, rootid):
         for chunkid in dataset_chunks:
             await deleteObj(app, chunkid, notify=False)
         await deleteObj(app, dsetid, notify=False)
-    # finally didn't the root group
+    # finally delete the root group
     await deleteObj(app, rootid, notify=False)
-
+     
 async def domainDelete(app, domain):
     """ Process domain deletion event """
     log.info("domainDelete: {}".format(domain))
@@ -291,10 +291,12 @@ async def domainDelete(app, domain):
     if domain not in s3objs:
         log.warn("Expected to find domain {} in s3objs".format(domain))
         return
+    
     domainS3Obj = s3objs[domain]
     if domainS3Obj.root:
         await rootDelete(app, domainS3Obj.root)
     await deleteObj(app, domain, notify=False)
+    del domains[domain]
     
 
 async def domainCreate(app, domain):
@@ -317,11 +319,17 @@ async def domainCreate(app, domain):
         log.info("domainCreate for {}, root found: {}".format(domain, s3obj.root))
         updated_domains = app["updated_domains"]
         updated_domains.add(domain)  # flag to update domain contents
+         
     else:
         log.info("domainCreate for {}, no root (folder)".format(domain)) 
+         
 
     domains = app["domains"]
-    domains.add(domain)
+    domains[domain] = s3obj.root  # will be None for folder domains
+
+    # fill in the domain collection sets with any objects that have previously
+    # shown up
+
     log.info("domainCreate - added domain s3obj: {}".format(domain))
 
 
@@ -356,29 +364,22 @@ async def objUpdate(app, objid):
 
     elif s3obj.root is None:
         # fetch the root property
+        # will also add to roots dictionary if a root group
         try:
             await getRootProperty(app, s3obj)  # will set root prop
         except HttpProcessingError as hpe:
             log.warn("domainCreate - getRootProperty({}) error: {}".format(objid, hpe.code))
-
-        if s3obj.isRoot:
-            roots = app["roots"]
-            roots.add(objid)
-        elif s3obj.root and s3obj.root in s3objs:
-            # add to the appropriate root collection
-            s3root = s3objs[s3obj.root]
-            collection = getCollectionForId(objid)
-            s3root_col = s3root.get_collection(collection)
-            log.info("adding {} to root collection: {}".format(objid, s3obj.root))
-            s3root_col.add(objid)
+ 
 
 
     domain = getDomainForObjId(app, objid)
     if domain:
         # Flag that the content files should be updated
-        log.info("adding {} to updated_domains".format(domain))
+        log.info("objUpdate: adding {} to updated_domains".format(domain))
         updated_domains = app["updated_domains"]
         updated_domains.add(domain)  
+    else:
+        log.info("objUpdate: domain {} not found for {}".format(domain, objid))
      
    
 
@@ -409,7 +410,7 @@ async def gcsweep(app):
     """
 
     now = int(time.time())
-    log.info("gcweep {}".format(unixTimeToUTC(now)))
+    log.info("gcsweep {}".format(unixTimeToUTC(now)))
     # list all keys from bucket, save stats to s3objs
     await listKeys(app)
 
@@ -417,7 +418,7 @@ async def gcsweep(app):
     clearUsedFlags(app)
 
     # mark used objects
-    await markObjs(app)
+    await markObjs(app, removeInvalidDomains=True)
 
     # clear out any unused objects
     await sweepObjs(app)
@@ -475,6 +476,7 @@ async def bucketCheck(app):
     gc_freq = config.get("gc_freq")
     log.info("gc_freq: {}".format(gc_freq))
     first_run = True
+     
 
     # update/initialize root object before starting node updates
  
@@ -631,8 +633,8 @@ async def init(loop):
     # object and domain updates will be posted here to be worked on offline
     app["pending_queue"] = [] 
     app["s3objs"] = {}
-    app["domains"] = set()
-    app["roots"] = set()
+    app["domains"] = {}   # domain to root map
+    app["roots"] = {}  # root to domain map
     app["deleted_ids"] = set()
     app["bytes_in_bucket"] = 0
     app["anonymous_ttl"] = config.get("anonymous_ttl")
