@@ -32,6 +32,7 @@ async def bucketCheck(app):
  
     now = int(time.time())
     log.info("bucket check {}".format(unixTimeToUTC(now)))
+     
     # do initial listKeys
     await listKeys(app)
 
@@ -64,7 +65,7 @@ async def bucketCheck(app):
     print("Num domains: {}".format(len(app["domains"])))
     print("Num root groups: {}".format(len(app["roots"])))
     print("Unlinked objects: {}".format(unlinked_count))
-
+     
 
 #
 # Main

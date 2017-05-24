@@ -370,6 +370,7 @@ async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=Fal
                 
                 if prefix:
                     key_name = key_name[len(prefix):]  # just include after prefix
+                    print("adjusted key_name:", key_name)
                 if suffix:
                     n = len(suffix)
                     key_name = key_name[:-n]

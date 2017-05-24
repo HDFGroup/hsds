@@ -21,7 +21,7 @@ from aiohttp.errors import HttpProcessingError, HttpBadRequest
 import config
 from basenode import baseInit, healthCheck
 from util.timeUtil import unixTimeToUTC
-from util.s3Util import putS3Bytes, isS3Obj, deleteS3Obj
+from util.s3Util import putS3Bytes, isS3Obj, deleteS3Obj, getS3Keys
 from util.idUtil import getCollectionForId, isValidChunkId, isValidUuid, getClassForObjId
 from util.domainUtil import isValidDomain
 from util.httpUtil import jsonResponse, StreamResponse
@@ -89,12 +89,12 @@ async def updateDomainContent(app, domain, objs_updated=None):
     s3objs = app["s3objs"]
     roots = app["roots"]
     if domain not in s3objs:
-        log.warn("updateDomainContents - {} not found in s3objs".format(domain))
+        log.warn("updateDomainContent - {} not found in s3objs".format(domain))
         return
     domainS3Obj = s3objs[domain]
 
     if domainS3Obj.root is None:
-        log.info("updateDomainContents - folder domain: {}, skipping".format(domain))
+        log.info("updateDomainContent - folder domain: {}, skipping".format(domain))
         return
   
     rootid = domainS3Obj.root
@@ -258,25 +258,30 @@ async def rootDelete(app, rootid):
     rootObj = roots[rootid]
 
     root_groups = rootObj["groups"]
-    for grpid in root_groups:
-        await deleteObj(app, grpid, notify=False)
+    while len(root_groups) > 0:
+        grpid = root_groups.pop()
+        await deleteObj(app, grpid, notify=True)
     # delete all types of domain
     root_datatypes = rootObj["datatypes"]
-    for datatypeid in root_datatypes:
-        await deleteObj(app, datatypeid, notify=False)
+    while len(root_datatypes) > 0:
+        datatypeid = root_datatypes.pop()
+        await deleteObj(app, datatypeid, notify=True)
     # delete all datasets of domain
     root_datasets = rootObj["datasets"]
-    for dsetid in root_datasets:
+    while len(root_datasets) > 0:
+        dsetid = root_datasets.pop()
         if dsetid not in s3objs:
             log.warn("Expected to find {} in s3objs".format(dsetid))
             continue
         datasetS3Obj = s3objs[dsetid]
         # for each dataset, delete all its chunks
         dataset_chunks = datasetS3Obj["chunks"]
-        for chunkid in dataset_chunks:
-            await deleteObj(app, chunkid, notify=False)
-        await deleteObj(app, dsetid, notify=False)
+        while len(dataset_chunks) > 0:
+            chunkid = dataset_chunks.pop()
+            await deleteObj(app, chunkid, notify=True)
+        await deleteObj(app, dsetid, notify=True)
     # finally delete the root group
+    # note - this event originated from DN, so no notify for root
     await deleteObj(app, rootid, notify=False)
      
 async def domainDelete(app, domain):
@@ -296,7 +301,18 @@ async def domainDelete(app, domain):
     if domainS3Obj.root:
         await rootDelete(app, domainS3Obj.root)
     await deleteObj(app, domain, notify=False)
-    del domains[domain]
+     
+    # delete any content .txt objects assoc with this domain
+    s3_prefix = domain[1:] + "/"
+    s3_contents_keys = await getS3Keys(app, prefix=s3_prefix, suffix='.txt')
+    print("got {} keys".format(len(s3_contents_keys)))
+    log.info("s3_contents_keys:")
+    for k in s3_contents_keys:
+        log.info("{}".format(k))
+        s3_content_key = s3_prefix + k + ".txt"
+        await deleteS3Obj(app, s3_content_key)
+    log.info("s3_contents_keys done")
+     
     
 
 async def domainCreate(app, domain):
@@ -331,6 +347,9 @@ async def domainCreate(app, domain):
     # shown up
 
     log.info("domainCreate - added domain s3obj: {}".format(domain))
+    # update the domain contents 
+    # Note - objUpdate events may happen before the domainCreate
+    await updateDomainContent(app, domain)
 
 
 
@@ -498,10 +517,11 @@ async def bucketCheck(app):
         
         pending_queue = app["pending_queue"]
         if len(pending_queue) > 0:
-            try:
-                await processPendingQueue(app)
-            except Exception as e:
-                log.warn("bucketCheck - got exception from processPendingQueue: {}".format(e))
+            
+            #try:
+            await processPendingQueue(app)
+            #except Exception as e:
+            #    log.warn("bucketCheck - got exception from processPendingQueue: {}".format(e))
 
         # set of domains that will need the contents files updated
         updated_domains = app["updated_domains"]
@@ -609,9 +629,6 @@ async def DELETE_Objects(request):
 
     pending_queue = app["pending_queue"]
     for objid in objids:
-        if isValidDomain(objid):
-            # ignore domain events
-            continue
         item = {"objid": objid, "action": "DELETE"}
         log.info("adding item: {} to pending queue".format(item))
         pending_queue.append(item)

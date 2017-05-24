@@ -187,7 +187,9 @@ def isS3Obj(app, id):
     
 async def getRootProperty(app, s3obj):
     """ Get the root property if not already set """
+    log.info("getRootProperty {}".format(s3obj.id))
     if s3obj.root is not None:
+        log.info("getRootProperty - root already set")
         return s3obj.root # root already set
     if isValidChunkId(s3obj.id):
         return None  # no root for chunk objects
@@ -197,6 +199,7 @@ async def getRootProperty(app, s3obj):
     domain = None
     roots = app["roots"]
     domains = app["domains"]
+    s3objs = app["s3objs"]
     if "root" not in obj_json:
         if isValidDomain(s3obj.id):
             log.info("No root for folder domain: {}".format(s3obj.id))
@@ -212,8 +215,10 @@ async def getRootProperty(app, s3obj):
             domain = s3obj.id
         elif "domain" not in obj_json:
             log.error("expected to find domain property in object: {}".format(s3obj.id))
-        else:
+        elif obj_json["domain"] in s3objs:
             domain = obj_json["domain"]
+        else:
+            log.info("root group {} referenced non-existent domain: {}".format(s3obj.id, obj_json["domain"]))
 
     if rootid and domain:
         # update the root and domain global dictionaries if needed
@@ -370,7 +375,7 @@ async def deleteObj(app, objid, notify=True):
     domains = app["domains"]
 
     if objid not in s3objs:
-        log.error("deleteObj - {} not found in s3objs".format(objid))
+        log.warn("deleteObj - {} not found in s3objs".format(objid))
         return False
     
     s3obj = s3objs[objid]
@@ -411,7 +416,7 @@ async def deleteObj(app, objid, notify=True):
             log.info("delete for chunk: {}".format(objid))
         elif isValidUuid(objid) and s3obj.root is not None and s3obj.root in roots:
             # remove groups/datasets/datatypes from their domain collection
-            rootObj = roots[objid]
+            rootObj = roots[s3obj.root]
             obj_collection = getCollectionForId(objid)
             if obj_collection not in rootObj:
                 log.error("expected collection: {} in rootObj: {}".format(obj_collection, s3obj.root))
@@ -461,7 +466,7 @@ async def listKeys(app):
 
     log.info("listKeys: s3objs...")
     for id in s3objs:
-        log.info("{}".format(id))
+        log.info("listKey: {}".format(id))
 
     log.info("listKeys: add chunks")
     # iterate through s3keys again and add any chunks to the corresponding dataset

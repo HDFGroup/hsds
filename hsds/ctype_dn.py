@@ -147,7 +147,10 @@ async def DELETE_Datatype(request):
 
     notify=True
     if "Notify" in request.GET and not request.GET["Notify"]:
+        log.info("notify value: {}".format(request.GET["Notify"]))
         notify=False
+    log.info("notify: {}".format(notify))
+    
     await delete_metadata_obj(app, ctype_id, notify=notify)
  
     resp_json = {  } 

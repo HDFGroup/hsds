@@ -232,6 +232,17 @@ class DomainTest(unittest.TestCase):
                 self.assertTrue(k in rspJson)
             self.assertFalse("root" in rspJson)   
 
+    
+
+    def testInvalidChildDomain(self):
+        domain = self.base_domain + "/notafolder/newdomain.h5"
+        # should fail assuming "notafolder" doesn't exist
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + '/'
+
+        rsp = requests.put(req, headers=headers)
+        self.assertEqual(rsp.status_code, 404)
+         
 
     def testGetNotFound(self):
         domain =  self.base_domain + "/doesnotexist.h6" 
