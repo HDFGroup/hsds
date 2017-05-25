@@ -265,7 +265,11 @@ async def getS3ObjStats(app, key):
             # not the requested object
             found = True
             if item["ETag"]:
-                stats["ETag"] = item["ETag"]
+                etag = item["ETag"]
+                if len(etag) > 2 and etag[0] == '"' and etag[-1] == '"':
+                    # S3 returning extra quotes around etag?
+                    etag = etag[1:-1]
+                    stats["ETag"] = etag
             else:
                 if "Owner" in item and "ID" in item["Owner"] and item["Owner"]["ID"] == "minio":
                     pass # minio is not creating ETags...
