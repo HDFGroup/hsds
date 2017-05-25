@@ -29,7 +29,7 @@ if [ $s3 == "s3" ]; then
   echo "starting headnode"
   ./run.sh head $count
   echo "starting asyncnode"
-  ./run_minio.sh an
+  ./run.sh an
   echo "starting datanodes"
   ./run.sh dn $count
   echo "starting service nodes"
