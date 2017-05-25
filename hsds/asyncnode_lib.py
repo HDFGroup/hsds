@@ -220,9 +220,8 @@ async def getRootProperty(app, s3obj):
         else:
             log.info("root group {} referenced non-existent domain: {}".format(s3obj.id, obj_json["domain"]))
 
-    if rootid and domain:
-        # update the root and domain global dictionaries if needed
-        
+    # update the root and domain global dictionaries if needed
+    if rootid:
         if rootid not in roots:
             rootObj = {"domain": domain}
             rootObj["groups"] = set()
@@ -231,19 +230,6 @@ async def getRootProperty(app, s3obj):
             roots[rootid] = rootObj
         else:
             rootObj = roots[rootid]
-            if rootObj["domain"] != domain:
-                log.error("Expected roots[{}] to be {} but was {}".format(rootid, domain, rootObj["domain"]))
-                return
-        if domain not in domains:
-            domains[domain] = rootid
-        elif domains[domain] != rootid:
-            if isValidDomain(s3obj.id):
-                # update the domain to point to new rootid
-                log.warn("replacing root obj of domain: to be: {}".format(s3obj.id, rootid))
-                domains[domain] = rootid
-            else:
-                # this can happen when the AN gets an objectUpdate before the domain create event comes in
-                log.warn("object {} has domain property of {} but that domain is using different root".format(s3obj.id, domain))
 
         # add non-root objects to the root collection
         if not isValidDomain(s3obj.id) and not s3obj.isRoot:
@@ -256,6 +242,24 @@ async def getRootProperty(app, s3obj):
                     log.info("adding {} to collection {} of root {}".format(s3obj.id, obj_collection, rootid))
                     root_collection.add(s3obj.id)  
  
+
+    if rootid and domain:
+        rootObj = roots[rootid]
+        if rootObj["domain"] != domain:
+            log.error("Expected roots[{}] to be {} but was {}".format(rootid, domain, rootObj["domain"]))
+            return
+        if domain not in domains:
+            domains[domain] = rootid
+        elif domains[domain] != rootid:
+            if isValidDomain(s3obj.id):
+                # update the domain to point to new rootid
+                log.warn("replacing root obj of domain: to be: {}".format(s3obj.id, rootid))
+                domains[domain] = rootid
+            else:
+                # this can happen when the AN gets an objectUpdate before the domain create event comes in
+                log.warn("object {} has domain property of {} but that domain is using different root".format(s3obj.id, domain))
+
+        
      
 
 async def getS3Obj(app, id, *args, **kwds):

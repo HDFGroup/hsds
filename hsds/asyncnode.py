@@ -430,9 +430,7 @@ async def gcsweep(app):
 
     now = int(time.time())
     log.info("gcsweep {}".format(unixTimeToUTC(now)))
-    # list all keys from bucket, save stats to s3objs
-    await listKeys(app)
-
+    
     # clear used flags
     clearUsedFlags(app)
 
@@ -494,6 +492,7 @@ async def bucketCheck(app):
     log.info("async_sleep_time: {}".format(async_sleep_time))
     gc_freq = config.get("gc_freq")
     log.info("gc_freq: {}".format(gc_freq))
+     
     first_run = True
      
 
@@ -504,6 +503,15 @@ async def bucketCheck(app):
             log.info("bucketCheck waiting for Node state to be READY")
             await asyncio.sleep(1)
             continue  # wait for READY state
+
+        if first_run:
+            # list all keys from bucket, save stats to s3objs
+            # Note - this can take some time if there are a large number of 
+            # objects, so run just once at startup.
+            # DN nodes will send events to AN for new/deleted object so the 
+            # s3objs dict should be kept more or less up to date
+            # TBD: rerun listKeys periodically to catch missing objects
+            await listKeys(app)
 
         now = int(time.time())
 
