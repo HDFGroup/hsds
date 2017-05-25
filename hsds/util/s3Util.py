@@ -391,7 +391,7 @@ async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=Fal
                 if include_stats:
                     stats = {}
                     if item["ETag"]:
-                        stats["Etag"] = item["Etag"]
+                        stats["ETag"] = item["ETag"]
                     else:
                         if "Owner" in item and "ID" in item["Owner"] and item["Owner"]["ID"] == "minio":
                             pass # minio is not creating ETags...
