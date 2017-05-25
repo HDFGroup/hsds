@@ -282,6 +282,9 @@ async def getS3Obj(app, id, *args, **kwds):
     if "ETag" in kwds and "LastModified" in kwds and "Size" in kwds:
         # don't need to call getS3ObjStats
         eTag = kwds["ETag"]
+        if len(eTag) > 2 and eTag[0] == '"' and eTag[-1] == '"':
+            # S3 returning extra quotes around etag?
+            eTag = eTag[1:-1]
         lastModified = kwds["LastModified"]
         s3size = kwds["Size"]
     else:
