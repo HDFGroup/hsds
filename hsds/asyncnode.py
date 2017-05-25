@@ -275,7 +275,7 @@ async def rootDelete(app, rootid):
             continue
         datasetS3Obj = s3objs[dsetid]
         # for each dataset, delete all its chunks
-        dataset_chunks = datasetS3Obj["chunks"]
+        dataset_chunks = datasetS3Obj.chunks
         while len(dataset_chunks) > 0:
             chunkid = dataset_chunks.pop()
             await deleteObj(app, chunkid, notify=True)
@@ -518,10 +518,10 @@ async def bucketCheck(app):
         pending_queue = app["pending_queue"]
         if len(pending_queue) > 0:
             
-            #try:
-            await processPendingQueue(app)
-            #except Exception as e:
-            #    log.warn("bucketCheck - got exception from processPendingQueue: {}".format(e))
+            try:
+                await processPendingQueue(app)
+            except Exception as e:
+                log.warn("bucketCheck - got exception from processPendingQueue: {}".format(e))
 
         # set of domains that will need the contents files updated
         updated_domains = app["updated_domains"]
