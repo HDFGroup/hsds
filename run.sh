@@ -43,9 +43,10 @@ elif [ $1 == "an" ]; then
   docker run -d -p ${AN_PORT}:${AN_PORT} --name hsds_async \
   --env AN_PORT=${AN_PORT} \
   --env NODE_TYPE="an"  \
+  --env AWS_S3_GATEWAY=${AWS_S3_GATEWAY} \
+  --env AWS_REGION=${AWS_REGION} \
   --env AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
   --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
-  --env AWS_S3_GATEWAY=${MINIO_BASE} \
   --env BUCKET_NAME=${BUCKET_NAME} \
   --link hsds_head:hsds_head \
   hdfgroup/hsds
