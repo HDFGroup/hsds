@@ -62,7 +62,7 @@ async def get_collection(request, collection):
     col_found = await isS3Obj(app, col_s3key)
     if not col_found:
         return []
-    objids = []
+    rows = []
     
     data = await getS3Bytes(app, col_s3key)
     data = data.decode('utf8')
@@ -73,6 +73,9 @@ async def get_collection(request, collection):
         if not line:
             continue
         fields = line.split(' ')
+        if len(fields) < 4:
+            log.warn("Unexpected contents line: {}".format(line))
+            continue
         objid = fields[0]
         if not objid:
             continue
@@ -90,11 +93,39 @@ async def get_collection(request, collection):
                 # return ids on the next iteration
                 marker = None
         else:
-            objids.append(objid)
-            if limit is not None and len(objids) == limit:
+            # return objid, etag, lastModified, and size
+            row = []
+            row.append(objid)
+            row.append(fields[1])  # etag
+            try:
+                row.append(float(fields[2]))
+            except ValueError:
+                log.warn("Unexpected contents line (3rd element should be float): {}".format(line))
+                continue
+            try:
+                row.append(int(fields[3]))
+            except ValueError:
+                log.warn("Unexpected contents line (4th element should be int): {}".format(line))
+                continue
+            # dataset contents will have extra fields for numchunks and chunk size
+            if len(fields) > 4:
+                try:
+                    row.append(int(fields[4]))
+                except ValueError:
+                    log.warn("Unexpected contents line (5th element should be int): {}".format(line))
+                    continue
+            if len(fields) > 5:
+                try:
+                    row.append(int(fields[5]))
+                except ValueError:
+                    log.warn("Unexpected contents line (6th element should be int): {}".format(line))
+                    continue
+
+            rows.append(row)
+            if limit is not None and len(rows) == limit:
                 log.info("got to limit, breaking")
                 break
-    return objids
+    return rows
         
 
 async def GET_Domains(request):
@@ -302,6 +333,30 @@ async def GET_Domain(request):
     log.info("href parent domain: {}".format(parent_domain))
     if parent_domain:
         hrefs.append({'rel': 'parent', 'href': getHref(request, '/', domain=parent_domain)})
+
+    if "verbose" in request.GET and request.GET["verbose"]:
+        # Gather additional info on the domain
+        allocated_bytes = 0
+        num_chunks = 0
+        group_collection = await get_collection(request, "groups")
+        rsp_json["num_groups"] = len(group_collection) 
+        for row in group_collection:
+            allocated_bytes += row[3]
+        datatype_collection = await get_collection(request, "datatypes")
+        
+        
+        rsp_json["num_datatypes"] = len(datatype_collection) 
+        for row in datatype_collection:
+            allocated_bytes += row[3]
+        dataset_collection = await get_collection(request, "datasets")
+        rsp_json["num_datasets"] = len(dataset_collection) 
+        for row in dataset_collection:
+            allocated_bytes += row[3]
+            if len(row) > 5:
+                num_chunks += row[4]
+                allocated_bytes += row[5]
+        rsp_json["allocated_bytes"] = allocated_bytes
+        rsp_json["num_chunks"] = num_chunks
 
     rsp_json["hrefs"] = hrefs
 
@@ -686,6 +741,11 @@ async def GET_Datasets(request):
 
     # get the dataset collection list
     datasets = await get_collection(request, "datasets")
+    obj_ids = []
+    for row in datasets:
+        # row consist of objectid, etag, lastmodified, and size
+        # return just the objid
+        obj_ids.append(row[0]) 
      
     # create hrefs 
     hrefs = []
@@ -697,7 +757,7 @@ async def GET_Datasets(request):
 
     # return obj ids and hrefs
     rsp_json = { }
-    rsp_json["datasets"] = datasets
+    rsp_json["datasets"] = obj_ids
     rsp_json["hrefs"] = hrefs
      
     resp = await jsonResponse(request, rsp_json)
@@ -744,6 +804,11 @@ async def GET_Groups(request):
 
     # get the groups collection list
     groups = await get_collection(request, "groups")
+    obj_ids = []
+    for row in groups:
+        # row consist of objectid, etag, lastmodified, and size
+        # return just the objid
+        obj_ids.append(row[0]) 
      
     # create hrefs 
     hrefs = []
@@ -755,7 +820,7 @@ async def GET_Groups(request):
 
     # return obj ids and hrefs
     rsp_json = { }
-    rsp_json["groups"] = groups
+    rsp_json["groups"] = obj_ids
     rsp_json["hrefs"] = hrefs
      
     resp = await jsonResponse(request, rsp_json)
@@ -802,6 +867,11 @@ async def GET_Datatypes(request):
 
     # get the datatypes collection list
     datatypes = await get_collection(request, "datatypes")
+    obj_ids = []
+    for row in datatypes:
+        # row consist of objectid, etag, lastmodified, and size
+        # return just the objid
+        obj_ids.append(row[0]) 
      
     # create hrefs 
     hrefs = []
@@ -813,7 +883,7 @@ async def GET_Datatypes(request):
 
     # return obj ids and hrefs
     rsp_json = { }
-    rsp_json["datatypes"] = datatypes
+    rsp_json["datatypes"] = obj_ids
     rsp_json["hrefs"] = hrefs
      
     resp = await jsonResponse(request, rsp_json)

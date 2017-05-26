@@ -38,26 +38,27 @@ async def updateDatasetContents(app, domain, dsetid):
     s3objs = app["s3objs"]
     if dsetid not in s3objs:
         log.warn("updateDatasetContents - {} not found in s3objs".format(dsetid))
-        return
+        return None
     dsetS3Obj = s3objs[dsetid]
     if dsetS3Obj.collection != "datasets":
         log.error("udpateDatasetContents - {} is not a dataset".format(dsetid))
-        return
+        return None
      
     if len(dsetS3Obj.chunks) == 0:
         log.info("no chunks for dataset")
-        return
+        return None
     # TBD: Replace with domainUtil func
     col_s3key = domain[1:] + "/." + dsetid + ".chunks.txt"  
     if await isS3Obj(app, col_s3key):
         # contents already exist, return
         # TBD: Add an option to force re-creation of index?
         if not FORCE_CONTENT_LIST_CREATION:
-            return
+            return None
          
     chunk_ids = list(dsetS3Obj.chunks)
     chunk_ids.sort()
     text_data = b""
+    allocated_size = 0
     for chunkid in chunk_ids:
         if chunkid not in s3objs:
             log.warn("updateDatasetContents: chunk {} for dset: {} not found in s3objs".format(chunkid, dsetid))
@@ -72,11 +73,13 @@ async def updateDatasetContents(app, domain, dsetid):
         log.info("chunk contents: {}".format(line))
         line = line.encode('utf8')
         text_data += line
+        allocated_size += chunk_obj.size
     log.info("write chunk collection key: {}, count: {}".format(col_s3key, len(chunk_ids)))
     try:
         await putS3Bytes(app, col_s3key, text_data)
     except HttpProcessingError:
         log.error("S3 Error writing chunk collection key: {}".format(col_s3key))
+    return (len(chunk_ids), allocated_size)
   
 
 async def updateDomainContent(app, domain, objs_updated=None):
@@ -149,20 +152,32 @@ async def updateDomainContent(app, domain, objs_updated=None):
                     log.info("id: {} etag: {}, lastModified: {} size: {}".format(col_obj.id, col_obj.etag, col_obj.lastModified, col_obj.size))
                     continue
 
-                line = "{} {} {} {}\n".format(obj_id, col_obj.etag, col_obj.lastModified, col_obj.size)
-                line = line.encode('utf8')
-                text_data += line
+                line = "{} {} {} {}".format(obj_id, col_obj.etag, col_obj.lastModified, col_obj.size)
+                
                 if col_obj.collection == "datasets":
                     # create chunk listing
+                    update = False
                     if objs_updated is None:
-                        await updateDatasetContents(app, domain, obj_id)
+                        update = True
                     else:
                         # if objs_updated is passed in, only update if at least one chunk in
                         # the dataset has been updated
                         for updated_id in objs_updated:
                             if isValidChunkId(updated_id) and getDatasetId(updated_id) == obj_id:
-                                await updateDatasetContents(app, domain, obj_id)
+                                update = True
                                 break
+                    if update:
+                        # add two extra fields for datasets: number of chunks and total size
+                        result = await updateDatasetContents(app, domain, obj_id)
+                        if result is not None:
+                            num_chunks = result[0]
+                            allocated_size = result[1]
+                            log.info("chunk summary {}: {} {}".format(obj_id, num_chunks, allocated_size))
+                            chunk_summary = " {} {}".format(num_chunks, allocated_size)
+                            line += chunk_summary
+                line += "\n"
+                line = line.encode('utf8')
+                text_data += line
 
             log.info("write collection key: {}, count: {}".format(col_s3key, len(col_ids)))
             try:
@@ -448,6 +463,8 @@ async def processPendingQueue(app):
     log.info("processPendingQueue start")    
     domain_updates = set()  # set of ids for which we'll need to update domain content
     dataset_updates = set()
+    # TBD - this could starve other work if items are getting added to the pending
+    # queue continually.  Copy items off pending queue synchronously and then process?
     while len(pending_queue) > 0:
         log.info("pending_queue len: {}".format(len(pending_queue)))
         item = pending_queue.pop(0)  # remove from the front
@@ -478,8 +495,6 @@ async def processPendingQueue(app):
     log.info("processPendingQueue stop")
     log.info("domains to be updated: {}".format(len(domain_updates)))
     log.info("datasets to be updates: {}".format(len(dataset_updates)))
-    # TBD: update domain.txt and chunks.txt files
-
                  
 
 async def bucketCheck(app):

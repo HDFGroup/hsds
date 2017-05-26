@@ -80,6 +80,7 @@ class DomainTest(unittest.TestCase):
         self.assertTrue(rspJson["root"].startswith("g-"))
         self.assertTrue(rspJson["owner"])
         self.assertEqual(rspJson["class"], "domain")
+        self.assertFalse("num_groups" in rspJson)  # should only show up with the verbose param
         
         root_uuid = rspJson["root"]
         helper.validateId(root_uuid)
@@ -110,6 +111,44 @@ class DomainTest(unittest.TestCase):
         rsp = requests.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 400)
 
+    def testGetDomainVerbose(self):
+        domain = helper.getTestDomain("tall.h5")
+        print("testGetDomainVerbose", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        
+        req = helper.getEndpoint() + '/'
+        params = {"verbose": 1}
+        rsp = requests.get(req, params=params, headers=headers)
+        if rsp.status_code != 200:
+            print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
+            return  # abort rest of test
+        self.assertEqual(rsp.headers['content-type'], 'application/json')
+        rspJson = json.loads(rsp.text)
+         
+        for name in ("lastModified", "created", "hrefs", "root", "owner", "class"):
+            self.assertTrue(name in rspJson)
+        now = time.time()
+        self.assertTrue(rspJson["created"] < now - 60 * 5)
+        self.assertTrue(rspJson["lastModified"] < now - 60 * 5)
+        self.assertEqual(len(rspJson["hrefs"]), 7)
+        self.assertTrue(rspJson["root"].startswith("g-"))
+        self.assertTrue(rspJson["owner"])
+        self.assertEqual(rspJson["class"], "domain")
+        
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        self.assertTrue("num_groups" in rspJson)
+        self.assertEqual(rspJson["num_groups"], 5)
+        self.assertTrue("num_datasets" in rspJson)
+        self.assertEqual(rspJson["num_datasets"], 4)
+        self.assertTrue("num_datatypes" in rspJson)
+        self.assertEqual(rspJson["num_datatypes"], 0)
+        self.assertTrue("allocated_bytes" in rspJson)
+        self.assertEqual(rspJson["allocated_bytes"], 5340)  # not sure how consistent this value will be
+        self.assertTrue("num_chunks" in rspJson)
+        self.assertTrue(rspJson["num_chunks"], 4)
+ 
         
 
     def testGetTopLevelDomain(self):
