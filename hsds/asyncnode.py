@@ -320,7 +320,6 @@ async def domainDelete(app, domain):
     # delete any content .txt objects assoc with this domain
     s3_prefix = domain[1:] + "/"
     s3_contents_keys = await getS3Keys(app, prefix=s3_prefix, suffix='.txt')
-    print("got {} keys".format(len(s3_contents_keys)))
     log.info("s3_contents_keys:")
     for k in s3_contents_keys:
         log.info("{}".format(k))
