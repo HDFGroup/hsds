@@ -18,7 +18,7 @@ from aiohttp.errors import HttpBadRequest, HttpProcessingError
 
 from util.httpUtil import  http_post, http_put, http_get_json, http_delete, jsonResponse, getHref
 from util.idUtil import  getDataNodeUrl, createObjId, getS3Key, getCollectionForId
-from util.s3Util import getS3Keys, isS3Obj, getS3Bytes
+from util.s3Util import getS3Keys, isS3Obj, getS3Bytes, getS3ObjStats
 from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
 from util.domainUtil import getParentDomain, getDomainFromRequest, getS3PrefixForDomain, validateDomain
@@ -40,23 +40,9 @@ async def domain_query(app, domain, rsp_dict):
     except HttpProcessingError as hpe:
         rsp_dict[domain] = { "status_code": hpe.code}
 
-async def get_collection(request, collection):
+async def get_collection(app, domain, collection, marker=None, limit=None):
     """ Return the object ids from the collections.txt obj for given collection.
-    """
-    app = request.app
-    domain = getDomainFromRequest(request)
-    limit = None
-    if "Limit" in request.GET:
-        try:
-            limit = int(request.GET["Limit"])
-        except ValueError:
-            msg = "Bad Request: Expected int type for limit"
-            log.warn(msg)
-            raise HttpBadRequest(message=msg)
-    marker = None
-    if "Marker" in request.GET:
-        marker = request.GET["Marker"]
-
+    """    
     col_s3key = domain[1:] + "/." + collection + ".txt"  
     log.info("get collection list: {}".format(col_s3key))
     col_found = await isS3Obj(app, col_s3key)
@@ -126,6 +112,38 @@ async def get_collection(request, collection):
                 log.info("got to limit, breaking")
                 break
     return rows
+
+async def getDomainInfo(app, domain):
+    """ Get extra information about the given domain """
+    # Gather additional info on the domain
+    results = {}
+    allocated_bytes = 0
+    num_chunks = 0
+    group_collection = await get_collection(app, domain, "groups")
+    results["num_groups"] = len(group_collection) 
+    for row in group_collection:
+        allocated_bytes += row[3]
+
+    datatype_collection = await get_collection(app, domain, "datatypes")
+    results["num_datatypes"] = len(datatype_collection) 
+    for row in datatype_collection:
+        allocated_bytes += row[3]
+    
+    dataset_collection = await get_collection(app, domain, "datasets")
+    results["num_datasets"] = len(dataset_collection) 
+    for row in dataset_collection:
+        allocated_bytes += row[3]
+        if len(row) > 5:
+            num_chunks += row[4]
+            allocated_bytes += row[5]
+    # get size of the domain json object itself
+    s3_key = getS3Key(domain)
+    stats = await getS3ObjStats(app, s3_key)
+                  
+    allocated_bytes += stats["Size"]
+    results["allocated_bytes"] = allocated_bytes
+    results["num_chunks"] = num_chunks
+    return results
         
 
 async def GET_Domains(request):
@@ -174,6 +192,9 @@ async def GET_Domains(request):
             raise HttpBadRequest(message=msg)
         marker_key = getS3Key(marker)
         log.info("GET_Domains - using Marker key: {}".format(marker_key))
+    verbose = False
+    if "verbose" in request.GET and request.GET["verbose"]:
+        verbose = True
 
     s3_keys = await getS3Keys(app, prefix=domain_prefix, deliminator='/')
     log.info("got {} keys".format(len(s3_keys)))
@@ -258,6 +279,13 @@ async def GET_Domains(request):
             domain_rsp["class"] = "domain"
         else:
             domain_rsp["class"] = "folder"
+        if verbose:
+            # get info from collection files
+            results = await getDomainInfo(app, sub_domain)
+            for k in ("num_groups", "num_datatypes", "num_datasets", "allocated_bytes", "num_chunks"):
+                if k in results:
+                    domain_rsp[k] = results[k]
+
         domains.append(domain_rsp)
     rsp_json = {}
     rsp_json["domains"] = domains
@@ -335,29 +363,11 @@ async def GET_Domain(request):
         hrefs.append({'rel': 'parent', 'href': getHref(request, '/', domain=parent_domain)})
 
     if "verbose" in request.GET and request.GET["verbose"]:
-        # Gather additional info on the domain
-        allocated_bytes = 0
-        num_chunks = 0
-        group_collection = await get_collection(request, "groups")
-        rsp_json["num_groups"] = len(group_collection) 
-        for row in group_collection:
-            allocated_bytes += row[3]
-        datatype_collection = await get_collection(request, "datatypes")
-        
-        
-        rsp_json["num_datatypes"] = len(datatype_collection) 
-        for row in datatype_collection:
-            allocated_bytes += row[3]
-        dataset_collection = await get_collection(request, "datasets")
-        rsp_json["num_datasets"] = len(dataset_collection) 
-        for row in dataset_collection:
-            allocated_bytes += row[3]
-            if len(row) > 5:
-                num_chunks += row[4]
-                allocated_bytes += row[5]
-        rsp_json["allocated_bytes"] = allocated_bytes
-        rsp_json["num_chunks"] = num_chunks
-
+        results = await getDomainInfo(app, domain)
+        for k in ("num_groups", "num_datatypes", "num_datasets", "allocated_bytes", "num_chunks"):
+            if k in results:
+                rsp_json[k] = results[k]
+         
     rsp_json["hrefs"] = hrefs
 
     resp = await jsonResponse(request, rsp_json)
@@ -739,8 +749,21 @@ async def GET_Datasets(request):
     # validate that the requesting user has permission to read this domain
     aclCheck(domain_json, "read", username)  # throws exception if not authorized
 
+    limit = None
+    if "Limit" in request.GET:
+        try:
+            limit = int(request.GET["Limit"])
+        except ValueError:
+            msg = "Bad Request: Expected int type for limit"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+    marker = None
+    if "Marker" in request.GET:
+        marker = request.GET["Marker"]
+
+
     # get the dataset collection list
-    datasets = await get_collection(request, "datasets")
+    datasets = await get_collection(app, domain, "datasets", marker=marker, limit=limit)
     obj_ids = []
     for row in datasets:
         # row consist of objectid, etag, lastmodified, and size
@@ -803,7 +826,20 @@ async def GET_Groups(request):
     aclCheck(domain_json, "read", username)  # throws exception if not authorized
 
     # get the groups collection list
-    groups = await get_collection(request, "groups")
+    limit = None
+    if "Limit" in request.GET:
+        try:
+            limit = int(request.GET["Limit"])
+        except ValueError:
+            msg = "Bad Request: Expected int type for limit"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+    marker = None
+    if "Marker" in request.GET:
+        marker = request.GET["Marker"]
+
+    # get the dataset collection list
+    groups = await get_collection(app, domain, "groups", marker=marker, limit=limit)
     obj_ids = []
     for row in groups:
         # row consist of objectid, etag, lastmodified, and size
@@ -865,8 +901,21 @@ async def GET_Datatypes(request):
     # validate that the requesting user has permission to read this domain
     aclCheck(domain_json, "read", username)  # throws exception if not authorized
 
-    # get the datatypes collection list
-    datatypes = await get_collection(request, "datatypes")
+    limit = None
+    if "Limit" in request.GET:
+        try:
+            limit = int(request.GET["Limit"])
+        except ValueError:
+            msg = "Bad Request: Expected int type for limit"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+    marker = None
+    if "Marker" in request.GET:
+        marker = request.GET["Marker"]
+
+    # get the datatype collection list
+    datatypes = await get_collection(app, domain, "datatypes", marker=marker, limit=limit)
+
     obj_ids = []
     for row in datatypes:
         # row consist of objectid, etag, lastmodified, and size

@@ -145,7 +145,7 @@ class DomainTest(unittest.TestCase):
         self.assertTrue("num_datatypes" in rspJson)
         self.assertEqual(rspJson["num_datatypes"], 0)
         self.assertTrue("allocated_bytes" in rspJson)
-        self.assertEqual(rspJson["allocated_bytes"], 5340)  # not sure how consistent this value will be
+        self.assertEqual(rspJson["allocated_bytes"], 5720)  # not sure how consistent this value will be
         self.assertTrue("num_chunks" in rspJson)
         self.assertTrue(rspJson["num_chunks"], 4)
  
