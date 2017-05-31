@@ -226,11 +226,48 @@ class DatasetTest(unittest.TestCase):
 
         self.assertEqual(rspJson["attributeCount"], 2)
 
+        # these properties should only be available when verbose is used
+        self.assertFalse("num_chunks" in rspJson)
+        self.assertFalse("allocated_size" in rspJson)
+
         now = time.time()
         # the object shouldn't have been just created or updated
         self.assertTrue(rspJson["created"] < now - 60 * 5)
         self.assertTrue(rspJson["lastModified"] < now - 60 * 5)
- 
+
+    def testGetVerbose(self):
+        domain = helper.getTestDomain("tall.h5")
+        print("testGetDomain", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        
+        # verify domain exists
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        if rsp.status_code != 200:
+            print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
+            return  # abort rest of test
+        domainJson = json.loads(rsp.text)
+        root_uuid = domainJson["root"]
+         
+        # get the dataset uuid 
+        dset_uuid = helper.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1")
+        self.assertTrue(dset_uuid.startswith("d-"))
+
+        # get the dataset json
+        req = helper.getEndpoint() + '/datasets/' + dset_uuid
+        params = {"verbose": 1}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        for name in ("id", "shape", "hrefs", "layout", "creationProperties", 
+            "attributeCount", "created", "lastModified", "root", "domain"):
+            self.assertTrue(name in rspJson)
+         
+        # these properties should only be available when verbose is used
+        self.assertTrue("num_chunks" in rspJson)
+        self.assertTrue("allocated_size" in rspJson)
+        self.assertEqual(rspJson["num_chunks"], 1)
+        self.assertEqual(rspJson["allocated_size"], 400) # this will likely change once compression is working
 
     def testDelete(self):
         # test Delete

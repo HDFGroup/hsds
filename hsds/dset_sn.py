@@ -25,6 +25,7 @@ from util.chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson, getItemSize
+from util.s3Util import isS3Obj, getS3Bytes
 from servicenode_lib import getDomainJson, getObjectJson, validateAction
 from util.chunkUtil import CHUNK_MIN, CHUNK_MAX
 import config
@@ -124,9 +125,57 @@ def validateChunkLayout(shape_json, item_size, body):
             log.info("Using client requested chunk layout: {}".format(chunk_dims))  
     return chunk_dims
 
+async def getDatasetDetails(app, dset_id, domain):
+    """ Return the object ids from the collections.txt obj for given collection.
+    """    
+    col_s3key = domain[1:] + "/.datasets.txt"  
+    log.info("get dataset list: {}".format(col_s3key))
+    col_found = await isS3Obj(app, col_s3key)
+    if not col_found:
+        return None
+    num_chunks = None
+    allocated_size = None
+
+    data = await getS3Bytes(app, col_s3key)
+    data = data.decode('utf8')
+    lines = data.split('\n')
+    for line in lines:
+        # format is: 
+        # <objid> <size>\n
+        if not line:
+            continue
+        fields = line.split(' ')
+        if len(fields) < 4:
+            log.warn("Unexpected contents line: {}".format(line))
+            continue
+        if fields[0] != dset_id:
+            continue # not the dataset we're looking for
+        
+        objid = fields[0]
+        if not objid:
+            continue
+        num_chunks = 0
+        allocated_size = 0
+        if len(fields) >= 6:
+            # chunks have been allocated yet
+            try:
+                num_chunks = int(fields[4])
+            except ValueError:
+                log.warn("Unexpected contents line (5th element should be int): {}".format(line))
+            try:
+                allocated_size = int(fields[5])
+            except ValueError:
+                log.warn("Unexpected contents line (6th element should be int): {}".format(line))
+        break  # no need to go through rest of the lines
+                    
+    if num_chunks is None:
+        return None
+    result = {"num_chunks": num_chunks, "allocated_size": allocated_size}
+    return result
+
 
 async def GET_Dataset(request):
-    """HTTP method to return JSON for dataset's type"""
+    """HTTP method to return JSON description of a dataset"""
     log.request(request)
     app = request.app 
 
@@ -151,6 +200,10 @@ async def GET_Dataset(request):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
         raise HttpBadRequest(message=msg)
+
+    verbose = False
+    if "verbose" in request.GET and request.GET["verbose"]:
+        verbose = True
     
     # get authoritative state for dataset from DN (even if it's in the meta_cache).
     dset_json = await getObjectJson(app, dset_id, refresh=True)  
@@ -201,6 +254,14 @@ async def GET_Dataset(request):
                 'href': getHref(request, dset_uri + '/value', query=previewQuery)})
 
     resp_json["hrefs"] = hrefs
+
+    if verbose:
+        # get allocated size and num_chunks for the dataset if available
+        dset_detail = await getDatasetDetails(app, dset_id, domain)
+        if "num_chunks" in dset_detail:
+            resp_json["num_chunks"] = dset_detail["num_chunks"]
+            resp_json["allocated_size"] = dset_detail["allocated_size"]
+
 
     resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
