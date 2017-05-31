@@ -258,10 +258,11 @@ async def GET_Dataset(request):
     if verbose:
         # get allocated size and num_chunks for the dataset if available
         dset_detail = await getDatasetDetails(app, dset_id, domain)
-        if "num_chunks" in dset_detail:
-            resp_json["num_chunks"] = dset_detail["num_chunks"]
-            resp_json["allocated_size"] = dset_detail["allocated_size"]
-
+        if dset_detail is not None:
+            if "num_chunks" in dset_detail:
+                resp_json["num_chunks"] = dset_detail["num_chunks"]
+            if "allocated_size" in dset_detail:
+                resp_json["allocated_size"] = dset_detail["allocated_size"]
 
     resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)

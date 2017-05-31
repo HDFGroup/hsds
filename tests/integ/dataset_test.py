@@ -89,6 +89,17 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("shape" in rspJson)
         shape_json = rspJson["shape"]
         self.assertTrue(shape_json["class"], "H5S_SCALAR")  
+
+        # try getting verbose info (shouldn't be available yet)
+        params = {"verbose": 1}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        for name in ("id", "shape", "hrefs", "layout", "creationProperties", 
+            "attributeCount", "created", "lastModified", "root", "domain"):
+            self.assertTrue(name in rspJson)
+        self.assertFalse("num_chunks" in rspJson)
+        self.assertFalse("allocated_size" in rspJson)
          
         # try get with a different user (who has read permission)
         headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
@@ -96,6 +107,8 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["id"], dset_id)
+
+        
 
         # try to do a GET with a different domain (should fail)
         another_domain = helper.getParentDomain(self.base_domain)
