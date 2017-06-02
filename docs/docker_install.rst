@@ -21,9 +21,10 @@ Installation with Docker
 16. For each username in the passwd file, create a top-level domain:  `# python create_toplevel_domain_json.py --user=<username>`
 17. Exit out of the container: `# exit`
 18. If the docker ip is not: 192.168.99.100, run this: `$ export HSDS_ENDPOINT=http://<docker_machine_ip>:5102`
-19. Set the HSDS_HEAD environment variable to be the docker-machine ip: `$ export HSDS_HEAD=http://<docker_machine_ip>:5100`
-20. From a Python 3.5 environment, run the test suite: `$ python testall.py`
-21. Shutdown cluster when you are done: `$ ./stopall.sh`
+19. Set the HEAD_ENDPOINT environment variable to be the docker-machine ip: `$ export HEAD_ENDPOINT=http://<docker_machine_ip>:5100`
+20. Set the HSDS_ENDPOINT environment variable to be the docker-machine ip: `$ export HSDS_ENDPOINT=http://<docker_machine_ip>:5101`
+21. From a Python 3.5 environment, run the test suite: `$ python testall.py --skip_unit`
+22. Shutdown cluster when you are done: `$ ./stopall.sh`
 
 Minio Setup
 -----------
