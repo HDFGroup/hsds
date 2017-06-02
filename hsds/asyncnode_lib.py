@@ -371,7 +371,7 @@ async def deleteObj(app, objid, notify=True):
     Otherwise, (e.g. we're responding to a DN delete notification) 
     just remove the tracking obj from the DN global collection. """
 
-    log.info("deleteObj: {} notify: {}".format(objid, notify))  
+    log.debug("deleteObj: {} notify: {}".format(objid, notify))  
     s3objs = app["s3objs"]
     if "deleted_ids" not in app:
         # app should only create this key if the intent is to allow object deletion
@@ -397,7 +397,7 @@ async def deleteObj(app, objid, notify=True):
             params["domain"] = objid 
         else:
             req += '/' + collection + '/' + objid
-        log.info("Delete object {}, [{} bytes]".format(objid, num_bytes))
+        log.debug("Delete object {}, [{} bytes]".format(objid, num_bytes))
         
         try:
             await http_delete(app, req, params=params)
