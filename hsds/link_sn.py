@@ -73,9 +73,9 @@ async def GET_Links(request):
     if marker is not None:
         req += query_sep + "Marker=" + marker
         
-    log.info("get LINKS: " + req)
+    log.debug("get LINKS: " + req)
     links_json = await http_get_json(app, req)
-    log.info("got links json from dn for group_id: {}".format(group_id)) 
+    log.debug("got links json from dn for group_id: {}".format(group_id)) 
     links = links_json["links"]
 
     # mix in collection key, target and hrefs
@@ -133,9 +133,9 @@ async def GET_Link(request):
     
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id + "/links/" + link_title
-    log.info("get LINK: " + req)
+    log.debug("get LINK: " + req)
     link_json = await http_get_json(app, req)
-    log.info("got link_json: " + str(link_json)) 
+    log.debug("got link_json: " + str(link_json)) 
     resp_link = {}
     resp_link["title"] = link_title
     resp_link["class"] = link_json["class"]
@@ -186,7 +186,7 @@ async def PUT_Link(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     link_title = request.match_info.get('title')
-    log.info("Link_title: [{}]".format(link_title) )
+    log.info("PUT Link_title: [{}]".format(link_title) )
     validateLinkName(link_title)
 
 
@@ -245,10 +245,10 @@ async def PUT_Link(request):
     # ready to add link now
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id + "/links/" + link_title
-    log.info("PUT link - getting group: " + req)
+    log.debug("PUT link - getting group: " + req)
     
     put_rsp = await http_put(app, req, data=link_json)
-    log.info("PUT Link resp: " + str(put_rsp))
+    log.debug("PUT Link resp: " + str(put_rsp))
 
     hrefs = []  # TBD
     req_rsp = { "hrefs": hrefs }

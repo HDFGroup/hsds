@@ -21,7 +21,7 @@ AN_PORT=6100
 SN_PORT=5101
 DN_PORT=6101
 MINIO_BASE="http://minio:9000"
-BUCKET_NAME="minio.hsdsdev"  # use a difrent bucket name to avoid any confusion with AWS S3
+BUCKET_NAME="minio.hsdsdev"  # use a diferent bucket name to avoid any confusion with AWS S3
 
 #
 # run container given in arguments
@@ -38,6 +38,7 @@ if [ $1 == "head" ]; then
   --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
   --env AWS_S3_GATEWAY=${MINIO_BASE} \
   --env BUCKET_NAME=${BUCKET_NAME} \
+  --env LOG_LEVEL=${LOG_LEVEL} \
   --link minio:minio \
   hdfgroup/hsds  
 elif [ $1 == "an" ]; then
@@ -49,6 +50,7 @@ elif [ $1 == "an" ]; then
   --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
   --env AWS_S3_GATEWAY=${MINIO_BASE} \
   --env BUCKET_NAME=${BUCKET_NAME} \
+  --env LOG_LEVEL=${LOG_LEVEL} \
   --link hsds_head:hsds_head \
   --link minio:minio \
   hdfgroup/hsds
@@ -65,6 +67,7 @@ elif [ $1 == "dn" ]; then
         --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
         --env AWS_S3_GATEWAY=${MINIO_BASE} \
         --env BUCKET_NAME=${BUCKET_NAME} \
+        --env LOG_LEVEL=${LOG_LEVEL} \
         --link hsds_head:hsds_head \
         --link minio:minio \
         hdfgroup/hsds
@@ -82,6 +85,7 @@ elif [ $1 == "sn" ]; then
         --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
         --env AWS_S3_GATEWAY=${MINIO_BASE} \
         --env BUCKET_NAME=${BUCKET_NAME} \
+        --env LOG_LEVEL=${LOG_LEVEL} \
         --link hsds_head:hsds_head \
         --link minio:minio \
         hdfgroup/hsds

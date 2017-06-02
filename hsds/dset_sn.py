@@ -208,7 +208,7 @@ async def GET_Dataset(request):
     # get authoritative state for dataset from DN (even if it's in the meta_cache).
     dset_json = await getObjectJson(app, dset_id, refresh=True)  
 
-    log.info("got dset_json: {}".format(dset_json))
+    log.debug("got dset_json: {}".format(dset_json))
     await validateAction(app, domain, dset_id, username, "read")
 
     resp_json = {}
@@ -401,7 +401,7 @@ async def PUT_DatasetShape(request):
     if isinstance(shape_update, int):
         # convert to a list
         shape_update = [shape_update,]
-    log.info("shape_update: {}".format(shape_update))
+    log.debug("shape_update: {}".format(shape_update))
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
@@ -412,7 +412,7 @@ async def PUT_DatasetShape(request):
     # get authoritative state for dataset from DN (even if it's in the meta_cache).
     dset_json = await getObjectJson(app, dset_id, refresh=True)  
     shape_orig = dset_json["shape"]
-    log.info("shape_orig: {}".format(shape_orig))
+    log.debug("shape_orig: {}".format(shape_orig))
 
     # verify that the extend request is valid
     if shape_orig["class"] != "H5S_SIMPLE":
@@ -500,9 +500,9 @@ async def POST_Dataset(request):
     if isinstance(datatype, str) and datatype.startswith("t-"):
         # Committed type - fetch type json from DN
         ctype_id = datatype
-        log.info("got ctypeid: {}".format(ctype_id)) 
+        log.debug("got ctypeid: {}".format(ctype_id)) 
         ctype_json = await getObjectJson(app, ctype_id)  
-        log.info("ctype: {}".format(ctype_json))
+        log.debug("ctype: {}".format(ctype_json))
         if ctype_json["root"] != root_id:
             msg = "Referenced committed datatype must belong in same domain"
             log.warn(msg)
@@ -515,7 +515,7 @@ async def POST_Dataset(request):
             # convert predefined type string (e.g. "H5T_STD_I32LE") to 
             # corresponding json representation
             datatype = getBaseTypeJson(datatype)
-            log.info("got datatype: {}".format(datatype))
+            log.debug("got datatype: {}".format(datatype))
         except TypeError:
             msg = "POST Dataset with invalid predefined type"
             log.warn(msg)
@@ -626,10 +626,10 @@ async def POST_Dataset(request):
     # get the chunk layout and create/adjust if needed
     layout = validateChunkLayout(shape_json, item_size, body) 
     if layout is not None:
-        log.info("client layout: {}".format(layout))
+        log.debug("client layout: {}".format(layout))
     else:
         layout = guessChunk(shape_json, item_size) 
-        log.info("initial autochunk layout: {}".format(layout))
+        log.debug("initial autochunk layout: {}".format(layout))
     
     if layout is not None:
         chunk_size = getChunkSize(layout, item_size)
@@ -683,7 +683,7 @@ async def POST_Dataset(request):
         layout_json["dims"] = layout
         dataset_json["layout"] = layout_json
     
-    log.info("create dataset: " + json.dumps(dataset_json))
+    log.debug("create dataset: " + json.dumps(dataset_json))
     req = getDataNodeUrl(app, dset_id) + "/datasets"
     
     post_json = await http_post(app, req, data=dataset_json)
@@ -697,7 +697,7 @@ async def POST_Dataset(request):
         link_req += "/groups/" + link_id + "/links/" + link_title
         log.info("PUT link - : " + link_req)
         put_rsp = await http_put(app, link_req, data=link_json)
-        log.info("PUT Link resp: {}".format(put_rsp))
+        log.debug("PUT Link resp: {}".format(put_rsp))
 
     # dataset creation successful     
     resp = await jsonResponse(request, post_json, status=201)

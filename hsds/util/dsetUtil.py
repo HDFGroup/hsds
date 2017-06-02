@@ -162,7 +162,7 @@ Helper method - return slice for dim based on query params
 """
 def getSliceQueryParam(request, dim, extent, body=None):        
     # Get optional query parameters for given dim
-    log.info("getSliceQueryParam: " + str(dim) + ", " + str(extent))
+    log.debug("getSliceQueryParam: " + str(dim) + ", " + str(extent))
 
     start = 0
     stop = extent
@@ -203,7 +203,7 @@ def getSliceQueryParam(request, dim, extent, body=None):
 
     if "select" in request.GET:
         query = request.GET["select"]
-        log.info("select query value:" + query )
+        log.debug("select query value:" + query )
 
         if not query.startswith('['):
             msg = "Bad Request: selection query missing start bracket"
@@ -238,7 +238,7 @@ def getSliceQueryParam(request, dim, extent, body=None):
             pass
         else:
             fields = dim_query.split(":")
-            log.info("got fields: {}".format(fields))
+            log.debug("got fields: {}".format(fields))
             if len(fields) > 3:
                 msg = "Bad Request: Too many ':' seperators for dimension: " + str(dim)
                 log.warn(msg)
@@ -254,7 +254,7 @@ def getSliceQueryParam(request, dim, extent, body=None):
                 msg = "Bad Request: invalid selection parameter (can't convert to int) for dimension: " + str(dim)
                 log.info(msg)
                 raise HttpBadRequest(message=msg)
-    log.info("start: {}, stop: {}, step: {}".format(start, stop, step))
+    log.debug("start: {}, stop: {}, step: {}".format(start, stop, step))
     # now, validate whaterver start/stop/step values we got
     if start < 0 or start > extent:
         msg = "Bad Request: Invalid selection start parameter for dimension: " + str(dim)
@@ -266,10 +266,10 @@ def getSliceQueryParam(request, dim, extent, body=None):
         raise HttpBadRequest(message=msg)
     if step <= 0:
         msg = "Bad Request: invalid selection step parameter for dimension: " + str(dim)
-        log.info(msg)
+        log.debug(msg)
         raise HttpBadRequest(message=msg)
     s = slice(start, stop, step)
-    log.info("dim query[" + str(dim) + "] returning: start: " +
+    log.debug("dim query[" + str(dim) + "] returning: start: " +
             str(start) + " stop: " + str(stop) + " step: " + str(step))
     return s
 
@@ -299,7 +299,7 @@ def setSliceQueryParam(params, sel):
             if i < rank - 1:
                 sel_param += ','
         sel_param += ']'
-        log.info("select query param: {}".format(sel_param))
+        log.debug("select query param: {}".format(sel_param))
         params["select"] = sel_param
 
 """
@@ -321,7 +321,7 @@ def setChunkDimQueryParam(params, dims):
             extent = dims[i]
             dim_param += str(extent)
         dim_param += ']'
-        log.info("dim query param: {}".format(dim_param))
+        log.debug("dim query param: {}".format(dim_param))
         params["dim"] = dim_param
  
 
@@ -467,7 +467,6 @@ def getEvalStr(query, arr_name, field_names):
     var_count = 0
     paren_count = 0
     black_list = ( "import", ) # field names that are not allowed
-    #log.info("getEvalStr(" + query + ")")
     for item in black_list:
         if item in field_names:
             msg = "invalid field name"
@@ -540,7 +539,7 @@ Determine if the dataset can be extended
 def isExtensible(dims, maxdims):
     if maxdims is None or len(dims) == 0:
         return False
-    log.info("isExtensible - dims: {} maxdims: {}".format(dims, maxdims))
+    log.debug("isExtensible - dims: {} maxdims: {}".format(dims, maxdims))
     rank = len(dims)
     if len(maxdims) != rank:
         raise ValueError("rank of maxdims does not match dataset")

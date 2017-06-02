@@ -94,7 +94,7 @@ class LruCache(object):
                 raise KeyError("unexpected error")
             self._lru_tail = prev
         self._lru_head = node
-        log.info("new {} headnode: {}".format(self._name, node._id))
+        log.debug("new {} headnode: {}".format(self._name, node._id))
         return node
 
     def __delitem__(self, key):
@@ -181,22 +181,24 @@ class LruCache(object):
              
     def _reduceCache(self):
         # remove nodes from cache (if not dirty) until we are under memory mem_target
-        log.info("reduce {}".format(self._name))
+        log.info("reduceCache {}".format(self._name))
         
         node = self._lru_tail  # start from the back
         while node is not None:
-            log.info("check node: {}".format(node._id))
+            log.debug("check node: {}".format(node._id))
             next = node._prev
             if not node._isdirty:
-                log.info("removing node: {}".format(node._id))
+                log.debug("removing node: {}".format(node._id))
                 self.__delitem__(node._id)
-                if self._mem_size < self._mem_target:
+                if self._mem_size <= self._mem_target:
                     log.info("{} mem_sized reduced below target".format(self._name))
                     break
             else:
-                log.info("node: {} is dirty".format(node._id))
+                log.debug("node: {} is dirty".format(node._id))
                 pass # can't remove dirty nodes
             node = next
+        if self._mem_size > self._mem_target:
+            log.info("{} mem size of {} not reduced below target {}".format(self._name, self._mem_size, self._mem_target))
         # done reduceCache
 
     def consistencyCheck(self):

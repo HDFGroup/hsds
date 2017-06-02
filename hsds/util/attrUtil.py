@@ -33,7 +33,7 @@ def getRequestCollectionName(request):
     col_name = uri[:npos]
 
 
-    log.info('got collection name: [' + col_name + ']')
+    log.debug('got collection name: [' + col_name + ']')
     if col_name not in ('datasets', 'groups', 'datatypes'):
         msg = "Error: collection name unexpected: {}".format(col_name)
         log.error(msg)

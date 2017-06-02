@@ -56,7 +56,6 @@ async def GET_Dataset(request):
 
 async def POST_Dataset(request):
     """ Handler for POST /datasets"""
-    log.info("Post_Dataset")
     log.request(request)
     app = request.app
 
@@ -121,7 +120,7 @@ async def POST_Dataset(request):
     # ok - all set, create committed type obj
     now = int(time.time())
 
-    log.info("POST_dataset typejson: {}, shapejson: {}".format(type_json, shape_json))
+    log.debug("POST_dataset typejson: {}, shapejson: {}".format(type_json, shape_json))
     
     dset_json = {"id": dset_id, "root": root_id, "created": now, "lastModified": now, "type": type_json, "shape": shape_json, "attributes": {} }
     if domain is not None:
@@ -162,7 +161,7 @@ async def DELETE_Dataset(request):
     # verify the id  exist
     await check_metadata_obj(app, dset_id) 
 
-    log.info("deleting dataset: {}".format(dset_id))
+    log.debug("deleting dataset: {}".format(dset_id))
 
     notify=True
     if "Notify" in request.GET and not request.GET["Notify"]:
@@ -193,10 +192,10 @@ async def PUT_DatasetShape(request):
 
     shape_update = body["shape"]
      
-    log.info("shape_update: {}".format(shape_update))
+    log.debug("shape_update: {}".format(shape_update))
 
     shape_orig = dset_json["shape"]
-    log.info("shape_orig: {}".format(shape_orig))
+    log.debug("shape_orig: {}".format(shape_orig))
 
     # verify that the extend request is still valid
     # e.g. another client has already extended the shape since the SN

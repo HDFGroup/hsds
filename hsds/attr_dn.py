@@ -59,7 +59,7 @@ async def GET_Attributes(request):
      
     obj_json = await get_metadata_obj(app, obj_id)
     
-    log.info("GET attributes obj_id: {} got json".format(obj_id))
+    log.debug("GET attributes obj_id: {} got json".format(obj_id))
     if "attributes" not in obj_json:
         msg = "unexpected data for obj id: {}".format(obj_id)
         msg.error(msg)
@@ -135,7 +135,6 @@ async def GET_Attribute(request):
 async def PUT_Attribute(request):
     """ Handler for PUT /(obj)/<id>/attributes/<name>
     """
-    log.info("put_attribute dn")
     log.request(request)
     app = request.app
     obj_id = get_obj_id(request) 
@@ -174,7 +173,7 @@ async def PUT_Attribute(request):
 
   
     obj_json = await get_metadata_obj(app, obj_id)
-    log.info("PUT attribute obj_id: {} got json".format(obj_id))
+    log.debug("PUT attribute obj_id: {} got json".format(obj_id))
 
     if "attributes" not in obj_json:
         log.error("unexpected obj data for id: {}".format(obj_id))
@@ -216,7 +215,7 @@ async def DELETE_Attribute(request):
 
     obj_json = await get_metadata_obj(app, obj_id)
     
-    log.info("DELETE attribute obj_id: {} got json".format(obj_id))
+    log.debug("DELETE attribute obj_id: {} got json".format(obj_id))
     if "attributes" not in obj_json:
         msg = "unexpected data for obj id: {}".format(obj_id)
         msg.error(msg)

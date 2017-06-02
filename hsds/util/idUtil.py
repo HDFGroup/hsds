@@ -183,7 +183,7 @@ def getObjPartition(id, count):
     hash_code = getIdHash(id)
     hash_value = int(hash_code, 16)
     number = hash_value % count
-    log.info("getObjPartition for key: {} got: {}".format(id, number))
+    log.debug("getObjPartition for key: {} got: {}".format(id, number))
     return number
 
 def validateInPartition(app, obj_id):
@@ -208,7 +208,7 @@ def getDataNodeUrl(app, obj_id):
     dn_number = getObjPartition(obj_id, app['node_count'])
       
     url = dn_urls[dn_number]
-    log.info("got dn url: {}".format(url))
+    log.debug("got dn url: {}".format(url))
     return url
 
 

@@ -34,6 +34,7 @@ async def GET_Group(request):
         msg = "Missing group id"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
+    log.info("GET_Group, id: {}".format(group_id))
     if not isValidUuid(group_id, "Group"):
         msg = "Invalid group id: {}".format(group_id)
         log.warn(msg)
@@ -103,13 +104,13 @@ async def POST_Group(request):
         if body:
             if "link" in body:
                 link_body = body["link"]
-                log.info("link_body: {}".format(link_body))
+                log.debug("link_body: {}".format(link_body))
                 if "id" in link_body:
                     link_id = link_body["id"]
                 if "name" in link_body:
                     link_title = link_body["name"]
                 if link_id and link_title:
-                    log.info("link id: {}".format(link_id))
+                    log.debug("link id: {}".format(link_id))
                     # verify that the referenced id exists and is in this domain
                     # and that the requestor has permissions to create a link
                     await validateAction(app, domain, link_id, username, "create")
@@ -122,7 +123,7 @@ async def POST_Group(request):
     group_id = createObjId("groups") 
     log.info("new  group id: {}".format(group_id))
     group_json = {"id": group_id, "root": root_id, "domain": domain }
-    log.info("create group, body: " + json.dumps(group_json))
+    log.debug("create group, body: " + json.dumps(group_json))
     req = getDataNodeUrl(app, group_id) + "/groups"
     
     group_json = await http_post(app, req, data=group_json)
@@ -134,10 +135,10 @@ async def POST_Group(request):
         link_json["class"] = "H5L_TYPE_HARD"
         link_req = getDataNodeUrl(app, link_id)
         link_req += "/groups/" + link_id + "/links/" + link_title
-        log.info("PUT link - : " + link_req)
+        log.debug("PUT link - : " + link_req)
         put_json_rsp = await http_put(app, link_req, data=link_json)
-        log.info("PUT Link resp: {}".format(put_json_rsp))
-    log.info("returning resp")
+        log.debug("PUT Link resp: {}".format(put_json_rsp))
+    log.debug("returning resp")
     # group creation successful     
     resp = await jsonResponse(request, group_json, status=201)
     log.response(request, resp=resp)

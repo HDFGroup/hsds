@@ -88,9 +88,9 @@ async def GET_Attributes(request):
     if include_data:
         params["IncludeData"] = '1'
          
-    log.info("get attributes: " + req)
+    log.debug("get attributes: " + req)
     dn_json = await http_get_json(app, req, params=params)
-    log.info("got attributes json from dn for obj_id: " + str(obj_id)) 
+    log.debug("got attributes json from dn for obj_id: " + str(obj_id)) 
     attributes = dn_json["attributes"]
 
     # mixin hrefs
@@ -154,9 +154,9 @@ async def GET_Attribute(request):
 
     req = getDataNodeUrl(app, obj_id)
     req += '/' + collection + '/' + obj_id + "/attributes/" + attr_name
-    log.info("get Attribute: " + req)
+    log.debug("get Attribute: " + req)
     dn_json = await http_get_json(app, req)
-    log.info("got attributes json from dn for obj_id: " + str(obj_id)) 
+    log.debug("got attributes json from dn for obj_id: " + str(obj_id)) 
    
      
     resp_json = {}
@@ -197,7 +197,7 @@ async def PUT_Attribute(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     attr_name = request.match_info.get('name')
-    log.info("Attribute name: [{}]".format(attr_name) )
+    log.debug("Attribute name: [{}]".format(attr_name) )
     validateAttributeName(attr_name)
 
     log.info("PUT Attribute id: {} name: {}".format(obj_id, attr_name))
@@ -241,9 +241,9 @@ async def PUT_Attribute(request):
     if isinstance(datatype, str) and datatype.startswith("t-"):
         # Committed type - fetch type json from DN
         ctype_id = datatype
-        log.info("got ctypeid: {}".format(ctype_id)) 
+        log.debug("got ctypeid: {}".format(ctype_id)) 
         ctype_json = await getObjectJson(app, ctype_id)  
-        log.info("ctype: {}".format(ctype_json))
+        log.debug("ctype: {}".format(ctype_json))
         if ctype_json["root"] != root_id:
             msg = "Referenced committed datatype must belong in same domain"
             log.warn(msg)
@@ -256,7 +256,7 @@ async def PUT_Attribute(request):
             # convert predefined type string (e.g. "H5T_STD_I32LE") to 
             # corresponding json representation
             datatype = getBaseTypeJson(datatype)
-            log.info("got datatype: {}".format(datatype))
+            log.debug("got datatype: {}".format(datatype))
         except TypeError:
             msg = "POST Dataset with invalid predefined type"
             log.warn(msg)
@@ -343,7 +343,7 @@ async def DELETE_Attribute(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     attr_name = request.match_info.get('name')
-    log.info("Attribute name: [{}]".format(attr_name) )
+    log.debug("Attribute name: [{}]".format(attr_name) )
     validateAttributeName(attr_name)
 
     username, pswd = getUserPasswordFromRequest(request)

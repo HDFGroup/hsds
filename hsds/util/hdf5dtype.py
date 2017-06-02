@@ -720,7 +720,7 @@ Validate a json type
 def validateTypeItem(typeItem):
     try:
         dt = createDataType(typeItem)
-        log.info("got numpy type: {}".format(str(dt)))
+        log.debug("got numpy type: {}".format(str(dt)))
     except (KeyError, TypeError, ValueError) as e:
         raise HttpBadRequest(message=str(e))
      

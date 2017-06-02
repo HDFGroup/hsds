@@ -76,7 +76,7 @@ def validateUserPassword(app, user_name, password):
         log.info('isPasswordValid - null password')
         raise HttpBadRequest("provide  password")
 
-    log.info("looking up username: {}".format(user_name))
+    log.debug("looking up username: {}".format(user_name))
     if "user_db" not in app:
         msg = "user_db not intialized"
         log.error(msg)
@@ -89,7 +89,7 @@ def validateUserPassword(app, user_name, password):
     user_data = user_db[user_name] 
     
     if user_data['pwd'] == password:
-        log.info("user  password validated")
+        log.debug("user  password validated")
     else:
         log.info("user password is not valid")
         raise HttpProcessingError(code=401, message="provide user and password")
@@ -101,7 +101,7 @@ def getUserPasswordFromRequest(request):
     user = None
     pswd = None
     if 'Authorization' not in request.headers:
-        log.info("no Authorization in header")
+        log.debug("no Authorization in header")
         return None, None
     scheme, _, token =  request.headers.get('Authorization', '').partition(' ')
     if not scheme or not token:
@@ -154,7 +154,7 @@ def aclCheck(obj_json, req_action, req_user):
     if req_action not in acl or not acl[req_action]:
         log.warn("Action: {} not permitted for user: {}".format(req_action, req_user))
         raise HttpProcessingError(code=403, message="Forbidden")
-    log.info("action permitted")
+    log.debug("action permitted")
 
 def validateAclJson(acl_json):
     acl_keys = getAclKeys()

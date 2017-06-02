@@ -63,13 +63,13 @@ async def PUT_Chunk(request):
         raise HttpBadRequest(message=msg)
 
     validateInPartition(app, chunk_id)
-    log.info("request params: {}".format(list(request.GET.keys())))
+    log.debug("request params: {}".format(list(request.GET.keys())))
     if "dset" not in request.GET:
         msg = "Missing dset in GET request"
         log.error(msg)
         raise HttpBadRequest(message=msg)
     dset_json = json.loads(request.GET["dset"])
-    log.info("dset_json: {}".format(dset_json))
+    log.debug("dset_json: {}".format(dset_json))
     dims = getChunkLayout(dset_json)
      
     rank = len(dims)  
@@ -82,11 +82,11 @@ async def PUT_Chunk(request):
         dim_slice = getSliceQueryParam(request, i, dims[i])
         selection.append(dim_slice)   
     selection = tuple(selection)  
-    log.info("got selection: {}".format(selection))
+    log.debug("got selection: {}".format(selection))
 
     type_json = dset_json["type"]
     dt = createDataType(type_json)
-    log.info("dtype: {}".format(dt))
+    log.debug("dtype: {}".format(dt))
     itemsize = dt.itemsize
 
     if rank == 0:
@@ -99,17 +99,17 @@ async def PUT_Chunk(request):
         raise HttpBadRequest(message=msg)
     for i in range(rank):
         s = selection[i]
-        log.info("selection[{}]: {}".format(i, s))
+        log.debug("selection[{}]: {}".format(i, s))
 
     input_shape = getSelectionShape(selection)
-    log.info("input_shape: {}".format(input_shape))
+    log.debug("input_shape: {}".format(input_shape))
     num_elements = 1
     for extent in input_shape:
         num_elements *= extent
         
     # check that the content_length is what we expect
-    log.info("expect content_length: {}".format(num_elements*itemsize))
-    log.info("actual content_length: {}".format(request.content_length))
+    log.debug("expect content_length: {}".format(num_elements*itemsize))
+    log.debug("actual content_length: {}".format(request.content_length))
 
     if (num_elements * itemsize) != request.content_length:
         msg = "Excpected content_length of: {}, but got: {}".format(num_elements*itemsize, request.content_length)
@@ -130,19 +130,19 @@ async def PUT_Chunk(request):
     chunk_arr = None 
     chunk_cache = app['chunk_cache'] 
     s3_key = getS3Key(chunk_id)
-    log.info("PUT_Chunks s3_key: {}".format(s3_key))
+    log.debug("PUT_Chunks s3_key: {}".format(s3_key))
     if chunk_id in chunk_cache:
         chunk_arr = chunk_cache[chunk_id]
     else:
         obj_exists = await isS3Obj(app, s3_key)
         # TBD - potential race condition?
         if obj_exists:
-            log.info("Reading chunk from S3")
+            log.debug("Reading chunk from S3")
             chunk_bytes = await getS3Bytes(app, s3_key)
             chunk_arr = np.fromstring(chunk_bytes, dtype=dt)
             chunk_arr = chunk_arr.reshape(dims)
         else:
-            log.info("Initializing chunk")
+            log.debug("Initializing chunk")
             if fill_value:
                 # need to convert list to tuples for numpy broadcast
                 if isinstance(fill_value, list):
@@ -192,32 +192,32 @@ async def GET_Chunk(request):
         raise HttpBadRequest(message=msg)
 
     validateInPartition(app, chunk_id)
-    log.info("request params: {}".format(list(request.GET.keys())))
+    log.debug("request params: {}".format(list(request.GET.keys())))
     if "dset" not in request.GET:
         msg = "Missing dset in GET request"
         log.error(msg)
         raise HttpBadRequest(message=msg)
     dset_json = json.loads(request.GET["dset"])
     
-    log.info("dset_json: {}".format(dset_json)) 
+    log.debug("dset_json: {}".format(dset_json)) 
     type_json = dset_json["type"]
      
     dims = getChunkLayout(dset_json)
-    log.info("got dims: {}".format(dims))
+    log.debug("got dims: {}".format(dims))
     rank = len(dims)  
 
     # get chunk selection from query params
     if "select" in request.GET:
-        log.info("select: {}".format(request.GET["select"]))
+        log.debug("select: {}".format(request.GET["select"]))
     selection = []
     for i in range(rank):
         dim_slice = getSliceQueryParam(request, i, dims[i])
         selection.append(dim_slice)   
     selection = tuple(selection)  
-    log.info("got selection: {}".format(selection))
+    log.debug("got selection: {}".format(selection))
 
     dt = createDataType(type_json)
-    log.info("dtype: {}".format(dt))
+    log.debug("dtype: {}".format(dt))
 
     rank = len(dims)
     if rank == 0:
@@ -230,7 +230,7 @@ async def GET_Chunk(request):
         raise HttpBadRequest(message=msg)
     for i in range(rank):
         s = selection[i]
-        log.info("selection[{}]: {}".format(i, s))
+        log.debug("selection[{}]: {}".format(i, s))
 
     # get numpy array of chunk
     chunk_arr = None 
@@ -240,7 +240,7 @@ async def GET_Chunk(request):
         chunk_arr = chunk_cache[chunk_id]
     else:
         s3_key = getS3Key(chunk_id)
-        log.info("GET_Chunks s3_key: {}".format(s3_key))
+        log.debug("GET_Chunks s3_key: {}".format(s3_key))
         # check to see if there's a chunk object
         # TBD - potential race condition?
         obj_exists = await isS3Obj(app, s3_key)
@@ -249,10 +249,10 @@ async def GET_Chunk(request):
             msg = "Chunk {} does not exist".format(chunk_id)
             log.warn(msg)
             raise HttpProcessingError(code=404, message="Not found")
-        log.info("Reading chunk {} from S3".format(s3_key))
+        log.debug("Reading chunk {} from S3".format(s3_key))
         chunk_bytes = await getS3Bytes(app, s3_key)
         chunk_arr = np.fromstring(chunk_bytes, dtype=dt)
-        log.info("chunk size: {}".format(chunk_arr.size))
+        log.debug("chunk size: {}".format(chunk_arr.size))
         chunk_arr = chunk_arr.reshape(dims)
         chunk_cache[chunk_id] = chunk_arr  # store in cache
      
@@ -278,22 +278,22 @@ async def GET_Chunk(request):
             field_names = list(dt.fields.keys())
 
         x = chunk_arr[selection]
-        log.info("x: {}".format(x))
+        log.debug("x: {}".format(x))
         eval_str = getEvalStr(query, "x", field_names)
-        log.info("eval_str: {}".format(eval_str))
+        log.debug("eval_str: {}".format(eval_str))
         where_result = np.where(eval(eval_str))
-        log.info("where_result: {}".format(where_result))
+        log.debug("where_result: {}".format(where_result))
         where_result_index = where_result[0]
-        log.info("whare_result index: {}".format(where_result_index))
-        log.info("boolean selection: {}".format(x[where_result_index]))
+        log.debug("whare_result index: {}".format(where_result_index))
+        log.debug("boolean selection: {}".format(x[where_result_index]))
         s = selection[0]
         count = 0
         for index in where_result_index:
-            log.info("index: {}".format(index))
+            log.debug("index: {}".format(index))
             value = x[index].tolist()
-            log.info("value: {}".format(value))
+            log.debug("value: {}".format(value))
             json_val = bytesArrayToList(value)
-            log.info("json_value: {}".format(json_val))
+            log.debug("json_value: {}".format(json_val))
             json_index = index.tolist() * s.step + s.start  # adjust for selection
             indices.append(json_index)
             values.append(json_val)
@@ -335,9 +335,9 @@ async def POST_Chunk(request):
         msg = "Missing chunk id"
         log.error(msg)
         raise HttpBadRequest(message=msg)
-    log.info("chunk_id: {}".format(chunk_id))
+    log.info("POST chunk_id: {}".format(chunk_id))
     chunk_index = getChunkIndex(chunk_id)
-    log.info("chunk_index: {}".format(chunk_index))
+    log.debug("chunk_index: {}".format(chunk_index))
     
     if not isValidUuid(chunk_id, "Chunk"):
         msg = "Invalid chunk id: {}".format(chunk_id)
@@ -345,16 +345,16 @@ async def POST_Chunk(request):
         raise HttpBadRequest(message=msg)
 
     validateInPartition(app, chunk_id)
-    log.info("request params: {}".format(list(request.GET.keys())))
+    log.debug("request params: {}".format(list(request.GET.keys())))
     if "dset" not in request.GET:
         msg = "Missing dset in GET request"
         log.error(msg)
         raise HttpBadRequest(message=msg)
     dset_json = json.loads(request.GET["dset"])
-    log.info("dset_json: {}".format(dset_json))
+    log.debug("dset_json: {}".format(dset_json))
     chunk_layout = getChunkLayout(dset_json)
     chunk_coord = getChunkCoordinate(chunk_id, chunk_layout)
-    log.info("chunk_coord: {}".format(chunk_coord))
+    log.debug("chunk_coord: {}".format(chunk_coord))
     
     
     if not request.has_body:
@@ -372,12 +372,12 @@ async def POST_Chunk(request):
         raise HttpBadRequest(message=msg)
     
     dims = getChunkLayout(dset_json)
-    log.info("got dims: {}".format(dims))
+    log.debug("got dims: {}".format(dims))
     rank = len(dims)  
 
     type_json = dset_json["type"]
     dt = createDataType(type_json)
-    log.info("dtype: {}".format(dt))
+    log.debug("dtype: {}".format(dt))
 
     rank = len(dims)
     if rank == 0:
@@ -392,7 +392,7 @@ async def POST_Chunk(request):
         chunk_arr = chunk_cache[chunk_id]
     else:
         s3_key = getS3Key(chunk_id)
-        log.info("GET_Chunks s3_key: {}".format(s3_key))
+        log.debug("GET_Chunks s3_key: {}".format(s3_key))
         # check to see if there's a chunk object
         # TBD - potential race condition?
         obj_exists = await isS3Obj(app, s3_key)
@@ -401,7 +401,7 @@ async def POST_Chunk(request):
             msg = "Chunk {} does not exist".format(chunk_id)
             log.warn(msg)
             raise HttpProcessingError(code=404, message="Not found")
-        log.info("Reading chunk {} from S3".format(s3_key))
+        log.debug("Reading chunk {} from S3".format(s3_key))
         chunk_bytes = await getS3Bytes(app, s3_key)
         chunk_arr = np.fromstring(chunk_bytes, dtype=dt)
         chunk_arr = chunk_arr.reshape(dims)
@@ -419,7 +419,7 @@ async def POST_Chunk(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     num_points = len(point_arr) // rank
-    log.info("got {} points".format(num_points))
+    log.debug("got {} points".format(num_points))
 
     point_arr = point_arr.reshape((num_points, rank))    
     output_arr = np.zeros((num_points,), dtype=dt)
@@ -463,7 +463,7 @@ async def DELETE_Chunk(request):
 
     chunk_cache = app['chunk_cache'] 
     s3_key = getS3Key(chunk_id)
-    log.info("DELETE_Chunk s3_key: {}".format(s3_key))
+    log.debug("DELETE_Chunk s3_key: {}".format(s3_key))
 
     if chunk_id in chunk_cache:
         del chunk_cache[chunk_id]

@@ -33,7 +33,7 @@ def getAsyncNodeUrl(app):
         raise HttpProcessingError(message=msg, code=503)
 
     an_url = app["an_url"]
-    log.info("got an url: {}".format(an_url))
+    log.debug("got an url: {}".format(an_url))
     return an_url
 
 def get_obj_id(request, body=None):
@@ -93,10 +93,10 @@ async def check_metadata_obj(app, obj_id):
     meta_cache = app['meta_cache'] 
     obj_json = None 
     if obj_id in meta_cache:
-        log.info("check_metadata_obj, {} found in meta cache".format(obj_id))
+        log.debug("check_metadata_obj, {} found in meta cache".format(obj_id))
     else:   
         s3_key = getS3Key(obj_id)
-        log.info("check_metadata_obj({})".format(s3_key))
+        log.debug("check_metadata_obj({})".format(s3_key))
         # does key exist?
         found = await isS3Obj(app, s3_key)
         if not found:
@@ -130,13 +130,13 @@ async def get_metadata_obj(app, obj_id):
     meta_cache = app['meta_cache'] 
     obj_json = None 
     if obj_id in meta_cache:
-        log.info("{} found in meta cache".format(obj_id))
+        log.debug("{} found in meta cache".format(obj_id))
         obj_json = meta_cache[obj_id]
     else:   
         # TBD: put a flag here that S3 read in progress so that we don'task
         # double transfer the same object
         s3_key = getS3Key(obj_id)
-        log.info("getS3JSONObj({})".format(s3_key))
+        log.debug("getS3JSONObj({})".format(s3_key))
         # read S3 object as JSON
         obj_json = await getS3JSONObj(app, s3_key)
          
@@ -173,7 +173,7 @@ def save_metadata_obj(app, obj_id, obj_json, notify=True):
     
     # update meta cache
     meta_cache = app['meta_cache'] 
-    log.info("save: {} to cache".format(obj_id))
+    log.debug("save: {} to cache".format(obj_id))
     meta_cache[obj_id] = obj_json
     meta_cache.setDirty(obj_id)
     
@@ -263,7 +263,7 @@ async def s3sync(app):
                 s3_key = None
                 log.info("s3sync for obj_id: {}".format(obj_id))
                 s3_key = getS3Key(obj_id)  
-                log.info("s3sync for s3_key: {}".format(s3_key))
+                log.debug("s3sync for s3_key: {}".format(s3_key))
                 if obj_id in deleted_ids:
                     # delete the s3 obj
                     try:
@@ -299,7 +299,7 @@ async def s3sync(app):
                         continue
                     obj_json = meta_cache[obj_id]
                     meta_cache.clearDirty(obj_id)
-                    log.info("writing s3_key: {}".format(s3_key))
+                    log.debug("writing s3_key: {}".format(s3_key))
                     try:
                         await putS3JSONObj(app, s3_key, obj_json) 
                         log.info("adding {} to success_keys".format(obj_id))
@@ -330,11 +330,11 @@ async def s3sync(app):
                 keys = []
                 while len(success_keys) > 0:
                     key = success_keys.pop(0)
-                    log.info("pop success_key: {}".format(key))
+                    log.debug("pop success_key: {}".format(key))
                     if key in notify_ids:
                         notify_ids.remove(key)
                     else:
-                        log.info("notify not set for key: {}".format(key))
+                        log.debug("notify not set for key: {}".format(key))
                         continue
                     if key in deleted_ids:
                         if action is None:
@@ -351,7 +351,7 @@ async def s3sync(app):
                         else:
                             break
                     keys.append(key)
-                    log.info("appended_keys: {}".format(keys))
+                    log.debug("appended_keys: {}".format(keys))
 
                 if len(keys) > 0:
                     body = { "objids": keys }

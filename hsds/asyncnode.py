@@ -45,7 +45,7 @@ async def updateDatasetContents(app, domain, dsetid):
         return None
      
     if len(dsetS3Obj.chunks) == 0:
-        log.info("no chunks for dataset")
+        log.debug("no chunks for dataset")
         return None
     # TBD: Replace with domainUtil func
     col_s3key = domain[1:] + "/." + dsetid + ".chunks.txt"  
@@ -63,14 +63,14 @@ async def updateDatasetContents(app, domain, dsetid):
         if chunkid not in s3objs:
             log.warn("updateDatasetContents: chunk {} for dset: {} not found in s3objs".format(chunkid, dsetid))
             continue
-        log.info("getting chunk_obj for {}".format(chunkid))
+        log.debug("getting chunk_obj for {}".format(chunkid))
         chunk_obj = s3objs[chunkid]
         # chunk_obj should have keys: ETag, Size, and LastModified 
         if chunk_obj.etag is None:
             log.warn("chunk_obj for {} not initialized".format(chunkid))
             continue
         line = "{} {} {} {}\n".format(chunkid[39:], chunk_obj.etag, chunk_obj.lastModified, chunk_obj.size)
-        log.info("chunk contents: {}".format(line))
+        log.debug("chunk contents: {}".format(line))
         line = line.encode('utf8')
         text_data += line
         allocated_size += chunk_obj.size
@@ -87,7 +87,7 @@ async def updateDomainContent(app, domain, objs_updated=None):
     """
     log.info("updateDomainContent: {}".format(domain))
     if objs_updated is not None:
-        log.info("objs_updated: {}".format(objs_updated))
+        log.debug("objs_updated: {}".format(objs_updated))
 
     s3objs = app["s3objs"]
     roots = app["roots"]
@@ -97,7 +97,7 @@ async def updateDomainContent(app, domain, objs_updated=None):
     domainS3Obj = s3objs[domain]
 
     if domainS3Obj.root is None:
-        log.info("updateDomainContent - folder domain: {}, skipping".format(domain))
+        log.debug("updateDomainContent - folder domain: {}, skipping".format(domain))
         return
   
     rootid = domainS3Obj.root
@@ -122,11 +122,11 @@ async def updateDomainContent(app, domain, objs_updated=None):
                     collection_included = True
                     break
             if not collection_included:
-                log.info("no updated for collection: {}".format(collection))
+                log.debug("no updates for collection: {}".format(collection))
                 continue  # go on to next collection
         domain_col = rootObj[collection]
         log.info("domain_{} count: {}".format(collection, len(domain_col)))
-        log.info("domain_{} items: {}".format(collection, domain_col))
+        log.debug("domain_{} items: {}".format(collection, domain_col))
         col_s3key = domain[1:] + "/." + collection + ".txt"  
         if await isS3Obj(app, col_s3key):
             if len(domain_col) == 0:
@@ -138,7 +138,7 @@ async def updateDomainContent(app, domain, objs_updated=None):
                 if not FORCE_CONTENT_LIST_CREATION:
                     continue
         if len(domain_col) > 0:
-            log.info("updating domain collection: {} for domain: {}".format(domain_col, domain))
+            log.debug("updating domain collection: {} for domain: {}".format(domain_col, domain))
             col_ids = list(domain_col)
             col_ids.sort()
             text_data = b""
@@ -149,7 +149,7 @@ async def updateDomainContent(app, domain, objs_updated=None):
                 col_obj = s3objs[obj_id]
                 if col_obj.etag is None or col_obj.lastModified is None or col_obj.size is None:
                     log.warn("updateDomainContent - s3 properties not set for {}".format(obj_id))
-                    log.info("id: {} etag: {}, lastModified: {} size: {}".format(col_obj.id, col_obj.etag, col_obj.lastModified, col_obj.size))
+                    log.debug("id: {} etag: {}, lastModified: {} size: {}".format(col_obj.id, col_obj.etag, col_obj.lastModified, col_obj.size))
                     continue
 
                 line = "{} {} {} {}".format(obj_id, col_obj.etag, col_obj.lastModified, col_obj.size)
@@ -172,7 +172,7 @@ async def updateDomainContent(app, domain, objs_updated=None):
                         if result is not None:
                             num_chunks = result[0]
                             allocated_size = result[1]
-                            log.info("chunk summary {}: {} {}".format(obj_id, num_chunks, allocated_size))
+                            log.debug("chunk summary {}: {} {}".format(obj_id, num_chunks, allocated_size))
                             chunk_summary = " {} {}".format(num_chunks, allocated_size)
                             line += chunk_summary
                 line += "\n"
@@ -198,14 +198,14 @@ def sweepObj(app, objid):
         return False
     s3obj = s3objs[objid]
     if s3obj.used is True:
-        log.info("sweepObj {} - obj in use".format(objid))
+        log.debug("sweepObj {} - obj in use".format(objid))
         return False
     if s3obj.lastModified is None:
         log.warn("sweepObj({}) - lastModified not set".format(objid))
         return False
     now = time.time()
     if now - s3obj.lastModified < app["anonymous_ttl"]:
-        log.info("obj: {} isn't old enough to delete yet".format(objid))
+        log.debug("obj: {} isn't old enough to delete yet".format(objid))
         return False
  
     return True
@@ -320,12 +320,12 @@ async def domainDelete(app, domain):
     # delete any content .txt objects assoc with this domain
     s3_prefix = domain[1:] + "/"
     s3_contents_keys = await getS3Keys(app, prefix=s3_prefix, suffix='.txt')
-    log.info("s3_contents_keys:")
+    log.debug("s3_contents_keys:")
     for k in s3_contents_keys:
-        log.info("{}".format(k))
+        log.debug("{}".format(k))
         s3_content_key = s3_prefix + k + ".txt"
         await deleteS3Obj(app, s3_content_key)
-    log.info("s3_contents_keys done")
+    log.debug("s3_contents_keys done")
      
     
 
@@ -346,12 +346,12 @@ async def domainCreate(app, domain):
         except HttpProcessingError as hpe:
             log.warn("domainCreate - getRootProperty({}) error: {}".format(domain, hpe.code))
     if s3obj.root:
-        log.info("domainCreate for {}, root found: {}".format(domain, s3obj.root))
+        log.debug("domainCreate for {}, root found: {}".format(domain, s3obj.root))
         updated_domains = app["updated_domains"]
         updated_domains.add(domain)  # flag to update domain contents
          
     else:
-        log.info("domainCreate for {}, no root (folder)".format(domain)) 
+        log.debug("domainCreate for {}, no root (folder)".format(domain)) 
          
 
     domains = app["domains"]
@@ -392,7 +392,7 @@ async def objUpdate(app, objid):
         dsetid = getDatasetId(objid)
         if dsetid in s3objs:
             dsetObj = s3objs[dsetid]
-            log.info("adding {} to {} chunks".format(objid, dsetid))
+            log.debug("adding {} to {} chunks".format(objid, dsetid))
             dsetObj.chunks.add(objid)
 
     elif s3obj.root is None:
@@ -408,11 +408,11 @@ async def objUpdate(app, objid):
     domain = getDomainForObjId(app, objid)
     if domain:
         # Flag that the content files should be updated
-        log.info("objUpdate: adding {} to updated_domains".format(domain))
+        log.debug("objUpdate: adding {} to updated_domains".format(domain))
         updated_domains = app["updated_domains"]
         updated_domains.add(domain)  
     else:
-        log.info("objUpdate: domain {} not found for {}".format(domain, objid))
+        log.debug("objUpdate: domain {} not found for {}".format(domain, objid))
      
    
 
@@ -432,7 +432,7 @@ async def objDelete(app, objid):
     if success and domain and domain.root != objid:
         # Flag that the content files should be updated
         # Note: for root deletions, we'll just let the DN node cleanup the content objects
-        log.info("adding {} to updated_domains".format(domain))
+        log.debug("adding {} to updated_domains".format(domain))
         updated_domains = app["updated_domains"]
         updated_domains.add(domain) 
 
@@ -459,17 +459,20 @@ async def processPendingQueue(app):
     """ Process any pending queue events """      
 
     pending_queue = app["pending_queue"]
-    log.info("processPendingQueue start")    
+    pending_count = len(pending_queue)
+    if pending_count == 0:
+        return # nothing to do
+    log.info("processPendingQueue start - {} items".format(pending_count))    
     domain_updates = set()  # set of ids for which we'll need to update domain content
     dataset_updates = set()
     # TBD - this could starve other work if items are getting added to the pending
     # queue continually.  Copy items off pending queue synchronously and then process?
     while len(pending_queue) > 0:
-        log.info("pending_queue len: {}".format(len(pending_queue)))
+        log.debug("pending_queue len: {}".format(len(pending_queue)))
         item = pending_queue.pop(0)  # remove from the front
         objid = item["objid"]
         action = item["action"]
-        log.info("pop from pending queue: obj: {} action: {}".format(objid, action))
+        log.debug("pop from pending queue: obj: {} action: {}".format(objid, action))
             
         if isValidDomain(objid):
             if action == "DELETE":

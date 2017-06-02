@@ -86,7 +86,7 @@ async def http_get_json(app, url, params=None):
      
     try:    
         async with client.get(url, params=params, timeout=timeout) as rsp:
-            log.info("http_get status: {}".format(rsp.status))
+            log.info("http_get_json status: {}".format(rsp.status))
             if rsp.status != 200:
                 msg = "request to {} failed with code: {}".format(url, rsp.status)
                 log.warn(msg)
@@ -121,7 +121,7 @@ async def http_post(app, url, data=None, params=None):
                 log.warn(msg)
                 raise HttpProcessingError(message=msg, code=rsp.status)
             rsp_json = await rsp.json()
-            log.info("http_post({}) response: {}".format(url, rsp_json))
+            log.debug("http_post({}) response: {}".format(url, rsp_json))
     except ClientError as ce:
         log.error("Error for http_post({}): {} ".format(url, str(ce)))
         raise HttpProcessingError(message="Unexpected error", code=500)
@@ -148,7 +148,7 @@ async def http_put(app, url, data=None, params=None):
                 raise HttpProcessingError(message=msg, code=rsp.status)
 
             rsp_json = await rsp.json()
-            log.info("http_put({}) response: {}".format(url, rsp_json))
+            log.debug("http_put({}) response: {}".format(url, rsp_json))
     except ClientError as ce:
         log.error("ClientError for http_put({}): {} ".format(url, str(ce)))
         raise HttpProcessingError(message="Unexpected error", code=500)
@@ -176,7 +176,7 @@ async def http_put_binary(app, url, data=None, params=None):
                 raise HttpProcessingError(message=msg, code=rsp.status)
 
             rsp_json = await rsp.json()
-            log.info("http_put_binary({}) response: {}".format(url, rsp_json))
+            log.debug("http_put_binary({}) response: {}".format(url, rsp_json))
     except ClientError as ce:
         log.error("Error for http_put_binary({}): {} ".format(url, str(ce)))
         raise HttpProcessingError(message="Unexpected error", code=500)
@@ -203,7 +203,7 @@ async def http_delete(app, url, data=None, params=None):
                 raise HttpProcessingError(message=msg, code=rsp.status)
 
             rsp_json = await rsp.json()
-            log.info("http_delete({}) response: {}".format(url, rsp_json))
+            log.debug("http_delete({}) response: {}".format(url, rsp_json))
     except ClientError as ce:
         log.error("Error for http_delete({}): {} ".format(url, str(ce)))
         raise HttpProcessingError(message="Unexpected error", code=500)

@@ -168,13 +168,13 @@ async def GET_Domains(request):
     log.info("got domain: [{}]".format(domain))
 
     domain_prefix = getS3PrefixForDomain(domain)
-    log.info("using domain prefix: {}".format(domain_prefix))
+    log.debug("using domain prefix: {}".format(domain_prefix))
      
     limit = None
     if "Limit" in request.GET:
         try:
             limit = int(request.GET["Limit"])
-            log.info("GET_Domains - using Limit: {}".format(limit))
+            log.debug("GET_Domains - using Limit: {}".format(limit))
         except ValueError:
             msg = "Bad Request: Expected int type for limit"
             log.error(msg)  # should be validated by SN
@@ -182,7 +182,7 @@ async def GET_Domains(request):
     marker_key = None
     if "Marker" in request.GET:
         marker = request.GET["Marker"]
-        log.info("got Marker request param: {}".format(marker))
+        log.debug("got Marker request param: {}".format(marker))
         try:
             # marker should be a valid domain
             validateDomain(marker)
@@ -191,30 +191,30 @@ async def GET_Domains(request):
             log.warn(msg)
             raise HttpBadRequest(message=msg)
         marker_key = getS3Key(marker)
-        log.info("GET_Domains - using Marker key: {}".format(marker_key))
+        log.debug("GET_Domains - using Marker key: {}".format(marker_key))
     verbose = False
     if "verbose" in request.GET and request.GET["verbose"]:
         verbose = True
 
     s3_keys = await getS3Keys(app, prefix=domain_prefix, deliminator='/')
-    log.info("got {} keys".format(len(s3_keys)))
+    log.debug("got {} keys".format(len(s3_keys)))
     # filter out anything without a '/' in the key
     # note: sometimes a ".domain.json" key shows up, not sure why
     keys = []
     for key in s3_keys:
         if key.find('/') == -1:
-            log.info('skipping key: {}'.format(key))
+            log.debug('skipping key: {}'.format(key))
             continue
         keys.append(key)
 
-    log.info("s3keys: {}".format(keys))
+    log.debug("s3keys: {}".format(keys))
     if marker_key:
         # trim everything up to and including marker
-        log.info("using marker key: {}".format(marker_key))
+        log.debug("using marker key: {}".format(marker_key))
         index = 0
         for key in keys:
             index += 1
-            log.info("compare {} to {}".format(key, marker_key))
+            log.debug("compare {} to {}".format(key, marker_key))
             if key == marker_key:
                 break
             # also check if this matches key with ".domain.json" appended
@@ -226,30 +226,30 @@ async def GET_Domains(request):
 
     if limit and len(keys) > limit:
         keys = keys[:limit]  
-        log.info("restricting number of keys returned to limit value")
+        log.debug("restricting number of keys returned to limit value")
 
-    log.info("s3keys trim to marker and limit: {}".format(keys))
+    log.debug("s3keys trim to marker and limit: {}".format(keys))
     
     if len(keys) > 0:
         dn_rsp = {} # dictionary keyed by chunk_id
         tasks = []
-        log.info("async query with {} domain keys".format(len(keys)))
+        log.debug("async query with {} domain keys".format(len(keys)))
         for key in keys:
             sub_domain = '/' + key
             if sub_domain[-1] == '/':
                 sub_domain = sub_domain[:-1]  # specific sub-domains don't have trailing slash
-            log.info("query for subdomain: {}".format(sub_domain))
+            log.debug("query for subdomain: {}".format(sub_domain))
             task = asyncio.ensure_future(domain_query(app, sub_domain, dn_rsp))
             tasks.append(task)
         await asyncio.gather(*tasks, loop=loop)
-        log.info("async query complete")
+        log.debug("async query complete")
 
     domains = []
     for key in keys:
         sub_domain = '/' + key  
         if sub_domain[-1] == '/':
             sub_domain = sub_domain[:-1]  # specific sub-domains don't have trailing slash
-        log.info("sub_domain: {}".format(sub_domain))
+        log.debug("sub_domain: {}".format(sub_domain))
         if sub_domain not in dn_rsp:
             log.warn("expected to find sub-domain: {} in dn_rsp".format(sub_domain))
             continue
@@ -329,7 +329,7 @@ async def GET_Domain(request):
         log.warn("No acls key found in domain")
         raise HttpProcessingError(code=500, message="Unexpected error")
 
-    log.info("got domain_json: {}".format(domain_json))
+    log.debug("got domain_json: {}".format(domain_json))
     # validate that the requesting user has permission to read this domain
     aclCheck(domain_json, "read", username)  # throws exception if not authorized
 
@@ -358,7 +358,7 @@ async def GET_Domain(request):
     
     hrefs.append({'rel': 'acls', 'href': getHref(request, '/acls')})
     parent_domain = getParentDomain(domain)
-    log.info("href parent domain: {}".format(parent_domain))
+    log.debug("href parent domain: {}".format(parent_domain))
     if parent_domain:
         hrefs.append({'rel': 'parent', 'href': getHref(request, '/', domain=parent_domain)})
 
@@ -381,7 +381,6 @@ async def PUT_Domain(request):
     # yet exist
     username, pswd = getUserPasswordFromRequest(request) # throws exception if user/password is not valid
     validateUserPassword(app, username, pswd)
-    log.info("PUT domain request from: {}".format(username))
     
     try:
         domain = getDomainFromRequest(request)
@@ -390,7 +389,7 @@ async def PUT_Domain(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
  
-    log.info("PUT domain: {}".format(domain))
+    log.info("PUT domain: {}, username: {}".format(domain, username))
 
     parent_domain = getParentDomain(domain)
 
@@ -398,7 +397,7 @@ async def PUT_Domain(request):
         msg = "creation of top-level domains is not supported"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-    log.info("parent_domain: {}".format(parent_domain))
+    log.debug("parent_domain: {}".format(parent_domain))
 
     parent_json = None
     try:
@@ -412,7 +411,7 @@ async def PUT_Domain(request):
     is_folder = False
     if request.has_body:
         body = await request.json()   
-        log.info("PUT domain with body: {}".format(body))
+        log.debug("PUT domain with body: {}".format(body))
         if body and "folder" in body:
             if body["folder"]:
                 is_folder = True
@@ -422,9 +421,9 @@ async def PUT_Domain(request):
     if not is_folder:
         # create a root group for the new domain
         root_id = createObjId("groups") 
-        log.info("new root group id: {}".format(root_id))
+        log.debug("new root group id: {}".format(root_id))
         group_json = {"id": root_id, "root": root_id, "domain": domain }
-        log.info("create group for domain, body: " + json.dumps(group_json))
+        log.debug("create group for domain, body: " + json.dumps(group_json))
     
         # create root group
         req = getDataNodeUrl(app, root_id) + "/groups"
@@ -435,7 +434,7 @@ async def PUT_Domain(request):
             log.error(msg)
             raise ce
     else:
-        log.info("no root group, creating folder")
+        log.debug("no root group, creating folder")
  
     domain_json = { }
 
@@ -484,13 +483,13 @@ async def DELETE_Domain(request):
 
     # get the parent domain
     try:
-        log.info("get parent domain {}".format(parent_domain))
+        log.debug("get parent domain {}".format(parent_domain))
         parent_json = await getDomainJson(app, parent_domain)
     except HttpProcessingError as hpe:
         msg = "Attempt to delete domain with no parent domain"
         log.warn(msg)
         raise HttpProcessingError(code=403, message="Forbidden")
-    log.info("got parent json: {}".format(parent_json))
+    log.debug("got parent json: {}".format(parent_json))
     
     try:
         domain_json = await getDomainJson(app, domain, reload=True)
@@ -560,7 +559,7 @@ async def GET_ACL(request):
 
     acls = domain_json["acls"]
 
-    log.info("got domain_json: {}".format(domain_json))
+    log.debug("got domain_json: {}".format(domain_json))
 
     if acl_username not in acls:
         msg = "acl for username: [{}] not found".format(acl_username)
@@ -624,7 +623,7 @@ async def GET_ACLs(request):
 
     acls = domain_json["acls"]
 
-    log.info("got domain_json: {}".format(domain_json))
+    log.debug("got domain_json: {}".format(domain_json))
     # validate that the requesting user has permission to read this domain
     aclCheck(domain_json, "readACL", username)  # throws exception if not authorized
 
@@ -745,7 +744,7 @@ async def GET_Datasets(request):
         log.warn("No acls key found in domain")
         raise HttpProcessingError(code=500, message="Unexpected error")
 
-    log.info("got domain_json: {}".format(domain_json))
+    log.debug("got domain_json: {}".format(domain_json))
     # validate that the requesting user has permission to read this domain
     aclCheck(domain_json, "read", username)  # throws exception if not authorized
 
@@ -821,7 +820,7 @@ async def GET_Groups(request):
         log.warn("No acls key found in domain")
         raise HttpProcessingError(code=500, message="Unexpected error")
 
-    log.info("got domain_json: {}".format(domain_json))
+    log.debug("got domain_json: {}".format(domain_json))
     # validate that the requesting user has permission to read this domain
     aclCheck(domain_json, "read", username)  # throws exception if not authorized
 
@@ -897,7 +896,7 @@ async def GET_Datatypes(request):
         log.warn("No acls key found in domain")
         raise HttpProcessingError(code=500, message="Unexpected error")
 
-    log.info("got domain_json: {}".format(domain_json))
+    log.debug("got domain_json: {}".format(domain_json))
     # validate that the requesting user has permission to read this domain
     aclCheck(domain_json, "read", username)  # throws exception if not authorized
 

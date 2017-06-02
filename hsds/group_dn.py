@@ -138,7 +138,7 @@ async def DELETE_Group(request):
     # verify the id exist
     await check_metadata_obj(app, group_id)
         
-    log.info("deleting group: {}".format(group_id))
+    log.debug("deleting group: {}".format(group_id))
 
     notify=True
     if "Notify" in request.GET and not request.GET["Notify"]:

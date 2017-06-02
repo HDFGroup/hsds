@@ -187,7 +187,7 @@ def isS3Obj(app, id):
     
 async def getRootProperty(app, s3obj):
     """ Get the root property if not already set """
-    log.info("getRootProperty {}".format(s3obj.id))
+    log.debug("getRootProperty {}".format(s3obj.id))
     if s3obj.root is not None:
         log.info("getRootProperty - root already set")
         return s3obj.root # root already set
@@ -209,7 +209,7 @@ async def getRootProperty(app, s3obj):
             log.warn("no root for {}".format(s3obj.id))
     else:
         rootid = obj_json["root"]
-        log.info("got rootid {} for obj: {}".format(rootid, s3obj.id))
+        log.debug("got rootid {} for obj: {}".format(rootid, s3obj.id))
         s3obj.setRoot(obj_json["root"])
         if isValidDomain(s3obj.id):
             domain = s3obj.id
@@ -239,7 +239,7 @@ async def getRootProperty(app, s3obj):
             else:
                 root_collection = rootObj[obj_collection]
                 if s3obj.id not in root_collection:
-                    log.info("adding {} to collection {} of root {}".format(s3obj.id, obj_collection, rootid))
+                    log.debug("adding {} to collection {} of root {}".format(s3obj.id, obj_collection, rootid))
                     root_collection.add(s3obj.id)  
  
 
@@ -309,15 +309,15 @@ async def getS3Obj(app, id, *args, **kwds):
         s3obj = S3Obj(id, **kwds)
 
     if eTag is not None:
-        log.info("s3obj {} set etag: {}".format(id, eTag))
+        log.debug("s3obj {} set etag: {}".format(id, eTag))
         s3obj.setETag(eTag)
 
     if lastModified is not None:
-        log.info("s3obj {} set lastModified: {}".format(id, lastModified))
+        log.debug("s3obj {} set lastModified: {}".format(id, lastModified))
         s3obj.setLastModified(lastModified)
 
     if s3size != 0:
-        log.info("s3obj {} set size: {}".format(id, s3size))
+        log.debug("s3obj {} set size: {}".format(id, s3size))
         s3obj.setSize(s3size)
         app["bytes_in_bucket"] += (s3size - old_size)
 
@@ -451,11 +451,11 @@ async def listKeys(app):
     # Get all the keys for the bucket
     # request include_stats, so that for each key we get the ETag, LastModified, and Size values.
     s3keys = await getS3Keys(app, include_stats=True)
-    log.info("got: {} keys".format(len(s3keys)))    
+    log.debug("got: {} keys".format(len(s3keys)))    
     for s3key in s3keys:
-        log.info("got s3key: {}".format(s3key))
+        log.debug("got s3key: {}".format(s3key))
         if not isS3ObjKey(s3key):
-            log.info("ignoring: {}".format(s3key))
+            log.debug("ignoring: {}".format(s3key))
             continue
         item = s3keys[s3key]   
         objid = getObjId(s3key)
@@ -464,16 +464,16 @@ async def listKeys(app):
         except HttpProcessingError as hpe:
             log.warn("got error retreiving obj {}: {}".format(objid, hpe.code))
             continue
-        log.info("got s3obj({})".format(objid))
+        log.debug("got s3obj({})".format(objid))
 
     s3objs = app["s3objs"]  
     domains = app["domains"] 
     roots = app["roots"]
     bytes_in_bucket = app["bytes_in_bucket"]  
 
-    log.info("listKeys: s3objs...")
+    log.debug("listKeys: s3objs...")
     for id in s3objs:
-        log.info("listKey: {}".format(id))
+        log.debug("listKey: {}".format(id))
 
     log.info("listKeys: add chunks")
     # iterate through s3keys again and add any chunks to the corresponding dataset
@@ -486,7 +486,7 @@ async def listKeys(app):
             else:
                 item = s3objs[chunkid]  # Dictionary of ETag, LastModified, and Size
                 dset = s3objs[dsetid]
-                log.info("listKeys: adding chunk {} to dset {} chunks".format(chunkid, dsetid))
+                log.debug("listKeys: adding chunk {} to dset {} chunks".format(chunkid, dsetid))
                 dset.chunks.add(chunkid)  
 
     # get root properties
@@ -497,11 +497,11 @@ async def listKeys(app):
             continue  # no root for chunks
         s3obj = s3objs[objid]
         if s3obj.root is None:
-            log.info("listKeys getRootProperty: {}".format(objid))
+            log.debug("listKeys getRootProperty: {}".format(objid))
             try:
-                log.info("listKeys: getRootProperty for {}".format(objid))
+                log.debug("listKeys: getRootProperty for {}".format(objid))
                 await getRootProperty(app, s3obj)
-                log.info("listKeys: gotRootProperty {} for {}".format(s3obj.root, objid))
+                log.debug("listKeys: gotRootProperty {} for {}".format(s3obj.root, objid))
             except HttpProcessingError as hpe:
                 log.warn("Got error getting root property of {}: {}".format(objid, hpe.code))
                 continue
@@ -524,7 +524,7 @@ async def removeLink(app, grpid, link_name):
     req = getDataNodeUrl(app, grpid)
 
     req += "/groups/" + grpid + "/links/" + link_name
-    log.info("Delete request: {}".format(req))
+    log.debug("Delete request: {}".format(req))
     params = {"Notify": 0}  # Let the DN not to notify the AN node about this action
     try:
         await http_delete(app, req, params=params)
@@ -576,10 +576,10 @@ async def markObj(app, objid, updateLinks=False):
 
     s3obj = s3objs[objid]
     if s3obj.used:
-        log.info("markObj: {} already in use".format(objid))
+        log.debug("markObj: {} already in use".format(objid))
         return
 
-    log.info("markObj: setUsed {}".format(objid))
+    log.debug("markObj: setUsed {}".format(objid))
     s3obj.setUsed(True)  # mark as inuse
 
     if s3obj.root is None:
@@ -587,7 +587,7 @@ async def markObj(app, objid, updateLinks=False):
         return
 
     if s3obj.collection != "groups":
-        log.info("markObj: not a group so no iterating for linked objects")
+        log.debug("markObj: not a group so no iterating for linked objects")
         return  # no linked objects to mark
 
     # for group object recurse through all hard links
@@ -624,7 +624,7 @@ async def markObj(app, objid, updateLinks=False):
                 if updateLinks:
                     await safeRemoveLink(app, objid, link_name)
             else:
-                log.info("markObj: recursive call from group: {} to link id: {}".format(objid, linkid))
+                log.debug("markObj: recursive call from group: {} to link id: {}".format(objid, linkid))
                 await markObj(app, linkid, updateLinks=updateLinks)
 
 async def markObjs(app, removeInvalidDomains=False):
@@ -632,15 +632,15 @@ async def markObjs(app, removeInvalidDomains=False):
     log.info("Mark objects")
     domains = app["domains"]
     roots = app["roots"]
-    log.info("domains..")
+    log.debug("domains..")
     for domain in domains:
-        log.info("domain: {}".format(domain))
+        log.debug("domain: {}".format(domain))
     s3objs = app["s3objs"]
     invalid_domains = set()
     for domain in domains:
         rootid = domains[domain]
         if rootid is None:
-            log.info("markObj: skipping folder domain {}".format(domain))
+            log.debug("markObj: skipping folder domain {}".format(domain))
             continue
          
         if rootid not in s3objs:
@@ -649,16 +649,16 @@ async def markObjs(app, removeInvalidDomains=False):
             continue
         s3root = s3objs[rootid]
         if not s3root.isRoot:
-            log.warn("markObjs: Expected to find {} to be root for domain: {}".format(s3root.id, domain))
+            log.warn("markObjs: Expected to find {} to be root for domain: {}".formatå(s3root.id, domain))
             continue
         if s3root.root not in roots:
             log.warn("markObjs: Expected to find {} in roots set for domain: {}".format())
             continue
         # this will recurse into each linked object
-        log.info("markObjs domain: {} root: {}".format(domain, rootid))
+        log.debug("markObjs domain: {} root: {}".format(domain, rootid))
         await markObj(app, rootid)
     if len(invalid_domains) > 0 and removeInvalidDomains:
-        log.info("removing {} invalid domains".format(len(invalid_domains)))
+        log.debug("removing {} invalid domains".format(len(invalid_domains)))
         for domain in invalid_domains:
             log.info("remove: {}".format(domain))
             await deleteObj(app, domain)

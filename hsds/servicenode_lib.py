@@ -41,14 +41,14 @@ async def getDomainJson(app, domain, reload=False):
         if reload:
             del domain_cache[domain]
         else:
-            log.info("returning domain_cache value")
+            log.debug("returning domain_cache value")
             return domain_cache[domain]
 
      
     req = getDataNodeUrl(app, domain)
     req += "/domains"
     params = { "domain": domain } 
-    log.info("sending dn req: {}".format(req))
+    log.debug("sending dn req: {}".format(req))
     
     domain_json = await http_get_json(app, req, params=params)
     
@@ -111,8 +111,9 @@ async def getObjectJson(app, obj_id, refresh=False):
     """
     meta_cache = app['meta_cache']
     obj_json = None
+    log.info("getObjectJson {}".format(obj_id))
     if obj_id in meta_cache and not refresh:
-        log.info("found {} in meta_cache".format(obj_id))
+        log.debug("found {} in meta_cache".format(obj_id))
         obj_json = meta_cache[obj_id]
     else:
         req = getDataNodeUrl(app, obj_id)

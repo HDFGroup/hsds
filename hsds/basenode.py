@@ -49,7 +49,7 @@ async def getHeadUrl(app):
         else:
             head_url = head_state["head_url"]
             app["head_url"] = head_url  # so we don't need to check S3 next time
-    log.info("head_url: {}".format(head_url))
+    log.debug("head_url: {}".format(head_url))
     return head_url
 
 
@@ -67,10 +67,10 @@ async def register(app):
     body = {"id": app["id"], "port": app["node_port"], "node_type": app["node_type"]}
     app['register_time'] = int(time.time())
     try:
-        log.info("register req: {} body: {}".format(req_reg, body))
+        log.debug("register req: {} body: {}".format(req_reg, body))
         rsp_json = await http_post(app, req_reg, data=body)     
         if rsp_json is not None:
-            log.info("register response: {}".format(rsp_json))
+            log.debug("register response: {}".format(rsp_json))
             app["node_number"] = rsp_json["node_number"]
             app["node_count"] = rsp_json["node_count"]
             log.info("setting node_state to WAITING")
@@ -91,13 +91,13 @@ async def healthCheck(app):
         else:
             # check in with the head node and make sure we are still active
             req_node = "{}/nodestate".format(head_url)
-            log.info("health check req {}".format(req_node))
+            log.debug("health check req {}".format(req_node))
             try:
                 rsp_json = await http_get_json(app, req_node)
                 if rsp_json is None or not isinstance(rsp_json, dict):
                     log.warn("invalid health check response: type: {} text: {}".format(type(rsp_json), rsp_json))
                 else:
-                    log.info("cluster_state: {}".format(rsp_json["cluster_state"]))
+                    log.debug("cluster_state: {}".format(rsp_json["cluster_state"]))
                     if rsp_json["cluster_state"] != "READY" and app["node_state"] == "READY":
                         log.info("changing node_state to WAITING")
                         app["node_state"] = "WAITING"
@@ -156,7 +156,7 @@ async def healthCheck(app):
             except HttpProcessingError as he:
                 log.warn("HttpProcessingError <{}> for health check".format(he.code))
 
-        log.info("health check sleep: {}".format(sleep_secs))
+        log.debug("health check sleep: {}".format(sleep_secs))
         await asyncio.sleep(sleep_secs)
  
 async def info(request):
@@ -284,6 +284,7 @@ def baseInit(loop, node_type):
     counter["DELETE"] = 0
     app["req_count"] = counter
     counter = {}
+    counter["DEBUG"] = 0
     counter["INFO"] = 0
     counter["WARN"] = 0
     counter["ERROR"] = 0

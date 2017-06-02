@@ -28,7 +28,7 @@ def get_domain(request, body=None):
     domain = None
     if "domain" in request.GET:
         domain = request.GET["domain"]
-        log.info("got domain param: {}".format(domain))
+        log.debug("got domain param: {}".format(domain))
     elif request.has_body:
         if "domain" in body:
             domain = body["domain"]
@@ -57,7 +57,7 @@ async def GET_Domain(request):
     app = request.app
 
     domain = get_domain(request)
-    log.info("get domain: {}".format(domain))
+    log.debug("get domain: {}".format(domain))
     domain_json = await get_metadata_obj(app, domain)
 
     resp = await jsonResponse(request, domain_json)
@@ -78,7 +78,7 @@ async def PUT_Domain(request):
 
     domain = get_domain(request, body=body)
  
-    log.info("PUT domain: {}".format(domain))
+    log.debug("PUT domain: {}".format(domain))
  
     body_json = await request.json()
     if "owner" not in body_json:
@@ -143,7 +143,7 @@ async def DELETE_Domain(request):
     # raises exception if domain not found
     domain_json = await get_metadata_obj(app, domain)
     if domain_json:
-        log.info("got domain json")
+        log.debug("got domain json")
     # delete domain
     notify=True
     if "Notify" in request.GET and not request.GET["Notify"]:

@@ -96,7 +96,7 @@ async def POST_Datatype(request):
             # convert predefined type string (e.g. "H5T_STD_I32LE") to 
             # corresponding json representation
             datatype = getBaseTypeJson(datatype)
-            log.info("got datatype: {}".format(datatype))
+            log.debug("got datatype: {}".format(datatype))
         except TypeError:
             msg = "POST Dataset with invalid predefined type"
             log.warn(msg)
@@ -127,16 +127,16 @@ async def POST_Datatype(request):
         if "name" in link_body:
             link_title = link_body["name"]
         if link_id and link_title:
-            log.info("link id: {}".format(link_id))
+            log.debug("link id: {}".format(link_id))
             # verify that the referenced id exists and is in this domain
             # and that the requestor has permissions to create a link
             await validateAction(app, domain, link_id, username, "create")
 
     root_id = domain_json["root"]
     ctype_id = createObjId("datatypes") 
-    log.info("new  type id: {}".format(ctype_id))
+    log.debug("new  type id: {}".format(ctype_id))
     ctype_json = {"id": ctype_id, "root": root_id, "domain": domain, "type": datatype }
-    log.info("create named type, body: " + json.dumps(ctype_json))
+    log.debug("create named type, body: " + json.dumps(ctype_json))
     req = getDataNodeUrl(app, ctype_id) + "/datatypes"
     
     type_json = await http_post(app, req, data=ctype_json)
@@ -148,9 +148,9 @@ async def POST_Datatype(request):
         link_json["class"] = "H5L_TYPE_HARD"
         link_req = getDataNodeUrl(app, link_id)
         link_req += "/groups/" + link_id + "/links/" + link_title
-        log.info("PUT link - : " + link_req)
+        log.debug("PUT link - : " + link_req)
         put_rsp = await http_put(app, link_req, data=link_json)
-        log.info("PUT Link resp: {}".format(put_rsp))
+        log.debug("PUT Link resp: {}".format(put_rsp))
 
     # datatype creation successful     
     resp = await jsonResponse(request, type_json, status=201)

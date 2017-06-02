@@ -416,4 +416,5 @@ if __name__ == '__main__':
     asyncio.ensure_future(healthCheck(app), loop=loop)
     head_port = config.get("head_port")
     log.info("Starting service on port: {}".format(head_port))
+    log.debug("debug test")
     run_app(app, port=int(head_port))

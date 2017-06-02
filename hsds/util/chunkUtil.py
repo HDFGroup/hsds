@@ -202,7 +202,7 @@ def getNumChunks(selection, layout):
     # TBD: this needs to be revise to do the right think with stride > 1
     for s in selection:
         if s.stop <= s.start:
-            log.info("null selection")
+            log.debug("null selection")
             return 0
     num_chunks = 1
     for i in range(len(selection)): 

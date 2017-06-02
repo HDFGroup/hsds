@@ -120,7 +120,7 @@ async def getS3JSONObj(app, key):
 
     s3_stats_increment(app, "bytes_in", inc=len(data)) 
     json_dict = json.loads(data.decode('utf8'))
-    log.info("s3 returned: {}".format(json_dict))
+    log.debug("s3 returned: {}".format(json_dict))
     return json_dict
 
 async def getS3Bytes(app, key):
@@ -182,7 +182,7 @@ async def putS3JSONObj(app, key, json_obj):
         raise HttpProcessingError(code=500, message=msg)
     if data and len(data) > 0:
         s3_stats_increment(app, "bytes_out", inc=len(data))
-    log.info("putS3JSONObj complete")
+    log.debug("putS3JSONObj complete")
 
 async def putS3Bytes(app, key, data):
     """ Store byte string as S3 object with given key
@@ -203,7 +203,7 @@ async def putS3Bytes(app, key, data):
         raise HttpProcessingError(code=500, message=msg)
     if data and len(data) > 0:
         s3_stats_increment(app, "bytes_in", inc=len(data))
-    log.info("putS3Bytes complete")
+    log.debug("putS3Bytes complete")
 
 async def deleteS3Obj(app, key):
     """ Delete S3 object identfied by given key
@@ -223,7 +223,7 @@ async def deleteS3Obj(app, key):
         msg = "Error deleting s3 obj: " + str(ce)
         log.error(msg)
         raise HttpProcessingError(code=500, message=msg)
-    log.info("deleteS3Obj complete")
+    log.debug("deleteS3Obj complete")
 
 async def getS3ObjStats(app, key):
     """ Return etag, size, and last modified time for given object
@@ -255,7 +255,7 @@ async def getS3ObjStats(app, key):
         log.info(msg)
         raise HttpProcessingError(code=404, message=msg)
     contents = resp['Contents']
-    log.info("s3_contents: {}".format(contents))
+    log.debug("s3_contents: {}".format(contents))
     
     found = False
     if len(contents) > 0:
@@ -312,7 +312,7 @@ async def isS3Obj(app, key):
             # if the key is a S3 folder, the key will be the first object in the folder,
             # not the requested object
             found = True
-    log.info("isS3Obj {} returning {}".format(key, found))
+    log.debug("isS3Obj {} returning {}".format(key, found))
     return found
 
         
@@ -341,7 +341,7 @@ async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=Fal
     # TBD - for some reason passing in non-null deliminator doesn't work
     pages = paginator.paginate(MaxKeys=1000, Bucket=bucket_name, Prefix=prefix, Delimiter=deliminator)
     responses = await _fetch_all(pages)
-    log.info("getS3Keys, got {} responses".format(len(responses)))
+    log.debug("getS3Keys, got {} responses".format(len(responses)))
     if include_stats:
         # use a dictionary to hold return values
         key_names = {}
@@ -351,11 +351,11 @@ async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=Fal
     last_key = None
     for response in responses:
         if 'CommonPrefixes' in response:
-            log.info("got CommonPrefixes in s3 response")
+            log.debug("got CommonPrefixes in s3 response")
             common = response["CommonPrefixes"]
             for item in common:
                 if 'Prefix' in item:
-                    log.info("got s3 prefix: {}".format(item['Prefix']))
+                    log.debug("got s3 prefix: {}".format(item['Prefix']))
                     if include_stats:
                         # TBD: not sure what makes sense to include for stats here
                         key_names[item['Prefix']] = {}
@@ -363,11 +363,11 @@ async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=Fal
                         key_names.append(item['Prefix'])
 
         elif 'Contents' in response:
-            log.info("got Contents in s3 response")
+            log.debug("got Contents in s3 response")
             contents = response['Contents']
             for item in contents:
                 key_name = item['Key']
-                log.info("got s3key: {}".format(key_name))
+                log.debug("got s3key: {}".format(key_name))
                 if suffix and not key_name.endswith(suffix):
                     log.info("got s3key without suffix")
                     continue
