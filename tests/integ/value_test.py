@@ -922,6 +922,12 @@ class ValueTest(unittest.TestCase):
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
+
+        # write to the etended region 
+        payload = {'value': value, 'start': 10, 'stop': 20}
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # write value
     
         # read values from the extended region
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
@@ -932,6 +938,7 @@ class ValueTest(unittest.TestCase):
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
         data = rspJson["value"]
+
         self.assertEqual(len(data), num_elements-orig_extent)
          
         # read all values back  
@@ -945,7 +952,7 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(len(data), num_elements)
         self.assertEqual(data[0:orig_extent], list(range(orig_extent)))
         # the extended area should be all zeros
-        self.assertEqual(data[orig_extent:num_elements], [0,]*(num_elements-orig_extent))
+        self.assertEqual(data[orig_extent:num_elements], list(range(orig_extent)))
             
  
              

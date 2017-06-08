@@ -352,6 +352,7 @@ async def PUT_Value(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     dims = getDsetDims(dset_json)
+    maxdims = getDsetMaxDims(dset_json)
     rank = len(dims)
     layout = getChunkLayout(dset_json)
      
@@ -374,6 +375,10 @@ async def PUT_Value(request):
     await validateAction(app, domain, dset_id, username, "update")
  
     binary_data = None
+    # refetch the dims if the dataset is extensible 
+    if isExtensible(dims, maxdims):
+        dset_json = await getObjectJson(app, dset_id, refresh=True)
+        dims = getDsetDims(dset_json) 
     slices = []  # selection for write 
     
     # Get query parameter for selection
@@ -381,6 +386,7 @@ async def PUT_Value(request):
         body_json = None
         if request_type == "json":
             body_json = body
+        # if they selection region is invalid here, it's really invalid
         dim_slice = getSliceQueryParam(request, dim, dims[dim], body=body_json)
         slices.append(dim_slice)   
     slices = tuple(slices)  
