@@ -20,7 +20,10 @@ DOMAIN_SUFFIX = "/.domain.json"  # key suffix used to hold domain info
 def isIPAddress(s):
     """Return True if the string looks like an IP address:
         n.n.n.n where n is between 0 and 255 """
-    
+    # see if there is a port specifier
+    if s.find(':') > 0:
+        return True
+     
     if s == 'localhost':
         return True # special case for loopback dns_path
 
@@ -29,6 +32,9 @@ def isIPAddress(s):
     if len(parts) != 4:
         return False
     for part in parts:
+        if part == ':':
+            # skip past a possible port specifier
+            break
         try:
             n = int(part)
             if n < 0 or n > 255:
@@ -179,7 +185,7 @@ def getDomainFromRequest(request, domain_path=False, validate=True):
                     validateHostDomain(host)
                     domain = getDomainForHost(host)
                 except ValueError:
-                    domain = '' # ignore
+                    pass # ignore
     # now validate that its a properly formed domain
     if validate:
         if domain_path:

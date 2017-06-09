@@ -32,7 +32,7 @@ class DomainUtilTest(unittest.TestCase):
                            'x.y.z.',  # period in back
                            'x.y..z',  # consecutive periods
                            '192.168.1.100',  # looks like IP
-                           '9.0.17.172',
+                           '172.17.0.9:5101', # IP with port
                            'mydomain/foobar', # has a slash
                            None)      # none
         for domain in invalid_domains:

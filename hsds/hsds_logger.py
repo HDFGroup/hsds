@@ -52,7 +52,10 @@ def error(msg):
 
 def request(req):
 	domain = getDomainFromRequest(req, validate=False)
-	print("REQ> {}: {}:[{}]".format(req.method, req.path, domain))
+	if domain is None:
+		print("REQ> {}: {}".format(req.method, req.path))
+	else:
+		print("REQ> {}: {} [{}]".format(req.method, req.path, domain))
 	if app:
 		counter = app["req_count"]
 		if req.method in ("GET", "POST", "PUT", "DELETE"):
