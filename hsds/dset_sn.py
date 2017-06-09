@@ -113,8 +113,8 @@ def validateChunkLayout(shape_json, item_size, body):
     #
     if chunk_dims is not None:      
         chunk_size = getNumElements(chunk_dims) * item_size
-        min_chunk_size = config.get("min_chunk_size")
-        max_chunk_size = config.get("max_chunk_size")
+        min_chunk_size = int(config.get("min_chunk_size"))
+        max_chunk_size = int(config.get("max_chunk_size"))
         if chunk_size < min_chunk_size:
             log.warn("requested chunk size of {} less than {}, ignoring".format(chunk_size, min_chunk_size))
             chunk_dims = None

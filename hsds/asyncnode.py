@@ -507,7 +507,7 @@ async def bucketCheck(app):
     app["last_gcsweep"] = 0
     async_sleep_time = config.get("async_sleep_time")
     log.info("async_sleep_time: {}".format(async_sleep_time))
-    gc_freq = config.get("gc_freq")
+    gc_freq = int(config.get("gc_freq"))
     log.info("gc_freq: {}".format(gc_freq))
      
     first_run = True
