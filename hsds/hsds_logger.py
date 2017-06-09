@@ -13,6 +13,7 @@
 # Simple looger for hsds
 #
 import config
+from util.domainUtil import getDomainFromRequest
 app = None # global app handle
 
 def debug(msg):
@@ -50,15 +51,8 @@ def error(msg):
 		counter["ERROR"] += 1
 
 def request(req):
-	domain = None
-	key = None
-	if "domain" in req.GET:
-		domain = req.GET["domain"]
-		key = "domain"
-	else:
-		domain = req.headers["host"]
-		key = "host"
-	print("REQ> {}: {} {}:[{}]".format(req.method, req.path, key, domain))
+	domain = getDomainFromRequest(req, validate=False)
+	print("REQ> {}: {}:[{}]".format(req.method, req.path, domain))
 	if app:
 		counter = app["req_count"]
 		if req.method in ("GET", "POST", "PUT", "DELETE"):

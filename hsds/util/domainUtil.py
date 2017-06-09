@@ -152,7 +152,7 @@ def getDomainForHost(host_value):
      
     return domain
 
-def getDomainFromRequest(request, domain_path = False):
+def getDomainFromRequest(request, domain_path=False, validate=True):
     #domain = request.match_info.get()
     domain = None
     if "domain" in request.GET:
@@ -171,13 +171,21 @@ def getDomainFromRequest(request, domain_path = False):
         else:  # DNS style host
             if domain_path:
                 raise ValueError("Domain paths can not be DNS-style")
-            validateHostDomain(host) # throw ValueError if invalid
-            domain = getDomainForHost(host)  # convert to s3 path
+            if validate:
+                validateHostDomain(host) # throw ValueError if invalid
+                domain = getDomainForHost(host)  # convert to s3 path
+            else:
+                try:
+                    validateHostDomain(host)
+                    domain = getDomainForHost(host)
+                except ValueError:
+                    domain = '' # ignore
     # now validate that its a properly formed domain
-    if domain_path:
-        validateDomainPath(domain)
-    else:
-        validateDomain(domain)
+    if validate:
+        if domain_path:
+            validateDomainPath(domain)
+        else:
+            validateDomain(domain)
     return domain
 
 
