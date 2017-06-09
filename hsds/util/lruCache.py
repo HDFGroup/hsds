@@ -262,10 +262,11 @@ class LruCache(object):
         log.info("clear dirty for {} node: {}".format(self._name, key))
         node = self._moveToFront(key)
         node._isdirty = False
-        self._dirty_set.remove(key)
-        if self._mem_size > self._mem_target:
-            # maybe we can free up some memory now
-            self._reduceCache()
+        if key in self._dirty_set:
+            self._dirty_set.remove(key)
+            if self._mem_size > self._mem_target:
+                # maybe we can free up some memory now
+                self._reduceCache()
 
     def isDirty(self, key):
         # don't adjust LRU position
