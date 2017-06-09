@@ -1,8 +1,8 @@
 from aiohttp.errors import HttpBadRequest 
 import hsds_logger as log
 
-CHUNK_BASE =  16*1024    # Multiplier by which chunks are adjusted
-CHUNK_MIN =  512*1024      # Soft lower limit (512k)
+CHUNK_BASE =  16*1024   # Multiplier by which chunks are adjusted
+CHUNK_MIN =  512*1024   # Soft lower limit (512k)
 CHUNK_MAX = 2048*1024   # Hard upper limit (2M) 
 DEFAULT_TYPE_SIZE = 128 # Type size case when it is variable
 
@@ -42,7 +42,7 @@ def get_dset_size(shape_json, typesize):
         dset_size *= shape[n]
     return dset_size
 
-def expandChunk(layout, typesize, shape_json):
+def expandChunk(layout, typesize, shape_json, chunk_min=CHUNK_MIN):
     """ Extend the chunk shape until it is above the MIN target.
     """
     if shape_json is None or shape_json["class"] == 'H5S_NULL':
@@ -62,14 +62,14 @@ def expandChunk(layout, typesize, shape_json):
                 extendable_dims += 1
                  
     dset_size = get_dset_size(shape_json, typesize)
-    if dset_size <= CHUNK_MIN and extendable_dims == 0:
+    if dset_size <= chunk_min and extendable_dims == 0:
         # just use the entire dataspace shape as one big chunk
         return tuple(dims)
 
     chunk_size = getChunkSize(layout, typesize)
-    if chunk_size >= CHUNK_MIN:
+    if chunk_size >= chunk_min:
         return tuple(layout)  # good already
-    while chunk_size < CHUNK_MIN:
+    while chunk_size < chunk_min:
         # just adjust along extendable dimensions first
         old_chunk_size = chunk_size
         for n in range(rank):
@@ -80,7 +80,7 @@ def expandChunk(layout, typesize, shape_json):
                     # infinately extendable dimensions
                     layout[dim] *= 2
                     chunk_size = getChunkSize(layout, typesize)
-                    if chunk_size > CHUNK_MIN:
+                    if chunk_size > chunk_min:
                         break
                 elif maxdims[dim] > layout[dim]:
                     # can only be extended so much
@@ -90,7 +90,7 @@ def expandChunk(layout, typesize, shape_json):
                         extendable_dims -= 1  # one less extenable dimension
                     
                     chunk_size = getChunkSize(layout, typesize)
-                    if chunk_size > CHUNK_MIN:
+                    if chunk_size > chunk_min:
                         break
                     else:
                         pass # ignore non-extensible for now
@@ -102,7 +102,7 @@ def expandChunk(layout, typesize, shape_json):
                     if layout[dim] > dims[dim]:
                         layout[dim] = dims[dim]  # trim back
                     chunk_size = getChunkSize(layout, typesize)
-                    if chunk_size > CHUNK_MIN:
+                    if chunk_size > chunk_min:
                         break
                 else:
                     pass # can't extend chunk along this dimension
@@ -111,29 +111,29 @@ def expandChunk(layout, typesize, shape_json):
             log.warn("Unexpected error in guess_chunk size")
              
             break
-        elif chunk_size > CHUNK_MIN:
+        elif chunk_size > chunk_min:
             break  # we're good
         else:
             pass  # do another round
     return tuple(layout)
 
-def shrinkChunk(layout, typesize):
+def shrinkChunk(layout, typesize, chunk_max=CHUNK_MAX):
     """ Shrink the chunk shape until it is less than the MAX target.
     """  
     layout = list(layout)
     chunk_size = getChunkSize(layout, typesize)
-    if chunk_size <= CHUNK_MAX:
+    if chunk_size <= chunk_max:
         return tuple(layout)  # good already
     rank = len(layout)
      
-    while chunk_size > CHUNK_MAX:
+    while chunk_size > chunk_max:
         # just adjust along extendable dimensions first
         old_chunk_size = chunk_size
         for dim in range(rank):
             if layout[dim] > 1:
                 layout[dim] //= 2
                 chunk_size = getChunkSize(layout, typesize)
-                if chunk_size <= CHUNK_MAX:
+                if chunk_size <= chunk_max:
                     break
             else:
                 pass # can't shrink chunk along this dimension
@@ -141,7 +141,7 @@ def shrinkChunk(layout, typesize):
             # reality check to see if we'll ever break out of the while loop
             log.warning("Unexpected error in shrink_chunk")
             break
-        elif chunk_size <= CHUNK_MAX:
+        elif chunk_size <= chunk_max:
             break  # we're good
         else:
             pass   # do another round

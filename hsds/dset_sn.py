@@ -27,7 +27,6 @@ from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson, getItemSize
 from util.s3Util import isS3Obj, getS3Bytes
 from servicenode_lib import getDomainJson, getObjectJson, validateAction
-from util.chunkUtil import CHUNK_MIN, CHUNK_MAX
 import config
 import hsds_logger as log
 
@@ -107,22 +106,7 @@ def validateChunkLayout(shape_json, item_size, body):
         else:
             pass # allow any positive value for unlimited dimensions
      
-    #
-    # Verify the requested chunk size is within valid range.
-    # If not, ignore client input
-    #
-    if chunk_dims is not None:      
-        chunk_size = getNumElements(chunk_dims) * item_size
-        min_chunk_size = int(config.get("min_chunk_size"))
-        max_chunk_size = int(config.get("max_chunk_size"))
-        if chunk_size < min_chunk_size:
-            log.warn("requested chunk size of {} less than {}, ignoring".format(chunk_size, min_chunk_size))
-            chunk_dims = None
-        elif chunk_size > max_chunk_size:
-            log.warn("requested chunk size of {} greater than {}, ignoring".format(chunk_size, max_chunk_size))
-            chunk_dims = None
-        else:
-            log.info("Using client requested chunk layout: {}".format(chunk_dims))  
+     
     return chunk_dims
 
 async def getDatasetDetails(app, dset_id, domain):
@@ -633,13 +617,18 @@ async def POST_Dataset(request):
     
     if layout is not None:
         chunk_size = getChunkSize(layout, item_size)
+        min_chunk_size = int(config.get("min_chunk_size"))
+        max_chunk_size = int(config.get("max_chunk_size"))
+        log.debug("chunk_size: {}, min: {}, max: {}".format(chunk_size, min_chunk_size, max_chunk_size))
         # adjust the layout if chunk size is too small or too big
-        if chunk_size <= CHUNK_MIN:
-            layout = expandChunk(layout, item_size, shape_json)
-        elif chunk_size >= CHUNK_MAX:
-            layout = shrinkChunk(layout, item_size)
+        if chunk_size <= min_chunk_size:
+            log.debug("chunk size: {} less than min size: {}, expanding".format(chunk_size, min_chunk_size))
+            layout = expandChunk(layout, item_size, shape_json, chunk_min=min_chunk_size)
+        elif chunk_size >= max_chunk_size:
+            log.debug("chunk size: {} greater than max size: {}, expanding".format(chunk_size, max_chunk_size))
+            layout = shrinkChunk(layout, item_size, chunk_max=max_chunk_size)
         if layout is not None:
-            log.info("chunk_layout: {}".format(layout))
+            log.debug("chunk_layout: {}".format(layout))
         
     link_id = None
     link_title = None

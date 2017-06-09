@@ -15,9 +15,9 @@ import sys
 sys.path.append('../../hsds/util')
 sys.path.append('../../hsds')
 from dsetUtil import getHyperslabSelection
-from chunkUtil import guessChunk, getNumChunks, getChunkCoordinate, getChunkIds, getChunkId
+from chunkUtil import guessChunk, getNumChunks, getChunkIds, getChunkId
 from chunkUtil import getChunkIndex, getChunkSelection, getChunkCoverage, getDataCoverage, ChunkIterator
-from chunkUtil import CHUNK_MIN, CHUNK_MAX, getChunkSize, shrinkChunk, expandChunk, getDatasetId
+from chunkUtil import getChunkSize, shrinkChunk, expandChunk, getDatasetId
 
 
 class ChunkUtilTest(unittest.TestCase):
@@ -79,15 +79,17 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(layout, None)
 
     def testShrinkChunk(self):
+        CHUNK_MIN = 500
+        CHUNK_MAX = 5000
         typesize = 1
         layout = (1, 2, 3)
-        shrunk = shrinkChunk(layout, typesize)
+        shrunk = shrinkChunk(layout, typesize, chunk_max=CHUNK_MAX)
         self.assertEqual(shrunk, layout)
 
-        layout = (1000, 2000, 3000)
+        layout = (100, 200, 300)
         num_bytes = getChunkSize(layout, typesize)
         self.assertTrue(num_bytes > CHUNK_MAX)
-        shrunk = shrinkChunk(layout, typesize)
+        shrunk = shrinkChunk(layout, typesize, chunk_max=CHUNK_MAX)
         rank = len(layout)
         for i in range(rank):
             self.assertTrue(shrunk[i] >= 1)
@@ -96,10 +98,10 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertTrue(num_bytes > CHUNK_MIN)
         self.assertTrue(num_bytes < CHUNK_MAX)
 
-        layout = (3000, 2000, 1000)
+        layout = (300, 200, 100)
         num_bytes = getChunkSize(layout, typesize)
         self.assertTrue(num_bytes > CHUNK_MAX)
-        shrunk = shrinkChunk(layout, typesize)
+        shrunk = shrinkChunk(layout, typesize, chunk_max=CHUNK_MAX)
         rank = len(layout)
         for i in range(rank):
             self.assertTrue(shrunk[i] >= 1)
@@ -109,12 +111,14 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertTrue(num_bytes < CHUNK_MAX)
 
     def testExpandChunk(self):
+        CHUNK_MIN = 5000
+        CHUNK_MAX = 50000
         typesize = 1
         shape = {"class": 'H5S_SIMPLE', "dims": [10, 10, 10]}
         layout = (10, 10, 10)
         num_bytes = getChunkSize(layout, typesize)
         self.assertTrue(num_bytes < CHUNK_MIN)
-        expanded = expandChunk(layout, typesize, shape)
+        expanded = expandChunk(layout, typesize, shape, chunk_min=CHUNK_MIN)
         num_bytes = getChunkSize(expanded, typesize)
         # chunk layout can't be larger than dataspace
         self.assertTrue(num_bytes < CHUNK_MIN)
@@ -125,7 +129,7 @@ class ChunkUtilTest(unittest.TestCase):
         layout = (10, 10, 10)
         num_bytes = getChunkSize(layout, typesize)
         self.assertTrue(num_bytes < CHUNK_MIN)
-        expanded = expandChunk(layout, typesize, shape)
+        expanded = expandChunk(layout, typesize, shape, chunk_min=CHUNK_MIN)
         num_bytes = getChunkSize(expanded, typesize)
         self.assertTrue(num_bytes > CHUNK_MIN)
         self.assertTrue(num_bytes < CHUNK_MAX)
@@ -135,7 +139,7 @@ class ChunkUtilTest(unittest.TestCase):
         layout = (10, 10, 10)
         num_bytes = getChunkSize(layout, typesize)
         self.assertTrue(num_bytes < CHUNK_MIN)
-        expanded = expandChunk(layout, typesize, shape)
+        expanded = expandChunk(layout, typesize, shape, chunk_min=CHUNK_MIN)
         num_bytes = getChunkSize(expanded, typesize)
         self.assertTrue(num_bytes > CHUNK_MIN)
         self.assertTrue(num_bytes < CHUNK_MAX)
@@ -144,7 +148,7 @@ class ChunkUtilTest(unittest.TestCase):
         layout = (10, 10, 10)
         num_bytes = getChunkSize(layout, typesize)
         self.assertTrue(num_bytes < CHUNK_MIN)
-        expanded = expandChunk(layout, typesize, shape)
+        expanded = expandChunk(layout, typesize, shape, chunk_min=CHUNK_MIN)
         num_bytes = getChunkSize(expanded, typesize)
         self.assertTrue(num_bytes > CHUNK_MIN)
         self.assertTrue(num_bytes < CHUNK_MAX)
@@ -153,7 +157,7 @@ class ChunkUtilTest(unittest.TestCase):
         layout = (10, 10, 10)
         num_bytes = getChunkSize(layout, typesize)
         self.assertTrue(num_bytes < CHUNK_MIN)
-        expanded = expandChunk(layout, typesize, shape)
+        expanded = expandChunk(layout, typesize, shape, chunk_min=CHUNK_MIN)
         num_bytes = getChunkSize(expanded, typesize)
         self.assertTrue(num_bytes > CHUNK_MIN)
         self.assertTrue(num_bytes < CHUNK_MAX)
@@ -888,7 +892,6 @@ class ChunkUtilTest(unittest.TestCase):
         # getChunkIds(dset_id, selection, layout, dim=0, prefix=None, chunk_ids=None):
         dset_id = "d-12345678-1234-1234-1234-1234567890ab"
 
-        datashape = [1,]
         layout = (1,)        
         chunk_id = getChunkId(dset_id, 0, layout)
         self.assertTrue(chunk_id.startswith("c-"))
@@ -896,7 +899,6 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(chunk_id[2:-2], dset_id[2:])
         self.assertEqual(len(chunk_id), 2+36+2)
 
-        datashape = [100,]
         layout = (10,)
         chunk_id = getChunkId(dset_id, 23, layout)
         self.assertTrue(chunk_id.startswith("c-"))
@@ -904,7 +906,6 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(chunk_id[2:-2], dset_id[2:])
         self.assertEqual(len(chunk_id), 2+36+2)
 
-        datashape = [100,100]
         layout = (10,20)
         chunk_id = getChunkId(dset_id, (23,61), layout)
         self.assertTrue(chunk_id.startswith("c-"))

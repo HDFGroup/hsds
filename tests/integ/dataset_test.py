@@ -15,9 +15,12 @@ import json
 import time
 import helper
 
-# min/max chunk size - copied from chunkUtil.py
-CHUNK_MIN = 512*1024      # Soft lower limit (512k)
-CHUNK_MAX = 2*1024*1024   # Hard upper limit (2M) 
+# min/max chunk size - these can be set by config, but 
+# practially the min config value should be larger than 
+# CHUNK_MIN and the max config value should less than 
+# CHUNK_MAX
+CHUNK_MIN = 1024                # lower limit  (1024b)
+CHUNK_MAX = 50*1024*1024        # upper limit (50M) 
 
 class DatasetTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -50,7 +53,6 @@ class DatasetTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["attributeCount"], 0)   
         dset_id = rspJson["id"]
-        print("created dset: {}".format(dset_id))
         self.assertTrue(helper.validateId(dset_id))
 
         # read back the obj
@@ -637,7 +639,7 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("class" in layout_json)
         self.assertEqual(layout_json["class"], 'H5D_CHUNKED')
         self.assertTrue("dims" in layout_json)
-        self.assertEqual(layout_json["dims"], [1, 390, 512])
+        self.assertEqual(layout_json["dims"], [1, 390, 1024])
 
     
     def testInvalidFillValue(self):
