@@ -119,7 +119,7 @@ def validateChunkLayout(shape_json, item_size, body):
             log.warn("requested chunk size of {} less than {}, ignoring".format(chunk_size, min_chunk_size))
             chunk_dims = None
         elif chunk_size > max_chunk_size:
-            log.warn("requested chunk size of {} less than {}, ignoring".format(chunk_size, max_chunk_size))
+            log.warn("requested chunk size of {} greater than {}, ignoring".format(chunk_size, max_chunk_size))
             chunk_dims = None
         else:
             log.info("Using client requested chunk layout: {}".format(chunk_dims))  
