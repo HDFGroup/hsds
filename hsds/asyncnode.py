@@ -498,6 +498,38 @@ async def processPendingQueue(app):
     log.info("domains to be updated: {}".format(len(domain_updates)))
     log.info("datasets to be updates: {}".format(len(dataset_updates)))
                  
+async def createTopLevelDomainList(app):
+    """ Save a textfile with a list of toplevel domains """
+    top_level_domains = []
+    domains = app["domains"]
+    for domain in domains:
+        if domain[0] != '/':
+            log.error("unexpected domain: {}".format(domain))
+            continue
+        if domain[1:].find('/') == -1:
+            top_level_domains.append(domain)
+
+    print("top-level-domains:")
+    for domain in top_level_domains:
+        print(domain)
+
+    if len(top_level_domains) == 0:
+        log.warn("No top-level domains found")
+        return
+
+    log.info("Creating topleveldomains.txt")
+    text_data = b""
+    for domain in top_level_domains:
+        line = domain + "\n"
+        line = line.encode('utf8')
+        text_data += line
+    topleveldomains_key = "topleveldomains.txt"
+    log.info("write toplevelsdomain key: {}, count: {}".format(topleveldomains_key, len(top_level_domains)))
+    try:
+        await putS3Bytes(app, topleveldomains_key, text_data)
+    except HttpProcessingError:
+        log.error("S3 Error writing chunk collection key: {}".format(topleveldomains_key))
+
 
 async def bucketCheck(app):
     """ Periodic method for GC and pending queue updates 
@@ -529,6 +561,8 @@ async def bucketCheck(app):
             # s3objs dict should be kept more or less up to date
             # TBD: rerun listKeys periodically to catch missing objects
             await listKeys(app)
+            # create a list of topleveldomains found
+            await createTopLevelDomainList(app)
 
         now = int(time.time())
 

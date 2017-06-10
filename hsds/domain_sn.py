@@ -21,7 +21,7 @@ from util.idUtil import  getDataNodeUrl, createObjId, getS3Key, getCollectionFor
 from util.s3Util import getS3Keys, isS3Obj, getS3Bytes, getS3ObjStats
 from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
-from util.domainUtil import getParentDomain, getDomainFromRequest, getS3PrefixForDomain, validateDomain
+from util.domainUtil import getParentDomain, getDomainFromRequest, getS3PrefixForDomain, validateDomain, isIPAddress
 from servicenode_lib import getDomainJson
 import hsds_logger as log
 
@@ -145,30 +145,28 @@ async def getDomainInfo(app, domain):
     results["num_chunks"] = num_chunks
     return results
         
-
-async def GET_Domains(request):
-    """HTTP method to return JSON for child domains of given domain"""
-    log.request(request)
+async def get_domains(request):
+    """ This method is called by GET_Domains and GET_Domain when no domain is passed in.
+    """
     app = request.app
     loop = app["loop"]
+    # if there is no domain passed in, get a list of top level domains
+    domain = None
+    if "domain" in request.GET or "host" in request.GET or not isIPAddress(request.host):
+        try:
+            domain = getDomainFromRequest(request, domain_path=True)
+        except ValueError:
+            msg = "Invalid domain"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
 
-    (username, pswd) = getUserPasswordFromRequest(request)
-    if username is None and app['allow_noauth']:
-        username = "default"
+        log.info("got domain: [{}]".format(domain))
     else:
-        validateUserPassword(app, username, pswd)
+        log.info("get top level domains")
 
-    try:
-        domain = getDomainFromRequest(request, domain_path=True)
-    except ValueError:
-        msg = "Invalid domain"
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
-
-    log.info("got domain: [{}]".format(domain))
-
-    domain_prefix = getS3PrefixForDomain(domain)
-    log.debug("using domain prefix: {}".format(domain_prefix))
+    if domain is not None:
+        domain_prefix = getS3PrefixForDomain(domain)
+        log.debug("using domain prefix: {}".format(domain_prefix))
      
     limit = None
     if "Limit" in request.GET:
@@ -196,13 +194,33 @@ async def GET_Domains(request):
     if "verbose" in request.GET and request.GET["verbose"]:
         verbose = True
 
-    s3_keys = await getS3Keys(app, prefix=domain_prefix, deliminator='/')
-    log.debug("got {} keys".format(len(s3_keys)))
+    s3_keys = []
+    if domain is None:
+        # return list of toplevel domains
+        topleveldomains_key = "topleveldomains.txt"
+        col_found = await isS3Obj(app, topleveldomains_key)
+        if not col_found:
+            log.warn("{} key not found".format(topleveldomains_key))
+        else:
+            data = await getS3Bytes(app, topleveldomains_key)
+            data = data.decode('utf8')
+            lines = data.split('\n')
+            log.info("{} lines: {}".format(topleveldomains_key, lines))
+            for line in lines:
+                if not line:
+                    continue
+                if line[0] != '/':
+                    log.warn("unexpected line in {}: {}".format(topleveldomains_key, line))
+                    continue
+                s3_keys.append(line[1:])  # strip of leading slash
+    else:
+        s3_keys = await getS3Keys(app, prefix=domain_prefix, deliminator='/')
+        log.debug("got {} keys".format(len(s3_keys)))
     # filter out anything without a '/' in the key
     # note: sometimes a ".domain.json" key shows up, not sure why
     keys = []
     for key in s3_keys:
-        if key.find('/') == -1:
+        if domain is not None and key.find('/') == -1:
             log.debug('skipping key: {}'.format(key))
             continue
         keys.append(key)
@@ -294,6 +312,20 @@ async def GET_Domains(request):
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp
+
+async def GET_Domains(request):
+    """HTTP method to return JSON for child domains of given domain"""
+    log.request(request)
+    app = request.app
+
+    (username, pswd) = getUserPasswordFromRequest(request)
+    if username is None and app['allow_noauth']:
+        username = "default"
+    else:
+        validateUserPassword(app, username, pswd)
+
+    return await get_domains(request)
+
  
 async def GET_Domain(request):
     """HTTP method to return JSON for given domain"""
@@ -305,6 +337,10 @@ async def GET_Domain(request):
         username = "default"
     else:
         validateUserPassword(app, username, pswd)
+
+    if "domain" not in request.GET and "host" not in request.GET and isIPAddress(request.host):
+        # no domain passed in, return top-level domains for this request
+        return await get_domains(request)
 
     try:
         domain = getDomainFromRequest(request)

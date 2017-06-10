@@ -59,6 +59,19 @@ async def bucketCheck(app):
     roots = app["roots"]
     for root in roots:
         print("root:", root)    
+
+    top_level_domains = []
+    for domain in domains:
+        if domain[0] != '/':
+            log.error("unexpected domain: {}".format(domain))
+            continue
+        if domain[1:].find('/') == -1:
+            top_level_domains.append(domain)
+
+    print("top-level-domains:")
+    for domain in top_level_domains:
+        print(domain)
+    print("="*80)
  
     print("total storage: {}".format(app["bytes_in_bucket"]))
     print("Num objects: {}".format(len(app["s3objs"])))
