@@ -171,7 +171,7 @@ def getDomainFromRequest(request, domain_path=False, validate=True):
             host = request.host
             if "X-Forwarded-Host" in request.headers:
                 host = request.headers["X-Forwarded-Host"]
-        if host.find('/') > -1:  # path style host
+        if host and host.find('/') > -1:  # path style host
             domain = host
             
         else:  # DNS style host
