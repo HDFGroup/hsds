@@ -20,6 +20,16 @@ HEAD_PORT=5100
 AN_PORT=6100
 SN_PORT=5101
 DN_PORT=6101
+AN_RAM=4g  # AN needs to store the entire object dictionary in memory
+SN_RAM=1g
+DN_RAM=3g  # should be comfortably larger than CHUNK CACHE
+HEAD_RAM=512m
+# set chunk cache size to 2GB
+CHUNK_MEM_CACHE_SIZE=2147483648
+# set max chunk size to 8MB
+MAX_CHUNK_SIZE=20971520
+# set the log level  
+LOG_LEVEL=DEBUG
 
 #
 # run container given in arguments
@@ -27,6 +37,7 @@ DN_PORT=6101
 if [ $1 == "head" ]; then
   echo "run head_node - ${HEAD_PORT}"
   docker run -d -p ${HEAD_PORT}:${HEAD_PORT} --name hsds_head \
+  --memory=${HEAD_RAM} \
   --env TARGET_SN_COUNT=${count} \
   --env TARGET_DN_COUNT=${count} \
   --env HEAD_PORT=${HEAD_PORT} \
@@ -42,6 +53,7 @@ if [ $1 == "head" ]; then
 elif [ $1 == "an" ]; then
   echo "run async_node - ${AN_PORT}"
   docker run -d -p ${AN_PORT}:${AN_PORT} --name hsds_async \
+  --memory=${AN_RAM} \
   --env AN_PORT=${AN_PORT} \
   --env NODE_TYPE="an"  \
   --env AWS_S3_GATEWAY=${AWS_S3_GATEWAY} \
@@ -59,6 +71,7 @@ elif [ $1 == "dn" ]; then
     do    
       NAME="hsds_dn_"$(($i))
       docker run -d -p ${DN_PORT}:${DN_PORT} --name $NAME \
+        --memory=${DN_RAM} \
         --env DN_PORT=${DN_PORT} \
         --env NODE_TYPE="dn"  \
         --env AWS_S3_GATEWAY=${AWS_S3_GATEWAY} \
@@ -67,6 +80,8 @@ elif [ $1 == "dn" ]; then
         --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
         --env BUCKET_NAME=${BUCKET_NAME} \
         --env LOG_LEVEL=${LOG_LEVEL} \
+        --env CHUNK_MEM_CACHE_SIZE=${CHUNK_MEM_CACHE_SIZE} \
+        --env MAX_CHUNK_SIZE=${MAX_CHUNK_SIZE} \
         --link hsds_head:hsds_head \
         hdfgroup/hsds
       DN_PORT=$(($DN_PORT+1))
@@ -77,6 +92,7 @@ elif [ $1 == "sn" ]; then
     do    
       NAME="hsds_sn_"$(($i))
       docker run -d -p ${SN_PORT}:${SN_PORT} --name $NAME \
+        --memory=${SN_RAM} \
         --env SN_PORT=${SN_PORT} \
         --env NODE_TYPE="sn"  \
         --env AWS_S3_GATEWAY=${AWS_S3_GATEWAY} \
@@ -85,6 +101,8 @@ elif [ $1 == "sn" ]; then
         --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
         --env BUCKET_NAME=${BUCKET_NAME} \
         --env LOG_LEVEL=${LOG_LEVEL} \
+        --env CHUNK_MEM_CACHE_SIZE=${CHUNK_MEM_CACHE_SIZE} \
+        --env MAX_CHUNK_SIZE=${MAX_CHUNK_SIZE} \
         --link hsds_head:hsds_head \
         hdfgroup/hsds
       SN_PORT=$(($SN_PORT+1))
