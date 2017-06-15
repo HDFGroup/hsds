@@ -538,7 +538,7 @@ Object:
         },
         "created": 1477549587.387293, 
         "lastModified": 1477549587.387293, 
-        "root": "g-2428ae0e-a082-11e6-9d93-0242ac110005" 
+        "root": "g-2428ae0e-a082-11e6-9d93-0242ac110005", 
         "attributes": {},
         "stats": {
             "allocatedChunkCount": 122,
