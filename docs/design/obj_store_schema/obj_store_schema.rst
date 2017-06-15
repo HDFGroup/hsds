@@ -528,7 +528,7 @@ Object:
         "layout": { 
             "class": "H5D_CHUNKED",
             "dims": [100,100,100]
-        }
+        },
         "creationProperties": { 
             "allocTime": "H5D_ALLOC_TIME_LATE", 
             "fillTime": "H5D_FILL_TIME_IFSET", 
