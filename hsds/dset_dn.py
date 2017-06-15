@@ -18,7 +18,6 @@ from aiohttp.errors import HttpBadRequest, HttpProcessingError
  
 from util.idUtil import isValidUuid, validateUuid
 from util.httpUtil import jsonResponse
-from util.domainUtil import validateDomain
 from datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj, save_metadata_obj, delete_metadata_obj
 import hsds_logger as log
     
@@ -44,7 +43,6 @@ async def GET_Dataset(request):
     resp_json["type"] = dset_json["type"]
     resp_json["shape"] = dset_json["shape"]
     resp_json["attributeCount"] = len(dset_json["attributes"])
-    resp_json["domain"] = dset_json["domain"]
     if "creationProperties" in dset_json:
         resp_json["creationProperties"] = dset_json["creationProperties"]
     if "layout" in dset_json:
@@ -102,17 +100,7 @@ async def POST_Dataset(request):
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
     shape_json = body["shape"]
-    if "domain" not in body:
-        msg = "POST_Dataset with no domain"
-        log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
-    domain = body["domain"]
-    try:
-        validateDomain(domain)
-    except ValueError:
-        msg = "Invalid domain: " + domain
-        log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+     
     layout = None
     if "layout" in body:       
         layout = body["layout"]  # client specified chunk layout
@@ -123,8 +111,6 @@ async def POST_Dataset(request):
     log.debug("POST_dataset typejson: {}, shapejson: {}".format(type_json, shape_json))
     
     dset_json = {"id": dset_id, "root": root_id, "created": now, "lastModified": now, "type": type_json, "shape": shape_json, "attributes": {} }
-    if domain is not None:
-        dset_json["domain"] = domain
     if "creationProperties" in body:
         dset_json["creationProperties"] = body["creationProperties"]
     if layout is not None:

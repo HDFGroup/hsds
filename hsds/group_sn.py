@@ -51,11 +51,14 @@ async def GET_Group(request):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
         raise HttpBadRequest(message=msg)
+
+    # veriful authorization to read the group
+    await validateAction(app, domain, group_id, username, "read")
     
     # get authoritative state for group from DN (even if it's in the meta_cache).
     group_json = await getObjectJson(app, group_id, refresh=True)  
     
-    await validateAction(app, domain, group_id, username, "read")
+    group_json["domain"] = domain
 
     hrefs = []
     group_uri = '/groups/'+group_id
@@ -122,7 +125,7 @@ async def POST_Group(request):
     root_id = domain_json["root"]
     group_id = createObjId("groups") 
     log.info("new  group id: {}".format(group_id))
-    group_json = {"id": group_id, "root": root_id, "domain": domain }
+    group_json = {"id": group_id, "root": root_id }
     log.debug("create group, body: " + json.dumps(group_json))
     req = getDataNodeUrl(app, group_id) + "/groups"
     

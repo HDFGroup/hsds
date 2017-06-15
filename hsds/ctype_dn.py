@@ -18,7 +18,6 @@ from aiohttp.errors import HttpBadRequest, HttpProcessingError
  
 from util.idUtil import isValidUuid, validateUuid
 from util.httpUtil import jsonResponse
-from util.domainUtil import validateDomain
 from datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj, delete_metadata_obj, check_metadata_obj
 import hsds_logger as log
     
@@ -43,7 +42,6 @@ async def GET_Datatype(request):
     resp_json["lastModified"] = ctype_json["lastModified"]
     resp_json["type"] = ctype_json["type"]
     resp_json["attributeCount"] = len(ctype_json["attributes"])
-    resp_json["domain"] = ctype_json["domain"]
      
     resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
@@ -76,7 +74,6 @@ async def POST_Datatype(request):
         pass  # expected
 
     root_id = None
-    domain = None
     
     if "root" not in body:
         msg = "POST_Datatype with no root"
@@ -96,26 +93,13 @@ async def POST_Datatype(request):
         raise HttpProcessingError(code=500, message="Unexpected Error")
     type_json = body["type"]
      
-    if "domain" not in body:
-        msg = "POST_Datatype with no domain key"
-        log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
-
-    domain = body["domain"]
-    try:
-        validateDomain(domain)
-    except ValueError:
-        msg = "Invalid domain: " + domain
-        log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
-
     # ok - all set, create committed type obj
     now = time.time()
 
     log.info("POST_datatype, typejson: {}". format(type_json))
     
     ctype_json = {"id": ctype_id, "root": root_id, "created": now, 
-        "lastModified": now, "type": type_json, "attributes": {}, "domain": domain }
+        "lastModified": now, "type": type_json, "attributes": {} }
      
     save_metadata_obj(app, ctype_id, ctype_json)
 

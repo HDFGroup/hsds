@@ -189,16 +189,17 @@ async def GET_Dataset(request):
     if "verbose" in request.GET and request.GET["verbose"]:
         verbose = True
     
+    # check that we have permissions to read the object
+    await validateAction(app, domain, dset_id, username, "read")
+
     # get authoritative state for dataset from DN (even if it's in the meta_cache).
     dset_json = await getObjectJson(app, dset_id, refresh=True)  
 
     log.debug("got dset_json: {}".format(dset_json))
-    await validateAction(app, domain, dset_id, username, "read")
 
     resp_json = {}
     resp_json["id"] = dset_json["id"]
     resp_json["root"] = dset_json["root"]
-    resp_json["domain"] = dset_json["domain"]
     resp_json["shape"] = dset_json["shape"]
     resp_json["type"] = dset_json["type"]
     if "creationProperties" in dset_json:
@@ -211,6 +212,7 @@ async def GET_Dataset(request):
     resp_json["attributeCount"] = dset_json["attributeCount"]
     resp_json["created"] = dset_json["created"]
     resp_json["lastModified"] = dset_json["lastModified"]
+    resp_json["domain"] = domain
     
     hrefs = []
     dset_uri = '/datasets/'+dset_id
@@ -647,7 +649,7 @@ async def POST_Dataset(request):
     dset_id = createObjId("datasets") 
     log.info("new  dataset id: {}".format(dset_id))
 
-    dataset_json = {"id": dset_id, "root": root_id, "domain": domain, "type": datatype, "shape": shape_json }
+    dataset_json = {"id": dset_id, "root": root_id, "type": datatype, "shape": shape_json }
 
     if "creationProperties" in body:
         # TBD - validate all creationProperties

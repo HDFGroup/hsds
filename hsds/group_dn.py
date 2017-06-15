@@ -18,7 +18,6 @@ from aiohttp.errors import HttpBadRequest, HttpProcessingError
  
 from util.idUtil import isValidUuid 
 from util.httpUtil import jsonResponse
-from util.domainUtil import validateDomain
 from datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj, save_metadata_obj, delete_metadata_obj
 import hsds_logger as log
     
@@ -44,7 +43,6 @@ async def GET_Group(request):
     resp_json["lastModified"] = group_json["lastModified"]
     resp_json["linkCount"] = len(group_json["links"])
     resp_json["attributeCount"] = len(group_json["attributes"])
-    resp_json["domain"] = group_json["domain"]
      
     resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
@@ -77,7 +75,6 @@ async def POST_Group(request):
         pass  # expected
     
     root_id = None
-    domain = None
     
     if "root" not in body:
         msg = "POST_Group with no root"
@@ -89,22 +86,11 @@ async def POST_Group(request):
         msg = "Invalid root_id: " + root_id
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
-     
-    if "domain" not in body:
-        log.error("POST_Group with no domain")
-        raise HttpProcessingError(code=500, message="Unexpected Error")
-    domain = body["domain"]
-    try:
-        validateDomain(domain)
-    except ValueError:
-        msg = "Invalid domain: " + domain
-        log.error(msg)
-        raise HttpBadRequest(message=msg)
 
     # ok - all set, create group obj
     now = time.time()
     
-    group_json = {"id": group_id, "root": root_id, "created": now, "lastModified": now, "domain": domain, 
+    group_json = {"id": group_id, "root": root_id, "created": now, "lastModified": now,  
         "links": {}, "attributes": {} }
 
     save_metadata_obj(app, group_id, group_json)

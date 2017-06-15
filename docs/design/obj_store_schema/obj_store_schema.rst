@@ -335,7 +335,6 @@ The Group object consist of JSON with the following keys:
 * "created" - timestamp (since epoch) of when the group was created
 * "lastModified" - timestamp of when the group was last modified
 * "root" - the id of the root group in the domain
-* "domain" - the domain which this group is a member of
 * "acls" - access Control List for authorization overrides
 
 There are three types of links that are supported: Hard, Soft, and External.  Each link item is a JSON object with the following keys:
@@ -390,8 +389,7 @@ Object:
         }, 
         "created": 1478039149.932783, 
         "lastModified": 1478039149.932783, 
-        "root": "g-2428ae0e-a082-11e6-9d93-0242ac110005", 
-        "domain": "/home/test_user1/mydomain"
+        "root": "g-2428ae0e-a082-11e6-9d93-0242ac110005" 
     }
 
 
@@ -420,7 +418,6 @@ The Committed type storage schema consists of JSON with the following keys:
 * "created" - timestamp (seconds since epoch) of when the committed type was created
 * "lastModified" - timestamp (seconds since epoch) of when the committed type was modified
 * "root" - the id of the root group in the domain
-* "domain" - the domain which this group is a member of
 * "acls" - access Control List for authorization overrides
 
 Notes:
@@ -451,8 +448,7 @@ Object:
     "attributes": {},
     "created": 1478039183.392074,
     "lastModified": 1478039183.392074, 
-    "root": "g-2428ae0e-a082-11e6-9d93-0242ac110005", 
-    "domain": "/home/test_user1/mydomain"   
+    "root": "g-2428ae0e-a082-11e6-9d93-0242ac110005" 
     }
 
 
@@ -493,7 +489,6 @@ The dataset storage schema consists of JSON with the following keys:
 * "created" - timestamp (seconds since epoch) of when the dataset was created
 * "lastModified" - timestamp (seconds since epoch) of when the dataset was last modified
 * "root" - the id of the root group in the domain
-* "domain" - the domain which this group is a member of
 * "acls" - access Control List for authorization overrides
 * "stats" - summary statistics for the dataset and chunk data
 
@@ -543,8 +538,7 @@ Object:
         },
         "created": 1477549587.387293, 
         "lastModified": 1477549587.387293, 
-        "root": "g-2428ae0e-a082-11e6-9d93-0242ac110005", 
-        "domain": "/home/test_user1/mydomain",
+        "root": "g-2428ae0e-a082-11e6-9d93-0242ac110005" 
         "attributes": {},
         "stats": {
             "allocatedChunkCount": 122,

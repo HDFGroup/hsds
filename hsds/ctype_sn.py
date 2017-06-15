@@ -52,11 +52,12 @@ async def GET_Datatype(request):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-    
-    # get authoritative state for group from DN (even if it's in the meta_cache).
-    type_json = await getObjectJson(app, ctype_id, refresh=True)  
 
     await validateAction(app, domain, ctype_id, username, "read")
+
+    # get authoritative state for group from DN (even if it's in the meta_cache).
+    type_json = await getObjectJson(app, ctype_id, refresh=True)  
+    type_json["domain"] = domain
 
     hrefs = []
     ctype_uri = '/datatypes/'+ctype_id
@@ -135,7 +136,7 @@ async def POST_Datatype(request):
     root_id = domain_json["root"]
     ctype_id = createObjId("datatypes") 
     log.debug("new  type id: {}".format(ctype_id))
-    ctype_json = {"id": ctype_id, "root": root_id, "domain": domain, "type": datatype }
+    ctype_json = {"id": ctype_id, "root": root_id, "type": datatype }
     log.debug("create named type, body: " + json.dumps(ctype_json))
     req = getDataNodeUrl(app, ctype_id) + "/datatypes"
     
