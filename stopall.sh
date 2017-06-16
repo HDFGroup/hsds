@@ -31,6 +31,8 @@ HSDS_SN_PID=$!
 
 wait $HSDS_{HEAD,ASYNC,DN,SN}_PID 
 
+for job in `jobs | awk '{print $1}' | sed -e "s/\[//" |sed -e "s/\]//" | sed -e "s/[+-]//"`; do wait %$job 2>/dev/null; done
+
 docker ps
    
  
