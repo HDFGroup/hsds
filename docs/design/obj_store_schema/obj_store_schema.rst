@@ -196,8 +196,7 @@ The domain object contains JSON with the following keys:
 * "root" - the UUID (not including the md5 hash) of the root group in the domain
 * "created" - the timestamp for when the domain was created
 * "lastModified" - the timestamp for when the domain was last updated
-* "stats" - summary statistics that include all objects in the domain
-
+ 
 The "owner" and "acls" keys are required, others may not be present.  In particular, if the "root" key is not present, that impies there is no HDF collection associated with this domain.  In this case the domain object can serve as a sort of "directory" for a set of related sub-domains.
 
 Notes:
@@ -240,17 +239,7 @@ Object:
         "root": "g-cf4f3baa-956e-11e6-8319-0242ac110005", 
         "owner": "test_user1",
         "created": 1479168471.038638,
-        "lastModified": 1479168471.038638,
-        "stats": {
-            "groupCount": 20,
-            "typeCount": 0,
-            "datasetCount": 67,
-            "logicalSize": 13194139533,
-            "allocatedSize": 8456534532,
-            "actualSize": 5457344534,
-            "checksum": "394a7d8d67c7e022490212d6098a2209",
-            "lastModified": 14791685671.058672
-        }
+        "lastModified": 1479168471.038638
     }
 
 
@@ -275,20 +264,51 @@ Note: optionally, an ACL key can be used in a group, dataset, or committed datat
 
 Example: Using the ACLs defined for the "my_domain" object above, user "test_user1" would be authorized to make any change to objects in the domain, or change the ACL itself.  User "joebob" (not listed in the ACL keys), would have permission to perform any read operation (assuming a more restrictive ACL is not present in the requested object), but not have authority to modify or delete any object.
 
-Domain stats
-------------
+Domain catalog
+--------------
 
-In order to provide summary information about the objects in a domain, an additional object will be used to store this data.  The object will be JSON with the following keys:
+In order to provide summary information about the objects in a domain, additional objects will be used to store information about the domain objects.  The following objects will be created/updated by the async node that store information about the group, dataset, and datatype objects in the domain:
 
-* "groupCount" - integer value of number of groups in domain  
-* "typeCount" - integer value of number of committed type objects in domain 
-* "datasetCount" - integer value of number of dataset objects in domain  
-* "logicalSize" - storage size of all entities including non-allocated chunks
-* "allocatedSize" - storage size that of all entities including only allocated chunks
-* "actualSize" - storage size as reported by the storage system (maybe smaller than "allocatedSize" due to compression)
-* "lastModified" - the timestamp for the most recent change to any object in the domain
+* ".groups.txt" - list of group ids (other than root group) in the domain
+* ".datasets.txt" - list of datsaet ids in the domain
+* ".datatypes.txt" - list of datatype ids in the domain
 
-For reasons of efficiency, the summary information will typically be updated asynchronously from changes to object state. Therefore the stats object may not reflect the most recent changes to objects in the domain.  E.g. is a dataset is created using the HDF REST API, the changes in datasetCount and size keys won't be immediately reflected.  The Last-Modified metadata property of the domain stats object can be used to determine when these keys were last updated.
+The object keys for the catalog objects will by the domain prefix key with the above name appended (e.g. ``/home/test_user1/my_domain/.groups.txt``).
+
+Each line of each catalog object will contain the following space deliminated fields:
+
+* object id
+* object ETag  (md5 checksum)
+* object last updated timestamp
+* object size (in bytes)
+* number of allocated chunks (for datasets.txt only)
+* total size of allocated chunks in bytes (for datasets.txt only)
+
+E.g.:
+
+``d-dea4d476-4724-11e7-8c95-0242ac110008 4ec1b96919cc5087e2d546073fa45670 1496360953 1058 1 400``
+
+Note: For reasons of efficiency, the summary information will typically be updated asynchronously from changes to object state. Therefore the domain catalog object may not reflect the most recent changes to objects in the domain.  E.g. if a dataset is created using the HDF REST API, a line with the dataset id will not appear immediately in the .datasets.txt object.  
+
+Dataset catalog
+---------------
+
+In order to provide information about all the allocated chunks of a given dataset, a dataset catalog object will be created for each dataset that has had at one write.  The key suffix of catalog object will be: ``.<datsetid>.chunks.txt`` and the key prefix will be the domain prefix (e.g. ``/home/test_user1/my_domain/.d-dea4d476-4724-11e7-8c95-0242ac110008.chunks.txt``).
+
+The dataset catalog object will contain one line for each allocated chunk with the following space deliminated fields:
+
+* chunk index  (the position of the chunk within the dataspace)
+* chunk ETag (md5 checksum)
+* chunk last updated timestamp
+* chunk size (in bytes)
+
+E.g.:
+
+``0_0 3b3cf9f694bd64ef3152d7e05c3143bb 1496360953 400``
+
+``0_0`` indicates that this is chunk index (0,0)  (the indexes are seperated by an underscore character), the chunk data has the given md5 checksum, was last modified at 1496360953 (seconds in epoch), and has a size of 400 bytes.
+
+Note: As with the domain catalog objects, the dataset catalog is updated asynchronously to dataset write operations.
 
  
 Group object
