@@ -56,7 +56,7 @@ class DomainUtilTest(unittest.TestCase):
         for domain in invalid_domains:
             self.assertFalse(isValidDomainPath(domain))
 
-        valid_domains = ("/home/test_user1/mytests/",)
+        valid_domains = ("/home/test_user1/mytests/", "/")
         for domain in valid_domains:
             self.assertTrue(isValidDomainPath(domain))
     

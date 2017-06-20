@@ -21,7 +21,7 @@ from util.idUtil import  getDataNodeUrl, createObjId, getS3Key, getCollectionFor
 from util.s3Util import getS3Keys, isS3Obj, getS3Bytes, getS3ObjStats
 from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
-from util.domainUtil import getParentDomain, getDomainFromRequest, getS3PrefixForDomain, validateDomain, isIPAddress
+from util.domainUtil import getParentDomain, getDomainFromRequest, getS3PrefixForDomain, validateDomain, isIPAddress, isValidDomainPath
 from servicenode_lib import getDomainJson
 import hsds_logger as log
 
@@ -151,10 +151,12 @@ async def get_domains(request):
     app = request.app
     loop = app["loop"]
     # if there is no domain passed in, get a list of top level domains
+    log.info("get_domains")
     domain = None
     if "domain" in request.GET or "host" in request.GET or not isIPAddress(request.host):
         try:
-            domain = getDomainFromRequest(request, domain_path=True)
+            log.debug("getDomainFromRequest")
+            domain = getDomainFromRequest(request, domain_path=True, validate=False)
         except ValueError:
             msg = "Invalid domain"
             log.warn(msg)
@@ -164,6 +166,14 @@ async def get_domains(request):
     else:
         log.info("get top level domains")
 
+    log.debug("getDomainFromRequest returned: [{}]".format(domain))
+    if domain and not isValidDomainPath(domain):
+        msg = "Invalid domain"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+
+    if domain == '/':
+        domain = None  # to simplify logic below
     if domain is not None:
         domain_prefix = getS3PrefixForDomain(domain)
         log.debug("using domain prefix: {}".format(domain_prefix))

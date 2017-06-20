@@ -567,32 +567,35 @@ class DomainTest(unittest.TestCase):
         print("testGetDomains", self.base_domain)
     
         import os.path as op
-        # 
-        headers = helper.getRequestHeaders()
-        req = helper.getEndpoint() + '/domains'
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.headers['content-type'], 'application/json')
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("domains" in rspJson)
-        domains = rspJson["domains"]
+        # Either '/' or no domain should get same result
+        for domain in (None, '/'):
+            headers = helper.getRequestHeaders(domain=domain)
+            print("headers:", headers)
+            req = helper.getEndpoint() + '/domains'
+            rsp = requests.get(req, headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+            self.assertEqual(rsp.headers['content-type'], 'application/json')
+            rspJson = json.loads(rsp.text)
+            self.assertTrue("domains" in rspJson)
+            domains = rspJson["domains"]
         
-        domain_count = len(domains)
-        if domain_count == 0:
-            # this should only happen in the very first test run
-            print("Expected to find more domains!")
-            return
+            domain_count = len(domains)
+            if domain_count == 0:
+                # this should only happen in the very first test run
+                print("Expected to find more domains!")
+                self.assertTrue(False)
+                return
 
-        for item in domains:
-            self.assertTrue("name" in item)
-            name = item["name"]
-            self.assertEqual(name[0], '/')
-            self.assertTrue(name[-1] != '/')
-            self.assertTrue("owner" in item)
-            self.assertTrue("created" in item)
-            self.assertTrue("lastModified" in item)
-            self.assertTrue("class") in item
-            self.assertTrue(item["class"] in ("domain", "folder"))
+            for item in domains:
+                self.assertTrue("name" in item)
+                name = item["name"]
+                self.assertEqual(name[0], '/')
+                self.assertTrue(name[-1] != '/')
+                self.assertTrue("owner" in item)
+                self.assertTrue("created" in item)
+                self.assertTrue("lastModified" in item)
+                self.assertTrue("class") in item
+                self.assertTrue(item["class"] in ("domain", "folder"))
           
              
 if __name__ == '__main__':

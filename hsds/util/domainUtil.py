@@ -109,7 +109,7 @@ def isValidDomain(id):
 def validateDomainPath(path):
     if not isinstance(path, str):
         raise ValueError("Expected string type")
-    if len(path) < 3:
+    if len(path) < 1:
         raise ValueError("Domain path too short")
     if path[0] != '/':
         raise ValueError("Domain path should start with '/'")
@@ -175,7 +175,7 @@ def getDomainFromRequest(request, domain_path=False, validate=True):
             domain = host
             
         else:  # DNS style host
-            if domain_path:
+            if domain_path and validate:
                 raise ValueError("Domain paths can not be DNS-style")
             if validate:
                 validateHostDomain(host) # throw ValueError if invalid
