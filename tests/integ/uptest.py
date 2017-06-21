@@ -10,6 +10,7 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import unittest
+import time
 import requests
 import json
 import helper
@@ -19,6 +20,23 @@ class UpTest(unittest.TestCase):
         super(UpTest, self).__init__(*args, **kwargs)
         
         # main
+    def testGetAbout(self):
+        req = helper.getEndpoint() + '/about'
+        rsp = requests.get(req)
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(rsp.headers['content-type'], 'application/json')
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("state") in rspJson
+        self.assertEqual(rspJson["state"], "READY")
+        self.assertTrue("about" in rspJson)
+        self.assertTrue("hsds_version" in rspJson)
+        self.assertTrue("greeting" in rspJson)
+        self.assertTrue("name" in rspJson)
+        self.assertTrue("start_time" in rspJson)
+        start_time = rspJson["start_time"]
+        now = int(time.time())
+        self.assertTrue(now > start_time)
+
     def testGetInfo(self):
         req = helper.getEndpoint() + '/info'
         rsp = requests.get(req)
@@ -29,12 +47,16 @@ class UpTest(unittest.TestCase):
         node = rspJson["node"]
         self.assertTrue("id" in node)
         self.assertTrue(node["id"].startswith("sn-"))
-        self.assertTrue("number" in node)
-        self.assertTrue(node["number"] >= 0)
+        self.assertTrue("node_number" in node)
+        self.assertTrue(node["node_number"] >= 0)
+        self.assertTrue("node_count" in node)
+        self.assertTrue(node["node_count"] >= 0)
         self.assertTrue("type" in node)
         self.assertEqual(node["type"], "sn")
         self.assertTrue("state" in node)
         self.assertEqual(node["state"], "READY")  
+        
+ 
              
 if __name__ == '__main__':
     #setup test files

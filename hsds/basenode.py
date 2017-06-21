@@ -32,6 +32,8 @@ from util.idUtil import getHeadNodeS3Key
 
 import hsds_logger as log
 
+HSDS_VERSION = "0.1"
+
 
 async def getHeadUrl(app):
     head_url = None
@@ -158,7 +160,24 @@ async def healthCheck(app):
 
         log.debug("health check sleep: {}".format(sleep_secs))
         await asyncio.sleep(sleep_secs)
- 
+
+async def about(request):
+    """ HTTP Method to return general info about the service """
+    log.request(request) 
+    app = request.app
+    resp = StreamResponse()
+    resp.headers['Content-Type'] = 'application/json'
+    answer = {}
+    answer['start_time'] =  app["start_time"] #unixTimeToUTC(app['start_time'])
+    answer['state'] = app['node_state'] 
+    answer["hsds_version"] = HSDS_VERSION
+    answer["name"] = "Highly Scalable Data Service (HSDS)"
+    answer["greeting"] = "Welcome to HSDS!"
+    answer["about"] = "HSDS is a webservice for HSDS data"
+    resp = await jsonResponse(request, answer) 
+    log.response(request, resp=resp)
+    return resp
+
 async def info(request):
     """HTTP Method to retun node state to caller"""
     log.request(request)
@@ -171,10 +190,10 @@ async def info(request):
     node['id'] = request.app['id']
     node['type'] = request.app['node_type']
     node['start_time'] =  app["start_time"] #unixTimeToUTC(app['start_time'])
-    node['up_time'] = app['start_time'] # elapsedTime(app['start_time'])
     node['state'] = app['node_state'] 
-    node['number'] = app['node_number']
-    node['count'] = app['node_count']
+    node['node_number'] = app['node_number']
+    node['node_count'] = app['node_count']
+    
     answer["node"] = node
     # psutil info
     # see: http://pythonhosted.org/psutil/ for description of different fields
@@ -299,6 +318,7 @@ def baseInit(loop, node_type):
     app["loop"] = loop
 
     app.router.add_get('/info', info)
+    app.router.add_get('/about', about)
       
     return app
  
