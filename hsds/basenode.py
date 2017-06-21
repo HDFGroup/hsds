@@ -86,7 +86,7 @@ async def healthCheck(app):
     sleep_secs = config.get("node_sleep_time")
     head_url = await getHeadUrl(app)
     while True:
-        if app["node_state"] == "INITIALIZING":
+        if app["node_state"] == "INITIALIZING" or (app["node_state"] == "WAITING" and app["node_number"] < 0):
             await register(app)
         else:
             # check in with the head node and make sure we are still active

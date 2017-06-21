@@ -102,17 +102,21 @@ async def healthCheck(app):
                 node_state = rsp_json["node"]
                 node_id = node_state["id"]
                 
-                if node_state['id'] != node['id']:
-                    log.warn("unexpected node_id: {} (expecting: {})".formatnode_id, (node['id']))
+                if node_id != node['id']:
+                    log.warn("unexpected node_id: {} (expecting: {})".format(node_id, node['id']))
                     node['host'] = None
                     node['id'] = None
-                    app["cluster_state"] = "INITIALIZING"
-                if node_state['number'] != node['node_number']:
+                    if app["cluster_state"] != "INITIALIZING":
+                        log.warn("setting cluster state to INITIALIZING")
+                        app["cluster_state"] = "INITIALIZING"
+                elif node_state['number'] != node['node_number']:
                     msg = "unexpected node_number got {} (expecting: {})"
                     log.warn(msg.format(node_state["number"], node['node_number']))
                     node['host'] = None
                     node['id'] = None
-                    app["cluster_state"] = "INITIALIZING"
+                    if app["cluster_state"] != "INITIALIZING":
+                        log.warn("setting cluster state to INITIALIZING")
+                        app["cluster_state"] = "INITIALIZING"
                 # save off other useful info from the node
                 app_node_stats = app["node_stats"]
                 node_stats = {}
@@ -137,7 +141,7 @@ async def healthCheck(app):
         if fail_count > 0:
             if app["cluster_state"] == "READY":
                 # go back to INITIALIZING state until another node is registered
-                log.warn("Setting cluster_state from READY to INITIALIZING")
+                log.warn("Fail_count > 0, Setting cluster_state from READY to INITIALIZING")
                 app["cluster_state"] = "INITIALIZING"
 
         
@@ -192,6 +196,7 @@ async def register(request):
     if peername is None:
         raise HttpBadRequest(message="Can not determine caller IP")
     host, req_port = peername
+    log.info("register host: {}, port: {}".format(host, req_port))
 
     nodes = None
     ret_node = None  
@@ -213,9 +218,13 @@ async def register(request):
                 ret_node = node
                 node_ids[body["id"]] = ret_node
                 break
- 
 
-    if getInactiveNodeCount(app) == 0:
+    if ret_node is None:
+        log.info("no free node to assign")
+ 
+    inactive_node_count = getInactiveNodeCount(app)
+    log.info("inactive_node_count: {}".format(inactive_node_count))
+    if inactive_node_count == 0:
         # all the nodes have checked in
         log.info("setting cluster state to ready")
         app['cluster_state'] = "READY"

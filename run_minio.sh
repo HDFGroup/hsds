@@ -30,6 +30,9 @@ CHUNK_MEM_CACHE_SIZE=2147483648
 MAX_CHUNK_SIZE=20971520
 # set the log level  
 LOG_LEVEL=DEBUG
+# Restart policy: no, on-failure, always, unless-stopped (see docker run reference)
+RESTART_POLICY=always
+
 MINIO_BASE="http://minio:9000"
 BUCKET_NAME="minio.hsdsdev"  # use a diferent bucket name to avoid any confusion with AWS S3
 
@@ -38,7 +41,7 @@ BUCKET_NAME="minio.hsdsdev"  # use a diferent bucket name to avoid any confusion
 #
 if [ $1 == "head" ]; then
   echo "run head_node - ${HEAD_PORT}"
-  docker run -d -p ${HEAD_PORT}:${HEAD_PORT} --name hsds_head \
+  docker run -d -p ${HEAD_PORT}:${HEAD_PORT} --restart ${RESTART_POLICY} --name hsds_head \
   --memory=${HEAD_RAM} \
   --env TARGET_SN_COUNT=${count} \
   --env TARGET_DN_COUNT=${count} \
@@ -54,7 +57,7 @@ if [ $1 == "head" ]; then
   hdfgroup/hsds  
 elif [ $1 == "an" ]; then
   echo "run async_node - ${AN_PORT}"
-  docker run -d -p ${AN_PORT}:${AN_PORT} --name hsds_async \
+  docker run -d -p ${AN_PORT}:${AN_PORT} --restart ${RESTART_POLICY} --name hsds_async \
   --memory=${AN_RAM} \
   --env AN_PORT=${AN_PORT} \
   --env NODE_TYPE="an"  \
@@ -72,7 +75,7 @@ elif [ $1 == "dn" ]; then
   for i in $(seq 1 $count);
     do    
       NAME="hsds_dn_"$(($i))
-      docker run -d -p ${DN_PORT}:${DN_PORT} --name $NAME \
+      docker run -d -p ${DN_PORT}:${DN_PORT} --restart ${RESTART_POLICY} --name $NAME \
         --memory=${DN_RAM} \
         --env DN_PORT=${DN_PORT} \
         --env NODE_TYPE="dn"  \
@@ -93,7 +96,7 @@ elif [ $1 == "sn" ]; then
   for i in $(seq 1 $count);
     do    
       NAME="hsds_sn_"$(($i))
-      docker run -d -p ${SN_PORT}:${SN_PORT} --name $NAME \
+      docker run -d -p ${SN_PORT}:${SN_PORT} --restart ${RESTART_POLICY} --name $NAME \
         --memory=${SN_RAM} \
         --env SN_PORT=${SN_PORT} \
         --env NODE_TYPE="sn"  \
@@ -120,7 +123,7 @@ elif [ $1 == "stopsn" ]; then
         docker stop $SN_NAME &
      done
 elif [ $1 == "minio" ]; then
-   docker run -d -p 9000:9000 --name minio \
+   docker run -d -p 9000:9000 --restart ${RESTART_POLICY} --name minio \
       --env MINIO_ACCESS_KEY=${AWS_ACCESS_KEY_ID} \
       --env MINIO_SECRET_KEY=${AWS_SECRET_ACCESS_KEY} \
       -v ${MINIO_DATA}:/export \
