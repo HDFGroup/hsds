@@ -29,7 +29,7 @@ from util.httpUtil import http_get_json, http_post, jsonResponse
 from util.idUtil import createNodeId
 from util.s3Util import getS3JSONObj, getInitialS3Stats 
 from util.idUtil import getHeadNodeS3Key
-
+from util.authUtil import getUserPasswordFromRequest, validateUserPassword
 import hsds_logger as log
 
 HSDS_VERSION = "0.1"
@@ -164,7 +164,11 @@ async def healthCheck(app):
 async def about(request):
     """ HTTP Method to return general info about the service """
     log.request(request) 
+    
     app = request.app
+    (username, pswd) = getUserPasswordFromRequest(request)
+    if username:
+        validateUserPassword(app, username, pswd)
     resp = StreamResponse()
     resp.headers['Content-Type'] = 'application/json'
     answer = {}

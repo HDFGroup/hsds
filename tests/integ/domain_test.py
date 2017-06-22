@@ -570,7 +570,6 @@ class DomainTest(unittest.TestCase):
         # Either '/' or no domain should get same result
         for domain in (None, '/'):
             headers = helper.getRequestHeaders(domain=domain)
-            print("headers:", headers)
             req = helper.getEndpoint() + '/domains'
             rsp = requests.get(req, headers=headers)
             self.assertEqual(rsp.status_code, 200)

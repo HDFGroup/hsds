@@ -21,7 +21,9 @@ class UpTest(unittest.TestCase):
         
         # main
     def testGetAbout(self):
-        req = helper.getEndpoint() + '/about'
+        endpoint = helper.getEndpoint()
+        print("endpoint:", endpoint)
+        req = endpoint + "/about"
         rsp = requests.get(req)
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers['content-type'], 'application/json')
