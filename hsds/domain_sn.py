@@ -415,7 +415,6 @@ async def GET_Domain(request):
                 rsp_json[k] = results[k]
          
     rsp_json["hrefs"] = hrefs
-
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp

@@ -23,6 +23,8 @@ from aiohttp.errors import ClientError, HttpBadRequest, HttpProcessingError
 import hsds_logger as log
 import config
 
+CORS_DOMAIN='*'
+
 def isOK(http_response):
     if http_response < 300:
         return True
@@ -219,6 +221,8 @@ JSON data
 async def jsonResponse(request, data, status=200):
     resp = StreamResponse(status=status)
     resp.headers['Content-Type'] = 'application/json'
+    if CORS_DOMAIN:
+        resp.headers['Access-Control-Allow-Origin'] = CORS_DOMAIN
     answer = json.dumps(data)
     answer = answer.encode('utf8')
     resp.content_length = len(answer)
