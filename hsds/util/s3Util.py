@@ -411,6 +411,7 @@ async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=Fal
                         stats["LastModified"] = int(item["LastModified"].timestamp())
                     else:
                         log.warn("No LastModified for key: {}".format(key_name))
+                    log.debug("key: {} stats:".format(key_name, stats))
                     key_names[key_name] = stats
                 else:
                     key_names.append(key_name)
