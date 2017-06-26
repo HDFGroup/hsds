@@ -26,6 +26,7 @@ from util.idUtil import getCollectionForId, isValidChunkId, isValidUuid, getClas
 from util.domainUtil import isValidDomain
 from util.httpUtil import jsonResponse, StreamResponse
 from util.chunkUtil import getDatasetId 
+from util.domainUtil import getDomainFromRequest
 from asyncnode_lib import listKeys, markObjs, deleteObj, getS3Obj, getRootProperty, clearUsedFlags, getDomainForObjId
 import hsds_logger as log
  
@@ -697,6 +698,97 @@ async def DELETE_Objects(request):
     log.response(request, resp=resp)
     return resp
 
+async def GET_Object(request):
+    """HTTP method to get object s3 state """
+    log.request(request)
+    app = request.app
+    log.info("GET_Object")
+    
+
+    obj_id = request.match_info.get('id')
+    s3objs = app["s3objs"]
+    if obj_id not in s3objs:
+        log.info("object: {} not found".format(obj_id))
+        raise HttpProcessingError(code=404)
+    s3obj = s3objs[obj_id] 
+    log.debug("get s3obj: {}".format(s3obj))
+     
+    resp_json = {  } 
+    resp_json["id"] = obj_id
+    resp_json["etag"] = s3obj.etag
+    resp_json["Size"] = s3obj.size
+    resp_json["LastModified"] = s3obj.lastModified
+    resp_json["S3Key"] = s3obj.s3key
+    resp = await jsonResponse(request, resp_json, status=200)
+    log.response(request, resp=resp)
+    return resp
+
+async def GET_Domain(request):
+    """HTTP method to get object s3 state """
+    log.request(request)
+    app = request.app
+    log.info("GET_Object")
+    
+    try:
+        domain = getDomainFromRequest(request)
+    except ValueError:
+        msg = "Invalid domain"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+
+    domains = app["domains"]
+    if domain not in domains:
+        log.info("domain: {} not found".format(domain))
+        raise HttpProcessingError(code=404)
+    root_id = domains[domain] 
+    log.debug("rootid: {}".format(root_id))
+     
+    resp_json = {  } 
+    resp_json["id"] = domain
+    resp_json["root"] = root_id
+    resp = await jsonResponse(request, resp_json, status=200)
+    log.response(request, resp=resp)
+    return resp
+
+async def GET_Root(request):
+    """HTTP method to get root object state """
+    log.request(request)
+    app = request.app
+    log.info("GET_Root")
+    
+
+    obj_id = request.match_info.get('id')
+    s3objs = app["s3objs"]
+    roots = app["roots"]
+    if obj_id not in roots:
+        log.info("root: {} not found".format(obj_id))
+        raise HttpProcessingError(code=404)
+    rootObj = roots[obj_id]
+    
+    if obj_id not in s3objs:
+        log.warn("expected to find id in s3objs")
+    else:
+        s3obj = s3objs[obj_id] 
+        log.debug("got s3obj: {}".format(s3obj))
+     
+    resp_json = {  } 
+    resp_json["id"] = obj_id
+    if "domain" in rootObj:
+        resp_json["domain"] = rootObj["domain"]
+     
+    resp_json["groups"] = list(rootObj["groups"])
+    resp_json["datasets"] = list(rootObj["datasets"])
+    resp_json["datatypes"] = list(rootObj["datatypes"])
+
+    if s3obj:
+        resp_json["etag"] = s3obj.etag
+        resp_json["Size"] = s3obj.size
+        resp_json["LastModified"] = s3obj.lastModified
+        resp_json["S3Key"] = s3obj.s3key
+    resp = await jsonResponse(request, resp_json, status=200)
+    log.response(request, resp=resp)
+    return resp
+
 
 async def init(loop):
     """Intitialize application and return app object"""
@@ -705,6 +797,9 @@ async def init(loop):
     app.router.add_route('GET', '/async_info', GET_AsyncInfo)
     app.router.add_route('PUT', '/objects', PUT_Objects)
     app.router.add_route('DELETE', '/objects', DELETE_Objects)
+    app.router.add_route('GET', '/objects/{id}', GET_Object)
+    app.router.add_route('GET', '/domains', GET_Domain)
+    app.router.add_route('GET', '/roots/{id}', GET_Root)
     app["bucket_stats"] = {}
     # object and domain updates will be posted here to be worked on offline
     app["pending_queue"] = [] 

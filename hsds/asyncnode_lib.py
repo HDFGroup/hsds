@@ -199,7 +199,6 @@ async def getRootProperty(app, s3obj):
     domain = None
     roots = app["roots"]
     domains = app["domains"]
-    s3objs = app["s3objs"]
     if "root" not in obj_json:
         if isValidDomain(s3obj.id):
             log.info("No root for folder domain: {}".format(s3obj.id))
@@ -213,23 +212,24 @@ async def getRootProperty(app, s3obj):
         s3obj.setRoot(obj_json["root"])
         if isValidDomain(s3obj.id):
             domain = s3obj.id
-        elif "domain" not in obj_json:
-            log.error("expected to find domain property in object: {}".format(s3obj.id))
-        elif obj_json["domain"] in s3objs:
-            domain = obj_json["domain"]
-        else:
-            log.info("root group {} referenced non-existent domain: {}".format(s3obj.id, obj_json["domain"]))
 
     # update the root and domain global dictionaries if needed
     if rootid:
         if rootid not in roots:
-            rootObj = {"domain": domain}
+            rootObj = {}
             rootObj["groups"] = set()
             rootObj["datasets"] = set()
             rootObj["datatypes"] = set()
+            if domain is not None:
+                rootObj["domain"] = domain
             roots[rootid] = rootObj
         else:
             rootObj = roots[rootid]
+            if domain is not None:
+                if "domain" in rootObj:
+                    pass # already set
+                else:
+                    rootObj["domain"] = domain
 
         # add non-root objects to the root collection
         if not isValidDomain(s3obj.id) and not s3obj.isRoot:
@@ -243,14 +243,12 @@ async def getRootProperty(app, s3obj):
                     root_collection.add(s3obj.id)  
  
 
-    if rootid and domain:
+    if rootid:
         rootObj = roots[rootid]
-        if rootObj["domain"] != domain:
-            log.error("Expected roots[{}] to be {} but was {}".format(rootid, domain, rootObj["domain"]))
-            return
-        if domain not in domains:
+         
+        if domain is not None and domain not in domains:
             domains[domain] = rootid
-        elif domains[domain] != rootid:
+        elif domain is not None and domains[domain] != rootid:
             if isValidDomain(s3obj.id):
                 # update the domain to point to new rootid
                 log.warn("replacing root obj of domain: to be: {}".format(s3obj.id, rootid))
@@ -445,28 +443,65 @@ async def deleteObj(app, objid, notify=True):
     return success
 
 
-async def listKeys(app):
-    """ Get all s3 keys in the bucket and create list of objkeys and domain keys """
-    log.info("listKeys start")
-    # Get all the keys for the bucket
-    # request include_stats, so that for each key we get the ETag, LastModified, and Size values.
-    s3keys = await getS3Keys(app, include_stats=True)
-    log.debug("got: {} keys".format(len(s3keys)))    
+def gets3keys_callback(app, s3keys):
+    #
+    # this is called for each page of results by getS3Keys 
+    #
+    s3objs = app["s3objs"]
+
+    log.debug("getS3Keys count: {} keys".format(len(s3keys)))    
+    log.debug("s3object_cnt: {}".format(len(s3objs)))
     for s3key in s3keys:
         log.debug("got s3key: {}".format(s3key))
         if not isS3ObjKey(s3key):
             log.debug("ignoring: {}".format(s3key))
             continue
         item = s3keys[s3key]   
-        objid = getObjId(s3key)
-        try:
-            s3obj = await getS3Obj(app, objid, **item) 
-        except HttpProcessingError as hpe:
-            log.warn("got error retreiving obj {}: {}".format(objid, hpe.code))
-            continue
-        log.debug("got s3obj({})".format(objid))
+        id = getObjId(s3key)
+        
+        old_size = 0
+        new_size = 0
+        if id in s3objs:
+            s3obj = s3objs[id]
+            old_size = s3obj.size
+        else:
+            s3obj = S3Obj(id)
 
-    s3objs = app["s3objs"]  
+        if "ETag" in item:
+            etag = item["ETag"]
+            log.debug("s3obj {} set etag: {}".format(id, etag))
+            s3obj.setETag(etag)
+
+        if "LastModified" in item:
+            lastModified = item["LastModified"]
+            log.debug("s3obj {} set lastModified: {}".format(id, lastModified))
+            s3obj.setLastModified(lastModified)
+
+       
+        if "Size" in item:
+            new_size = int(item["Size"])
+            log.debug("s3obj {} set size: {}".format(id, new_size))
+            s3obj.setSize(new_size)
+        app["bytes_in_bucket"] += (new_size - old_size)
+
+        if id not in s3objs: 
+            log.info("adding {} to s3objs - size: {}".format(id, s3obj.size))        
+            s3objs[id] = s3obj
+
+ 
+    log.debug("gets3keys_callback done")
+
+
+
+async def listKeys(app):
+    """ Get all s3 keys in the bucket and create list of objkeys and domain keys """
+    
+    s3objs = app["s3objs"] 
+    log.info("listKeys start - {} s3objs".format(len(s3objs))) 
+    # Get all the keys for the bucket
+    # request include_stats, so that for each key we get the ETag, LastModified, and Size values.
+    await getS3Keys(app, include_stats=True, callback=gets3keys_callback)
+
     domains = app["domains"] 
     roots = app["roots"]
     bytes_in_bucket = app["bytes_in_bucket"]  
@@ -484,7 +519,6 @@ async def listKeys(app):
             if dsetid not in s3objs:
                 log.info("dataset for chunk: {} not found".format(chunkid))
             else:
-                item = s3objs[chunkid]  # Dictionary of ETag, LastModified, and Size
                 dset = s3objs[dsetid]
                 log.debug("listKeys: adding chunk {} to dset {} chunks".format(chunkid, dsetid))
                 dset.chunks.add(chunkid)  
@@ -512,6 +546,7 @@ async def listKeys(app):
     log.info("domain_cnt: {}".format(len(domains)))
     log.info("root_cnt: {}".format(len(roots)))
     log.info("bytes_in_bucket: {}".format(bytes_in_bucket))
+    
      
     
  

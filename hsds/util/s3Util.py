@@ -318,38 +318,15 @@ async def isS3Obj(app, key):
         
      
 """
-Helper function for getKeys
+Helper function for getS3Keys
 """
-async def _fetch_all(pages):
-    responses = []
+async def _fetch_all(app, pages, key_names, prefix='', deliminator='', suffix='', include_stats=False, callback=None):
+    count = 0
     while True:
-        n = await pages.next_page()
-        if n is None:
+        response = await pages.next_page()
+        if response is None:
             break
-        responses.append(n)
-    return responses
-    
-
-async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=False):
-    # return keys matching the arguments
-    s3_client = getS3Client(app)
-    bucket_name = app['bucket_name']
-    log.info("getS3Keys('{}','{}','{}')".format(prefix, deliminator, suffix))
-    paginator = s3_client.get_paginator('list_objects')
-     
-    # TBD - how to paginate when more than 1000 keys are present
-    # TBD - for some reason passing in non-null deliminator doesn't work
-    pages = paginator.paginate(MaxKeys=1000, Bucket=bucket_name, Prefix=prefix, Delimiter=deliminator)
-    responses = await _fetch_all(pages)
-    log.debug("getS3Keys, got {} responses".format(len(responses)))
-    if include_stats:
-        # use a dictionary to hold return values
-        key_names = {}
-    else:
-        # just use a list
-        key_names = []
-    last_key = None
-    for response in responses:
+        last_key = None
         if 'CommonPrefixes' in response:
             log.debug("got CommonPrefixes in s3 response")
             common = response["CommonPrefixes"]
@@ -361,6 +338,7 @@ async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=Fal
                         key_names[item['Prefix']] = {}
                     else:
                         key_names.append(item['Prefix'])
+                    count += 1
 
         elif 'Contents' in response:
             log.debug("got Contents in s3 response")
@@ -380,7 +358,7 @@ async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=Fal
                     key_name = key_name[:-n]
                 if deliminator:
                     if key_name.endswith(deliminator):
-                        key_name = key_name[:-1]  # dont show ending deliminator
+                        key_name = key_name[:-1]  # don't show ending deliminator
                     if key_name.startswith(deliminator):
                         key_name = key_name[1:]
                     index = key_name.find(deliminator)
@@ -393,6 +371,15 @@ async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=Fal
                         continue  # not unique
                     last_key = key_name
                 if include_stats:
+                    #
+                    # key + stats format:
+                    #
+                    # key   38 + chunk_index                       | chunk|etag - 32 hex -> 16 bytes               | lm - 4 bytes  | size - 4 bytes
+                    # c-287d0b70-29e0-11e7-ab6f-0242ac110007_17_2_4 860e189d78013404a3940900b956892c1493142971 1233936
+                    # 
+                    # ~ 146 bytes in Python
+                    # ~ 45 bytes in C
+                    
                     stats = {}
                     if item["ETag"]:
                         stats["ETag"] = item["ETag"]
@@ -411,11 +398,46 @@ async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=Fal
                         stats["LastModified"] = int(item["LastModified"].timestamp())
                     else:
                         log.warn("No LastModified for key: {}".format(key_name))
-                    log.debug("key: {} stats:".format(key_name, stats))
+                    log.debug("key: {} stats: {}".format(key_name, stats))
                     key_names[key_name] = stats
+                    count += 1
                 else:
                     key_names.append(key_name)
-                
+                    count += 1
+        # done with all items in this response
+        if callback is not None and len(key_names) > 0:
+            callback(app, key_names)
+            # reset key_names
+            log.debug("reset key_names")
+            key_names.clear()
+             
+             
+    # end while True
+    return count
+# end _fetch_all
+        
+    
+
+async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=False, callback=None):
+    # return keys matching the arguments
+    s3_client = getS3Client(app)
+    bucket_name = app['bucket_name']
+    log.info("getS3Keys('{}','{}','{}')".format(prefix, deliminator, suffix))
+    paginator = s3_client.get_paginator('list_objects')
+    if include_stats:
+        # use a dictionary to hold return values
+        key_names = {}
+    else:
+        # just use a list
+        key_names = []
+     
+    # TBD - for some reason passing in non-null deliminator doesn't work
+    pages = paginator.paginate(MaxKeys=1000, Bucket=bucket_name, Prefix=prefix, Delimiter=deliminator)
+    # fetch all will fill in key_names unless callback is provided
+    count = await _fetch_all(app, pages, key_names, prefix=prefix, deliminator=deliminator, suffix=suffix, include_stats=include_stats, callback=callback)
+
+    log.info("getS3Keys done, got {} keys".format(count))
+               
     return key_names
 
 

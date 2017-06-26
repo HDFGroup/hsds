@@ -24,30 +24,64 @@ import config
 #
 def printUsage():
      
-    print("       python list_objects.py [prefix] [deliminator]")
+    print("       python list_objects.py [--prefix <prefix> ] [--deliminator deliminator] [--showstats]")
     sys.exit(); 
   
-async def listObjects(app, prefix='', deliminator=''):
-    s3keys = await getS3Keys(app, prefix=prefix, deliminator=deliminator)
+def getS3KeysCallback(app, s3keys):
+    print("getS3KeysCallback, {} items".format(len(s3keys)))
+    if isinstance(s3keys, list):
+        for s3key in s3keys:
+            print(s3key)
+    else:
+        for s3key in s3keys.keys():
+            etag = None
+            obj_size = None
+            lastModified = None
+            item = s3keys[s3key]
+            if "ETag" in item:
+                etag = item["ETag"]
+            if "Size" in item:
+                obj_size = item["Size"]
+            if "LastModified" in item:
+                lastModified = item["LastModified"]
+            print("{}: {} {} {}".format(s3key, etag, obj_size, lastModified))
+
+
+async def listObjects(app, prefix='', deliminator='', showstats=False):
+    await getS3Keys(app, prefix=prefix, deliminator=deliminator, include_stats=showstats, callback=getS3KeysCallback)
     
-    print("got {} responses".format(len(s3keys)))
-    for s3key in s3keys:
-        print(s3key)
-   
                
 def main():
      
     if len(sys.argv) > 1 and (sys.argv[1] == "-h" or sys.argv[1] == "--help"):
         printUsage()
-        sys.exit(1)
+         
 
     prefix = ''
     deliminator = '' 
-    if len(sys.argv) > 1:
-        prefix = sys.argv[1]
+    showstats = False
 
-    if len(sys.argv) > 2:
-        deliminator = sys.argv[2]
+    argn = 1
+    while argn < len(sys.argv):
+        arg = sys.argv[argn]
+        val = None
+        if len(sys.argv) > argn + 1:
+            val = sys.argv[argn+1]
+        if arg == "--prefix":
+            prefix = val
+            argn += 2
+        elif arg == "--deliminator":
+            deliminator = val
+            argn += 2
+        elif arg == "--showstats":
+            showstats = True
+            argn +=1
+        else:
+            printUsage()
+
+    print("prefix:", prefix)
+    print("delimantor:", deliminator)
+    print("showstats:", showstats)
     
     # we need to setup a asyncio loop to query s3
     loop = asyncio.get_event_loop()
@@ -57,7 +91,7 @@ def main():
     app["loop"] = loop
     session = get_session(loop=loop)
     app["session"] = session
-    loop.run_until_complete(listObjects(app, prefix=prefix, deliminator=deliminator))
+    loop.run_until_complete(listObjects(app, prefix=prefix, deliminator=deliminator, showstats=showstats))
     releaseClient(app)
     loop.close()
 
