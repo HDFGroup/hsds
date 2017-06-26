@@ -442,7 +442,7 @@ async def objDelete(app, objid):
 async def gcsweep(app):
     """ Do garbage collection run across all objects in the bucket 
     """
-    return # temp skip for gcsweep
+     
     now = int(time.time())
     log.info("gcsweep {}".format(unixTimeToUTC(now)))
     
