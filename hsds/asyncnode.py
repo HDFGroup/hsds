@@ -442,7 +442,7 @@ async def objDelete(app, objid):
 async def gcsweep(app):
     """ Do garbage collection run across all objects in the bucket 
     """
-
+    return # temp skip for gcsweep
     now = int(time.time())
     log.info("gcsweep {}".format(unixTimeToUTC(now)))
     
@@ -608,7 +608,9 @@ def updateBucketStats(app):
     s3objs = app["s3objs"]
     domains = app["domains"]
     roots = app["roots"]
+    deleted_ids = app["deleted_ids"]
     pending_queue = app["pending_queue"]
+    
 
     
     bucket_stats["object_count"] = len(s3objs)  
@@ -616,6 +618,7 @@ def updateBucketStats(app):
     bucket_stats["root_count"] = len(roots)
     bucket_stats["storage_size"] = app["bytes_in_bucket"]
     bucket_stats["pending_count"] = len(pending_queue)    
+    bucket_stats["deleted_count"] = len(deleted_ids)
         
 
 async def GET_AsyncInfo(request):
@@ -708,8 +711,13 @@ async def GET_Object(request):
     obj_id = request.match_info.get('id')
     s3objs = app["s3objs"]
     if obj_id not in s3objs:
-        log.info("object: {} not found".format(obj_id))
-        raise HttpProcessingError(code=404)
+        deleted_ids = app["deleted_ids"]
+        if obj_id in deleted_ids:
+            log.info("object: {} deleted".format(obj_id))
+            raise HttpProcessingError(code=410)
+        else:
+            log.info("object: {} not found".format(obj_id))
+            raise HttpProcessingError(code=404)
     s3obj = s3objs[obj_id] 
     log.debug("get s3obj: {}".format(s3obj))
      
@@ -738,8 +746,14 @@ async def GET_Domain(request):
 
     domains = app["domains"]
     if domain not in domains:
-        log.info("domain: {} not found".format(domain))
-        raise HttpProcessingError(code=404)
+        deleted_ids = app["deleted_ids"]
+        if domain in deleted_ids:
+            log.info("domain: {} deleted".format(domain))
+            raise HttpProcessingError(code=410)
+        else:
+            log.info("domain: {} not found".format(domain))
+            raise HttpProcessingError(code=404)
+ 
     root_id = domains[domain] 
     log.debug("rootid: {}".format(root_id))
      
