@@ -241,15 +241,16 @@ async def sweepObjs(app):
             deleted_ids.add(chunkid)
 
     delete_count = 0
-    log.info("sweepObjs - {} objects to be deleted".format(len(delete_set)))
-    # delete objects in the delete set
-    for objid in delete_set:
-        log.info("delete: {}".format(objid))
-        success = await deleteObj(app, objid)
-        if success:
-            delete_count += 1
-        else:
-            log.warn("failed to delete: {}".format(objid))    
+    if len(delete_set) > 0:
+        log.info("sweepObjs - {} objects to be deleted".format(len(delete_set)))
+        # delete objects in the delete set
+        for objid in delete_set:
+            log.info("delete: {}".format(objid))
+            success = await deleteObj(app, objid)
+            if success:
+                delete_count += 1
+            else:
+                log.warn("failed to delete: {}".format(objid))    
 
     # iteratate through 
     log.info("SweepObjs done - delete count: {}".format(delete_count))
