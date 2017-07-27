@@ -13,7 +13,7 @@ Installation with Docker
 8. Build docker image:  `$ ./build.sh --nolint`
 9. Export environment variables for AWS_ACCESS_KEY and AWS_SECRET_KEY, and AWS_REGION
 10. Run the docker containers: `$ ./runall.sh 4 s3`  For Minio, just: `$ ./runall.sh` 
-11. Run `$ docker ps` and verify that 9 containers are running: hsds_head, hsds_sn[0-4], hsds_dn[0-4]
+11. Run `$ docker ps` and verify that 10 containers are running: hsds_head, hsds_async, hsds_sn[0-4], hsds_dn[0-4]
 12. Get the external IP for the docker containers (just 127.0.0.1 if running directly on host, otherwise run: `$docker-machine ip`
 13. Enter: `http://<docker_ip>:5100/` and verify that "cluster_state" is "READY" (might need to give it a minute or two)
 14. Exec into the head_node_container: `$ docker exec -it hsds_head /bin/bash`
