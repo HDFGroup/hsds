@@ -14,8 +14,31 @@
 
 HEAD_PORT=5100
 DN_PORT=5101
-SN_PORT=5102
+SN_PORT=5201
+AN_PORT=6100
 CONT_NETWORK=hsdsnet
+
+# Restart policy: no, on-failure, always, unless-stopped (see docker run reference)
+RESTART_POLICY=always
+
+# AN needs to store the entire object dictionary in memory
+AN_RAM=4g  
+
+SN_RAM=1g
+
+# should be comfortably larger than CHUNK CACHE
+DN_RAM=3g  
+
+HEAD_RAM=512m
+
+# set chunk cache size to 2GB
+CHUNK_MEM_CACHE_SIZE=2147483648
+
+# set max chunk size to 8MB
+MAX_CHUNK_SIZE=20971520
+# set the log level  
+
+LOG_LEVEL=DEBUG
 
 CNT=
 CLUST=
@@ -35,7 +58,7 @@ if [ -z "$1" ] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
    echo "export REPURI=158023651469.dkr.ecr.us-west-2.amazonaws.com"
    echo "export REPNAME=hsds"
    echo "export HSDS_ADMIN=adminuser"
-   echo "export ROOTDOMAIN=/data"
+   echo "export ROOT_DOMAIN=/data"
    exit 1
 else
    CNT=$1
@@ -85,6 +108,9 @@ function run_head {
       --env AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
       --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
       --env BUCKET_NAME=${BUCKET_NAME} \
+      --restart ${RESTART_POLICY}  \
+      --memory=${HEAD_RAM} \
+      --env LOG_LEVEL=${LOG_LEVEL} \
       --network=$CONT_NETWORK \
         ${REPURI}/${REPNAME}:latest
 }
@@ -103,6 +129,11 @@ function run_datanode {
          --env AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
          --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
          --env BUCKET_NAME=${BUCKET_NAME} \
+         --restart ${RESTART_POLICY} \
+         --memory=${DN_RAM} \
+         --env LOG_LEVEL=${LOG_LEVEL} \
+         --env CHUNK_MEM_CACHE_SIZE=${CHUNK_MEM_CACHE_SIZE} \
+         --env MAX_CHUNK_SIZE=${MAX_CHUNK_SIZE} \
          --network=$CONT_NETWORK \
          ${REPURI}/${REPNAME}:latest
       DN_PORT=$(($DN_PORT+2))
@@ -123,10 +154,34 @@ function run_servicenode  {
          --env AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
          --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
          --env BUCKET_NAME=${BUCKET_NAME} \
+         --restart ${RESTART_POLICY} \
+         --memory=${DN_RAM} \
+         --env LOG_LEVEL=${LOG_LEVEL} \
+         --env CHUNK_MEM_CACHE_SIZE=${CHUNK_MEM_CACHE_SIZE} \
+         --env MAX_CHUNK_SIZE=${MAX_CHUNK_SIZE} \
          --network=$CONT_NETWORK \
          ${REPURI}/${REPNAME}:latest
       SN_PORT=$(($SN_PORT+2))
    done    
+}
+
+#-------------------------------------------------------------------------------
+# Routine must be called like "run_asyncnode"  
+function run_asyncnode {
+   NAME="hsds_async"
+   docker run -d -p ${AN_PORT}:${AN_PORT} --restart ${RESTART_POLICY} --name $NAME \
+      --env AN_PORT=${AN_PORT} \
+      --env NODE_TYPE="an"  \
+      --env AWS_S3_GATEWAY=${AWS_S3_GATEWAY} \
+      --env AWS_REGION=${AWS_REGION} \
+      --env AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
+      --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
+      --env BUCKET_NAME=${BUCKET_NAME} \
+      --env LOG_LEVEL=${LOG_LEVEL} \
+      --memory=${AN_RAM} \
+      --restart ${RESTART_POLICY} \
+       --network=$CONT_NETWORK \
+       ${REPURI}/${REPNAME}:latest
 }
 
 #---------------------------------------------------------------------------
@@ -136,7 +191,8 @@ function run_servicenode  {
 function init_h5_root_domain_local {
    mylocalip 
    ison=
-   for i in `seq 1 10`; do
+   for i in `seq 1 20`; do
+      curl -s http://$HOSTIP:$HEAD_PORT/info 
       ISREADY=`curl -s http://$HOSTIP:$HEAD_PORT/info | grep READY`
       if  [ ! -z "$ISREADY" ]; then
          ison="1"
@@ -163,6 +219,7 @@ else
    echo "Running with local docker..."
    make_local_container_network 
    run_head $CNT
+   run_asyncnode 
    run_datanode $CNT
    run_servicenode $CNT
    init_h5_root_domain_local 
