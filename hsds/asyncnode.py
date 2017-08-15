@@ -504,6 +504,7 @@ async def createTopLevelDomainList(app):
     """ Save a textfile with a list of toplevel domains """
     top_level_domains = []
     domains = app["domains"]
+    log.info("createTopLevelDomainList - searching domains")
     for domain in domains:
         if domain[0] != '/':
             log.error("unexpected domain: {}".format(domain))
@@ -511,13 +512,11 @@ async def createTopLevelDomainList(app):
         if domain[1:].find('/') == -1:
             top_level_domains.append(domain)
 
-    print("top-level-domains:")
-    for domain in top_level_domains:
-        print(domain)
-
     if len(top_level_domains) == 0:
-        log.warn("No top-level domains found")
+        log.warn("No topleveldomains found")
         return
+    else:
+        log.info("Found {} topleveldomains".format(len(top_level_domains)))
 
     log.info("Creating topleveldomains.txt")
     text_data = b""
