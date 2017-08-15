@@ -109,7 +109,7 @@ async def healthCheck(app):
                     if app["cluster_state"] != "INITIALIZING":
                         log.warn("setting cluster state to INITIALIZING")
                         app["cluster_state"] = "INITIALIZING"
-                elif node_state['number'] != node['node_number']:
+                elif 'number' in node_state and node_state['number'] != node['node_number']:
                     msg = "unexpected node_number got {} (expecting: {})"
                     log.warn(msg.format(node_state["number"], node['node_number']))
                     node['host'] = None
