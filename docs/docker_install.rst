@@ -63,6 +63,7 @@ may vary.  For OS X, see: https://docs.docker.com/engine/installation/.
 Run the following commands to install Docker on Linux/CentOS:
 
 ::
+
     $ sudo yum install docker
     $ sudo service docker start
     $ sudo chkconfig --level 300 docker on
