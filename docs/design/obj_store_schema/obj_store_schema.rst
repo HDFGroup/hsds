@@ -423,7 +423,7 @@ Committed Type Key
 
 The committed type object storage key is of the form::
 
-    hash>-t-<uuid>
+    <hash>-t-<uuid>
 
 Where <hash> is an md5 hash of the group id ("t-<uuid>").  Where <uuid> is a standard 36 character UUID.
 
