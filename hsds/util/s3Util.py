@@ -14,7 +14,7 @@
 # S3-related functions
 # 
 import json
-import zlib
+#import zlib
 from botocore.exceptions import ClientError
 from aiohttp.errors import HttpProcessingError 
 
@@ -161,6 +161,7 @@ async def getS3Bytes(app, key):
     if data and len(data) > 0:
         s3_stats_increment(app, "bytes_in", inc=len(data))
         log.info("read: {} bytes for S3 key: {}".format(len(data), key))
+        """
         try:
             unzip_data = zlib.decompress(data)
             log.info("uncompressed to {} bytes".format(len(unzip_data)))
@@ -168,6 +169,7 @@ async def getS3Bytes(app, key):
         except zlib.error as zlib_error:
             log.info("zlib_err: {}".format(zlib_error))
             log.warn("unable to uncompress s3 obj: {}, returning raw bytes".format(key))
+        """
 
     return data
 
@@ -204,6 +206,7 @@ async def putS3Bytes(app, key, data):
         key = key[1:]  # no leading slash
     log.info("putS3Bytes({}), {} bytes".format(key, len(data)))
     s3_stats_increment(app, "put_count")
+    """
     try:
         zip_data = zlib.compress(data)
         log.info("compressed to {} bytes".format(len(zip_data)))
@@ -211,6 +214,7 @@ async def putS3Bytes(app, key, data):
     except zlib.error as zlib_error:
         log.info("zlib_err: {}".format(zlib_error))
         log.warn("unable to compress s3 obj: {}, using raw bytes".format(key))
+    """
 
     try:
         await client.put_object(Bucket=bucket, Key=key, Body=data)
