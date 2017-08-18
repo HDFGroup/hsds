@@ -67,7 +67,9 @@ Run the following commands to install Docker on Linux/CentOS:
     $ sudo yum install docker
     $ sudo service docker start
     $ sudo chkconfig --level 300 docker on
-    $ sudo usermod -aG docker $(whoami)
+    $ sudo groupadd docker # if group docker doesn't exist already
+    $ sudo gpasswd -a $USER docker
+    # log out and back in again (may also need to stop/start docker service)
     $ docker ps  # verify
 
 
