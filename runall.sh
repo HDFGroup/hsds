@@ -18,7 +18,6 @@ if [ $# -gt 1 ]; then
 fi
 
 [ -z ${BUCKET_NAME} ] && echo "Need to set BUCKET_NAME" && exit 1
-[ -z ${AWS_S3_GATEWAY} ] && echo "Need to set AWS_S3_GATEWAY" && exit 1
 [ -z ${AWS_ACCESS_KEY_ID} ] && echo "Need to set AWS_ACCESS_KEY_ID" && exit 1
 [ -z ${AWS_SECRET_ACCESS_KEY} ] && echo "Need to set AWS_SECRET_ACCESS_KEY" && exit 1
 if [ ! -z ${s3} ] && [ ${s3} -ne 0 ]; then
