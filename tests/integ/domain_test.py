@@ -146,7 +146,7 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rspJson["num_datatypes"], 0)
         self.assertTrue("allocated_bytes" in rspJson)
         # test that allocated_bytes falls in a given range
-        self.assertTrue(rspJson["allocated_bytes"] > 5500)  
+        self.assertTrue(rspJson["allocated_bytes"] > 5000)  
         self.assertTrue(rspJson["allocated_bytes"] < 6000)  
         self.assertTrue("num_chunks" in rspJson)
         self.assertTrue(rspJson["num_chunks"], 4)
