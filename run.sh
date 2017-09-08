@@ -33,10 +33,9 @@ LOG_LEVEL=DEBUG
 # Restart policy: no, on-failure, always, unless-stopped (see docker run reference)
 RESTART_POLICY=always
 
+# the following is returned when /about is invoked
+SERVER_NAME=${SERVER_NAME:='Highly Scalable Data Service (HSDS)'}
 
-if [ -z ${SERVER_NAME} ]; then 
-  SERVER_NAME='Highly Scalable Data Service (HSDS)'
-fi
 
 #
 # run container given in arguments
@@ -108,7 +107,7 @@ elif [ $1 == "sn" ]; then
         --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
         --env BUCKET_NAME=${BUCKET_NAME} \
         --env LOG_LEVEL=${LOG_LEVEL} \
-        --env SERVER_NAME=${SERVER_NAME} \
+        --env SERVER_NAME="${SERVER_NAME}" \
         --env CHUNK_MEM_CACHE_SIZE=${CHUNK_MEM_CACHE_SIZE} \
         --env MAX_CHUNK_SIZE=${MAX_CHUNK_SIZE} \
         --link hsds_head:hsds_head \
