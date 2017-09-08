@@ -111,7 +111,6 @@ elif [ $1 == "sn" ]; then
         --env SERVER_NAME=${SERVER_NAME} \
         --env CHUNK_MEM_CACHE_SIZE=${CHUNK_MEM_CACHE_SIZE} \
         --env MAX_CHUNK_SIZE=${MAX_CHUNK_SIZE} \
-
         --link hsds_head:hsds_head \
         hdfgroup/hsds
       SN_PORT=$(($SN_PORT+1))
