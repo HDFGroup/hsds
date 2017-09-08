@@ -175,7 +175,7 @@ async def about(request):
     answer['start_time'] =  app["start_time"] #unixTimeToUTC(app['start_time'])
     answer['state'] = app['node_state'] 
     answer["hsds_version"] = HSDS_VERSION
-    answer["name"] = "Highly Scalable Data Service (HSDS)"
+    answer["name"] = config.get("server_name")
     answer["greeting"] = "Welcome to HSDS!"
     answer["about"] = "HSDS is a webservice for HSDS data"
     resp = await jsonResponse(request, answer) 

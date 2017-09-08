@@ -45,7 +45,8 @@ cfg = {
     'timeout': 30,  # http timeout - 30 sec
     'anonymous_ttl': 10*60,  # time after which anonymous objects will be deleted - 10 m
     'gc_freq': 20*60,  # time between gc runs
-    'password_file': '/usr/local/src/hsds/passwd.txt'  # filepath to a text file of username/passwords
+    'password_file': '/usr/local/src/hsds/passwd.txt',  # filepath to a text file of username/passwords
+    'server_name': 'Highly Scalable Data Service (HSDS)'
 }
    
 def get(x): 

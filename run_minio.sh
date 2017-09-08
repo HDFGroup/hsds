@@ -35,6 +35,11 @@ RESTART_POLICY=always
 
 MINIO_BASE="http://minio:9000"
 BUCKET_NAME="minio.hsdsdev"  # use a diferent bucket name to avoid any confusion with AWS S3
+ 
+if [ -z ${SERVER_NAME} ]; then 
+  SERVER_NAME='Highly Scalable Data Service (HSDS)'
+fi
+ 
 
 #
 # run container given in arguments
@@ -105,6 +110,7 @@ elif [ $1 == "sn" ]; then
         --env AWS_S3_GATEWAY=${MINIO_BASE} \
         --env BUCKET_NAME=${BUCKET_NAME} \
         --env LOG_LEVEL=${LOG_LEVEL} \
+        --env SERVER_NAME=${SERVER_NAME} \
         --link hsds_head:hsds_head \
         --link minio:minio \
         hdfgroup/hsds
