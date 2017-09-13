@@ -21,7 +21,7 @@ from util.httpUtil import http_get_json
 import hsds_logger as log
 
 
-async def getDomainJson(app, domain, reload=False):
+async def getDomainJson(app, domain, reload=True):
     """ Return domain JSON from cache or fetch from DN if not found
         Note: only call from sn!
     """

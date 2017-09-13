@@ -45,7 +45,6 @@ def getS3Client(app):
         msg="Invalid aws s3 gateway"
         log.error(msg)
         raise ValueError(msg)
-    log.info("s3_gateway: {}".format(s3_gateway))
 
     use_ssl = False
     if s3_gateway.startswith("https"):

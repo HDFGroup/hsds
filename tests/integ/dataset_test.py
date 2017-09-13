@@ -989,14 +989,14 @@ class DatasetTest(unittest.TestCase):
 
         # create a dataset again
         req = self.endpoint + "/datasets"
+        payload = {'type': type_vstr, 'shape': 10,
+             'link': {'id': root_uuid, 'name': 'linked_dset'} }
         rsp = requests.post(req, data=json.dumps(payload), headers=headers)
-        print(rsp.status_code)
-        # should return 201, but is returning 409
-        #self.assertEqual(rsp.status_code, 201)  # create dataset
-        #rspJson = json.loads(rsp.text)
-        #dset_uuid = rspJson['id']
-        #self.assertTrue(helper.validateId(dset_uuid))
-        #self.assertEqual(root_uuid, rspJson["root"])
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dset_uuid))
+        self.assertEqual(root_uuid, rspJson["root"])
          
         
              
