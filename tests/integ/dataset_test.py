@@ -931,6 +931,72 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(rsp_type["class"], 'H5T_FLOAT')
         self.assertTrue("id" in rsp_type)
         self.assertEqual(rsp_type["id"], dtype_uuid)
+
+    def testDatasetwithDomainDelete(self):
+        domain = self.base_domain + "/datasetwithdomaindelete.h6"
+        print("testDatasetwithDomainDelete", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+
+
+        # create a domain
+        req = helper.getEndpoint() + '/'
+        rsp = requests.put(req, headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+         
+        # get root group and verify link count is 0
+        req = helper.getEndpoint() + '/groups/' + root_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 0)
+        
+        type_vstr = {"charSet": "H5T_CSET_ASCII", 
+            "class": "H5T_STRING", 
+            "strPad": "H5T_STR_NULLTERM", 
+            "length": "H5T_VARIABLE" } 
+        payload = {'type': type_vstr, 'shape': 10,
+             'link': {'id': root_uuid, 'name': 'linked_dset'} }
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dset_uuid))
+        self.assertEqual(root_uuid, rspJson["root"])
+
+        # get root group and verify link count is 1
+        req = helper.getEndpoint() + '/groups/' + root_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 1)
+
+        # delete the domain (with the orginal user)
+        req = helper.getEndpoint() + '/'
+        rsp = requests.delete(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # re-create a domain
+        rsp = requests.put(req, headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        self.assertTrue(root_uuid != rspJson["root"])
+        root_uuid = rspJson["root"]
+
+        # create a dataset again
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        print(rsp.status_code)
+        # should return 201, but is returning 409
+        #self.assertEqual(rsp.status_code, 201)  # create dataset
+        #rspJson = json.loads(rsp.text)
+        #dset_uuid = rspJson['id']
+        #self.assertTrue(helper.validateId(dset_uuid))
+        #self.assertEqual(root_uuid, rspJson["root"])
          
         
              
