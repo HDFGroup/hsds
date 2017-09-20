@@ -980,7 +980,6 @@ class ValueTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
         self.assertTrue(helper.validateId(dset_uuid))
-        print("dset_uuid:", dset_uuid)
          
         # link new dataset as 'dset'
         name = 'dset'

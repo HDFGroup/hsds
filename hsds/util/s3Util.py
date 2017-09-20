@@ -206,8 +206,8 @@ async def putS3Bytes(app, key, data, deflate_level=None):
     s3_stats_increment(app, "put_count")
     if deflate_level is not None:
         try:
-            zip_data = zlib.compress(data)
-            log.info("compressed to {} bytes".format(len(zip_data)))
+            zip_data = zlib.compress(data, level=deflate_level)
+            log.info("compressed to {} bytes with level: {}".format(len(zip_data, deflate_level)))
             data = zip_data
         except zlib.error as zlib_error:
             log.info("zlib_err: {}".format(zlib_error))
