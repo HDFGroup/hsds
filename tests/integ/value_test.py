@@ -923,7 +923,7 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
 
-        # write to the etended region 
+        # write to the extended region 
         payload = {'value': value, 'start': 10, 'stop': 20}
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
@@ -953,6 +953,62 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(data[0:orig_extent], list(range(orig_extent)))
         # the extended area should be all zeros
         self.assertEqual(data[orig_extent:num_elements], list(range(orig_extent)))
+
+    def testDeflateCompression(self):
+        # test Dataset with creation property list
+        print("testDefalteCompression", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        # get domain
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # create the dataset 
+        req = self.endpoint + "/datasets"
+        
+        # Create ~1MB dataset
+        
+        payload = {'type': 'H5T_STD_I8LE', 'shape': [1024, 1024]}
+        # define deflate compression
+        gzip_filter = {'class': 'H5Z_FILTER_DEFLATE', 'id': 1, 'level': 9, 'name': 'deflate'}
+        payload['creationProperties'] = {'filters': [gzip_filter,] }
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dset_uuid))
+        print("dset_uuid:", dset_uuid)
+         
+        # link new dataset as 'dset'
+        name = 'dset'
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {"id": dset_uuid}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # write a horizontal strip of 22s
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value" 
+        data = [22,] * 1024
+        payload = { 'start': [512, 0], 'stop': [513, 1024], 'value': data }
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        
+        # read back the 512,512 element
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"  # test
+        params = {"select": "[512:513,512:513]"} # read  1 element
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+        self.assertEqual(len(value), 1)
+        row = value[0]
+        self.assertEqual(len(row), 1)
+        self.assertEqual(row[0], 22) 
             
  
              

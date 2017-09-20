@@ -404,6 +404,31 @@ def getChunkLayout(dset_json):
     layout = layout_json["dims"]
     return layout
 
+""" Get the Deflate compression value.
+"""
+def getDeflateLevel(dset_json):
+    
+    if "creationProperties" not in dset_json:
+        return None
+    creationProperties = dset_json["creationProperties"]
+    if "filters" not in creationProperties:
+        return None
+    filters = creationProperties["filters"]
+    deflate_level = None
+    for filter in filters:
+        if "class" not in filter:
+            continue
+        filterClass = filter["class"]
+        if filterClass != "H5Z_FILTER_DEFLATE":
+            continue
+        if "level" not in filter:
+            deflate_level = 5  # medium level
+        else:
+            deflate_level = filter["level"]
+    return deflate_level
+
+
+
 
 """Helper method - return query options for a "reasonable" size
     data preview selection. Return None if the dataset is small

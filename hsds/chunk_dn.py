@@ -25,8 +25,9 @@ from util.idUtil import getS3Key, validateInPartition, isValidUuid
 from util.s3Util import  isS3Obj, getS3Bytes, deleteS3Obj   
 from util.hdf5dtype import createDataType
 from util.dsetUtil import  getSelectionShape, getSliceQueryParam
-from util.dsetUtil import getFillValue, getChunkLayout, getEvalStr
-from util.chunkUtil import getChunkIndex, getChunkCoordinate, getChunkRelativePoint
+from util.dsetUtil import getFillValue, getChunkLayout, getEvalStr, getDeflateLevel
+from util.chunkUtil import getChunkIndex, getChunkCoordinate, getChunkRelativePoint, getDatasetId
+
 
 import hsds_logger as log
 
@@ -47,7 +48,7 @@ async def PUT_Chunk(request):
         msg = "Invalid chunk id: {}".format(chunk_id)
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-
+  
     if not request.has_body:
         msg = "PUT Value with no body"
         log.warn(msg)
@@ -71,7 +72,9 @@ async def PUT_Chunk(request):
     dset_json = json.loads(request.GET["dset"])
     log.debug("dset_json: {}".format(dset_json))
     dims = getChunkLayout(dset_json)
-     
+    deflate_level = getDeflateLevel(dset_json)
+    log.info("got deflate_level: {}".format(deflate_level))
+    
     rank = len(dims)  
    
     fill_value = getFillValue(dset_json)
@@ -128,7 +131,15 @@ async def PUT_Chunk(request):
     input_arr = input_arr.reshape(input_shape)
 
     chunk_arr = None 
-    chunk_cache = app['chunk_cache'] 
+    chunk_cache = app['chunk_cache']
+    if deflate_level is not None:
+        deflate_map = app['deflate_map']
+        dset_id = getDatasetId(chunk_id)
+        if dset_id not in deflate_map:
+            # save the deflate level so the lazy chunk writer can access it
+            deflate_map[dset_id] = deflate_level
+            log.info("update deflate_map: {}: {}".format(dset_id, deflate_level))
+    
     s3_key = getS3Key(chunk_id)
     log.debug("PUT_Chunks s3_key: {}".format(s3_key))
     if chunk_id in chunk_cache:
@@ -138,7 +149,7 @@ async def PUT_Chunk(request):
         # TBD - potential race condition?
         if obj_exists:
             log.debug("Reading chunk from S3")
-            chunk_bytes = await getS3Bytes(app, s3_key)
+            chunk_bytes = await getS3Bytes(app, s3_key, deflate_level=deflate_level)
             chunk_arr = np.fromstring(chunk_bytes, dtype=dt)
             chunk_arr = chunk_arr.reshape(dims)
         else:
@@ -190,7 +201,7 @@ async def GET_Chunk(request):
         msg = "Invalid chunk id: {}".format(chunk_id)
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-
+    
     validateInPartition(app, chunk_id)
     log.debug("request params: {}".format(list(request.GET.keys())))
     if "dset" not in request.GET:
@@ -206,6 +217,13 @@ async def GET_Chunk(request):
     log.debug("got dims: {}".format(dims))
     rank = len(dims)  
 
+    # get deflate compression level
+    deflate_level = getDeflateLevel(dset_json)
+    if deflate_level is None:
+        log.info("deflate_level is None")
+    else:
+        log.info("deflate_level: {}".format(deflate_level))
+         
     # get chunk selection from query params
     if "select" in request.GET:
         log.debug("select: {}".format(request.GET["select"]))
@@ -250,7 +268,7 @@ async def GET_Chunk(request):
             log.warn(msg)
             raise HttpProcessingError(code=404, message="Not found")
         log.debug("Reading chunk {} from S3".format(s3_key))
-        chunk_bytes = await getS3Bytes(app, s3_key)
+        chunk_bytes = await getS3Bytes(app, s3_key, deflate_level=deflate_level)
         chunk_arr = np.fromstring(chunk_bytes, dtype=dt)
         log.debug("chunk size: {}".format(chunk_arr.size))
         chunk_arr = chunk_arr.reshape(dims)
@@ -355,6 +373,7 @@ async def POST_Chunk(request):
     chunk_layout = getChunkLayout(dset_json)
     chunk_coord = getChunkCoordinate(chunk_id, chunk_layout)
     log.debug("chunk_coord: {}".format(chunk_coord))
+    deflate_level = getDeflateLevel(dset_json)
     
     
     if not request.has_body:
@@ -402,7 +421,7 @@ async def POST_Chunk(request):
             log.warn(msg)
             raise HttpProcessingError(code=404, message="Not found")
         log.debug("Reading chunk {} from S3".format(s3_key))
-        chunk_bytes = await getS3Bytes(app, s3_key)
+        chunk_bytes = await getS3Bytes(app, s3_key, deflate_level=deflate_level)
         chunk_arr = np.fromstring(chunk_bytes, dtype=dt)
         chunk_arr = chunk_arr.reshape(dims)
         chunk_cache[chunk_id] = chunk_arr  # store in cache
@@ -471,6 +490,14 @@ async def DELETE_Chunk(request):
     await deleteS3Obj(app, s3_key)
         
     resp_json = {  } 
+
+    deflate_map = app["deflate_map"]
+    dset_id = getDatasetId(chunk_id)
+    if dset_id in deflate_map:
+        # The only reason chunks are ever deleted is if the dataset is being deleted,
+        # so it should be save to remove this entry now
+        log.info("Removing deflate_map entry for {}".format(dset_id))
+        del deflate_map[dset_id]
       
     resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)

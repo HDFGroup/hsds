@@ -498,7 +498,7 @@ async def processPendingQueue(app):
 
     log.info("processPendingQueue stop")
     log.info("domains to be updated: {}".format(len(domain_updates)))
-    log.info("datasets to be updates: {}".format(len(dataset_updates)))
+    log.info("datasets to be updated: {}".format(len(dataset_updates)))
                  
 async def createTopLevelDomainList(app):
     """ Save a textfile with a list of toplevel domains """
@@ -610,8 +610,6 @@ def updateBucketStats(app):
     roots = app["roots"]
     deleted_ids = app["deleted_ids"]
     pending_queue = app["pending_queue"]
-    
-
     
     bucket_stats["object_count"] = len(s3objs)  
     bucket_stats["domain_count"] = len(domains)

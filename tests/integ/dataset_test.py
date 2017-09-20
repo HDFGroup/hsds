@@ -263,6 +263,7 @@ class DatasetTest(unittest.TestCase):
             return  # abort rest of test
         domainJson = json.loads(rsp.text)
         root_uuid = domainJson["root"]
+        self.assertTrue(helper.validateId(root_uuid))
          
         # get the dataset uuid 
         dset_uuid = helper.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1")
@@ -381,6 +382,7 @@ class DatasetTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
         root_uuid = rspJson["root"]
+        self.assertTrue(helper.validateId(root_uuid))
 
         fields = ({'name': 'x', 'type': 'H5T_STD_I32LE'}, 
                     {'name': 'x', 'type': 'H5T_IEEE_F32LE'}) 
@@ -612,10 +614,12 @@ class DatasetTest(unittest.TestCase):
         # create the dataset 
         req = self.endpoint + "/datasets"
         # Create ~1GB dataset
+        
         payload = {'type': 'H5T_IEEE_F32LE', 'shape': [365, 780, 1024], 'maxdims': [0, 780, 1024]}
         # define a chunk layout with 4 chunks per 'slice'
         # chunk size is 798720 bytes
-        payload['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [1, 390, 512] }}
+        gzip_filter = {'class': 'H5Z_FILTER_DEFLATE', 'id': 1, 'level': 9, 'name': 'deflate'}
+        payload['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [1, 390, 512] }, 'filters': [gzip_filter,] }
         req = self.endpoint + "/datasets"
         rsp = requests.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
@@ -640,6 +644,21 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(layout_json["class"], 'H5D_CHUNKED')
         self.assertTrue("dims" in layout_json)
         self.assertEqual(layout_json["dims"], [1, 390, 1024])
+
+        # verify compression
+        self.assertTrue("creationProperties" in rspJson)
+        cpl = rspJson["creationProperties"]
+        self.assertTrue("filters") in cpl
+        filters = cpl["filters"]
+        self.assertEqual(len(filters), 1)
+        filter = filters[0]
+        self.assertTrue("class") in filter
+        self.assertEqual(filter["class"], 'H5Z_FILTER_DEFLATE')
+        self.assertTrue("level" in filter)
+        self.assertEqual(filter["level"], 9)
+        self.assertTrue("id" in filter)
+        self.assertEqual(filter["id"], 1)
+         
 
     
     def testInvalidFillValue(self):

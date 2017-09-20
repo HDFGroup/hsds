@@ -95,7 +95,12 @@ if __name__ == '__main__':
     app['deleted_ids'] = set()
     app['notify_ids'] = set()
     app['dirty_ids'] = {}
-
+    app['deflate_map'] = {} # map of dataset ids to deflate levels (if compressed)
+    # TODO - there's nothing to prevent the defalte_map from getting ever larger 
+    # (though it is only one int per dataset id)
+    # add a timestamp and remove at a certain time?
+    # delete entire map whenver the synch queue is empty?
+    
     # run background tasks
     asyncio.ensure_future(healthCheck(app), loop=loop)
 

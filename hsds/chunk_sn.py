@@ -25,7 +25,7 @@ from util.idUtil import   isValidUuid, getDataNodeUrl
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.hdf5dtype import getItemSize, createDataType
 from util.dsetUtil import getSliceQueryParam, setSliceQueryParam, getFillValue, isExtensible 
-from util.dsetUtil import getSelectionShape, getNumElements, getDsetDims, getDsetMaxDims, getChunkLayout
+from util.dsetUtil import getSelectionShape, getNumElements, getDsetDims, getDsetMaxDims, getChunkLayout, getDeflateLevel
 from util.chunkUtil import getNumChunks, getChunkIds, getChunkId
 from util.chunkUtil import getChunkCoverage, getDataCoverage
 from util.arrayUtil import bytesArrayToList, toTuple 
@@ -38,13 +38,15 @@ import hsds_logger as log
 """
 Write data to given chunk_id.  Pass in type, dims, and selection area.
 """
-async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr):
+async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level, arr):
     """ write the chunk selection to the DN
     chunk_id: id of chunk to write to
     chunk_sel: chunk-relative selection to write to
     np_arr: numpy array of data to be written
     """
     log.info("write_chunk_hyperslab, chunk_id:{}, slices:{}".format(chunk_id, slices))
+    if deflate_level is not None:
+        log.info("deflate_level: {}".format(deflate_level))
     if "layout" not in dset_json:
         log.error("No layout found in dset_json: {}".format(dset_json))
         raise HttpProcessingError(message="Unexpected error", code=500)
@@ -63,7 +65,8 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr):
     log.debug("arr.shape: {}".format(arr.shape))
     arr_chunk = arr[data_sel]
     req = getDataNodeUrl(app, chunk_id)
-    req += "/chunks/" + chunk_id 
+    req += "/chunks/" + chunk_id  
+
     log.debug("PUT chunk req: " + req)
     client = get_http_client(app)
     data = arr_chunk.tobytes()  # TBD - this makes a copy, use np_arr.data to get memoryview and avoid copy
@@ -343,7 +346,7 @@ async def PUT_Value(request):
         body = await request.json()
     
     # get  state for dataset from DN.
-    dset_json = await getObjectJson(app, dset_id)  
+    dset_json = await getObjectJson(app, dset_id, refresh=False)  
 
     layout = None 
     datashape = dset_json["shape"]
@@ -355,6 +358,7 @@ async def PUT_Value(request):
     maxdims = getDsetMaxDims(dset_json)
     rank = len(dims)
     layout = getChunkLayout(dset_json)
+    deflate_level = getDeflateLevel(dset_json)
      
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
@@ -496,7 +500,7 @@ async def PUT_Value(request):
 
     tasks = []
     for chunk_id in chunk_ids:
-        task = asyncio.ensure_future(write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr))
+        task = asyncio.ensure_future(write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level, arr))
         tasks.append(task)
     await asyncio.gather(*tasks, loop=loop)
 
