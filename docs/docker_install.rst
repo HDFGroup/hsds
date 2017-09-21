@@ -43,8 +43,8 @@ These environment variables will be passed to the Docker containers on start up.
 Minio Setup
 -----------
 
-Minio is a docker container you can run on your desktop rather than using S3.  To HSDS treats the Minio just like
-it would the real S3 endpoint.
+Minio is a docker container you can run on your desktop rather than using S3.  To HSDS Minio just like
+works just like the real S3 endpoint.
 
 To setup minio:
 
