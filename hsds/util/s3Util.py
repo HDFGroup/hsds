@@ -119,7 +119,14 @@ async def getS3JSONObj(app, key):
             raise HttpProcessingError(code=500, message=msg)
 
     s3_stats_increment(app, "bytes_in", inc=len(data)) 
-    json_dict = json.loads(data.decode('utf8'))
+    try:
+        json_dict = json.loads(data.decode('utf8'))
+    except UnicodeDecodeError:
+        s3_stats_increment(app, "error_count")
+        log.error("Error loading JSON at key: {}".format(key))
+        msg = "Unexpected i/o error"
+        raise HttpProcessingError(code=500, message=msg)
+
     log.debug("s3 returned: {}".format(json_dict))
     return json_dict
 
@@ -206,8 +213,10 @@ async def putS3Bytes(app, key, data, deflate_level=None):
     s3_stats_increment(app, "put_count")
     if deflate_level is not None:
         try:
-            zip_data = zlib.compress(data, level=deflate_level)
-            log.info("compressed to {} bytes with level: {}".format(len(zip_data, deflate_level)))
+            # the keyword parameter is enabled with py3.6
+            # zip_data = zlib.compress(data, level=deflate_level)
+            zip_data = zlib.compress(data, deflate_level)
+            log.info("compressed from {} bytes to {} bytes with level: {}".format(len(data), len(zip_data), deflate_level))
             data = zip_data
         except zlib.error as zlib_error:
             log.info("zlib_err: {}".format(zlib_error))
