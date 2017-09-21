@@ -451,7 +451,9 @@ async def gcsweep(app):
     clearUsedFlags(app)
 
     # mark used objects
-    await markObjs(app, removeInvalidDomains=True)
+    # Note: setting removeInvalidDomains to true is causing cases where
+    # the domain gets deleted because the root group hasn't showed up yet.
+    await markObjs(app, removeInvalidDomains=False)
 
     # clear out any unused objects
     await sweepObjs(app)
