@@ -189,8 +189,8 @@ def getObjPartition(id, count):
 def validateInPartition(app, obj_id):
     if getObjPartition(obj_id, app['node_count']) != app['node_number']:
         # The request shouldn't have come to this node'
-        expected_node = getObjPartition(obj_id, app['node_count'])
-        msg = "wrong node for 'id':{}, expected node {} got {}".format(obj_id, expected_node, app['node_number'])
+        partition = getObjPartition(obj_id, app['node_count'])
+        msg = "wrong node for 'id':{}, expected node {} got {}".format(obj_id, app['node_number'], partition)
         log.error(msg)
         raise KeyError(msg)
 

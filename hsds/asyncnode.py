@@ -838,7 +838,9 @@ if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     app = loop.run_until_complete(init(loop))   
     # run background tasks
-    asyncio.ensure_future(bucketCheck(app), loop=loop)
+    if app["anonymous_ttl"] > 0:
+        # only run if we need to do garbage collection
+        asyncio.ensure_future(bucketCheck(app), loop=loop)
     asyncio.ensure_future(healthCheck(app), loop=loop)
     async_port = config.get("an_port")
     log.info("Starting service on port: {}".format(async_port))

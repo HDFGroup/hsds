@@ -193,6 +193,7 @@ async def delete_metadata_obj(app, obj_id, notify=True):
     """ Delete the given object """
     meta_cache = app['meta_cache'] 
     dirty_ids = app["dirty_ids"]
+    log.info("delete_meta_data_obj: {} notify: {}".format(obj_id, notify))
     if not isValidDomain(obj_id) and not isValidUuid(obj_id):
         msg = "Invalid obj id: {}".format(obj_id)
         log.error(msg)
