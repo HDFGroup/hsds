@@ -13,6 +13,7 @@
 # s3Util:
 # S3-related functions
 # 
+import asyncio
 import json
 import zlib
 from botocore.exceptions import ClientError
@@ -350,8 +351,22 @@ Helper function for getS3Keys
 """
 async def _fetch_all(app, pages, key_names, prefix='', deliminator='', suffix='', include_stats=False, callback=None):
     count = 0
+    retry_limit = 3
     while True:
-        response = await pages.next_page()
+        for retry_number in range(retry_limit):
+            try: 
+                response = await pages.next_page()
+                break  # success
+            except AttributeError as ae:
+                # aiohttp if throwing an attribute error when there  is a problem
+                # with the S3 connection
+                # back off and try again
+                if retry_number == retry_limit - 1:
+                    log.error("Error retreiving s3 keys")
+                    raise HttpProcessingError(code=500, message="Unexpected Error retreiving S3 keys")
+                log.warn("Error retrieving S3 keys, retrying")
+                sleep_seconds = (retry_number+1)**2  # sleep, 1,4,9, etc. seconds
+                await asyncio.sleep(sleep_seconds)
         if response is None:
             break
         last_key = None
