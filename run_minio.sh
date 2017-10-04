@@ -38,6 +38,9 @@ BUCKET_NAME="minio.hsdsdev"  # use a diferent bucket name to avoid any confusion
 
 #the following is returned when /about is invoked
 SERVER_NAME=${SERVER_NAME:='Highly Scalable Data Service (HSDS)'}
+
+# Set ANONYMOUS_TTL to 0 to disable GC, default to 10 minutes
+ANONYMOUS_TTL=${ANONYMOUS_TTL:=600}
  
 
 #
@@ -70,6 +73,7 @@ elif [ $1 == "an" ]; then
   --env AWS_S3_GATEWAY=${MINIO_BASE} \
   --env BUCKET_NAME=${BUCKET_NAME} \
   --env LOG_LEVEL=${LOG_LEVEL} \
+  --env ANONYMOUS_TTL=${ANONYMOUS_TTL} \
   --link hsds_head:hsds_head \
   --link minio:minio \
   hdfgroup/hsds

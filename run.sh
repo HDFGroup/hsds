@@ -36,6 +36,9 @@ RESTART_POLICY=always
 # the following is returned when /about is invoked
 SERVER_NAME=${SERVER_NAME:='Highly Scalable Data Service (HSDS)'}
 
+# Set ANONYMOUS_TTL to 0 to disable GC, default to 10 minutes
+ANONYMOUS_TTL=${ANONYMOUS_TTL:=600}
+
 
 #
 # run container given in arguments
@@ -68,6 +71,7 @@ elif [ $1 == "an" ]; then
   --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
   --env BUCKET_NAME=${BUCKET_NAME} \
   --env LOG_LEVEL=${LOG_LEVEL} \
+  --env ANONYMOUS_TTL=${ANONYMOUS_TTL} \
   --link hsds_head:hsds_head \
   hdfgroup/hsds
 elif [ $1 == "dn" ]; then

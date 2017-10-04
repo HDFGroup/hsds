@@ -87,6 +87,8 @@ async def updateDomainContent(app, domain, objs_updated=None):
     """ Create/update context files listing objids and size for objects in the domain.
     """
     log.info("updateDomainContent: {}".format(domain))
+    if app["anonymous_ttl"] > 0:
+        log.info("no gc, so skipping updateDomainContent")
     if objs_updated is not None:
         log.debug("objs_updated: {}".format(objs_updated))
 
@@ -264,6 +266,8 @@ async def sweepObjs(app):
 async def rootDelete(app, rootid):
     """ get root obj for rootid """
     log.info("rootDelete {}".format(rootid))
+    if app["anonymous_ttl"] > 0:
+        log.info("no gc, so skipping root delete")
     s3objs = app["s3objs"]
     roots = app["roots"]
     if rootid not in roots:
@@ -304,6 +308,8 @@ async def rootDelete(app, rootid):
 async def domainDelete(app, domain):
     """ Process domain deletion event """
     log.info("domainDelete: {}".format(domain))
+    if app["anonymous_ttl"] > 0:
+        log.info("no gc, so skipping domain delete")
      
     domains = app["domains"]
     if domain not in domains:
@@ -334,6 +340,8 @@ async def domainDelete(app, domain):
 async def domainCreate(app, domain):
     """ Process domain creation event """
     log.info("domainCreate: {}".format(domain))
+    if app["anonymous_ttl"] > 0:
+        log.info("no gc, so skipping domainCreate")
     
     try:
         s3obj = await getS3Obj(app, domain)
@@ -376,6 +384,9 @@ async def objUpdate(app, objid):
     if not isValidChunkId(objid) and not isValidUuid(objid):
         log.error("Got unexpected objid: {}".format(objid))
         return
+
+    if app["anonymous_ttl"] > 0:
+        log.info("no gc, so skipping obj delete")
 
     s3objs = app["s3objs"]
         
@@ -421,6 +432,9 @@ async def objUpdate(app, objid):
 async def objDelete(app, objid):
     """ Process object delete event """
     log.info("objectDelete: {}".format(objid))
+
+    if app["anonymous_ttl"] > 0:
+        log.info("no gc, so skipping obj delete")
 
     if not isValidUuid(objid):
         log.error("Got unexpected objid: {}".format(objid))
@@ -556,7 +570,7 @@ async def bucketCheck(app):
             await asyncio.sleep(1)
             continue  # wait for READY state
 
-        if first_run:
+        if first_run and app["anonymous_ttl"] > 0:
             # list all keys from bucket, save stats to s3objs
             # Note - this can take some time if there are a large number of 
             # objects, so run just once at startup.
@@ -569,7 +583,7 @@ async def bucketCheck(app):
 
         now = int(time.time())
 
-        if now - app["last_gcsweep"] > gc_freq:
+        if now - app["last_gcsweep"] > gc_freq and app["anonymous_ttl"] > 0:
             app["last_gcsweep"] = now
             log.info("running gcsweep")    
             try:
@@ -822,8 +836,8 @@ async def init(loop):
     app["roots"] = {}  # root to domain map
     app["deleted_ids"] = set()
     app["bytes_in_bucket"] = 0
-    app["anonymous_ttl"] = config.get("anonymous_ttl")
-    app["s3_sync_interval"] = config.get("s3_sync_interval")
+    app["anonymous_ttl"] = int(config.get("anonymous_ttl"))
+    log.info("anonymous_ttl: {}".format(app["anonymous_ttl"]))
     app["updated_domains"] = set()
      
     return app
