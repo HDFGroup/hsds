@@ -14,8 +14,8 @@ import sys
 
 cfg = {
     'allow_noauth': True,
-    'aws_access_key_id': 'xxx',  
-    'aws_secret_access_key': 'xxx',    
+    'aws_access_key_id': 'xxx',  # Replace with access key for account
+    'aws_secret_access_key': 'xxx',   # Replace with secret key for account
     'aws_region': 'us-east-1',
     'hsds_endpoint': '', # used for hateos links in response
     'head_endpoint': '', # optionally used for nodes to register

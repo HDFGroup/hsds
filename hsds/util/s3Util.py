@@ -36,17 +36,18 @@ def getS3Client(app):
     if not aws_secret_access_key or aws_secret_access_key == 'xxx':
         msg="Invalid aws secret access key, using None"
         log.info(msg)
+        aws_secret_access_key = None
     aws_access_key_id = config.get("aws_access_key_id")
     if not aws_access_key_id or aws_access_key_id == 'xxx':
         msg="Invalid aws access key, using None"
         log.info(msg)
+        aws_access_key_id = None
 
     s3_gateway = config.get('aws_s3_gateway')
     if not s3_gateway:
         msg="Invalid aws s3 gateway"
         log.error(msg)
         raise ValueError(msg)
-
     use_ssl = False
     if s3_gateway.startswith("https"):
         use_ssl = True
