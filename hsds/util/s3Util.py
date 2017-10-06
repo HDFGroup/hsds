@@ -16,6 +16,8 @@
 import asyncio
 import json
 import zlib
+import subprocess
+import datetime
 from botocore.exceptions import ClientError
 from aiohttp.errors import HttpProcessingError 
 
@@ -25,24 +27,68 @@ import config
 def getS3Client(app):
     """ Return s3client handle
     """
-    if "s3" in app:
-        return app["s3"]
-    # first time setup of s3 client
     if "session" not in app:
+        # app startup should have set this
         raise KeyError("Session not initialized")
     session = app["session"]
-    aws_region = config.get("aws_region")
-    aws_secret_access_key = config.get("aws_secret_access_key")
-    if not aws_secret_access_key or aws_secret_access_key == 'xxx':
-        msg="Invalid aws secret access key, using None"
-        log.info(msg)
-        aws_secret_access_key = None
-    aws_access_key_id = config.get("aws_access_key_id")
-    if not aws_access_key_id or aws_access_key_id == 'xxx':
-        msg="Invalid aws access key, using None"
-        log.info(msg)
-        aws_access_key_id = None
 
+    if "s3" in app:
+        if "token_expiration" in app:
+            # check that our token is not about to expire
+            expiration = app["token_expiration"]
+            now = datetime.datetime.now()
+            delta = expiration - now
+            if delta.seconds > 10:
+                return app["s3"]
+            # otherwise, fall through and get a new token
+            log.info("S3 access token has expired - renewing")
+        else:
+            return app["s3"]
+    
+    # first time setup of s3 client or limited time token has expired
+    aws_region = config.get("aws_region")
+    aws_secret_access_key = None
+    aws_access_key_id = None 
+    aws_session_token = None
+    aws_iam_role = config.get("aws_iam_role")
+    log.info("using iam role: {}".format(aws_iam_role))
+    aws_secret_access_key = config.get("aws_secret_access_key")
+    aws_access_key_id = config.get("aws_access_key_id")
+    if not aws_secret_access_key or aws_secret_access_key == 'xxx':
+        log.info("aws secret access key not set")
+        aws_secret_access_key = None
+    if not aws_access_key_id or aws_access_key_id == 'xxx':
+        log.info("aws access key id not set")
+        aws_access_key_id = None
+  
+    if aws_iam_role and not aws_secret_access_key:
+        log.info("getted EC2 IAM role credentials")
+        # Use EC2 IAM role to get credentials
+        # See: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html?icmpid=docs_ec2_console
+        curl_cmd = ["curl", "http://169.254.169.254/latest/meta-data/iam/security-credentials/{}".format(aws_iam_role)]
+        p = subprocess.run(curl_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if p.returncode != 0:
+            msg = "Error getting IAM role credentials: {}".format(p.stderr)
+            log.error(msg)
+        else:
+            stdout = p.stdout.decode("utf-8")
+            try:
+                cred = json.loads(stdout)
+                aws_secret_access_key = cred["SecretAccessKey"]
+                aws_access_key_id = cred["AccessKeyId"]
+                log.info("Got ACCESS_KEY_ID: {} from EC2 metadata".format(aws_access_key_id))     
+                aws_session_token = cred["Token"]
+                log.info("Got Expiration of: {}".format(cred["Expiration"]))
+                expiration_str = cred["Expiration"][:-1] + "UTC" # trim off 'Z' and add 'UTC'
+                # save the expiration
+                app["token_expiration"] = datetime.datetime.strptime(expiration_str, "%Y-%m-%dT%H:%M:%S%Z")
+            except json.JSONDecodeError:
+                msg = "Unexpected error decoding EC2 meta-data response"
+                log.error(msg)
+            except KeyError:
+                msg = "Missing expected key from EC2 meta-data response"
+                log.error(msg)
+       
     s3_gateway = config.get('aws_s3_gateway')
     if not s3_gateway:
         msg="Invalid aws s3 gateway"
@@ -54,6 +100,7 @@ def getS3Client(app):
     s3 = session.create_client('s3', region_name=aws_region,
                                    aws_secret_access_key=aws_secret_access_key,
                                    aws_access_key_id=aws_access_key_id,
+                                   aws_session_token=aws_session_token,
                                    endpoint_url=s3_gateway,
                                    use_ssl=use_ssl)
 

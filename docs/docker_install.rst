@@ -11,7 +11,7 @@ Installation with Docker
 6. Go to admin/config directory: `$ cd hsds/admin/config`
 7. Copy the file "passwd.default" to "passwd.txt".  Add any usernames/passwords you wish 
 8. Create an enviroment variable to pass the bucket name: `$ export BUCKET_NAME=<your_bucket>`
-9. Build docker image:  `$ ./build.sh --nolint` 
+9. From hsds directory, build docker image:  `$ ./build.sh --nolint` 
 10. Run the docker containers: `$ ./runall.sh 4 s3`  For Minio, just: `$ ./runall.sh` 
 11. Run `$ docker ps` and verify that 10 containers are running: hsds_head, hsds_async, hsds_sn[0-4], hsds_dn[0-4]
 12. Get the external IP for the docker containers (just 127.0.0.1 if running directly on host, otherwise run: `$docker-machine ip`
@@ -36,9 +36,10 @@ These environment variables will be passed to the Docker containers on start up.
     export AWS_ACCESS_KEY_ID=1234567890            # user your AWS account access key if using S3
     export AWS_SECRET_ACCESS_KEY=ABCDEFGHIJKL      # use your AWS account access secret key if using S3
     export BUCKET_NAME=hsds                        # set to the name of the bucket you will be usings
-    export AWS_REGION=us-east-1                    # for boto compatibility
-    export AWS_S3_GATEWAY="http://127,0.0.1:9000"  # if running docker machine set to machine ip
-
+    export AWS_REGION=us-east-1                    # for boto compatibility - for S3 set to the region the bucket is in
+    export AWS_S3_GATEWAY="http://127,0.0.1:9000"  # if running docker machine set to machine ip 
+    # For S3, set AWS_S3_GATEWAY to endpoint for the region the bucket is in.  E.g.: http://s3.amazonaws.com.
+    # See http://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region for list of endpoints.
 
 Minio Setup
 -----------

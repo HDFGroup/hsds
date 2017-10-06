@@ -16,6 +16,7 @@ cfg = {
     'allow_noauth': True,
     'aws_access_key_id': 'xxx',  # Replace with access key for account
     'aws_secret_access_key': 'xxx',   # Replace with secret key for account
+    'aws_iam_role': "hsds_role",  # For EC2 using IAM roles
     'aws_region': 'us-east-1',
     'hsds_endpoint': '', # used for hateos links in response
     'head_endpoint': '', # optionally used for nodes to register
