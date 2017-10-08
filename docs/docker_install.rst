@@ -37,7 +37,7 @@ These environment variables will be passed to the Docker containers on start up.
     export AWS_SECRET_ACCESS_KEY=ABCDEFGHIJKL      # use your AWS account access secret key if using S3
     export BUCKET_NAME=hsds                        # set to the name of the bucket you will be usings
     export AWS_REGION=us-east-1                    # for boto compatibility - for S3 set to the region the bucket is in
-    export AWS_S3_GATEWAY="http://127,0.0.1:9000"  # if running docker machine set to machine ip 
+    export AWS_S3_GATEWAY="http://127.0.0.1:9000"  # if running docker machine set to machine ip 
     # For S3, set AWS_S3_GATEWAY to endpoint for the region the bucket is in.  E.g.: http://s3.amazonaws.com.
     # See http://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region for list of endpoints.
 

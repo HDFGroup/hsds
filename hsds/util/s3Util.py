@@ -38,7 +38,7 @@ def getS3Client(app):
             expiration = app["token_expiration"]
             now = datetime.datetime.now()
             delta = expiration - now
-            if delta.seconds > 10:
+            if delta.total_seconds() > 10:
                 return app["s3"]
             # otherwise, fall through and get a new token
             log.info("S3 access token has expired - renewing")
