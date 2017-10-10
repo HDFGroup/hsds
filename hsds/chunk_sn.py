@@ -28,7 +28,7 @@ from util.dsetUtil import getSliceQueryParam, setSliceQueryParam, getFillValue, 
 from util.dsetUtil import getSelectionShape, getNumElements, getDsetDims, getDsetMaxDims, getChunkLayout, getDeflateLevel
 from util.chunkUtil import getNumChunks, getChunkIds, getChunkId
 from util.chunkUtil import getChunkCoverage, getDataCoverage
-from util.arrayUtil import bytesArrayToList, toTuple 
+from util.arrayUtil import bytesArrayToList, jsonToArray 
 from util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from servicenode_lib import getObjectJson, validateAction
 import config
@@ -438,54 +438,37 @@ async def PUT_Value(request):
         arr = arr.reshape(np_shape)  # conform to selection shape
                 
     else:
+        #
         # data is json
-
-        # need some special conversion for compound types --
-        # each element must be a tuple, but the JSON decoder
-        # gives us a list instead.
-        if len(dset_dtype) > 1 and type(json_data) in (list, tuple):
-            np_shape_rank = len(np_shape)
-            #log.info("np_shape_rank: {}".format(np_shape_rank))
-            converted_data = []
-            if npoints == 1:
-                converted_data.append(toTuple(0, json_data))
-            else:  
-                converted_data = toTuple(np_shape_rank, json_data)
-            json_data = converted_data
-
-        arr = np.array(json_data, dtype=dset_dtype)
-        # raise an exception of the array shape doesn't match the selection shape
-        # allow if the array is a scalar and the selection shape is one element,
-        # numpy is ok with this
-        if arr.size != npoints:
-            msg = "Input data doesn't match selection number of elements"
-            msg += " Expected {}, but received: {}".format(npoints, arr.size)
+        #
+        try:
+            arr = jsonToArray(np_shape, dset_dtype, json_data)
+        except ValueError:
+            msg = "Bad Request: input data doesn't match selection"
             log.warn(msg)
             raise HttpBadRequest(message=msg)
-        if arr.shape != np_shape:
-            arr = arr.reshape(np_shape)  # reshape to match selection
 
-        np_index = 0
-        for dim in range(len(arr.shape)):
-            data_extent = arr.shape[dim]
-            selection_extent = 1
-            if np_index < len(np_shape):
-                selection_extent = np_shape[np_index]
-            if selection_extent == data_extent:
-                np_index += 1
-                continue  # good
-            if data_extent == 1:
-                continue  # skip singleton selection
-            if selection_extent == 1:
-                np_index += 1
-                continue  # skip singleton selection
+    np_index = 0
+    for dim in range(len(arr.shape)):
+        data_extent = arr.shape[dim]
+        selection_extent = 1
+        if np_index < len(np_shape):
+            selection_extent = np_shape[np_index]
+        if selection_extent == data_extent:
+            np_index += 1
+            continue  # good
+        if data_extent == 1:
+            continue  # skip singleton selection
+        if selection_extent == 1:
+            np_index += 1
+            continue  # skip singleton selection
                  
-            # selection/data mismatch!
-            msg = "data shape doesn't match selection shape"
-            msg += "--data shape: " + str(arr.shape)
-            msg += "--selection shape: " + str(np_shape)         
-            log.warn(msg)
-            raise HttpBadRequest(message=msg)
+        # selection/data mismatch!
+        msg = "data shape doesn't match selection shape"
+        msg += "--data shape: " + str(arr.shape)
+        msg += "--selection shape: " + str(np_shape)         
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
 
     #log.info("got np array: {}".format(arr))
     num_chunks = getNumChunks(slices, layout)

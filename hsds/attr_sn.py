@@ -19,7 +19,8 @@ from util.idUtil import   isValidUuid, getDataNodeUrl
 from util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.attrUtil import  validateAttributeName, getRequestCollectionName
-from util.hdf5dtype import validateTypeItem, getBaseTypeJson
+from util.hdf5dtype import validateTypeItem, getBaseTypeJson, createDataType
+from util.arrayUtil import jsonToArray 
 from servicenode_lib import getDomainJson, getObjectJson, validateAction
 import hsds_logger as log
 
@@ -283,14 +284,17 @@ async def PUT_Attribute(request):
             log.warn(msg)
             raise HttpBadRequest(message=msg)  
 
-    if dims is not None:
-        if "value" not in body:
-            msg = "Bad Request: value not specified"
-            log.warn(msg)
-            raise HttpBadRequest(message=msg)  
-                
+    if "value" in body:
         value = body["value"]
-        # TBD - validate that the value agrees with type/shape
+        # validate that the value agrees with type/shape
+        arr_dtype = createDataType(datatype)  # np datatype
+        try:
+            arr = jsonToArray(dims, arr_dtype, value)
+        except ValueError:
+            msg = "Bad Request: input data doesn't match selection"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        log.info("Got: {} array elements".format(arr.size))
 
     shape_json = {}
     if dims is None:
@@ -315,7 +319,8 @@ async def PUT_Attribute(request):
     attr_json = {}
     attr_json["type"] = datatype
     attr_json["shape"] = shape_json
-    attr_json["value"] = value
+    if value is not None:
+        attr_json["value"] = value
     
     put_rsp = await http_put(app, req, data=attr_json)
     log.info("PUT Attribute resp: " + str(put_rsp))

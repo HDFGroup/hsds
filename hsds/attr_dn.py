@@ -164,11 +164,10 @@ async def PUT_Attribute(request):
         raise HttpProcessingError(code=500, message="Unexpected Error")
     shape = body["shape"]
 
-    if "value" not in body:
-        if shape["class"] != "H5S_NULL":
-            log.error("non-null PUT attribute with no value in body")
-            raise HttpProcessingError(code=500, message="Unexpected Error")
-    else:
+    if "value" in body:
+        #if shape["class"] != "H5S_NULL":
+        #    log.error("non-null PUT attribute with no value in body")
+        #    raise HttpProcessingError(code=500, message="Unexpected Error")
         value = body["value"]
 
   

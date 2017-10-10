@@ -11,6 +11,7 @@
 ##############################################################################
 
 import numpy as np
+import hsds_logger as log
 
 """
 Convert list that may contain bytes type elements to list of string elements  
@@ -67,3 +68,50 @@ def getArraySize(arr):
     for n in arr.shape:
         nbytes *= n
     return nbytes
+
+"""
+Helper - get num elements defined by a shape
+TODO: refactor some function in dsetUtil.py
+"""
+def getNumElements(dims):
+    num_elements = 0
+    if isinstance(dims, int):
+        num_elements = dims
+    elif isinstance(dims, (list, tuple)):
+        num_elements = 1
+        for dim in dims:
+            num_elements *= dim
+    else:
+        raise ValueError("Unexpected argument")
+    return num_elements
+
+"""
+Return numpy array from the given json array.
+"""
+def jsonToArray(data_shape, data_dtype, data_json):
+    # need some special conversion for compound types --
+    # each element must be a tuple, but the JSON decoder
+    # gives us a list instead.
+    npoints = getNumElements(data_shape)
+    if len(data_dtype) > 1 and type(data_json) in (list, tuple):
+        np_shape_rank = len(data_shape)
+        converted_data = []
+        if npoints == 1:
+            converted_data.append(toTuple(0, data_json))
+        else:  
+            converted_data = toTuple(np_shape_rank, data_json)
+        data_json = converted_data
+
+    arr = np.array(data_json, dtype=data_dtype)
+    # raise an exception of the array shape doesn't match the selection shape
+    # allow if the array is a scalar and the selection shape is one element,
+    # numpy is ok with this
+    if arr.size != npoints:
+        msg = "Input data doesn't match selection number of elements"
+        msg += " Expected {}, but received: {}".format(npoints, arr.size)
+        log.warn(msg)
+        raise ValueError(msg)
+    if arr.shape != data_shape:
+        arr = arr.reshape(data_shape)  # reshape to match selection
+
+    return arr
