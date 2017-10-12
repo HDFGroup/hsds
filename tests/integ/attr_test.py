@@ -593,8 +593,6 @@ class AttributeTest(unittest.TestCase):
         print("testGetAttributeBinaryValue", self.base_domain)
 
         headers = helper.getRequestHeaders(domain=self.base_domain)
-        #headers_bin_req = helper.getRequestHeaders(domain=self.base_domain) 
-        #headers_bin_req["Content-Type"] = "application/octet-stream"
         headers_bin_rsp = helper.getRequestHeaders(domain=self.base_domain)
         headers_bin_rsp["accept"] = "application/octet-stream"
 
