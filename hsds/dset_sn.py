@@ -20,7 +20,8 @@ from aiohttp.errors import HttpBadRequest
  
 from util.httpUtil import http_post, http_put, http_delete, jsonResponse, getHref
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
-from util.dsetUtil import  getNumElements, getPreviewQuery
+from util.dsetUtil import  getPreviewQuery
+from util.arrayUtil import getNumElements
 from util.chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain

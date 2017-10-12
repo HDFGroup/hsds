@@ -15,7 +15,7 @@ import json
  
 sys.path.append('../../hsds/util')
 sys.path.append('../../hsds')
-from arrayUtil import bytesArrayToList, toTuple 
+from arrayUtil import bytesArrayToList, toTuple, getNumElements
 
 
 class ArrayUtilTest(unittest.TestCase):
@@ -60,6 +60,19 @@ class ArrayUtilTest(unittest.TestCase):
         self.assertEqual([[(0, 0.0), (1, 0.1)], [(2, 0.2), (3, 0.3)]], out)
         out = toTuple(1, data3d)  # treat input a 1d array of compound type of compound types
         self.assertEqual([((0, 0.0), (1, 0.1)), ((2, 0.2), (3, 0.3))], out)
+
+    def testGetNumElements(self):     
+        shape = (4,)
+        nelements = getNumElements(shape)
+        self.assertEqual(nelements, 4)
+
+        shape = [10,]
+        nelements = getNumElements(shape)
+        self.assertEqual(nelements, 10)
+
+        shape = (10,8)
+        nelements = getNumElements(shape)
+        self.assertEqual(nelements, 80)
          
 
 if __name__ == '__main__':

@@ -149,6 +149,10 @@ async def PUT_Attribute(request):
 
     body = await request.json() 
     
+    replace = False
+    if "replace" in request.GET and request.GET["replace"]:
+        replace = True
+        log.info("replace attribute")
     datatype = None
     shape = None
     value = None
@@ -165,12 +169,8 @@ async def PUT_Attribute(request):
     shape = body["shape"]
 
     if "value" in body:
-        #if shape["class"] != "H5S_NULL":
-        #    log.error("non-null PUT attribute with no value in body")
-        #    raise HttpProcessingError(code=500, message="Unexpected Error")
         value = body["value"]
 
-  
     obj_json = await get_metadata_obj(app, obj_id)
     log.debug("PUT attribute obj_id: {} got json".format(obj_id))
 
@@ -179,15 +179,24 @@ async def PUT_Attribute(request):
         raise HttpProcessingError(code=500, message="Unexpected Error")
 
     attributes = obj_json["attributes"]
-    if attr_name in attributes:
+    if attr_name in attributes and not replace:
         # Attribute already exists, return a 409
         log.warn("Attempt to overwrite attribute: {} in obj_id:".format(attr_name, obj_id))
         raise HttpProcessingError(code=409, message="Attribute with name: {} already exists".format(attr_name))
+    
+    if replace and attr_name not in attributes:
+        # Replace requires attribute exists
+        log.warn("Attempt to update missing attribute: {} in obj_id:".format(attr_name, obj_id))
+        raise HttpProcessingError(code=404, message="Attribute with name: {} not found".format(attr_name))
+
+    if replace:
+        orig_attr = attributes[attr_name]
+        create_time = orig_attr["created"]
+    else:
+        create_time = time.time()
 
     # ok - all set, create attribute obj
-    now = time.time()
-    
-    attr_json = {"type": datatype, "shape": shape, "value": value, "created": now }
+    attr_json = {"type": datatype, "shape": shape, "value": value, "created": create_time }
     attributes[attr_name] = attr_json
      
     # write back to S3, save to metadata cache

@@ -25,10 +25,10 @@ from util.idUtil import   isValidUuid, getDataNodeUrl
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.hdf5dtype import getItemSize, createDataType
 from util.dsetUtil import getSliceQueryParam, setSliceQueryParam, getFillValue, isExtensible 
-from util.dsetUtil import getSelectionShape, getNumElements, getDsetDims, getDsetMaxDims, getChunkLayout, getDeflateLevel
+from util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout, getDeflateLevel
 from util.chunkUtil import getNumChunks, getChunkIds, getChunkId
 from util.chunkUtil import getChunkCoverage, getDataCoverage
-from util.arrayUtil import bytesArrayToList, jsonToArray 
+from util.arrayUtil import bytesArrayToList, jsonToArray, getShapeDims, getNumElements
 from util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from servicenode_lib import getObjectJson, validateAction
 import config
@@ -54,8 +54,7 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level,
     if "type" not in dset_json:
         log.error("No type found in dset_json: {}".format(dset_json))
         raise HttpProcessingError(message="Unexpected error", code=500)
-    #type_json = dset_json["type"]
-    #dims = getDsetDims(dset_json)
+    
     layout = getChunkLayout(dset_json)
 
     chunk_sel = getChunkCoverage(chunk_id, slices, layout)
@@ -354,7 +353,7 @@ async def PUT_Value(request):
         msg = "Null space datasets can not be used as target for PUT value"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-    dims = getDsetDims(dset_json)
+    dims = getShapeDims(datashape)
     maxdims = getDsetMaxDims(dset_json)
     rank = len(dims)
     layout = getChunkLayout(dset_json)
@@ -382,7 +381,7 @@ async def PUT_Value(request):
     # refetch the dims if the dataset is extensible 
     if isExtensible(dims, maxdims):
         dset_json = await getObjectJson(app, dset_id, refresh=True)
-        dims = getDsetDims(dset_json) 
+        dims = getShapeDims(dset_json["shape"]) 
     slices = []  # selection for write 
     
     # Get query parameter for selection
@@ -390,7 +389,7 @@ async def PUT_Value(request):
         body_json = None
         if request_type == "json":
             body_json = body
-        # if they selection region is invalid here, it's really invalid
+        # if the selection region is invalid here, it's really invalid
         dim_slice = getSliceQueryParam(request, dim, dims[dim], body=body_json)
         slices.append(dim_slice)   
     slices = tuple(slices)  
@@ -548,8 +547,14 @@ async def GET_Value(request):
         msg = "variable length data types not yet supported"
         log.warn(msg)
         raise HttpProcessingError(code=501, message="Variable length data not yet supported")
+    
+    datashape = dset_json["shape"]
+    if datashape["class"] == 'H5S_NULL':
+        msg = "Null space datasets can not be used as target for GET value"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
 
-    dims = getDsetDims(dset_json)  # throws 400 for HS_NULL dsets
+    dims = getShapeDims(datashape)  # throws 400 for HS_NULL dsets
     maxdims = getDsetMaxDims(dset_json)
     rank = len(dims)
     layout = getChunkLayout(dset_json)
@@ -560,7 +565,7 @@ async def GET_Value(request):
     # an explicit region
     if isExtensible(dims, maxdims) and "select" not in request.GET:
         dset_json = await getObjectJson(app, dset_id, refresh=True)
-        dims = getDsetDims(dset_json)  
+        dims = getShapeDims(dset_json["shape"])  
 
     slices = None  # selection for read 
      
@@ -574,7 +579,7 @@ async def GET_Value(request):
         except HttpBadRequest:
             # exception might be due to us having stale version of dims, refresh
             dset_json = await getObjectJson(app, dset_id, refresh=True)
-            dims = getDsetDims(dset_json) 
+            dims = getShapeDims(dset_json["shape"]) 
             slices = None  # retry below
             
     if slices is None:
@@ -797,7 +802,7 @@ async def POST_Value(request):
         msg = "POST value not supported for datasets with SCALAR shape"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-    dims = getDsetDims(dset_json)
+    dims = getShapeDims(datashape)
     rank = len(dims)
     
     layout = getChunkLayout(dset_json)

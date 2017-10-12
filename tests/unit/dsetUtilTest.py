@@ -15,7 +15,7 @@ import sys
 sys.path.append('../../hsds/util')
 sys.path.append('../../hsds')
 from dsetUtil import  getHyperslabSelection, getSelectionShape
-from dsetUtil import  getNumElements, ItemIterator, getEvalStr
+from dsetUtil import  ItemIterator, getEvalStr
 
 class DsetUtilTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -83,19 +83,6 @@ class DsetUtilTest(unittest.TestCase):
         sel = [ slice(0, 5, 2), ] # select points 0, 2, 4
         shape = getSelectionShape(sel)
         self.assertEqual(shape, [3,])
-
-    def testGetNumElements(self):     
-        shape = (4,)
-        nelements = getNumElements(shape)
-        self.assertEqual(nelements, 4)
-
-        shape = [10,]
-        nelements = getNumElements(shape)
-        self.assertEqual(nelements, 10)
-
-        shape = (10,8)
-        nelements = getNumElements(shape)
-        self.assertEqual(nelements, 80)
 
     def testGetEvalStr(self):
         queries = { "date == 23": "rows['date'] == 23",
