@@ -173,7 +173,7 @@ async def getS3JSONObj(app, key):
         s3_stats_increment(app, "error_count")
         log.error("Error loading JSON at key: {}".format(key))
         msg = "Unexpected i/o error"
-        raise raise ValueError(msg)
+        raise ValueError(msg)
 
     log.debug("s3 returned: {}".format(json_dict))
     return json_dict
@@ -204,7 +204,7 @@ async def getS3Bytes(app, key, deflate_level=None):
         if is_404:
             msg = "s3_key: {} not found ".format(key,)
             log.warn(msg)
-            raise raise ValueError(msg)
+            raise ValueError(msg)
         else:
             s3_stats_increment(app, "error_count")
             log.warn("got ClientError on s3 get: {}".format(str(ce)))
@@ -276,7 +276,7 @@ async def putS3Bytes(app, key, data, deflate_level=None):
         s3_stats_increment(app, "error_count")
         msg = "Error putting s3 obj: " + str(ce)
         log.error(msg)
-        raise raise ValueError(msg)
+        raise ValueError(msg)
     if data and len(data) > 0:
         s3_stats_increment(app, "bytes_in", inc=len(data))
     log.debug("putS3Bytes complete")
@@ -298,7 +298,7 @@ async def deleteS3Obj(app, key):
         s3_stats_increment(app, "error_count")
         msg = "Error deleting s3 obj: " + str(ce)
         log.error(msg)
-        raise raise ValueError(msg)
+        raise ValueError(msg)
     log.debug("deleteS3Obj complete")
 
 async def getS3ObjStats(app, key):
@@ -325,11 +325,11 @@ async def getS3ObjStats(app, key):
         s3_stats_increment(app, "error_count")
         msg = "Error listing s3 obj: " + str(ce)
         log.error(msg)
-        raise raise ValueError(msg)
+        raise ValueError(msg)
     if 'Contents' not in resp:
         msg = "key: {} not found".format(key)
         log.info(msg)
-        raise raise ValueError(msg)
+        raise ValueError(msg)
     contents = resp['Contents']
     log.debug("s3_contents: {}".format(contents))
     
@@ -358,7 +358,7 @@ async def getS3ObjStats(app, key):
     if not found:
         msg = "key: {} not found".format(key)
         log.info(msg)
-        raise raise ValueError(msg)
+        raise ValueError(msg)
 
     return stats
     
@@ -410,7 +410,7 @@ async def _fetch_all(app, pages, key_names, prefix='', deliminator='', suffix=''
                 # back off and try again
                 if retry_number == retry_limit - 1:
                     log.error("Error retreiving s3 keys")
-                    raise HttpProcessingError(code=500, message="Unexpected Error retreiving S3 keys")
+                    raise ValueError("Unexpected Error retreiving S3 keys")
                 log.warn("Error retrieving S3 keys, retrying")
                 sleep_seconds = (retry_number+1)**2  # sleep, 1,4,9, etc. seconds
                 await asyncio.sleep(sleep_seconds)
