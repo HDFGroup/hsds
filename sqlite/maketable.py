@@ -4,7 +4,7 @@ def init_table(conn):
     c = conn.cursor()
 
     # Creating a new SQLite table with 1 column
-    c.execute("CREATE TABLE S3Keys (s3id TEXT PRIMARY KEY)")  
+    c.execute("CREATE TABLE S3Keys (id TEXT PRIMARY KEY)")  
     c.execute("ALTER TABLE  S3Keys ADD COLUMN size INTEGER")
     c.execute("ALTER TABLE  S3Keys ADD COLUMN created TEXT")
     conn.commit()
@@ -12,10 +12,10 @@ def init_table(conn):
 def insertS3Key(conn, s3id, size, created):
     c = conn.cursor()
     try:
-        c.execute("INSERT INTO S3Keys (s3id, size, created) VALUES ('{}', {}, '{}')". \
+        c.execute("INSERT INTO S3Keys (id, size, created) VALUES ('{}', {}, '{}')". \
           format(s3id, size, created) )
     except sqlite3.IntegrityError:
-        print("Error, s3id already exists: {}".format(s3id))
+        print("Error, id already exists: {}".format(s3id))
     conn.commit()
     print("added ({} {} {})".format(s3id, size, created))
 
