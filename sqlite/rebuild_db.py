@@ -5,7 +5,7 @@ from aiobotocore import get_session
 from util.s3Util import getS3Keys, getS3JSONObj, releaseClient
 from util.idUtil import isS3ObjKey, isValidUuid, isValidChunkId, getS3Key, getObjId
 from util.domainUtil import isValidDomain
-from dbutil import dbInitTable, insertDomainTable, insertChunkTable, insertObjectTable
+from dbutil import dbInitTable, insertDomainTable, batchInsertChunkTable, insertObjectTable, insertTLDTable
 import hsds_logger as log
 import config
 
@@ -36,7 +36,9 @@ async def gets3keys_callback(app, s3keys):
     # this is called for each page of results by getS3Keys 
     #
     
-    log.debug("getS3Keys count: {} keys".format(len(s3keys)))    
+    log.debug("getS3Keys count: {} keys".format(len(s3keys)))   
+    chunk_items = [] # batch up chunk inserts for faster processing 
+
     for s3key in s3keys:
         log.debug("got s3key: {}".format(s3key))
         if not isS3ObjKey(s3key):
@@ -68,14 +70,38 @@ async def gets3keys_callback(app, s3keys):
         # save to a table based on the type of object this is
         if isValidDomain(id):
             rootid = await getRootProperty(app, id)  # get Root property from S3
-            insertDomainTable(conn, id, etag=etag, lastModified=lastModified, objSize=objSize, rootid=rootid)
+            try:
+                insertDomainTable(conn, id, etag=etag, lastModified=lastModified, objSize=objSize, rootid=rootid)
+            except KeyError:
+                log.warn("got KeyError inserting domain: {}".format(id))
+                continue
+            # add to Top-Level-Domain table if this is not a subdomain
+            index = id[1:-1].find('/')  # look for interior slash - isValidDomain implies len > 2
+            if index == -1:
+                try:
+                    insertTLDTable(conn, id)
+                except KeyError:
+                    log.warn("got KeyError inserting TLD: {}".format(id))
+                    continue
         elif isValidChunkId(id):
-            insertChunkTable(conn, id, etag=etag, lastModified=lastModified, objSize=objSize)
+            log.debug("Got chunk: {}".format(id))
+            chunk_items.append((id, etag, objSize, lastModified))
         else:
             rootid = await getRootProperty(app, id)  # get Root property from S3
-            insertObjectTable(conn, id, etag=etag, lastModified=lastModified, objSize=objSize, rootid=rootid)
+            try:
+                insertObjectTable(conn, id, etag=etag, lastModified=lastModified, objSize=objSize, rootid=rootid)
+            except KeyError:
+                log.warn("got KeyError inserting object: {}".format(id))
+                continue
          
- 
+    # insert any remaining chunks
+    if len(chunk_items) > 0:
+        log.info("batchInsertChunkTable = {} items".format(len(chunk_items)))
+        try:
+            batchInsertChunkTable(conn, chunk_items)
+        except KeyError:
+            log.warn("got KeyError inserting chunk: {}".format(id))
+            sys.exit(1)
     log.debug("gets3keys_callback done")
 
 #
@@ -89,8 +115,6 @@ async def listKeys(app):
     # Get all the keys for the bucket
     # request include_stats, so that for each key we get the ETag, LastModified, and Size values.
     await getS3Keys(app, include_stats=True, callback=gets3keys_callback)
-
-    
 
 #
 # Main

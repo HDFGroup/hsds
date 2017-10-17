@@ -30,9 +30,8 @@ def dbInitTable(conn):
     c.execute("ALTER TABLE  DomainTable ADD COLUMN root TEXT") 
     conn.commit()
 
-    # Create Root Table
-    c.execute("CREATE TABLE RootTable (id TEXT PRIMARY KEY)") 
-    c.execute("ALTER TABLE  RootTable ADD COLUMN domain TEXT") 
+    # Create Top Level Domain Table
+    c.execute("CREATE TABLE TLDTable (id TEXT PRIMARY KEY)") 
     conn.commit()
 
 #
@@ -46,7 +45,18 @@ def insertDomainTable(conn, id, etag='', objSize=0, lastModified='', rootid='' )
     except sqlite3.IntegrityError:
         raise KeyError("Error, id already exists: {}".format(id))
     conn.commit()
-    print("added ({})".format(id))
+
+#
+# Add given domain to Top Level Domain table
+#
+def insertTLDTable(conn, id ):
+    c = conn.cursor()
+    try:
+        c.execute("INSERT INTO TLDTable (id) VALUES ('{}')". \
+          format(id) )
+    except sqlite3.IntegrityError:
+        raise KeyError("Error, id already exists: {}".format(id))
+    conn.commit()
 
 #
 # Add given chunk to chunk table
@@ -59,7 +69,18 @@ def insertChunkTable(conn, id, etag='', objSize=0, lastModified=''):
     except sqlite3.IntegrityError:
         raise KeyError("Error, id already exists: {}".format(id))
     conn.commit()
-    print("added ({})".format(id))
+
+#
+# Add batch of chunks to chunk table (much faster than inserting one by one)
+#
+def batchInsertChunkTable(conn, items):
+    c = conn.cursor()
+    try:
+        c.executemany("INSERT INTO ChunkTable (id, etag, size, lastModified) VALUES (?, ?, ?, ?)", 
+          items)
+    except sqlite3.IntegrityError as se:
+        raise KeyError("Error, id already exists: {}".format(se))
+    conn.commit()
 
 #
 # Add given object to chunk table
@@ -76,9 +97,10 @@ def insertObjectTable(conn, id, etag='', objSize=0, lastModified='', rootid=None
     except sqlite3.IntegrityError:
         raise KeyError("Error, id already exists: {}".format(id))
     conn.commit()
-    print("added ({})".format(id))
 
-
+#
+# Get info on the given domain
+#
 def getDomain(conn, domain):
     c = conn.cursor()
     c.execute("SELECT * FROM DomainTable WHERE id='{}'".format(domain))
@@ -97,6 +119,9 @@ def getDomain(conn, domain):
     result["root"] = row[4]
     return result
 
+# 
+# Get all objects with given root
+#
 def getRootObjects(conn, root):
     c = conn.cursor()
     c.execute("SELECT * FROM ObjectTable WHERE id LIKE '{}%'".format(root))
@@ -114,6 +139,22 @@ def getRootObjects(conn, root):
         results.append(result)
     return results
 
+#
+# Get all Top-Level Domains
+#
+def getTopLevelDomains(conn):
+    c = conn.cursor()
+    c.execute("SELECT * FROM TLDTable ")
+    all_rows = c.fetchall()
+    results = []
+    for row in all_rows:
+        key = row[0]
+        results.append(key)
+    return results
+
+#
+# Get all chunks for given dataset
+#
 def getDatasetChunks(conn, dsetid):
     c = conn.cursor()
     chunkid_prefix = "c" + dsetid[1:]
