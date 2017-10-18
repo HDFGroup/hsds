@@ -87,8 +87,9 @@ async def updateDomainContent(app, domain, objs_updated=None):
     """ Create/update context files listing objids and size for objects in the domain.
     """
     log.info("updateDomainContent: {}".format(domain))
-    if app["anonymous_ttl"] > 0:
+    if app["anonymous_ttl"] == 0:
         log.info("no gc, so skipping updateDomainContent")
+        return
     if objs_updated is not None:
         log.debug("objs_updated: {}".format(objs_updated))
 
@@ -266,8 +267,9 @@ async def sweepObjs(app):
 async def rootDelete(app, rootid):
     """ get root obj for rootid """
     log.info("rootDelete {}".format(rootid))
-    if app["anonymous_ttl"] > 0:
+    if app["anonymous_ttl"] == 0:
         log.info("no gc, so skipping root delete")
+        return
     s3objs = app["s3objs"]
     roots = app["roots"]
     if rootid not in roots:
@@ -308,8 +310,9 @@ async def rootDelete(app, rootid):
 async def domainDelete(app, domain):
     """ Process domain deletion event """
     log.info("domainDelete: {}".format(domain))
-    if app["anonymous_ttl"] > 0:
+    if app["anonymous_ttl"] == 0:
         log.info("no gc, so skipping domain delete")
+        return
      
     domains = app["domains"]
     if domain not in domains:
@@ -340,8 +343,9 @@ async def domainDelete(app, domain):
 async def domainCreate(app, domain):
     """ Process domain creation event """
     log.info("domainCreate: {}".format(domain))
-    if app["anonymous_ttl"] > 0:
+    if app["anonymous_ttl"] == 0:
         log.info("no gc, so skipping domainCreate")
+        return
     
     try:
         s3obj = await getS3Obj(app, domain)
@@ -385,8 +389,9 @@ async def objUpdate(app, objid):
         log.error("Got unexpected objid: {}".format(objid))
         return
 
-    if app["anonymous_ttl"] > 0:
+    if app["anonymous_ttl"] == 0:
         log.info("no gc, so skipping obj delete")
+        return
 
     s3objs = app["s3objs"]
         
@@ -433,8 +438,9 @@ async def objDelete(app, objid):
     """ Process object delete event """
     log.info("objectDelete: {}".format(objid))
 
-    if app["anonymous_ttl"] > 0:
+    if app["anonymous_ttl"] == 0:
         log.info("no gc, so skipping obj delete")
+        return
 
     if not isValidUuid(objid):
         log.error("Got unexpected objid: {}".format(objid))
@@ -855,6 +861,8 @@ if __name__ == '__main__':
     if app["anonymous_ttl"] > 0:
         # only run if we need to do garbage collection
         asyncio.ensure_future(bucketCheck(app), loop=loop)
+    else:
+        log.info("anonymous_ttl is zero, not running bucketCheck")
     asyncio.ensure_future(healthCheck(app), loop=loop)
     async_port = config.get("an_port")
     log.info("Starting service on port: {}".format(async_port))
