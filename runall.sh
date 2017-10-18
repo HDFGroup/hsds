@@ -13,6 +13,11 @@ if [ $# -gt 0 ]; then
 fi
 
 
+s3=0
+if [ $# -gt 1 ]; then 
+  s3=$2
+fi
+
 [ -z ${BUCKET_NAME} ] && echo "Need to set BUCKET_NAME" && exit 1
 [ -z ${AWS_S3_GATEWAY} ] && echo "Need to set AWS_S3_GATEWAY" && exit 1
 if [ -z $s3 ]; then
@@ -20,12 +25,6 @@ if [ -z $s3 ]; then
   [ -z ${AWS_ACCESS_KEY_ID} ] && echo "Need to set AWS_ACCESS_KEY_ID" && exit 1
   [ -z ${AWS_SECRET_ACCESS_KEY} ] && echo "Need to set AWS_SECRET_ACCESS_KEY" && exit 1
 fi
-
-s3=0
-if [ $# -gt 1 ]; then 
-  s3=$2
-fi
-
 
 if [ $(docker ps -aq -f status=exited | wc -l) -gt 0 ]; then
    echo "clean stopped containers"
