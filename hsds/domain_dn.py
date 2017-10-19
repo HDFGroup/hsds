@@ -145,9 +145,11 @@ async def DELETE_Domain(request):
     if domain_json:
         log.debug("got domain json")
     # delete domain
-    notify=True
-    if "Notify" in request.GET and not request.GET["Notify"]:
-        notify=False
+    notify=False
+    # Note: Don't notify async node on domain deleteion since recreation of 
+    # the domain may cause a race condition where the new domain gets 
+    # removed.  Instead rely on AN garbage collection to remove any objects
+    # that have no parent domain.
     await delete_metadata_obj(app, domain, notify=notify)
 
  
