@@ -31,7 +31,7 @@ MAX_CHUNK_SIZE=20971520
 # set the log level  
 LOG_LEVEL=DEBUG
 # Restart policy: no, on-failure, always, unless-stopped (see docker run reference)
-RESTART_POLICY=always
+RESTART_POLICY=no
 
 # the following is returned when /about is invoked
 SERVER_NAME=${SERVER_NAME:='Highly Scalable Data Service (HSDS)'}
