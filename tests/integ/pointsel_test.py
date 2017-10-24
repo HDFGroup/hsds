@@ -9,6 +9,7 @@
 # distribution tree.  If you do not have access to this file, you may        #
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
+import base64
 import unittest
 import requests
 import json
@@ -95,7 +96,7 @@ class PointSelTest(unittest.TestCase):
         headers = helper.getRequestHeaders(domain=self.base_domain)
         
         req = self.endpoint + '/'
-
+ 
         # Get root uuid
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -222,7 +223,7 @@ class PointSelTest(unittest.TestCase):
 
     def testPost2DDatasetBinary(self):
         # Test POST value with selection for 2d dataset
-        print("testPost2DDataset", self.base_domain)
+        print("testPost2DDatasetBinary", self.base_domain)
 
         headers = helper.getRequestHeaders(domain=self.base_domain)
         headers_bin_req = helper.getRequestHeaders(domain=self.base_domain)
@@ -292,7 +293,259 @@ class PointSelTest(unittest.TestCase):
             100015, 100020, 100025, 150005, 150010, 150015, 150020, 150025]
          
         self.assertEqual(values, expected_result)
+
+    def testPut1DDataset(self):
+        # Test writing using point selection for a 1D dataset
+        print("testPut1DDataset", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + '/'
+
+        # Get root uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create dataset
+        # pass in layout specification so that we can test selection across chunk boundries
+        data = { "type": "H5T_STD_I8LE", "shape": (100,) }
+        data['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [20,] }}
+        
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        dset_id = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_id))
+
+        # link new dataset as 'dset1d'
+        name = "dset"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {"id": dset_id}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        
+        # Do a point selection write
+        primes = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97]
+        value = [1,] * len(primes)  # write 1's at indexes that are prime
+        # write 1's to all the prime indexes
+        payload = { 'points': primes, 'value': value }
+        req = self.endpoint + "/datasets/" + dset_id + "/value"
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)   
+
+        # read back data
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        # verify the correct elements got set
+        value = rspJson["value"]
+        for i in range(100):
+            if i in primes:
+                self.assertEqual(value[i], 1)
+            else:
+                self.assertEqual(value[i], 0)
+
+    def testPut2DDataset(self):
+        # Test writing with point selection for 2d dataset
+        print("testPut2DDataset", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        
+        req = self.endpoint + '/'
+ 
+        # Get root uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+        
+        # create dataset
+        # pass in layout specification so that we can test selection across chunk boundries
+        data = { "type": "H5T_STD_I32LE", "shape": [20,30] }
+        data['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [10, 10] }}
+        
+        req = self.endpoint + '/datasets' 
+        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        dset_id = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_id))
+
+        # link new dataset as 'dset2d'
+        name = "dset2d"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {"id": dset_id}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # make up some points
+        points = []
+        for i in range(20):
+            points.append((i, i))
+        value = [1,] * 20
+
+        # write 1's to all the point locations 
+        payload = { 'points': points, 'value': value }
+        req = self.endpoint + "/datasets/" + dset_id + "/value"
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200) 
+
+        # read back data
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        # verify the correct elements got set
+        value = rspJson["value"]
+        #print("value:", value)
+        for x in range(20):
+            row = value[x]
+            for y in range(30):
+                if x == y:
+                    self.assertEqual(row[y], 1)
+                else:
+                    self.assertEqual(row[y], 0)
+        
+
+
+    def testPut1DDatasetBinary(self):
+        # Test writing using point selection for a 1D dataset
+        print("testPut1DDatasetBinary", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + '/'
+
+        # Get root uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create dataset
+        # pass in layout specification so that we can test selection across chunk boundries
+        data = { "type": "H5T_STD_I8LE", "shape": (100,) }
+        data['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [20,] }}
+        
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        dset_id = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_id))
+
+        # link new dataset as 'dset1d'
+        name = "dset"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {"id": dset_id}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        
+        # Do a point selection write
+        primes = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97]
+
+        # create binary array for the values
+        byte_array = bytearray(len(primes))
+        for i in range(len(primes)):
+            byte_array[i] = 1  
+        value_base64 = base64.b64encode(bytes(byte_array))
+        value_base64 = value_base64.decode("ascii")
          
+        # write 1's to all the prime indexes
+        payload = { 'points': primes, 'value_base64': value_base64 }
+        req = self.endpoint + "/datasets/" + dset_id + "/value"
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)   
+
+        # read back data
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        # verify the correct elements got set
+        value = rspJson["value"]
+        for i in range(100):
+            if i in primes:
+                self.assertEqual(value[i], 1)
+            else:
+                self.assertEqual(value[i], 0)     
+         
+    def testPut2DDatasetBinary(self):
+        # Test writing with point selection for 2d dataset with binary data
+        print("testPut2DDatasetBinary", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        
+        req = self.endpoint + '/'
+ 
+        # Get root uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+        
+        # create dataset
+        # pass in layout specification so that we can test selection across chunk boundries
+        data = { "type": "H5T_STD_I32LE", "shape": [20,30] }
+        data['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [10, 10] }}
+        
+        req = self.endpoint + '/datasets' 
+        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        dset_id = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_id))
+
+        # link new dataset as 'dset2d'
+        name = "dset2d"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {"id": dset_id}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # make up some points
+        points = []
+        for i in range(20):
+            points.append((i, i))
+        value = [1,] * 20
+        # create a byter array of 20 ints with value 1
+        # create binary array for the values
+        byte_array = bytearray(20*4)
+        for i in range(20):
+            byte_array[i*4] = 1  
+        value_base64 = base64.b64encode(bytes(byte_array))
+        value_base64 = value_base64.decode("ascii")
+
+        # write 1's to all the point locations 
+        payload = { 'points': points, 'value_base64': value_base64 }
+        req = self.endpoint + "/datasets/" + dset_id + "/value"
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200) 
+
+        # read back data
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        # verify the correct elements got set
+        value = rspJson["value"]
+        #print("value:", value)
+        for x in range(20):
+            row = value[x]
+            for y in range(30):
+                if x == y:
+                    self.assertEqual(row[y], 1)
+                else:
+                    self.assertEqual(row[y], 0)
+             
     
              
 if __name__ == '__main__':

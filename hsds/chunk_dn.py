@@ -153,7 +153,7 @@ async def PUT_Chunk(request):
             chunk_arr = np.fromstring(chunk_bytes, dtype=dt)
             chunk_arr = chunk_arr.reshape(dims)
         else:
-            log.debug("Initializing chunk")
+            log.debug("Initializing chunk {}".format(chunk_id))
             if fill_value:
                 # need to convert list to tuples for numpy broadcast
                 if isinstance(fill_value, list):
@@ -348,6 +348,18 @@ async def POST_Chunk(request):
     app = request.app 
     #loop = app["loop"]
 
+    put_points = False
+    num_points = 0
+    if "count" in request.GET:
+        num_points = int(request.GET["count"])
+
+    if "action" in request.GET and request.GET["action"] == "put":
+        log.info("POST Chunk put points, num_points: {}".format(num_points))
+
+        put_points = True
+    else:
+        log.info("POST Chunk get points")
+
     chunk_id = request.match_info.get('id')
     if not chunk_id:
         msg = "Missing chunk id"
@@ -375,7 +387,6 @@ async def POST_Chunk(request):
     log.debug("chunk_coord: {}".format(chunk_coord))
     deflate_level = getDeflateLevel(dset_json)
     
-    
     if not request.has_body:
         msg = "POST Value with no body"
         log.warn(msg)
@@ -389,20 +400,19 @@ async def POST_Chunk(request):
         msg = "Unexpected content_type: {}".format(content_type)
         log.error(msg)
         raise HttpBadRequest(message=msg)
-    
+     
+    type_json = dset_json["type"]
+    dset_dtype = createDataType(type_json)
+    log.debug("dtype: {}".format(dset_dtype))
+
     dims = getChunkLayout(dset_json)
     log.debug("got dims: {}".format(dims))
-    rank = len(dims)  
-
-    type_json = dset_json["type"]
-    dt = createDataType(type_json)
-    log.debug("dtype: {}".format(dt))
-
     rank = len(dims)
     if rank == 0:
-        msg = "No dimension passed to POST chunk request"
+        msg = "POST chunk request with no dimensions"
         log.error(msg)
         raise HttpBadRequest(message=msg)
+    fill_value = getFillValue(dset_json)
 
     chunk_arr = None 
     chunk_cache = app['chunk_cache'] 
@@ -416,47 +426,115 @@ async def POST_Chunk(request):
         # TBD - potential race condition?
         obj_exists = await isS3Obj(app, s3_key)
         if not obj_exists:
-            # return a 404
-            msg = "Chunk {} does not exist".format(chunk_id)
-            log.warn(msg)
-            raise HttpProcessingError(code=404, message="Not found")
-        log.debug("Reading chunk {} from S3".format(s3_key))
-        chunk_bytes = await getS3Bytes(app, s3_key, deflate_level=deflate_level)
-        chunk_arr = np.fromstring(chunk_bytes, dtype=dt)
-        chunk_arr = chunk_arr.reshape(dims)
-        chunk_cache[chunk_id] = chunk_arr  # store in cache
+            if put_points:
+                # initialize a new chunk
+                log.debug("Initializing chunk {}".format(chunk_id))
+                if fill_value:
+                    # need to convert list to tuples for numpy broadcast
+                    if isinstance(fill_value, list):
+                        fill_value = tuple(fill_value)
+                    chunk_arr = np.empty(dims, dtype=dset_dtype, order='C')
+                    chunk_arr[...] = fill_value
+                else:
+                    chunk_arr = np.zeros(dims, dtype=dset_dtype, order='C')
+            else:
+                # return a 404
+                msg = "Chunk {} does not exist".format(chunk_id)
+                log.warn(msg)
+                raise HttpProcessingError(code=404, message="Not found")
+        if obj_exists:
+            log.debug("Reading chunk {} from S3".format(s3_key))
+            chunk_bytes = await getS3Bytes(app, s3_key, deflate_level=deflate_level)
+            chunk_arr = np.fromstring(chunk_bytes, dtype=dset_dtype)
+            chunk_arr = chunk_arr.reshape(dims)
+            chunk_cache[chunk_id] = chunk_arr  # store in cache
+        else:
+            log.debug("Initializing chunk")
+            if fill_value:
+                # need to convert list to tuples for numpy broadcast
+                if isinstance(fill_value, list):
+                    fill_value = tuple(fill_value)
+                chunk_arr = np.empty(dims, dtype=dset_dtype, order='C')
+                chunk_arr[...] = fill_value
+            else:
+                chunk_arr = np.zeros(dims, dtype=dset_dtype, order='C')
+            chunk_cache[chunk_id] = chunk_arr
+
     # create a numpy array for incoming points
     input_bytes = await request.read()  # TBD - will it cause problems when failures are raised before reading data?
     if len(input_bytes) != request.content_length:
         msg = "Read {} bytes, expecting: {}".format(len(input_bytes), request.content_length)
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
-    point_dt = np.dtype('u8')  # use unsigned long for point index    
-    point_arr = np.fromstring(input_bytes, dtype=point_dt)  # read points as unsigned longs
-    if len(point_arr) % rank != 0:
-        msg = "Unexpected size of point array"
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
-    num_points = len(point_arr) // rank
-    log.debug("got {} points".format(num_points))
 
-    point_arr = point_arr.reshape((num_points, rank))    
-    output_arr = np.zeros((num_points,), dtype=dt)
+
+    if put_points:
+        # writing point data
+
+        # create a numpy array with the following type:
+        #       (coord1, coord2, ...) | dset_dtype
+        if rank == 1:
+            coord_type_str = "uint64"
+        else:
+            coord_type_str = "({},)uint64".format(rank)
+        comp_dtype = np.dtype([("coord", np.dtype(coord_type_str)), ("value", dset_dtype)])
+        point_arr = np.fromstring(input_bytes, dtype=comp_dtype)
+        if len(point_arr) != num_points:
+            msg = "Unexpected size of point array, got: {} expected: {}".format(len(point_arr), num_points)
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        for i in range(num_points):
+            elem = point_arr[i]
+            if rank == 1:
+                coord = int(elem[0])
+            else:
+                coord = tuple(elem[0]) # index to update
+            val = elem[1]   # value 
+            chunk_arr[coord] = val # update the point
+        chunk_cache.setDirty(chunk_id)
+
+        # async write to S3   
+        dirty_ids = app["dirty_ids"]
+        now = int(time.time())
+        dirty_ids[chunk_id] = now
+        log.info("set {} to dirty".format(chunk_id))
+
+        # set notify flag for AN
+        notify_ids = app['notify_ids']
+        notify_ids.add(chunk_id)
     
-    for i in range(num_points):
-        point = point_arr[i,:]
-        tr_point = getChunkRelativePoint(chunk_coord, point)
-        val = chunk_arr[tuple(tr_point)]
-        output_arr[i] = val
+    else:
+        # reading point data  
+        point_dt = np.dtype('uint64')  # use unsigned long for point index  
+        point_arr = np.fromstring(input_bytes, dtype=point_dt)  # read points as unsigned longs
+        if len(point_arr) % rank != 0:
+            msg = "Unexpected size of point array"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        num_points = len(point_arr) // rank
+        log.debug("got {} points".format(num_points))
+
+        point_arr = point_arr.reshape((num_points, rank))    
+        output_arr = np.zeros((num_points,), dtype=dset_dtype)
+    
+        for i in range(num_points):
+            point = point_arr[i,:]
+            tr_point = getChunkRelativePoint(chunk_coord, point)
+            val = chunk_arr[tuple(tr_point)]
+            output_arr[i] = val
      
-    # write response
-    resp = StreamResponse(status=200)
-    resp.headers['Content-Type'] = "application/octet-stream"
-    output_data = output_arr.tobytes()
-    resp.content_length = len(output_data)
-    await resp.prepare(request)
-    resp.write(output_data)
-    await resp.write_eof()
+    if put_points:
+        # write empty response
+        resp = await jsonResponse(request, {})
+    else:
+        # write response
+        resp = StreamResponse(status=200)
+        resp.headers['Content-Type'] = "application/octet-stream"
+        output_data = output_arr.tobytes()
+        resp.content_length = len(output_data)
+        await resp.prepare(request)
+        resp.write(output_data)
+        await resp.write_eof()
     return resp
 
 async def DELETE_Chunk(request):
