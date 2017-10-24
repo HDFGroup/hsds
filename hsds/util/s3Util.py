@@ -443,7 +443,6 @@ async def _fetch_all(app, pages, key_names, prefix='', deliminator='', suffix=''
                 
                 if prefix:
                     key_name = key_name[len(prefix):]  # just include after prefix
-                    print("adjusted key_name:", key_name)
                 if suffix:
                     n = len(suffix)
                     key_name = key_name[:-n]

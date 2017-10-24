@@ -240,10 +240,8 @@ def getNumChunks(selection, layout):
 def getChunkId(dset_id, point, layout):
     """ get chunkid for given point in the dataset
     """
-    print("getChunkId(dset_id:", dset_id, "point:", point, "layout:", layout)
     chunk_id = "c-" + dset_id[2:] + '_'
     rank = len(layout)
-    print("getChunkId() rank:",rank, "chunkid:", chunk_id)
     for dim in range(rank):
         coord = None
         if rank == 1:
@@ -252,15 +250,11 @@ def getChunkId(dset_id, point, layout):
             coord = point[dim]
          
         c = layout[dim]
-        print("getChunkId, coord: ", coord, "type:", type(coord), "c:", c, "type:", type(c))
         chunk_index= coord // c
-        print("chunk_index:", chunk_index)
         chunk_id +=  str(chunk_index)
-        print("getChunkId() chunk_id:", chunk_id)
         if dim + 1 < rank:
             chunk_id += '_' # seperate dimensions with underscores
     # got the complete chunk_id
-    print("getChunkId ret chunk_id:", chunk_id)
     return chunk_id
 
 def getDatasetId(chunk_id):

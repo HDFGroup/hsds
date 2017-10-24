@@ -289,7 +289,6 @@ async def write_point_sel(app, chunk_id, dset_json, point_list, point_data):
             elem = (point_list[i], data_arr[i])
         else:
             elem = (tuple(point_list[i]), data_arr[i])
-            log.debug("elem[{}]: {}".format(i, elem))
         np_arr[i] = elem
 
     post_data = np_arr.tobytes()
@@ -508,7 +507,6 @@ async def PUT_Value(request):
                 msg = "Bad Request: point list not valid for dataset shape"
                 log.warn(msg)
                 raise HttpBadRequest(message=msg)
-            log.info("got points: {}".format(points))
     else:
         # read binary data
         binary_data = await request.read()
@@ -598,7 +596,6 @@ async def PUT_Value(request):
         #
         # Do point PUT
         #
-        log.debug("points: {}".format(points))        
         log.debug("num_points: {}".format(num_points))
         
         chunk_dict = {}  # chunk ids to list of points in chunk
@@ -628,9 +625,7 @@ async def PUT_Value(request):
                         msg = msg.format(point)
                         log.warn(msg)
                         raise HttpBadRequest(message=msg) 
-            log.debug("getChunkId({}, {}, {}".format(dset_id, point, layout))
             chunk_id = getChunkId(dset_id, point, layout)
-            log.debug("chunk_id: {}".format(chunk_id))
             # get the pt_indx element from the input data
             value = arr[pt_indx]
             if chunk_id not in chunk_dict:
@@ -1027,17 +1022,12 @@ async def POST_Value(request):
             arr_points = arr_points.reshape((num_points, rank))  # conform to point index shape
         points = arr_points.tolist()  # convert to Python list
     
-    log.debug("points: {}".format(points))        
     log.debug("num_points: {}".format(num_points))
     
-    # TBD - return 413 if too many points requested
-
     chunk_dict = {}  # chunk ids to list of points in chunk
 
     for pt_indx in range(num_points):
         point = points[pt_indx]
-        log.debug("checking point: {}".format(point))
-        log.debug("point type: {}".format(type(point)))
         if rank == 1:
             if point < 0 or point >= dims[0]:
                 msg = "PUT Value point: {} is not within the bounds of the dataset"
@@ -1056,7 +1046,6 @@ async def POST_Value(request):
                     log.warn(msg)
                     raise HttpBadRequest(message=msg) 
         chunk_id = getChunkId(dset_id, point, layout)
-        log.debug("chunk_id: {}".format(chunk_id))
         if chunk_id not in chunk_dict:
             point_list = [point,]
             point_index =[pt_indx]
