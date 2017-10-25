@@ -324,6 +324,16 @@ class GroupTest(unittest.TestCase):
         g11id = helper.getUUIDByPath(domain, "/g1/g1.1")
         self.assertEqual(g11id, rspJson["id"])
 
+        # Try with a trailing slash
+        h5path = "/g1/g1.1/"
+        req = helper.getEndpoint() + "/groups/"
+        params = {"h5path": h5path}
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+         
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(g11id, rspJson["id"])
+
         # try a invalid link and verify a 404 is returened
         h5path = "/g1/foobar"
         req = helper.getEndpoint() + "/groups/"
