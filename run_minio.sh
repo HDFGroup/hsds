@@ -31,7 +31,7 @@ MAX_CHUNK_SIZE=20971520
 # set the log level  
 LOG_LEVEL=DEBUG
 # Restart policy: no, on-failure, always, unless-stopped (see docker run reference)
-RESTART_POLICY=always
+RESTART_POLICY=no
 
 MINIO_BASE="http://minio:9000"
 BUCKET_NAME="minio.hsdsdev"  # use a diferent bucket name to avoid any confusion with AWS S3
