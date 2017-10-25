@@ -68,6 +68,7 @@ class GroupTest(unittest.TestCase):
     def testGet(self):
         domain = helper.getTestDomain("tall.h5")
         print("testGetDomain", domain)
+        
         headers = helper.getRequestHeaders(domain=domain)
         
         # verify domain exists
@@ -89,6 +90,7 @@ class GroupTest(unittest.TestCase):
         for name in ("id", "hrefs", "attributeCount", "linkCount", 
             "domain", "root", "created", "lastModified"):
             self.assertTrue(name in rspJson)
+
          
         self.assertEqual(rspJson["id"], grp_uuid) 
 
@@ -104,7 +106,13 @@ class GroupTest(unittest.TestCase):
         self.assertTrue(rspJson["created"] < now - 60 * 5)
         self.assertTrue(rspJson["lastModified"] < now - 60 * 5)
 
-         
+        # verify trying to read this group from a different domain fails
+        print("base_domain", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = helper.getEndpoint() + '/groups/' + grp_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 400) 
+   
 
     def testGetInvalidUUID(self):
         print("testGetRootGroup", self.base_domain)
@@ -284,6 +292,52 @@ class GroupTest(unittest.TestCase):
         req = helper.getEndpoint() + '/groups/' + root_id
         rsp = requests.delete(req, headers=headers)
         self.assertEqual(rsp.status_code, 403)  # Forbidden    
+
+    def testGetByPath(self):
+        domain = helper.getTestDomain("tall.h5")
+        print("testGetDomain", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        
+        # verify domain exists
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        if rsp.status_code != 200:
+            print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
+            return  # abort rest of test
+
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+
+        # get the group at "/g1/g1.1"
+        h5path = "/g1/g1.1"
+        req = helper.getEndpoint() + "/groups/"
+        params = {"h5path": h5path}
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+         
+        rspJson = json.loads(rsp.text)
+        for name in ("id", "hrefs", "attributeCount", "linkCount", 
+            "domain", "root", "created", "lastModified"):
+            self.assertTrue(name in rspJson)
+
+        # verify we get the same id when following the path via service calls
+        g11id = helper.getUUIDByPath(domain, "/g1/g1.1")
+        self.assertEqual(g11id, rspJson["id"])
+
+        # try a invalid link and verify a 404 is returened
+        h5path = "/g1/foobar"
+        req = helper.getEndpoint() + "/groups/"
+        params = {"h5path": h5path}
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 404)
+
+        # try passing a path to a dataset and verify we get 404
+        h5path = "/g1/g1.1/dset1.1.1"
+        req = helper.getEndpoint() + "/groups/"
+        params = {"h5path": h5path}
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 404)
+         
     
              
 if __name__ == '__main__':

@@ -20,7 +20,7 @@ from util.httpUtil import http_post, http_put, http_delete, jsonResponse, getHre
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
-from servicenode_lib import getDomainJson, getObjectJson, validateAction
+from servicenode_lib import getDomainJson, getObjectJson, validateAction, getObjectIdByPath
 import hsds_logger as log
 
 
@@ -29,17 +29,29 @@ async def GET_Group(request):
     log.request(request)
     app = request.app 
 
+    h5path = None
     group_id = request.match_info.get('id')
-    if not group_id:
+    if not group_id and "h5path" not in request.GET:
+        # no id, or path provided, so bad request
         msg = "Missing group id"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-    log.info("GET_Group, id: {}".format(group_id))
-    if not isValidUuid(group_id, "Group"):
-        msg = "Invalid group id: {}".format(group_id)
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
-
+        
+    if group_id:
+        log.info("GET_Group, id: {}".format(group_id))
+        # is the id a group id and not something else?
+        if not isValidUuid(group_id, "Group"):
+            msg = "Invalid group id: {}".format(group_id)
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)        
+    else:
+        h5path = request.GET["h5path"]
+        if h5path[0] != '/':
+            msg = "h5paths must be absolute"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        log.info("GET_Group, h5path: {}".format(h5path))
+    
     username, pswd = getUserPasswordFromRequest(request)
     if username is None and app['allow_noauth']:
         username = "default"
@@ -52,12 +64,26 @@ async def GET_Group(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
 
-    # veriful authorization to read the group
+    if h5path:
+        domain_json = await getDomainJson(app, domain)
+        if "root" not in domain_json:
+            msg = "Expected root key for domain: {}".format(domain)
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        root_id = domain_json["root"]
+        group_id = await getObjectIdByPath(app, root_id, h5path)  # throws 404 if not found
+        if not isValidUuid(group_id, "Group"):
+            msg = "No group exist with the path: {}".format(h5path)
+            log.warn(msg)
+            raise HttpProcessingError(code=404, message=msg)
+        log.info("get group_id: {} from h5path: {}".format(group_id, h5path))
+
+    # verify authorization to read the group
     await validateAction(app, domain, group_id, username, "read")
-    
+        
     # get authoritative state for group from DN (even if it's in the meta_cache).
     group_json = await getObjectJson(app, group_id, refresh=True)  
-    
+
     group_json["domain"] = domain
 
     hrefs = []

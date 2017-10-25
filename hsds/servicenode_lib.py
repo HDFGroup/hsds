@@ -126,5 +126,33 @@ async def getObjectJson(app, obj_id, refresh=False):
         log.warn(msg)
         raise HttpProcessingError(code=404, message=msg)
     return obj_json
+
+async def getObjectIdByPath(app, obj_id, h5path, refresh=False):
+    """ Find the object at the provided h5path location.
+    If not found raise 404 error.
+    """
+    links = h5path.split('/')
+    for link in links:
+        if not link:
+            continue  # skip empty link
+        if getCollectionForId(obj_id) != "groups":
+            # not a group, so won't have links
+            msg = "h5path: {} not found".format(h5path)
+            log.warn(msg)
+            raise HttpProcessingError(code=404, message=msg)
+        req = getDataNodeUrl(app, obj_id)
+        req += "/groups/" + obj_id + "/links/" + link
+        log.debug("get LINK: " + req)
+        link_json = await http_get_json(app, req)
+        log.debug("got link_json: " + str(link_json)) 
+        if link_json["class"] != 'H5L_TYPE_HARD':
+            # don't follow soft/external links
+            msg = "h5path: {} not found".format(h5path)
+            log.warn(msg)
+            raise HttpProcessingError(code=404, message=msg)
+        obj_id = link_json["id"]
+    # if we get here, we've traveresed the entire path and found the object
+    return obj_id
+
     
 

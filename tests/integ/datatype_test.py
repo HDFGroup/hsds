@@ -156,6 +156,16 @@ class DatatypeTest(unittest.TestCase):
             rsp = requests.put(req, data=json.dumps(data), headers=headers)
             self.assertEqual(rsp.status_code, 201)
 
+            # Try getting the datatype by h5path
+            req = self.endpoint + '/datatypes/' 
+            h5path = '/' + datatype
+            params = {"h5path": h5path} 
+            rsp = requests.get(req, headers=headers, params=params)
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+            self.assertEqual(rspJson["id"], dtype_uuid)
+
+
     def testPostCompoundType(self):
         print("testPostCompoundType", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
