@@ -44,10 +44,10 @@ async def GET_Group(request):
             msg = "Invalid group id: {}".format(group_id)
             log.warn(msg)
             raise HttpBadRequest(message=msg)        
-    else:
+    if "h5path" in request.GET:
         h5path = request.GET["h5path"]
-        if h5path[0] != '/':
-            msg = "h5paths must be absolute"
+        if not group_id and h5path[0] != '/':
+            msg = "h5paths must be absolute if no parent id is provided"
             log.warn(msg)
             raise HttpBadRequest(message=msg)
         log.info("GET_Group, h5path: {}".format(h5path))
@@ -63,15 +63,20 @@ async def GET_Group(request):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-
-    if h5path:
+    
+    if h5path and h5path[0] == '/':
+        # ignore the request path id (if given) and start
+        # from root group for absolute paths
+        
         domain_json = await getDomainJson(app, domain)
         if "root" not in domain_json:
             msg = "Expected root key for domain: {}".format(domain)
             log.warn(msg)
             raise HttpBadRequest(message=msg)
-        root_id = domain_json["root"]
-        group_id = await getObjectIdByPath(app, root_id, h5path)  # throws 404 if not found
+        group_id = domain_json["root"]
+
+    if h5path:
+        group_id = await getObjectIdByPath(app, group_id, h5path)  # throws 404 if not found
         if not isValidUuid(group_id, "Group"):
             msg = "No group exist with the path: {}".format(h5path)
             log.warn(msg)

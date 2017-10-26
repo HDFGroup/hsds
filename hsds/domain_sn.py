@@ -22,7 +22,7 @@ from util.s3Util import getS3Keys, isS3Obj, getS3Bytes, getS3ObjStats
 from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
 from util.domainUtil import getParentDomain, getDomainFromRequest, getS3PrefixForDomain, validateDomain, isIPAddress, isValidDomainPath
-from servicenode_lib import getDomainJson
+from servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath
 import hsds_logger as log
 
 async def get_domain_json(app, domain):
@@ -378,6 +378,22 @@ async def GET_Domain(request):
     log.debug("got domain_json: {}".format(domain_json))
     # validate that the requesting user has permission to read this domain
     aclCheck(domain_json, "read", username)  # throws exception if not authorized
+
+    if "h5path" in request.GET:
+        # if h5path is passed in, return object info for that path
+        #   (if exists)
+        h5path = request.GET["h5path"]
+        root_id = domain_json["root"]
+        obj_id = await getObjectIdByPath(app, root_id, h5path)  # throws 404 if not found
+        log.info("get obj_id: {} from h5path: {}".format(obj_id, h5path))
+        # get authoritative state for object from DN (even if it's in the meta_cache).
+        obj_json = await getObjectJson(app, obj_id, refresh=True)
+        obj_json["domain"] = domain
+        # Not bothering with hrefs for h5path lookups...
+        resp = await jsonResponse(request, obj_json)
+        log.response(request, resp=resp)
+        return resp
+         
 
     # return just the keys as per the REST API
     rsp_json = { }

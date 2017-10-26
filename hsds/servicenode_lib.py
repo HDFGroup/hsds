@@ -131,6 +131,8 @@ async def getObjectIdByPath(app, obj_id, h5path, refresh=False):
     """ Find the object at the provided h5path location.
     If not found raise 404 error.
     """
+    if h5path.startswith("./"):
+        h5path = h5path[2:]  # treat as relative path
     links = h5path.split('/')
     for link in links:
         if not link:
