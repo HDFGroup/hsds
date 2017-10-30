@@ -119,6 +119,13 @@ class LinkTest(unittest.TestCase):
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 404)  # Not Found
 
+        # try creating a link without a slash in link name
+        link_title = "one/two"
+        payload = {"id": grp1_id}
+        req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 404)  # Not Found
+
         # got a real id, but outside this domain
         req = helper.getEndpoint() + "/groups/" + root_id + "/links/another_domain"
         another_domain = helper.getParentDomain(self.base_domain)
