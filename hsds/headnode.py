@@ -20,6 +20,7 @@ import time
 from aiohttp.web import Application, StreamResponse, run_app
 from aiohttp import  ClientSession, TCPConnector
 from aiohttp.errors import HttpBadRequest, HttpProcessingError
+from asyncio import TimeoutError
 import aiobotocore
 
 import config
@@ -134,6 +135,12 @@ async def healthCheck(app):
                 
             except HttpProcessingError as hpe:
                 log.warn("HttpProcessingError for req: {}: {}".format(url, str(hpe)))
+                # node has gone away?
+                log.warn("removing {}:{} from active list".format(node["host"], node["port"]))
+                node["host"] = None
+                fail_count += 1
+            except TimeoutError as toe:
+                log.warn("Timeout error for req: {}: {}".format(url, str(toe)))
                 # node has gone away?
                 log.warn("removing {}:{} from active list".format(node["host"], node["port"]))
                 node["host"] = None
