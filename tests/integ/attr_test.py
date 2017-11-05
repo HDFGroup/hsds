@@ -324,7 +324,7 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 400)  # Bad Request
          
     def testPutFixedString(self):
-        # Test PUT value for 1d dataset with fixed length string types
+        # Test PUT value for 1d attribute with fixed length string types
         print("testPutFixedString", self.base_domain)
 
         headers = helper.getRequestHeaders(domain=self.base_domain)
@@ -366,7 +366,7 @@ class AttributeTest(unittest.TestCase):
 
 
     def testPutVLenString(self):
-        # Test PUT value for 1d dataset with fixed length string types
+        # Test PUT value for 1d attribute with variable length string types
         print("testPutVLenString", self.base_domain)
 
         headers = helper.getRequestHeaders(domain=self.base_domain)
@@ -474,7 +474,7 @@ class AttributeTest(unittest.TestCase):
         self.assertTrue(rsp_type["id"], dtype_uuid)
 
     def testPutNoData(self):
-        # Test PUT value for 1d dataset without any data provided
+        # Test PUT value for 1d attribute without any data provided
         print("testPutNoData", self.base_domain)
 
         headers = helper.getRequestHeaders(domain=self.base_domain)
@@ -513,7 +513,7 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(type_json["length"], 7)
 
     def testPutIntegerArray(self):
-        # Test PUT value for 1d dataset with list of integers
+        # Test PUT value for 1d attribute with list of integers
         print("testPutIntegerArray", self.base_domain)
 
         headers = helper.getRequestHeaders(domain=self.base_domain)
@@ -691,10 +691,6 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(rspJson["value"], value)
         
  
-
-
-        
-
 if __name__ == '__main__':
     #setup test files
     
