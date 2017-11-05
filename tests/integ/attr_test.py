@@ -473,6 +473,68 @@ class AttributeTest(unittest.TestCase):
         self.assertTrue("id" in rsp_type)
         self.assertTrue(rsp_type["id"], dtype_uuid)
 
+    def testPutObjReference(self):
+        print("testPutObjReference", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + '/'
+
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_id = rspJson["root"]
+
+        # create group "g1"
+        payload = { 'link': { 'id': root_id, 'name': 'g1' } }
+        req = helper.getEndpoint() + "/groups"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201) 
+        rspJson = json.loads(rsp.text)
+        g1_id = rspJson["id"]
+        self.assertTrue(helper.validateId(g1_id))
+        self.assertTrue(g1_id != root_id)
+
+        # create group "g2"
+        payload = { 'link': { 'id': root_id, 'name': 'g2' } }
+        req = helper.getEndpoint() + "/groups"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201) 
+        rspJson = json.loads(rsp.text)
+        g2_id = rspJson["id"]
+        self.assertTrue(helper.validateId(g1_id))
+        self.assertTrue(g1_id != g2_id)
+  
+        # create attr of g1 that is a reference to g2
+        ref_type = {"class": "H5T_REFERENCE", 
+                    "base": "H5T_STD_REF_OBJ"}
+        attr_name = "g1_ref"
+        value = g2_id
+        data = { "type": ref_type, "value": value }
+        req = self.endpoint + "/groups/" + g1_id + "/attributes/" + attr_name
+        rsp = requests.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # read back the attribute and verify the type, space, and value
+        req = self.endpoint + "/groups/" + g1_id + "/attributes/g1_ref"
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("type" in rspJson)
+        rsp_type = rspJson["type"]
+        self.assertTrue("base" in rsp_type)
+        self.assertEqual(rsp_type["base"], 'H5T_STD_REF_OBJ')
+        self.assertTrue("class" in rsp_type)
+        self.assertTrue(rsp_type["class"], 'H5T_REFERENCE')
+        self.assertTrue("shape" in rspJson)
+        rsp_shape = rspJson["shape"]
+        self.assertTrue("class" in rsp_shape)
+        self.assertEqual(rsp_shape["class"], 'H5S_SCALAR')
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], g2_id)
+
+         
+
+         
+
     def testPutNoData(self):
         # Test PUT value for 1d attribute without any data provided
         print("testPutNoData", self.base_domain)

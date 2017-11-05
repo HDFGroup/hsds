@@ -855,6 +855,74 @@ class ValueTest(unittest.TestCase):
             self.assertEqual(len(ret_values[i+5]), len(fill_value))
             self.assertEqual(ret_values[i+5], fill_value)
 
+    def testPutObjRefDataset(self):
+        # Test PUT obj ref values for 1d dataset
+        print("testPutObjRefDataset", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + '/'
+
+        # Get root uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create new group  
+        payload = { 'link': { 'id': root_uuid, 'name': 'g1' } }
+        req = helper.getEndpoint() + "/groups"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201) 
+        rspJson = json.loads(rsp.text)
+        g1_uuid = rspJson["id"]
+        self.assertTrue(helper.validateId(g1_uuid))
+
+        # create dataset
+        ref_type = {"class": "H5T_REFERENCE", 
+                    "base": "H5T_STD_REF_OBJ"}
+        data = { "type": ref_type, "shape": 3 }
+        
+        req = self.endpoint + '/datasets' 
+        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        dset_id = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_id))
+
+        # link new dataset as 'dsetref'
+        name = "dsetref"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {"id": dset_id}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        
+        # read values from dset (should be empty strings)
+        req = self.endpoint + "/datasets/" + dset_id + "/value" 
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], ['',] * data["shape"])
+
+        # write some values
+        ref_values = [root_uuid, '', g1_uuid]
+        payload = {  'value': ref_values }
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        ret_values = rspJson["value"]
+        self.assertEqual(ref_values[0], root_uuid)
+        self.assertEqual(ref_values[1], '')
+        self.assertEqual(ref_values[2], g1_uuid)
+        
+
     def testGet(self):
         domain = helper.getTestDomain("tall.h5")
         print("testGetDomain", domain)

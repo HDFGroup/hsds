@@ -150,18 +150,17 @@ class Hdf5dtypeTest(unittest.TestCase):
         dt = special_dtype(ref=Reference)
         typeItem = hdf5dtype.getTypeItem(dt)
         typeSize = hdf5dtype.getItemSize(typeItem)
-        self.assertEqual(typeItem['class'], 'H5T_STRING')
-        # TBD - FIXME: this should return the commented out values below
-        #self.assertEqual(typeItem['class'], 'H5T_REFERENCE')  
-        #self.assertEqual(typeItem['base'], 'H5T_STD_REF_OBJ')
-        #self.assertEqual(typeSize, 'H5T_VARIABLE')
+        self.assertEqual(typeItem['class'], 'H5T_REFERENCE')  
+        self.assertEqual(typeItem['base'], 'H5T_STD_REF_OBJ')
+        # length of obj id, e.g.:
+        # g-b2c9a750-a557-11e7-ab09-0242ac110009
+        self.assertEqual(typeSize, 38)
 
     def testRegionReferenceTypeItem(self):
         dt = special_dtype(ref=RegionReference)
         typeItem = hdf5dtype.getTypeItem(dt)
         typeSize = hdf5dtype.getItemSize(typeItem)
-        self.assertEqual(typeItem['class'], 'H5T_STRING')
-        #self.assertEqual(typeItem['class'], 'H5T_REFERENCE')
+        self.assertEqual(typeItem['class'], 'H5T_REFERENCE')
         #self.assertEqual(typeItem['base'], 'H5T_STD_REF_DSETREG')
         #self.assertEqual(typeSize, 'H5T_VARIABLE')
 

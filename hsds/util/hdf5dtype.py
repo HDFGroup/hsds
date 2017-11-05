@@ -127,9 +127,9 @@ def special_dtype(**kwds):
 
         dt = None
         if val is Reference:
-            dt = np.dtype('S48', metadata={'ref': Reference})
+            dt = np.dtype('S38', metadata={'ref': Reference})
         elif val is RegionReference:
-            dt = np.dtype('S48', metadata={'ref': RegionReference})
+            dt = np.dtype('S38', metadata={'ref': RegionReference})
         else:
             raise ValueError("Ref class must be Reference or RegionReference")
 
@@ -229,7 +229,6 @@ def getTypeResponse(typeItem):
 """
 
 def getTypeItem(dt):
-
     predefined_int_types = {
         'int8':    'H5T_STD_I8',
         'uint8':   'H5T_STD_U8',
@@ -268,6 +267,7 @@ def getTypeItem(dt):
         # vlen string or data
         #
         # check for h5py variable length extension
+        
 
         vlen_check = check_dtype(vlen=dt.base)
         #if vlen_check is not None and isinstance(vlen_check, np.dtype):
@@ -311,8 +311,21 @@ def getTypeItem(dt):
         type_info['size'] = dt.itemsize
         type_info['tag'] = ''  # todo - determine tag
     elif dt.base.kind == 'S':
-        # Fixed length string type
-        type_info['class'] = 'H5T_STRING'
+        # check for object reference
+        ref_check = check_dtype(ref=dt.base)
+        if ref_check is not None:
+            # a reference type
+            type_info['class'] = 'H5T_REFERENCE'
+
+            if ref_check is Reference:
+                type_info['base'] = 'H5T_STD_REF_OBJ'  # objref
+            elif ref_check is RegionReference:
+                type_info['base'] = 'H5T_STD_REF_DSETREG'  # region ref
+            else:
+                raise TypeError("unexpected reference type")
+        else:
+            # Fixed length string type
+            type_info['class'] = 'H5T_STRING'
         type_info['charSet'] = 'H5T_CSET_ASCII'
         type_info['length'] = dt.itemsize
         type_info['strPad'] = 'H5T_STR_NULLPAD'
@@ -394,6 +407,7 @@ def getTypeItem(dt):
     return the string "H5T_VARIABLE"
 """
 def getItemSize(typeItem):
+    print("getItemSize: {}".format(typeItem))
     # handle the case where we are passed a primitive type first
     if isinstance(typeItem, str) or isinstance(typeItem, bytes):
         for type_prefix in ("H5T_STD_I", "H5T_STD_U", "H5T_IEEE_F"):
@@ -450,7 +464,13 @@ def getItemSize(typeItem):
         item_size = getItemSize(typeItem['base'])
 
     elif typeClass == 'H5T_REFERENCE':
-        item_size = "H5T_VARIABLE"
+        if 'length' in typeItem:
+            item_size = typeItem['length']
+        elif 'base' in typeItem and typeItem['base'] == 'H5T_STD_REF_OBJ':
+            # obj ref values are in the form: 'g-b2c9a750-a557-11e7-ab09-0242ac110009'
+            item_size = 38
+        else:
+            raise KeyError("Unable to determine item size for reference type")
     elif typeClass == 'H5T_COMPOUND':
         if 'fields' not in typeItem:
             raise KeyError("'fields' not provided for compound type")
