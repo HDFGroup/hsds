@@ -322,6 +322,7 @@ class AttributeTest(unittest.TestCase):
         # read value should fail with 400
         rsp = requests.get(req+"/value", headers=headers)
         self.assertEqual(rsp.status_code, 400)  # Bad Request
+
          
     def testPutFixedString(self):
         # Test PUT value for 1d attribute with fixed length string types
@@ -573,6 +574,13 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(type_json["class"], "H5T_STRING")
         self.assertTrue("length" in type_json)
         self.assertEqual(type_json["length"], 7)
+
+        # create attr with 2D float type
+        data = {"type": {"class": "H5T_FLOAT", "base": "H5T_IEEE_F32LE"},"shape": [2,3]} 
+        attr_name = "float_attr"
+        req = self.endpoint + "/groups/" + root_uuid + "/attributes/" + attr_name
+        rsp = requests.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
 
     def testPutIntegerArray(self):
         # Test PUT value for 1d attribute with list of integers
