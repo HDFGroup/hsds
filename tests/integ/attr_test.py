@@ -323,6 +323,50 @@ class AttributeTest(unittest.TestCase):
         rsp = requests.get(req+"/value", headers=headers)
         self.assertEqual(rsp.status_code, 400)  # Bad Request
 
+    def testNoShapeAttr(self):
+        print("testNoShapeAttr", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = helper.getEndpoint() + '/'
+
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        attr_name = "attr_no_shape"
+        attr_payload = {'type': 'H5T_STD_I32LE'}
+        req = self.endpoint + "/groups/" + root_uuid + "/attributes/" + attr_name
+        rsp = requests.put(req, headers=headers, data=json.dumps(attr_payload))
+        self.assertEqual(rsp.status_code, 201)  # created
+
+
+        # read back the attribute
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # OK
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("name" in rspJson)
+        self.assertEqual(rspJson["name"], attr_name)
+        self.assertTrue("type" in rspJson)
+        attr_type = rspJson["type"]
+        self.assertEqual(attr_type["base"], "H5T_STD_I32LE")
+        self.assertTrue("hrefs" in rspJson)
+        self.assertEqual(len(rspJson["hrefs"]), 3)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], None)
+        self.assertTrue("shape" in rspJson)
+        attr_shape = rspJson["shape"]
+        self.assertTrue("class" in attr_shape)
+        self.assertEqual(attr_shape["class"], "H5S_SCALAR")
+
+        # read value should return None
+        rsp = requests.get(req+"/value", headers=headers)
+        self.assertEqual(rsp.status_code, 200)  
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], None)
+         
+
          
     def testPutFixedString(self):
         # Test PUT value for 1d attribute with fixed length string types

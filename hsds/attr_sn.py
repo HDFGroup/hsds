@@ -236,6 +236,7 @@ async def PUT_Attribute(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     datatype = body["type"]
+    
     if isinstance(datatype, str) and datatype.startswith("t-"):
         # Committed type - fetch type json from DN
         ctype_id = datatype
@@ -261,36 +262,67 @@ async def PUT_Attribute(request):
             raise HttpBadRequest(message=msg) 
 
     validateTypeItem(datatype)
-
-    if "shape" in body:
-        dims = getShapeDims(body["shape"])
-        if dims is None and "value" in body:
-            msg = "can't have H5S_NULL shape with value"
-            log.warn(msg)
-            raise HttpBadRequest(message=msg)
-    else:
-        dims = None
-
+    
+    dims = None
     shape_json = {}
-    if dims is None:
-        # For no shape, if value is supplied, then this is a scalar
-        # otherwise a null space attribute
-        if "value" not in body:
-            shape_json["class"] = "H5S_NULL"
+    if "shape" in body:
+        shape_body = body["shape"]
+        shape_class = None
+        if isinstance(shape_body, dict) and "class" in shape_body:
+            shape_class = shape_body["class"]
+        elif isinstance(shape_body, str):
+            shape_class = shape_body
+        if shape_class:
+            if shape_class == "H5S_NULL":
+                shape_json["class"] = "H5S_NULL"
+                if isinstance(shape_body, dict) and "dims" in shape_body:
+                    msg = "can't include dims with null shape"
+                    log.warn(msg)
+                    raise HttpBadRequest(message=msg)
+                if isinstance(shape_body, dict) and "value" in body:
+                    msg = "can't have H5S_NULL shape with value"
+                    log.warn(msg)
+                    raise HttpBadRequest(message=msg)
+            elif shape_class == "H5S_SCALAR":
+                shape_json["class"] = "H5S_SCALAR"
+                dims = getShapeDims(shape_body)
+                if len(dims) != 1 or dims[0] != 1:
+                    msg = "dimensions aren't valid for scalar attribute"
+                    log.warn(msg)
+                    raise HttpBadRequest(message=msg)
+            elif shape_class == "H5S_SIMPLE":
+                shape_json["class"] = "H5S_SIMPLE"
+                dims = getShapeDims(shape_body)
+                shape_json["dims"] = dims
+            else:
+                msg = "Unknown shape class: {}".format(shape_class)
+                log.warn(msg)
+                raise HttpBadRequest(message=msg)
         else:
-            shape_json["class"] = "H5S_SCALAR"
+            # no class, interpet shape value as dimensions and 
+            # use H5S_SIMPLE as class
+            if isinstance(shape_body, list) and len(shape_body) == 0:
+                shape_json["class"] = "H5S_SCALAR"
+                dims = [1,]
+            else:
+                shape_json["class"] = "H5S_SIMPLE"
+                dims = getShapeDims(shape_body)
+                shape_json["dims"] = dims
     else:
-        if len(dims) == 0:
-            shape_json["class"] = "H5S_SCALAR"
-        else:
-            shape_json["class"] = "H5S_SIMPLE"
-            shape_json["dims"] = dims
+        shape_json["class"] = "H5S_SCALAR"
+        dims = [1,]  # default to scalar
+        shape_json["dims"] = dims
+ 
     
     if "value" in body:
+        if dims is None:
+            msg = "Bad Request: data can not be included with H5S_NULL space"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
         value = body["value"]
         # validate that the value agrees with type/shape
         arr_dtype = createDataType(datatype)  # np datatype
-        if dims is None or len(dims) == 0:
+        if len(dims) == 0:
             np_dims = [1,]
         else:
             np_dims = dims
