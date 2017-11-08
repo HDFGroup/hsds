@@ -265,7 +265,7 @@ async def GET_Chunk(request):
         if not obj_exists:
             # return a 404
             msg = "Chunk {} does not exist".format(chunk_id)
-            log.warn(msg)
+            log.info(msg)
             raise HttpProcessingError(code=404, message="Not found")
         log.debug("Reading chunk {} from S3".format(s3_key))
         chunk_bytes = await getS3Bytes(app, s3_key, deflate_level=deflate_level)
