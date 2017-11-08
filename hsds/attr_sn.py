@@ -70,12 +70,6 @@ async def GET_Attributes(request):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-    
-    # get domain JSON
-    domain_json = await getDomainJson(app, domain)
-    if "root" not in domain_json:
-        log.error("Expected root key for domain: {}".format(domain))
-        raise HttpBadRequest(message="Unexpected Error")
 
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "read")
@@ -145,12 +139,6 @@ async def GET_Attribute(request):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-    
-    # get domain JSON
-    domain_json = await getDomainJson(app, domain)
-    if "root" not in domain_json:
-        log.error("Expected root key for domain: {}".format(domain))
-        raise HttpBadRequest(message="Unexpected Error")
 
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "read")

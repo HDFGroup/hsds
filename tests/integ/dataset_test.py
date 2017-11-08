@@ -1001,7 +1001,6 @@ class DatasetTest(unittest.TestCase):
         print("testDatasetwithDomainDelete", domain)
         headers = helper.getRequestHeaders(domain=domain)
 
-
         # create a domain
         req = helper.getEndpoint() + '/'
         rsp = requests.put(req, headers=headers)
@@ -1043,6 +1042,11 @@ class DatasetTest(unittest.TestCase):
         rsp = requests.delete(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
+        # try getting the domain again
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 410)  # GONE
+ 
         # re-create a domain
         rsp = requests.put(req, headers=headers)
         self.assertEqual(rsp.status_code, 201)
@@ -1050,6 +1054,11 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("root" in rspJson)
         self.assertTrue(root_uuid != rspJson["root"])
         root_uuid = rspJson["root"]
+
+        # try getting the dataset
+        req = self.endpoint + "/datasets/" + dset_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 400) # Not Found
 
         # create a dataset again
         req = self.endpoint + "/datasets"

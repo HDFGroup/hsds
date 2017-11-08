@@ -524,13 +524,38 @@ async def DELETE_Domain(request):
     log.request(request)
     app = request.app 
 
-    try:
-        domain = getDomainFromRequest(request)
-    except ValueError:
-        msg = "Invalid domain"
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
- 
+    domain = None
+    meta_only = False  # if True, just delete the meta cache value
+    if request.has_body:
+        body = await request.json() 
+        if "domain" in body:
+            domain = body["domain"]
+        else:
+            msg = "No domain in request body"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+
+        if "meta_only" in body:
+            meta_only = body["meta_only"]
+    else:
+        # get domain from request uri
+        try:
+            domain = getDomainFromRequest(request)
+        except ValueError:
+            msg = "Invalid domain"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+
+    log.info("meta_only domain delete: {}".format(meta_only))
+    if meta_only:
+        # remove from domain cache if present
+        domain_cache = app["domain_cache"]
+        if domain in domain_cache:
+            log.info("deleting {} from domain_cache".format(domain))
+            del domain_cache[domain]
+        resp = await jsonResponse(request, {})
+        return resp
+
     username, pswd = getUserPasswordFromRequest(request)
     validateUserPassword(app, username, pswd)
 
@@ -568,6 +593,27 @@ async def DELETE_Domain(request):
     rsp_json = await http_delete(app, req, data=body)
  
     resp = await jsonResponse(request, rsp_json)
+
+    # remove from domain cache if present
+    domain_cache = app["domain_cache"]
+    if domain in domain_cache:
+        del domain_cache[domain]
+
+    # delete domain cache from other sn_urls
+    sn_urls = app["sn_urls"]
+    body["meta_only"] = True 
+    for node_no in sn_urls:
+        if node_no == app["node_number"]:
+            continue # don't send to ourselves
+        sn_url = sn_urls[node_no]
+        req = sn_url + "/"
+        log.info("sending sn request: {}".format(req))
+        try: 
+            sn_rsp = await http_delete(app, req, data=body)
+            log.info("{} response: {}".format(req, sn_rsp))
+        except HttpProcessingError as hpe:
+            log.warn("got hpe for sn_delete: {}".format(hpe))
+
     log.response(request, resp=resp)
     return resp
 

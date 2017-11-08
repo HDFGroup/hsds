@@ -337,7 +337,6 @@ class GroupTest(unittest.TestCase):
         g1id = helper.getUUIDByPath(domain, "/g1/")
         h5path = "./g1.1"
         req = helper.getEndpoint() + "/groups/" + g1id
-        print("req:", req)
         params = {"h5path": h5path}
         rsp = requests.get(req, headers=headers, params=params)
         self.assertEqual(rsp.status_code, 200)
