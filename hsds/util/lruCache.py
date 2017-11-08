@@ -132,7 +132,6 @@ class LruCache(object):
         node = self._moveToFront(key)
         return node._data
 
-
     def __setitem__(self, key, data):
         if self._chunk_cache:
             if not isinstance(data, numpy.ndarray):
@@ -149,26 +148,29 @@ class LruCache(object):
             # TBD - come up with a way to get the actual data size for dict objects
             mem_size = 1024
   
-        node = Node(key, data, mem_size=mem_size)
-        if self._lru_head is None:
-            self._lru_head = self._lru_tail = node
-        else:
-            # newer items go to the front
-            next = self._lru_head
-            if next._prev is not None:
-                raise KeyError("unexpected error")
-            node._next = next
-            next._prev = node  
-            self._lru_head = node
-
-        
         if key in self._hash:
+            # key is already in the LRU - update mem size, data and move to front
+            node = self._hash[key]
             old_size = self._hash[key]._mem_size
             mem_delta = node._mem_size - old_size
             self._hash[key] = node
             self._mem_size += mem_delta
+            node._data = data
+            node._mem_size = mem_size
+            self._moveToFront(key)
             log.info("updated node in {}: {} [was {} bytes now {} bytes]".format(self._name, key, old_size, node._mem_size))
         else:
+            node = Node(key, data, mem_size=mem_size)
+            if self._lru_head is None:
+                self._lru_head = self._lru_tail = node
+            else:
+                # newer items go to the front
+                next = self._lru_head
+                if next._prev is not None:
+                    raise KeyError("unexpected error")
+                node._next = next
+                next._prev = node  
+                self._lru_head = node
             self._hash[key] = node
             self._mem_size += node._mem_size
             log.info("added new node to {}: {} [{} bytes]".format(self._name, key, node._mem_size))

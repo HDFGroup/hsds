@@ -61,6 +61,13 @@ class LruCacheTest(unittest.TestCase):
         self.assertEqual(mem_used, 500*500*8)
         mem_per = cc.cacheUtilizationPercent
         self.assertEqual(mem_per, 20)   # have used 20% of target memory
+
+        # try adding the same id to the cache again
+        cc[rand_id] = np_arr
+        cc.consistencyCheck()
+        self.assertEqual(len(cc), 1)
+        self.assertTrue(rand_id in cc)
+
         # try out the dirty flags
         self.assertFalse(cc.isDirty(rand_id))
         self.assertEqual(cc.dirtyCount, 0)
@@ -178,7 +185,6 @@ class LruCacheTest(unittest.TestCase):
             self.assertTrue(id in cc)
             cc.setDirty(id)  
             cc.consistencyCheck()
-            new_mem_used = cc.memUsed
              
              
         mem_per = cc.cacheUtilizationPercent
