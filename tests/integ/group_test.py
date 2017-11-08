@@ -343,8 +343,6 @@ class GroupTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertEqual(g11id, rspJson["id"])
-        print(rspJson)
-
 
         # try a invalid link and verify a 404 is returened
         h5path = "/g1/foobar"

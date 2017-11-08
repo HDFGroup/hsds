@@ -153,7 +153,6 @@ class LruCache(object):
             node = self._hash[key]
             old_size = self._hash[key]._mem_size
             mem_delta = node._mem_size - old_size
-            self._hash[key] = node
             self._mem_size += mem_delta
             node._data = data
             node._mem_size = mem_size
