@@ -181,6 +181,7 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("shape" in rspJson)
         shape_json = rspJson["shape"]
         self.assertTrue(shape_json["class"], "H5S_SCALAR")
+        self.assertFalse("dims" in shape_json)
         self.assertTrue("type" in rspJson)
         self.assertTrue(rspJson["type"], "H5T_IEEE_F32LE")
 

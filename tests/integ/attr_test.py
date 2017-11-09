@@ -358,6 +358,7 @@ class AttributeTest(unittest.TestCase):
         attr_shape = rspJson["shape"]
         self.assertTrue("class" in attr_shape)
         self.assertEqual(attr_shape["class"], "H5S_SCALAR")
+        self.assertFalse("dims" in attr_shape)
 
         # read value should return None
         rsp = requests.get(req+"/value", headers=headers)

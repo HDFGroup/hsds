@@ -298,8 +298,7 @@ async def PUT_Attribute(request):
                 shape_json["dims"] = dims
     else:
         shape_json["class"] = "H5S_SCALAR"
-        dims = [1,]  # default to scalar
-        shape_json["dims"] = dims
+        dims = [1,]
  
     
     if "value" in body:
