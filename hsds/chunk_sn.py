@@ -549,6 +549,10 @@ async def PUT_Value(request):
             msg = "Bad Request: input data doesn't match selection"
             log.warn(msg)
             raise HttpBadRequest(message=msg)
+        except TypeError:
+            msg = "Bad Request: input data doesn't match selection"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
         log.debug("got json arr: {}".format(arr))
 
     if points is None:
