@@ -17,6 +17,11 @@ import numpy as np
 sys.path.append('../../hsds/util')
 sys.path.append('../../hsds')
 from arrayUtil import bytesArrayToList, toTuple, getNumElements, jsonToArray
+import hdf5dtype
+from hdf5dtype import special_dtype
+from hdf5dtype import check_dtype
+from hdf5dtype import Reference
+from hdf5dtype import createDataType
 
 
 class ArrayUtilTest(unittest.TestCase):
@@ -34,8 +39,7 @@ class ArrayUtilTest(unittest.TestCase):
             (1,2,3),
             ["A", "B", "C"],
             [b"A", b"B", b"C"],
-            [["A", "B"], [b'a', b'b', b'c']]
-             
+            [["A", "B"], [b'a', b'b', b'c']]    
         )
         for data in data_items:
             json_data = bytesArrayToList(data)
@@ -99,8 +103,10 @@ class ArrayUtilTest(unittest.TestCase):
         self.assertTrue(isinstance(out, np.ndarray))
         
         self.assertEqual(out.shape, (2,))
+        self.assertTrue(isinstance(out[0], np.void))
         e0 = out[0].tolist()
         self.assertEqual(e0, (4, b'four'))
+        self.assertTrue(isinstance(out[1], np.void))
         e1 = out[1].tolist()
         self.assertEqual(e1, (5, b'five'))
 
@@ -115,6 +121,52 @@ class ArrayUtilTest(unittest.TestCase):
         e0 = out[0].tolist()
         self.assertEqual(e0, (6, b'six'))
 
+        dt = special_dtype(vlen=np.dtype('int32'))
+        shape = [4,]
+        data = [[1,], [1,2], [1,2,3], [1,2,3,4]]
+        out = jsonToArray(shape, dt, data)
+        self.assertTrue(isinstance(out, np.ndarray))
+        self.assertEqual(check_dtype(vlen=out.dtype), np.dtype('int32'))
+        
+        self.assertEqual(out.shape, (4,))
+        self.assertEqual(out.dtype.kind, 'O')
+        self.assertEqual(check_dtype(vlen=out.dtype), np.dtype('int32'))
+        for i in range(4):
+            e = out[i]  #.tolist()
+            self.assertTrue(isinstance(e, tuple))
+            self.assertEqual(e, tuple(range(1, i+2)))
+
+        # create VLEN of obj ref's
+        ref_type = {"class": "H5T_REFERENCE", 
+                    "base": "H5T_STD_REF_OBJ"}
+        vlen_type = {"class": "H5T_VLEN", "base": ref_type}
+        dt = createDataType(vlen_type)  # np datatype
+        
+        id0 = 'g-a4f455b2-c8cf-11e7-8b73-0242ac110009'
+        id1 = 'g-a50af844-c8cf-11e7-8b73-0242ac110009'
+        id2 = 'g-a5236276-c8cf-11e7-8b73-0242ac110009'
+
+        data = [ [id0,], [id0,id1], [id0,id1,id2] ]
+        shape = [3,]
+        out = jsonToArray(shape, dt, data)
+        self.assertTrue(isinstance(out, np.ndarray))
+        base_type = check_dtype(vlen=out.dtype)
+        self.assertEqual(base_type.kind, 'S')
+        self.assertEqual(base_type.itemsize, 38)
+        
+        self.assertEqual(out.shape, (3,))
+        self.assertEqual(out.dtype.kind, 'O')
+        self.assertEqual(check_dtype(vlen=out.dtype), np.dtype('S38'))
+
+        e = out[0] 
+        self.assertTrue(isinstance(e, tuple))
+        self.assertEqual(e, (id0,))
+        e = out[1] 
+        self.assertTrue(isinstance(e, tuple))
+        self.assertEqual(e, (id0,id1))
+        e = out[2] 
+        self.assertTrue(isinstance(e, tuple))
+        self.assertEqual(e, (id0,id1,id2))
          
 
 if __name__ == '__main__':

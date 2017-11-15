@@ -452,6 +452,54 @@ class AttributeTest(unittest.TestCase):
         self.assertTrue("length" in type_json)
         self.assertEqual(type_json["length"], "H5T_VARIABLE")
 
+    def testPutVLenInt(self):
+        # Test PUT value for 1d attribute with variable length int types
+        print("testPutVLenInt", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + '/'
+
+        # Get root uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create attr
+        vlen_type = {"class": "H5T_VLEN", "base": { "class": "H5T_INTEGER", "base": "H5T_STD_I32LE"}}
+        value = [[1,], [1,2], [1,2,3], [1,2,3,4]]
+        data = { "type": vlen_type, "shape": 4, "value": value}
+        attr_name = "vlen_int_attr"
+        req = self.endpoint + "/groups/" + root_uuid + "/attributes/" + attr_name
+        rsp = requests.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # read attr  
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], value)
+        self.assertTrue("type" in rspJson)
+        type_json = rspJson["type"]
+        self.assertTrue("class" in type_json)
+        self.assertEqual(type_json["class"], "H5T_VLEN")
+        self.assertTrue("base" in type_json)
+        base_type = type_json["base"]
+        self.assertTrue("class" in base_type)
+        self.assertEqual(base_type["class"], "H5T_INTEGER")
+        self.assertTrue("base" in base_type)
+        self.assertEqual(base_type["base"], "H5T_STD_I32LE")
+        self.assertTrue("shape" in rspJson)
+        shape_json = rspJson["shape"]
+        self.assertTrue("class" in shape_json)
+        self.assertEqual(shape_json["class"], "H5S_SIMPLE")
+        self.assertTrue("dims" in shape_json)
+        self.assertEqual(shape_json["dims"], [4,])
+        
+
     def testPutInvalid(self):
         print("testPutInvalid", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
@@ -621,7 +669,7 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 201)
 
         # read back the attribute and verify the type, space, and value
-        req = self.endpoint + "/groups/" + g1_id + "/attributes/g1_ref"
+        req = self.endpoint + "/groups/" + g1_id + "/attributes/" + attr_name
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
@@ -637,6 +685,94 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(rsp_shape["class"], 'H5S_SCALAR')
         self.assertTrue("value" in rspJson)
         self.assertEqual(rspJson["value"], g2_id)
+
+    def testPutVlenObjReference(self):
+        print("testPutVlenObjReference", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + '/'
+
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_id = rspJson["root"]
+
+        # create group "g1"
+        payload = { 'link': { 'id': root_id, 'name': 'g1' } }
+        req = helper.getEndpoint() + "/groups"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201) 
+        rspJson = json.loads(rsp.text)
+        g1_id = rspJson["id"]
+        self.assertTrue(helper.validateId(g1_id))
+        self.assertTrue(g1_id != root_id)
+
+        # create group "g1/g1_1"
+        payload = { 'link': { 'id': g1_id, 'name': 'g1_1' } }
+        req = helper.getEndpoint() + "/groups"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201) 
+        rspJson = json.loads(rsp.text)
+        g1_1_id = rspJson["id"]
+        self.assertTrue(helper.validateId(g1_1_id))
+
+        # create group "g1/g1_2"
+        payload = { 'link': { 'id': g1_id, 'name': 'g1_2' } }
+        req = helper.getEndpoint() + "/groups"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201) 
+        rspJson = json.loads(rsp.text)
+        g1_2_id = rspJson["id"]
+        self.assertTrue(helper.validateId(g1_2_id))
+
+        # create group "g1/g1_3"
+        payload = { 'link': { 'id': g1_id, 'name': 'g1_3' } }
+        req = helper.getEndpoint() + "/groups"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201) 
+        rspJson = json.loads(rsp.text)
+        g1_3_id = rspJson["id"]
+        self.assertTrue(helper.validateId(g1_3_id))
+        
+  
+        # create attr of g1 that is a vlen list of obj ref's
+        ref_type = {"class": "H5T_REFERENCE", 
+                    "base": "H5T_STD_REF_OBJ"}
+        vlen_type = {"class": "H5T_VLEN", "base": ref_type}
+        attr_name = "obj_ref"
+        value = [[g1_1_id,], [g1_1_id, g1_2_id], [g1_1_id, g1_2_id, g1_3_id]]
+        data = { "type": vlen_type, "shape": 3, "value": value }
+        req = self.endpoint + "/groups/" + g1_id + "/attributes/" + attr_name
+        rsp = requests.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # read back the attribute and verify the type, space, and value
+        req = self.endpoint + "/groups/" + g1_id + "/attributes/" + attr_name
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("type" in rspJson)
+        rsp_type = rspJson["type"]
+        self.assertTrue("class" in rsp_type)
+        self.assertEqual(rsp_type["class"], 'H5T_VLEN')
+        self.assertTrue("base" in rsp_type)
+        rsp_type_base = rsp_type["base"]
+        self.assertTrue("base" in rsp_type_base)
+        self.assertEqual(rsp_type_base["base"], 'H5T_STD_REF_OBJ')
+        self.assertTrue("class" in rsp_type_base)
+        self.assertTrue(rsp_type["class"], 'H5T_REFERENCE')
+        self.assertTrue("shape" in rspJson)
+        rsp_shape = rspJson["shape"]
+        self.assertTrue("class" in rsp_shape)
+        self.assertEqual(rsp_shape["class"], 'H5S_SIMPLE')
+        self.assertTrue("dims" in rsp_shape)
+        self.assertEqual(rsp_shape["dims"], [3,])
+        self.assertTrue("value" in rspJson)
+        vlen_values = rspJson["value"]
+        self.assertEqual(len(vlen_values), 3)
+        for i in range(3):
+            vlen_element = vlen_values[i]
+            self.assertEqual(len(vlen_element), i+1)
+         
 
     def testPutCompoundObjReference(self):
         print("testPutCompoundObjReference", self.base_domain)

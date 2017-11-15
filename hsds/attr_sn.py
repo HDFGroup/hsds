@@ -245,7 +245,7 @@ async def PUT_Attribute(request):
             datatype = getBaseTypeJson(datatype)
             log.debug("got datatype: {}".format(datatype))
         except TypeError:
-            msg = "POST Dataset with invalid predefined type"
+            msg = "PUT attribute with invalid predefined type"
             log.warn(msg)
             raise HttpBadRequest(message=msg) 
 
@@ -445,7 +445,6 @@ async def GET_AttributeValue(request):
 
     attr_shape = dn_json["shape"]
     log.debug("attribute shape: {}".format(attr_shape))
-    log.debug("attribute class: [{}]".format(attr_shape["class"]))
     if attr_shape["class"] == 'H5S_NULL':
         msg = "Null space attributes can not be read"
         log.warn(msg)
@@ -455,9 +454,7 @@ async def GET_AttributeValue(request):
     response_type = accept_type    # will adjust later if binary not possible
     type_json = dn_json["type"]
     shape_json = dn_json["shape"]
-    log.debug("attr shape: {}".format(shape_json))
     item_size = getItemSize(type_json)
-    log.debug("item size: {}".format(item_size))
     
     if item_size == 'H5T_VARIABLE' and accept_type != "json":
         msg = "Client requested binary, but only JSON is supported for variable length data types"

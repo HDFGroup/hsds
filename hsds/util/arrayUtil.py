@@ -126,12 +126,11 @@ def jsonToArray(data_shape, data_dtype, data_json):
     # need some special conversion for compound types --
     # each element must be a tuple, but the JSON decoder
     # gives us a list instead.
-    #print("jsonToArray:", data_json)
     if len(data_dtype) > 1 and not isinstance(data_json, (list, tuple)):
         raise TypeError("expected list data for compound data type")
     npoints = getNumElements(data_shape)
-    #print("npoints:", npoints)
-    if len(data_dtype) > 1 and type(data_json) in (list, tuple):
+    
+    if type(data_json) in (list, tuple):
         np_shape_rank = len(data_shape)
         converted_data = []
         if npoints == 1 and len(data_json) == len(data_dtype):
@@ -140,7 +139,6 @@ def jsonToArray(data_shape, data_dtype, data_json):
             converted_data = toTuple(np_shape_rank, data_json)
         data_json = converted_data
 
-    #print("data_json:", data_json, "dtype:", data_dtype)
     arr = np.array(data_json, dtype=data_dtype)
     # raise an exception of the array shape doesn't match the selection shape
     # allow if the array is a scalar and the selection shape is one element,
