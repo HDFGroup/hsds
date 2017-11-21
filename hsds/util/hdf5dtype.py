@@ -742,6 +742,7 @@ def validateTypeItem(typeItem):
         dt = createDataType(typeItem)
         log.debug("got numpy type: {}".format(str(dt)))
     except (KeyError, TypeError, ValueError) as e:
+        log.warn("Got error parsing type... {}".format(e))
         raise HttpBadRequest(message=str(e))
      
 
