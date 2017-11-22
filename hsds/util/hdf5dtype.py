@@ -713,17 +713,12 @@ def createDataType(typeItem):
             field_name = field['name']
             if not isinstance(field_name, str):
                 raise TypeError("field names must be strings")
-
             # verify the field name is ascii
-            """
-            TBD
             try:
-                ascii_name = field_name.encode('ascii')
-                field['name'] = ascii_name
-            except UnicodeDecodeError:
-                raise TypeError("non-ascii field name not allowed")  
-            """  
-
+                field_name.encode('ascii')
+            except UnicodeEncodeError:
+                raise TypeError("non-ascii field name not allowed")    
+    
             dt = createDataType(field['type'])  # recursive call
             if dt is None:
                 raise Exception("unexpected error")

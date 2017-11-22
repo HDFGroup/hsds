@@ -183,7 +183,6 @@ class Hdf5dtypeTest(unittest.TestCase):
         field_b_basetype = field_b_type['base']
         self.assertEqual(field_b_basetype['class'], 'H5T_STRING')
         self.assertEqual(typeSize, 11)
-        
     
         
     def testCompoundArrayVlenIntTypeItem(self):
@@ -381,8 +380,6 @@ class Hdf5dtypeTest(unittest.TestCase):
         self.assertEqual(check_dtype(vlen=dt), bytes)
         self.assertEqual(typeSize, 'H5T_VARIABLE')
         
-
-
     def testCreateVLenUTF8Type(self):
         typeItem = { 'class': 'H5T_STRING', 'charSet': 'H5T_CSET_UTF8', 'length': 'H5T_VARIABLE' }
         typeSize = hdf5dtype.getItemSize(typeItem)
@@ -476,6 +473,20 @@ class Hdf5dtypeTest(unittest.TestCase):
         self.assertEqual(dtLocation.kind, 'O')
         self.assertEqual(check_dtype(vlen=dtLocation), bytes)
         self.assertEqual(typeSize, 'H5T_VARIABLE')
+
+    
+    def testCreateCompoundInvalidFieldName(self):
+        typeItem = {
+            'class': 'H5T_COMPOUND', 'fields': 
+            [{'name': '\u03b1', 'type': {'base': 'H5T_STD_I32LE', 'class': 'H5T_INTEGER'}}, 
+             {'name': '\u03c9', 'type': {'base': 'H5T_STD_I32LE', 'class': 'H5T_INTEGER'}}]
+        }
+        try:
+            hdf5dtype.createDataType(typeItem)
+            self.assertTrue(False)
+        except TypeError:
+            pass # expected
+
 
     def testCreateCompoundOfCompoundType(self):
         typeItem = {'class': 'H5T_COMPOUND', 'fields': 
