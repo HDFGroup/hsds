@@ -772,7 +772,7 @@ class AttributeTest(unittest.TestCase):
         ref_type = {"class": "H5T_REFERENCE", 
                     "base": "H5T_STD_REF_OBJ"}
         attr_name = "g1_ref"
-        value = g2_id
+        value = "groups/" + g2_id
         data = { "type": ref_type, "value": value }
         req = self.endpoint + "/groups/" + g1_id + "/attributes/" + attr_name
         rsp = requests.put(req, data=json.dumps(data), headers=headers)
@@ -794,7 +794,7 @@ class AttributeTest(unittest.TestCase):
         self.assertTrue("class" in rsp_shape)
         self.assertEqual(rsp_shape["class"], 'H5S_SCALAR')
         self.assertTrue("value" in rspJson)
-        self.assertEqual(rspJson["value"], g2_id)
+        self.assertEqual(rspJson["value"], value)
 
     def testPutVlenObjReference(self):
         print("testPutVlenObjReference", self.base_domain)

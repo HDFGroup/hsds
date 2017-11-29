@@ -127,9 +127,9 @@ def special_dtype(**kwds):
 
         dt = None
         if val is Reference:
-            dt = np.dtype('S38', metadata={'ref': Reference})
+            dt = np.dtype('S48', metadata={'ref': Reference})
         elif val is RegionReference:
-            dt = np.dtype('S38', metadata={'ref': RegionReference})
+            dt = np.dtype('S48', metadata={'ref': RegionReference})
         else:
             raise ValueError("Ref class must be Reference or RegionReference")
 
@@ -467,8 +467,8 @@ def getItemSize(typeItem):
         if 'length' in typeItem:
             item_size = typeItem['length']
         elif 'base' in typeItem and typeItem['base'] == 'H5T_STD_REF_OBJ':
-            # obj ref values are in the form: 'g-b2c9a750-a557-11e7-ab09-0242ac110009'
-            item_size = 38
+            # obj ref values are in the form: "groups/<id>" or "datasets/<id>" or "datatypes/<id>"
+            item_size = 48
         else:
             raise KeyError("Unable to determine item size for reference type")
     elif typeClass == 'H5T_COMPOUND':
