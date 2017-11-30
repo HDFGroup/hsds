@@ -154,7 +154,7 @@ class Hdf5dtypeTest(unittest.TestCase):
         self.assertEqual(typeItem['base'], 'H5T_STD_REF_OBJ')
         # length of obj id, e.g.:
         # g-b2c9a750-a557-11e7-ab09-0242ac110009
-        self.assertEqual(typeSize, 38)
+        self.assertEqual(typeSize, 48)
 
     def testRegionReferenceTypeItem(self):
         dt = special_dtype(ref=RegionReference)

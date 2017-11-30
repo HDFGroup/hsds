@@ -152,11 +152,11 @@ class ArrayUtilTest(unittest.TestCase):
         self.assertTrue(isinstance(out, np.ndarray))
         base_type = check_dtype(vlen=out.dtype)
         self.assertEqual(base_type.kind, 'S')
-        self.assertEqual(base_type.itemsize, 38)
+        self.assertEqual(base_type.itemsize, 48)
         
         self.assertEqual(out.shape, (3,))
         self.assertEqual(out.dtype.kind, 'O')
-        self.assertEqual(check_dtype(vlen=out.dtype), np.dtype('S38'))
+        self.assertEqual(check_dtype(vlen=out.dtype), np.dtype('S48'))
 
         e = out[0] 
         self.assertTrue(isinstance(e, tuple))

@@ -277,6 +277,19 @@ class DatasetTest(unittest.TestCase):
             "attributeCount", "created", "lastModified", "root", "domain"):
             self.assertTrue(name in rspJson)
 
+        # get the dataset via a relative apth "g1/g1.1/dset1.1.1"
+        h5path = "g1/g1.1/dset1.1.1"
+        req = helper.getEndpoint() + "/datasets/"
+        params = {"h5path": h5path, "grpid": root_uuid}
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+
+        rspJson = json.loads(rsp.text)
+        for name in ("id", "shape", "hrefs", "layout", "creationProperties", 
+            "attributeCount", "created", "lastModified", "root", "domain"):
+            self.assertTrue(name in rspJson)
+
+
         # get the dataset uuid and verify it matches what we got by h5path
         dset_uuid = helper.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1")
         self.assertTrue(dset_uuid.startswith("d-"))

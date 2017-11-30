@@ -165,6 +165,22 @@ class DatatypeTest(unittest.TestCase):
             rspJson = json.loads(rsp.text)
             self.assertEqual(rspJson["id"], dtype_uuid)
 
+            # Try again using relative h5path
+            req = self.endpoint + '/datatypes/' 
+            h5path = datatype
+            params = {"h5path": h5path} 
+            rsp = requests.get(req, headers=headers, params=params)
+            self.assertEqual(rsp.status_code, 400)
+
+            # try using relative h5path and parent group id
+            req = self.endpoint + '/datatypes/' 
+            h5path = datatype
+            params = {"h5path": h5path, "grpid": root_uuid} 
+            rsp = requests.get(req, headers=headers, params=params)
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+            self.assertEqual(rspJson["id"], dtype_uuid)
+
 
     def testPostCompoundType(self):
         print("testPostCompoundType", self.base_domain)

@@ -131,12 +131,14 @@ async def getObjectIdByPath(app, obj_id, h5path, refresh=False):
     """ Find the object at the provided h5path location.
     If not found raise 404 error.
     """
+    log.info("getObjectIdByPath obj_id: {} h5path: {} refresh: {}".format(obj_id, h5path, refresh))
     if h5path.startswith("./"):
         h5path = h5path[2:]  # treat as relative path
     links = h5path.split('/')
     for link in links:
         if not link:
             continue  # skip empty link
+        log.debug("getObjectIdByPath for objid: {} got link: {}".format(obj_id, link))
         if getCollectionForId(obj_id) != "groups":
             # not a group, so won't have links
             msg = "h5path: {} not found".format(h5path)

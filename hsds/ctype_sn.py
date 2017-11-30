@@ -44,8 +44,20 @@ async def GET_Datatype(request):
             log.warn(msg)
             raise HttpBadRequest(message=msg)
     else:
+        group_id = None
+        if "grpid" in request.GET:
+            group_id = request.GET["grpid"]
+            if not isValidUuid(group_id, "Group"):
+                msg = "Invalid parent group id: {}".format(group_id)
+                log.warn(msg)
+                raise HttpBadRequest(message=msg)
+        if "h5path" not in request.GET:
+            msg = "Expecting either ctype id or h5path url param"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+
         h5path = request.GET["h5path"]
-        if h5path[0] != '/':
+        if h5path[0] != '/' and group_id is None:
             msg = "h5paths must be absolute"
             log.warn(msg)
             raise HttpBadRequest(message=msg)
@@ -69,8 +81,9 @@ async def GET_Datatype(request):
             msg = "Expected root key for domain: {}".format(domain)
             log.warn(msg)
             raise HttpBadRequest(message=msg)
-        root_id = domain_json["root"]
-        ctype_id = await getObjectIdByPath(app, root_id, h5path)  # throws 404 if not found
+        if group_id is None:
+            group_id = domain_json["root"]
+        ctype_id = await getObjectIdByPath(app, group_id, h5path)  # throws 404 if not found
         if not isValidUuid(ctype_id, "Datatype"):
             msg = "No datatype exist with the path: {}".format(h5path)
             log.warn(msg)
