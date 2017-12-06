@@ -106,12 +106,20 @@ class GroupTest(unittest.TestCase):
         self.assertTrue(rspJson["created"] < now - 60 * 5)
         self.assertTrue(rspJson["lastModified"] < now - 60 * 5)
 
+        # request the group path
+        req = helper.getEndpoint() + '/groups/' + grp_uuid
+        params = {"getalias": 1}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("alias" in rspJson)
+        self.assertEqual(rspJson["alias"], ['/'])
+
         # verify trying to read this group from a different domain fails
         headers = helper.getRequestHeaders(domain=self.base_domain)
         req = helper.getEndpoint() + '/groups/' + grp_uuid
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 400) 
-   
 
     def testGetInvalidUUID(self):
         print("testGetInvalidUUID", self.base_domain)
@@ -155,6 +163,15 @@ class GroupTest(unittest.TestCase):
         self.assertTrue("domain" in rspJson)
         #self.assertEqual(rspJson["domain"], domain) # TBD
 
+        # try getting the path of the group 
+        params = {"getalias": 1}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("alias" in rspJson)
+        self.assertEqual(rspJson["alias"], [])
+
+
         # try POST with user who doesn't have create permission on this domain
         headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
         req = helper.getEndpoint() + '/groups'
@@ -191,7 +208,6 @@ class GroupTest(unittest.TestCase):
 
         root_uuid = new_root_id
         
-
         # get root group and verify link count is 0
         req = helper.getEndpoint() + '/groups/' + root_uuid
         rsp = requests.get(req, headers=headers)
@@ -229,6 +245,15 @@ class GroupTest(unittest.TestCase):
         self.assertEqual(link_json["class"], "H5L_TYPE_HARD")
         self.assertEqual(link_json["title"], "linked_group")
         self.assertEqual(link_json["id"], new_group_id)
+
+        # try getting the path of the group 
+        req = helper.getEndpoint() + "/groups/" + new_group_id 
+        params = {"getalias": 1}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("alias" in rspJson)
+        self.assertEqual(rspJson["alias"], ['/linked_group',])
 
     def testDelete(self):
         # test Delete
@@ -356,6 +381,21 @@ class GroupTest(unittest.TestCase):
         params = {"h5path": h5path}
         rsp = requests.get(req, headers=headers, params=params)
         self.assertEqual(rsp.status_code, 404)
+
+        # try getting the path of the group 
+        req = helper.getEndpoint() + "/groups/" + g11id 
+        params = {"getalias": 1}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("alias" in rspJson)
+        self.assertEqual(rspJson["alias"], ['/g1/g1.1',])
+
+        
+
+
+
+
          
     
              

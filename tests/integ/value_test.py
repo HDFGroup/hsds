@@ -1128,6 +1128,8 @@ class ValueTest(unittest.TestCase):
                 offset = i*ref_length + j
                 data[offset] = ord(ref_value[j])
 
+        print(data)
+
         req = self.endpoint + "/datasets/" + dset_id + "/value" 
         rsp = requests.put(req, data=data, headers=headers_bin_req)
         self.assertEqual(rsp.status_code, 200)

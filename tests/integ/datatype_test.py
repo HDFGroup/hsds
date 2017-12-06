@@ -330,6 +330,15 @@ class DatatypeTest(unittest.TestCase):
         self.assertEqual(link_json["title"], "linked_dtype")
         self.assertEqual(link_json["id"], dtype_uuid)
 
+        # request the dataset path
+        req = helper.getEndpoint() + '/datatypes/' + dtype_uuid
+        params = {"getalias": 1}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("alias" in rspJson)
+        self.assertEqual(rspJson["alias"], ['/linked_dtype'])
+
     
              
 if __name__ == '__main__':

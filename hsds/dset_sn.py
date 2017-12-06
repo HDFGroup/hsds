@@ -27,7 +27,7 @@ from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPass
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson, getItemSize
 from util.s3Util import isS3Obj, getS3Bytes
-from servicenode_lib import getDomainJson, getObjectJson, validateAction, getObjectIdByPath
+from servicenode_lib import getDomainJson, getObjectJson, validateAction, getObjectIdByPath, getPathForObjectId
 import config
 import hsds_logger as log
 
@@ -165,6 +165,7 @@ async def GET_Dataset(request):
     app = request.app 
 
     h5path = None
+    getAlias = False
     dset_id = request.match_info.get('id')
     if not dset_id and "h5path" not in request.GET:
         msg = "Missing dataset id"
@@ -176,6 +177,9 @@ async def GET_Dataset(request):
             msg = "Invalid dataset id: {}".format(dset_id)
             log.warn(msg)
             raise HttpBadRequest(message=msg)
+        if "getalias" in request.GET:
+            if request.GET["getalias"]:
+                getAlias = True 
     else:
         group_id = None
         if "grpid" in request.GET:
@@ -251,6 +255,15 @@ async def GET_Dataset(request):
     resp_json["created"] = dset_json["created"]
     resp_json["lastModified"] = dset_json["lastModified"]
     resp_json["domain"] = domain
+
+    if getAlias:
+        root_id = dset_json["root"]
+        alias = []
+        idpath_map = {root_id: '/'}
+        h5path = await getPathForObjectId(app, root_id, idpath_map, dset_id)
+        if h5path:
+            alias.append(h5path)
+        resp_json["alias"] = alias
     
     hrefs = []
     dset_uri = '/datasets/'+dset_id

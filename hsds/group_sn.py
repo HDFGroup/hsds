@@ -14,13 +14,14 @@
 # 
  
 import json
+
 from aiohttp.errors import HttpBadRequest, HttpProcessingError
  
 from util.httpUtil import http_post, http_put, http_delete, jsonResponse, getHref
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
-from servicenode_lib import getDomainJson, getObjectJson, validateAction, getObjectIdByPath
+from servicenode_lib import getDomainJson, getObjectJson, validateAction, getObjectIdByPath, getPathForObjectId
 import hsds_logger as log
 
 
@@ -30,20 +31,23 @@ async def GET_Group(request):
     app = request.app 
 
     h5path = None
+    getAlias = False
     group_id = request.match_info.get('id')
     if not group_id and "h5path" not in request.GET:
         # no id, or path provided, so bad request
         msg = "Missing group id"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-        
     if group_id:
         log.info("GET_Group, id: {}".format(group_id))
         # is the id a group id and not something else?
         if not isValidUuid(group_id, "Group"):
             msg = "Invalid group id: {}".format(group_id)
             log.warn(msg)
-            raise HttpBadRequest(message=msg)        
+            raise HttpBadRequest(message=msg) 
+        if "getalias" in request.GET:
+            if request.GET["getalias"]:
+                getAlias = True       
     if "h5path" in request.GET:
         h5path = request.GET["h5path"]
         if not group_id and h5path[0] != '/':
@@ -90,6 +94,18 @@ async def GET_Group(request):
     group_json = await getObjectJson(app, group_id, refresh=True)  
 
     group_json["domain"] = domain
+
+    if getAlias:
+        root_id = group_json["root"]
+        alias = []
+        if group_id == root_id:
+            alias.append('/')
+        else:
+            idpath_map = {root_id: '/'}
+            h5path = await getPathForObjectId(app, root_id, idpath_map, group_id)
+            if h5path:
+                alias.append(h5path)
+        group_json["alias"] = alias
 
     hrefs = []
     group_uri = '/groups/'+group_id
@@ -228,5 +244,7 @@ async def DELETE_Group(request):
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp
+
+ 
 
  

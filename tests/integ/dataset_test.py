@@ -251,6 +251,15 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue(rspJson["created"] < now - 60 * 5)
         self.assertTrue(rspJson["lastModified"] < now - 60 * 5)
 
+        # request the dataset path
+        req = helper.getEndpoint() + '/datasets/' + dset_uuid
+        params = {"getalias": 1}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("alias" in rspJson)
+        self.assertEqual(rspJson["alias"], ['/g1/g1.1/dset1.1.1'])
+
     def testGetByPath(self):
         domain = helper.getTestDomain("tall.h5")
         print("testGetDomain", domain)

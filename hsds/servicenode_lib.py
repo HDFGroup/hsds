@@ -12,6 +12,7 @@
 #
 # service node of hsds cluster
 #  
+import os.path as op
 from aiohttp.errors import HttpBadRequest, HttpProcessingError
 
 from util.idUtil import getDataNodeUrl, getCollectionForId
@@ -157,6 +158,48 @@ async def getObjectIdByPath(app, obj_id, h5path, refresh=False):
         obj_id = link_json["id"]
     # if we get here, we've traveresed the entire path and found the object
     return obj_id
+
+async def getPathForObjectId(app, parent_id, idpath_map, tgt_id):
+    """ Search the object starting with the given parent_id.
+    idpath should be a dict with at minimum the key: parent_id: <parent_path>.
+    Returns first path that matches the tgt_id or None if not found.
+    """
+    if parent_id not in idpath_map:
+        msg = "Obj {} expected to be found in idpath_map".format(parent_id)
+        log.error(msg)
+        raise HttpProcessingError(code=500, message=msg)
+    
+    parent_path = idpath_map[parent_id]
+    if parent_id == tgt_id:
+        return parent_path
+
+    req = getDataNodeUrl(app, parent_id)
+    req += "/groups/" + parent_id + "/links" 
+        
+    log.debug("getPathForObjectId LINKS: " + req)
+    links_json = await http_get_json(app, req)
+    log.debug("getPathForObjectId got links json from dn for parent_id: {}".format(parent_id)) 
+    links = links_json["links"]
+
+    h5path = None
+    for link in links:
+        if link["class"] != "H5L_TYPE_HARD":
+            continue  # ignore everything except hard links
+        link_id = link["id"]
+        if link_id in idpath_map:
+            continue  # this node has already been visitid
+        title = link["title"]
+        if link_id == tgt_id:
+            # found it!
+            h5path = op.join(parent_path, title)
+            break
+        if getCollectionForId(link_id) != "groups":
+            continue
+        idpath_map[link_id] = op.join(parent_path, title)
+        h5path = await getPathForObjectId(app, link_id, idpath_map, tgt_id) # recursive call
+        if h5path:
+            break
+    return h5path
 
     
 
