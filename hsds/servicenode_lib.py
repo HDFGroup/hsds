@@ -187,7 +187,7 @@ async def getPathForObjectId(app, parent_id, idpath_map, tgt_id):
             continue  # ignore everything except hard links
         link_id = link["id"]
         if link_id in idpath_map:
-            continue  # this node has already been visitid
+            continue  # this node has already been visited
         title = link["title"]
         if link_id == tgt_id:
             # found it!
