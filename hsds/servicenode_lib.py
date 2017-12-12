@@ -159,15 +159,21 @@ async def getObjectIdByPath(app, obj_id, h5path, refresh=False):
     # if we get here, we've traveresed the entire path and found the object
     return obj_id
 
-async def getPathForObjectId(app, parent_id, idpath_map, tgt_id):
+async def getPathForObjectId(app, parent_id, idpath_map, tgt_id=None):
     """ Search the object starting with the given parent_id.
     idpath should be a dict with at minimum the key: parent_id: <parent_path>.
-    Returns first path that matches the tgt_id or None if not found.
+    If tgt_id is not None, returns first path that matches the tgt_id or None if not found.
+    If Tgt_id is no, returns the idpath_map.
     """
+
+    if not parent_id:
+        log.error("No parent_id passed to getPathForObjectId")
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+
     if parent_id not in idpath_map:
         msg = "Obj {} expected to be found in idpath_map".format(parent_id)
         log.error(msg)
-        raise HttpProcessingError(code=500, message=msg)
+        raise HttpProcessingError(code=500, message="Unexpected Error")
     
     parent_path = idpath_map[parent_id]
     if parent_id == tgt_id:
@@ -189,16 +195,17 @@ async def getPathForObjectId(app, parent_id, idpath_map, tgt_id):
         if link_id in idpath_map:
             continue  # this node has already been visited
         title = link["title"]
-        if link_id == tgt_id:
+        if tgt_id is not None and link_id == tgt_id:
             # found it!
             h5path = op.join(parent_path, title)
             break
+        idpath_map[link_id] = op.join(parent_path, title)
         if getCollectionForId(link_id) != "groups":
             continue
-        idpath_map[link_id] = op.join(parent_path, title)
         h5path = await getPathForObjectId(app, link_id, idpath_map, tgt_id) # recursive call
-        if h5path:
+        if tgt_id is not None and h5path:
             break
+    
     return h5path
 
     

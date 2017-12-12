@@ -260,7 +260,7 @@ async def GET_Dataset(request):
         root_id = dset_json["root"]
         alias = []
         idpath_map = {root_id: '/'}
-        h5path = await getPathForObjectId(app, root_id, idpath_map, dset_id)
+        h5path = await getPathForObjectId(app, root_id, idpath_map, tgt_id=dset_id)
         if h5path:
             alias.append(h5path)
         resp_json["alias"] = alias

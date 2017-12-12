@@ -102,7 +102,7 @@ async def GET_Group(request):
             alias.append('/')
         else:
             idpath_map = {root_id: '/'}
-            h5path = await getPathForObjectId(app, root_id, idpath_map, group_id)
+            h5path = await getPathForObjectId(app, root_id, idpath_map, tgt_id=group_id)
             if h5path:
                 alias.append(h5path)
         group_json["alias"] = alias

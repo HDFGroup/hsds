@@ -104,7 +104,7 @@ async def GET_Datatype(request):
         root_id = type_json["root"]
         alias = []
         idpath_map = {root_id: '/'}
-        h5path = await getPathForObjectId(app, root_id, idpath_map, ctype_id)
+        h5path = await getPathForObjectId(app, root_id, idpath_map, tgt_id=ctype_id)
         if h5path:
             alias.append(h5path)
         type_json["alias"] = alias

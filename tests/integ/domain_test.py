@@ -21,6 +21,7 @@ class DomainTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(DomainTest, self).__init__(*args, **kwargs)
         self.base_domain = helper.getTestDomainName(self.__class__.__name__)
+        print("base_domain: {}".format(self.base_domain))
         helper.setupDomain(self.base_domain)
         
         # main
@@ -210,8 +211,7 @@ class DomainTest(unittest.TestCase):
         req = helper.getEndpoint() + '/'
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
-         
-        
+          
 
     def testCreateDomain(self):
         domain = self.base_domain + "/newdomain.h6"
@@ -450,7 +450,7 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("datasets in rspJson")
+        self.assertTrue("datasets" in rspJson)
         datasets = rspJson["datasets"]
         for objid in datasets:
             helper.validateId(objid)
@@ -462,7 +462,7 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("datasets in rspJson")
+        self.assertTrue("datasets" in rspJson)
         batch = rspJson["datasets"]
         self.assertEqual(len(batch), 2)
         helper.validateId(batch[0])
@@ -475,7 +475,7 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("datasets in rspJson")
+        self.assertTrue("datasets" in rspJson)
         batch = rspJson["datasets"]
         self.assertEqual(len(batch), 2)
         helper.validateId(batch[0])
@@ -489,7 +489,7 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("groups in rspJson")
+        self.assertTrue("groups" in rspJson)
         groups = rspJson["groups"]
         self.assertEqual(len(groups), 5)
         # get the first 2 groups
@@ -498,7 +498,7 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("groups in rspJson")
+        self.assertTrue("groups" in rspJson)
         batch = rspJson["groups"]
         self.assertEqual(len(batch), 2)
         helper.validateId(batch[0])
@@ -512,7 +512,7 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("groups in rspJson")
+        self.assertTrue("groups" in rspJson)
         batch = rspJson["groups"]
         self.assertEqual(len(batch), 3)
         for i in range(3):
@@ -525,9 +525,87 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("datatypes in rspJson")
+        self.assertTrue("datatypes" in rspJson)
         datatypes = rspJson["datatypes"]
         self.assertEqual(len(datatypes), 0)  # no datatypes in this domain
+
+    def testNewDomainCollections(self):
+        # verify that newly added groups/datasets show up in the collections 
+        print("testNewDOmainCollections", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+
+        # get root id
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        def make_group(parent_id, name):
+            # create new group  
+            payload = { 'link': { 'id': parent_id, 'name': name } }
+            req = helper.getEndpoint() + "/groups"
+            rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+            self.assertEqual(rsp.status_code, 201) 
+            rspJson = json.loads(rsp.text)
+            new_group_id = rspJson["id"]
+            self.assertTrue(helper.validateId(rspJson["id"]) )
+            return new_group_id
+
+        def make_dset(parent_id, name):
+            type_vstr = {"charSet": "H5T_CSET_ASCII", 
+                "class": "H5T_STRING", 
+                "strPad": "H5T_STR_NULLTERM", 
+                "length": "H5T_VARIABLE" } 
+            payload = {'type': type_vstr, 'shape': 10,
+                'link': {'id': parent_id, 'name': name} }
+            req = helper.getEndpoint() + "/datasets"
+            rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+            self.assertEqual(rsp.status_code, 201)  # create dataset
+            rspJson = json.loads(rsp.text)
+            dset_id = rspJson["id"]
+            self.assertTrue(helper.validateId(dset_id) )
+            return dset_id
+ 
+
+        group_ids = []
+        group_ids.append(make_group(root_uuid, "g1"))
+        group_ids.append(make_group(root_uuid, "g2"))
+        group_ids.append(make_group(root_uuid, "g3"))
+        g3_id = group_ids[2]
+        dset_ids = []
+        dset_ids.append(make_dset(g3_id, "ds1"))
+        dset_ids.append(make_dset(g3_id, "ds2"))
+
+       
+        # get the groups collection
+        req = helper.getEndpoint() + '/groups'
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+    
+        groups = rspJson["groups"]
+        self.assertEqual(len(groups), len(group_ids))
+        for objid in groups:
+            helper.validateId(objid)
+            self.assertTrue(objid in group_ids)
+
+        # get the datasets collection
+        req = helper.getEndpoint() + '/datasets'
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+    
+        datasets = rspJson["datasets"]
+        self.assertEqual(len(datasets), len(dset_ids))
+        for objid in datasets:
+            helper.validateId(objid)
+            self.assertTrue(objid in dset_ids)
+        
+
 
     def testGetDomains(self):
         print("testGetDomains", self.base_domain)

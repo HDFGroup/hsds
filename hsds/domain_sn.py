@@ -22,7 +22,7 @@ from util.s3Util import getS3Keys, isS3Obj, getS3Bytes, getS3ObjStats
 from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
 from util.domainUtil import getParentDomain, getDomainFromRequest, getS3PrefixForDomain, validateDomain, isIPAddress, isValidDomainPath
-from servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath
+from servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath, getPathForObjectId
 import hsds_logger as log
 
 async def get_domain_json(app, domain):
@@ -113,12 +113,55 @@ async def get_collection(app, domain, collection, marker=None, limit=None):
                 break
     return rows
 
+
+async def get_collection_ids(app, domain, collection, marker=None, limit=None):
+    """ Return the object ids for given collection.
+    """    
+  
+    try:
+        domain_json = await getDomainJson(app, domain, reload=True)
+    except HttpProcessingError as hpe:
+        msg = "domain not found"
+        log.warn(msg)
+        raise HttpProcessingError(code=404, message=msg)
+    if "root" not in domain_json:
+        return [] # return empty list for folders
+    root_uuid = domain_json["root"]    
+    idpath_map = {root_uuid: '/'}  
+
+    # populate idpath_map with all ids in this domain
+    await getPathForObjectId(app, root_uuid, idpath_map)
+    objids = []
+    for objid in idpath_map:
+        if objid == root_uuid:
+            continue  # don't include root id
+        if collection is None or getCollectionForId(objid) == collection:
+            objids.append(objid)
+    objids.sort()
+    
+    ret_ids = []
+    for objid in objids:
+        if marker:
+            if marker == objid:
+                # got to the marker, clear it so we will start 
+                # return ids on the next iteration
+                marker = None
+        else:
+            ret_ids.append(objid)
+            if limit is not None and len(ret_ids) == limit:
+                log.info("got to limit, breaking")
+                break
+    return ret_ids
+       
+     
+
 async def getDomainInfo(app, domain):
     """ Get extra information about the given domain """
     # Gather additional info on the domain
     results = {}
     allocated_bytes = 0
     num_chunks = 0
+
     group_collection = await get_collection(app, domain, "groups")
     results["num_groups"] = len(group_collection) 
     for row in group_collection:
@@ -464,7 +507,7 @@ async def PUT_Domain(request):
     try:
         parent_json = await getDomainJson(app, parent_domain, reload=True)
     except HttpProcessingError as hpe:
-        msg = "Parent domain not found"
+        msg = "Parent domain: {} not found".format(parent_domain)
         log.warn(msg)
         raise HttpProcessingError(code=404, message=msg)
 
@@ -869,12 +912,7 @@ async def GET_Datasets(request):
 
 
     # get the dataset collection list
-    datasets = await get_collection(app, domain, "datasets", marker=marker, limit=limit)
-    obj_ids = []
-    for row in datasets:
-        # row consist of objectid, etag, lastmodified, and size
-        # return just the objid
-        obj_ids.append(row[0]) 
+    obj_ids = await get_collection_ids(app, domain, "datasets", marker=marker, limit=limit)
      
     # create hrefs 
     hrefs = []
@@ -944,13 +982,8 @@ async def GET_Groups(request):
     if "Marker" in request.GET:
         marker = request.GET["Marker"]
 
-    # get the dataset collection list
-    groups = await get_collection(app, domain, "groups", marker=marker, limit=limit)
-    obj_ids = []
-    for row in groups:
-        # row consist of objectid, etag, lastmodified, and size
-        # return just the objid
-        obj_ids.append(row[0]) 
+    # get the groups collection list
+    obj_ids = await get_collection_ids(app, domain, "groups", marker=marker, limit=limit)
      
     # create hrefs 
     hrefs = []
@@ -1020,14 +1053,8 @@ async def GET_Datatypes(request):
         marker = request.GET["Marker"]
 
     # get the datatype collection list
-    datatypes = await get_collection(app, domain, "datatypes", marker=marker, limit=limit)
-
-    obj_ids = []
-    for row in datatypes:
-        # row consist of objectid, etag, lastmodified, and size
-        # return just the objid
-        obj_ids.append(row[0]) 
-     
+    obj_ids = await get_collection_ids(app, domain, "datatypes", marker=marker, limit=limit)
+ 
     # create hrefs 
     hrefs = []
     hrefs.append({'rel': 'self', 'href': getHref(request, '/datatypes')})
