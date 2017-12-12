@@ -565,8 +565,21 @@ class DomainTest(unittest.TestCase):
             self.assertEqual(rsp.status_code, 201)  # create dataset
             rspJson = json.loads(rsp.text)
             dset_id = rspJson["id"]
-            self.assertTrue(helper.validateId(dset_id) )
+            self.assertTrue(helper.validateId(dset_id))
             return dset_id
+
+        def make_ctype(parent_id, name):
+            payload = { 
+                'type': 'H5T_IEEE_F64LE', 
+                'link': {'id': parent_id, 'name': name} 
+            }
+            req = helper.getEndpoint() + "/datatypes"
+            rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+            self.assertEqual(rsp.status_code, 201) 
+            rspJson = json.loads(rsp.text)
+            dtype_id = rspJson["id"]
+            self.assertTrue(helper.validateId(dtype_id))
+            return dtype_id
  
 
         group_ids = []
@@ -577,6 +590,8 @@ class DomainTest(unittest.TestCase):
         dset_ids = []
         dset_ids.append(make_dset(g3_id, "ds1"))
         dset_ids.append(make_dset(g3_id, "ds2"))
+        ctype_ids = []
+        ctype_ids.append(make_ctype(g3_id, "ctype1"))
 
        
         # get the groups collection
@@ -604,6 +619,19 @@ class DomainTest(unittest.TestCase):
         for objid in datasets:
             helper.validateId(objid)
             self.assertTrue(objid in dset_ids)
+
+         # get the datatypes collection
+        req = helper.getEndpoint() + '/datatypes'
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+    
+        datatypes = rspJson["datatypes"]
+        self.assertEqual(len(datatypes), len(ctype_ids))
+        for objid in datatypes:
+            helper.validateId(objid)
+            self.assertTrue(objid in ctype_ids)
         
 
 
