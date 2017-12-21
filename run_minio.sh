@@ -40,7 +40,8 @@ BUCKET_NAME="minio.hsdsdev"  # use a diferent bucket name to avoid any confusion
 SERVER_NAME=${SERVER_NAME:='Highly Scalable Data Service (HSDS)'}
 
 # Set ANONYMOUS_TTL to 0 to disable GC, default to 10 minutes
-ANONYMOUS_TTL=${ANONYMOUS_TTL:=600}
+#ANONYMOUS_TTL=${ANONYMOUS_TTL:=600}
+ANONYMOUS_TTL=${ANONYMOUS_TTL:=0}
  
 
 #
