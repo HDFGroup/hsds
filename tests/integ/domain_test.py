@@ -531,7 +531,7 @@ class DomainTest(unittest.TestCase):
 
     def testNewDomainCollections(self):
         # verify that newly added groups/datasets show up in the collections 
-        print("testNewDOmainCollections", self.base_domain)
+        print("testNewDomainCollections", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
         # get root id
