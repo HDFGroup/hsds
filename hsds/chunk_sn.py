@@ -538,7 +538,12 @@ async def PUT_Value(request):
             log.warn(msg)
             raise HttpBadRequest(message=msg)
         arr = np.fromstring(binary_data, dtype=dset_dtype)
-        arr = arr.reshape(np_shape)  # conform to selection shape           
+        try:
+            arr = arr.reshape(np_shape)  # conform to selection shape    
+        except ValueError:
+            msg = "Bad Request: binary input data doesn't match selection" 
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)      
     else:
         #
         # data is json
