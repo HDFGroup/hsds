@@ -558,7 +558,7 @@ async def PUT_Value(request):
             msg = "Bad Request: input data doesn't match selection"
             log.warn(msg)
             raise HttpBadRequest(message=msg)
-        log.debug("got json arr: {}".format(arr))
+        log.debug("got json arr: {}".format(arr.shape))
 
     if points is None:
         # for hyperslab selection, verify the input shape matches the
@@ -961,7 +961,7 @@ async def POST_Value(request):
             log.debug("POST value - request type is json")
 
     if not request.has_body:
-        msg = "PPST Value with no body"
+        msg = "POST Value with no body"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     
@@ -1020,8 +1020,8 @@ async def POST_Value(request):
             log.warn(msg)
             raise HttpBadRequest(message=msg)
         num_points = request.content_length // point_dt.itemsize
+        log.debug("got {} num_points".format(num_points))
         arr_points = np.fromstring(binary_data, dtype=point_dt)
-        log.debug("got arr_points: {}".format(arr_points))
         if rank > 1:
             if num_points % rank != 0:
                 msg = "Number of points is not consistent with dataset rank"
@@ -1030,27 +1030,25 @@ async def POST_Value(request):
             num_points //= rank
             arr_points = arr_points.reshape((num_points, rank))  # conform to point index shape
         points = arr_points.tolist()  # convert to Python list
-    
-    log.debug("num_points: {}".format(num_points))
-    
+
     chunk_dict = {}  # chunk ids to list of points in chunk
 
     for pt_indx in range(num_points):
         point = points[pt_indx]
         if rank == 1:
             if point < 0 or point >= dims[0]:
-                msg = "PUT Value point: {} is not within the bounds of the dataset"
+                msg = "POST Value point: {} is not within the bounds of the dataset"
                 msg = msg.format(point)
                 log.warn(msg)
                 raise HttpBadRequest(message=msg) 
         else:
             if len(point) != rank:
-                msg = "PUT Value point value did not match dataset rank"
+                msg = "POST Value point value did not match dataset rank"
                 log.warn(msg)
                 raise HttpBadRequest(message=msg) 
             for i in range(rank):
                 if point[i] < 0 or point[i] >= dims[i]:
-                    msg = "PUT Value point: {} is not within the bounds of the dataset"
+                    msg = "POST Value point: {} is not within the bounds of the dataset"
                     msg = msg.format(point)
                     log.warn(msg)
                     raise HttpBadRequest(message=msg) 
