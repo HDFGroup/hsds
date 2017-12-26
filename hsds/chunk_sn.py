@@ -1102,7 +1102,7 @@ async def POST_Value(request):
         log.debug("POST Value - returning JSON data")
         rsp_json = {}
         data = arr_rsp.tolist()
-        log.debug("got rsp data: {}".format(data))
+        log.debug("got rsp data {} points".format(len(data)))
         json_data = bytesArrayToList(data)
         rsp_json["value"] = json_data  
         resp = await jsonResponse(request, rsp_json)
