@@ -137,7 +137,8 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr):
                 npoints_read = getNumElements(chunk_arr.shape)
                 npoints_expected = getNumElements(chunk_shape)
                 if npoints_read != npoints_expected:
-                    msg = "Expected {} points, but got: {}".format(npoints_expected, npoints_read)
+                    log.error("Expected {} points, but got: {}".format(npoints_expected, npoints_read))
+                    raise HttpProcessingError(message="Unexpected error", code=500)
                 chunk_arr = chunk_arr.reshape(chunk_shape)
             elif rsp.status == 404:
                 # no data, return zero array
@@ -441,11 +442,11 @@ async def PUT_Value(request):
     item_size = getItemSize(type_json)
     log.debug("item size: {}".format(item_size))
 
-    if item_size == 'H5T_VARIABLE':
-        # keep this check until we have variable length supported
-        msg = "variable length data types not yet supported"
-        log.warn(msg)
-        raise HttpProcessingError(code=501, message="Variable length data not yet supported")
+    #if item_size == 'H5T_VARIABLE':
+    #    # keep this check until we have variable length supported
+    #    msg = "variable length data types not yet supported"
+    #    log.warn(msg)
+    #    raise HttpProcessingError(code=501, message="Variable length data not yet supported")
       
 
     if item_size == 'H5T_VARIABLE' and request_type != "json":
