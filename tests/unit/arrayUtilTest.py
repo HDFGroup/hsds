@@ -16,7 +16,7 @@ import numpy as np
  
 sys.path.append('../../hsds/util')
 sys.path.append('../../hsds')
-from arrayUtil import bytesArrayToList, toTuple, getNumElements, jsonToArray
+from arrayUtil import bytesArrayToList, toTuple, getNumElements, jsonToArray, arrayToBytes, bytesToArray, getByteArraySize
 import hdf5dtype
 from hdf5dtype import special_dtype
 from hdf5dtype import check_dtype
@@ -167,6 +167,108 @@ class ArrayUtilTest(unittest.TestCase):
         e = out[2] 
         self.assertTrue(isinstance(e, tuple))
         self.assertEqual(e, (id0,id1,id2))
+
+    def testToBytes(self):
+        # Simple array
+        dt = np.dtype("<i4")
+        arr = np.asarray((1,2,3,4), dtype=dt)
+        buffer = arrayToBytes(arr)
+        self.assertEqual(buffer, arr.tobytes())
+
+        # convert buffer back to arr
+        arr_copy = bytesToArray(buffer, dt, (4,))
+        #print("arr_copy: {}".format(arr_copy))
+        self.assertTrue(np.array_equal(arr, arr_copy))
+
+        # Compound non-vlen
+        dt = np.dtype([('x', 'f8'), ('y', 'i4')])
+        arr = np.zeros((4,), dtype=dt)
+        arr[0] = (3.12, 42)
+        arr[3] = (1.28, 69)
+        buffer = arrayToBytes(arr)
+        self.assertEqual(buffer, arr.tobytes())
+        
+        # convert back to array
+        arr_copy = bytesToArray(buffer, dt, (4,))
+        #print("arr_copy: {}".format(arr_copy))
+        self.assertTrue(np.array_equal(arr, arr_copy))
+        
+        # VLEN of int32's
+        dt = np.dtype('O', metadata={'vlen': np.dtype('int32')})
+        arr = np.zeros((4,), dtype=dt)
+        arr[0] = np.int32([1,])
+        arr[1] = np.int32([1,2])
+        arr[2] = 0  # test un-intialized value
+        arr[3] = np.int32([1,2,3])
+        buffer = arrayToBytes(arr)
+        self.assertEqual(len(buffer), 40)
+
+        # convert back to array
+        arr_copy = bytesToArray(buffer, dt, (4,))
+        # np.array_equal doesn't work for object arrays
+        self.assertEqual(arr.dtype, arr_copy.dtype)
+        self.assertEqual(arr.shape, arr_copy.shape)
+        for i in range(4):
+            e = arr[i]
+            e_copy = arr_copy[i]
+            self.assertTrue(np.array_equal(e, e_copy))
+           
+        # VLEN of strings
+        dt =  np.dtype('O', metadata={'vlen': str})
+        arr = np.zeros((5,), dtype=dt)
+        arr[0] = "Parting"
+        arr[1] = "is such"
+        arr[2] = "sweet"
+        arr[3] = "sorrow"
+        #arr[4] = 0
+        #print("arr: {}".format(arr))
+        buffer = arrayToBytes(arr)
+        expected = b'\x07\x00\x00\x00Parting\x07\x00\x00\x00is such\x05\x00\x00\x00sweet\x06\x00\x00\x00sorrow\x00\x00\x00\x00'
+        self.assertEqual(buffer, expected)
+
+        # convert back to array
+        arr_copy = bytesToArray(buffer, dt, (5,))
+        #print("arr_copy: {}".format(arr_copy))
+        self.assertTrue(np.array_equal(arr, arr_copy))
+        
+        # VLEN of bytes
+        dt =  np.dtype('O', metadata={'vlen': bytes})
+        arr = np.zeros((5,), dtype=dt)
+        arr[0] = b"Parting"
+        arr[1] = b"is such"
+        arr[2] = b"sweet"
+        arr[3] = b"sorrow"
+        arr[4] = 0
+        
+        buffer = arrayToBytes(arr)
+        self.assertEqual(buffer, expected)  # same serialization as weith str
+
+        # convert back to array
+        arr_copy = bytesToArray(buffer, dt, (5,))
+        #print("arr_copy: {}".format(arr_copy))
+        self.assertTrue(np.array_equal(arr, arr_copy))
+        """
+        # Compound vlen
+        dt_str = np.dtype('O', metadata={'vlen': str})
+        dt = np.dtype([('x', 'i4'), ('tag', dt_str)])
+        arr = np.zeros((4,), dtype=dt)
+        arr[0] = (42, "Hello")
+        arr[3] = (84, "Bye")
+        count = getByteArraySize(arr)
+        print("count: {}".format(count))
+        buffer = arrayToBytes(arr)
+        self.assertEqual(len(buffer), 40)
+        self.assertEqual(buffer.find(b"Hello"), 8)
+        self.assertEqual(buffer.find(b"Bye"), 37)
+        print(buffer)
+
+        # convert back to array
+        arr_copy = bytesToArray(buffer, dt, (4,))
+        print("arr_copy: {}".format(arr_copy))
+        """
+         
+
+
          
 
 if __name__ == '__main__':

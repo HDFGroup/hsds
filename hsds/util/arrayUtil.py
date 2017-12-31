@@ -152,3 +152,202 @@ def jsonToArray(data_shape, data_dtype, data_json):
         arr = arr.reshape(data_shape)  # reshape to match selection
 
     return arr
+
+"""
+Return True if the type contains variable length elements
+"""
+def isVlen(dt):
+    is_vlen = False
+    if len(dt) > 1:
+        names = dt.names
+        for name in names:
+            if isVlen(dt[name]):
+                is_vlen = True
+                break
+    else:
+        if dt.metadata and "vlen" in dt.metadata:
+            is_vlen = True
+    return is_vlen
+
+"""
+Get number of byte needed to given element as a bytestream
+"""
+def getElementSize(e, dt):
+    #print("getElementSize - e: {}  dt: {}".format(e, dt))
+    if len(dt) > 1:
+        count = 0
+        for name in dt.names:
+            field_dt = dt[name]
+            field_val = e[name]
+            count += getElementSize(field_val, field_dt)
+    elif not dt.metadata or "vlen" not in dt.metadata:
+        count = dt.itemsize  # fixed size element
+    else:
+        # variable length element
+        vlen = dt.metadata["vlen"]
+        if isinstance(e, int):
+            if e == 0:
+                count = 4  # non-initialized element
+            else:
+                raise ValueError("Unexpected value: {}".format(e))
+        elif isinstance(e, bytes):
+            count = len(e) + 4
+        elif isinstance(e, str):
+            count = len(e.encode('utf-8')) + 4
+        elif isinstance(e, np.ndarray):
+            count = len(e) * vlen.itemsize + 4  # +4 for byte count
+        else:
+            raise TypeError("unexpected type: {}".format(type(vlen)))
+    #print("size for {}: {}".format(e, count))
+    return count
+
+
+"""
+Get number of bytes needed to store given numpy array as a bytestream
+"""
+def getByteArraySize(arr):
+    if not isVlen(arr.dtype):
+        return arr.itemsize * np.prod(arr.shape)
+    nElements = np.prod(arr.shape)
+    # reshape to 1d for easier iteration
+    arr1d = arr.reshape((nElements,))
+    dt = arr1d.dtype
+    count = 0
+    for e in arr1d:
+        count += getElementSize(e, dt)
+    return count
+
+"""
+Copy to buffer at given offset
+"""
+def copyBuffer(src, des, offset):
+    for i in range(len(src)):
+        des[i+offset] = src[i]
+         
+    return offset + len(src)
+
+"""
+Copy element to bytearray
+"""
+def copyElement(e, dt, buffer, offset):
+    #print("copyElement: {} offset: {}".format(e, offset))
+    
+    if len(dt) > 1:
+        for name in dt.names:
+            field_dt = dt[name]
+            field_val = e[name]
+            offset = copyElement(field_val, field_dt, buffer, offset) 
+    elif not dt.metadata or "vlen" not in dt.metadata:
+        #print("e novlen: {} type: {}".format(e, type(e)))
+        e_buf = e.tobytes()
+        offset = copyBuffer(e_buf, buffer, offset)
+    else:
+        # variable length element
+        vlen = dt.metadata["vlen"]
+        if isinstance(e, int):
+            if e == 0:
+                # write 4-byte integer 0 to buffer
+                offset = copyBuffer(b'\x00\x00\x00\x00', buffer, offset)  
+            else:
+                raise ValueError("Unexpected value: {}".format(e))
+        elif isinstance(e, bytes):
+            count = np.int32(len(e))
+            offset = copyBuffer(count.tobytes(), buffer, offset)
+            offset = copyBuffer(e, buffer, offset)
+        elif isinstance(e, str):
+            count = np.int32(len(e))
+            offset = copyBuffer(count.tobytes(), buffer, offset)
+            text = e.encode('utf-8')
+            count = len(text)
+            offset = copyBuffer(text, buffer, offset)
+        elif isinstance(e, np.ndarray):
+            count = np.int32(len(e) * vlen.itemsize)
+            offset = copyBuffer(count.tobytes(), buffer, offset)
+            offset = copyBuffer(e.tobytes(), buffer, offset)
+        else:
+            raise TypeError("unexpected type: {}".format(type(e)))
+        #print("buffer: {}".format(buffer))
+    return offset
+
+"""
+Read element from bytearrray 
+"""
+def readElement(buffer, offset, dt):
+    #print("readElement, offset: {}".format(offset))
+    
+    if len(dt) > 1:
+        retval = np.zeros((), dtype=dt)
+        for name in dt.names:
+            field_dt = dt[name]
+            retval[name], offset = readElement(buffer, offset, field_dt)
+    elif not dt.metadata or "vlen" not in dt.metadata:
+        count = dt.itemsize
+        e_buffer = buffer[offset:(offset+count)]
+        offset += count
+        retval = np.fromstring(bytes(e_buffer), dtype=dt)  
+    else:
+        # variable length element
+        vlen = dt.metadata["vlen"]
+        count_bytes = bytes(buffer[offset:(offset+4)])
+        count = int(np.fromstring(count_bytes, dtype="<i4"))
+        offset += 4
+        if count == 0:
+            retval = 0  # null element
+        else:
+            e_buffer = buffer[offset:(offset+count)]
+            offset += count
+            if vlen is bytes:
+                retval = e_buffer
+            elif vlen is str:
+                retval = e_buffer.decode('utf-8')
+            else:
+                # assume numpy array   
+                retval = np.fromstring(bytes(e_buffer), dtype=vlen)
+             
+        #print("retval: {}".format(retval))
+    return retval, offset
+
+             
+""" 
+Return byte representation of numpy array
+"""
+def arrayToBytes(arr):
+    if not isVlen(arr.dtype):
+        # can just return normal numpy bytestream
+        return arr.tobytes()  
+    
+    nSize = getByteArraySize(arr)
+    #print("nsize:", nSize)
+    buffer = bytearray(nSize)
+    offset = 0
+    nElements = np.prod(arr.shape)
+    arr1d = arr.reshape((nElements,))
+    for e in arr1d:
+        offset = copyElement(e, arr1d.dtype, buffer, offset)
+        #print("offset: {}".format(offset))
+    return buffer
+
+"""
+Create numpy array based on byte representation
+"""
+def bytesToArray(data, dt, shape):
+    nelements = getNumElements(shape)
+    if not isVlen(dt):
+        # regular numpy from string
+        arr = np.fromstring(data, dtype=dt)  
+    else:
+        arr = np.zeros((nelements,), dtype=dt)
+        offset = 0
+        for index in range(nelements):
+            e, offset = readElement(data, offset, dt)
+            #print("e: {} type: {}".format(e, type(e)))
+            arr[index] = e
+    arr = arr.reshape(shape)
+    return arr
+
+
+        
+
+
+    
+
