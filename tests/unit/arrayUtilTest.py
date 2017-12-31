@@ -170,6 +170,7 @@ class ArrayUtilTest(unittest.TestCase):
 
     def testToBytes(self):
         # Simple array
+        
         dt = np.dtype("<i4")
         arr = np.asarray((1,2,3,4), dtype=dt)
         buffer = arrayToBytes(arr)
@@ -247,7 +248,7 @@ class ArrayUtilTest(unittest.TestCase):
         arr_copy = bytesToArray(buffer, dt, (5,))
         #print("arr_copy: {}".format(arr_copy))
         self.assertTrue(np.array_equal(arr, arr_copy))
-        """
+        
         # Compound vlen
         dt_str = np.dtype('O', metadata={'vlen': str})
         dt = np.dtype([('x', 'i4'), ('tag', dt_str)])
@@ -255,17 +256,20 @@ class ArrayUtilTest(unittest.TestCase):
         arr[0] = (42, "Hello")
         arr[3] = (84, "Bye")
         count = getByteArraySize(arr)
-        print("count: {}".format(count))
         buffer = arrayToBytes(arr)
         self.assertEqual(len(buffer), 40)
         self.assertEqual(buffer.find(b"Hello"), 8)
         self.assertEqual(buffer.find(b"Bye"), 37)
-        print(buffer)
-
+       
         # convert back to array
         arr_copy = bytesToArray(buffer, dt, (4,))
-        print("arr_copy: {}".format(arr_copy))
-        """
+        self.assertEqual(arr.dtype, arr_copy.dtype)
+        self.assertEqual(arr.shape, arr_copy.shape)
+        for i in range(4):
+            e = arr[i]
+            e_copy = arr_copy[i]
+            self.assertTrue(np.array_equal(e, e_copy))
+        
          
 
 

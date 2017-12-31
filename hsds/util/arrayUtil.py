@@ -276,10 +276,7 @@ def readElement(buffer, offset, dt):
     #print("readElement, offset: {}".format(offset))
     
     if len(dt) > 1:
-        retval = np.zeros((), dtype=dt)
-        for name in dt.names:
-            field_dt = dt[name]
-            retval[name], offset = readElement(buffer, offset, field_dt)
+        raise TypeError("Compound type not valid with readElement")
     elif not dt.metadata or "vlen" not in dt.metadata:
         count = dt.itemsize
         e_buffer = buffer[offset:(offset+count)]
@@ -307,6 +304,22 @@ def readElement(buffer, offset, dt):
         #print("retval: {}".format(retval))
     return retval, offset
 
+
+"""
+Read compound element from bytearrray 
+"""
+def readCompound(buffer, offset, e, dt):
+    #print("readElement, offset: {}".format(offset))
+    
+    for name in dt.names:
+        field_dt = dt[name]
+        if len(field_dt) > 1:
+            offset = readCompound(buffer, offset, e[name], dt_field)
+        else:
+            field_val, offset = readElement(buffer, offset, field_dt)
+            e[name] = field_val
+    return offset
+    
              
 """ 
 Return byte representation of numpy array
@@ -339,9 +352,13 @@ def bytesToArray(data, dt, shape):
         arr = np.zeros((nelements,), dtype=dt)
         offset = 0
         for index in range(nelements):
-            e, offset = readElement(data, offset, dt)
-            #print("e: {} type: {}".format(e, type(e)))
-            arr[index] = e
+            if len(dt) > 1:
+                e = arr[index]
+                offset = readCompound(data, offset, e, dt)
+            else:
+                e, offset = readElement(data, offset, dt)
+                #print("e: {} type: {}".format(e, type(e)))
+                arr[index] = e
     arr = arr.reshape(shape)
     return arr
 
