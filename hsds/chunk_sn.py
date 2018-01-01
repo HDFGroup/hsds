@@ -28,7 +28,7 @@ from util.dsetUtil import getSliceQueryParam, setSliceQueryParam, getFillValue, 
 from util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout, getDeflateLevel
 from util.chunkUtil import getNumChunks, getChunkIds, getChunkId
 from util.chunkUtil import getChunkCoverage, getDataCoverage
-from util.arrayUtil import bytesArrayToList, jsonToArray, getShapeDims, getNumElements
+from util.arrayUtil import bytesArrayToList, jsonToArray, getShapeDims, getNumElements, arrayToBytes, bytesToArray
 from util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from servicenode_lib import getObjectJson, validateAction
 import config
@@ -68,7 +68,7 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level,
 
     log.debug("PUT chunk req: " + req)
     client = get_http_client(app)
-    data = arr_chunk.tobytes()  # TBD - this makes a copy, use np_arr.data to get memoryview and avoid copy
+    data = arrayToBytes(arr_chunk)  
     # pass itemsize, type, dimensions, and selection as query params
     params = {}
     params["dset"] = json.dumps(dset_json)
@@ -133,7 +133,7 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr):
             log.debug("http_get {} status: <{}>".format(req, rsp.status))
             if rsp.status == 200:
                 data = await rsp.read()  # read response as bytes
-                chunk_arr = np.fromstring(data, dtype=dt) 
+                chunk_arr = bytesToArray(data, dt, chunk_shape)  
                 npoints_read = getNumElements(chunk_arr.shape)
                 npoints_expected = getNumElements(chunk_shape)
                 if npoints_read != npoints_expected:
@@ -208,7 +208,8 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_a
         async with client.post(req, params=params, data=post_data) as rsp:
             log.debug("http_post {} status: <{}>".format(req, rsp.status))
             if rsp.status == 200:
-                rsp_data = await rsp.read()  # read response as bytes         
+                rsp_data = await rsp.read()  # read response as bytes  
+                # TBD - Does not support VLEN response data       
                 np_arr_rsp = np.fromstring(rsp_data, dtype=dt) 
                 npoints_read = len(np_arr_rsp)
                 if npoints_read != num_points:
@@ -292,6 +293,7 @@ async def write_point_sel(app, chunk_id, dset_json, point_list, point_data):
             elem = (tuple(point_list[i]), data_arr[i])
         np_arr[i] = elem
 
+    # TBD - support VLEN data
     post_data = np_arr.tobytes()
     
     # pass dset_json as query params

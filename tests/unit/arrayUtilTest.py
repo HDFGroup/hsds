@@ -269,6 +269,30 @@ class ArrayUtilTest(unittest.TestCase):
             e = arr[i]
             e_copy = arr_copy[i]
             self.assertTrue(np.array_equal(e, e_copy))
+
+    def testJsonToBytes(self):
+        dt = special_dtype(vlen=np.dtype('int32'))
+        shape = [4,]
+        data = [[1,], [1,2], [1,2,3], [1,2,3,4]]
+        arr = jsonToArray(shape, dt, data)
+        self.assertTrue(isinstance(arr, np.ndarray))
+        self.assertEqual(check_dtype(vlen=arr.dtype), np.dtype('int32'))
+        print(arr)
+        print(type(arr[0]))
+        buffer = arrayToBytes(arr)
+        self.assertEqual(len(buffer), 56)
+        expected = b'\x04\x00\x00\x00\x01\x00\x00\x00\x08\x00\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00\x0c\x00\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00\x10\x00\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00\x04\x00\x00\x00'
+        self.assertEqual(buffer, expected)
+
+        # convert back to array
+        arr_copy = bytesToArray(buffer, dt, (4,))
+        # np.array_equal doesn't work for object arrays
+        self.assertEqual(arr.dtype, arr_copy.dtype)
+        self.assertEqual(arr.shape, arr_copy.shape)
+        for i in range(4):
+            e = arr[i]
+            e_copy = arr_copy[i]
+            self.assertTrue(np.array_equal(e, e_copy))
         
          
 

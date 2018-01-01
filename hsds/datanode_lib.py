@@ -21,6 +21,7 @@ from util.domainUtil import isValidDomain
 from util.attrUtil import getRequestCollectionName
 from util.httpUtil import http_put, http_delete
 from util.chunkUtil import getDatasetId
+from util.arrayUtil import arrayToBytes
 import config
 import hsds_logger as log
 
@@ -284,7 +285,8 @@ async def s3sync(app):
                         continue
                     chunk_arr = chunk_cache[obj_id]
                     chunk_cache.clearDirty(obj_id)  # chunk may get evicted from cache now
-                    chunk_bytes = chunk_arr.tobytes()
+                    #chunk_bytes = chunk_arr.tobytes()
+                    chunk_bytes = arrayToBytes(chunk_arr)
                     dset_id = getDatasetId(obj_id)
                     deflate_level = None
                     if dset_id in deflate_map:

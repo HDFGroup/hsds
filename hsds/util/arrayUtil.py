@@ -194,10 +194,10 @@ def getElementSize(e, dt):
             count = len(e) + 4
         elif isinstance(e, str):
             count = len(e.encode('utf-8')) + 4
-        elif isinstance(e, np.ndarray):
+        elif isinstance(e, np.ndarray) or isinstance(e, list) or isinstance(e, tuple):
             count = len(e) * vlen.itemsize + 4  # +4 for byte count
         else:
-            raise TypeError("unexpected type: {}".format(type(vlen)))
+            raise TypeError("unexpected type: {}".format(type(e)))
     #print("size for {}: {}".format(e, count))
     return count
 
@@ -260,10 +260,15 @@ def copyElement(e, dt, buffer, offset):
             text = e.encode('utf-8')
             count = len(text)
             offset = copyBuffer(text, buffer, offset)
-        elif isinstance(e, np.ndarray):
+        elif isinstance(e, np.ndarray) or isinstance(e, list) or isinstance(e, tuple):
             count = np.int32(len(e) * vlen.itemsize)
             offset = copyBuffer(count.tobytes(), buffer, offset)
-            offset = copyBuffer(e.tobytes(), buffer, offset)
+            if isinstance(e, np.ndarray):
+                arr = e
+            else:
+                arr = np.asarray(e, dtype=vlen)
+            offset = copyBuffer(arr.tobytes(), buffer, offset)
+       
         else:
             raise TypeError("unexpected type: {}".format(type(e)))
         #print("buffer: {}".format(buffer))
@@ -314,7 +319,7 @@ def readCompound(buffer, offset, e, dt):
     for name in dt.names:
         field_dt = dt[name]
         if len(field_dt) > 1:
-            offset = readCompound(buffer, offset, e[name], dt_field)
+            offset = readCompound(buffer, offset, e[name], field_dt)
         else:
             field_val, offset = readElement(buffer, offset, field_dt)
             e[name] = field_val

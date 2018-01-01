@@ -392,10 +392,11 @@ class Hdf5dtypeTest(unittest.TestCase):
     def testCreateVLenDataType(self):
         typeItem = {'class': 'H5T_VLEN', 'base': 'H5T_STD_I32BE'}
         typeSize = hdf5dtype.getItemSize(typeItem)
+        self.assertEqual(typeSize, 'H5T_VARIABLE')
         dt = hdf5dtype.createDataType(typeItem)
         self.assertEqual(dt.name, 'object')
         self.assertEqual(dt.kind, 'O')
-        self.assertEqual(typeSize, 'H5T_VARIABLE')
+        
 
     def testCreateOpaqueType(self):
         typeItem = {'class': 'H5T_OPAQUE', 'size': 200}

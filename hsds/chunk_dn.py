@@ -19,7 +19,7 @@ import time
 import numpy as np
 from aiohttp.errors import HttpBadRequest, HttpProcessingError 
 from aiohttp.web import StreamResponse
-from util.arrayUtil import bytesArrayToList
+from util.arrayUtil import bytesArrayToList, bytesToArray
 from util.httpUtil import  jsonResponse
 from util.idUtil import getS3Key, validateInPartition, isValidUuid
 from util.s3Util import  isS3Obj, getS3Bytes, deleteS3Obj   
@@ -88,10 +88,12 @@ async def PUT_Chunk(request):
     log.debug("got selection: {}".format(selection))
 
     type_json = dset_json["type"]
+    itemsize = 'H5T_VARIABLE'  
+    if "size" in type_json:
+        itemsize = type_json["size"]
     dt = createDataType(type_json)
     log.debug("dtype: {}".format(dt))
-    itemsize = dt.itemsize
-
+    
     if rank == 0:
         msg = "No dimension passed to PUT chunk request"
         log.error(msg)
@@ -114,7 +116,7 @@ async def PUT_Chunk(request):
     log.debug("expect content_length: {}".format(num_elements*itemsize))
     log.debug("actual content_length: {}".format(request.content_length))
 
-    if (num_elements * itemsize) != request.content_length:
+    if itemsize != 'H5T_VARIABLE' and (num_elements * itemsize) != request.content_length:
         msg = "Excpected content_length of: {}, but got: {}".format(num_elements*itemsize, request.content_length)
         log.error(msg)
         raise HttpBadRequest(message=msg)
@@ -126,9 +128,10 @@ async def PUT_Chunk(request):
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
         
-    input_arr = np.fromstring(input_bytes, dtype=dt)
+    #input_arr = np.fromstring(input_bytes, dtype=dt)
+    input_arr = bytesToArray(input_bytes, dt, input_shape)
     #log.info("input arr: {}".format(input_arr))
-    input_arr = input_arr.reshape(input_shape)
+    #input_arr = input_arr.reshape(input_shape)
 
     chunk_arr = None 
     chunk_cache = app['chunk_cache']
@@ -269,9 +272,10 @@ async def GET_Chunk(request):
             raise HttpProcessingError(code=404, message="Not found")
         log.debug("Reading chunk {} from S3".format(s3_key))
         chunk_bytes = await getS3Bytes(app, s3_key, deflate_level=deflate_level)
-        chunk_arr = np.fromstring(chunk_bytes, dtype=dt)
+        #chunk_arr = np.fromstring(chunk_bytes, dtype=dt)
+        chunk_arr = bytesToArray(chunk_bytes, dt, dims)
         log.debug("chunk size: {}".format(chunk_arr.size))
-        chunk_arr = chunk_arr.reshape(dims)
+        #chunk_arr = chunk_arr.reshape(dims)
         chunk_cache[chunk_id] = chunk_arr  # store in cache
      
     resp = None
