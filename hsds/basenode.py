@@ -158,7 +158,8 @@ async def healthCheck(app):
             except HttpProcessingError as he:
                 log.warn("HttpProcessingError <{}> for health check".format(he.code))
 
-        log.debug("health check sleep: {}".format(sleep_secs))
+        svmem = psutil.virtual_memory()
+        log.debug("health check sleep: {}, vm: {}".format(sleep_secs, svmem.percent))
         await asyncio.sleep(sleep_secs)
 
 async def about(request):

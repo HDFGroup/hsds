@@ -39,10 +39,10 @@ cfg = {
     'async_sleep_time': 10,
     's3_sync_interval': 10,  # time to wait to write object data to S3 (in sec)     
     'max_chunks_per_request': 1000,  # maximum number of chunks to be serviced by one request
-    'min_chunk_size': 1024*1024,  # 1 MB
-    'max_chunk_size': 4*1024*1024,  # 4 MB
-    'metadata_mem_cache_size': 128*1024*1024,  # 128 MB
-    'chunk_mem_cache_size': 128*1024*1024,  # 128 MB
+    'min_chunk_size': '1m',  # 1 MB
+    'max_chunk_size': '4m',  # 4 MB
+    'metadata_mem_cache_size': '128m',
+    'chunk_mem_cache_size': '128m',  # 128 MB
     'timeout': 30,  # http timeout - 30 sec
     'anonymous_ttl': 10*60,  # time after which anonymous objects will be deleted - 10 m, 0 for infinite
     'gc_freq': 20*60,  # time between gc runs
@@ -55,18 +55,30 @@ def get(x):
     # see if there is a command-line override
     #print("config get:", x)
     option = '--'+x+'='
+    retval = None
     for i in range(1, len(sys.argv)):
         #print(i, sys.argv[i])
         if sys.argv[i].startswith(option):
-            # found an override
-            
+            # found an override     
             arg = sys.argv[i]
-            return arg[len(option):]  # return text after option string    
+            retval = arg[len(option):]  # return text after option string    
     # see if there are an environment variable override
-    if x.upper() in os.environ:
-        return os.environ[x.upper()]
-    # no command line override, just return the cfg value        
-    return cfg[x]
+    if not retval and  x.upper() in os.environ:
+        retval = os.environ[x.upper()]
+    # no command line override, just return the cfg value  
+    if not retval:    
+        retval = cfg[x]
+    if isinstance(retval, str) and len(retval) > 1 and retval[-1] in ('g', 'm', 'k') and retval[:-1].isdigit():
+        # convert values like 512m to corresponding integer
+        u = retval[-1]
+        n = int(retval[:-1])
+        if u == 'k':
+            retval =  n * 1024
+        elif u == 'm':
+            retval = n * 1024*1024
+        else: # u == 'g'
+            retval = n * 1024*1024*1024
+    return retval
 
   
   

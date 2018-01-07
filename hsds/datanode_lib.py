@@ -250,7 +250,7 @@ async def s3sync(app):
 
         if len(keys_to_update) == 0:
             log.info("s3sync task - nothing to update, sleeping")
-            await asyncio.sleep(sleep_secs)
+            await asyncio.sleep(1)  # was sleep_secs
         else:
             # some objects need to be flushed to S3
             log.info("{} objects to be synced to S3".format(len(keys_to_update)))
@@ -293,6 +293,7 @@ async def s3sync(app):
                         deflate_level = deflate_map[dset_id]
                         log.info("got deflate_level: {} for dset: {}".format(deflate_level, dset_id))
 
+                    log.info("writing S3 object: {}, num_bytes: {}".format(s3_key, len(chunk_bytes)))
                     try:
                         await putS3Bytes(app, s3_key, chunk_bytes, deflate_level=deflate_level)
                         success_keys.append(obj_id)

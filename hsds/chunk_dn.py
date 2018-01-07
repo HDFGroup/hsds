@@ -14,6 +14,7 @@
 # handles regauests to read/write chunk data
 # 
 #
+import asyncio
 import json
 import time
 import numpy as np
@@ -39,6 +40,9 @@ async def PUT_Chunk(request):
     app = request.app 
     #loop = app["loop"]
 
+    task_count = len(asyncio.Task.all_tasks())
+    log.debug("Task count: {}".format(task_count))
+     
     chunk_id = request.match_info.get('id')
     if not chunk_id:
         msg = "Missing chunk id"
@@ -113,13 +117,21 @@ async def PUT_Chunk(request):
         num_elements *= extent
         
     # check that the content_length is what we expect
-    log.debug("expect content_length: {}".format(num_elements*itemsize))
+    if itemsize != 'H5T_VARIABLE':
+        log.debug("expect content_length: {}".format(num_elements*itemsize))
     log.debug("actual content_length: {}".format(request.content_length))
 
     if itemsize != 'H5T_VARIABLE' and (num_elements * itemsize) != request.content_length:
         msg = "Excpected content_length of: {}, but got: {}".format(num_elements*itemsize, request.content_length)
         log.error(msg)
         raise HttpBadRequest(message=msg)
+
+    # if the chunk cache has too many dirty items, wait till items get flushed to S3
+    chunk_cache = app['chunk_cache']
+    log.debug("PUT_Chunk cache utilization: {} dirty_count: {}".format(chunk_cache.cacheUtilizationPercent, chunk_cache.dirtyCount))
+    while chunk_cache.cacheUtilizationPercent > 100 and chunk_cache.dirtyCount > 0:
+        log.info("PUT_Chunk, cache utilization: {}, sleeping till items are flushed".format(chunk_cache.cacheUtilizationPercent))
+        await asyncio.sleep(0)
 
     # create a numpy array for incoming data
     input_bytes = await request.read()  # TBD - will it cause problems when failures are raised before reading data?
@@ -134,7 +146,6 @@ async def PUT_Chunk(request):
     #input_arr = input_arr.reshape(input_shape)
 
     chunk_arr = None 
-    chunk_cache = app['chunk_cache']
     if deflate_level is not None:
         deflate_map = app['deflate_map']
         dset_id = getDatasetId(chunk_id)
@@ -168,6 +179,7 @@ async def PUT_Chunk(request):
         chunk_cache[chunk_id] = chunk_arr
         
 
+    log.info("PUT_Chunk dirty cache count: {}".format(chunk_cache.dirtyCount))
     # update chunk array
     chunk_arr[selection] = input_arr
     chunk_cache.setDirty(chunk_id)

@@ -600,10 +600,15 @@ async def PUT_Value(request):
         log.debug("chunk_ids: {}".format(chunk_ids))
 
         tasks = []
+        task_batch_size = len(app["dn_urls"]) * 10
         for chunk_id in chunk_ids:
             task = asyncio.ensure_future(write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level, arr))
             tasks.append(task)
-        await asyncio.gather(*tasks, loop=loop)
+            if len(tasks) == task_batch_size:
+                await asyncio.gather(*tasks, loop=loop)
+                tasks = []
+        if tasks:
+            await asyncio.gather(*tasks, loop=loop)
     else:
         #
         # Do point PUT

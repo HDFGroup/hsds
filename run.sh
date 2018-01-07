@@ -20,16 +20,16 @@ HEAD_PORT=5100
 AN_PORT=6100
 SN_PORT=5101
 DN_PORT=6101
-AN_RAM=4g  # AN needs to store the entire object dictionary in memory
+AN_RAM=1g  # AN needs to store the entire object dictionary in memory
 SN_RAM=1g
 DN_RAM=3g  # should be comfortably larger than CHUNK CACHE
 HEAD_RAM=512m
 # set chunk cache size to 2GB
-CHUNK_MEM_CACHE_SIZE=2147483648
+CHUNK_MEM_CACHE_SIZE=2g
 # set max chunk size to 8MB
-MAX_CHUNK_SIZE=20971520
+MAX_CHUNK_SIZE=8m
 # set the log level  
-LOG_LEVEL=DEBUG
+LOG_LEVEL=INFO
 # Restart policy: no, on-failure, always, unless-stopped (see docker run reference)
 RESTART_POLICY=no
 
