@@ -291,7 +291,20 @@ def readElement(buffer, offset, dt):
         # variable length element
         vlen = dt.metadata["vlen"]
         count_bytes = bytes(buffer[offset:(offset+4)])
-        count = int(np.fromstring(count_bytes, dtype="<i4"))
+        print("count_bytes:", count_bytes, "type:", type(count_bytes))
+        try:
+            count = int(np.fromstring(count_bytes, dtype="<i4"))
+        except TypeError as e:
+            msg = "Unexpected error reading count value for variable length elemennt: {}".format(e)
+            log.error(msg)
+            raise TypeError(msg)
+        print("count:", count)
+        if count < 0:
+            # shouldn't be negative
+            raise ValueError("Unexpected count value for variable length element")
+        if count > 1024*1024*1024:
+            # expect variable length element to be between 0 and 1mb
+            raise ValueError("Variable length element size expected to be less than 1MB")
         offset += 4
         if count == 0:
             retval = 0  # null element

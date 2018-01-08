@@ -722,15 +722,6 @@ async def GET_Value(request):
     # get state for dataset from DN.
     dset_json = await getObjectJson(app, dset_id)  
     log.debug("got dset_json: {}".format(dset_json))
-
-    type_json = dset_json["type"]
-    item_size = getItemSize(type_json)
-
-    if item_size == 'H5T_VARIABLE':
-        # keep this check until we have variable length supported
-        msg = "variable length data types not yet supported"
-        log.warn(msg)
-        raise HttpProcessingError(code=501, message="Variable length data not yet supported")
     
     datashape = dset_json["shape"]
     if datashape["class"] == 'H5S_NULL':

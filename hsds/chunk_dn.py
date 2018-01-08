@@ -20,7 +20,7 @@ import time
 import numpy as np
 from aiohttp.errors import HttpBadRequest, HttpProcessingError 
 from aiohttp.web import StreamResponse
-from util.arrayUtil import bytesArrayToList, bytesToArray
+from util.arrayUtil import bytesArrayToList, bytesToArray, arrayToBytes
 from util.httpUtil import  jsonResponse
 from util.idUtil import getS3Key, validateInPartition, isValidUuid
 from util.s3Util import  isS3Obj, getS3Bytes, deleteS3Obj   
@@ -346,7 +346,7 @@ async def GET_Chunk(request):
         resp = StreamResponse(status=200)
         resp.headers['Content-Type'] = "application/octet-stream" #binary response
         output_arr = chunk_arr[selection]
-        output_data = output_arr.tobytes()
+        output_data = arrayToBytes(output_arr)
         resp = StreamResponse(status=200)
      
         # write response    

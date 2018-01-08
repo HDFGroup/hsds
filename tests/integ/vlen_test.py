@@ -62,6 +62,10 @@ class VlenTest(unittest.TestCase):
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
+        # read values from dataset
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
          
  
              
