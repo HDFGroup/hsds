@@ -61,6 +61,7 @@ if [ $1 == "head" ]; then
   --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
   --env AWS_S3_GATEWAY=${MINIO_BASE} \
   --env BUCKET_NAME=${BUCKET_NAME} \
+  --env SYS_BUCKET_NAME=${SYS_BUCKET_NAME} \
   --env LOG_LEVEL=${LOG_LEVEL} \
   --link minio:minio \
   hdfgroup/hsds  

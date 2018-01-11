@@ -22,6 +22,7 @@ cfg = {
     'head_endpoint': '', # optionally used for nodes to register
     'aws_s3_gateway': 'https://s3.amazonaws.com',  
     'bucket_name': 'hdfgroup_hsdsdev',
+    'sys_bucket_name': '',
     'head_host': 'localhost',
     'head_port': 5100,
     'an_port': 6100,

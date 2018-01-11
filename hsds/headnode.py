@@ -384,7 +384,10 @@ async def init(loop):
     app["start_time"] = int(time.time())  # seconds after epoch 
     app["target_sn_count"] = int(config.get("target_sn_count"))
     app["target_dn_count"] = int(config.get("target_dn_count"))
-    bucket_name = config.get("bucket_name")
+    bucket_name = config.get("sys_bucket_name")
+    if not bucket_name:
+        # use a combine data/sys bucket
+        bucket_name = config.get("bucket_name")
     if not bucket_name:
         log.error("BUCKET_NAME environment variable not set")
         sys.exit()

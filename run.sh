@@ -58,6 +58,7 @@ if [ $1 == "head" ]; then
   --env AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
   --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
   --env BUCKET_NAME=${BUCKET_NAME} \
+  --env SYS_BUCKET_NAME=${SYS_BUCKET_NAME} \
   --env LOG_LEVEL=${LOG_LEVEL} \
   hdfgroup/hsds  
 elif [ $1 == "an" ]; then
