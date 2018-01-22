@@ -350,6 +350,22 @@ class PointSelTest(unittest.TestCase):
             else:
                 self.assertEqual(value[i], 0)
 
+        # read back data as one big hyperslab selection
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200) 
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        ret_values = rspJson["value"]
+        self.assertEqual(len(ret_values), 100)
+        for i in range(100):
+            if i in primes:
+                self.assertEqual(ret_values[i], 1)
+            else:
+                self.assertEqual(ret_values[i], 0)
+
+        
+
     def testPut2DDataset(self):
         # Test writing with point selection for 2d dataset
         print("testPut2DDataset", self.base_domain)
