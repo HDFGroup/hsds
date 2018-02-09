@@ -42,6 +42,7 @@ cfg = {
     'max_chunks_per_request': 1000,  # maximum number of chunks to be serviced by one request
     'min_chunk_size': '1m',  # 1 MB
     'max_chunk_size': '4m',  # 4 MB
+    'max_request_size': '100m',  # 100 MB
     'metadata_mem_cache_size': '128m',
     'chunk_mem_cache_size': '128m',  # 128 MB
     'timeout': 30,  # http timeout - 30 sec

@@ -870,6 +870,19 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices):
     # create array to hold response data
     np_shape = getSelectionShape(slices)   
     log.debug("selection shape: {}".format(np_shape))
+
+    # check that the array size is reasonable
+    request_size = np.prod(np_shape)
+    if item_size == 'H5T_VARIABLE':
+        request_size *= 512  # random guess of avg item_size
+    else:
+        request_size *= item_size
+    log.debug("request_size: {}".format(request_size))
+    if request_size > int(config.get("max_request_size")):
+        msg = "GET value request too large"
+        log.warn(msg)
+        raise HttpProcessingError(code=413, message=msg)
+
     arr = np.zeros(np_shape, dtype=dset_dtype, order='C')
     tasks = []
     for chunk_id in chunk_ids:
