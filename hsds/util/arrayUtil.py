@@ -255,10 +255,9 @@ def copyElement(e, dt, buffer, offset):
             offset = copyBuffer(count.tobytes(), buffer, offset)
             offset = copyBuffer(e, buffer, offset)
         elif isinstance(e, str):
-            count = np.int32(len(e))
-            offset = copyBuffer(count.tobytes(), buffer, offset)
             text = e.encode('utf-8')
-            count = len(text)
+            count = np.int32(len(text))
+            offset = copyBuffer(count.tobytes(), buffer, offset)
             offset = copyBuffer(text, buffer, offset)
         elif isinstance(e, np.ndarray) or isinstance(e, list) or isinstance(e, tuple):
             count = np.int32(len(e) * vlen.itemsize)
@@ -291,14 +290,12 @@ def readElement(buffer, offset, dt):
         # variable length element
         vlen = dt.metadata["vlen"]
         count_bytes = bytes(buffer[offset:(offset+4)])
-        print("count_bytes:", count_bytes, "type:", type(count_bytes))
         try:
             count = int(np.fromstring(count_bytes, dtype="<i4"))
         except TypeError as e:
             msg = "Unexpected error reading count value for variable length elemennt: {}".format(e)
             log.error(msg)
             raise TypeError(msg)
-        print("count:", count)
         if count < 0:
             # shouldn't be negative
             raise ValueError("Unexpected count value for variable length element")

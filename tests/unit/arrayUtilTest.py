@@ -217,14 +217,13 @@ class ArrayUtilTest(unittest.TestCase):
         # VLEN of strings
         dt =  np.dtype('O', metadata={'vlen': str})
         arr = np.zeros((5,), dtype=dt)
-        arr[0] = "Parting"
-        arr[1] = "is such"
-        arr[2] = "sweet"
-        arr[3] = "sorrow"
-        #arr[4] = 0
-        #print("arr: {}".format(arr))
+        arr[0] = "one: \u4e00"
+        arr[1] = "two: \u4e8c"
+        arr[2] = "three: \u4e09"
+        arr[3] = "four: \u56db"
+        arr[4] = 0
         buffer = arrayToBytes(arr)
-        expected = b'\x07\x00\x00\x00Parting\x07\x00\x00\x00is such\x05\x00\x00\x00sweet\x06\x00\x00\x00sorrow\x00\x00\x00\x00'
+        expected = b'\x08\x00\x00\x00one: \xe4\xb8\x80\x08\x00\x00\x00two: \xe4\xba\x8c\n\x00\x00\x00three: \xe4\xb8\x89\t\x00\x00\x00four: \xe5\x9b\x9b\x00\x00\x00\x00'
         self.assertEqual(buffer, expected)
 
         # convert back to array
@@ -242,6 +241,7 @@ class ArrayUtilTest(unittest.TestCase):
         arr[4] = 0
         
         buffer = arrayToBytes(arr)
+        expected = b'\x07\x00\x00\x00Parting\x07\x00\x00\x00is such\x05\x00\x00\x00sweet\x06\x00\x00\x00sorrow\x00\x00\x00\x00'
         self.assertEqual(buffer, expected)  # same serialization as weith str
 
         # convert back to array
@@ -277,8 +277,6 @@ class ArrayUtilTest(unittest.TestCase):
         arr = jsonToArray(shape, dt, data)
         self.assertTrue(isinstance(arr, np.ndarray))
         self.assertEqual(check_dtype(vlen=arr.dtype), np.dtype('int32'))
-        print(arr)
-        print(type(arr[0]))
         buffer = arrayToBytes(arr)
         self.assertEqual(len(buffer), 56)
         expected = b'\x04\x00\x00\x00\x01\x00\x00\x00\x08\x00\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00\x0c\x00\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00\x10\x00\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00\x03\x00\x00\x00\x04\x00\x00\x00'
