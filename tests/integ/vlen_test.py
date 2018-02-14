@@ -160,9 +160,7 @@ class VlenTest(unittest.TestCase):
         payload = {"id": dset_uuid}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
-
-        """
-        # TBD: Fix for compound
+        
         # write values to dataset
         data = []
         for i in range(4):
@@ -181,8 +179,8 @@ class VlenTest(unittest.TestCase):
         self.assertTrue("value" in rspJson)
         value = rspJson["value"]
         self.assertEqual(len(value), 4)
-        print(value)
-        """
+        
+        
 
     
 

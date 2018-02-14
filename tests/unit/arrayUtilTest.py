@@ -96,6 +96,7 @@ class ArrayUtilTest(unittest.TestCase):
         for i in range(4):
             self.assertEqual(out[i], i*2)
 
+        # compound type
         dt = np.dtype([('a', 'i4'), ('b', 'S5')])
         shape = [2,]
         data = [[4, 'four'], [5, 'five']]
@@ -121,6 +122,33 @@ class ArrayUtilTest(unittest.TestCase):
         e0 = out[0].tolist()
         self.assertEqual(e0, (6, b'six'))
 
+        # VLEN ascii
+        dt = special_dtype(vlen=bytes)
+        data = [b"one", b"two", b"three", "four", b"five"]
+        shape = [5,]
+        out = jsonToArray(shape, dt, data)
+        self.assertTrue("vlen" in out.dtype.metadata)
+        self.assertEqual(out.dtype.metadata["vlen"], bytes)
+        self.assertEqual(out.dtype.kind, 'O')
+        # TBD: code does not actually enforce use of bytes vs. str, 
+        #  probably not worth the effort to fix
+        self.assertEqual(out[2], b"three")
+        self.assertEqual(out[3], "four")
+
+        # VLEN unicode
+        dt = special_dtype(vlen=bytes)
+        data = ["one", "two", "three", "four", "five"]
+        shape = [5,]
+        out = jsonToArray(shape, dt, data)
+        self.assertTrue("vlen" in out.dtype.metadata)
+        self.assertEqual(out.dtype.metadata["vlen"], bytes)
+        self.assertEqual(out.dtype.kind, 'O')
+        # TBD: this should show up as bytes, but may not be worth the effort
+        self.assertEqual(out[2], "three")
+
+        
+
+        # VLEN data
         dt = special_dtype(vlen=np.dtype('int32'))
         shape = [4,]
         data = [[1,], [1,2], [1,2,3], [1,2,3,4]]
@@ -203,7 +231,7 @@ class ArrayUtilTest(unittest.TestCase):
         arr[3] = np.int32([1,2,3])
         buffer = arrayToBytes(arr)
         self.assertEqual(len(buffer), 40)
-
+        
         # convert back to array
         arr_copy = bytesToArray(buffer, dt, (4,))
         # np.array_equal doesn't work for object arrays
@@ -213,7 +241,7 @@ class ArrayUtilTest(unittest.TestCase):
             e = arr[i]
             e_copy = arr_copy[i]
             self.assertTrue(np.array_equal(e, e_copy))
-           
+         
         # VLEN of strings
         dt =  np.dtype('O', metadata={'vlen': str})
         arr = np.zeros((5,), dtype=dt)
@@ -223,6 +251,7 @@ class ArrayUtilTest(unittest.TestCase):
         arr[3] = "four: \u56db"
         arr[4] = 0
         buffer = arrayToBytes(arr)
+        
         expected = b'\x08\x00\x00\x00one: \xe4\xb8\x80\x08\x00\x00\x00two: \xe4\xba\x8c\n\x00\x00\x00three: \xe4\xb8\x89\t\x00\x00\x00four: \xe5\x9b\x9b\x00\x00\x00\x00'
         self.assertEqual(buffer, expected)
 
@@ -241,6 +270,7 @@ class ArrayUtilTest(unittest.TestCase):
         arr[4] = 0
         
         buffer = arrayToBytes(arr)
+        
         expected = b'\x07\x00\x00\x00Parting\x07\x00\x00\x00is such\x05\x00\x00\x00sweet\x06\x00\x00\x00sorrow\x00\x00\x00\x00'
         self.assertEqual(buffer, expected)  # same serialization as weith str
 
@@ -260,7 +290,7 @@ class ArrayUtilTest(unittest.TestCase):
         self.assertEqual(len(buffer), 40)
         self.assertEqual(buffer.find(b"Hello"), 8)
         self.assertEqual(buffer.find(b"Bye"), 37)
-       
+        
         # convert back to array
         arr_copy = bytesToArray(buffer, dt, (4,))
         self.assertEqual(arr.dtype, arr_copy.dtype)
@@ -269,8 +299,66 @@ class ArrayUtilTest(unittest.TestCase):
             e = arr[i]
             e_copy = arr_copy[i]
             self.assertTrue(np.array_equal(e, e_copy))
+        #
+        # VLEN utf string with array type
+        #
+        dt_arr_str = np.dtype('(2,)O', metadata={'vlen': str})
+        dt = np.dtype([('x', 'i4'), ('tag', dt_arr_str)])
+        arr = np.zeros((4,), dtype=dt)
+        dt_str = np.dtype('O', metadata={'vlen': str})
+        arr[0] = (42, np.asarray(["hi", "bye"], dtype=dt_str))
+        arr[3] = (84, np.asarray(["hi-hi", "bye-bye"], dtype=dt_str))
+        count = getByteArraySize(arr)
+        buffer = arrayToBytes(arr)
+        self.assertEqual(len(buffer), 81)
+         
+        self.assertEqual(buffer.find(b"hi"), 8)
+        self.assertEqual(buffer.find(b"bye"), 14)
+        self.assertEqual(buffer.find(b"hi-hi"), 49)
+        self.assertEqual(buffer.find(b"bye-bye"), 58)
+        
+        # convert back to array
+        arr_copy = bytesToArray(buffer, dt, (4,))
+    
+        self.assertEqual(arr.dtype, arr_copy.dtype)
+        self.assertEqual(arr.shape, arr_copy.shape)
+        for i in range(4):
+            e = arr[i]
+            e_copy = arr_copy[i]
+            self.assertTrue(np.array_equal(e, e_copy))
+        #
+        # VLEN ascii with array type
+        #
+        dt_arr_str = np.dtype('(2,)O', metadata={'vlen': bytes})
+        dt = np.dtype([('x', 'i4'), ('tag', dt_arr_str)])
+        arr = np.zeros((4,), dtype=dt)
+        dt_str = np.dtype('O', metadata={'vlen': bytes})
+        arr[0] = (42, np.asarray([b"hi", b"bye"], dtype=dt_str))
+        arr[3] = (84, np.asarray([b"hi-hi", b"bye-bye"], dtype=dt_str))
+        count = getByteArraySize(arr)
+        buffer = arrayToBytes(arr)
+        self.assertEqual(len(buffer), 81)
+         
+        self.assertEqual(buffer.find(b"hi"), 8)
+        self.assertEqual(buffer.find(b"bye"), 14)
+        self.assertEqual(buffer.find(b"hi-hi"), 49)
+        self.assertEqual(buffer.find(b"bye-bye"), 58)
+        # convert back to array
+        
+        arr_copy = bytesToArray(buffer, dt, (4,))
+    
+        self.assertEqual(arr.dtype, arr_copy.dtype)
+        self.assertEqual(arr.shape, arr_copy.shape)
+        for i in range(4):
+            e = arr[i]
+            e_copy = arr_copy[i]
+            self.assertTrue(np.array_equal(e, e_copy))
+        
 
     def testJsonToBytes(self):
+        #
+        # VLEN int
+        #
         dt = special_dtype(vlen=np.dtype('int32'))
         shape = [4,]
         data = [[1,], [1,2], [1,2,3], [1,2,3,4]]
@@ -291,9 +379,77 @@ class ArrayUtilTest(unittest.TestCase):
             e = arr[i]
             e_copy = arr_copy[i]
             self.assertTrue(np.array_equal(e, e_copy))
-        
-         
+        #
+        # Compound vlen
+        #
+        dt_str = np.dtype('O', metadata={'vlen': str})
+        dt = np.dtype([('x', 'i4'), ('tag', dt_str)])
+        shape = [4,]
+        data = [[42, "Hello"], [0,0], [0,0], [84, "Bye"]]
+        arr = jsonToArray(shape, dt, data)
+        self.assertTrue(isinstance(arr, np.ndarray))
+        buffer = arrayToBytes(arr)
+        self.assertEqual(len(buffer), 40)
+        expected = b'*\x00\x00\x00\x05\x00\x00\x00Hello\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00T\x00\x00\x00\x03\x00\x00\x00Bye'
+        self.assertEqual(buffer, expected)
 
+        # convert back to array
+        arr_copy = bytesToArray(buffer, dt, (4,))
+        # np.array_equal doesn't work for object arrays
+        self.assertEqual(arr.dtype, arr_copy.dtype)
+        self.assertEqual(arr.shape, arr_copy.shape)
+        for i in range(4):
+            e = arr[i]
+            e_copy = arr_copy[i]
+            self.assertTrue(np.array_equal(e, e_copy))
+
+        #
+        # VLEN utf with array type
+        #
+        dt_arr_str = np.dtype('(2,)O', metadata={'vlen': str})
+        dt = np.dtype([('x', 'i4'), ('tag', dt_arr_str)])
+        shape = [4,]
+        data = [[42, ["hi","bye"]], [0,[0,0]], [0,[0,0]], [84, ["hi-hi", "bye-bye"]]]
+        arr = jsonToArray(shape, dt, data)
+        self.assertTrue(isinstance(arr, np.ndarray))
+        buffer = arrayToBytes(arr)
+        self.assertEqual(len(buffer), 81)
+        self.assertEqual(buffer.find(b"hi"), 8)
+        self.assertEqual(buffer.find(b"bye"), 14)
+        self.assertEqual(buffer.find(b"hi-hi"), 49)
+        self.assertEqual(buffer.find(b"bye-bye"), 58)
+        arr_copy = bytesToArray(buffer, dt, (4,))
+    
+        self.assertEqual(arr.dtype, arr_copy.dtype)
+        self.assertEqual(arr.shape, arr_copy.shape)
+        for i in range(4):
+            e = arr[i]
+            e_copy = arr_copy[i]
+            self.assertTrue(np.array_equal(e, e_copy))
+
+        #
+        # VLEN ascii with array type
+        #
+        dt_arr_str = np.dtype('(2,)O', metadata={'vlen': bytes})
+        dt = np.dtype([('x', 'i4'), ('tag', dt_arr_str)])
+        shape = [4,]
+        data = [[42, [b"hi", b"bye"]], [0,[0,0]], [0,[0,0]], [84, [b"hi-hi", b"bye-bye"]]]
+        arr = jsonToArray(shape, dt, data)
+        self.assertTrue(isinstance(arr, np.ndarray))
+        buffer = arrayToBytes(arr)
+        self.assertEqual(len(buffer), 81)
+        self.assertEqual(buffer.find(b"hi"), 8)
+        self.assertEqual(buffer.find(b"bye"), 14)
+        self.assertEqual(buffer.find(b"hi-hi"), 49)
+        self.assertEqual(buffer.find(b"bye-bye"), 58)
+        arr_copy = bytesToArray(buffer, dt, (4,))
+    
+        self.assertEqual(arr.dtype, arr_copy.dtype)
+        self.assertEqual(arr.shape, arr_copy.shape)
+        for i in range(4):
+            e = arr[i]
+            e_copy = arr_copy[i]
+            self.assertTrue(np.array_equal(e, e_copy))
 
          
 

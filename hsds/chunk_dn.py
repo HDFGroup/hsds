@@ -122,7 +122,7 @@ async def PUT_Chunk(request):
     log.debug("actual content_length: {}".format(request.content_length))
 
     if itemsize != 'H5T_VARIABLE' and (num_elements * itemsize) != request.content_length:
-        msg = "Excpected content_length of: {}, but got: {}".format(num_elements*itemsize, request.content_length)
+        msg = "Expected content_length of: {}, but got: {}".format(num_elements*itemsize, request.content_length)
         log.error(msg)
         raise HttpBadRequest(message=msg)
 

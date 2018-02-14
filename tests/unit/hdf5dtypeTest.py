@@ -583,6 +583,29 @@ class Hdf5dtypeTest(unittest.TestCase):
         self.assertTrue('b' in dt.fields.keys())
         self.assertEqual(typeSize, 11)
 
+    def testCompoundArrayType(self):
+        typeItem = {
+            "class": "H5T_COMPOUND",
+            "fields": 
+            [ {"type": {"class": "H5T_INTEGER", "base": "H5T_STD_U64BE"}, "name": "VALUE1"}, 
+              {"type": {"class": "H5T_FLOAT", "base": "H5T_IEEE_F64BE"}, "name": "VALUE2"}, 
+              {"type": {"class": "H5T_ARRAY", "dims": [2], "base": 
+                         {"class": "H5T_STRING", "charSet": "H5T_CSET_ASCII",
+                          "strPad": "H5T_STR_NULLTERM", "length": "H5T_VARIABLE"}}, "name": "VALUE3"}]
+        }
+        dt = hdf5dtype.createDataType(typeItem) 
+        print("testCompoundArrayType, dt:", dt)
+        typeSize = hdf5dtype.getItemSize(typeItem)
+        self.assertEqual(typeSize, 'H5T_VARIABLE')
+        self.assertEqual(len(dt), 3)
+        self.assertTrue("VALUE1" in dt.fields.keys())
+        self.assertTrue("VALUE2" in dt.fields.keys())
+        self.assertTrue("VALUE3" in dt.fields.keys())
+        dt3 = dt["VALUE3"]
+        self.assertEqual(check_dtype(vlen=dt3), bytes)
+
+        print("dt.metadata:", dt3.metadata)
+
 
 
 if __name__ == '__main__':

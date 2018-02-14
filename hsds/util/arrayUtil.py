@@ -194,11 +194,21 @@ def getElementSize(e, dt):
             count = len(e) + 4
         elif isinstance(e, str):
             count = len(e.encode('utf-8')) + 4
-        elif isinstance(e, np.ndarray) or isinstance(e, list) or isinstance(e, tuple):
+        elif isinstance(e, np.ndarray):
+            nElements = np.prod(e.shape)
+            if e.dtype.kind != 'O':
+                count = e.dtype.itemsize * nElements
+            else:
+                arr1d = e.reshape((nElements,))
+                count = 0
+                for item in arr1d:
+                    count += getElementSize(item, dt)
+            count += 4  # byte count
+        elif isinstance(e, list) or isinstance(e, tuple):
+            #print("got list for e:", e)
             count = len(e) * vlen.itemsize + 4  # +4 for byte count
         else:
             raise TypeError("unexpected type: {}".format(type(e)))
-    #print("size for {}: {}".format(e, count))
     return count
 
 
@@ -230,8 +240,6 @@ def copyBuffer(src, des, offset):
 Copy element to bytearray
 """
 def copyElement(e, dt, buffer, offset):
-    #print("copyElement: {} offset: {}".format(e, offset))
-    
     if len(dt) > 1:
         for name in dt.names:
             field_dt = dt[name]
@@ -259,7 +267,19 @@ def copyElement(e, dt, buffer, offset):
             count = np.int32(len(text))
             offset = copyBuffer(count.tobytes(), buffer, offset)
             offset = copyBuffer(text, buffer, offset)
-        elif isinstance(e, np.ndarray) or isinstance(e, list) or isinstance(e, tuple):
+
+        elif isinstance(e, np.ndarray):
+            nElements = np.prod(e.shape)
+            if e.dtype.kind != 'O':
+                count = np.int32(e.dtype.itemsize * nElements)
+                offset = copyBuffer(count.tobytes(), buffer, offset)
+                offset = copyBuffer(e.tobytes(), buffer, offset)
+            else:
+                arr1d = e.reshape((nElements,))
+                for item in arr1d:
+                    offset = copyElement(item, dt, buffer, offset)            
+
+        elif False and isinstance(e, list) or isinstance(e, tuple):
             count = np.int32(len(e) * vlen.itemsize)
             offset = copyBuffer(count.tobytes(), buffer, offset)
             if isinstance(e, np.ndarray):
@@ -274,67 +294,72 @@ def copyElement(e, dt, buffer, offset):
     return offset
 
 """
+Get the count value from persisted vlen array
+"""
+def getElementCount(buffer, offset):
+    count_bytes = bytes(buffer[offset:(offset+4)])
+        
+    try:
+        count = int(np.fromstring(count_bytes, dtype="<i4"))
+    except TypeError as e:
+        msg = "Unexpected error reading count value for variable length elemennt: {}".format(e)
+        log.error(msg)
+        raise TypeError(msg)
+    if count < 0:
+        # shouldn't be negative
+        raise ValueError("Unexpected count value for variable length element")
+    if count > 1024*1024*1024:
+        # expect variable length element to be between 0 and 1mb
+        raise ValueError("Variable length element size expected to be less than 1MB")
+    return count
+
+
+"""
 Read element from bytearrray 
 """
-def readElement(buffer, offset, dt):
-    #print("readElement, offset: {}".format(offset))
+def readElement(buffer, offset, arr, index, dt):
+    #print("readElement, offset: {}, index: {} dt: {}".format(offset, index, dt))
     
     if len(dt) > 1:
-        raise TypeError("Compound type not valid with readElement")
+        e = arr[index]
+        for name in dt.names:
+            field_dt = dt[name]
+            offset = readElement(buffer, offset, e, name, field_dt)
     elif not dt.metadata or "vlen" not in dt.metadata:
         count = dt.itemsize
         e_buffer = buffer[offset:(offset+count)]
         offset += count
-        retval = np.fromstring(bytes(e_buffer), dtype=dt)  
+        arr[index] = np.fromstring(bytes(e_buffer), dtype=dt)
     else:
         # variable length element
         vlen = dt.metadata["vlen"]
-        count_bytes = bytes(buffer[offset:(offset+4)])
-        try:
-            count = int(np.fromstring(count_bytes, dtype="<i4"))
-        except TypeError as e:
-            msg = "Unexpected error reading count value for variable length elemennt: {}".format(e)
-            log.error(msg)
-            raise TypeError(msg)
-        if count < 0:
-            # shouldn't be negative
-            raise ValueError("Unexpected count value for variable length element")
-        if count > 1024*1024*1024:
-            # expect variable length element to be between 0 and 1mb
-            raise ValueError("Variable length element size expected to be less than 1MB")
-        offset += 4
-        if count == 0:
-            retval = 0  # null element
+        e = arr[index]
+        
+        if isinstance(e, np.ndarray):
+            nelements = np.prod(dt.shape)
+            e.reshape((nelements,))
+            for i in range(nelements):
+                offset = readElement(buffer, offset, e, i, dt)
+            e.reshape(dt.shape)
         else:
-            e_buffer = buffer[offset:(offset+count)]
-            offset += count
-            if vlen is bytes:
-                retval = e_buffer
-            elif vlen is str:
-                retval = e_buffer.decode('utf-8')
-            else:
-                # assume numpy array   
-                retval = np.fromstring(bytes(e_buffer), dtype=vlen)
-             
-        #print("retval: {}".format(retval))
-    return retval, offset
+            count = getElementCount(buffer, offset)
+            offset += 4
+            if count > 0:
+                e_buffer = buffer[offset:(offset+count)]
+                offset += count
 
-
-"""
-Read compound element from bytearrray 
-"""
-def readCompound(buffer, offset, e, dt):
-    #print("readElement, offset: {}".format(offset))
-    
-    for name in dt.names:
-        field_dt = dt[name]
-        if len(field_dt) > 1:
-            offset = readCompound(buffer, offset, e[name], field_dt)
-        else:
-            field_val, offset = readElement(buffer, offset, field_dt)
-            e[name] = field_val
+                if vlen is bytes:
+                    arr[index] = bytes(e_buffer)
+                elif vlen is str:
+                    s = e_buffer.decode("utf-8")
+                    arr[index] = s
+                else:
+                    e = np.fromstring(bytes(e_buffer), dtype=vlen)
+                    arr[index] = e
+        
     return offset
-    
+
+   
              
 """ 
 Return byte representation of numpy array
@@ -345,14 +370,12 @@ def arrayToBytes(arr):
         return arr.tobytes()  
     
     nSize = getByteArraySize(arr)
-    #print("nsize:", nSize)
     buffer = bytearray(nSize)
     offset = 0
     nElements = np.prod(arr.shape)
     arr1d = arr.reshape((nElements,))
     for e in arr1d:
         offset = copyElement(e, arr1d.dtype, buffer, offset)
-        #print("offset: {}".format(offset))
     return buffer
 
 """
@@ -367,13 +390,7 @@ def bytesToArray(data, dt, shape):
         arr = np.zeros((nelements,), dtype=dt)
         offset = 0
         for index in range(nelements):
-            if len(dt) > 1:
-                e = arr[index]
-                offset = readCompound(data, offset, e, dt)
-            else:
-                e, offset = readElement(data, offset, dt)
-                #print("e: {} type: {}".format(e, type(e)))
-                arr[index] = e
+            offset = readElement(data, offset, arr, index, dt)
     arr = arr.reshape(shape)
     return arr
 
