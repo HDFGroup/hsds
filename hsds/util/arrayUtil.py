@@ -123,23 +123,40 @@ def getShapeDims(shape):
 Return numpy array from the given json array.
 """
 def jsonToArray(data_shape, data_dtype, data_json):
+    # utility function to initialize vlen array
+    def fillVlenArray(rank, data, arr, index):
+        for i in range(len(data)):
+            if rank > 1:    
+                index = fillVlenArray(rank-1, data[i], arr, index)
+            else:
+                arr[index] = data[i]
+                index += 1
+        return index
+                
+
     # need some special conversion for compound types --
     # each element must be a tuple, but the JSON decoder
     # gives us a list instead.
     if len(data_dtype) > 1 and not isinstance(data_json, (list, tuple)):
         raise TypeError("expected list data for compound data type")
     npoints = getNumElements(data_shape)
+    np_shape_rank = len(data_shape)
     
-    if type(data_json) in (list, tuple):
-        np_shape_rank = len(data_shape)
+    if type(data_json) in (list, tuple):   
         converted_data = []
         if npoints == 1 and len(data_json) == len(data_dtype):
             converted_data.append(toTuple(0, data_json))
         else:  
             converted_data = toTuple(np_shape_rank, data_json)
         data_json = converted_data
+    else:
+        data_json = [data_json,]  # listify
 
-    arr = np.array(data_json, dtype=data_dtype)
+    if isVlen(data_dtype):
+        arr = np.zeros((npoints,), dtype=data_dtype)
+        fillVlenArray(np_shape_rank, data_json, arr, 0)
+    else:
+        arr = np.array(data_json, dtype=data_dtype)
     # raise an exception of the array shape doesn't match the selection shape
     # allow if the array is a scalar and the selection shape is one element,
     # numpy is ok with this

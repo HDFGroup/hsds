@@ -73,6 +73,66 @@ class VlenTest(unittest.TestCase):
         for i in range(4):
             self.assertEqual(value[i], data[i])
 
+    def testPutVLen2DInt(self):
+        # Test PUT value for 1d attribute with variable length int types
+        print("testPutVLen2DInt", self.base_domain)
+        nrow = 2
+        ncol = 2
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + '/'
+
+        # Get root uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create dataset
+        vlen_type = {"class": "H5T_VLEN", "base": { "class": "H5T_INTEGER", "base": "H5T_STD_I32LE"}}
+        payload = {'type': vlen_type, 'shape': [nrow,ncol]}
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dset_uuid))
+         
+        # link new dataset as 'dset'
+        name = 'dset'
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {"id": dset_uuid}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+    
+        # write values to dataset
+        data = []
+        for i in range(nrow):
+            row = []
+            for j in range(ncol):
+                start = i+j
+                end = start+j+1
+                row.append(list(range(start,end)))
+            data.append(row)
+        
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value" 
+        payload = { 'value': data }
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # read values from dataset
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+        self.assertEqual(len(value), nrow)
+
+        for i in range(nrow):
+            for j in range(ncol):
+                self.assertEqual(value[i][j], data[i][j])
 
     def testPutVLenString(self):
         # Test PUT value for 1d attribute with variable length string types

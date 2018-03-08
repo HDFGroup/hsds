@@ -552,13 +552,15 @@ async def PUT_Value(request):
         # data is json
         #
         try:
+            msg = "input data doesn't match selection"
             arr = jsonToArray(np_shape, dset_dtype, json_data)
         except ValueError:
-            msg = "Bad Request: input data doesn't match selection"
             log.warn(msg)
             raise HttpBadRequest(message=msg)
         except TypeError:
-            msg = "Bad Request: input data doesn't match selection"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        except IndexError:
             log.warn(msg)
             raise HttpBadRequest(message=msg)
         log.debug("got json arr: {}".format(arr.shape))

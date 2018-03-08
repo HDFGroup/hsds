@@ -130,10 +130,30 @@ class ArrayUtilTest(unittest.TestCase):
         self.assertTrue("vlen" in out.dtype.metadata)
         self.assertEqual(out.dtype.metadata["vlen"], bytes)
         self.assertEqual(out.dtype.kind, 'O')
+        self.assertEqual(out.shape, (5,))
         # TBD: code does not actually enforce use of bytes vs. str, 
         #  probably not worth the effort to fix
         self.assertEqual(out[2], b"three")
         self.assertEqual(out[3], "four")
+        
+        # VLEN str
+        dt = special_dtype(vlen=str)
+        data = [['part 1 - section A', 'part 1 - section B'], ['part 2 - section A', 'part 2 - section B']]
+        shape = [2,]
+        out = jsonToArray(shape, dt, data)
+        self.assertTrue("vlen" in out.dtype.metadata)
+        self.assertEqual(out.dtype.metadata["vlen"], str)
+        self.assertEqual(out.dtype.kind, 'O')
+        self.assertEqual(out.shape, (2,))
+        self.assertEqual(out[0], tuple(data[0]))
+        self.assertEqual(out[1], tuple(data[1]))
+
+        # VLEN Scalar str
+        dt = special_dtype(vlen=str)
+        data = "I'm a string!"
+        shape = [1,]
+        out = jsonToArray(shape, dt, data)
+
 
         # VLEN unicode
         dt = special_dtype(vlen=bytes)
@@ -147,7 +167,6 @@ class ArrayUtilTest(unittest.TestCase):
         self.assertEqual(out[2], "three")
 
         
-
         # VLEN data
         dt = special_dtype(vlen=np.dtype('int32'))
         shape = [4,]
@@ -163,6 +182,23 @@ class ArrayUtilTest(unittest.TestCase):
             e = out[i]  #.tolist()
             self.assertTrue(isinstance(e, tuple))
             self.assertEqual(e, tuple(range(1, i+2)))
+
+        # VLEN 2D data
+        dt = special_dtype(vlen=np.dtype('int32'))
+        shape = [2,2]
+        data = [[[0,], [1,2]], [[1,], [2,3]]]
+        out = jsonToArray(shape, dt, data)
+        self.assertTrue(isinstance(out, np.ndarray))
+        self.assertEqual(check_dtype(vlen=out.dtype), np.dtype('int32'))
+        
+        self.assertEqual(out.shape, (2,2))
+        self.assertEqual(out.dtype.kind, 'O')
+        self.assertEqual(check_dtype(vlen=out.dtype), np.dtype('int32'))
+        for i in range(2):
+            for j in range(2):
+                e = out[i,j]  #.tolist()
+                self.assertTrue(isinstance(e, tuple))
+
 
         # create VLEN of obj ref's
         ref_type = {"class": "H5T_REFERENCE", 
