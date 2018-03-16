@@ -34,7 +34,7 @@ An object storage is a storage architecture that manages data as objects rather 
 
 Compared to other storage technologies object storage has the advantages of:
 
-#. Scalability - It's easier to build out large storage solutions (.e.g AWS S3 manages trillions of objects)
+#. Scalability - It's easier to build out large storage solutions (e.g. AWS S3 manages trillions of objects)
 #. Throughput - Potentially greater aggregate throughput (scales with the number of storage nodes)
 #. Reliability - Objects are automatically replicated to avoid potential data loss
 #. Cost-effective - easier to scale out.  Vendors like AWS provide low-cost, pay-as-you go services
@@ -45,7 +45,7 @@ Object storage systems share some common properties:
 
 #. Objects stored in the system are identified by a key (a string value)
 #. The object storage system maintains metadata about each object (see next section)
-#. They are not natively POSIX complient (e.g. there is no way to append to a storage object)
+#. They are not natively POSIX compliant (e.g. there is no way to append to a storage object)
 #. Objects are transparently (to the client) replicated in multiple storage devices for redundancy
 #. Latency is high compared to storage on local disk, but aggregate throughput is potentially much higher
 #. Keys and Objects live in a "bucket".  Permissions to access objects are defined at the bucket level
@@ -55,13 +55,13 @@ Object Metadata
 
 In an object storage system each object has data, a key, and metadata (a set of properties that pertain to the object).  The metadata can be system or user defined.  The later is typically limited to a fairly small size (2KB in the case of AWS S3).
 
-For the purposes of this document that following metadata properties (as defined for AWS S3) are relevant to the schema design:
+For the purposes of this document, the following metadata properties (as defined for AWS S3) are relevant to the schema design:
 
 #. Content-Length - the size of the object in bytes
 #. Content-MD5 - a checksum of the object data
 #. Last-Modified - the time at which the object was last modified (or created, whichever is later)
 
-In addition, the object storage schema will use define some custom metadata properties such as Compression-State for chunk objects.
+In addition, the object storage schema will use define and use some custom metadata properties such as Compression-State for chunk objects.
 
 Object Storage system assumptions
 *********************************
@@ -71,7 +71,7 @@ The following constraints and assumptions are given as the basis of the schema d
 #. Object keys are limited to 1024 characters
 #. The use of many small objects would be prohibitive from a cost perspective (API Request Pricing)
 #. The use of very large objects (e.g. >100MB) would introduce excessive latency
-#. The first 3-4 characters of the keys should be randomaly distributed (to avoid request rate limits due to a single storage system be targeted)
+#. The first 3-4 characters of the keys should be randomly distributed (to avoid request rate limits due to a single storage system be targeted)
 #. Listing keys is generally inefficient (and would not work well with randomly distributed keys)
 #. The storage system is not read-write consistent
 #. The storage system supports object metadata of at least 1024 bytes per object
@@ -87,9 +87,9 @@ The following constraints and assumptions are given as the basis of the schema d
 The HDF5 data model
 ###################
 
-The following is a brief review of the HDF5 data model as it relates to the shema design (see the HDF5 docs for a fuller description).
+The following is a brief review of the HDF5 data model as it relates to the schema design (see the HDF5 docs for a more complete description).
 
-In the traditional HDF5 data model, object are stored in a posix File.  Management of objects within the file is done by the HDF5 library and is opaque to the HDF5 library client.
+In the traditional HDF5 data model, object are stored in a POSIX file.  Management of objects within the file is done by the HDF5 library and is opaque to the HDF5 library client.
 
 HDF5 data model consist of:
 
@@ -127,7 +127,7 @@ These additions are described in the sub-sections below.
 UUID
 ----
 
-Each high level object (group, dataset, committed type) can be identified by a UUID - a 36 character alphanumeric identifier.  E.g.: "0568d8c5-a77e-11e4-9f7a-3c15c2da029e".  The UUID's used in the object storage schema add a two-character prefix to the id to identify the type of object:
+Each high-level object (group, dataset, committed type) can be identified by a UUID - a 36 character alphanumeric identifier.  E.g.: "0568d8c5-a77e-11e4-9f7a-3c15c2da029e".  The UUID's used in the object storage schema add a two-character prefix to the id to identify the type of object:
 
 * "g-": a group id
 * "d-": a dataset id
@@ -141,12 +141,12 @@ For example, the id used for a group object with the above UUID would be::
 ACL
 ---
 
-Each high level object can maintain an ACCESS Control List that describes the default and user-specific access permissions for that object (see: http://h5serv.readthedocs.io/en/latest/AclOps/index.html).
+Each high-level object can maintain an ACCESS Control List that describes the default and user-specific access permissions for that object (see: http://h5serv.readthedocs.io/en/latest/AclOps/index.html).
 
 Timestamp
 ---------
 
-Each high level object has timestamps for create time and last updated time, that can be retrieved using the REST API.
+Each high-level object has timestamps for create time and last updated time, that can be retrieved using the REST API.
 
 
 Schema Description
@@ -167,12 +167,12 @@ Note: all strings used in the schema (e.g. link names) are UTF8 encoded unicode 
 Domains
 ******* 
 
-The domain entity is similar to traditional HDF5 files in that they are containers for related collections of resources.  Unlike a file however, the related resources for a domain aren't contained within the domain object, but are persisted as other objects within the bucket.  The domain object contains a "root" key that can be used to retrieve the root group of the given domain.  From the root group other entities in the domain can be retrived by traversing the directed graph anchored at the root group.
+The domain entity is similar to traditional HDF5 files in that they are containers for related collections of resources.  Unlike a file however, the related resources for a domain aren't contained within the domain object, but are persisted as other objects within the bucket.  The domain object contains a "root" key that can be used to retrieve the root group of the given domain.  From the root group other entities in the domain can be retrieved by traversing the directed graph anchored at the root group.
 
 Domain key
 ----------
 
-Domain keys end with "/.domain.json" and can have an arbitrary prefix. Unlike other entities in the object storage schema, domain keys are stored hierarchaly (as with files in a file system), delimited using the '/' character.  This enables domain keys to be listed by prefix and provides a cannonical key for the parent domain of a domain.
+Domain keys end with "/.domain.json" and can have an arbitrary prefix. Unlike other entities in the object storage schema, domain keys are stored hierarchically (as with files in a file system), delimited using the '/' character.  This enables domain keys to be listed by prefix and provides a canonical key for the parent of a domain.
 
 For example, the domain key::
 
@@ -197,14 +197,14 @@ The domain object contains JSON with the following keys:
 * "created" - the timestamp for when the domain was created
 * "lastModified" - the timestamp for when the domain was last updated
  
-The "owner" and "acls" keys are required, others may not be present.  In particular, if the "root" key is not present, that impies there is no HDF collection associated with this domain.  In this case the domain object can serve as a sort of "directory" for a set of related sub-domains.
+The "owner" and "acls" keys are required, others may not be present.  In particular, if the "root" key is not present, that implies there is no HDF collection associated with this domain.  In this case the domain object can serve as a sort of "directory" for a set of related sub-domains.
 
 Notes:
 
 * The service layer may impose a policy where domains can only be created if there is an existing domain with the requisite permission ACLs for the requesting user.  One or more "top-level" domains (e.g. "/home") would be created outside the service API (e.g. by an administrator with permissions to create objects in the bucket directly).
 * The owner and root keys can be assumed to be immutable (i.e. these values can be cached)
 * Metadata about the owner (and other usernames referenced in this schema) are assumed to be stored in another system (such as NASA URS)
-* The "root" key is optional.  If not present, the domain doesn't have an associatted root group (but can server as a place-holder for sub-domains)
+* The "root" key is optional.  If not present, the domain doesn't have an associated root group (but can server as a place-holder for sub-domains)
 
 Domain object example
 ---------------------
@@ -270,12 +270,12 @@ Domain catalog
 In order to provide summary information about the objects in a domain, additional objects will be used to store information about the domain objects.  The following objects will be created/updated by the async node that store information about the group, dataset, and datatype objects in the domain:
 
 * ".groups.txt" - list of group ids (other than root group) in the domain
-* ".datasets.txt" - list of datsaet ids in the domain
+* ".datasets.txt" - list of dataset ids in the domain
 * ".datatypes.txt" - list of datatype ids in the domain
 
 The object keys for the catalog objects will by the domain prefix key with the above name appended (e.g. ``/home/test_user1/my_domain/.groups.txt``).
 
-Each line of each catalog object will contain the following space deliminated fields:
+Each line of each catalog object will contain the following space delimitated fields:
 
 * object id
 * object ETag  (md5 checksum)
@@ -288,16 +288,16 @@ E.g.:
 
 ``d-dea4d476-4724-11e7-8c95-0242ac110008 4ec1b96919cc5087e2d546073fa45670 1496360953 1058 1 400``
 
-Note: For reasons of efficiency, the summary information will typically be updated asynchronously from changes to object state. Therefore the domain catalog object may not reflect the most recent changes to objects in the domain.  E.g. if a dataset is created using the HDF REST API, a line with the dataset id will not appear immediately in the .datasets.txt object.  
+Note: For reasons of efficiency, the summary information will typically be updated asynchronously from changes to object state. Therefore, the domain catalog object may not reflect the most recent changes to objects in the domain.  E.g. if a dataset is created using the HDF REST API, a line with the dataset id will not appear immediately in the .datasets.txt object.  
 
 Dataset catalog
 ---------------
 
 In order to provide information about all the allocated chunks of a given dataset, a dataset catalog object will be created for each dataset that has had at one write.  The key suffix of catalog object will be: ``.<datsetid>.chunks.txt`` and the key prefix will be the domain prefix (e.g. ``/home/test_user1/my_domain/.d-dea4d476-4724-11e7-8c95-0242ac110008.chunks.txt``).
 
-The dataset catalog object will contain one line for each allocated chunk with the following space deliminated fields:
+The dataset catalog object will contain one line for each allocated chunk with the following space delimitated fields:
 
-* chunk index  (the position of the chunk within the dataspace)
+* chunk index (the position of the chunk within the dataspace)
 * chunk ETag (md5 checksum)
 * chunk last updated timestamp
 * chunk size (in bytes)
@@ -306,7 +306,7 @@ E.g.:
 
 ``0_0 3b3cf9f694bd64ef3152d7e05c3143bb 1496360953 400``
 
-``0_0`` indicates that this is chunk index (0,0)  (the indexes are seperated by an underscore character), the chunk data has the given md5 checksum, was last modified at 1496360953 (seconds in epoch), and has a size of 400 bytes.
+``0_0`` indicates that this is chunk index (0,0)  (the indexes are separated by an underscore character), the chunk data has the given md5 checksum, was last modified at 1496360953 (seconds in epoch), and has a size of 400 bytes.
 
 Note: As with the domain catalog objects, the dataset catalog is updated asynchronously to dataset write operations.
 
@@ -314,7 +314,7 @@ Note: As with the domain catalog objects, the dataset catalog is updated asynchr
 Group object
 ************
 
-In the HDF data model group object is used to organize collections of other groups and datasets via describing a set of links (either hard, soft, or external).  In the object store schema, the links contain just information about the link itself, not the linked object.  The group object may also contain a collection of attributes.
+In the HDF data model, the group object is used to organize collections of other groups and datasets by describing a set of links (either hard, soft, or external).  In the object store schema, the links contain just information about the link itself, not the linked object.  The group object may also contain a collection of attributes.
 
 Group key
 ---------
@@ -325,7 +325,7 @@ The group object storage key is of the form::
 
 Where <hash> is an md5 hash of the group id ("g-<uuid>"). Where <uuid> is a standard 36 character UUID.
 
-Since storage systems such as AWS S3 use a hash of the first few characters of the object key to determine the storage node used to store the object, these characters should be randomly distributed to ensure thoughput to the storage system is not limited.  UUIDs in general don't have good distribution (i.e. it's very common for the first characters to be repeated), so the object key for a specific UUID is formed by prefixing a five character md5 hash to the object id.
+Since storage systems such as AWS S3 use a hash of the first few characters of the object key to determine the storage node used to store the object, these characters should be randomly distributed to ensure throughput to the storage system is not limited.  UUIDs in general don't have good distribution (i.e. it's very common for the first characters to be repeated), so the object key for a specific UUID is formed by prefixing a five character md5 hash to the object id.
 
 For example, if the object id is::
 
@@ -335,7 +335,7 @@ An md5 hash of the id would be::
 
     8211ea6301342ba59ee07056cef3e586
 
-Taking the first five characters and appending to the id with a hyphen seperator gives::
+Taking the first five characters and appending to the id with a hyphen separator gives::
 
     8211e-g-2428ae0e-a082-11e6-9d93-0242ac110005
 
@@ -347,10 +347,10 @@ The same approach is used for dataset, committed type, and chunk keys.
 Group Specification
 -------------------
 
-The Group object consist of JSON with the following keys:
+The Group object consists of JSON with the following keys:
 
 * "id" - the id of the group ("g-<uuid>")
-* "attributes" - a key/value collection of group atttributes
+* "attributes" - a key/value collection of group attributes
 * "links" - a key/value collection of links
 * "created" - timestamp (since epoch) of when the group was created
 * "lastModified" - timestamp of when the group was last modified
@@ -362,7 +362,7 @@ There are three types of links that are supported: Hard, Soft, and External.  Ea
 * "class" - the type of link.  Must be one of the values: "H5L_TYPE_HARD", "H5L_TYPE_SOFT", or "H5L_TYPE_EXTERNAL"
 * "created" - timestamp of when the link was created
 * "id" - for hard links, the id value is the id of the dataset or group the link points to
-* "h5path" - for soft or external links, this is a string that gives the HDF5 path the object is expected to be found
+* "h5path" - for soft or external links, this is a string that gives the HDF5 path where the object is expected to be found
 * "domain" - for external links, this is a string that gives the domain which the linked object is a member of
 
 Notes:
@@ -373,7 +373,7 @@ Notes:
 
 TBD:
 
-* A group that contains a large number (roughly > 100K or more) of links or attributes, may present problems when accessed.  If a single storage object is very large, there will be excessive latency in retrieving the object from the object store.  Also applications loading a large JSON string may consume an excessive amount of memory.  To address this, one possiblity would be to shard such large groups into multiple storage objects.
+* A group that contains a large number (roughly > 100K or more) of links or attributes, may present problems when accessed.  If a single storage object is very large, there will be excessive latency in retrieving the object from the object store.  Also applications loading a large JSON string may consume an excessive amount of memory.  To address this, one possibility would be to shard such large groups into multiple storage objects.
 
 Group object example
 --------------------
@@ -416,7 +416,7 @@ Object:
 Committed Type Object
 *********************
 
-In the HDF data model the committed type object is used to provide types that can be shared among datasets and attributes.  In addition, the committed type may contain its own attributes as well.  The object store schema provides keys that describe the type as well as a key/value collection for attributes.
+In the HDF data model the committed type object is used to provide types that can be shared among datasets and attributes.  The committed type may contain attributes.  The object store schema provides keys that describe the type as well as a key/value collection for attributes.
 
 Committed Type Key
 ------------------ 
@@ -434,7 +434,7 @@ The Committed type storage schema consists of JSON with the following keys:
 
 * "id" - the id of the committed type ("t-<uuid>")
 * "type" - a JSON object (or string for primitive types) representing the type
-* "attributes" - a key/value collection of group atttributes
+* "attributes" - a key/value collection of group attributes
 * "created" - timestamp (seconds since epoch) of when the committed type was created
 * "lastModified" - timestamp (seconds since epoch) of when the committed type was modified
 * "root" - the id of the root group in the domain
@@ -475,15 +475,15 @@ Object:
 Dataset object
 **************
 
-In the HDF data model, datasets are used to describe homogenous collections of data elements, where the organization of the elements can either be scalar (for one element datasets, one-dimensional, or multi-dimensional). In addition, non-scalar datasets may be extensible or non-extensible (i.e. the number of elements can be modified).
+In the HDF data model, datasets are used to describe homogenous collections of data elements, where the organization of the elements can either be scalar (for single element datasets), one-dimensional, or multi-dimensional. In addition, non-scalar datasets may be extensible or non-extensible (i.e. the number of elements can be modified).
 
 The dataset also includes information that describe other aspects of the dataset, such as compression filters, fill value, and possible chunk layout.  
 
 Also, like groups and committed types, datasets may contain a collection of attributes.
 
-The data values of a dataset are not stored in the storage object, but instead in one or more "chunk" objects.  Chunks are a regular sized partition of the dataspace (except possibly along the "edges").  The layout key describes how the dataspace is partitioned.  Each chunk is stored (assuming any value has been assigned to it) in a seperate storage object (See "Chunk Object").
+The data values of a dataset are not stored in the storage object, but instead in one or more "chunk" objects.  Chunks are a regular sized partition of the dataspace (except possibly along the "edges").  The layout key describes how the dataspace is partitioned.  Each chunk is stored (assuming a value has been assigned to it) in a separate storage object (See "Chunk Object").
 
-In traditional HDF5 files, dataset values may be stored in either "compact", "chunks" or "contiguous" storage layouts (the later stores all values in one partition in the file).  By contrast the object storage schema always stores data in chunks (though there may be just one chunk for smaller datasets).  This is so that we can limit the maximum size of objects stored in the system.
+In traditional HDF5 files, dataset values may be stored in either "compact", "chunks" or "contiguous" storage layouts (the later stores all values in one partition in the file).  In contrast, the object storage schema always stores data in chunks (though there may be just one chunk for smaller datasets).  This is so that we can control the maximum size of objects stored in the system.
 
 
 Dataset key
@@ -493,7 +493,7 @@ The dataset object storage key is of the form::
 
     <hash>-d-<uuid>
 
-Where <hash> is an md5 hash of the dataset id ("d-<uuid>"). Where <uuid> is a standard 36 character UUID.
+Where <hash> is the first five characters of the md5 hash of the dataset id ("d-<uuid>"). Where <uuid> is a standard 36 character UUID.
 
 Dataset Specification
 ---------------------
@@ -505,7 +505,7 @@ The dataset storage schema consists of JSON with the following keys:
 * "shape" - a JSON object that representing the dataset shape
 * "layout" - a JSON object that represents the chunk layout
 * "creationProperties" - a JSON object representing the dataset creation property list used at dataset creation time 
-* "attributes" - a key/value collection of group atttributes
+* "attributes" - a key/value collection of group attributes
 * "created" - timestamp (seconds since epoch) of when the dataset was created
 * "lastModified" - timestamp (seconds since epoch) of when the dataset was last modified
 * "root" - the id of the root group in the domain
@@ -520,7 +520,7 @@ Notes:
 * See "Attributes" for a description of the object schema for attributes
 * See "Types" for a description of the object schema for type
 * The "id", "root", "domain", "creationProperties", "layout", and "type" keys can be assumed to be immutable
-* The "shape" key is immutable unless the dataset is extensible (the shape object contains a "maxdims" key).  In anycase, the shape of the dataset will never shrink
+* The "shape" key is immutable unless the dataset is extensible (the shape object contains a "maxdims" key).  In any case, the shape of the dataset will never shrink
 * The "stats" object is updated asynchronously from changes to dataset values, so may not reflect the most recent changes to the dataset
 
 Dataset Example
@@ -576,7 +576,7 @@ Chunk object
 
 The chunk objects are used to store dataset values.  Each chunk object stores the values for one chunk element of the dataset it's a member of.  Since it's expected that for many domains, the bulk of the storage used will be for dataset values, it's important that the design enables data to be stored and accessed efficiently.
 
-Whereas the other objects described in this document use a JSON representation, the chunk objects will typically store binary data.  Information about the type used, and chunk dimensions are contained in the dataset object.
+Whereas the other objects described in this document use a JSON representation, the chunk objects typically store binary data.  Information about the data type, and chunk dimensions are contained in the dataset object.
 
 For dataset types that are of varying length, the object will contain a JSON representation of the values in the chunk (possibly compressed).
 
@@ -595,9 +595,9 @@ The chunk storage key is of the form::
 
 Where:
 
-* <hash> is an md5 hash of the chunk id ("c-<uuid>_i_j_k")
+* <hash> is the first five characters of the md5 hash of the chunk id ("c-<uuid>_i_j_k")
 * <uuid> is a standard 36 character UUID
-* Following the <uuid> there is a series of stringified integers seperated by underscores.  The number of integers should be equal to the rank (number of dimensions) of the dataset.
+* Following the <uuid> there is a series of stringified integers separated by underscores.  The number of integers is equal to the rank (number of dimensions) of the dataset.
 * The coordinates <i>, <j>, <k>, etc.  identify the coordinate of the chunk (fastest varying dimension last)
 
 Note: conceivably there could be a danger of exceeding the maximum key length (1024 characters) if the dataset had hundreds of dimensions, or very large extents.
@@ -615,7 +615,7 @@ Chunk Specification
 
 The chunk object is a binary blob for fixed length types, or a JSON array for varying length types.
 
-TBD: Is there a potential for data loss in converting floating-point data to JSON and back?  Validate that the JSON loader stringifies floating point values with sufficient percision.  
+TBD: Is there a potential for data loss in converting floating-point data to JSON and back?  Validate that the JSON loader stringifies floating point values with sufficient precision.  
 
 Chunk object example
 --------------------
@@ -716,7 +716,7 @@ Attribute
 
 Attributes are used as components of the attributes collection in dataset, group, and committed type objects.
 
-An attribute object consist of JSON with the following keys:
+An attribute object consists of JSON with the following keys:
 
 * "type" - a JSON object representing the attribute type
 * "shape" - a JSON object representing the dataspace of the attribute
@@ -725,7 +725,7 @@ An attribute object consist of JSON with the following keys:
 Attribute Example
 -----------------
 
-The following is an example of an attribute with 5 elements of type 8-bit little-endian:
+The following is an example of an attribute with 5 elements of type 8-bit little-endian integers:
 
 .. code-block:: json
 
@@ -745,11 +745,11 @@ The following is an example of an attribute with 5 elements of type 8-bit little
 Dataset creation properties
 ***************************
 
-Dataset creation properties are used to represent client requested properties of the dataset such as: cunk layout, fill value, and compression filters.   
+Dataset creation properties are used to represent client requested properties of the dataset such as: chunk layout, fill value, and compression filters.   
 
 The creation properties specification is given here: http://hdf5-json.readthedocs.io/en/latest/bnf/dataset.html#grammar-token-dcpl. 
 
-Dataset creation property Example
+Dataset creation property example
 ---------------------------------
 
 The following example shows properties for "allocTime", "fillValue", and "layout":
@@ -769,7 +769,7 @@ The following example shows properties for "allocTime", "fillValue", and "layout
 Related documents
 #################
 
-The following documents provided related material that mayby of use:
+The following documents provided related material that may be of use:
 
 * HSDS Design document: https://s3.amazonaws.com/hdfgroup/docs/HDF+Scalable+Data+Service.pdf
 * H5Serv developer documentation: http://h5serv.readthedocs.io/en/latest/index.html 
