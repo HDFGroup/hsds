@@ -7,7 +7,7 @@
 # terms governing use, modification, and redistribution, is contained in     #
 # the file COPYING, which can be found at the root of the source code        #
 # distribution tree.  If you do not have access to this file, you may        #
-# request a copy from help@hdfgroup.org.                                     #
+# request a copy from  help@hdfgroup.org.                                     #
 ##############################################################################
 #
 # httpUtil:
@@ -223,11 +223,17 @@ async def jsonResponse(request, data, status=200):
     resp.headers['Content-Type'] = 'application/json'
     if CORS_DOMAIN:
         resp.headers['Access-Control-Allow-Origin'] = CORS_DOMAIN
-    answer = json.dumps(data)
-    answer = answer.encode('utf8')
-    resp.content_length = len(answer)
-    await resp.prepare(request)
-    resp.write(answer)
+        resp.headers['Access-Control-Allow-Methods'] = "GET, POST, DELETE, PUT, OPTIONS"
+        resp.headers['Access-Control-Allow-Headers'] = "Content-Type, api_key, Authorization"
+
+    if request.method != "OPTIONS":
+        answer = json.dumps(data)
+        answer = answer.encode('utf8')
+        resp.content_length = len(answer)
+        await resp.prepare(request)
+        resp.write(answer)
+    else:
+        await resp.prepare(request)
     await resp.write_eof()
     return resp
 

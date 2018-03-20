@@ -782,7 +782,10 @@ async def GET_Value(request):
         raise HttpProcessingError(code=413, message=msg)
     chunk_ids = getChunkIds(dset_id, slices, layout)
 
-    if "query" in request.GET:
+    if request.method == "OPTIONS":
+        # skip doing any big data load for options request
+        resp = await jsonResponse(request, None)
+    elif "query" in request.GET:
         if rank > 1:
             msg = "Query string is not supported for multidimensional arrays"
             log.warn(msg)
