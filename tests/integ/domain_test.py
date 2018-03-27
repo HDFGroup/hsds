@@ -18,16 +18,17 @@ import helper
  
 
 class DomainTest(unittest.TestCase):
+
+    def assertLooksLikeUUID(self, s):
+        self.assertTrue(helper.validateId(s))
+
     def __init__(self, *args, **kwargs):
         super(DomainTest, self).__init__(*args, **kwargs)
         self.base_domain = helper.getTestDomainName(self.__class__.__name__)
-        print("base_domain: {}".format(self.base_domain))
+        #print("base_domain: {}".format(self.base_domain))
         helper.setupDomain(self.base_domain)
         
-        # main
-     
     def testBaseDomain(self):
-        print("testBaseDomain", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
         
         req = helper.getEndpoint() + '/'
@@ -36,7 +37,7 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.headers['content-type'], 'application/json')
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
-        helper.validateId(root_uuid)
+        self.assertLooksLikeUUID(root_uuid)
 
         # verify that passing domain as query string works as well
         del headers["host"]
@@ -84,7 +85,7 @@ class DomainTest(unittest.TestCase):
         self.assertFalse("num_groups" in rspJson)  # should only show up with the verbose param
         
         root_uuid = rspJson["root"]
-        helper.validateId(root_uuid)
+        self.assertLooksLikeUUID(root_uuid)
 
         # verify that passing domain as query string works as well
         del headers["host"]
@@ -114,7 +115,6 @@ class DomainTest(unittest.TestCase):
 
     def testGetByPath(self):
         domain = helper.getTestDomain("tall.h5")
-        print("testGetByPath", domain)
         headers = helper.getRequestHeaders(domain=domain)
         
         req = helper.getEndpoint() + '/'
@@ -151,7 +151,6 @@ class DomainTest(unittest.TestCase):
 
     def testGetDomainVerbose(self):
         domain = helper.getTestDomain("tall.h5")
-        print("testGetDomainVerbose", domain)
         headers = helper.getRequestHeaders(domain=domain)
         
         req = helper.getEndpoint() + '/'
@@ -174,7 +173,7 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rspJson["class"], "domain")
         
         root_uuid = rspJson["root"]
-        helper.validateId(root_uuid)
+        self.assertLooksLikeUUID(root_uuid)
 
         self.assertTrue("num_groups" in rspJson)
         self.assertEqual(rspJson["num_groups"], 5)
@@ -193,7 +192,6 @@ class DomainTest(unittest.TestCase):
 
     def testGetTopLevelDomain(self):
         domain = "/home"
-        print("testGetTopLevelDomain", domain)
         headers = helper.getRequestHeaders(domain=domain)
         
         req = helper.getEndpoint() + '/'
@@ -215,7 +213,6 @@ class DomainTest(unittest.TestCase):
 
     def testCreateDomain(self):
         domain = self.base_domain + "/newdomain.h6"
-        print("testCreateDomain", domain)        
         headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/'
 
@@ -273,7 +270,6 @@ class DomainTest(unittest.TestCase):
 
     def testCreateFolder(self):
         domain = self.base_domain + "/newfolder"
-        print("testCreateFolder", domain)        
         headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/'
         body = {"folder": True}
@@ -324,7 +320,6 @@ class DomainTest(unittest.TestCase):
 
     def testGetNotFound(self):
         domain =  self.base_domain + "/doesnotexist.h6" 
-        print("testGetNotFound", domain)
         headers = helper.getRequestHeaders(domain=domain) 
         req = helper.getEndpoint() + '/'
         
@@ -335,7 +330,6 @@ class DomainTest(unittest.TestCase):
         # DNS domain names are in reverse order with dots as seperators...
          
         dns_domain = helper.getDNSDomain(self.base_domain)
-        print("testDNSDomain", dns_domain)
         # verify we can access base domain as via dns name
         headers = helper.getRequestHeaders(domain=dns_domain)
         
@@ -345,7 +339,7 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.headers['content-type'], 'application/json')
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
-        helper.validateId(root_uuid)
+        self.assertLooksLikeUUID(root_uuid)
 
         # can't have two consecutive dots'       
         domain = 'two.dots..are.bad.' + dns_domain 
@@ -378,7 +372,6 @@ class DomainTest(unittest.TestCase):
 
     def testDeleteDomain(self):
         domain = self.base_domain + "/deleteme.h6"
-        print("testDeleteDomain", domain)
         
         headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/'
@@ -428,7 +421,6 @@ class DomainTest(unittest.TestCase):
 
     def testDomainCollections(self):
         domain = helper.getTestDomain("tall.h5")
-        print("testDomainCollections", domain)
         headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/'
 
@@ -442,7 +434,7 @@ class DomainTest(unittest.TestCase):
              self.assertTrue(k in rspJson)
 
         root_id = rspJson["root"]
-        helper.validateId(root_id)
+        self.assertLooksLikeUUID(root_id)
 
         # get the datasets collection
         req = helper.getEndpoint() + '/datasets'
@@ -453,7 +445,7 @@ class DomainTest(unittest.TestCase):
         self.assertTrue("datasets" in rspJson)
         datasets = rspJson["datasets"]
         for objid in datasets:
-            helper.validateId(objid)
+            self.assertLooksLikeUUID(objid)
         self.assertEqual(len(datasets), 4)
 
         # get the first 2 datasets
@@ -465,9 +457,9 @@ class DomainTest(unittest.TestCase):
         self.assertTrue("datasets" in rspJson)
         batch = rspJson["datasets"]
         self.assertEqual(len(batch), 2)
-        helper.validateId(batch[0])
+        self.assertLooksLikeUUID(batch[0])
         self.assertEqual(batch[0], datasets[0])
-        helper.validateId(batch[1])
+        self.assertLooksLikeUUID(batch[1])
         self.assertEqual(batch[1], datasets[1])
         # next batch
         params["Marker"] = batch[1]
@@ -478,9 +470,9 @@ class DomainTest(unittest.TestCase):
         self.assertTrue("datasets" in rspJson)
         batch = rspJson["datasets"]
         self.assertEqual(len(batch), 2)
-        helper.validateId(batch[0])
+        self.assertLooksLikeUUID(batch[0])
         self.assertEqual(batch[0], datasets[2])
-        helper.validateId(batch[1])
+        self.assertLooksLikeUUID(batch[1])
         self.assertEqual(batch[1], datasets[3])
 
         # get the groups collection
@@ -501,9 +493,9 @@ class DomainTest(unittest.TestCase):
         self.assertTrue("groups" in rspJson)
         batch = rspJson["groups"]
         self.assertEqual(len(batch), 2)
-        helper.validateId(batch[0])
+        self.assertLooksLikeUUID(batch[0])
         self.assertEqual(batch[0], groups[0])
-        helper.validateId(batch[1])
+        self.assertLooksLikeUUID(batch[1])
         self.assertEqual(batch[1], groups[1])
         # next batch
         params["Marker"] = batch[1]
@@ -516,7 +508,7 @@ class DomainTest(unittest.TestCase):
         batch = rspJson["groups"]
         self.assertEqual(len(batch), 3)
         for i in range(3):
-            helper.validateId(batch[i])
+            self.assertLooksLikeUUID(batch[i])
             self.assertEqual(batch[i], groups[2+i])
          
         # get the datatypes collection
@@ -531,7 +523,6 @@ class DomainTest(unittest.TestCase):
 
     def testNewDomainCollections(self):
         # verify that newly added groups/datasets show up in the collections 
-        print("testNewDomainCollections", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
         # get root id
@@ -540,7 +531,7 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
-        helper.validateId(root_uuid)
+        self.assertLooksLikeUUID(root_uuid)
 
         def make_group(parent_id, name):
             # create new group  
@@ -550,7 +541,7 @@ class DomainTest(unittest.TestCase):
             self.assertEqual(rsp.status_code, 201) 
             rspJson = json.loads(rsp.text)
             new_group_id = rspJson["id"]
-            self.assertTrue(helper.validateId(rspJson["id"]) )
+            self.assertLooksLikeUUID(rspJson["id"])
             return new_group_id
 
         def make_dset(parent_id, name):
@@ -565,7 +556,7 @@ class DomainTest(unittest.TestCase):
             self.assertEqual(rsp.status_code, 201)  # create dataset
             rspJson = json.loads(rsp.text)
             dset_id = rspJson["id"]
-            self.assertTrue(helper.validateId(dset_id))
+            self.assertLooksLikeUUID(dset_id)
             return dset_id
 
         def make_ctype(parent_id, name):
@@ -578,7 +569,7 @@ class DomainTest(unittest.TestCase):
             self.assertEqual(rsp.status_code, 201) 
             rspJson = json.loads(rsp.text)
             dtype_id = rspJson["id"]
-            self.assertTrue(helper.validateId(dtype_id))
+            self.assertLooksLikeUUID(dtype_id)
             return dtype_id
  
 
@@ -604,7 +595,7 @@ class DomainTest(unittest.TestCase):
         groups = rspJson["groups"]
         self.assertEqual(len(groups), len(group_ids))
         for objid in groups:
-            helper.validateId(objid)
+            self.assertLooksLikeUUID(objid)
             self.assertTrue(objid in group_ids)
 
         # get the datasets collection
@@ -617,7 +608,7 @@ class DomainTest(unittest.TestCase):
         datasets = rspJson["datasets"]
         self.assertEqual(len(datasets), len(dset_ids))
         for objid in datasets:
-            helper.validateId(objid)
+            self.assertLooksLikeUUID(objid)
             self.assertTrue(objid in dset_ids)
 
          # get the datatypes collection
@@ -630,14 +621,12 @@ class DomainTest(unittest.TestCase):
         datatypes = rspJson["datatypes"]
         self.assertEqual(len(datatypes), len(ctype_ids))
         for objid in datatypes:
-            helper.validateId(objid)
+            self.assertLooksLikeUUID(objid)
             self.assertTrue(objid in ctype_ids)
         
 
 
     def testGetDomains(self):
-        print("testGetDomains", self.base_domain)
-    
         import os.path as op
         # back up two levels
         domain = op.dirname(self.base_domain)
@@ -707,8 +696,6 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(len(domains), 0)
 
     def testGetTopLevelDomains(self):
-        print("testGetDomains", self.base_domain)
-    
         import os.path as op
         # Either '/' or no domain should get same result
         for domain in (None, '/'):
