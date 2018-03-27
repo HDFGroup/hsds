@@ -15,7 +15,67 @@ import time
 import json
 import config
 import helper
- 
+
+class DomainAccessPatternsTest(unittest.TestCase):
+
+    def assertLooksLikeUUID(self, s):
+        self.assertTrue(helper.validateId(s))
+
+    def __init__(self, *args, **kwargs):
+        super(DomainAccessPatternsTest, self).__init__(*args, **kwargs)
+        self.base_domain = helper.getTestDomainName(self.__class__.__name__)
+        helper.setupDomain(self.base_domain)
+
+        self.endpoint = helper.getEndpoint()
+        self.headers = helper.getRequestHeaders()
+
+        response = requests.get(
+                self.endpoint + "/",
+                headers = helper.getRequestHeaders(domain=self.base_domain))
+        assert response.status_code == 200, f"HTTP code {response.status_code}"
+        self.expected_root = response.json()["root"]
+
+    # this is what we did to get our expected root
+    def testGetViaHeaderHost(self):
+        # domain is recorded as 'host' header
+        headers_with_host = helper.getRequestHeaders(domain=self.base_domain)
+        response = requests.get(
+                self.endpoint + "/",
+                headers=headers_with_host)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers['content-type'], 'application/json')
+        self.assertEqual(response.json()["root"], self.expected_root)
+
+    def testGetViaQueryHost(self):
+        params = {"host": self.base_domain}
+        response = requests.get(
+                self.endpoint + "/",
+                headers=self.headers,
+                params=params)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers['content-type'], 'application/json')
+        self.assertEqual(response.json()["root"], self.expected_root)
+
+    def testGetViaDNSLikeQueryHost(self):
+        domain = helper.getDNSDomain(self.base_domain)
+        params = { "host": domain }
+        response = requests.get(
+                self.endpoint + "/",
+                headers=self.headers,
+                params=params)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers['content-type'], 'application/json')
+        self.assertEqual(response.json()["root"], self.expected_root)
+
+    def testGetViaQueryDomain(self):
+        params = {"domain": self.base_domain}
+        response = requests.get(
+                self.endpoint + "/",
+                headers=self.headers,
+                params=params)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers['content-type'], 'application/json')
+        self.assertEqual(response.json()["root"], self.expected_root)
 
 class DomainTest(unittest.TestCase):
 
@@ -27,44 +87,12 @@ class DomainTest(unittest.TestCase):
         self.base_domain = helper.getTestDomainName(self.__class__.__name__)
         #print("base_domain: {}".format(self.base_domain))
         helper.setupDomain(self.base_domain)
-        
-    def testBaseDomain(self):
-        headers = helper.getRequestHeaders(domain=self.base_domain)
-        
-        req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.headers['content-type'], 'application/json')
-        rspJson = json.loads(rsp.text)
-        root_uuid = rspJson["root"]
-        self.assertLooksLikeUUID(root_uuid)
-
-        # verify that passing domain as query string works as well
-        del headers["host"]
-        req += "?host=" + self.base_domain
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.headers['content-type'], 'application/json')
-        rspJson = json.loads(rsp.text)
-        root_uuid_2 = rspJson["root"]
-        self.assertEqual(root_uuid, root_uuid_2)
-
-        # try using DNS-style domain name  
-        domain = helper.getDNSDomain(self.base_domain)
-        params = { "host": domain }
-        rsp = requests.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.headers['content-type'], 'application/json')
-        rspJson = json.loads(rsp.text)
-        root_uuid_3 = rspJson["root"]
-        self.assertEqual(root_uuid, root_uuid_3)
-
 
     def testGetDomain(self):
         domain = helper.getTestDomain("tall.h5")
         print("testGetDomain", domain)
         headers = helper.getRequestHeaders(domain=domain)
-        
+
         req = helper.getEndpoint() + '/'
         rsp = requests.get(req, headers=headers)
         if rsp.status_code != 200:
@@ -83,7 +111,7 @@ class DomainTest(unittest.TestCase):
         self.assertTrue(rspJson["owner"])
         self.assertEqual(rspJson["class"], "domain")
         self.assertFalse("num_groups" in rspJson)  # should only show up with the verbose param
-        
+
         root_uuid = rspJson["root"]
         self.assertLooksLikeUUID(root_uuid)
 
