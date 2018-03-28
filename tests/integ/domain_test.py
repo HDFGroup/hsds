@@ -10,19 +10,22 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import unittest
+import warnings
 import requests
 import time
 import json
 import config
 import helper
 
-class DomainAccessPatternsTest(unittest.TestCase):
+# ----------------------------------------------------------------------
+
+class GetDomainPatternsTest(unittest.TestCase):
 
     def assertLooksLikeUUID(self, s):
         self.assertTrue(helper.validateId(s))
 
     def __init__(self, *args, **kwargs):
-        super(DomainAccessPatternsTest, self).__init__(*args, **kwargs)
+        super(GetDomainPatternsTest, self).__init__(*args, **kwargs)
         self.base_domain = helper.getTestDomainName(self.__class__.__name__)
         helper.setupDomain(self.base_domain)
 
@@ -36,7 +39,7 @@ class DomainAccessPatternsTest(unittest.TestCase):
         self.expected_root = response.json()["root"]
 
     # this is what we did to get our expected root
-    def testGetViaHeaderHost(self):
+    def testHeaderHost(self):
         # domain is recorded as 'host' header
         headers_with_host = helper.getRequestHeaders(domain=self.base_domain)
         response = requests.get(
@@ -46,7 +49,13 @@ class DomainAccessPatternsTest(unittest.TestCase):
         self.assertEqual(response.headers['content-type'], 'application/json')
         self.assertEqual(response.json()["root"], self.expected_root)
 
-    def testGetViaQueryHost(self):
+    def testHeaderHostMissingLeadSlash(self):
+        bad_domain = self.base_domain[1:] # remove leading '/'
+        headers = helper.getRequestHeaders(domain=bad_domain)
+        response = requests.get(self.endpoint + "/", headers=headers)
+        self.assertEqual(response.status_code, 400)
+
+    def testQueryHost(self):
         params = {"host": self.base_domain}
         response = requests.get(
                 self.endpoint + "/",
@@ -56,7 +65,14 @@ class DomainAccessPatternsTest(unittest.TestCase):
         self.assertEqual(response.headers['content-type'], 'application/json')
         self.assertEqual(response.json()["root"], self.expected_root)
 
-    def testGetViaDNSLikeQueryHost(self):
+    def testQueryHostMissingLeadSlash(self):
+        params = {"host": self.base_domain[1:]} # remove leading '/'
+        response = requests.get(
+                self.endpoint + "/",
+                headers=self.headers)
+        self.assertEqual(response.status_code, 400)
+
+    def testQueryHostDNSLike(self):
         domain = helper.getDNSDomain(self.base_domain)
         params = { "host": domain }
         response = requests.get(
@@ -67,7 +83,7 @@ class DomainAccessPatternsTest(unittest.TestCase):
         self.assertEqual(response.headers['content-type'], 'application/json')
         self.assertEqual(response.json()["root"], self.expected_root)
 
-    def testGetViaQueryDomain(self):
+    def testQueryDomain(self):
         params = {"domain": self.base_domain}
         response = requests.get(
                 self.endpoint + "/",
@@ -77,32 +93,36 @@ class DomainAccessPatternsTest(unittest.TestCase):
         self.assertEqual(response.headers['content-type'], 'application/json')
         self.assertEqual(response.json()["root"], self.expected_root)
 
-class DomainTest(unittest.TestCase):
+    def testQueryDomainMissingLeadSlash(self):
+        params = {"domain": self.base_domain[1:]} # remove leading '/'
+        response = requests.get(
+                self.endpoint + "/",
+                headers=self.headers)
+        self.assertEqual(response.status_code, 400)
 
-    def assertLooksLikeUUID(self, s):
-        self.assertTrue(helper.validateId(s))
+# ----------------------------------------------------------------------
+
+@unittest.skipUnless(
+        config.get("test_on_uploaded_file"),
+        "sample file may not be present")
+class OperationsOnUploadedTest(unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
-        super(DomainTest, self).__init__(*args, **kwargs)
+        super(OperationsOnUploadedTest, self).__init__(*args, **kwargs)
         self.base_domain = helper.getTestDomainName(self.__class__.__name__)
-        #print("base_domain: {}".format(self.base_domain))
         helper.setupDomain(self.base_domain)
 
     def testGetDomain(self):
         domain = helper.getTestDomain("tall.h5")
-        print("testGetDomain", domain)
         headers = helper.getRequestHeaders(domain=domain)
 
         req = helper.getEndpoint() + '/'
         rsp = requests.get(req, headers=headers)
-        if rsp.status_code != 200:
-            print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
-            return  # abort rest of test
+        self.assertEqual(
+                rsp.status_code, 200, f"Failed to get domain {self.domain}")
         self.assertEqual(rsp.headers['content-type'], 'application/json')
-        rspJson = json.loads(rsp.text)
-         
-        for name in ("lastModified", "created", "hrefs", "root", "owner", "class"):
-            self.assertTrue(name in rspJson)
+        rspJson = rsp.json()
+
         now = time.time()
         self.assertTrue(rspJson["created"] < now - 60 * 5)
         self.assertTrue(rspJson["lastModified"] < now - 60 * 5)
@@ -110,36 +130,10 @@ class DomainTest(unittest.TestCase):
         self.assertTrue(rspJson["root"].startswith("g-"))
         self.assertTrue(rspJson["owner"])
         self.assertEqual(rspJson["class"], "domain")
-        self.assertFalse("num_groups" in rspJson)  # should only show up with the verbose param
-
-        root_uuid = rspJson["root"]
-        self.assertLooksLikeUUID(root_uuid)
-
-        # verify that passing domain as query string works as well
-        del headers["host"]
-        params = {"host": domain}
-        rsp = requests.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.headers['content-type'], 'application/json')
-        rspJson = json.loads(rsp.text)
-        root_uuid_2 = rspJson["root"]
-        self.assertEqual(root_uuid, root_uuid_2)
-
-        # same deal using the "domain" param
-        params = {"domain": domain}
-        rsp = requests.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.headers['content-type'], 'application/json')
-        rspJson = json.loads(rsp.text)
-        root_uuid_3 = rspJson["root"]
-        self.assertEqual(root_uuid, root_uuid_3)
-
-        # verify that invalid domain fails
-        domain = domain[1:]  # strip off the '/'
-        params = {"domain": domain}
-
-        rsp = requests.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 400)
+        self.assertFalse(
+                "num_groups" in rspJson,
+                "'num_groups' should only show up with the verbose param")
+        self.assertLooksLikeUUID(rspJson["root"])
 
     def testGetByPath(self):
         domain = helper.getTestDomain("tall.h5")
@@ -147,9 +141,8 @@ class DomainTest(unittest.TestCase):
         
         req = helper.getEndpoint() + '/'
         rsp = requests.get(req, headers=headers)
-        if rsp.status_code != 200:
-            print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
-            return  # abort rest of test
+        self.assertEqual(
+                rsp.status_code, 200, f"Failed to get domain {self.domain}")
         domainJson = json.loads(rsp.text)
         self.assertTrue("root" in domainJson)
         root_id = domainJson["root"]
@@ -176,20 +169,118 @@ class DomainTest(unittest.TestCase):
         self.assertTrue("root" in rspJson)
         self.assertEqual(root_id, rspJson["root"])
 
+    def testDomainCollections(self):
+        domain = helper.getTestDomain("tall.h5")
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + '/'
+
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200, f"Can't get domain: {domain}")
+
+        rspJson = json.loads(rsp.text)
+        for k in ("root", "owner", "created", "lastModified"):
+             self.assertTrue(k in rspJson)
+
+        root_id = rspJson["root"]
+        self.assertLooksLikeUUID(root_id)
+
+        # get the datasets collection
+        req = helper.getEndpoint() + '/datasets'
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("datasets" in rspJson)
+        datasets = rspJson["datasets"]
+        for objid in datasets:
+            self.assertLooksLikeUUID(objid)
+        self.assertEqual(len(datasets), 4)
+
+        # get the first 2 datasets
+        params = {"Limit": 2}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("datasets" in rspJson)
+        batch = rspJson["datasets"]
+        self.assertEqual(len(batch), 2)
+        self.assertLooksLikeUUID(batch[0])
+        self.assertEqual(batch[0], datasets[0])
+        self.assertLooksLikeUUID(batch[1])
+        self.assertEqual(batch[1], datasets[1])
+        # next batch
+        params["Marker"] = batch[1]
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("datasets" in rspJson)
+        batch = rspJson["datasets"]
+        self.assertEqual(len(batch), 2)
+        self.assertLooksLikeUUID(batch[0])
+        self.assertEqual(batch[0], datasets[2])
+        self.assertLooksLikeUUID(batch[1])
+        self.assertEqual(batch[1], datasets[3])
+
+        # get the groups collection
+        req = helper.getEndpoint() + '/groups'
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("groups" in rspJson)
+        groups = rspJson["groups"]
+        self.assertEqual(len(groups), 5)
+        # get the first 2 groups
+        params = {"Limit": 2}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("groups" in rspJson)
+        batch = rspJson["groups"]
+        self.assertEqual(len(batch), 2)
+        self.assertLooksLikeUUID(batch[0])
+        self.assertEqual(batch[0], groups[0])
+        self.assertLooksLikeUUID(batch[1])
+        self.assertEqual(batch[1], groups[1])
+        # next batch
+        params["Marker"] = batch[1]
+        params["Limit"] = 100
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("groups" in rspJson)
+        batch = rspJson["groups"]
+        self.assertEqual(len(batch), 3)
+        for i in range(3):
+            self.assertLooksLikeUUID(batch[i])
+            self.assertEqual(batch[i], groups[2+i])
+
+        # get the datatypes collection
+        req = helper.getEndpoint() + '/datatypes'
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("datatypes" in rspJson)
+        datatypes = rspJson["datatypes"]
+        self.assertEqual(len(datatypes), 0)  # no datatypes in this domain
 
     def testGetDomainVerbose(self):
         domain = helper.getTestDomain("tall.h5")
         headers = helper.getRequestHeaders(domain=domain)
-        
+
         req = helper.getEndpoint() + '/'
         params = {"verbose": 1}
         rsp = requests.get(req, params=params, headers=headers)
-        if rsp.status_code != 200:
-            print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
-            return  # abort rest of test
+        self.assertEqual(rsp.status_code, 200, f"Can't get domain: {domain}")
+
         self.assertEqual(rsp.headers['content-type'], 'application/json')
         rspJson = json.loads(rsp.text)
-         
+
         for name in ("lastModified", "created", "hrefs", "root", "owner", "class"):
             self.assertTrue(name in rspJson)
         now = time.time()
@@ -199,7 +290,7 @@ class DomainTest(unittest.TestCase):
         self.assertTrue(rspJson["root"].startswith("g-"))
         self.assertTrue(rspJson["owner"])
         self.assertEqual(rspJson["class"], "domain")
-        
+
         root_uuid = rspJson["root"]
         self.assertLooksLikeUUID(root_uuid)
 
@@ -210,13 +301,24 @@ class DomainTest(unittest.TestCase):
         self.assertTrue("num_datatypes" in rspJson)
         self.assertEqual(rspJson["num_datatypes"], 0)
         self.assertTrue("allocated_bytes" in rspJson)
+
         # test that allocated_bytes falls in a given range
         self.assertTrue(rspJson["allocated_bytes"] > 5000)  
         self.assertTrue(rspJson["allocated_bytes"] < 6000)  
         self.assertTrue("num_chunks" in rspJson)
         self.assertTrue(rspJson["num_chunks"], 4)
- 
-        
+
+# ----------------------------------------------------------------------
+
+class DomainTest(unittest.TestCase):
+
+    def assertLooksLikeUUID(self, s):
+        self.assertTrue(helper.validateId(s))
+
+    def __init__(self, *args, **kwargs):
+        super(DomainTest, self).__init__(*args, **kwargs)
+        self.base_domain = helper.getTestDomainName(self.__class__.__name__)
+        helper.setupDomain(self.base_domain)
 
     def testGetTopLevelDomain(self):
         domain = "/home"
@@ -237,7 +339,6 @@ class DomainTest(unittest.TestCase):
         req = helper.getEndpoint() + '/'
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
-          
 
     def testCreateDomain(self):
         domain = self.base_domain + "/newdomain.h6"
@@ -338,7 +439,6 @@ class DomainTest(unittest.TestCase):
 
     def testInvalidChildDomain(self):
         domain = self.base_domain + "/notafolder/newdomain.h5"
-        # should fail assuming "notafolder" doesn't exist
         headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/'
 
@@ -446,108 +546,6 @@ class DomainTest(unittest.TestCase):
         # TBD - try deleting a top-level domain
 
         # TBD - try deleting a domain that has child-domains
-
-    def testDomainCollections(self):
-        domain = helper.getTestDomain("tall.h5")
-        headers = helper.getRequestHeaders(domain=domain)
-        req = helper.getEndpoint() + '/'
-
-        rsp = requests.get(req, headers=headers)
-        if rsp.status_code != 200:
-            print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
-            return  # abort rest of test
-
-        rspJson = json.loads(rsp.text)
-        for k in ("root", "owner", "created", "lastModified"):
-             self.assertTrue(k in rspJson)
-
-        root_id = rspJson["root"]
-        self.assertLooksLikeUUID(root_id)
-
-        # get the datasets collection
-        req = helper.getEndpoint() + '/datasets'
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("datasets" in rspJson)
-        datasets = rspJson["datasets"]
-        for objid in datasets:
-            self.assertLooksLikeUUID(objid)
-        self.assertEqual(len(datasets), 4)
-
-        # get the first 2 datasets
-        params = {"Limit": 2}
-        rsp = requests.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("datasets" in rspJson)
-        batch = rspJson["datasets"]
-        self.assertEqual(len(batch), 2)
-        self.assertLooksLikeUUID(batch[0])
-        self.assertEqual(batch[0], datasets[0])
-        self.assertLooksLikeUUID(batch[1])
-        self.assertEqual(batch[1], datasets[1])
-        # next batch
-        params["Marker"] = batch[1]
-        rsp = requests.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("datasets" in rspJson)
-        batch = rspJson["datasets"]
-        self.assertEqual(len(batch), 2)
-        self.assertLooksLikeUUID(batch[0])
-        self.assertEqual(batch[0], datasets[2])
-        self.assertLooksLikeUUID(batch[1])
-        self.assertEqual(batch[1], datasets[3])
-
-        # get the groups collection
-        req = helper.getEndpoint() + '/groups'
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("groups" in rspJson)
-        groups = rspJson["groups"]
-        self.assertEqual(len(groups), 5)
-        # get the first 2 groups
-        params = {"Limit": 2}
-        rsp = requests.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("groups" in rspJson)
-        batch = rspJson["groups"]
-        self.assertEqual(len(batch), 2)
-        self.assertLooksLikeUUID(batch[0])
-        self.assertEqual(batch[0], groups[0])
-        self.assertLooksLikeUUID(batch[1])
-        self.assertEqual(batch[1], groups[1])
-        # next batch
-        params["Marker"] = batch[1]
-        params["Limit"] = 100
-        rsp = requests.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("groups" in rspJson)
-        batch = rspJson["groups"]
-        self.assertEqual(len(batch), 3)
-        for i in range(3):
-            self.assertLooksLikeUUID(batch[i])
-            self.assertEqual(batch[i], groups[2+i])
-         
-        # get the datatypes collection
-        req = helper.getEndpoint() + '/datatypes'
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("datatypes" in rspJson)
-        datatypes = rspJson["datatypes"]
-        self.assertEqual(len(datatypes), 0)  # no datatypes in this domain
 
     def testNewDomainCollections(self):
         # verify that newly added groups/datasets show up in the collections 
@@ -724,39 +722,31 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(len(domains), 0)
 
     def testGetTopLevelDomains(self):
-        import os.path as op
-        # Either '/' or no domain should get same result
-        for domain in (None, '/'):
-            headers = helper.getRequestHeaders(domain=domain)
+        for host in (None, '/'):
+            headers = helper.getRequestHeaders(domain=host)
             req = helper.getEndpoint() + '/domains'
             rsp = requests.get(req, headers=headers)
             self.assertEqual(rsp.status_code, 200)
             self.assertEqual(rsp.headers['content-type'], 'application/json')
-            rspJson = json.loads(rsp.text)
-            self.assertTrue("domains" in rspJson)
-            domains = rspJson["domains"]
-        
-            domain_count = len(domains)
-            if domain_count == 0:
-                # this should only happen in the very first test run
-                print("Expected to find more domains!")
-                self.assertTrue(False)
-                return
+            domains = rsp.json()["domains"]
+
+            #TODO: what?
+            # this should only happen in the very first test run
+            # self.assertNotEqual(0, len(domains), "expected to find domains")
+            if len(domains) == 0:
+                warnings.warn("no domains found at top level ({host})")
 
             for item in domains:
-                self.assertTrue("name" in item)
                 name = item["name"]
-                self.assertEqual(name[0], '/')
-                self.assertTrue(name[-1] != '/')
+                self.assertTrue(name.startsWith('/'))
+                self.assertFalse(name.endsWith('/'))
                 self.assertTrue("owner" in item)
                 self.assertTrue("created" in item)
                 self.assertTrue("lastModified" in item)
-                self.assertTrue("class") in item
                 self.assertTrue(item["class"] in ("domain", "folder"))
-          
-             
+
+# ----------------------------------------------------------------------
+
 if __name__ == '__main__':
-    #setup test files
-    
     unittest.main()
-    
+

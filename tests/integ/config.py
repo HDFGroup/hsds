@@ -13,12 +13,14 @@ import os
 
 cfg = {
     'head_port': 5100,
-    'hsds_endpoint': 'http://192.168.99.100:5101',
-    'head_endpoint': 'http://192.168.99.100:5100',
+    'hsds_endpoint': 'http://localhost:5101',
+    'head_endpoint': 'http://localhost:5100',
+    #'hsds_endpoint': 'http://192.168.99.100:5101',
     #'hsds_endpoint': 'http://192.168.1.100:5101',
     'user_name': 'test_user1',
     'user_password': 'test',
-    'test_noauth': True
+    'test_noauth': False,
+    'test_on_uploaded_file': False,
 }
    
 def get(x):     
