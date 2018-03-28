@@ -72,16 +72,63 @@ class GetDomainPatternsTest(unittest.TestCase):
                 headers=self.headers)
         self.assertEqual(response.status_code, 400)
 
-    def testQueryHostDNSLike(self):
-        domain = helper.getDNSDomain(self.base_domain)
-        params = { "host": domain }
+    def testQueryHostDNS(self):
+        dns_domain = helper.getDNSDomain(self.base_domain)
         response = requests.get(
                 self.endpoint + "/",
                 headers=self.headers,
-                params=params)
+                params={"host": dns_domain})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers['content-type'], 'application/json')
         self.assertEqual(response.json()["root"], self.expected_root)
+
+    def testQueryHostDNSMalformed(self):
+        dns_domain = helper.getDNSDomain(self.base_domain)
+        req = self.endpoint + "/"
+
+        for predomain in (
+            "two.dots..are.bad.",
+            "no/slash",
+            ".", 
+            ".sure.leading.dot",
+        ):
+            domain = predomain + dns_domain
+            response = requests.get(
+                    req,
+                    headers=self.headers,
+                    params={"host": domain})
+            self.assertEqual(
+                    response.status_code,
+                    400,
+                    f"predomain '{predomain}' should fail")
+
+    def testHeaderHostDNS(self):
+        dns_domain = helper.getDNSDomain(self.base_domain)
+        req = helper.getEndpoint() + '/'
+
+        # verify we can access base domain as via dns name
+        headers = helper.getRequestHeaders(domain=dns_domain)
+        response = requests.get(req, headers=headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertLooksLikeUUID(response.json()["root"])
+
+    def testHeaderHostDNSMalformed(self):
+        dns_domain = helper.getDNSDomain(self.base_domain)
+        req = helper.getEndpoint() + '/'
+
+        for predomain in (
+            "two.dots..are.bad.",
+            "no/slash",
+            ".", 
+            ".sure.leading.dot",
+        ):
+            domain = predomain + dns_domain
+            headers = helper.getRequestHeaders(domain=domain)
+            response = requests.get(req, headers=headers)
+            self.assertEqual(
+                    response.status_code,
+                    400,
+                    f"predomain '{predomain}' should fail")
 
     def testQueryDomain(self):
         params = {"domain": self.base_domain}
@@ -450,57 +497,12 @@ class DomainTest(unittest.TestCase):
         domain =  self.base_domain + "/doesnotexist.h6" 
         headers = helper.getRequestHeaders(domain=domain) 
         req = helper.getEndpoint() + '/'
-        
+
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 404)
 
-    def testDNSDomain(self):
-        # DNS domain names are in reverse order with dots as seperators...
-         
-        dns_domain = helper.getDNSDomain(self.base_domain)
-        # verify we can access base domain as via dns name
-        headers = helper.getRequestHeaders(domain=dns_domain)
-        
-        req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.headers['content-type'], 'application/json')
-        rspJson = json.loads(rsp.text)
-        root_uuid = rspJson["root"]
-        self.assertLooksLikeUUID(root_uuid)
-
-        # can't have two consecutive dots'       
-        domain = 'two.dots..are.bad.' + dns_domain 
-        req = helper.getEndpoint() + '/'
-        headers = helper.getRequestHeaders(domain=domain)
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 400)  # 400 == bad syntax
-        
-        # can't have a slash
-        domain = 'no/slash.' + dns_domain    
-        req = helper.getEndpoint() + '/'
-        headers = helper.getRequestHeaders(domain=domain)
-        rsp = requests.get(req, headers=headers)
-        # somehow this is showing up as a 400 in ceph and 404 in S3
-        self.assertTrue(rsp.status_code in (400, 404))  # 400 == bad syntax
-        
-        # just a dot is no good
-        domain = '.'  + dns_domain  
-        req = helper.getEndpoint() + '/'
-        headers = helper.getRequestHeaders(domain=domain)
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 400)  # 400 == bad syntax
-        
-        # dot in the front is bad
-        domain =  '.dot.in.front.is.bad.' + dns_domain    
-        req = helper.getEndpoint() + '/'
-        headers = helper.getRequestHeaders(domain=domain)
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 400)  # 400 == bad syntax
-
     def testDeleteDomain(self):
         domain = self.base_domain + "/deleteme.h6"
-        
         headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/'
 
@@ -515,7 +517,7 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertEqual(root_id, rspJson["root"])
-        
+
         # try deleting the domain with a user who doesn't have permissions'
         headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
         rsp = requests.delete(req, headers=headers)
@@ -597,7 +599,6 @@ class DomainTest(unittest.TestCase):
             dtype_id = rspJson["id"]
             self.assertLooksLikeUUID(dtype_id)
             return dtype_id
- 
 
         group_ids = []
         group_ids.append(make_group(root_uuid, "g1"))
@@ -649,8 +650,6 @@ class DomainTest(unittest.TestCase):
         for objid in datatypes:
             self.assertLooksLikeUUID(objid)
             self.assertTrue(objid in ctype_ids)
-        
-
 
     def testGetDomains(self):
         import os.path as op
@@ -665,7 +664,7 @@ class DomainTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("domains" in rspJson)
         domains = rspJson["domains"]
-        
+
         domain_count = len(domains)
         if domain_count < 9:
             # this should only happen in the very first test run
@@ -697,7 +696,7 @@ class DomainTest(unittest.TestCase):
             name = item["name"]
             self.assertEqual(name[0], '/')
             self.assertTrue(name[-1] != '/')
-             
+
         # get next batch of 4
         params = {"domain": domain, "Marker": name, "Limit": 4}
         rsp = requests.get(req, params=params, headers=headers)
@@ -730,9 +729,8 @@ class DomainTest(unittest.TestCase):
             self.assertEqual(rsp.headers['content-type'], 'application/json')
             domains = rsp.json()["domains"]
 
-            #TODO: what?
             # this should only happen in the very first test run
-            # self.assertNotEqual(0, len(domains), "expected to find domains")
+            # TODO: ^ what?
             if len(domains) == 0:
                 warnings.warn("no domains found at top level ({host})")
 
