@@ -394,57 +394,35 @@ class DomainTest(unittest.TestCase):
         headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/'
 
+        # must not already exist
+        get_absent_code = requests.get(req, headers=headers).status_code
+        self.assertEqual(get_absent_code, 404)
+
+        # put up new Domain
         rsp = requests.put(req, headers=headers)
         self.assertEqual(rsp.status_code, 201)
-        rspJson = json.loads(rsp.text)
-        for k in ("root", "owner", "acls", "created", "lastModified"):
-             self.assertTrue(k in rspJson)
 
+        # verify expected elements returned
+        rspJson = rsp.json()
+        for k in (
+            "root",
+            "owner",
+            "acls",
+            "created",
+            "lastModified"
+        ):
+             self.assertTrue(k in rspJson)
+        self.assertFalse("class" in rspJson)
         root_id = rspJson["root"]
+        self.assertLooksLikeUUID(root_id)
 
-        # verify that putting the same domain again fails with a 409 error
-        rsp = requests.put(req, headers=headers)
-        self.assertEqual(rsp.status_code, 409)
+        # putting the same domain again fails with a 409 error
+        self.assertEqual(requests.put(req, headers=headers).status_code, 409)
 
-        # do a get on the new domain
+        # verify that we can get the Domain back
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        for k in ("root", "owner"):
-             self.assertTrue(k in rspJson)
-        # we should get the same value for root id
-        self.assertEqual(root_id, rspJson["root"])
-
-        # try doing a GET with a host query args
-        headers = helper.getRequestHeaders()
-        req = helper.getEndpoint() + "/?host=" + domain
-        # do a get on the domain with a query arg for host
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        for k in ("root", "owner"):
-             self.assertTrue(k in rspJson)
-        # we should get the same value for root id
-        self.assertEqual(root_id, rspJson["root"])
-
-        # verify we can access root groups
-        root_req =  helper.getEndpoint() + "/groups/" + root_id
-        headers = helper.getRequestHeaders(domain=domain)
-        rsp = requests.get(root_req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-
-        # try doing a un-authenticated request
-        if config.get("test_noauth"):
-            headers = helper.getRequestHeaders()
-            req = helper.getEndpoint() + "/?host=" + domain
-            # do a get on the domain with a query arg for host
-            rsp = requests.get(req)
-            self.assertEqual(rsp.status_code, 200)
-            rspJson = json.loads(rsp.text)
-            for k in ("root", "owner"):
-                self.assertTrue(k in rspJson)
-            # we should get the same value for root id
-            self.assertEqual(root_id, rspJson["root"])
+        self.assertEqual(rsp.json()["root"], root_id)
 
     def testCreateFolder(self):
         domain = self.base_domain + "/newfolder"
