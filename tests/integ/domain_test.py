@@ -89,7 +89,7 @@ class GetDomainPatternsTest(unittest.TestCase):
         for predomain in (
             "two.dots..are.bad.",
             "no/slash",
-            ".", 
+            ".",
             ".sure.leading.dot",
         ):
             domain = predomain + dns_domain
@@ -119,7 +119,7 @@ class GetDomainPatternsTest(unittest.TestCase):
         for predomain in (
             "two.dots..are.bad.",
             "no/slash",
-            ".", 
+            ".",
             ".sure.leading.dot",
         ):
             domain = predomain + dns_domain
@@ -185,7 +185,7 @@ class OperationsOnUploadedTest(unittest.TestCase):
     def testGetByPath(self):
         domain = helper.getTestDomain("tall.h5")
         headers = helper.getRequestHeaders(domain=domain)
-        
+
         req = helper.getEndpoint() + '/'
         rsp = requests.get(req, headers=headers)
         self.assertEqual(
@@ -350,8 +350,8 @@ class OperationsOnUploadedTest(unittest.TestCase):
         self.assertTrue("allocated_bytes" in rspJson)
 
         # test that allocated_bytes falls in a given range
-        self.assertTrue(rspJson["allocated_bytes"] > 5000)  
-        self.assertTrue(rspJson["allocated_bytes"] < 6000)  
+        self.assertTrue(rspJson["allocated_bytes"] > 5000)
+        self.assertTrue(rspJson["allocated_bytes"] < 6000)
         self.assertTrue("num_chunks" in rspJson)
         self.assertTrue(rspJson["num_chunks"], 4)
 
@@ -380,7 +380,7 @@ class DomainTest(unittest.TestCase):
             response = requests.get(req, headers=headers)
             self.assertEqual(
                     response.status_code,
-                    200, 
+                    200,
                     f"Unable to get domain {domain}")
             rspJson = response.json()
             self.assertFalse("root" in rspJson)
@@ -411,7 +411,7 @@ class DomainTest(unittest.TestCase):
             "created",
             "lastModified"
         ):
-             self.assertTrue(k in rspJson)
+             self.assertTrue(k in rspJson, f"missing element: {k}")
         self.assertFalse("class" in rspJson)
         root_id = rspJson["root"]
         self.assertLooksLikeUUID(root_id)
@@ -445,39 +445,41 @@ class DomainTest(unittest.TestCase):
         domain = self.base_domain + "/newfolder"
         headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/'
+
+        # must not already exist
+        get_absent_code = requests.get(req, headers=headers).status_code
+        self.assertEqual(get_absent_code, 404)
+
+        # put up new Domain
         body = {"folder": True}
-        rsp = requests.put(req, data=json.dumps(body), headers=headers)
+        rsp = requests.put(req, headers=headers, data=json.dumps(body))
         self.assertEqual(rsp.status_code, 201)
-        rspJson = json.loads(rsp.text)
-        for k in ("owner", "acls", "created", "lastModified"):
-             self.assertTrue(k in rspJson)
-        self.assertFalse("root" in rspJson)  # no root -> folder
- 
-        # verify that putting the same domain again fails with a 409 error
+
+        # verify expected elements returned
+        rspJson = rsp.json()
+        for k in (
+            "owner",
+            "acls",
+            "created",
+            "lastModified"
+        ):
+             self.assertTrue(k in rspJson, f"missing element: {k}")
+        self.assertFalse("root" in rspJson, "folders have no root element")
+
+        # verify that putting the same folder again fails with a 409 error
         rsp = requests.put(req, data=json.dumps(body), headers=headers)
         self.assertEqual(rsp.status_code, 409)
 
-        # do a get on the new folder
+        # verify that putting a domain with the same name also 409s
+        rsp = requests.put(req, headers=headers)
+        self.assertEqual(rsp.status_code, 409)
+
+        # get newly-created folder and inspect
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-         
+        rspJson = rsp.json()
         self.assertTrue("owner" in rspJson)
-        self.assertTrue("class" in rspJson)
         self.assertEqual(rspJson["class"], "folder")
-         
-
-        # try doing a un-authenticated request
-        if config.get("test_noauth"):
-            headers = helper.getRequestHeaders()
-            req = helper.getEndpoint() + "/?host=" + domain
-            # do a get on the folder with a query arg for host
-            rsp = requests.get(req)
-            self.assertEqual(rsp.status_code, 200)
-            rspJson = json.loads(rsp.text)
-            for k in ("class", "owner"):
-                self.assertTrue(k in rspJson)
-            self.assertFalse("root" in rspJson)   
 
     def testCreateDomainInMissingFolder(self):
         domain = self.base_domain + "/notafolder/newdomain.h5"
@@ -488,8 +490,8 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 404)
 
     def testGetMissingDomain(self):
-        domain =  self.base_domain + "/doesnotexist.h6" 
-        headers = helper.getRequestHeaders(domain=domain) 
+        domain =  self.base_domain + "/doesnotexist.h6"
+        headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/'
 
         rsp = requests.get(req, headers=headers)
@@ -552,8 +554,9 @@ class DomainTest(unittest.TestCase):
 
     # TBD - try deleting a domain that has child-domains
 
+    # TODO: refactor the snot out of this
     def testNewDomainCollections(self):
-        # verify that newly added groups/datasets show up in the collections 
+        # verify that newly added groups/datasets show up in the collections
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
         # get root id
@@ -565,21 +568,21 @@ class DomainTest(unittest.TestCase):
         self.assertLooksLikeUUID(root_uuid)
 
         def make_group(parent_id, name):
-            # create new group  
+            # create new group
             payload = { 'link': { 'id': parent_id, 'name': name } }
             req = helper.getEndpoint() + "/groups"
             rsp = requests.post(req, data=json.dumps(payload), headers=headers)
-            self.assertEqual(rsp.status_code, 201) 
+            self.assertEqual(rsp.status_code, 201)
             rspJson = json.loads(rsp.text)
             new_group_id = rspJson["id"]
             self.assertLooksLikeUUID(rspJson["id"])
             return new_group_id
 
         def make_dset(parent_id, name):
-            type_vstr = {"charSet": "H5T_CSET_ASCII", 
-                "class": "H5T_STRING", 
-                "strPad": "H5T_STR_NULLTERM", 
-                "length": "H5T_VARIABLE" } 
+            type_vstr = {"charSet": "H5T_CSET_ASCII",
+                "class": "H5T_STRING",
+                "strPad": "H5T_STR_NULLTERM",
+                "length": "H5T_VARIABLE" }
             payload = {'type': type_vstr, 'shape': 10,
                 'link': {'id': parent_id, 'name': name} }
             req = helper.getEndpoint() + "/datasets"
@@ -591,13 +594,13 @@ class DomainTest(unittest.TestCase):
             return dset_id
 
         def make_ctype(parent_id, name):
-            payload = { 
-                'type': 'H5T_IEEE_F64LE', 
-                'link': {'id': parent_id, 'name': name} 
+            payload = {
+                'type': 'H5T_IEEE_F64LE',
+                'link': {'id': parent_id, 'name': name}
             }
             req = helper.getEndpoint() + "/datatypes"
             rsp = requests.post(req, data=json.dumps(payload), headers=headers)
-            self.assertEqual(rsp.status_code, 201) 
+            self.assertEqual(rsp.status_code, 201)
             rspJson = json.loads(rsp.text)
             dtype_id = rspJson["id"]
             self.assertLooksLikeUUID(dtype_id)
@@ -614,14 +617,13 @@ class DomainTest(unittest.TestCase):
         ctype_ids = []
         ctype_ids.append(make_ctype(g3_id, "ctype1"))
 
-       
         # get the groups collection
         req = helper.getEndpoint() + '/groups'
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
-    
+
         groups = rspJson["groups"]
         self.assertEqual(len(groups), len(group_ids))
         for objid in groups:
@@ -634,7 +636,7 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
-    
+
         datasets = rspJson["datasets"]
         self.assertEqual(len(datasets), len(dset_ids))
         for objid in datasets:
@@ -647,7 +649,7 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
-    
+
         datatypes = rspJson["datatypes"]
         self.assertEqual(len(datatypes), len(ctype_ids))
         for objid in datatypes:
@@ -683,7 +685,7 @@ class DomainTest(unittest.TestCase):
             self.assertTrue("created" in item)
             self.assertTrue("lastModified" in item)
             self.assertTrue(item["class"] in ("domain", "folder"))
-       
+
         # try getting the first 4 domains
         params = {"domain": domain, "Limit": 4}
         rsp = requests.get(req, params=params, headers=headers)
@@ -691,7 +693,7 @@ class DomainTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("domains" in rspJson)
         part1 = rspJson["domains"]
-        
+
         self.assertEqual(len(part1), 4)
         for item in part1:
             self.assertTrue("name" in item)
