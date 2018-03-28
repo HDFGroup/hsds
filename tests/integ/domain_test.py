@@ -367,10 +367,38 @@ class DomainTest(unittest.TestCase):
         self.base_domain = helper.getTestDomainName(self.__class__.__name__)
         helper.setupDomain(self.base_domain)
 
+        self._getfolder_keys = (
+            "owner",
+            "hrefs",
+            "created",
+            "class",
+            "lastModified",
+        )
+        self._putfolder_keys = (
+            "owner",
+            "acls",
+            "created",
+            "lastModified"
+        )
+        self._putdomain_keys = (
+            "root",
+            "owner",
+            "acls",
+            "created",
+            "lastModified"
+        )
+        self._getdomain_keys = (
+            "root",
+            "owner",
+            "acls",
+            "created",
+            "lastModified"
+        )
+
     def testGetFolderDomains(self):
         req = helper.getEndpoint() + "/"
         username = config.get("user_name")
-        for domain in (
+        for domain in ( # demonstrate both path- and dns-like domain names
             "/home",
             "home",
             f"/home/{username}",
@@ -383,13 +411,16 @@ class DomainTest(unittest.TestCase):
                     200,
                     f"Unable to get domain {domain}")
             rspJson = response.json()
+            for key in self._getfolder_keys :
+                self.assertTrue(key in rspJson, "missing element: {key}")
             self.assertFalse("root" in rspJson)
             self.assertEqual(rspJson["class"], "folder")
-            self.assertTrue("owner" in rspJson)
-            self.assertTrue("hrefs" in rspJson)
-            self.assertTrue("class" in rspJson)
+            self.assertEqual(
+                    len(self._getfolder_keys),
+                    len(rspJson),
+                    list(rspJson.keys()))
 
-    def testCreateDomain(self):
+    def testCreateAndGetDomain(self):
         domain = self.base_domain + "/newdomain.h6"
         headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/'
@@ -404,14 +435,12 @@ class DomainTest(unittest.TestCase):
 
         # verify expected elements returned
         rspJson = rsp.json()
-        for k in (
-            "root",
-            "owner",
-            "acls",
-            "created",
-            "lastModified"
-        ):
-             self.assertTrue(k in rspJson, f"missing element: {k}")
+        for key in self._putdomain_keys:
+             self.assertTrue(key in rspJson, f"missing element: {key}")
+        self.assertEqual(
+                len(self._putdomain_keys),
+                len(rspJson),
+                list(rspJson.keys()))
         self.assertFalse("class" in rspJson)
         root_id = rspJson["root"]
         self.assertLooksLikeUUID(root_id)
@@ -423,6 +452,13 @@ class DomainTest(unittest.TestCase):
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.json()["root"], root_id)
+        for key in self._getdomain_keys:
+            self.assertTrue(key in rspJson, f"missing element: {key}")
+        self.assertEqual(
+                len(self._getdomain_keys),
+                len(rspJson),
+                list(rspJson.keys())
+        )
 
     def testCreateDomainNotAuthorizedFails401(self):
         domain = self.base_domain + "/user_infringement.h6"
@@ -441,7 +477,7 @@ class DomainTest(unittest.TestCase):
         other_put_code = requests.put(req, headers=other_headers).status_code
         self.assertEqual(other_put_code, 401)
 
-    def testCreateFolder(self):
+    def testCreateAndGetFolder(self):
         domain = self.base_domain + "/newfolder"
         headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/'
@@ -457,13 +493,9 @@ class DomainTest(unittest.TestCase):
 
         # verify expected elements returned
         rspJson = rsp.json()
-        for k in (
-            "owner",
-            "acls",
-            "created",
-            "lastModified"
-        ):
+        for k in self._putfolder_keys:
              self.assertTrue(k in rspJson, f"missing element: {k}")
+        self.assertEqual(len(self._putfolder_keys), len(rspJson))
         self.assertFalse("root" in rspJson, "folders have no root element")
 
         # verify that putting the same folder again fails with a 409 error
@@ -478,7 +510,12 @@ class DomainTest(unittest.TestCase):
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = rsp.json()
-        self.assertTrue("owner" in rspJson)
+        for key in self._getfolder_keys:
+             self.assertTrue(key in rspJson, f"missing element: {key}")
+        self.assertEqual(
+                len(self._getfolder_keys),
+                len(rspJson),
+                list(rspJson.keys()))
         self.assertEqual(rspJson["class"], "folder")
 
     def testCreateDomainInMissingFolderFails404(self):
