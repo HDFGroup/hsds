@@ -424,6 +424,8 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.json()["root"], root_id)
 
+# TODO: attempt to create domain in valid folder but not allowed
+
     def testCreateFolder(self):
         domain = self.base_domain + "/newfolder"
         headers = helper.getRequestHeaders(domain=domain)
@@ -462,18 +464,15 @@ class DomainTest(unittest.TestCase):
                 self.assertTrue(k in rspJson)
             self.assertFalse("root" in rspJson)   
 
-    
-
-    def testInvalidChildDomain(self):
+    def testCreateDomainInMissingFolder(self):
         domain = self.base_domain + "/notafolder/newdomain.h5"
         headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/'
 
         rsp = requests.put(req, headers=headers)
         self.assertEqual(rsp.status_code, 404)
-         
 
-    def testGetNotFound(self):
+    def testGetMissingDomain(self):
         domain =  self.base_domain + "/doesnotexist.h6" 
         headers = helper.getRequestHeaders(domain=domain) 
         req = helper.getEndpoint() + '/'
@@ -481,53 +480,62 @@ class DomainTest(unittest.TestCase):
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 404)
 
+    # TODO: if this fails, there may be a lingering "deleteme.h6" domain
     def testDeleteDomain(self):
         domain = self.base_domain + "/deleteme.h6"
         headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/'
 
-        # create a domain
-        rsp = requests.put(req, headers=headers)
-        self.assertEqual(rsp.status_code, 201)
-        rspJson = json.loads(rsp.text)
-        root_id = rspJson["root"]
+        # domain does not exist
+        self.assertEqual(requests.get(req, headers=headers).status_code, 404)
 
-        # do a get on the domain
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertEqual(root_id, rspJson["root"])
+        # create domain
+        self.assertEqual(requests.put(req, headers=headers).status_code, 201)
 
-        # try deleting the domain with a user who doesn't have permissions'
-        headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
-        rsp = requests.delete(req, headers=headers)
-        self.assertEqual(rsp.status_code, 403) # forbidden
+        # can get domain
+        self.assertEqual(requests.get(req, headers=headers).status_code, 200)
 
-        # delete the domain (with the orginal user)
+        # user without permission cannot delete domain
+        other_headers = helper.getRequestHeaders(
+                domain=self.base_domain,
+                username="test_user2")
+        self.assertEqual(
+                requests.delete(req, headers=other_headers).status_code,
+                403)
+
+        # delete the domain with the orginal user
+        self.assertEqual(
+                requests.delete(req, headers=headers).status_code,
+                200)
+
+        # cannot get deleted Domain
+        self.assertEqual(requests.get(req, headers=headers).status_code, 410)
+
+    # TODO: if this fails, there may be a lingering "deleteme.h6" domain
+    def testReplaceDeletedDomain(self):
+        domain = self.base_domain + "/deleteme.h6"
         headers = helper.getRequestHeaders(domain=domain)
-        rsp = requests.delete(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
+        req = helper.getEndpoint() + '/'
 
-        # try getting the domain
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 410)
+        # SETUP: create domain
+        self.assertEqual(requests.put(req, headers=headers).status_code, 201)
 
-        # try re-creating a domain
-        rsp = requests.put(req, headers=headers)
-        self.assertEqual(rsp.status_code, 201)
-        rspJson = json.loads(rsp.text)
-        new_root_id = rspJson["root"]
-        self.assertTrue(new_root_id != root_id)
+        # SETUP: delete the domain
+        self.assertEqual(
+                requests.delete(req, headers=headers).status_code,
+                200)
 
-        # verify we can access root groups
-        root_req =  helper.getEndpoint() + "/groups/" + new_root_id
-        headers = helper.getRequestHeaders(domain=domain)
-        rsp = requests.get(root_req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
+        # TEST: can create new domain with same name
+        self.assertEqual(requests.put(req, headers=headers).status_code, 201)
 
-        # TBD - try deleting a top-level domain
+        # CLEANUP: remove domain again
+        self.assertEqual(
+                requests.delete(req, headers=headers).status_code,
+                200)
 
-        # TBD - try deleting a domain that has child-domains
+    # TBD - try deleting a top-level domain
+
+    # TBD - try deleting a domain that has child-domains
 
     def testNewDomainCollections(self):
         # verify that newly added groups/datasets show up in the collections 
