@@ -424,7 +424,7 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.json()["root"], root_id)
 
-    def testCreateDomainNotAuthorized(self):
+    def testCreateDomainNotAuthorizedFails401(self):
         domain = self.base_domain + "/user_infringement.h6"
         headers = helper.getRequestHeaders(domain=domain)
         other_user = "user2" if config.get("user_name") != "user2" else "user3"
@@ -481,7 +481,7 @@ class DomainTest(unittest.TestCase):
         self.assertTrue("owner" in rspJson)
         self.assertEqual(rspJson["class"], "folder")
 
-    def testCreateDomainInMissingFolder(self):
+    def testCreateDomainInMissingFolderFails404(self):
         domain = self.base_domain + "/notafolder/newdomain.h5"
         headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/'
@@ -489,7 +489,7 @@ class DomainTest(unittest.TestCase):
         rsp = requests.put(req, headers=headers)
         self.assertEqual(rsp.status_code, 404)
 
-    def testGetMissingDomain(self):
+    def testGetMissingDomainFails404(self):
         domain =  self.base_domain + "/doesnotexist.h6"
         headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/'
