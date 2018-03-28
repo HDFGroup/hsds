@@ -367,25 +367,27 @@ class DomainTest(unittest.TestCase):
         self.base_domain = helper.getTestDomainName(self.__class__.__name__)
         helper.setupDomain(self.base_domain)
 
-    def testGetTopLevelDomain(self):
-        domain = "/home"
-        headers = helper.getRequestHeaders(domain=domain)
-        
-        req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertFalse("root" in rspJson)  # no root group for folder domain
-        self.assertTrue("owner" in rspJson)
-        self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("class" in rspJson)
-        self.assertEqual(rspJson["class"], "folder")
-        domain = "test_user1.home"
-        headers = helper.getRequestHeaders(domain=domain)
-        
-        req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
+    def testGetFolderDomains(self):
+        req = helper.getEndpoint() + "/"
+        username = config.get("user_name")
+        for domain in (
+            "/home",
+            "home",
+            f"/home/{username}",
+            f"{username}.home",
+        ):
+            headers = helper.getRequestHeaders(domain=domain)
+            response = requests.get(req, headers=headers)
+            self.assertEqual(
+                    response.status_code,
+                    200, 
+                    f"Unable to get domain {domain}")
+            rspJson = response.json()
+            self.assertFalse("root" in rspJson)
+            self.assertEqual(rspJson["class"], "folder")
+            self.assertTrue("owner" in rspJson)
+            self.assertTrue("hrefs" in rspJson)
+            self.assertTrue("class" in rspJson)
 
     def testCreateDomain(self):
         domain = self.base_domain + "/newdomain.h6"
@@ -668,18 +670,17 @@ class DomainTest(unittest.TestCase):
         domain_count = len(domains)
         if domain_count < 9:
             # this should only happen in the very first test run
-            print("Expected to find more domains!")
+            # TODO: ^ what?
+            warnings.warn(f"Expected to find more domains in {domain}")
             return
 
         for item in domains:
-            self.assertTrue("name" in item)
             name = item["name"]
-            self.assertEqual(name[0], '/')
-            self.assertTrue(name[-1] != '/')
+            self.assertTrue(name.startsWith('/'))
+            self.assertFalse(name.endsWith('/'))
             self.assertTrue("owner" in item)
             self.assertTrue("created" in item)
             self.assertTrue("lastModified" in item)
-            self.assertTrue("class") in item
             self.assertTrue(item["class"] in ("domain", "folder"))
        
         # try getting the first 4 domains
@@ -732,7 +733,7 @@ class DomainTest(unittest.TestCase):
             # this should only happen in the very first test run
             # TODO: ^ what?
             if len(domains) == 0:
-                warnings.warn("no domains found at top level ({host})")
+                warnings.warn(f"no domains found at top level ({host})")
 
             for item in domains:
                 name = item["name"]
