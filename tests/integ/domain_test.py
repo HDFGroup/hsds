@@ -424,7 +424,22 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.json()["root"], root_id)
 
-# TODO: attempt to create domain in valid folder but not allowed
+    def testCreateDomainNotAuthorized(self):
+        domain = self.base_domain + "/user_infringement.h6"
+        headers = helper.getRequestHeaders(domain=domain)
+        other_user = "user2" if config.get("user_name") != "user2" else "user3"
+        other_headers = helper.getRequestHeaders(
+                domain=domain,
+                username=other_user)
+        req = helper.getEndpoint() + '/'
+
+        # domain must not already exist
+        get_absent_code = requests.get(req, headers=headers).status_code
+        self.assertEqual(get_absent_code, 404)
+
+        # other user lacks permission to create domain
+        other_put_code = requests.put(req, headers=other_headers).status_code
+        self.assertEqual(other_put_code, 401)
 
     def testCreateFolder(self):
         domain = self.base_domain + "/newfolder"
