@@ -1,0 +1,1487 @@
+swagger: '2.0'
+
+# swagger 2.0 spec 
+#   https://swagger.io/docs/specification/2-0/basic-structure/
+#   https://github.com/OAI/OpenAPI-Specification/blob/master/versions/2.0.md
+# swagger 'editor'
+#   http://editor.swagger.io/
+
+info:
+  title: Something About h5serv / H5Cloud / HSDS REST API
+  description: REST API for h5serv or something.
+# termsOfService: TODO url
+# contact:
+#   name: TODO
+#   url: : TODO
+#   email: TODO
+# license
+#   name: TODO
+#   url: TODO
+  version: '1.1'
+
+host: 'localhost:5101'
+basePath: '/'
+schemes:
+  - http
+# - https
+
+securityDefinitions:
+  basicAuth:
+    type: basic
+security:
+  - basicAuth: []
+
+externalDocs:
+  description: Previous REST API documentation
+  url: 'http://h5serv.readthedocs.io/en/latest/index.html'
+
+parameters:
+  accept_json:
+    name: accept
+    in: header
+    type: string
+    enum:
+      - 'application/json'
+    default: 'application/json'
+
+  authorization:
+    name: Authorization
+    in: header
+    type: string
+    description: >
+        Credentials for the request.
+
+        'Basic' authorization, `"Basic " + base64(<username>:<password>)` 
+
+  query_domain:
+    name: domain
+    in: query
+    type: string
+    description: >
+        Domain on service to access.
+
+        e.g., `/home/user/someproject/somefile`
+
+  content_json_only:
+    name: 'Content-Type'
+    in: header
+#    description: Include if supplying JSON elements in body.
+    type: string
+    enum:
+      - 'application/json'
+    default: 'application/json'
+
+  path_group_uuid:
+    in: path
+    description: >
+        UUID of the Group to query.
+
+        e.g., `g-37aa76f6-2c86-11e8-9391-0242ac110009`
+    name: id
+    type: string
+    required: true
+
+  path_dataset_uuid:
+    in: path
+    description: UUID of the Dataset.
+    name: id
+    type: string
+    required: true
+#end parameters
+
+definitions:
+  DomainInfo:
+    type: object
+    properties:
+      lastModified:
+        description: When object was last modified.
+        type: number
+        example: 1521476710.039304
+      root:
+        description: ID of root group.
+        type: string
+        example: 'g-82da0346-2b9e-11e8-9391-0242ac110009'
+      created:
+        description: When domain was created.
+        type: number
+        example: 1521476710.039304
+      owner:
+        description: Name of owner.
+        type: string
+        example: 'test_user1'
+      class:
+        description: Who knows?
+        type: string
+        example: domain
+      hrefs:
+        type: array
+        items:
+          type: object
+          properties:
+            href:
+              description: URL to reference.
+              type: string
+              example: 'http://myfile.test_user1.home/'
+            rel:
+              description: Relation to this object.
+              type: string
+              example: 'self'
+        example:
+          - href: 'http://myfile.test_user1.home/'
+            rel: self
+          - href: 'http://myfile.test_user1.home/datasets'
+            rel: database
+          - href: 'http://myfile.test_user1.home/groups'
+            rel: groupbase
+          - href: 'http://myfile.test_user1.home/datatypes/'
+            rel: typebase
+          - href: 'http://myfile.test_user1.home/groups/g-17d88042-2b92-11e8-9391-0242ac110009'
+            rel: root
+          - href: 'http://myfile.test_user1.home/acls'
+            rel: acls
+          - href: 'http://myfile.test_user1.home/?domain=/home/test_user1'
+            rel: parent
+
+  ACLForUser:
+    description: Access Control List for a single user `username`.
+    type: object
+    properties:
+      username:
+        type: object
+        properties:
+          create:
+            type: boolean
+            example: true
+          update:
+            type: boolean
+            example: true
+          delete:
+            type: boolean
+            example: true
+          updateACL:
+            type: boolean
+            example: true
+          read:
+            type: boolean
+            example: true
+          readACL:
+            type: boolean
+            example: true
+
+  ACLS:
+    type: object
+    description: Access Control Lists for users.
+    properties:
+      forWhom:
+        $ref: '#/definitions/ACLForUser'
+    example: 
+      test_user1:
+        create: true
+        update: true
+        delete: true
+        updateACL: true
+        read: true
+        readACL: true
+      default:
+        create: false
+        update: false
+        delete: false
+        updateACL: false
+        read: true
+        readACL: false
+
+  GroupCreationResponse:
+    type: object
+    properties:
+      id:
+        description: UUID of new Group.
+        type: string
+        example: 'g-a613ed48-2c86-11e8-9391-0242ac110009'
+      root:
+        description: UUID of root Group in Domain.
+        type: string
+        example: 'g-37aa76f6-2c86-11e8-9391-0242ac110009'
+      lastModified:
+        description: Time when Group was most recently modified.
+        type: number
+        example: 1521581745.9365487
+      created: 
+        description: Time when Group was created.
+        type: number
+        example: 1521581745.9365487
+      attributeCount:
+        description: Count of attributes in Group.
+        type: number
+        example: 0
+      linkCount:
+        description: Count of Links in Group.
+        type: number
+        example: 0
+
+  GroupInfo:
+    type: object
+    properties:
+      id:
+        description: UUID of this Group.
+        type: string
+        example: 'g-37aa76f6-2c86-11e8-9391-0242ac110009'
+      root:
+        description: UUID of root Group.
+        type: string
+        example: 'g-37aa76f6-2c86-11e8-9391-0242ac110009'
+      created:
+        description: Time when Group was created.
+        type: number
+        example: 1521581560.6883142
+      lastModified:
+        description: Time when Group was last modified.
+        type: number
+        example: 1521644498.984212
+      domain:
+        description: Domain where Group resides.
+        type: string
+        example: '/home/test_user1/file'
+      attributeCount:
+        type: number
+        example: 4
+      linkCount:
+        type: number
+        example: 2
+      hrefs:
+        description: List of references to other objects.
+        type: array
+        items:
+          type: object
+          properties:
+            href:
+              description: URL to reference.
+              type: string
+              example: 'http://myfile.test_user1.home/'
+            rel:
+              description: Relation to this object.
+              type: string
+              example: 'self'
+        example:
+          - href: 'http://localhost:5101/groups/g-37aa76f6-2c86-11e8-9391-0242ac110009?domain=/home/test_user1/file'
+            rel: 'self'
+          - href: 'http://localhost:5101/groups/g-37aa76f6-2c86-11e8-9391-0242ac110009/links?domain=/home/test_user1/file'
+            rel: 'links'
+          - href: 'http://localhost:5101/groups/g-37aa76f6-2c86-11e8-9391-0242ac110009?domain=/home/test_user1/file'
+            rel: 'root'
+          - href: 'http://localhost:5101/?domain=/home/test_user1/file'
+            rel: 'home'
+          - href: 'http://localhost:5101/groups/g-37aa76f6-2c86-11e8-9391-0242ac110009/attributes?domain=/home/test_user1/file'
+            rel: 'attributes'
+
+  LinkInfo:
+    type: object
+    properties: 
+      id:
+        description: UUID of Link.
+        type: string
+        example: 'g-a613ed48-2c86-11e8-9391-0242ac110009'
+      created:
+        description: Time when Link was created.
+        type: number
+        example: 1521644498.984212
+      class:
+        description: TODO
+        type: string
+        example: 'H5L_TYPE_HARD'
+      title:
+        description: Name/label of the Link, as provided upon creation.
+        type: string
+        example: 'g1'
+      target:
+        description: URL where Link points.
+        type: string
+        example: 'http://localhost:5101/groups/g-a613ed48-2c86-11e8-9391-0242ac110009?domain=/home/test_user1/file'
+      href:
+        description: URL to this Link.
+        type: string
+        example: 'http://localhost:5101/groups/g-37aa76f6-2c86-11e8-9391-0242ac110009/links/g1?domain=/home/test_user1/file'
+      collection:
+        description: TODO
+        type: string
+        example: 'groups'
+
+  DatasetCreationSchema:
+    type: object
+    properties:
+      'type':
+        description: >
+            Predefined data Type, UUID of a commtted type, or JSON object
+            description of a Type.
+
+            Must be present.
+        type: string
+        example: H5T_STD_U32LE
+      shape:
+        description: >
+            Either `H5S_NULL` or an integer array giving the initial dimensions
+            of the dataset.
+
+            If omitted, a scalar dataset will be created.
+
+            If value is `H5S_NULL`, a dataset will be created which can have a
+            type and attributes, but unable to hold any value.
+        type: string
+        example: [128, 64]
+      maxdims:
+        description: >
+            Integer array diving the maximum allowed extent for each dimension.
+
+            If 0, the extent is unlimited.
+        type: array
+        items:
+          type: number
+        example: [0, 512]
+      creationProperties:
+        description: TODO
+        type: object
+
+  DatasetCreatedResponse:
+    type: object
+    properties:
+      id:
+        description: UUID of this Dataset.
+        type: string
+      root:
+        description: UUID of root Group in Domain.
+        type: string
+      created:
+        description: Time when the Dataset was created.
+        type: number
+      lastModified:
+        type: number
+      attributeCount:
+        type: number
+      'type':
+        description: TODO
+        type: object
+      shape:
+        description: TODO
+        type: object
+
+  DatasetInfoFromID:
+    type: object
+    properties:
+      id:
+        description: UUID of this Dataset.
+        type: string
+        example: 'd-21ae0bbe-2dea-11e8-9391-0242ac110009'
+      root:
+        description: UUID of root Group in Domain.
+        type: string
+        example: 'g-d313d498-2de4-11e8-9391-0242ac110009'
+      domain:
+        type: string
+        example: '/home/test_user1/file'
+      created:
+        description: Time when the Dataset was created.
+        type: number
+        example: 1521734424
+      lastModified:
+        type: number
+        example: 1521734424
+      attributeCount:
+        type: number
+        example: 0
+      'type':
+        description: TODO
+        type: object
+        example: 
+          base: H5T_STD_U32LE
+          class: H5T_INTEGER
+      shape:
+        description: TODO
+        type: object
+        example:
+          maxdims: [4, 4, 4]
+          dims: [4, 4, 4]
+# classes: [H5S_SIMPLE, H5S_NULL, H5S_SCALAR]
+          class: H5S_SIMPLE
+      layout:
+        description: TODO
+        type: object
+        example:
+          dims: [4, 4, 4]
+          class: H5D_CHUNKED
+      creationProperties:
+        description: TODO
+        type: object
+      hrefs:
+        description: List of references to other objects.
+        type: array
+        items:
+          type: object
+          properties:
+            href:
+              description: URL to reference.
+              type: string
+            rel:
+              description: Relation to this object.
+              type: string
+
+  PutValueObject:
+    type: object
+    properties:
+      start:
+        description: >
+            Start coordinate of update.
+
+            Each coordinate value must be non-negative and less than the extent
+            of the dimension.
+
+            Default start value is 0 for each dimension.
+        type: array
+        items:
+          type: number
+      stop:
+        description: >
+            End coordinate of update.
+
+            Each coordinate value must be greater than `start` and less than
+            the dimension's extent.
+        type: array
+        items:
+          type: number
+      step:
+        description: >
+            Coordinate increment step for each dimension.
+
+            (TODO) Values must be greater than `start` and less than dimension's
+            extent. (This seems wrong, copy-pasted from 'stop'. TEST)
+        type: array
+        items:
+          type: number
+      points: # TODO: WISHLIST: enforce array-of-arrays?
+        description: >
+            List of coordinate points to update.
+
+            Overrides `start`, `stop`, and `step`.
+
+            If dataset is of rank 1 (single-dimension), each item should be an
+            integer index not less than zero and less than the extent of the
+            dataset.
+
+            If dataset is multi-dimensional, each item should be a list of
+            non-negative integers, each array being a valid coordinate in the
+            dataset.
+
+            Number of elements in list should equal that of `value`.
+        type: array
+        items:
+          type: string
+        example: [[4,3,1], [6,1,2], [12,0,0]]
+      value:
+        description: >
+            JSON array containing values to write.
+
+            (TODO: 'anything in array' may give Swagger some grief.)
+        type: array
+        items:
+          type: string # TODO: not really...
+        example: [323, 16, 44]
+      value_base64:
+        description: >
+            Base64-encoded binary data.
+
+            Use instead of `value` for more efficient large data transfers.
+
+            Only supported for fixed-length datatypes.
+        type: string
+
+  GetDatasetSchema:
+    type: object
+    properties:
+      index:
+        description: >
+            List of indices (TODO: coordinates?) corresponding with each value
+            returned. i.e., `index[i]` is the coordinate of `value[i]`.
+
+            Only present if `query` parameter is part of the request URI.
+        type: array
+        items:
+          type: string # TODO: integer or array of integers WISHLIST: arrays
+        example: [0, 1, 2, 3, 4, 5, 6, 7]
+      values:
+        description: Array of values.
+        type: array
+        items:
+          type: string # TODO: placeholder for 'any JSON, really'
+        example: [ [1, 3, 5, 7], [2, 6, 10, 14], [3, 9, 15, 21], [4, 12, 20, 28], [5, 15, 25, 35], [6, 18, 30, 42], [7, 21, 35, 49], [8, 24, 40, 56] ]
+#end definitions
+
+tags:
+  - name: Domain
+    description: Operations directly related to a file domain.
+#   externalDocs: ?
+#     url: ?
+  - name: Group
+    description: Operations on Groups.
+  - name: Link
+    description: Operations on Links.
+  - name: Dataset
+    description: Operations on Datasets.
+
+paths:
+  '/':
+    put:
+      tags:
+        - Domain
+      summary: Create a new domain on the service.
+      description: >
+          Create a new domain on the service.
+
+          Note: Initially, the only object on the domain is the root group. Use
+          other `put` and `post` operations to create new objects in the
+          domain.
+
+          Note: The operation will fail if the domain already exists
+          (Error 409).
+      parameters:
+        - $ref: '#/parameters/query_domain'
+        - $ref: '#/parameters/accept_json'
+        - $ref: '#/parameters/authorization'
+      responses:
+        '201':
+          description: Created.
+          headers:
+            content-length:
+              description: Length of response in bytes.
+              type: string
+            Etag:
+              description: Hash-code status of resource.
+              type: string
+            Content-Type:
+              description: MIME type of response -- always 'application/json'
+              type: string
+          schema:
+            type: object
+            properties:
+              lastModified:
+                description: When object was last modified.
+                type: number
+                example: 1521482043.5271084
+              root:
+                description: ID of root group.
+                type: string
+                example: 'g-82da0346-2b9e-11e8-9391-0242ac110009'
+              created:
+                description: When domain was created.
+                type: number
+                example: 1521482043.5271084
+              owner:
+                description: Name of owner.
+                type: string
+                example: 'test_user1'
+              acls:
+                $ref: '#/definitions/ACLS'
+        '409':
+          description: Conflict - Resource already exists.
+        default:
+          description: Operation unsuccessful.
+
+    get:
+      tags:
+        - Domain
+      summary: Get information about the requested domain.
+      description: >
+          Get information about the requested domain.
+
+          If no domain query paramter is provided, a 'Table of Contents' is
+          returned, but this TOC is unpopulated pending implementation; e.g.,
+          `{"domains": [], "href": []}`
+      parameters:
+        - $ref: '#/parameters/query_domain'
+        - $ref: '#/parameters/accept_json'
+        - $ref: '#/parameters/authorization'
+      responses:
+        '200':
+          description: Operation successful.
+          headers:
+            content-length:
+              description: Length of response in bytes.
+              type: string
+            Etag:
+              description: Hash-code status of resource.
+              type: string
+            Content-Type:
+              description: MIME type of response -- always 'application/json'
+              type: string
+          schema:
+            $ref: '#/definitions/DomainInfo'
+        default:
+          description: Operation unsuccessful.
+
+    delete:
+      tags:
+        - Domain
+      summary: Delete the specified domain.
+      description: >
+          Delete the domain and all associated groups,
+          datasets, attributes, etc.
+      parameters:
+        - $ref: '#/parameters/query_domain'
+        - $ref: '#/parameters/accept_json'
+        - $ref: '#/parameters/authorization'
+      responses:
+        '200':
+          description: Operation successful.
+          headers:
+            content-length:
+              description: Length of response in bytes.
+              type: string
+            Etag:
+              description: Hash-code status of resource.
+              type: string
+            Content-Type:
+              description: MIME type of response -- always 'application/json'
+              type: string
+          schema:
+            type: object
+            properties:
+              domain:
+                type: string
+                description: domain path
+                example: '/home/test_user/some_path/some_file'
+        default:
+          description: Operation unsuccessful.
+  # end '/'
+
+  '/groups':
+    post:
+      tags:
+        - Group
+      summary: Create a new Group.
+      description: >
+          Create a new Group in the given Domain.
+
+          By default, the new Group it not attached to any other object in the
+          Domain; it is left to the user or application to appropriately attach
+          the new Group, i.e., Link to.
+#
+#          A link description may be supplied in the request body as
+#          structured JSON, which will immediately link the new Group. If
+#          supplying link info, the header `Content-Type: application/json`
+#          should also be supplied as a matter of course. Note that this
+#          link will be a hard link: it refers directly to the object.
+#      consumes:
+#        - application/json
+      parameters:
+        - $ref: '#/parameters/query_domain'
+        - $ref: '#/parameters/accept_json'
+        - $ref: '#/parameters/authorization'
+#        - $ref: '#/parameters/content_json_only'
+#        - in: body
+#          name: linkInfo
+#          description: >
+#              Immediately create Link in Group `id` to the new Group with
+#              name/label `name`.
+#          schema:
+#            type: object
+#            required:
+#              - id
+#              - name
+#            properties:
+#              id:
+#                description: UUID of object to link from.
+#                type: string
+#                example: 'g-a613ed48-2c86-11e8-9391-0242ac110009'
+#              name:
+#                description: Name/label of group.
+#                type: string
+#                example: 'g2'
+      responses:
+        '201':
+          description: New Group created.
+          headers:
+            content-length:
+              description: Length of response in bytes.
+              type: string
+            Etag:
+              description: Hash-code status of resource.
+              type: string
+            Content-Type:
+              description: MIME type of response -- always 'application/json'
+              type: string
+          schema:
+            $ref: '#/definitions/GroupCreationResponse'
+        default:
+          description: Operation unsuccessful.
+
+    get:
+      tags:
+        - Group
+      summary: Get all non-root Group UUIDs in Domain.
+      description: Get UUIDs for all non-root Groups in Domain.
+      parameters:
+        - $ref: '#/parameters/query_domain'
+        - $ref: '#/parameters/accept_json'
+        - $ref: '#/parameters/authorization'
+      responses:
+        '200':
+          description: OK
+          headers:
+            content-length:
+              description: Length of response in bytes.
+              type: string
+            Etag:
+              description: Hash-code status of resource.
+              type: string
+            Content-Type:
+              description: MIME type of response -- always 'application/json'
+              type: string
+          schema:
+            type: object
+            properties:
+              groups:
+                type: array
+                items:
+                  description: UUID of each Group.
+                  type: string
+                  example: 'g-a613ed48-2c86-11e8-9391-0242ac110009'
+              hrefs:
+                type: array
+                items:
+                  description: References to other objects.
+                  type: object
+                  properties: 
+                    href: 
+                      description: URL reference.
+                      type: string
+                      example: 'http://localhost:5101/groups/g-37aa76f6-2c86-11e8-9391-0242ac110009?domain=/home/test_user1/file'
+                    rel: 
+                      description: Relation to this object.
+                      type: string
+                      example: 'root'
+        default:
+          description: Operation unsuccessful.
+  # end '/groups/'
+
+  '/groups/{id}':
+    get:
+      tags:
+        - Group
+      summary: Get information about a Group.
+      description: Get Group information.
+      parameters:
+        - $ref: '#/parameters/path_group_uuid'
+        - $ref: '#/parameters/query_domain'
+        - $ref: '#/parameters/accept_json'
+        - $ref: '#/parameters/authorization'
+      responses:
+        '200':
+          description: OK
+          headers:
+            content-length:
+              description: Length of response in bytes.
+              type: string
+            Etag:
+              description: Hash-code status of resource.
+              type: string
+            Content-Type:
+              description: MIME type of response -- always 'application/json'
+              type: string
+          schema:
+            $ref: '#/definitions/GroupInfo'
+        default:
+          description: Operation unsuccessful.
+
+    delete:
+      tags:
+        - Group
+      summary: Delete a Group.
+      description: >
+        Delete a Group.
+
+        TODO: Will delete attributes of the Group.
+
+        Will _not_ delete:
+
+        + Objects (Groups, Types, Datasets) this object linked to
+
+        + Links to this Group
+      parameters:
+        - $ref: '#/parameters/path_group_uuid'
+        - $ref: '#/parameters/query_domain'
+        - $ref: '#/parameters/accept_json'
+        - $ref: '#/parameters/authorization'
+      responses:
+        '200':
+          description: Group removed.
+          schema:
+            type: object
+# TODO: manual results are an empty object '{}'
+#            properties:
+#              hrefs:
+#                type: array
+#                items:
+#                  type: object
+#                  properties:
+#                    href:
+#                      description: URL to reference.
+#                      type: string
+#                      example: TODO
+#                    rel:
+#                      description: Relation to this object.
+#                      type: string
+#                      example: TODO
+        default:
+          description: Operation unsuccessful.
+  # end '/groups/{id}'
+
+  '/groups/{id}/links':
+    get:
+      tags:
+        - Link
+      summary: List all Links in Group.
+      description: List all Links in the given Group by UUID.
+      parameters:
+        - $ref: '#/parameters/path_group_uuid'
+        - $ref: '#/parameters/query_domain'
+        - $ref: '#/parameters/accept_json'
+        - $ref: '#/parameters/authorization'
+      responses:
+        '200':
+          description: OK
+          schema:
+            type: object
+            properties:
+              links:
+                type: array
+                items:
+                  $ref: '#/definitions/LinkInfo'
+              hrefs:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    href:
+                      description: URL to reference.
+                      type: string
+                      example: TODO
+                    rel:
+                      description: Relation to this object.
+                      type: string
+                      example: TODO
+        default:
+          description: Operation unsuccessful.
+  # end '/groups/{id}/links':
+
+  '/groups/{id}/links/{linkname}':
+    put:
+      tags:
+        - Link
+      summary: Create a new Link in a Group.
+      description: >
+          Create a new Link in a Group.
+
+          Link will be 'hard', 'soft', or 'external' depending on request
+          elements.
+
+          If `id` is provided, it will override other properties and attempt to
+          create a hard link to the object with that UUID.
+
+          If `h5path` is provided, will create a symbolic link to the given
+          path--either a soft link within this domain if no domain is
+          specified, or an external link.
+
+          If `h5domain` is provided, will create an external link, pointing to
+          the object (if any) at `h5path` in domain `h5domain`.
+      consumes:
+        - application/json
+      parameters:
+        - $ref: '#/parameters/path_group_uuid'
+        - in: path
+          name: linkname
+          description: >
+              URL-encoded name of the Link.
+
+              Label/name/title of the Link, e.g., "dset1" or "group3".
+
+              TODO: logical directory structure, e.g. "g1/g2/dsetBeta"...
+              guessing no, instead must track down each link down, so would be
+              'dsetBeta' accessed from 'g2'.
+          type: string
+          required: true
+        - $ref: '#/parameters/query_domain'
+        - $ref: '#/parameters/accept_json'
+        - $ref: '#/parameters/authorization'
+        - $ref: '#/parameters/content_json_only'
+        - in: body
+          name: LinkSpecification
+          description: >
+              JSON object describing the Link to create.
+
+              Requires at least one of `id` and `h5path`; if both supplied,
+              `id` takes priority. `h5domain` applies only if `h5path` is
+              present, providing the Domain for an external Link.
+          required: true
+          schema:
+            type: object
+            properties:
+              id:
+                description: >
+                   UUID of object to link to. Creates a hard link.
+
+                   Overrides other fields.
+                type: string
+                example: 'g-37aa76f6-2c86-11e8-9391-0242ac110009'
+              h5path:
+                description: >
+                   Path to an external resource.
+
+                   If used, will create a soft or external link.
+                type: string
+                example: '/dset1'
+              h5domain:
+                description: >
+                    URL of external domain.
+
+                    Results in an external link.
+
+                    Requires `h5path` be present.
+                type: string
+                example: 'external_target.test.hdfgroup.org'
+      responses:
+        '201':
+          description: New Link created.
+          schema:
+            type: object
+            properties:
+              hrefs:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    href:
+                      description: URL to reference.
+                      type: string
+                    rel:
+                      description: Relation to this object.
+                      type: string
+            example:
+              hrefs: []
+        default:
+          description: Operation unsuccessful.
+
+    get:
+      tags: 
+        - Link
+      summary: Get Link info.
+      description: Get information about a given Link.
+      parameters:
+        - $ref: '#/parameters/path_group_uuid'
+        - in: path
+          name: linkname
+          description: >
+              URL-encoded name of the Link.
+
+              Label/name/title of the Link, e.g., "dset1" or "group3".
+          type: string
+          required: true
+        - $ref: '#/parameters/query_domain'
+        - $ref: '#/parameters/accept_json'
+        - $ref: '#/parameters/authorization'
+        - $ref: '#/parameters/content_json_only'
+      responses:
+        '200':
+          description: OK
+          schema:
+            type: object
+            properties:
+              lastModified:
+                type: number
+              created:
+                type: number
+              link:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    example: 'g-a613ed48-2c86-11e8-9391-0242ac110009'
+                  title:
+                    type: string
+                    example: 'g1'
+                  collection:
+                    type: string
+                    example: 'group'
+                  class:
+                    type: string
+                    example: 'H5L_TYPE_HARD'
+              hrefs:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    href:
+                      description: URL to reference.
+                      type: string
+                      example: TODO
+                    rel:
+                      description: Relation to this object.
+                      type: string
+                      example: TODO
+        default:
+          description: Operation unsuccessful.
+
+    delete:
+      tags:
+        - Link
+      summary: Delete Link.
+      description: Delete a Link. Will _not_ delete the objects referred to.
+      parameters:
+        - $ref: '#/parameters/path_group_uuid'
+        - in: path
+          name: linkname
+          description: >
+              URL-encoded name of the Link.
+
+              Label/name/title of the Link, e.g., "dset1" or "group3".
+          type: string
+          required: true
+        - $ref: '#/parameters/query_domain'
+        - $ref: '#/parameters/accept_json'
+        - $ref: '#/parameters/authorization'
+        - $ref: '#/parameters/content_json_only'
+      responses:
+        '200':
+          description: Link deleted.
+          schema:
+            type: object
+            example:
+              href: []
+        default:
+          description: Operation unsuccessful.
+  # end '/groups/{id}/links/{linkname}'
+
+  '/datasets':
+    post:
+      tags:
+        - Dataset
+      summary: Create a Dataset.
+      description: >
+          Create a new Dataset object in the Domain.
+
+          New object is not linked to or by any other object upon creation;
+          will not appear in `datasets` listing until linked to tree
+          originating at the Domain's root Group.
+      consumes:
+        - 'application/json'
+      parameters:
+        - $ref: '#/parameters/query_domain'
+        - $ref: '#/parameters/accept_json'
+        - $ref: '#/parameters/authorization'
+        - $ref: '#/parameters/content_json_only'
+        - in: body
+          name: DatasetCreationSchema
+          description: >
+              JSON object describing the Dataset's properties.
+          required: true
+          schema:
+            $ref: '#/definitions/DatasetCreationSchema'
+      responses:
+        '201':
+          description: Dataset created.
+          schema:
+            $ref: '#/definitions/DatasetCreatedResponse'
+        default:
+          description: Operation unsuccessful.
+
+    get:
+      tags:
+        - Dataset
+      summary: List Datasets.
+      description: >
+          Get list of Datasets that are part of this Domain.
+
+          Only includes Datasets that are part of the tree linked to the root
+          Group in the Domain.
+      parameters:
+        - $ref: '#/parameters/query_domain'
+        - $ref: '#/parameters/accept_json'
+        - $ref: '#/parameters/authorization'
+      responses:
+        '200':
+          description: OK
+          schema:
+            type: object
+            properties:
+              datasets:
+                type: array
+                items:
+                  description: UUID of each Dataset.
+                  type: string
+                  example: 'd-21ae0bbe-2dea-11e8-9391-0242ac110009'
+              hrefs:
+                type: array
+                items:
+                  description: References to other objects.
+                  type: object
+                  properties: 
+                    href: 
+                      description: URL reference.
+                      type: string
+                      example: 'http://localhost:5101/groups/g-37aa76f6-2c86-11e8-9391-0242ac110009?domain=/home/test_user1/file'
+                    rel: 
+                      description: Relation to this object.
+                      type: string
+                      example: 'root'
+        default:
+          description: Operation unsuccessful.
+  # end '/datasets'
+
+  '/datasets/{id}':
+    get:
+      tags:
+        - Dataset
+      summary: Get information about a Dataset.
+      parameters:
+        - $ref: '#/parameters/path_dataset_uuid'
+        - $ref: '#/parameters/query_domain'
+        - $ref: '#/parameters/accept_json'
+        - $ref: '#/parameters/authorization'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/DatasetInfoFromID'
+        default:
+          description: Operation unsuccessful.
+
+    delete:
+      tags:
+        - Dataset
+      summary: Delete a Dataset.
+      description: 'Delete Dataset. (TODO: links to are or are not deleted?)'
+      parameters:
+        - $ref: '#/parameters/path_dataset_uuid'
+        - $ref: '#/parameters/query_domain'
+        - $ref: '#/parameters/accept_json'
+        - $ref: '#/parameters/authorization'
+      responses:
+        '200':
+          description: Dataset deleted.
+          schema:
+            type: object
+        default:
+          description: Operation unsuccessful.
+  # end /datasets/{id}
+
+  '/datasets/{id}/shape':
+    put:
+      tags:
+        - Dataset
+      summary: Modify a Dataset's dimensions.
+      description: >
+          Modify a Dataset's dimensions.
+
+          New extents must be greater than or equal to the current extents.
+
+          New extents cannot exceed the shape's maxDim for that dimension, if
+          specified.
+      parameters:
+        - $ref: '#/parameters/path_dataset_uuid'
+        - $ref: '#/parameters/query_domain'
+        - $ref: '#/parameters/accept_json'
+        - $ref: '#/parameters/authorization'
+        - in: body
+          name: shape
+          required: true
+          description: >
+              Array of nonzero integers.
+
+              Length must equal Dataset's rank--one value per dimension.
+          schema:
+            type: object
+            required:
+              - shape
+            properties:
+              shape:
+                type: array
+                items:
+                  type: number
+      responses:
+        '201':
+          description: Shape dimensions updated.
+          schema:
+            type: object
+            properties:
+              hrefs:
+                type: array
+                items:
+                  type: string # TODO object {"href": URL, "rel": REL} ?
+        default:
+          description: Operation unsuccessful.
+
+    get:
+      tags:
+        - Dataset
+      summary: Get information about a Dataset's shape.
+      description: Get information about a Dataset's shape.
+      parameters:
+        - $ref: '#/parameters/path_dataset_uuid'
+        - $ref: '#/parameters/query_domain'
+        - $ref: '#/parameters/accept_json'
+        - $ref: '#/parameters/authorization'
+      responses:
+        '200':
+          description: OK
+          schema:
+            type: object # TODO specify?
+        default:
+          description: Operation unsuccessful.
+  #end /datasets/{id}/shape
+
+  '/datasets/{id}/type':
+    get:
+      tags:
+        - Dataset
+      summary: Get information about a Dataset's type.
+      description: Get information about a Dataset's type.
+      parameters:
+        - $ref: '#/parameters/path_dataset_uuid'
+        - $ref: '#/parameters/query_domain'
+        - $ref: '#/parameters/accept_json'
+        - $ref: '#/parameters/authorization'
+      responses:
+        '200':
+          description: OK
+          schema:
+            type: object # TODO
+        default:
+          description: Operation unsuccessful.
+  #end /datasets/{id}/type
+
+  '/datasets/{id}/value':
+    put:
+      tags:
+        - Dataset
+      summary: Write values to Dataset.
+      description: >
+          Write values to Dataset.
+
+          Overwrites any existing data in update region.
+      consumes:
+        - 'application/json'
+      parameters:
+        - $ref: '#/parameters/path_dataset_uuid'
+        - $ref: '#/parameters/query_domain'
+        - $ref: '#/parameters/accept_json'
+        - $ref: '#/parameters/authorization'
+        - $ref: '#/parameters/content_json_only'
+        - in: body
+          description: >
+              JSON object describing what to write.
+
+              `start`, `stop`, and `step` are optional, but _either_ `value` or
+              `value_base64` must be provided.
+
+              If `points` is provided, each entry is the coordinate of a data
+              point to write. Overrides `start`, `stop`, and `step`. Must have
+              same length as `value` list.
+          name: PutValueObject
+          required: true
+          schema:
+            $ref: '#/definitions/PutValueObject'
+      responses:
+        '200':
+          description: Update/write successful.
+        default:
+          description: Operation unsuccessful.
+
+    get:
+      tags:
+        - Dataset
+      summary: Get values from Dataset.
+      description: Either get the entire Dataset or a selection.
+      parameters:
+        - $ref: '#/parameters/path_dataset_uuid'
+        - $ref: '#/parameters/query_domain'
+        - in: query
+          name: select
+          type: string
+          description: >
+              URL-encoded string representing a selection array.
+
+              Array-string of 
+              `'[' DIMENSION_SELECT { ',' DIMENSION_SELECT } ']'`,
+              where `DIMENSION_SELECT` has format of:
+              `START ':' STEP [ ':' STEP ]`.
+
+              `START` must be a non-negative integer less than the dimension's
+              extent.
+
+              `STOP` must be greater than `START`, and less than or equal to
+              the dimension's extent. Is the first index _not_ included in the
+              selection hyperslab.
+
+              `STOP` must be an integer greater than zero; is the increment of
+              index in dimension between each value. If omitted, defaults to
+              `1` (contiguous indices), and there should be no trailing colon.
+
+              _Example_: `[1:9,1:9:2]`
+        - in: query
+          name: query
+          type: string
+          description: >
+              URL-encoded string of conditional expression to filter selection.
+
+              E.g., the condition `(temp > 32.0) & (dir == 'N')` would return
+              elements of the dataset where the `temp` field was greater than
+              `32.0` _and_ the `dir` field was equal to `N`.
+
+              _Must_ be URL-encoded.
+
+              Can be used in conjunction with `select` parameter to filter
+              a hyberslab selection. Can be used in conjunction with `Limit`
+              parameter to restrict number of values returned.
+
+              (TODO: verify) Only applicable to one-dimensional compound
+              datasets.
+        - in: query
+          name: Limit
+          type: number
+          description: >
+              Integer greater than zero.
+
+              If present, specifies maximum number of values to return.
+
+              Apples only to the `query` parameter.
+        - in: header
+          name: Accept
+          type: string
+          enum:
+            - 'application/json'
+            - 'application/octet-stream'
+          default: 'application/json'
+          description: >
+              If expecting a binary data response, use
+              `application/octet-stream` in place of the usual
+              `application/json`
+
+              Binary data responses are only supported for datasets with
+              fixed-length type. Binary response will consist of the equivalent
+              binary data of the `data` item in the JSON response--no data
+              representing `hrefs` is returned.
+
+              Verify return type with the `Content-Type` response header.
+        - $ref: '#/parameters/authorization'
+## WISHLIST: Remove parameters from URI and fold in 'POST DATASET' with
+##           a single request body format:
+##type: object:
+##properties:
+##  points:
+##    description: >
+##        Specific data points to return from the Dataset.
+##
+##        Overrides any other selection element.
+##    type: array
+##    items:
+##      type: array
+##      items:
+##        type: number # 0 <= N < extent
+##  select:
+##    description: >
+##        Coordinate ranges defining a hyberslab subset of Dataset.
+##
+##        Array length must equal rank of Dataset.
+##        Empty range object, `{}`, stands in for entire dimension.
+##    type: array
+##    items:
+##      type: object
+##      properties:
+##        start:
+##          description: >
+##              Integer greater than or equal to `0` and less than extent.
+##
+##              Default `0`.
+##          type: number
+##        stop:
+##          description: >
+##              Integer greater than `start` and less than or equal to extent.
+##
+##              First index _not_ included in selection hyperslab.
+##
+##              Default dimension extent. (`-1`?)
+##          type: number
+##        step:
+##          description: Positive, non-zero integer. Default `1`.
+##          type: number
+##    example: [{}, {"start": 3, "stop": 19, "step": 4}, {"stop": 10, "step: 3}, {"start": 126}]
+##    # would get [[0,1,..,n], [3,7,11,15], [0,3,6,9], [126,127,..,n]]
+##    # TODO: do negative steps make sense in this context?
+##  query:
+##    description: >
+##        Filter response values (even from hyperslab selection).
+##    type: object
+##    properties:
+##      condition:
+##        description: >
+##            String describing contitions required to include the value in
+##            response. E.g., `"(temp > 32.0) & (dir == 'N')"` would return
+##            elements of the dataset where the `temp` field was greater than
+##            `32.0` and the `dir` field was equal to `N`.
+##        type: string
+##      limit:
+##        description: Integer greater than 0, maximum number of values to get.
+##        type: number
+      responses:
+        '200':
+          description: OK
+          headers:
+            'Content-Type':
+              description: >
+                  MIME type of response.
+
+                  Normally 'application/json' but can be
+                  'application/octet-stream' if binary data response was
+                  requested.
+              type: string
+          schema:
+            $ref: '#/definitions/GetDatasetSchema'
+        default:
+          description: Operation unsuccessful.
+
+    post:
+      tags:
+        - Dataset
+      summary: Get specific data points from Dataset.
+# TODO: WISHLIST: fold into GET DATASET; 'POST' is counterintuitive.
+      parameters:
+        - $ref: '#/parameters/path_dataset_uuid'
+        - $ref: '#/parameters/query_domain'
+        - $ref: '#/parameters/accept_json'
+        - $ref: '#/parameters/authorization'
+        - in: body
+          name: points
+          description: JSON array of coordinates in the Dataset.
+          required: true
+          schema:
+            type: object
+            properties:
+              points:
+                type: array
+                items:
+                  type: string # TODO: '[number]' and '[ [number] ]'
+                example: [[0,0], [0,1], [1,0], [1,1]]
+      responses:
+        '200':
+          description: OK
+          schema:
+            type: object
+            properties:
+              value:
+                type: array
+                items:
+                  type: string # TODO: any value
+                example: [0, 1, 1, 2]
+        default:
+          description: Operation unsuccessful.
+  #end /datasets/{id}/value
+
+#end paths
+
+
