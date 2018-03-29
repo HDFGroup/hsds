@@ -362,38 +362,62 @@ class DomainTest(unittest.TestCase):
     def assertLooksLikeUUID(self, s):
         self.assertTrue(helper.validateId(s))
 
-    def __init__(self, *args, **kwargs):
-        super(DomainTest, self).__init__(*args, **kwargs)
-        self.base_domain = helper.getTestDomainName(self.__class__.__name__)
-        helper.setupDomain(self.base_domain)
+    def assertDictHasOnlyTheseKeys(self, keys, d):
+        for key in keys :
+            self.assertTrue(key in d, "missing element: {key}")
+        self.assertEqual(
+                len(keys),
+                len(d),
+                list(d.keys()))
 
-        self._getfolder_keys = (
+    def assertLooksLikePutFolderResult(self, _json):
+        putfolder_keys = (
+            "owner",
+            "acls",
+            "created",
+            "lastModified",
+        )
+        self.assertDictHasOnlyTheseKeys(putfolder_keys, _json)
+
+    def assertLooksLikeGetFolderResult(self, _json):
+        getfolder_keys = (
             "owner",
             "hrefs",
             "created",
             "class",
             "lastModified",
         )
-        self._putfolder_keys = (
-            "owner",
-            "acls",
-            "created",
-            "lastModified"
-        )
-        self._putdomain_keys = (
+        self.assertDictHasOnlyTheseKeys(getfolder_keys, _json)
+        self.assertEqual(_json["class"], "folder")
+
+    def assertLooksLikePutDomainResult(self, _json):
+        putdomain_keys = (
             "root",
             "owner",
             "acls",
             "created",
-            "lastModified"
+            "lastModified",
         )
-        self._getdomain_keys = (
+        self.assertDictHasOnlyTheseKeys(putdomain_keys, _json)
+        self.assertLooksLikeUUID(_json["root"])
+
+    def assertLooksLikeGetDomainResult(self, _json):
+        getdomain_keys = (
             "root",
             "owner",
-            "acls",
             "created",
-            "lastModified"
+            "lastModified",
+            "class",
+            "hrefs",
         )
+        self.assertDictHasOnlyTheseKeys(getdomain_keys, _json)
+        self.assertEqual(_json["class"], "domain")
+        self.assertLooksLikeUUID(_json["root"])
+
+    def __init__(self, *args, **kwargs):
+        super(DomainTest, self).__init__(*args, **kwargs)
+        self.base_domain = helper.getTestDomainName(self.__class__.__name__)
+        helper.setupDomain(self.base_domain)
 
     def testGetFolderDomains(self):
         req = helper.getEndpoint() + "/"
@@ -410,15 +434,7 @@ class DomainTest(unittest.TestCase):
                     response.status_code,
                     200,
                     f"Unable to get domain {domain}")
-            rspJson = response.json()
-            for key in self._getfolder_keys :
-                self.assertTrue(key in rspJson, "missing element: {key}")
-            self.assertFalse("root" in rspJson)
-            self.assertEqual(rspJson["class"], "folder")
-            self.assertEqual(
-                    len(self._getfolder_keys),
-                    len(rspJson),
-                    list(rspJson.keys()))
+            self.assertLooksLikeGetFolderResult(response.json())
 
     def testCreateAndGetDomain(self):
         domain = self.base_domain + "/newdomain.h6"
@@ -435,15 +451,8 @@ class DomainTest(unittest.TestCase):
 
         # verify expected elements returned
         rspJson = rsp.json()
-        for key in self._putdomain_keys:
-             self.assertTrue(key in rspJson, f"missing element: {key}")
-        self.assertEqual(
-                len(self._putdomain_keys),
-                len(rspJson),
-                list(rspJson.keys()))
-        self.assertFalse("class" in rspJson)
+        self.assertLooksLikePutDomainResult(rspJson)
         root_id = rspJson["root"]
-        self.assertLooksLikeUUID(root_id)
 
         # putting the same domain again fails with a 409 error
         self.assertEqual(requests.put(req, headers=headers).status_code, 409)
@@ -451,14 +460,7 @@ class DomainTest(unittest.TestCase):
         # verify that we can get the Domain back
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.json()["root"], root_id)
-        for key in self._getdomain_keys:
-            self.assertTrue(key in rspJson, f"missing element: {key}")
-        self.assertEqual(
-                len(self._getdomain_keys),
-                len(rspJson),
-                list(rspJson.keys())
-        )
+        self.assertLooksLikeGetDomainResult(rsp.json())
 
     def testCreateDomainNotAuthorizedFails401(self):
         domain = self.base_domain + "/user_infringement.h6"
@@ -493,10 +495,7 @@ class DomainTest(unittest.TestCase):
 
         # verify expected elements returned
         rspJson = rsp.json()
-        for k in self._putfolder_keys:
-             self.assertTrue(k in rspJson, f"missing element: {k}")
-        self.assertEqual(len(self._putfolder_keys), len(rspJson))
-        self.assertFalse("root" in rspJson, "folders have no root element")
+        self.assertLooksLikePutFolderResult(rspJson)
 
         # verify that putting the same folder again fails with a 409 error
         rsp = requests.put(req, data=json.dumps(body), headers=headers)
@@ -510,13 +509,7 @@ class DomainTest(unittest.TestCase):
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = rsp.json()
-        for key in self._getfolder_keys:
-             self.assertTrue(key in rspJson, f"missing element: {key}")
-        self.assertEqual(
-                len(self._getfolder_keys),
-                len(rspJson),
-                list(rspJson.keys()))
-        self.assertEqual(rspJson["class"], "folder")
+        self.assertLooksLikeGetFolderResult(rspJson)
 
     def testCreateDomainInMissingFolderFails404(self):
         domain = self.base_domain + "/notafolder/newdomain.h5"
