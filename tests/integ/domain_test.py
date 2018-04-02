@@ -805,8 +805,8 @@ class DomainTest(unittest.TestCase):
 
         for item in domains:
             name = item["name"]
-            self.assertTrue(name.startsWith('/'))
-            self.assertFalse(name.endsWith('/'))
+            self.assertTrue(name.startswith('/'))
+            self.assertFalse(name.endswith('/'))
             self.assertTrue("owner" in item)
             self.assertTrue("created" in item)
             self.assertTrue("lastModified" in item)
@@ -866,8 +866,8 @@ class DomainTest(unittest.TestCase):
 
             for item in domains:
                 name = item["name"]
-                self.assertTrue(name.startsWith('/'))
-                self.assertFalse(name.endsWith('/'))
+                self.assertTrue(name.startswith('/'))
+                self.assertFalse(name.endswith('/'))
                 self.assertTrue("owner" in item)
                 self.assertTrue("created" in item)
                 self.assertTrue("lastModified" in item)
