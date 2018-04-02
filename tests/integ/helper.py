@@ -30,21 +30,17 @@ def getEndpoint():
 Helper function - return true if the parameter looks like a UUID
 """
 def validateId(id):
-    if type(id) != str: 
-        # should be a string
-        return False
-    if len(id) != 38:
-        # id's returned by uuid.uuid1() are always 38 chars long
-        return False
-    return True
+    try:
+        return type(id) == str and len(id) == 38
+    except Exception:
+        pass
+    return False
 
 """
 Helper - return number of active sn/dn nodes
 """
 def getActiveNodeCount():
-    req = getEndpoint("head") + "/info"
-    rsp = requests.get(req)   
-    rsp_json = json.loads(rsp.text)
+    rsp_json = requests.get(getEndpoint("head") + "/info").json()
     sn_count = rsp_json["active_sn_count"]
     dn_count = rsp_json["active_dn_count"]
     return sn_count, dn_count
@@ -55,25 +51,30 @@ Helper - get base domain to use for test_cases
 def getTestDomainName(name):
     now = time.time()
     dt = datetime.fromtimestamp(now, pytz.utc)
-    domain = "/home/"
-    domain += config.get('user_name')
-    domain += '/' 
-    domain += 'hsds_test'
-    domain += '/' 
-    domain += name.lower()
-    domain += '/' 
-    domain += "{:04d}{:02d}{:02d}T{:02d}{:02d}{:02d}_{:06d}Z".format(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, dt.microsecond)  
-    return domain
+    return '/'.join([
+        "", # for leading (root) slash
+        "home",
+        config.get("user_name"),
+        "hsds_test",
+        name.lower(),
+        "{:04d}{:02d}{:02d}T{:02d}{:02d}{:02d}_{:06d}Z".format(
+                dt.year,
+                dt.month,
+                dt.day,
+                dt.hour,
+                dt.minute,
+                dt.second,
+                dt.microsecond)
+    ])
 
 """
 Helper - get default request headers for domain
 """
 def getRequestHeaders(domain=None, username=None, password=None, **kwargs):
-    if username is None:
-        username = config.get("user_name")
-    if password is None:
-        password = config.get("user_password")
-    headers = { }
+    headers = {}
+    username = username or config.get("user_name")
+    password = password or config.get("user_password")
+
     if domain is not None:
         headers['host'] = domain
     if username and password:
@@ -82,9 +83,8 @@ def getRequestHeaders(domain=None, username=None, password=None, **kwargs):
         auth_string = base64.b64encode(auth_string)
         auth_string = b"Basic " + auth_string
         headers['Authorization'] = auth_string
-
-    for k in kwargs.keys():
-        headers[k] = kwargs[k]
+    for k,v in kwargs.items():
+        headers[k] = v 
     return headers
 
 """
@@ -93,22 +93,15 @@ Helper - Get parent domain of given domain.
 def getParentDomain(domain):
     parent = op.dirname(domain)
     if not parent:
-        raise ValueError("Invalid domain") # can't end with dot
+        raise ValueError("Invalid domain")
     return parent
 
 """
 Helper - Get DNS-style domain name given a filepath domain
 """
 def getDNSDomain(domain):
-    names = domain.split('/')
-    names.reverse()
-    dns_domain = ''
-    for name in names:
-        if name:
-            dns_domain += name
-            dns_domain += '.'
-    dns_domain = dns_domain[:-1]  # str trailing dot
-    return dns_domain
+    # slice at end to cut off tailing dot from leading (root) slash in domain
+    return '.'.join(reversed(domain.split('/')))[:-1]
 
 """
 Helper - Create domain (and parent domin if needed)
@@ -122,49 +115,41 @@ def setupDomain(domain, folder=False):
         return  # already have domain
     if rsp.status_code != 404:
         # something other than "not found"
-        raise ValueError("Unexpected get domain error: {}".format(rsp.status_code))
-    parent_domain = getParentDomain(domain)
-    if parent_domain is None:
-        raise ValueError("Invalid parent domain: {}".format(domain))
-    # create parent domain if needed
-    setupDomain(parent_domain)  
-     
+        raise ValueError(f"Unexpected get domain error: {rsp.status_code}")
+
     headers = getRequestHeaders(domain=domain)
-    body=None
     if folder:
         body = {"folder": True}
         rsp = requests.put(req, data=json.dumps(body), headers=headers)
     else:
         rsp = requests.put(req, headers=headers)
     if rsp.status_code != 201:
-        raise ValueError("Unexpected put domain error: {}".format(rsp.status_code))
+        which = "folder" if folder else "domain"
+        raise ValueError(
+                f"Unable to put {which}: {domain}\nError {rsp.status_code}")
 
 """
-Helper function - get root uuid for domain
+Helper function - get root uuid for domain (raises Exceptions if problem)
 """ 
 def getRootUUID(domain, username=None, password=None):
     req = getEndpoint() + "/"
-    headers = getRequestHeaders(domain=domain, username=username, password=password)
-    
-    rsp = requests.get(req, headers=headers)
-    root_uuid= None
-    if rsp.status_code == 200:
-        rspJson = json.loads(rsp.text)
-        root_uuid = rspJson["root"]
-    return root_uuid
-
+    headers = getRequestHeaders(
+            domain=domain, username=username, password=password)
+    return requests.get(req, headers=headers).json()["root"]
 
 """
 Helper function - get a domain for one of the test files
 """
 def getTestDomain(name):
-    folder = '/home/test_user1/test/'
+    folder = '/home/test_user1/test/' #TODO: un-hardcode "test_user1"?
     return folder + name
 
 """
 Helper function - get uuid for a given path
 """
 def getUUIDByPath(domain, path, username=None, password=None):
+#TODO: fails if the target is not a group?
+#TODO: some setup boilerplate is unnecessary?
     if path[0] != '/':
         raise KeyError("only abs paths") # only abs paths
             
