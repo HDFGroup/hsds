@@ -14,30 +14,32 @@ import unittest
 import time
 import requests
 import json
+import config
 import helper
 
 
-class LinkTest(unittest.TestCase):
+class HardLinkTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
-        super(LinkTest, self).__init__(*args, **kwargs)
+        super(HardLinkTest, self).__init__(*args, **kwargs)
         self.base_domain = helper.getTestDomainName(self.__class__.__name__)
         helper.setupDomain(self.base_domain)
+        self.base_endpoint = helper.getEndpoint() + "/"
+
+    def assertLooksLikeUUID(self, s):
+        self.assertTrue(
+                helper.validateId(s),
+                f"Helper thinks `{s}` does not look like a valid UUID")
 
     def testHardLink(self):
         headers = helper.getRequestHeaders(domain=self.base_domain)
-        req = helper.getEndpoint() + '/'
-
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        root_id = rspJson["root"]
+        root_id = helper.getRootUUID(domain=self.base_domain)
 
         # get root group and check it has no links
         req = helper.getEndpoint() + "/groups/" + root_id
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)  
         rspJson = json.loads(rsp.text)
-        self.assertEqual(rspJson["linkCount"], 0)  # no links
+        self.assertEqual(rsp.json()["linkCount"], 0, "should have no links")
 
         # create a new group
         req = helper.getEndpoint() + '/groups'
@@ -47,7 +49,7 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(rspJson["linkCount"], 0)   
         self.assertEqual(rspJson["attributeCount"], 0)   
         grp1_id = rspJson["id"]
-        self.assertTrue(helper.validateId(grp1_id))
+        self.assertLooksLikeUUID(grp1_id)
 
         # try to get "/g1"  (doesn't exist yet)
         link_title = "g1"
@@ -164,6 +166,13 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)  
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["linkCount"], 0)  # link count should zero
+
+
+class LinkTest(unittest.TestCase):
+    def __init__(self, *args, **kwargs):
+        super(LinkTest, self).__init__(*args, **kwargs)
+        self.base_domain = helper.getTestDomainName(self.__class__.__name__)
+        helper.setupDomain(self.base_domain)
 
     def testSoftLink(self):
         headers = helper.getRequestHeaders(domain=self.base_domain)
@@ -371,6 +380,9 @@ class LinkTest(unittest.TestCase):
         last_link = links[-1]
         self.assertEqual(last_link["title"], "third")    
 
+    @unittest.skipUnless(
+            config.get("test_on_uploaded_file"),
+            "don't test without uploaded file")
     def testGet(self):
         # test getting links from an existing domain
         domain = helper.getTestDomain("tall.h5")
