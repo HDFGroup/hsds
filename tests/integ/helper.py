@@ -102,7 +102,7 @@ def getDNSDomain(domain):
     return '.'.join(reversed(domain.split('/')))[:-1]
 
 """
-Helper - Create domain (and parent domin if needed)
+Helper - Create domain, creating parent folder(s) for complete heirarchy
 """
 def setupDomain(domain, folder=False):
     endpoint = config.get("hsds_endpoint")
@@ -114,6 +114,12 @@ def setupDomain(domain, folder=False):
     if rsp.status_code != 404:
         # something other than "not found"
         raise ValueError(f"Unexpected get domain error: {rsp.status_code}")
+
+    if requests.get(
+            req,
+            headers=getRequestHeaders(domain=getParentDomain(domain))
+    ).status_code != 200:
+        setupDomain(parent_domain, folder=True)
 
     headers = getRequestHeaders(domain=domain)
     if folder:
