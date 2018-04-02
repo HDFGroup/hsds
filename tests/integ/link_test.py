@@ -24,22 +24,101 @@ class HardLinkTest(unittest.TestCase):
         self.base_domain = helper.getTestDomainName(self.__class__.__name__)
         helper.setupDomain(self.base_domain)
         self.base_endpoint = helper.getEndpoint() + "/"
+        self.common_headers = helper.getRequestHeaders(domain=self.base_domain)
+        self.domain_root = helper.getRootUUID(domain=self.base_domain)
 
     def assertLooksLikeUUID(self, s):
         self.assertTrue(
                 helper.validateId(s),
                 f"Helper thinks `{s}` does not look like a valid UUID")
 
+    def testRootGroupHasNoLinksAtStart(self):
+        rsp = requests.get(
+                self.base_endpoint + "groups/" + self.domain_root,
+                headers=self.common_headers)
+        self.assertEqual(rsp.status_code, 200, "could not get groups")  
+        self.assertEqual(rsp.json()["linkCount"], 0, "should have no links")
+
+    def testUnlinkedGroupIsUnlinked(self):
+        # SETUP - create new group
+        rsp = requests.post(
+                self.base_endpoint + "groups",
+                headers=self.common_headers)
+        self.assertEqual(rsp.status_code, 201, "unable to create new group")
+        rspJson = rsp.json()
+        self.assertEqual(rspJson["linkCount"], 0)   
+        self.assertEqual(rspJson["attributeCount"], 0)   
+        grp1_id = rspJson["id"]
+        self.assertLooksLikeUUID(grp1_id)
+
+        # TEST
+        rsp = requests.get(
+                self.base_endpoint + f"groups",
+                headers=self.common_headers)
+        self.assertEqual(
+                rsp.status_code,
+                200,
+                "unable to get root groups listing")
+        self.assertEqual(
+                rsp.json()["groups"],
+                [],
+                "unlinked group should not be present in domain groups list")
+
+        # TEARDOWN - delete group
+        self.assertEqual(
+                requests.delete(
+                        self.base_endpoint + f"groups/{grp1_id}",
+                        headers=self.common_headers
+                ).status_code,
+                200,
+                "unable to delete temporary group")
+
+    def testGetMissingLink(self):
+        linkname = "g1"
+        self.assertEqual(
+                requests.get(
+                        self.base_endpoint + \
+                        f"groups/{self.domain_root}/links/{linkname}",
+                        headers=self.common_headers
+                ).status_code,
+                404,
+                "Absent link should result in expected error code")
+
+    def testCannotCreateLinkWithouPermission(self):
+        linkname = "g1"
+        wrong_username = "test_user2"
+
+        # SETUP - create new group
+        rsp = requests.post(
+                self.base_endpoint + "groups",
+                headers=self.common_headers)
+        self.assertEqual(rsp.status_code, 201, "unable to create new group")
+        rspJson = rsp.json()
+        self.assertEqual(rspJson["linkCount"], 0)   
+        self.assertEqual(rspJson["attributeCount"], 0)   
+        grp1_id = rspJson["id"]
+        self.assertLooksLikeUUID(grp1_id)
+        
+        req = f"{self.base_endpoint}groups/{self.domain_root}/links/{linkname}"
+        headers = helper.getRequestHeaders(
+                domain=self.base_domain,
+                username=wrong_username)
+        payload = {"id": grp1_id}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 403, "unauthorized put is forbidded")
+
+        # TEARDOWN - delete group
+        self.assertEqual(
+                requests.delete(
+                        self.base_endpoint + f"groups/{grp1_id}",
+                        headers=self.common_headers
+                ).status_code,
+                200,
+                "unable to delete temporary group")
+
     def testHardLink(self):
         headers = helper.getRequestHeaders(domain=self.base_domain)
         root_id = helper.getRootUUID(domain=self.base_domain)
-
-        # get root group and check it has no links
-        req = helper.getEndpoint() + "/groups/" + root_id
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)  
-        rspJson = json.loads(rsp.text)
-        self.assertEqual(rsp.json()["linkCount"], 0, "should have no links")
 
         # create a new group
         req = helper.getEndpoint() + '/groups'
@@ -51,20 +130,12 @@ class HardLinkTest(unittest.TestCase):
         grp1_id = rspJson["id"]
         self.assertLooksLikeUUID(grp1_id)
 
-        # try to get "/g1"  (doesn't exist yet)
-        link_title = "g1"
-        req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title 
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 404)  # link doesn't exist yet
-
-        # try creating a link with a different user (should fail)
-        headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
-        payload = {"id": grp1_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 403)  # forbidden
+        linkname = "g1"
+        req = f"{self.base_endpoint}groups/{self.domain_root}/links/{linkname}"
 
         # create "/g1" with original user
         headers = helper.getRequestHeaders(domain=self.base_domain)
+        payload = {"id": grp1_id}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # created
 
@@ -95,12 +166,12 @@ class HardLinkTest(unittest.TestCase):
 
         # try deleting link with a different user (should fail)
         headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
-        req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title 
+        req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + linkname 
         rsp = requests.delete(req, headers=headers)
         self.assertEqual(rsp.status_code, 403)   # forbidden
 
         # delete the link with original user
-        req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title 
+        req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + linkname 
         headers = helper.getRequestHeaders(domain=self.base_domain)
         rsp = requests.delete(req, headers=headers)
         self.assertEqual(rsp.status_code, 200) 
