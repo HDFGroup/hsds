@@ -170,17 +170,18 @@ def getUUIDByPath(domain, path, username=None, password=None):
             # found non-group object that is not last name in path
             raise KeyError("not found")
 
-        req = f"{endpoint}/groups/{parent_uuid}/links/{name}"
-        rsp = requests.get(req, headers=headers)
-        if rsp.status_code != 200:
+        response = requests.get(
+                f"{endpoint}/groups/{parent_uuid}/links/{name}",
+                headers=headers)
+        if response.status_code != 200:
             raise KeyError("not found")
-        tgt_json = rsp.json()["link"]
+        link = response.json()["link"]
 
-        if tgt_json['class'] != 'H5L_TYPE_HARD':
+        if link['class'] != 'H5L_TYPE_HARD':
             raise KeyError("non-hard link")
 
-        tgt_uuid = tgt_json['id']
-        if tgt_json['collection'] == 'groups':
+        tgt_uuid = link['id']
+        if link['collection'] == 'groups':
             parent_uuid = tgt_uuid
         else:
             parent_uuid = None # flags non-group object
