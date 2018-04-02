@@ -13,6 +13,7 @@ import unittest
 import requests
 import json
 import time
+import config
 import helper
 
 # min/max chunk size - these can be set by config, but 
@@ -28,13 +29,10 @@ class DatasetTest(unittest.TestCase):
         self.base_domain = helper.getTestDomainName(self.__class__.__name__)
         helper.setupDomain(self.base_domain)
         self.endpoint = helper.getEndpoint()
-        
-        # main
-     
+
     def testScalarDataset(self):
         # Test creation/deletion of scalar dataset obj
 
-        print("testScalarDataset", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
         req = self.endpoint + '/'
 
@@ -145,7 +143,6 @@ class DatasetTest(unittest.TestCase):
     def testScalarEmptyDimsDataset(self):
         # Test creation/deletion of scalar dataset obj
 
-        print("testScalarEmptyDimsDataset", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
         req = self.endpoint + '/'
 
@@ -185,9 +182,9 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("type" in rspJson)
         self.assertTrue(rspJson["type"], "H5T_IEEE_F32LE")
 
+    @unittest.skipUnless(config.get("test_on_uploaded_file"), "requires file")
     def testGet(self):
         domain = helper.getTestDomain("tall.h5")
-        print("testGetDomain", domain)
         headers = helper.getRequestHeaders(domain=domain)
         
         # verify domain exists
@@ -260,9 +257,9 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("alias" in rspJson)
         self.assertEqual(rspJson["alias"], ['/g1/g1.1/dset1.1.1'])
 
+    @unittest.skipUnless(config.get("test_on_uploaded_file"), "requires file")
     def testGetByPath(self):
         domain = helper.getTestDomain("tall.h5")
-        print("testGetDomain", domain)
         headers = helper.getRequestHeaders(domain=domain)
         
         # verify domain exists
@@ -318,9 +315,9 @@ class DatasetTest(unittest.TestCase):
         rsp = requests.get(req, headers=headers, params=params)
         self.assertEqual(rsp.status_code, 404)
 
+    @unittest.skipUnless(config.get("test_on_uploaded_file"), "requires file")
     def testGetVerbose(self):
         domain = helper.getTestDomain("tall.h5")
-        print("testGetDomain", domain)
         headers = helper.getRequestHeaders(domain=domain)
         
         # verify domain exists
@@ -355,7 +352,6 @@ class DatasetTest(unittest.TestCase):
 
     def testDelete(self):
         # test Delete
-        print("testDelete", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
         # get domain
@@ -411,7 +407,6 @@ class DatasetTest(unittest.TestCase):
 
     def testCompound(self):
         # test Dataset with compound type
-        print("testCompound", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
         # get domain
@@ -441,7 +436,6 @@ class DatasetTest(unittest.TestCase):
 
     def testCompoundDuplicateMember(self):
         # test Dataset with compound type but field that is repeated
-        print("testCompoundDupicateMember", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
         # get domain
@@ -462,7 +456,6 @@ class DatasetTest(unittest.TestCase):
 
     def testPostNullSpace(self):
         # test Dataset with null dataspace type
-        print("testNullSpace", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
         # get domain
@@ -502,7 +495,6 @@ class DatasetTest(unittest.TestCase):
 
     def testResizableDataset(self):
         # test Dataset with null dataspace type
-        print("testResizableDataset", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
         # get domain
@@ -583,7 +575,6 @@ class DatasetTest(unittest.TestCase):
 
     def testResizableUnlimitedDataset(self):
         # test Dataset with unlimited dimension
-        print("testResizableUnlimitedDataset", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
         # get domain
@@ -670,7 +661,6 @@ class DatasetTest(unittest.TestCase):
 
     def testCreationPropertiesLayoutDataset(self):
         # test Dataset with creation property list
-        print("testCreationPropertiesLayoutDataset", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
         # get domain
         req = helper.getEndpoint() + '/'
@@ -731,7 +721,6 @@ class DatasetTest(unittest.TestCase):
     
     def testInvalidFillValue(self):
         # test Dataset with simple type and fill value that is incompatible with the type
-        print("testInvalidFillValue", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
         # get domain
@@ -751,7 +740,6 @@ class DatasetTest(unittest.TestCase):
 
     def testAutoChunk1dDataset(self):
         # test Dataset where chunk layout is set automatically
-        print("testAutoChunk1dDataset", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
         # get domain
         req = helper.getEndpoint() + '/'
@@ -808,7 +796,6 @@ class DatasetTest(unittest.TestCase):
      
     def testAutoChunk2dDataset(self):
         # test Dataset where chunk layout is set automatically
-        print("testAutoChunk2dDataset", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
         # get domain
         req = helper.getEndpoint() + '/'
@@ -861,7 +848,6 @@ class DatasetTest(unittest.TestCase):
     def testMinChunkSizeDataset(self):
         # test Dataset where chunk layout is adjusted if provided
         # layout is too small
-        print("testMinChunkSizeDataset", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
         # get domain
         req = helper.getEndpoint() + '/'
@@ -913,7 +899,6 @@ class DatasetTest(unittest.TestCase):
 
 
     def testPostWithLink(self):
-        print("testPostWithLink", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
         # get domain
@@ -963,7 +948,6 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(link_json["id"], dset_uuid)
 
     def testPostCommittedType(self):
-        print("testPostCommittedType", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
         # get domain
@@ -1021,7 +1005,6 @@ class DatasetTest(unittest.TestCase):
 
     def testDatasetwithDomainDelete(self):
         domain = self.base_domain + "/datasetwithdomaindelete.h6"
-        print("testDatasetwithDomainDelete", domain)
         headers = helper.getRequestHeaders(domain=domain)
 
         # create a domain
