@@ -149,13 +149,11 @@ def getTestDomain(name):
     return folder + name
 
 """
-Helper function - get uuid for a given path
+Helper function - get uuid for a given path (must be reached via hard link)
 """
 def getUUIDByPath(domain, path, username=None, password=None):
-#TODO: fails if the target is not a group?
-#TODO: some setup boilerplate is unnecessary?
-    if path[0] != '/':
-        raise KeyError("only abs paths") # only abs paths
+    if not path.startswith("/"):
+        raise KeyError("only abs paths")
 
     parent_uuid = getRootUUID(domain, username=username, password=password)  
 
@@ -163,34 +161,30 @@ def getUUIDByPath(domain, path, username=None, password=None):
         return parent_uuid
 
     headers = getRequestHeaders(domain=domain)
-
-    # make a fake tgt_json to represent 'link' to root group
-    tgt_json = {'collection': "groups", 'class': "H5L_TYPE_HARD", 'id': parent_uuid }
     tgt_uuid = None
+    endpoint = getEndpoint()
+    path = path[1:] # strip leading slash (root)
 
-    names = path.split('/')         
-
-    for name in names:
-        if not name: 
-            continue
+    for name in path.split('/'):
         if parent_uuid is None:
+            # found non-group object that is not last name in path
             raise KeyError("not found")
 
-        req = getEndpoint() + "/groups/" + parent_uuid + "/links/" + name
+        req = f"{endpoint}/groups/{parent_uuid}/links/{name}"
         rsp = requests.get(req, headers=headers)
         if rsp.status_code != 200:
             raise KeyError("not found")
-        rsp_json = json.loads(rsp.text)    
-        tgt_json = rsp_json['link']
+        tgt_json = rsp.json()["link"]
 
-        if tgt_json['class'] == 'H5L_TYPE_HARD':
-            if tgt_json['collection'] == 'groups':
-                parent_uuid = tgt_json['id']    
-            else:
-                parent_uuid = None
-            tgt_uuid = tgt_json['id']
-        else:
+        if tgt_json['class'] != 'H5L_TYPE_HARD':
             raise KeyError("non-hard link")
+
+        tgt_uuid = tgt_json['id']
+        if tgt_json['collection'] == 'groups':
+            parent_uuid = tgt_uuid
+        else:
+            parent_uuid = None # flags non-group object
+
     return tgt_uuid
 
 
