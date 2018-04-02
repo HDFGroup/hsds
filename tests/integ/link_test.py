@@ -258,85 +258,74 @@ class LinkTest(unittest.TestCase):
 
     def testSoftLink(self):
         headers = helper.getRequestHeaders(domain=self.base_domain)
-        req = helper.getEndpoint() + '/'
+        endpoint = helper.getEndpoint()
+        link_title = "softlink"
+        target_path = "somewhere"
+        root_id = helper.getRootUUID(self.base_domain)
+        root_req = f"{endpoint}/groups/{root_id}"
+        link_req = f"{root_req}/links/{link_title}"
 
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        root_id = rspJson["root"]
+        self.assertEqual(
+                requests.get(root_req, headers=headers).json()["linkCount"],
+                0,
+                "domain should have no links")
 
-        # get root group and check it has no links
-        req = helper.getEndpoint() + "/groups/" + root_id 
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)  
-        rspJson = json.loads(rsp.text)
-        self.assertEqual(rspJson["linkCount"], 0)  # no links
-
-        # create softlink
-        link_title = 'softlink'
-        target_path = 'somewhere'
-        req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title 
         payload = {"h5path": target_path}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)  # created
+        rsp = requests.put(link_req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201, "problem creating soft link")
 
-        # get root group and check it has one link
-        req = helper.getEndpoint() + "/groups/" + root_id 
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)  
-        rspJson = json.loads(rsp.text)
-        self.assertEqual(rspJson["linkCount"], 1)  # no links
+        self.assertEqual(
+                requests.get(root_req, headers=headers).json()["linkCount"],
+                1,
+                "root should report one and only one link")
 
-        # get the link
-        req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title 
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)  # should get the softlink  
-        rspJson = json.loads(rsp.text)
+        rsp = requests.get(link_req, headers=headers)
+        self.assertEqual(rsp.status_code, 200, "problem getting soft link")
+        rspJson = rsp.json()
         self.assertTrue("created" in rspJson)
         self.assertTrue("lastModified" in rspJson)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("link" in rspJson)
-        rspLink = rspJson["link"]
-        self.assertEqual(rspLink["title"], link_title)
-        self.assertEqual(rspLink["class"], "H5L_TYPE_SOFT")
-        self.assertEqual(rspLink["h5path"], target_path)
+        self.assertEqual(len(rspJson), 4, "group links info has only 4 keys")
+        self.assertDictEqual(
+            rspJson["link"],
+            {   "title": link_title,
+                "class": "H5L_TYPE_SOFT",
+                "h5path": target_path,
+            })
 
     def testExternalLink(self):
+        endpoint = helper.getEndpoint()
         headers = helper.getRequestHeaders(domain=self.base_domain)
-        req = helper.getEndpoint() + '/'
+        root_id = helper.getRootUUID(self.base_domain)
 
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        root_id = rspJson["root"]
-
-        # get root group and check it has no links
-        req = helper.getEndpoint() + "/groups/" + root_id 
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)  
-        rspJson = json.loads(rsp.text)
-        self.assertEqual(rspJson["linkCount"], 0)  # no links
+        self.assertEqual(
+                requests.get(
+                        f"{endpoint}/groups/{root_id}",
+                         headers=headers
+                ).json()["linkCount"],
+                0,
+                "domain should have no links")
 
         # create external link
         target_domain = 'external_target.' + helper.getParentDomain(self.base_domain)
         target_path = 'somewhere'
         link_title = 'external_link'
-        req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title 
+        req = f"{endpoint}/groups/{root_id}/links/{link_title}"
         payload = {"h5path": target_path, "h5domain": target_domain}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)  # created
+        self.assertEqual(rsp.status_code, 201, "problem creating ext. link")
 
         # get root group and check it has one link
-        req = helper.getEndpoint() + "/groups/" + root_id 
+        req = f"{endpoint}/groups/{root_id}" 
         rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)  
-        rspJson = json.loads(rsp.text)
-        self.assertEqual(rspJson["linkCount"], 1)  # no links
+        self.assertEqual(rsp.status_code, 200, "problem getting root group")  
+        self.assertEqual(rsp.json()["linkCount"], 1)
 
         # get the link
-        req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title 
+        req = f"{endpoint}/groups/{root_id}/links/{link_title}"
         rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)  # should get the softlink  
+        self.assertEqual(rsp.status_code, 200, "problem getting softlink")
         rspJson = json.loads(rsp.text)
         self.assertTrue("created" in rspJson)
         self.assertTrue("lastModified" in rspJson)
@@ -347,6 +336,13 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(rspLink["class"], "H5L_TYPE_EXTERNAL")
         self.assertEqual(rspLink["h5path"], target_path)
         self.assertEqual(rspLink["h5domain"], target_domain)
+
+        # how to get the object at external link -- should fail as nonexistent
+        # continued from above section; uses link info returned
+        ext_domain = rspLink["h5domain"]
+        ext_path = rspLink["h5path"]
+        with self.assertRaises(KeyError):
+            helper.getUUIDByPath(ext_domain, ext_path)
 
     def testGetLinks(self):
         headers = helper.getRequestHeaders(domain=self.base_domain)
