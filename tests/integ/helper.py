@@ -41,9 +41,7 @@ Helper - return number of active sn/dn nodes
 """
 def getActiveNodeCount():
     rsp_json = requests.get(getEndpoint("head") + "/info").json()
-    sn_count = rsp_json["active_sn_count"]
-    dn_count = rsp_json["active_dn_count"]
-    return sn_count, dn_count
+    return rsp_json["active_sn_count"], rsp_json["active_dn_count"]
 
 """
 Helper - get base domain to use for test_cases
@@ -152,33 +150,33 @@ def getUUIDByPath(domain, path, username=None, password=None):
 #TODO: some setup boilerplate is unnecessary?
     if path[0] != '/':
         raise KeyError("only abs paths") # only abs paths
-            
+
     parent_uuid = getRootUUID(domain, username=username, password=password)  
-     
+
     if path == '/':
         return parent_uuid
 
     headers = getRequestHeaders(domain=domain)
-          
+
     # make a fake tgt_json to represent 'link' to root group
     tgt_json = {'collection': "groups", 'class': "H5L_TYPE_HARD", 'id': parent_uuid }
     tgt_uuid = None
-            
+
     names = path.split('/')         
-                      
+
     for name in names:
         if not name: 
             continue
         if parent_uuid is None:
             raise KeyError("not found")
-                 
+
         req = getEndpoint() + "/groups/" + parent_uuid + "/links/" + name
         rsp = requests.get(req, headers=headers)
         if rsp.status_code != 200:
             raise KeyError("not found")
         rsp_json = json.loads(rsp.text)    
         tgt_json = rsp_json['link']
-            
+
         if tgt_json['class'] == 'H5L_TYPE_HARD':
             if tgt_json['collection'] == 'groups':
                 parent_uuid = tgt_json['id']    
@@ -189,12 +187,4 @@ def getUUIDByPath(domain, path, username=None, password=None):
             raise KeyError("non-hard link")
     return tgt_uuid
 
-       
 
-     
-
-    
-
-
-
-        
