@@ -115,6 +115,7 @@ def setupDomain(domain, folder=False):
         # something other than "not found"
         raise ValueError(f"Unexpected get domain error: {rsp.status_code}")
 
+    parent_domain = getParentDomain(domain)
     if requests.get(
             req,
             headers=getRequestHeaders(domain=parent_domain)
