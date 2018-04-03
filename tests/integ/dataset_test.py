@@ -82,8 +82,13 @@ class ScalarDatasetTest(unittest.TestCase):
 
     def setUp(self):
         """Sanity checks before each test."""
-        assert helper.validateId(self.root_uuid) == True
+        assert helper.validateId(helper.getRootUUID(self.base_domain)) == True
+        get_given = requests.get(
+                f"{self.endpoint}/datasets/{self.given_dset_id}",
+                headers = self.headers)
+        assert get_given.status_code == 200, "given dataset inexplicably gone"
         assert helper.validateId(self.given_dset_id) == True
+        assert get_given.json()["id"] == self.given_dset_id
         assert self.headers is not None
 
     def testPost(self):
