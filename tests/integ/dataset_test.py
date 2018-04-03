@@ -23,6 +23,207 @@ import helper
 CHUNK_MIN = 1024                # lower limit  (1024b)
 CHUNK_MAX = 50*1024*1024        # upper limit (50M) 
 
+POST_DATASET_KEYS = [
+    "id",
+    "root",
+    "shape",
+    "type",
+    "attributeCount",
+    "created",
+    "lastModified",
+]
+
+GET_DATASET_KEYS = [
+    "id",
+    "type",
+    "shape",
+    "hrefs",
+    "layout",
+    "creationProperties",
+    "attributeCount",
+    "created",
+    "lastModified",
+    "root",
+    "domain",
+]
+
+def _assertLooksLikeUUID(testcase, s):
+    testcase.assertTrue(helper.validateId(s), "probably not UUID: " + s)
+
+class ScalarDatasetTest(unittest.TestCase):
+    base_domain = None
+    root_uuid = None
+    endpoint = None
+    headers = None
+    assertLooksLikeUUID = _assertLooksLikeUUID
+    given_expected_shape = {"class": "H5S_SCALAR"}
+    given_expected_type = {"class": "H5T_FLOAT", "base": "H5T_IEEE_F32LE"}
+    given_payload = {"type": "H5T_IEEE_F32LE"}
+    given_dset_id = None
+
+    @classmethod
+    def setUpClass(cls):
+        """Do one-time setup prior to any tests.
+
+        Prepare domain and post one scalar dataset.
+        Populates class variables.
+        """
+        cls.base_domain = helper.getTestDomainName(cls.__name__)
+        cls.headers = helper.getRequestHeaders(domain=cls.base_domain)
+        helper.setupDomain(cls.base_domain)
+        cls.root_uuid = helper.getRootUUID(cls.base_domain)
+        cls.endpoint = helper.getEndpoint()
+        response = requests.post(
+                cls.endpoint + '/datasets',
+                data=json.dumps(cls.given_payload),
+                headers=cls.headers)
+        assert response.status_code == 201, "unable to place dataset on service"
+        cls.given_dset_id = response.json()["id"]
+
+    def setUp(self):
+        """Sanity checks before each test."""
+        assert helper.validateId(self.root_uuid) == True
+        assert helper.validateId(self.given_dset_id) == True
+        assert self.headers is not None
+
+    def testPost(self):
+        data = { "type": "H5T_IEEE_F32LE" }
+        req = f"{self.endpoint}/datasets"
+        rsp = requests.post(req, data=json.dumps(data), headers=self.headers)
+        self.assertEqual(rsp.status_code, 201, "problem creating dataset")
+        rspJson = rsp.json()
+        self.assertEqual(rspJson["attributeCount"], 0)
+        dset_id = rspJson["id"]
+        self.assertLooksLikeUUID(dset_id)
+        for name in POST_DATASET_KEYS:
+            self.assertTrue(name in rspJson, name)
+        self.assertEqual(len(rspJson), len(POST_DATASET_KEYS))
+
+    def testGet(self):
+        req = f"{self.endpoint}/datasets/{self.given_dset_id}"
+        rsp = requests.get(req, headers=self.headers)
+        self.assertEqual(rsp.status_code, 200, "problem getting dataset")
+        rspJson = rsp.json()
+        for name in GET_DATASET_KEYS:
+            self.assertTrue(name in rspJson, name)
+        self.assertEqual(len(rspJson), len(GET_DATASET_KEYS))
+        self.assertEqual(rspJson["id"], self.given_dset_id)
+        self.assertEqual(rspJson["root"], self.root_uuid) 
+        self.assertEqual(rspJson["domain"], self.base_domain) 
+        self.assertEqual(rspJson["attributeCount"], 0)
+        self.assertDictEqual(rspJson["shape"], self.given_expected_shape)
+        self.assertDictEqual(rspJson["type"], self.given_expected_type)
+
+    def testGetType(self):
+        req = f"{self.endpoint}/datasets/{self.given_dset_id}/type"
+        rsp = requests.get(req, headers=self.headers)
+        self.assertEqual(rsp.status_code, 200, "problem getting dset's type")
+        rspJson = rsp.json()
+        self.assertEqual(len(rspJson), 2)
+        self.assertDictEqual(rspJson["type"], self.given_expected_type)
+        self.assertEqual(len(rspJson["hrefs"]), 3) 
+
+    def testGetShape(self):
+        req = f"{self.endpoint}/datasets/{self.given_dset_id}/shape"
+        rsp = requests.get(req, headers=self.headers)
+        self.assertEqual(rsp.status_code, 200, "problem getting dset's shape")
+        rspJson = rsp.json()
+        self.assertEqual(len(rspJson), 4)
+        self.assertTrue("created" in rspJson)
+        self.assertTrue("lastModified" in rspJson)
+        self.assertDictEqual(rspJson["shape"], self.given_expected_shape)
+        self.assertEqual(len(rspJson["hrefs"]), 3)
+
+    def testGet_VerboseNotYetImplemented(self):
+        req = f"{self.endpoint}/datasets/{self.given_dset_id}"
+        params = {"verbose": 1}
+        rsp = requests.get(req, headers=self.headers, params=params)
+        self.assertEqual(rsp.status_code, 200, "problem getting dataset")
+        rspJson = rsp.json()
+        self.assertFalse("num_chunks" in rspJson)
+        self.assertFalse("allocated_size" in rspJson)
+        for name in GET_DATASET_KEYS:
+            self.assertTrue(name in rspJson, name)
+        self.assertEqual(len(rspJson), len(GET_DATASET_KEYS))
+        self.assertEqual(rspJson["id"], self.given_dset_id)
+        self.assertEqual(rspJson["root"], self.root_uuid) 
+        self.assertEqual(rspJson["domain"], self.base_domain) 
+        self.assertEqual(rspJson["attributeCount"], 0)
+        self.assertDictEqual(rspJson["shape"], self.given_expected_shape)
+        self.assertDictEqual(rspJson["type"], self.given_expected_type)
+
+    def testGetWithOtherRead_AuthorizedUser(self):
+        other_user = "test_user2"
+        self.assertNotEqual(other_user, config.get("user_name"))
+        req = f"{self.endpoint}/datasets/{self.given_dset_id}"
+        headers = helper.getRequestHeaders(
+                domain=self.base_domain,
+                username=other_user)
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200, "unable to get dataset")
+        self.assertEqual(rsp.json()["id"], self.given_dset_id)
+
+    def testGetFromOtherDomainFails400(self):
+        req = f"{self.endpoint}/datasets/{self.given_dset_id}"
+        another_domain = helper.getParentDomain(self.base_domain)
+        headers = helper.getRequestHeaders(domain=another_domain)
+        self.assertEqual(requests.get(req, headers=headers).status_code, 400)
+        # TODO: explain why 400 is appropriate, instead of 404
+
+    def testDeleteWithoutPermission(self):
+        other_user = "test_user2"
+        self.assertNotEqual(other_user, config.get("user_name"))
+
+        # SETUP - place dset on service
+        data = { "type": "H5T_IEEE_F32LE" }
+        req = f"{self.endpoint}/datasets"
+        rsp = requests.post(req, data=json.dumps(data), headers=self.headers)
+        self.assertEqual(rsp.status_code, 201, "problem creating dataset")
+        dset_id = rsp.json()["id"]
+
+        # TEST - attempt delete
+        req = f"{self.endpoint}/datasets/{dset_id}"
+        headers = helper.getRequestHeaders(
+                domain=self.base_domain,
+                username=other_user)
+        rsp = requests.delete(req, headers=headers)
+        self.assertEqual(rsp.status_code, 403, "should be forbidden")
+
+    def testDeleteInOtherDomainFails400(self):
+        req = f"{self.endpoint}/datasets/{self.given_dset_id}"
+        another_domain = helper.getParentDomain(self.base_domain)
+        headers = helper.getRequestHeaders(domain=another_domain)
+        self.assertEqual(
+                requests.delete(req, headers=headers).status_code,
+                400) # TODO: explain why 400
+
+    def testDelete(self):
+        # SETUP - place dset on service
+        data = { "type": "H5T_IEEE_F32LE" }
+        req = f"{self.endpoint}/datasets"
+        rsp = requests.post(req, data=json.dumps(data), headers=self.headers)
+        self.assertEqual(rsp.status_code, 201, "problem creating dataset")
+        dset_id = rsp.json()["id"]
+
+        # TEST - delete
+        req = f"{self.endpoint}/datasets/{dset_id}"
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        rsp = requests.delete(req, headers=self.headers)
+        self.assertEqual(rsp.status_code, 200, "problem deleting dataset")
+        self.assertDictEqual(rsp.json(), {}, "should return empty object")
+        self.assertEqual(
+                requests.get(req, headers=self.headers).status_code,
+                410,
+                "GONE")
+
+    @unittest.skip("TODO")
+    def testDeleteWhileStillLinked(self):
+        pass
+
+    @unittest.skip("TODO")
+    def testPostWithMalformedPayload(self):
+        pass
+
 class DatasetTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(DatasetTest, self).__init__(*args, **kwargs)
@@ -30,115 +231,8 @@ class DatasetTest(unittest.TestCase):
         helper.setupDomain(self.base_domain)
         self.endpoint = helper.getEndpoint()
 
-    def testScalarDataset(self):
-        # Test creation/deletion of scalar dataset obj
-
-        headers = helper.getRequestHeaders(domain=self.base_domain)
-        req = self.endpoint + '/'
-
-        # Get root uuid
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        root_uuid = rspJson["root"]
-        helper.validateId(root_uuid)
-
-        # create a dataset obj
-        data = { "type": "H5T_IEEE_F32LE" }
-        req = self.endpoint + '/datasets' 
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
-        self.assertEqual(rsp.status_code, 201)
-        rspJson = json.loads(rsp.text)
-        self.assertEqual(rspJson["attributeCount"], 0)   
-        dset_id = rspJson["id"]
-        self.assertTrue(helper.validateId(dset_id))
-
-        # read back the obj
-        req = self.endpoint + '/datasets/' + dset_id 
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        for name in ("id", "shape", "hrefs", "layout", "creationProperties", 
-            "attributeCount", "created", "lastModified", "root", "domain"):
-            self.assertTrue(name in rspJson)
-        self.assertEqual(rspJson["id"], dset_id)
-        self.assertEqual(rspJson["root"], root_uuid) 
-        self.assertEqual(rspJson["domain"], self.base_domain) 
-        self.assertEqual(rspJson["attributeCount"], 0)
-        shape_json = rspJson["shape"]
-        self.assertTrue(shape_json["class"], "H5S_SCALAR")
-        self.assertTrue(rspJson["type"], "H5T_IEEE_F32LE")
-
-        # Get the type
-        rsp = requests.get(req + "/type", headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("type" in rspJson)
-        self.assertTrue(rspJson["type"], "H5T_IEEE_F32LE")
-        self.assertTrue("hrefs" in rspJson)
-        hrefs = rspJson["hrefs"]
-        self.assertEqual(len(hrefs), 3)
-
-        # Get the shape
-        rsp = requests.get(req + "/shape", headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("created" in rspJson)
-        self.assertTrue("lastModified" in rspJson)
-        self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("shape" in rspJson)
-        shape_json = rspJson["shape"]
-        self.assertTrue(shape_json["class"], "H5S_SCALAR")  
-
-        # try getting verbose info (shouldn't be available yet)
-        params = {"verbose": 1}
-        rsp = requests.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        for name in ("id", "shape", "hrefs", "layout", "creationProperties", 
-            "attributeCount", "created", "lastModified", "root", "domain"):
-            self.assertTrue(name in rspJson)
-        self.assertFalse("num_chunks" in rspJson)
-        self.assertFalse("allocated_size" in rspJson)
-         
-        # try get with a different user (who has read permission)
-        headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertEqual(rspJson["id"], dset_id)
-
-        
-
-        # try to do a GET with a different domain (should fail)
-        another_domain = helper.getParentDomain(self.base_domain)
-        headers = helper.getRequestHeaders(domain=another_domain)
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 400)
-
-
-        # try DELETE with user who doesn't have create permission on this domain
-        headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
-        rsp = requests.delete(req, headers=headers)
-        self.assertEqual(rsp.status_code, 403) # forbidden
-
-        # try to do a DELETE with a different domain (should fail)
-        another_domain = helper.getParentDomain(self.base_domain)
-        headers = helper.getRequestHeaders(domain=another_domain)
-        rsp = requests.delete(req, headers=headers)
-        self.assertEqual(rsp.status_code, 400)   
-        """
-        # delete the dataset
-        headers = helper.getRequestHeaders(domain=self.base_domain)
-        rsp = requests.delete(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue(rspJson is not None)
-
-        # a get for the dataset should now return 410 (GONE)
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 410)
-        """
+    def assertLooksLikeUUID(self, s):
+        self.assertTrue(helper.validateId(s), "maybe not UUID: " + s)
 
     def testScalarEmptyDimsDataset(self):
         # Test creation/deletion of scalar dataset obj
