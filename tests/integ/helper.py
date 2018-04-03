@@ -117,7 +117,7 @@ def setupDomain(domain, folder=False):
 
     if requests.get(
             req,
-            headers=getRequestHeaders(domain=getParentDomain(domain))
+            headers=getRequestHeaders(domain=parent_domain)
     ).status_code != 200:
         setupDomain(parent_domain, folder=True)
 
