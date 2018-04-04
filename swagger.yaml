@@ -685,38 +685,50 @@ paths:
           By default, the new Group it not attached to any other object in the
           Domain; it is left to the user or application to appropriately attach
           the new Group, i.e., Link to.
-#
-#          A link description may be supplied in the request body as
-#          structured JSON, which will immediately link the new Group. If
-#          supplying link info, the header `Content-Type: application/json`
-#          should also be supplied as a matter of course. Note that this
-#          link will be a hard link: it refers directly to the object.
-#      consumes:
-#        - application/json
+
+          A link description may be supplied in the request body as
+          structured JSON, which will immediately link the new Group. If
+          supplying link info, the header `Content-Type: application/json`
+          should also be supplied as a matter of course. Note that this
+          link will be a hard link: it refers directly to the object.
+      consumes:
+        - application/json
       parameters:
         - $ref: '#/parameters/query_domain'
         - $ref: '#/parameters/accept_json'
         - $ref: '#/parameters/authorization'
-#        - $ref: '#/parameters/content_json_only'
-#        - in: body
-#          name: linkInfo
-#          description: >
-#              Immediately create Link in Group `id` to the new Group with
-#              name/label `name`.
-#          schema:
-#            type: object
-#            required:
-#              - id
-#              - name
-#            properties:
-#              id:
-#                description: UUID of object to link from.
-#                type: string
-#                example: 'g-a613ed48-2c86-11e8-9391-0242ac110009'
-#              name:
-#                description: Name/label of group.
-#                type: string
-#                example: 'g2'
+        - $ref: '#/parameters/content_json_only'
+        - in: body
+          name: HardLinkAt
+          description: >
+              Optional JSON object to immediately create a hard Link to the
+              newly-created Group. If present, both `id` and `name` must be
+              supplied and `id` must be the UUID of an existing object
+              (TODO: Group only?).
+
+              Note that the id reference is _reverse_ the usual for Link
+              creation: the `id` value refers to the targeting object, not the
+              target object of the link.
+
+              The included example would serve the effect of:
+
+              `POST <yourhost>/groups`
+
+              `PUT <yourhost>/groups/g-a613ed48-2c86-11e8-9391-0242ac110009/links/g2 {"id": "<UUID_of_new>"}`
+          schema:
+            type: object
+            required:
+              - id
+              - name
+            properties:
+              id:
+                description: 'UUID of object (TODO:Groups only?) to link from.'
+                type: string
+                example: 'g-a613ed48-2c86-11e8-9391-0242ac110009'
+              name:
+                description: Title of Link.
+                type: string
+                example: 'g2'
       responses:
         '201':
           description: New Group created.
