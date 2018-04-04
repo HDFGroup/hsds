@@ -19,26 +19,36 @@ import helper
 
 # ----------------------------------------------------------------------
 
-class GetDomainPatternsTest(unittest.TestCase):
+class DomainAccessPatternsTest(unittest.TestCase):
+    """Demonstrate various ways to access a domain.
+
+    Only try to get the root group for the sake of simplicity, but the
+    patterns apply to all of the HSDS REST API.
+    """
+    base_domain = None
+    endpoint = None
+    headers = None
+    expected_root = None
+
+    @classmethod
+    def setUpClass(cls):
+        cls.base_domain = helper.getTestDomainName(cls.__name__)
+        helper.setupDomain(cls.base_domain)
+        cls.endpoint = helper.getEndpoint()
+        cls.headers = helper.getRequestHeaders(domain=cls.base_domain)
+        cls.expected_root = helper.getRootUUID(cls.base_domain)
+        assert helper.validateId(cls.expected_root), "domain is invalid"
+
+    def setUp(self):
+        """sanity-check extant domain"""
+        response = requests.get(self.endpoint + "/", headers=self.headers)
+        assert response.status_code == 200, f"HTTP code {response.status_code}"
+        assert helper.validateId(self.expected_root)
+        assert response.json()["root"] == self.expected_root
 
     def assertLooksLikeUUID(self, s):
         self.assertTrue(helper.validateId(s))
 
-    def __init__(self, *args, **kwargs):
-        super(GetDomainPatternsTest, self).__init__(*args, **kwargs)
-        self.base_domain = helper.getTestDomainName(self.__class__.__name__)
-        helper.setupDomain(self.base_domain)
-
-        self.endpoint = helper.getEndpoint()
-        self.headers = helper.getRequestHeaders()
-
-        response = requests.get(
-                self.endpoint + "/",
-                headers = helper.getRequestHeaders(domain=self.base_domain))
-        assert response.status_code == 200, f"HTTP code {response.status_code}"
-        self.expected_root = response.json()["root"]
-
-    # this is what we did to get our expected root
     def testHeaderHost(self):
         # domain is recorded as 'host' header
         headers_with_host = helper.getRequestHeaders(domain=self.base_domain)
@@ -358,12 +368,22 @@ class OperationsOnUploadedTest(unittest.TestCase):
 # ----------------------------------------------------------------------
 
 class DomainTest(unittest.TestCase):
+    base_domain = None
+    base_endpoint = None
 
-    def __init__(self, *args, **kwargs):
-        super(DomainTest, self).__init__(*args, **kwargs)
-        self.base_domain = helper.getTestDomainName(self.__class__.__name__)
-        helper.setupDomain(self.base_domain)
-        self.base_endpoint = helper.getEndpoint() + "/"
+    @classmethod
+    def setUpClass(cls):
+        cls.base_domain = helper.getTestDomainName(cls.__name__)
+        cls.base_endpoint = helper.getEndpoint()
+        print(cls.base_endpoint, cls.base_domain)
+        helper.setupDomain(cls.base_domain)
+        root = helper.getRootUUID(cls.base_domain)
+        assert helper.validateId(root), "domain is invalid"
+
+    def setUp(self):
+        """sanity-check extant domain"""
+        root = helper.getRootUUID(self.base_domain)
+        assert helper.validateId(root), "domain is invalid"
 
     def assertLooksLikeUUID(self, s):
         self.assertTrue(helper.validateId(s))
@@ -550,7 +570,7 @@ class DomainTest(unittest.TestCase):
                 "can't get domain")
 
         other_headers = helper.getRequestHeaders(
-                domain=self.base_domain,
+                domain=domain,
                 username="test_user2")
         self.assertEqual(
                 requests.delete(endpoint, headers=other_headers).status_code,
