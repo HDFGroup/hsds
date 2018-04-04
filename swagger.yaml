@@ -139,34 +139,6 @@ definitions:
         read: true
         readACL: false
 
-  GroupCreationResponse:
-    type: object
-    properties:
-      id:
-        description: UUID of new Group.
-        type: string
-        example: 'g-a613ed48-2c86-11e8-9391-0242ac110009'
-      root:
-        description: UUID of root Group in Domain.
-        type: string
-        example: 'g-37aa76f6-2c86-11e8-9391-0242ac110009'
-      lastModified:
-        description: Time when Group was most recently modified.
-        type: number
-        example: 1521581745.9365487
-      created: 
-        description: Time when Group was created.
-        type: number
-        example: 1521581745.9365487
-      attributeCount:
-        description: Count of attributes in Group.
-        type: number
-        example: 0
-      linkCount:
-        description: Count of Links in Group.
-        type: number
-        example: 0
-
   GroupInfo:
     type: object
     properties:
@@ -743,7 +715,28 @@ paths:
               description: MIME type of response -- always 'application/json'
               type: string
           schema:
-            $ref: '#/definitions/GroupCreationResponse'
+            type: object
+            properties:
+              id:
+                description: UUID of new Group.
+                type: string
+                example: 'g-a613ed48-2c86-11e8-9391-0242ac110009'
+              root:
+                description: UUID of root Group in Domain.
+                type: string
+                example: 'g-37aa76f6-2c86-11e8-9391-0242ac110009'
+              lastModified:
+                type: number
+                example: 1521581745.9365487
+              created: 
+                type: number
+                example: 1521581745.9365487
+              attributeCount:
+                type: number
+                example: 0
+              linkCount:
+                type: number
+                example: 0
         default:
           description: Operation unsuccessful.
 
