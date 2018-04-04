@@ -534,8 +534,9 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200, "can't get folder")
         self.assertLooksLikeGetFolderResponse(rsp.json())
 
-    def testCreateDomainInMissingFolderFails404(self):
-        domain = self.base_domain + "/notafolder/newdomain.h5"
+    def testCreateIndirectChildDomainFails404(self):
+        """New domains must be direct children of existing domain/folder."""
+        domain = self.base_domain + "/nonexistent/newdomain.h5"
         headers = helper.getRequestHeaders(domain=domain)
 
         rsp = requests.put(self.base_endpoint, headers=headers)
