@@ -22,9 +22,7 @@ import config
     Helper function - get endpoint we'll send http requests to 
 """ 
 def getEndpoint():
-    
-    endpoint = config.get("hsds_endpoint")
-    return endpoint
+    return config.get("hsds_endpoint")
 
 """
 Helper function - return true if the parameter looks like a UUID
