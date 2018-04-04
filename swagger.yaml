@@ -139,64 +139,6 @@ definitions:
         read: true
         readACL: false
 
-  DatasetCreationSchema:
-    type: object
-    properties:
-      'type':
-        description: >
-            Predefined data Type, UUID of a commtted type, or JSON object
-            description of a Type.
-
-            Must be present.
-        type: string
-        example: H5T_STD_U32LE
-      shape:
-        description: >
-            Either `H5S_NULL` or an integer array giving the initial dimensions
-            of the dataset.
-
-            If omitted, a scalar dataset will be created.
-
-            If value is `H5S_NULL`, a dataset will be created which can have a
-            type and attributes, but unable to hold any value.
-        type: string
-        example: [128, 64]
-      maxdims:
-        description: >
-            Integer array diving the maximum allowed extent for each dimension.
-
-            If 0, the extent is unlimited.
-        type: array
-        items:
-          type: number
-        example: [0, 512]
-      creationProperties:
-        description: TODO
-        type: object
-
-  DatasetCreatedResponse:
-    type: object
-    properties:
-      id:
-        description: UUID of this Dataset.
-        type: string
-      root:
-        description: UUID of root Group in Domain.
-        type: string
-      created:
-        description: Time when the Dataset was created.
-        type: number
-      lastModified:
-        type: number
-      attributeCount:
-        type: number
-      'type':
-        description: TODO
-        type: object
-      shape:
-        description: TODO
-        type: object
-
   DatasetInfoFromID:
     type: object
     properties:
@@ -1145,12 +1087,94 @@ paths:
               JSON object describing the Dataset's properties.
           required: true
           schema:
-            $ref: '#/definitions/DatasetCreationSchema'
+            type: object
+            properties:
+              'type':
+                description: >
+                    Predefined data Type, UUID of a commtted type, or JSON
+                    object description of a Type.
+
+                    Must be present.
+
+                    Predefined types are:
+                    `H5T_STD_U8BE`, (integer types of various sizes and
+                    `H5T_STD_U8LE`,  endainness)
+                    `H5T_STD_I8BE`,
+                    `H5T_STD_I8LE`,
+                    `H5T_STD_U16BE`,
+                    `H5T_STD_U16LE`,
+                    `H5T_STD_I16BE`,
+                    `H5T_STD_I16LE`,
+                    `H5T_STD_U32BE`,
+                    `H5T_STD_U32LE`,
+                    `H5T_STD_I32BE`,
+                    `H5T_STD_I32LE`,
+                    `H5T_STD_U64BE`,
+                    `H5T_STD_U64LE`,
+                    `H5T_STD_I64BE`,
+                    `H5T_STD_I64LE`,
+                    `H5T_IEEE_F32BE`, (floating-point types)
+                    `H5T_IEEE_F32LE`,
+                    `H5T_IEEE_F64BE`,
+                    `H5T_IEEE_F64LE`
+
+                    TODO: Type description objects.
+                    For now, see: http://h5serv.readthedocs.io/en/latest/Types/index.html
+                type: string
+                example: 'H5T_STD_U32LE'
+              shape:
+                description: >
+                    Either `H5S_NULL` or an integer array giving the initial
+                    dimensions of the dataset.
+
+                    If omitted, a scalar dataset will be created.
+
+                    TODO: single integer (not integer array) is accepted for
+                    one-dimensional dataset (vector), but is it the _only_
+                    accepted input? verify.
+
+                    If value is `H5S_NULL`, a dataset will be created which
+                    can have a type and attributes, but unable to hold any
+                    value.
+                type: string
+                example: [128, 64]
+              maxdims:
+                description: >
+                    Integer array diving the maximum allowed extent for each
+                    dimension.
+
+                    If 0, the extent is unlimited.
+                type: array
+                items:
+                  type: number
+                example: [0, 512]
+              creationProperties:
+                description: TODO
+                type: object
       responses:
         '201':
           description: Dataset created.
           schema:
-            $ref: '#/definitions/DatasetCreatedResponse'
+            type: object
+            properties:
+              id:
+                description: UUID of this Dataset.
+                type: string
+              root:
+                description: UUID of root Group in Domain.
+                type: string
+              created:
+                type: number
+              lastModified:
+                type: number
+              attributeCount:
+                type: number
+              'type':
+                description: TODO
+                type: object
+              shape:
+                description: TODO
+                type: object
         default:
           description: Operation unsuccessful.
 
@@ -1159,8 +1183,6 @@ paths:
         - Dataset
       summary: List Datasets.
       description: >
-          Get list of Datasets that are part of this Domain.
-
           Only includes Datasets that are part of the tree linked to the root
           Group in the Domain.
       parameters:
@@ -1179,20 +1201,38 @@ paths:
                   description: UUID of each Dataset.
                   type: string
                   example: 'd-21ae0bbe-2dea-11e8-9391-0242ac110009'
-              hrefs: # TODO: count and relations known?
+              hrefs:
                 type: array
+                description: >
+                    List of references to other objects.
+
+                    Should contain references for:
+                    `attributes`,
+                    `data`,
+                    `home`,
+                    `root`,
+                    `self`
                 items:
-                  description: References to other objects.
                   type: object
                   properties: 
                     href: 
                       description: URL reference.
                       type: string
-                      example: 'http://localhost:5101/groups/g-37aa76f6-2c86-11e8-9391-0242ac110009?domain=/home/test_user1/file'
                     rel: 
                       description: Relation to this object.
                       type: string
-                      example: 'root'
+                example:
+                  - rel: 'attributes'
+                    href: 'http://localhost:5101/datasets/d-d257f938-3854-11e8-a123-0242ac110009/attributes?domain=/home/test_user_1/file'
+                  - rel': 'data'
+                    href: 'http://localhost:5101/datasets/d-d257f938-3854-11e8-a123-0242ac110009/value?domain=/home/test_user_1/file'
+                  - rel: 'home'
+                    href: 'http://localhost:5101/?domain=/home/test_user_1/file'
+                  - rel: 'root'
+                    href: 'http://localhost:5101/groups/g-d20a1cc2-3854-11e8-a123-0242ac110009?domain=/home/test_user_1/file'
+                  - rel: 'self'
+                    href: 'http://localhost:5101/datasets/d-d257f938-3854-11e8-a123-0242ac110009?domain=/home/test_user_1/file'
+
         default:
           description: Operation unsuccessful.
   # end '/datasets'
