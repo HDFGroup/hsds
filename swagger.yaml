@@ -139,38 +139,6 @@ definitions:
         read: true
         readACL: false
 
-  LinkInfo:
-    type: object
-    properties: 
-      id:
-        description: UUID of Link.
-        type: string
-        example: 'g-a613ed48-2c86-11e8-9391-0242ac110009'
-      created:
-        description: Time when Link was created.
-        type: number
-        example: 1521644498.984212
-      class:
-        description: TODO
-        type: string
-        example: 'H5L_TYPE_HARD'
-      title:
-        description: Name/label of the Link, as provided upon creation.
-        type: string
-        example: 'g1'
-      target:
-        description: URL where Link points.
-        type: string
-        example: 'http://localhost:5101/groups/g-a613ed48-2c86-11e8-9391-0242ac110009?domain=/home/test_user1/file'
-      href:
-        description: URL to this Link.
-        type: string
-        example: 'http://localhost:5101/groups/g-37aa76f6-2c86-11e8-9391-0242ac110009/links/g1?domain=/home/test_user1/file'
-      collection:
-        description: TODO
-        type: string
-        example: 'groups'
-
   DatasetCreationSchema:
     type: object
     properties:
@@ -276,7 +244,7 @@ definitions:
       creationProperties:
         description: TODO
         type: object
-      hrefs:
+      hrefs: # TODO: count and relations known?
         description: List of references to other objects.
         type: array
         items:
@@ -372,11 +340,18 @@ definitions:
           type: string # TODO: integer or array of integers WISHLIST: arrays
         example: [0, 1, 2, 3, 4, 5, 6, 7]
       values:
-        description: Array of values.
         type: array
         items:
           type: string # TODO: placeholder for 'any JSON, really'
-        example: [ [1, 3, 5, 7], [2, 6, 10, 14], [3, 9, 15, 21], [4, 12, 20, 28], [5, 15, 25, 35], [6, 18, 30, 42], [7, 21, 35, 49], [8, 24, 40, 56] ]
+        example:  # array of arrays!
+          - [1, 3, 5, 7]
+          - [2, 6, 10, 14]
+          - [3, 9, 15, 21]
+          - [4, 12, 20, 28]
+          - [5, 15, 25, 35]
+          - [6, 18, 30, 42]
+          - [7, 21, 35, 49]
+          - [8, 24, 40, 56]
 #end definitions
 
 tags:
@@ -385,11 +360,11 @@ tags:
 #   externalDocs: ?
 #     url: ?
   - name: Group
-    description: Operations on Groups.
+    description: Operations involving Groups.
   - name: Link
-    description: Operations on Links.
+    description: Operations involving Links.
   - name: Dataset
-    description: Operations on Datasets.
+    description: Operations involving Datasets.
 
 paths:
   '/':
@@ -534,20 +509,20 @@ paths:
                       description: Relation to this Domain.
                       type: string
                 example:
-                  - href: 'http://myfile.test_user1.home/'
-                    rel: self
-                  - href: 'http://myfile.test_user1.home/datasets'
-                    rel: database
-                  - href: 'http://myfile.test_user1.home/groups'
-                    rel: groupbase
-                  - href: 'http://myfile.test_user1.home/datatypes/'
-                    rel: typebase
-                  - href: 'http://myfile.test_user1.home/groups/g-17d88042-2b92-11e8-9391-0242ac110009'
-                    rel: root
-                  - href: 'http://myfile.test_user1.home/acls'
-                    rel: acls
-                  - href: 'http://myfile.test_user1.home/?domain=/home/test_user1'
-                    rel: parent
+                  - rel: acls
+                    href: 'http://myfile.test_user1.home/acls'
+                  - rel: database
+                    href: 'http://myfile.test_user1.home/datasets'
+                  - rel: groupbase
+                    href: 'http://myfile.test_user1.home/groups'
+                  - rel: parent
+                    href: 'http://myfile.test_user1.home/?domain=/home/test_user1'
+                  - rel: root
+                    href: 'http://myfile.test_user1.home/groups/g-17d88042-2b92-11e8-9391-0242ac110009'
+                  - rel: self
+                    href: 'http://myfile.test_user1.home/'
+                  - rel: typebase
+                    href: 'http://myfile.test_user1.home/datatypes/'
         default:
           description: Operation unsuccessful.
 
@@ -731,18 +706,32 @@ paths:
                 items:
                   description: >
                       References to other objects.
-                      TODO: membership is known and should be outlined here,
-                      such as in the example?
+
+                      Should contain references for:
+                      `attributes`,
+                      `home`,
+                      `links`,
+                      `root`,
+                      `self`.
                   type: object
                   properties: 
                     href: 
                       description: URL reference.
                       type: string
-#                      example: 'http://localhost:5101/groups/g-37aa76f6-2c86-11e8-9391-0242ac110009?domain=/home/test_user1/file'
                     rel: 
                       description: Relation to this object.
                       type: string
-#                      example: 'root'
+                example: 
+                  - rel: 'attributes'
+                    href: 'http://localhost:5101/groups/g-ee2f6a2c-3847-11e8-a123-0242ac110009/attributes?domain=/home/test_user1/file'
+                  - rel: 'home'
+                    href: 'http://localhost:5101/?domain=/home/test_user1/file'
+                  - rel: 'links'
+                    href: 'http://localhost:5101/groups/g-ee2f6a2c-3847-11e8-a123-0242ac110009/links?domain=/home/test_user1/file'
+                  - rel: 'root'
+                    href: 'http://localhost:5101/groups/g-ed14d712-3847-11e8-a123-0242ac110009?domain=/home/test_user1/file'
+                  - rel: 'self'
+                    href: 'http://localhost:5101/groups/g-ee2f6a2c-3847-11e8-a123-0242ac110009?domain=/home/test_user1/file'
         default:
           description: Operation unsuccessful.
   # end '/groups/'
@@ -830,8 +819,6 @@ paths:
         - Group
       summary: Delete a Group.
       description: >
-        Delete a Group.
-
         TODO: Will delete attributes of the Group.
 
         Will _not_ delete: (TODO: extensive tests to verify)
@@ -857,8 +844,7 @@ paths:
     get:
       tags:
         - Link
-      summary: List all Links in Group.
-      description: List all Links in the given Group by UUID.
+      summary: List all Links in a Group.
       parameters:
         - $ref: '#/parameters/path_group_uuid'
         - $ref: '#/parameters/query_domain'
@@ -873,20 +859,74 @@ paths:
               links:
                 type: array
                 items:
-                  $ref: '#/definitions/LinkInfo'
+                  type: object
+                  properties: 
+                    id:
+                      description: UUID of Link target.
+                      type: string
+                      example: 'g-a613ed48-2c86-11e8-9391-0242ac110009'
+                    created:
+                      type: number
+                      example: 1521644498.984212
+                    class:
+                      description: >
+                          Indicate whether this Link is hard, soft, or
+                          external.
+                      type: string
+                      enum:
+                        - 'H5L_TYPE_HARD'
+                      #  - 'H5L_TYPE_SOFT' TODO
+                      #  - 'H5L_TYPE_EXTERNAL' TODO
+                      example: 'H5L_TYPE_HARD'
+                    title:
+                      description: >
+                          Name/label/title of the Link, as provided upon
+                          creation (TODO: relative to the origin?).
+                      type: string
+                      example: 'g1'
+                    target:
+                      description: URL of Link target.
+                      type: string
+                      example: 'http://localhost:5101/groups/g-a613ed48-2c86-11e8-9391-0242ac110009?domain=/home/test_user1/file'
+                    href:
+                      description: URL to origin of Link.
+                      type: string
+                      example: 'http://localhost:5101/groups/g-37aa76f6-2c86-11e8-9391-0242ac110009/links/g1?domain=/home/test_user1/file'
+                    collection:
+                      description: >
+                          What kind of object is the target. (TODO)
+                      type: string
+                      enum:
+                        - 'groups'
+                        - 'datasets'
+                      #  - 'datatypes' TODO
+                      #  - 'attributes' TODO
+                      example: 'groups'
               hrefs:
                 type: array
+                description: >
+                    List of references to other entities.
+
+                    Should contain references for:
+                    `home`,
+                    `owner`,
+                    `self`.
                 items:
                   type: object
                   properties:
-                    href:
-                      description: URL to reference.
-                      type: string
-                      example: TODO
                     rel:
                       description: Relation to this object.
                       type: string
-                      example: TODO
+                    href:
+                      description: URL to reference.
+                      type: string
+                example:
+                  - rel: 'home'
+                    href': 'http://localhost:5101/?domain=/home/test_user1/file'
+                  - rel: 'owner'
+                    href': 'http://localhost:5101/groups/g-cbb6b840-3849-11e8-a123-0242ac110009?domain=/home/test_user1/file'
+                  - rel: 'self'
+                    href': 'http://localhost:5101/groups/g-cbb6b840-3849-11e8-a123-0242ac110009/links?domain=/home/test_user1/file'
         default:
           description: Operation unsuccessful.
   # end '/groups/{id}/links':
@@ -897,17 +937,15 @@ paths:
         - Link
       summary: Create a new Link in a Group.
       description: >
-          Create a new Link in a Group.
-
           Link will be 'hard', 'soft', or 'external' depending on request
           elements.
 
           If `id` is provided, it will override other properties and attempt to
           create a hard link to the object with that UUID.
 
-          If `h5path` is provided, will create a symbolic link to the given
-          path--either a soft link within this domain if no domain is
-          specified, or an external link.
+          If `h5path` is provided, will create a symbolic link to object (if
+          any) at the given path -- either a soft link within this domain if no
+          domain is specified, or an external link.
 
           If `h5domain` is provided, will create an external link, pointing to
           the object (if any) at `h5path` in domain `h5domain`.
@@ -922,9 +960,7 @@ paths:
 
               Label/name/title of the Link, e.g., "dset1" or "group3".
 
-              TODO: logical directory structure, e.g. "g1/g2/dsetBeta"...
-              guessing no, instead must track down each link down, so would be
-              'dsetBeta' accessed from 'g2'.
+              TODO: linkname cannot contain slashes, as in a directory.
           type: string
           required: true
         - $ref: '#/parameters/query_domain'
@@ -952,7 +988,9 @@ paths:
                 example: 'g-37aa76f6-2c86-11e8-9391-0242ac110009'
               h5path:
                 description: >
-                   Path to an external resource.
+                   Path to an object relative to a Domain's root.
+                   TODO: Resolves by following Links to groups that match the
+                   path elements until a non-group terminal is reached.
 
                    If used, will create a soft or external link.
                 type: string
@@ -971,18 +1009,7 @@ paths:
           description: New Link created.
           schema:
             type: object
-            properties:
-              hrefs:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    href:
-                      description: URL to reference.
-                      type: string
-                    rel:
-                      description: Relation to this object.
-                      type: string
+            description: 'Always returns `{"hrefs": []}`.'
             example:
               hrefs: []
         default:
@@ -1034,17 +1061,32 @@ paths:
                     example: 'H5L_TYPE_HARD'
               hrefs:
                 type: array
+                description: >
+                    List of references to other entities.
+
+                    Should contain references for:
+                    `home`,
+                    `owner`,
+                    `self`,
+                    `target`,
                 items:
                   type: object
                   properties:
                     href:
                       description: URL to reference.
                       type: string
-                      example: TODO
                     rel:
                       description: Relation to this object.
                       type: string
-                      example: TODO
+                example:
+                  - rel: 'home'
+                    href: 'http://localhost:5101/?domain=/home/test_user1/file'
+                  - rel: 'owner'
+                    href: 'http://localhost:5101/groups/g-8822ef7a-384b-11e8-a123-0242ac110009?domain=/home/test_user1/file'
+                  - rel: 'self'
+                    href: 'http://localhost:5101/groups/g-8822ef7a-384b-11e8-a123-0242ac110009/links/g1?domain=/home/test_user1/file'
+                  - rel: 'target'
+                    href: 'http://localhost:5101/groups/g-a613ed48-2c86-11e8-9391-0242ac110009?domain=/home/test_user1/file'
         default:
           description: Operation unsuccessful.
 
@@ -1052,7 +1094,7 @@ paths:
       tags:
         - Link
       summary: Delete Link.
-      description: Delete a Link. Will _not_ delete the objects referred to.
+      description: Will _not_ delete the target object.
       parameters:
         - $ref: '#/parameters/path_group_uuid'
         - in: path
@@ -1072,6 +1114,7 @@ paths:
           description: Link deleted.
           schema:
             type: object
+            description: 'Always returns `{"hrefs": []}`.'
             example:
               href: []
         default:
@@ -1136,7 +1179,7 @@ paths:
                   description: UUID of each Dataset.
                   type: string
                   example: 'd-21ae0bbe-2dea-11e8-9391-0242ac110009'
-              hrefs:
+              hrefs: # TODO: count and relations known?
                 type: array
                 items:
                   description: References to other objects.
@@ -1214,7 +1257,7 @@ paths:
           description: >
               Array of nonzero integers.
 
-              Length must equal Dataset's rank--one value per dimension.
+              Length must equal Dataset's rank -- one value per dimension.
           schema:
             type: object
             required:
@@ -1230,10 +1273,10 @@ paths:
           schema:
             type: object
             properties:
-              hrefs:
+              hrefs: # TODO: count and relations known?
                 type: array
                 items:
-                  type: string # TODO object {"href": URL, "rel": REL} ?
+                  type: string
         default:
           description: Operation unsuccessful.
 
@@ -1385,7 +1428,7 @@ paths:
 
               Binary data responses are only supported for datasets with
               fixed-length type. Binary response will consist of the equivalent
-              binary data of the `data` item in the JSON response--no data
+              binary data of the `data` item in the JSON response -- no data
               representing `hrefs` is returned.
 
               Verify return type with the `Content-Type` response header.
@@ -1431,9 +1474,12 @@ paths:
 ##        step:
 ##          description: Positive, non-zero integer. Default `1`.
 ##          type: number
-##    example: [{}, {"start": 3, "stop": 19, "step": 4}, {"stop": 10, "step: 3}, {"start": 126}]
+##    example: # array of 'objects'
+##      - {}
+##      - {"start": 3, "stop": 19, "step": 4}
+##      - {"stop": 10, "step: 3}
+##      - {"start": 126}
 ##    # would get [[0,1,..,n], [3,7,11,15], [0,3,6,9], [126,127,..,n]]
-##    # TODO: do negative steps make sense in this context?
 ##  query:
 ##    description: >
 ##        Filter response values (even from hyperslab selection).
