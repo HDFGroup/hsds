@@ -139,61 +139,6 @@ definitions:
         read: true
         readACL: false
 
-  GroupInfo:
-    type: object
-    properties:
-      id:
-        description: UUID of this Group.
-        type: string
-        example: 'g-37aa76f6-2c86-11e8-9391-0242ac110009'
-      root:
-        description: UUID of root Group.
-        type: string
-        example: 'g-37aa76f6-2c86-11e8-9391-0242ac110009'
-      created:
-        description: Time when Group was created.
-        type: number
-        example: 1521581560.6883142
-      lastModified:
-        description: Time when Group was last modified.
-        type: number
-        example: 1521644498.984212
-      domain:
-        description: Domain where Group resides.
-        type: string
-        example: '/home/test_user1/file'
-      attributeCount:
-        type: number
-        example: 4
-      linkCount:
-        type: number
-        example: 2
-      hrefs:
-        description: List of references to other objects.
-        type: array
-        items:
-          type: object
-          properties:
-            href:
-              description: URL to reference.
-              type: string
-              example: 'http://myfile.test_user1.home/'
-            rel:
-              description: Relation to this object.
-              type: string
-              example: 'self'
-        example:
-          - href: 'http://localhost:5101/groups/g-37aa76f6-2c86-11e8-9391-0242ac110009?domain=/home/test_user1/file'
-            rel: 'self'
-          - href: 'http://localhost:5101/groups/g-37aa76f6-2c86-11e8-9391-0242ac110009/links?domain=/home/test_user1/file'
-            rel: 'links'
-          - href: 'http://localhost:5101/groups/g-37aa76f6-2c86-11e8-9391-0242ac110009?domain=/home/test_user1/file'
-            rel: 'root'
-          - href: 'http://localhost:5101/?domain=/home/test_user1/file'
-            rel: 'home'
-          - href: 'http://localhost:5101/groups/g-37aa76f6-2c86-11e8-9391-0242ac110009/attributes?domain=/home/test_user1/file'
-            rel: 'attributes'
-
   LinkInfo:
     type: object
     properties: 
@@ -662,7 +607,7 @@ paths:
           structured JSON, which will immediately link the new Group. If
           supplying link info, the header `Content-Type: application/json`
           should also be supplied as a matter of course. Note that this
-          link will be a hard link: it refers directly to the object.
+          link will be a hard link -- it refers directly to the object.
       consumes:
         - application/json
       parameters:
@@ -677,6 +622,8 @@ paths:
               newly-created Group. If present, both `id` and `name` must be
               supplied and `id` must be the UUID of an existing object
               (TODO: Group only?).
+
+              TODO: verify and document edge cases. Is group created, then linked? Is targeter checked for UUID and linkname before? If it returns error code, is the group created but "invisible" because its UUID is never given to user?
 
               Note that the id reference is _reverse_ the usual for Link
               creation: the `id` value refers to the targeting object, not the
@@ -744,7 +691,13 @@ paths:
       tags:
         - Group
       summary: Get all non-root Group UUIDs in Domain.
-      description: Get UUIDs for all non-root Groups in Domain.
+      description: >
+          Get UUIDs for all non-root Groups in Domain.
+
+          Groups must be reachable via Link (TODO: via hard link only.) from
+          root Group, either directly or indirectly. If Groups exist which are
+          unlinked or not reachable by tree originating at root, they will not
+          be included in the list.
       parameters:
         - $ref: '#/parameters/query_domain'
         - $ref: '#/parameters/accept_json'
@@ -770,21 +723,26 @@ paths:
                 items:
                   description: UUID of each Group.
                   type: string
-                  example: 'g-a613ed48-2c86-11e8-9391-0242ac110009'
+                example:
+                 - 'g-a613ed48-2c86-11e8-9391-0242ac110009'
+                 - 'g-37aa76f6-2c86-11e8-9391-0242ac110009'
               hrefs:
                 type: array
                 items:
-                  description: References to other objects.
+                  description: >
+                      References to other objects.
+                      TODO: membership is known and should be outlined here,
+                      such as in the example?
                   type: object
                   properties: 
                     href: 
                       description: URL reference.
                       type: string
-                      example: 'http://localhost:5101/groups/g-37aa76f6-2c86-11e8-9391-0242ac110009?domain=/home/test_user1/file'
+#                      example: 'http://localhost:5101/groups/g-37aa76f6-2c86-11e8-9391-0242ac110009?domain=/home/test_user1/file'
                     rel: 
                       description: Relation to this object.
                       type: string
-                      example: 'root'
+#                      example: 'root'
         default:
           description: Operation unsuccessful.
   # end '/groups/'
@@ -814,7 +772,56 @@ paths:
               description: MIME type of response -- always 'application/json'
               type: string
           schema:
-            $ref: '#/definitions/GroupInfo'
+            type: object
+            properties:
+              id:
+                description: UUID of this Group.
+                type: string
+                example: 'g-37aa76f6-2c86-11e8-9391-0242ac110009'
+              root:
+                description: UUID of root Group.
+                type: string
+                example: 'g-37aa76f6-2c86-11e8-9391-0242ac110009'
+              created:
+                type: number
+                example: 1521581560.6883142
+              lastModified:
+                type: number
+                example: 1521644498.984212
+              domain:
+                type: string
+                example: '/home/test_user1/file'
+              attributeCount:
+                type: number
+                example: 4
+              linkCount:
+                type: number
+                example: 2
+              hrefs:
+                description: List of references to other objects.
+                type: array
+                items:
+                  type: object
+                  properties:
+                    rel:
+                      description: Relation to this object.
+                      type: string
+                      example: 'self'
+                    href:
+                      description: URL to reference.
+                      type: string
+                      example: 'http://myfile.test_user1.home/'
+                example:
+                  - rel: 'attributes'
+                    href: 'http://localhost:5101/groups/g-37aa76f6-2c86-11e8-9391-0242ac110009/attributes?domain=/home/test_user1/file'
+                  - rel: 'home'
+                    href: 'http://localhost:5101/?domain=/home/test_user1/file'
+                  - rel: 'links'
+                    href: 'http://localhost:5101/groups/g-37aa76f6-2c86-11e8-9391-0242ac110009/links?domain=/home/test_user1/file'
+                  - rel: 'root'
+                    href: 'http://localhost:5101/groups/g-37aa76f6-2c86-11e8-9391-0242ac110009?domain=/home/test_user1/file'
+                  - rel: 'self'
+                    href: 'http://localhost:5101/groups/g-37aa76f6-2c86-11e8-9391-0242ac110009?domain=/home/test_user1/file'
         default:
           description: Operation unsuccessful.
 
@@ -827,7 +834,7 @@ paths:
 
         TODO: Will delete attributes of the Group.
 
-        Will _not_ delete:
+        Will _not_ delete: (TODO: extensive tests to verify)
 
         + Objects (Groups, Types, Datasets) this object linked to
 
@@ -842,21 +849,6 @@ paths:
           description: Group removed.
           schema:
             type: object
-# TODO: manual results are an empty object '{}'
-#            properties:
-#              hrefs:
-#                type: array
-#                items:
-#                  type: object
-#                  properties:
-#                    href:
-#                      description: URL to reference.
-#                      type: string
-#                      example: TODO
-#                    rel:
-#                      description: Relation to this object.
-#                      type: string
-#                      example: TODO
         default:
           description: Operation unsuccessful.
   # end '/groups/{id}'
