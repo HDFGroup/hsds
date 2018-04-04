@@ -375,7 +375,6 @@ class DomainTest(unittest.TestCase):
     def setUpClass(cls):
         cls.base_domain = helper.getTestDomainName(cls.__name__)
         cls.base_endpoint = helper.getEndpoint()
-        print(cls.base_endpoint, cls.base_domain)
         helper.setupDomain(cls.base_domain)
         root = helper.getRootUUID(cls.base_domain)
         assert helper.validateId(root), "domain is invalid"
