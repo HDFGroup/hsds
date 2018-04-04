@@ -90,57 +90,6 @@ parameters:
 #end parameters
 
 definitions:
-  DomainInfo:
-    type: object
-    properties:
-      lastModified:
-        description: When object was last modified.
-        type: number
-        example: 1521476710.039304
-      root:
-        description: ID of root group.
-        type: string
-        example: 'g-82da0346-2b9e-11e8-9391-0242ac110009'
-      created:
-        description: When domain was created.
-        type: number
-        example: 1521476710.039304
-      owner:
-        description: Name of owner.
-        type: string
-        example: 'test_user1'
-      class:
-        description: Who knows?
-        type: string
-        example: domain
-      hrefs:
-        type: array
-        items:
-          type: object
-          properties:
-            href:
-              description: URL to reference.
-              type: string
-              example: 'http://myfile.test_user1.home/'
-            rel:
-              description: Relation to this object.
-              type: string
-              example: 'self'
-        example:
-          - href: 'http://myfile.test_user1.home/'
-            rel: self
-          - href: 'http://myfile.test_user1.home/datasets'
-            rel: database
-          - href: 'http://myfile.test_user1.home/groups'
-            rel: groupbase
-          - href: 'http://myfile.test_user1.home/datatypes/'
-            rel: typebase
-          - href: 'http://myfile.test_user1.home/groups/g-17d88042-2b92-11e8-9391-0242ac110009'
-            rel: root
-          - href: 'http://myfile.test_user1.home/acls'
-            rel: acls
-          - href: 'http://myfile.test_user1.home/?domain=/home/test_user1'
-            rel: parent
 
   ACLForUser:
     description: Access Control List for a single user `username`.
@@ -532,16 +481,30 @@ paths:
         - Domain
       summary: Create a new domain on the service.
       description: >
-          Create a new domain on the service.
+          Domains represent dataspaces analogous to hdf5 files.
 
-          Note: Initially, the only object on the domain is the root group. Use
+          Folders are 'placeholder' domains which lack a root Group. Their
+          main use is to manage top-level directories (outside of user space)
+          and to fill out a user's directory paths if required.
+          E.g., `/home/user/project/missingdir/data.h5`
+
+          Note: Initially, the only object in a domain is the root group. Use
           other `put` and `post` operations to create new objects in the
           domain.
+
+          Note: Domains (and folders) may only be created as direct children
+          of existing Domains. e.g., `/home/user/project/missingdir/` _must_
+          exist prior to the creation of Domain 
+          `/home/user/project/missingdir/data.h5/`.
 
           Note: The operation will fail if the domain already exists
           (Error 409).
       parameters:
         - $ref: '#/parameters/query_domain'
+        - name: folder
+          in: query
+          type: number
+          description: If present and `1`, creates a Folder instead of a Domain.
         - $ref: '#/parameters/accept_json'
         - $ref: '#/parameters/authorization'
       responses:
@@ -588,10 +551,10 @@ paths:
         - Domain
       summary: Get information about the requested domain.
       description: >
-          Get information about the requested domain.
+          If the domain is of class 'folder', `root` is absent from returned
+          JSON object.
 
-          If no domain query paramter is provided, a 'Table of Contents' is
-          returned, but this TOC is unpopulated pending implementation; e.g.,
+          If no domain query paramter is provided, returns:
           `{"domains": [], "href": []}`
       parameters:
         - $ref: '#/parameters/query_domain'
@@ -611,7 +574,63 @@ paths:
               description: MIME type of response -- always 'application/json'
               type: string
           schema:
-            $ref: '#/definitions/DomainInfo'
+            type: object
+            properties:
+              root:
+                description: >
+                    UUID of root Group.
+                    If Domain is of class 'folder', this entry is not present.
+                type: string
+                example: 'g-82da0346-2b9e-11e8-9391-0242ac110009'
+              owner:
+                type: string
+                example: 'test_user1'
+              class:
+                description: >
+                    Category of Domain.
+                    If 'folder' no root group is included in response.
+                type: string
+                enum:
+                  - domain
+                  - folder
+                example: domain
+              created:
+                type: number
+                example: 1521476710.039304
+              lastModified:
+                type: number
+                example: 1521476710.039304
+              hrefs:
+                description: >
+                    Array of url references and their relation to this Domain.
+                    Should include entries for: `self`, `database`,
+                    `groupbase`, `typebase`, `root` (if not class folder?),
+                    `acls`, and `parent`.
+                type: array
+                items:
+                  type: object
+                  properties:
+                    href:
+                      description: URL to reference.
+                      type: string
+                    rel:
+                      description: Relation to this Domain.
+                      type: string
+                example:
+                  - href: 'http://myfile.test_user1.home/'
+                    rel: self
+                  - href: 'http://myfile.test_user1.home/datasets'
+                    rel: database
+                  - href: 'http://myfile.test_user1.home/groups'
+                    rel: groupbase
+                  - href: 'http://myfile.test_user1.home/datatypes/'
+                    rel: typebase
+                  - href: 'http://myfile.test_user1.home/groups/g-17d88042-2b92-11e8-9391-0242ac110009'
+                    rel: root
+                  - href: 'http://myfile.test_user1.home/acls'
+                    rel: acls
+                  - href: 'http://myfile.test_user1.home/?domain=/home/test_user1'
+                    rel: parent
         default:
           description: Operation unsuccessful.
 
@@ -620,8 +639,13 @@ paths:
         - Domain
       summary: Delete the specified domain.
       description: >
-          Delete the domain and all associated groups,
-          datasets, attributes, etc.
+          Delete the domain and all associated groups, datasets, attributes,
+          etc.
+
+          Note: if there are Domains which are children of this Domain
+          (e.g., deleting `somedir` from `/home/user/project/somedir/data.h5`),
+          those children directories will _not_ be deleted.
+          (TODO: abandoned children is incorrect behavior?)
       parameters:
         - $ref: '#/parameters/query_domain'
         - $ref: '#/parameters/accept_json'
