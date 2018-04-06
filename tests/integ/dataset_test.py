@@ -53,8 +53,6 @@ LIST_DATASETS_KEYS = [
 ]
 
 LIST_DATASETS_HREFS_RELS = [
-#    "attributes",
-#    "data",
     "home",
     "root",
     "self",
@@ -69,9 +67,7 @@ class CommonDatasetOperationsTest(unittest.TestCase):
     endpoint = None
     headers = None
     assertLooksLikeUUID = _assertLooksLikeUUID
-    given_expected_shape = {"class": "H5S_SCALAR"} # TODO: not so common
-    given_expected_type = {"class": "H5T_FLOAT", "base": "H5T_IEEE_F32LE"}
-    given_payload = {"type": "H5T_IEEE_F32LE"}
+    given_payload = {"type": "H5T_IEEE_F32LE"} # arbitrary scalar datatype
     given_dset_id = None
 
     @classmethod
@@ -129,8 +125,8 @@ class CommonDatasetOperationsTest(unittest.TestCase):
         self.assertEqual(rspJson["root"], self.root_uuid) 
         self.assertEqual(rspJson["domain"], self.base_domain) 
         self.assertEqual(rspJson["attributeCount"], 0)
-        self.assertDictEqual(rspJson["shape"], self.given_expected_shape)
-        self.assertDictEqual(rspJson["type"], self.given_expected_type)
+        self.assertEqual(type(rspJson["type"]), dict)
+        self.assertEqual(type(rspJson["shape"]), dict)
 
     def testGetType(self):
         req = f"{self.endpoint}/datasets/{self.given_dset_id}/type"
@@ -138,7 +134,7 @@ class CommonDatasetOperationsTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200, "problem getting dset's type")
         rspJson = rsp.json()
         self.assertEqual(len(rspJson), 2)
-        self.assertDictEqual(rspJson["type"], self.given_expected_type)
+        self.assertEqual(type(rspJson["type"]), dict)
         self.assertEqual(len(rspJson["hrefs"]), 3) 
 
     def testGetShape(self): # TODO: may be scalar-specific?
@@ -149,7 +145,7 @@ class CommonDatasetOperationsTest(unittest.TestCase):
         self.assertEqual(len(rspJson), 4)
         self.assertTrue("created" in rspJson)
         self.assertTrue("lastModified" in rspJson)
-        self.assertDictEqual(rspJson["shape"], self.given_expected_shape)
+        self.assertEqual(type(rspJson["shape"]), dict)
         self.assertEqual(len(rspJson["hrefs"]), 3)
 
     def testGet_VerboseNotYetImplemented(self):
@@ -167,8 +163,8 @@ class CommonDatasetOperationsTest(unittest.TestCase):
         self.assertEqual(rspJson["root"], self.root_uuid) 
         self.assertEqual(rspJson["domain"], self.base_domain) 
         self.assertEqual(rspJson["attributeCount"], 0)
-        self.assertDictEqual(rspJson["shape"], self.given_expected_shape)
-        self.assertDictEqual(rspJson["type"], self.given_expected_type)
+        self.assertEqual(type(rspJson["type"]), dict)
+        self.assertEqual(type(rspJson["shape"]), dict)
 
     def testGet_OtherUserAuthorizedRead(self):
         other_user = "test_user2"
