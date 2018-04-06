@@ -229,7 +229,7 @@ def postGroup(domain, path=None):
 Helper - post dataset and return its UUID. ValueError raised if problem.
 Optionally links on absolute path if path is valid.
 """
-def postDataset(domain, datatype, linkpath=None) :
+def postDataset(domain, data, linkpath=None) :
     endpoint = getEndpoint()
     parent_uuid = None
     headers = getRequestHeaders(domain=domain)
@@ -238,12 +238,12 @@ def postDataset(domain, datatype, linkpath=None) :
         path = op.dirname(linkpath)
         linkname = linkpath.split('/')[-1]
         parent_uuid = getUUIDByPath(domain, path)
-        datatype["link"] = {"id": parent_uuid, "name": linkname}
+        data["link"] = {"id": parent_uuid, "name": linkname}
 
     post_rsp = requests.post(
             f"{endpoint}/datasets",
             headers=headers,
-            data=json.dumps(datatype))
+            data=json.dumps(data))
 
     if post_rsp.status_code != 201:
         raise ValueError(f"Unable to post dataset: {post_rsp.status_code}")

@@ -672,61 +672,6 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(rspJson["num_chunks"], 1)
         self.assertEqual(rspJson["allocated_size"], 400) # this will likely change once compression is working
 
-    def testDelete(self):
-        # test Delete
-        headers = helper.getRequestHeaders(domain=self.base_domain)
-
-        # get domain
-        req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("root" in rspJson)
-  
-        # create a new dataset
-        req = helper.getEndpoint() + '/datasets'  
-        rsp = requests.post(req, headers=headers)
-        data = { "type": "H5T_IEEE_F32LE" }
-        req = self.endpoint + '/datasets' 
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
-        self.assertEqual(rsp.status_code, 201)
-        rspJson = json.loads(rsp.text)
-        self.assertEqual(rspJson["attributeCount"], 0)   
-        dset_id = rspJson["id"]
-        self.assertTrue(helper.validateId(dset_id))
-        
-
-        # verify we can do a get on the new dataset
-        req = helper.getEndpoint() + '/datasets/' + dset_id
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("id" in rspJson)
-        self.assertEqual(rspJson["id"], dset_id)
-        
-
-        # try DELETE with user who doesn't have create permission on this domain
-        headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
-        rsp = requests.delete(req, headers=headers)
-        self.assertEqual(rsp.status_code, 403) # forbidden
-
-        # try to do a DELETE with a different domain (should fail)
-        another_domain = helper.getParentDomain(self.base_domain)
-        headers = helper.getRequestHeaders(domain=another_domain)
-        req = helper.getEndpoint() + '/datasets/' + dset_id
-        rsp = requests.delete(req, headers=headers)
-        self.assertEqual(rsp.status_code, 400)   
-        
-        # delete the new dataset
-        headers = helper.getRequestHeaders(domain=self.base_domain)
-        rsp = requests.delete(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue(rspJson is not None)
-
-        # a get for the dataset should now return 410 (GONE)
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 410)
-
     def testCompound(self):
         # test Dataset with compound type
         headers = helper.getRequestHeaders(domain=self.base_domain)
@@ -776,44 +721,26 @@ class DatasetTest(unittest.TestCase):
         rsp = requests.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 400)  # Bad Request
 
-    def testPostNullSpace(self):
-        # test Dataset with null dataspace type
+    def testNullShape(self):
+        data = {
+            "type": "H5T_IEEE_F32LE", # arbirary type
+            "shape": "H5S_NULL"
+        }
+        dset_id = helper.postDataset(self.base_domain, data, linkpath="/dset1")
+
         headers = helper.getRequestHeaders(domain=self.base_domain)
-
-        # get domain
-        req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("root" in rspJson)
-        root_uuid = rspJson["root"]
-
-        # pass H5S_NULL for shape 
-        payload = {'type': 'H5T_IEEE_F32LE', 'shape': 'H5S_NULL'}
-        req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)  # create dataset
-        rspJson = json.loads(rsp.text)
-        dset_uuid = rspJson['id']
-        self.assertTrue(helper.validateId(dset_uuid))
-         
-        # link new dataset as 'dset1'
-        name = 'dset1'
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
-        payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)
-        
-        # verify the dataspace is has a null dataspace
-        req = self.endpoint + "/datasets/" + dset_uuid
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        shape = rspJson['shape']
-        self.assertEqual(shape['class'], 'H5S_NULL')
-        # verify type 
-        type_json = rspJson["type"]
-        self.assertEqual(type_json["class"], 'H5T_FLOAT')
-        self.assertEqual(type_json['base'], 'H5T_IEEE_F32LE')
+        rsp = requests.get(
+                f"{self.endpoint}/datasets/{dset_id}",
+                headers=headers)
+        self.assertEqual(rsp.status_code, 200, "unable to get dataset")
+        rspJson = rsp.json()
+        self.assertDictEqual(
+                rspJson["shape"],
+                {"class": "H5S_NULL"})
+        self.assertDictEqual(
+                rspJson["type"],
+                {"class": "H5T_FLOAT", "base": "H5T_IEEE_F32LE"},
+                "sanity check on datatype")
 
     def testResizableDataset(self):
         # test Dataset with null dataspace type
