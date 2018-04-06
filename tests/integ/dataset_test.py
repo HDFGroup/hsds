@@ -187,8 +187,8 @@ class CommonDatasetOperationsTest(unittest.TestCase):
     def testDelete_OtherUserWithoutPermission_Fails403(self):
         other_user = "test_user2" # TODO: THIS DEPENDS ON 'test_user2' BEING A RECOGNZIED USER? HOW TO MAKE PROGRAMMATICALLY VALID?
         self.assertNotEqual(other_user, config.get("user_name"))
-        data = { "type": "H5T_IEEE_F32LE" }
-        dset_id = helper.postDataset(self.base_domain, json.dumps(data))
+        datatype = { "type": "H5T_IEEE_F32LE" }
+        dset_id = helper.postDataset(self.base_domain, datatype)
 
         req = f"{self.endpoint}/datasets/{dset_id}"
         headers = helper.getRequestHeaders(
@@ -200,8 +200,8 @@ class CommonDatasetOperationsTest(unittest.TestCase):
     def testDelete_UnknownUser_Fails401(self):
         other_user = config.get("user_name")[::-1] # reversed copy
         self.assertNotEqual(other_user, config.get("user_name"))
-        data = { "type": "H5T_IEEE_F32LE" }
-        dset_id = helper.postDataset(self.base_domain, json.dumps(data))
+        datatype = { "type": "H5T_IEEE_F32LE" }
+        dset_id = helper.postDataset(self.base_domain, datatype)
 
         req = f"{self.endpoint}/datasets/{dset_id}"
         headers = helper.getRequestHeaders(
@@ -249,7 +249,7 @@ class CommonDatasetOperationsTest(unittest.TestCase):
         self.assertEqual(len(href_rels), len(_rels), "extra rels")
 
     def testListDatasetsUnlinked(self):
-        dtype = json.dumps({"type": "H5T_STD_U32LE"}) # arbitrary
+        dtype = {"type": "H5T_STD_U32LE"} # arbitrary
         dset0 = helper.postDataset(self.base_domain, dtype)
 
         root = helper.getRootUUID(self.base_domain)
@@ -279,7 +279,7 @@ class CommonDatasetOperationsTest(unittest.TestCase):
             "dset2"
         ]
         dset_ids = {} # dictionary -- "name": "id"
-        dtype = json.dumps({"type": "H5T_STD_U32LE"}) # arbitrary
+        dtype = {"type": "H5T_STD_U32LE"} # arbitrary
         for name in dset_names:
             path = "/" + name
             id = helper.postDataset(domain, dtype, linkpath=path)
@@ -304,7 +304,7 @@ class CommonDatasetOperationsTest(unittest.TestCase):
         # like above, but linked to places other than root group
         domain = helper.getTestDomainName(self.__class__.__name__)
         helper.setupDomain(domain)
-        dtype = json.dumps({"type": "H5T_STD_U32LE"}) # arbitrary
+        dtype = {"type": "H5T_STD_U32LE"} # arbitrary
         headers = helper.getRequestHeaders(domain=domain)
         root = helper.getRootUUID(domain)
         endpoint = self.endpoint
@@ -426,12 +426,12 @@ class PostDatasetWithLinkTest(unittest.TestCase):
         self.assertCanGetDatasetByUUID(dset_uuid)
 
     def testIntegerMultiDimLinkedToNonRoot(self):
-        linkname = "g1"
+        groupname = "g1"
         payload = {
             "type": "H5T_STD_U32LE",
             "shape": [10, 8, 8],
         }
-        gid = helper.postGroup(self.domain, path=f"/{linkname}")
+        gid = helper.postGroup(self.domain, path=f"/{groupname}")
         self.assertGroupHasNLinks(gid, 0, "child group should have no links")
 
         payload["link"] = {"id": gid, "name": self.linkname}
@@ -445,7 +445,7 @@ class PostDatasetWithLinkTest(unittest.TestCase):
         self.assertTrue(helper.validateId(dset_uuid), "invalid uuid?")
 
         self.assertGroupHasNLinks(gid, 1, "one link to dataset")
-        self.assertLinkIsExpectedDataset(gid, linkname, dset_uuid)
+        self.assertLinkIsExpectedDataset(gid, self.linkname, dset_uuid)
         self.assertCanGetDatasetByUUID(dset_uuid)
 
 class DatasetTest(unittest.TestCase):

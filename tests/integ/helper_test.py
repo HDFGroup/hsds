@@ -157,7 +157,7 @@ class postDatasetTest(unittest.TestCase) :
     endpoint = None
     domain = None
     headers = None
-    datatype = '{"type": "H5T_STD_U32LE"}'
+    datatype = {"type": "H5T_STD_U32LE"}
 
     @classmethod
     def setUpClass(cls):

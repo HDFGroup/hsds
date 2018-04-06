@@ -232,40 +232,21 @@ Optionally links on absolute path if path is valid.
 def postDataset(domain, datatype, linkpath=None) :
     endpoint = getEndpoint()
     parent_uuid = None
+    headers = getRequestHeaders(domain=domain)
 
     if linkpath is not None :
-        # check that we can create intended link
-        # if not, abort before creating dataset
-#        try:
-#            getUUIDByPath(linkpath)
-#        except KeyError:
-#            pass
-#        else :
-#            raise ValueError("conflict with existing link!")
-        # unintuitive function name, but same pathing operation
-        parentpath = getParentDomain(linkpath)
-        parent_uuid = getUUIDByPath(domain, parentpath)
+        path = op.dirname(linkpath)
+        linkname = linkpath.split('/')[-1]
+        parent_uuid = getUUIDByPath(domain, path)
+        datatype["link"] = {"id": parent_uuid, "name": linkname}
 
-    headers = getRequestHeaders(domain=domain)
     post_rsp = requests.post(
             f"{endpoint}/datasets",
             headers=headers,
-            data=datatype)
+            data=json.dumps(datatype))
+
     if post_rsp.status_code != 201:
         raise ValueError(f"Unable to post dataset: {post_rsp.status_code}")
-    dset_id = post_rsp.json()["id"]
-
-    # create link
-    if linkpath is not None :
-        assert parent_uuid is not None
-        linkname = linkpath.split('/')[-1]
-        linkdef = json.dumps({"id": dset_id})
-        link_rsp = requests.put(
-                f"{endpoint}/groups/{parent_uuid}/links/{linkname}",
-                headers=headers,
-                data=linkdef)
-        assert link_rsp.status_code == 201, f"Problem: {link_rsp.status_code}"
-
-    return dset_id
+    return post_rsp.json()["id"]
 
 
