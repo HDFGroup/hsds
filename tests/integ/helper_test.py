@@ -153,6 +153,80 @@ class GetUUIDByPathTest(unittest.TestCase):
 
         # TODO: link dataset to dataset?
 
+class postDatasetTest(unittest.TestCase) :
+    endpoint = None
+    domain = None
+    headers = None
+    datatype = '{"type": "H5T_STD_U32LE"}'
+
+    @classmethod
+    def setUpClass(cls):
+        cls.domain = helper.getTestDomainName(cls.__name__)
+        helper.setupDomain(cls.domain)
+        cls.endpoint = helper.getEndpoint()
+        cls.headers = helper.getRequestHeaders(domain=cls.domain)
+
+    def setUp(self):
+        root = helper.getRootUUID(self.domain)
+        assert helper.validateId(root), "domain invalid!"
+
+    def testCanPutAndGetDataset(self):
+        did = helper.postDataset(
+                self.domain,
+                self.datatype)
+        self.assertTrue(helper.validateId(did), "invalid dataset id?")
+
+        get_rsp = requests.get(
+                f"{self.endpoint}/datasets/{did}",
+                headers=self.headers)
+        self.assertEqual(get_rsp.status_code, 200, "unable to get dataset")
+
+    def testPutWithLinkFromRoot(self):
+        linkpath = "/dset0" # attached to root group
+        did = helper.postDataset(
+                self.domain,
+                self.datatype,
+                linkpath=linkpath)
+        self.assertTrue(helper.validateId(did), "invalid dataset id?")
+
+        # can get back by ID
+        get_rsp = requests.get(
+                f"{self.endpoint}/datasets/{did}",
+                headers=self.headers)
+        self.assertEqual(get_rsp.status_code, 200, "problem getting via ID")
+
+        # TEST - get via link
+        linkname = linkpath[1:] # remove root slash
+        root = helper.getRootUUID(self.domain)
+        get_rsp = requests.get(
+                f"{self.endpoint}/groups/{root}/links/{linkname}",
+                headers=self.headers)
+        self.assertEqual(get_rsp.status_code, 200, "problem getting via link")
+
+    # TODO: link conflicts (err)
+    # TODO: link to child group (err)
+    # TODO: link to non-group parent (err)
+    # TODO: invalid datatype (err)
+    # TODO: type-checking?
+    # TODO: pass-in username and password
+
+class PostGroupTest(unittest.TestCase):
+    def __init__(self, *args, **kwargs):
+        super(PostGroupTest, self).__init__(*args, **kwargs)
+        self.base_domain = helper.getTestDomainName(self.__class__.__name__)
+        helper.setupDomain(self.base_domain)
+        self.base_endpoint = helper.getEndpoint() + "/"
+        self.common_headers = helper.getRequestHeaders(domain=self.base_domain)
+        self.domain_root = helper.getRootUUID(domain=self.base_domain)
+
+    def testPutGroupWithPath(self):
+        path = "/group1"
+        gid = helper.postGroup(self.base_domain, path=path)
+        self.assertTrue(helper.validateId(gid), "doesn't look like UUID")
+
+        uuid = helper.getUUIDByPath(self.base_domain, path)
+        self.assertEqual(uuid, gid, "fetched idea should matched returned")
+
 if __name__ == "__main__":
     unittest.main()
 

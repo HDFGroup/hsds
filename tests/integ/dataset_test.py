@@ -47,16 +47,29 @@ GET_DATASET_KEYS = [
     "domain",
 ]
 
+LIST_DATASETS_KEYS = [
+    "datasets",
+    "hrefs",
+]
+
+LIST_DATASETS_HREFS_RELS = [
+#    "attributes",
+#    "data",
+    "home",
+    "root",
+    "self",
+]
+
 def _assertLooksLikeUUID(testcase, s):
     testcase.assertTrue(helper.validateId(s), "probably not UUID: " + s)
 
-class ScalarDatasetTest(unittest.TestCase):
+class CommonDatasetOperationsTest(unittest.TestCase):
     base_domain = None
     root_uuid = None
     endpoint = None
     headers = None
     assertLooksLikeUUID = _assertLooksLikeUUID
-    given_expected_shape = {"class": "H5S_SCALAR"}
+    given_expected_shape = {"class": "H5S_SCALAR"} # TODO: not so common
     given_expected_type = {"class": "H5T_FLOAT", "base": "H5T_IEEE_F32LE"}
     given_payload = {"type": "H5T_IEEE_F32LE"}
     given_dset_id = None
@@ -83,13 +96,13 @@ class ScalarDatasetTest(unittest.TestCase):
     def setUp(self):
         """Sanity checks before each test."""
         assert helper.validateId(helper.getRootUUID(self.base_domain)) == True
+        assert self.headers is not None
         get_given = requests.get(
                 f"{self.endpoint}/datasets/{self.given_dset_id}",
                 headers = self.headers)
         assert get_given.status_code == 200, "given dataset inexplicably gone"
         assert helper.validateId(self.given_dset_id) == True
         assert get_given.json()["id"] == self.given_dset_id
-        assert self.headers is not None
 
     def testPost(self):
         data = { "type": "H5T_IEEE_F32LE" }
@@ -128,7 +141,7 @@ class ScalarDatasetTest(unittest.TestCase):
         self.assertDictEqual(rspJson["type"], self.given_expected_type)
         self.assertEqual(len(rspJson["hrefs"]), 3) 
 
-    def testGetShape(self):
+    def testGetShape(self): # TODO: may be scalar-specific?
         req = f"{self.endpoint}/datasets/{self.given_dset_id}/shape"
         rsp = requests.get(req, headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "problem getting dset's shape")
@@ -157,7 +170,7 @@ class ScalarDatasetTest(unittest.TestCase):
         self.assertDictEqual(rspJson["shape"], self.given_expected_shape)
         self.assertDictEqual(rspJson["type"], self.given_expected_type)
 
-    def testGetWithOtherRead_AuthorizedUser(self):
+    def testGet_OtherUserAuthorizedRead(self):
         other_user = "test_user2"
         self.assertNotEqual(other_user, config.get("user_name"))
         req = f"{self.endpoint}/datasets/{self.given_dset_id}"
@@ -172,21 +185,15 @@ class ScalarDatasetTest(unittest.TestCase):
         req = f"{self.endpoint}/datasets/{self.given_dset_id}"
         another_domain = helper.getParentDomain(self.base_domain)
         headers = helper.getRequestHeaders(domain=another_domain)
-        self.assertEqual(requests.get(req, headers=headers).status_code, 400)
-        # TODO: explain why 400 is appropriate, instead of 404
+        response = requests.get(req, headers=headers)
+        self.assertEqual(response.status_code, 400, "fail 400 to hide details")
 
-    def testDeleteWithoutPermission(self):
-        other_user = "test_user2"
+    def testDelete_OtherUserWithoutPermission_Fails403(self):
+        other_user = "test_user2" # TODO: THIS DEPENDS ON 'test_user2' BEING A RECOGNZIED USER? HOW TO MAKE PROGRAMMATICALLY VALID?
         self.assertNotEqual(other_user, config.get("user_name"))
-
-        # SETUP - place dset on service
         data = { "type": "H5T_IEEE_F32LE" }
-        req = f"{self.endpoint}/datasets"
-        rsp = requests.post(req, data=json.dumps(data), headers=self.headers)
-        self.assertEqual(rsp.status_code, 201, "problem creating dataset")
-        dset_id = rsp.json()["id"]
+        dset_id = helper.postDataset(self.base_domain, json.dumps(data))
 
-        # TEST - attempt delete
         req = f"{self.endpoint}/datasets/{dset_id}"
         headers = helper.getRequestHeaders(
                 domain=self.base_domain,
@@ -194,13 +201,25 @@ class ScalarDatasetTest(unittest.TestCase):
         rsp = requests.delete(req, headers=headers)
         self.assertEqual(rsp.status_code, 403, "should be forbidden")
 
+    def testDelete_UnknownUser_Fails401(self):
+        other_user = config.get("user_name")[::-1] # reversed copy
+        self.assertNotEqual(other_user, config.get("user_name"))
+        data = { "type": "H5T_IEEE_F32LE" }
+        dset_id = helper.postDataset(self.base_domain, json.dumps(data))
+
+        req = f"{self.endpoint}/datasets/{dset_id}"
+        headers = helper.getRequestHeaders(
+                domain=self.base_domain,
+                username=other_user)
+        rsp = requests.delete(req, headers=headers)
+        self.assertEqual(rsp.status_code, 401, "should be unauthorized")
+
     def testDeleteInOtherDomainFails400(self):
         req = f"{self.endpoint}/datasets/{self.given_dset_id}"
         another_domain = helper.getParentDomain(self.base_domain)
         headers = helper.getRequestHeaders(domain=another_domain)
-        self.assertEqual(
-                requests.delete(req, headers=headers).status_code,
-                400) # TODO: explain why 400
+        response = requests.delete(req, headers=headers)
+        self.assertEqual(response.status_code, 400, "fail 400 to hide details")
 
     def testDelete(self):
         # SETUP - place dset on service
@@ -216,10 +235,105 @@ class ScalarDatasetTest(unittest.TestCase):
         rsp = requests.delete(req, headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "problem deleting dataset")
         self.assertDictEqual(rsp.json(), {}, "should return empty object")
+        response = requests.get(req, headers=self.headers)
         self.assertEqual(
-                requests.get(req, headers=self.headers).status_code,
+                response.status_code,
                 410,
                 "GONE")
+
+    def assertJSONHasOnlyKeys(self, _json, _keys):
+        for key in _keys:
+            self.assertTrue(key in _json, f"missing key {key}")
+        self.assertEqual(len(_json), len(_keys), "extra keys")
+
+    def assertHrefsHasOnlyRels(self, _hrefs, _rels):
+        href_rels = [item["rel"] for item in _hrefs]
+        for rel in _rels:
+            self.assertTrue(rel in href_rels, f"missing rel `{rel}`")
+        self.assertEqual(len(href_rels), len(_rels), "extra rels")
+
+    def testListDatasetsUnlinked(self):
+        dtype = json.dumps({"type": "H5T_STD_U32LE"}) # arbitrary
+        dset0 = helper.postDataset(self.base_domain, dtype)
+
+        root = helper.getRootUUID(self.base_domain)
+        res = requests.get(
+                f"{self.endpoint}/groups/{root}",
+                headers=self.headers)
+        self.assertEqual(res.json()["linkCount"], 0, "should have no links")
+
+        res = requests.get(
+                f"{self.endpoint}/datasets",
+                headers=self.headers)
+        res_json = res.json()
+        dset_list = res_json["datasets"]
+        self.assertEqual(dset_list, [], "list should be empty")
+        self.assertJSONHasOnlyKeys(res_json, LIST_DATASETS_KEYS)
+        hrefs_list = res_json["hrefs"]
+        self.assertHrefsHasOnlyRels(hrefs_list, LIST_DATASETS_HREFS_RELS)
+
+    def testListDatasetsLinkedToRoot(self):
+        # because of links, test in separate domain
+        domain = helper.getTestDomainName(self.__class__.__name__)
+        helper.setupDomain(domain)
+
+        dset_names = [
+            "dest0",
+            "dset1",
+            "dset2"
+        ]
+        dset_ids = {} # dictionary -- "name": "id"
+        dtype = json.dumps({"type": "H5T_STD_U32LE"}) # arbitrary
+        for name in dset_names:
+            path = "/" + name
+            id = helper.postDataset(domain, dtype, linkpath=path)
+            dset_ids[name] = id
+
+        root = helper.getRootUUID(domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        res = requests.get(f"{self.endpoint}/groups/{root}", headers=headers)
+        self.assertEqual(res.json()["linkCount"], 3, "should have 3 links")
+
+        res = requests.get(f"{self.endpoint}/datasets", headers=headers)
+        res_json = res.json()
+        listing = res_json["datasets"]
+        for name, id in dset_ids.items() :
+            self.assertTrue(id in listing, f"missing {name}: `{id}`")
+        self.assertEqual(len(listing), 3, "should have 3 datasets")
+        self.assertJSONHasOnlyKeys(res_json, LIST_DATASETS_KEYS)
+        hrefs = res_json["hrefs"]
+        self.assertHrefsHasOnlyRels(hrefs, LIST_DATASETS_HREFS_RELS)
+
+    def testListDatasetsLinkedAtVariousDepths(self):
+        # like above, but linked to places other than root group
+        domain = helper.getTestDomainName(self.__class__.__name__)
+        helper.setupDomain(domain)
+        dtype = json.dumps({"type": "H5T_STD_U32LE"}) # arbitrary
+        headers = helper.getRequestHeaders(domain=domain)
+        root = helper.getRootUUID(domain)
+        endpoint = self.endpoint
+
+        g1id = helper.postGroup(domain, path="/g1")
+        g12id = helper.postGroup(domain, path="/g1/g2")
+        d11id = helper.postDataset(domain, dtype, linkpath="/g1/d1")
+        d122id = helper.postDataset(domain, dtype, linkpath="/g1/g2/d2")
+        d123id = helper.postDataset(domain, dtype, linkpath="/g1/g2/d3")
+
+        res = requests.get(f"{endpoint}/groups/{root}", headers=headers)
+        self.assertEqual(res.json()["linkCount"], 1, "root links to g1")
+
+        res = requests.get(f"{endpoint}/groups/{g1id}", headers=headers)
+        self.assertEqual(res.json()["linkCount"], 2, "g1 links to g2 and d1")
+
+        res = requests.get(f"{endpoint}/datasets", headers=headers)
+        res_json = res.json()
+        listing = res_json["datasets"]
+        for path, id in [("d1", d11id), ("d2", d122id), ("d3", d123id)]:
+            self.assertTrue(id in listing, f"missing {path}: `{id}`")
+        self.assertEqual(len(listing), 3, "should have three datasets")
+        self.assertJSONHasOnlyKeys(res_json, LIST_DATASETS_KEYS)
+        hrefs = res_json["hrefs"]
+        self.assertHrefsHasOnlyRels(hrefs, LIST_DATASETS_HREFS_RELS)
 
     @unittest.skip("TODO")
     def testDeleteWhileStillLinked(self):
@@ -228,6 +342,115 @@ class ScalarDatasetTest(unittest.TestCase):
     @unittest.skip("TODO")
     def testPostWithMalformedPayload(self):
         pass
+
+class PostDatasetWithLinkTest(unittest.TestCase):
+    linkname = "linked_dset"
+
+    def __init__(self, *args, **kwargs):
+        super(PostDatasetWithLinkTest, self).__init__(*args, **kwargs)
+        self.domain = helper.getTestDomainName(self.__class__.__name__)
+        helper.setupDomain(self.domain)
+        self.endpoint = helper.getEndpoint()
+        self.headers = helper.getRequestHeaders(domain=self.domain)
+        self.root = helper.getRootUUID(domain=self.domain)
+
+    def assertGroupHasNLinks(self, group_uuid, count, msg):
+        rsp = requests.get(
+                f"{self.endpoint}/groups/{group_uuid}",
+                headers=self.headers)
+        rsp_json = json.loads(rsp.text)
+        self.assertEqual(rsp_json["linkCount"], count, msg)
+
+    def assertLinkIsExpectedDataset(self, group_uuid, linkname, dset_uuid):
+        rsp = requests.get(
+                f"{self.endpoint}/groups/{group_uuid}/links/{linkname}",
+                headers=self.headers)
+        self.assertEqual(rsp.status_code, 200, "problem getting link")
+        rsp_json = rsp.json()
+        self.assertTrue("link" in rsp_json)
+        link = rsp_json["link"]
+        self.assertDictEqual(
+                link,
+                { "id": dset_uuid,
+                  "collection": "datasets",
+                  "class": "H5L_TYPE_HARD",
+                  "title": linkname,
+                })
+
+    def assertCanGetDatasetByUUID(self, dset_uuid):
+        rsp = requests.get(
+                f"{self.endpoint}/datasets/{dset_uuid}",
+                headers=self.headers)
+        self.assertEqual(rsp.status_code, 200, "unable to get dataset")
+
+    def testScalar(self):
+        payload = {
+            "type": "H5T_STD_U8LE",
+        }
+        self.assertGroupHasNLinks(self.root, 0, "domain starts empty")
+
+        payload["link"] = {"id": self.root, "name": self.linkname}
+
+        rsp = requests.post(
+                f"{self.endpoint}/datasets",
+                data=json.dumps(payload),
+                headers=self.headers)
+        self.assertEqual(rsp.status_code, 201, "unable to create dataset")
+        dset_uuid = rsp.json()['id']
+        self.assertTrue(helper.validateId(dset_uuid), "invalid uuid?")
+
+        self.assertGroupHasNLinks(self.root, 1, "one link to dataset")
+        self.assertLinkIsExpectedDataset(self.root, self.linkname, dset_uuid)
+        self.assertCanGetDatasetByUUID(dset_uuid)
+
+    def testCompoundVector(self):
+        payload = {
+            "type": {
+                "charSet": "H5T_CSET_ASCII", 
+                "class": "H5T_STRING", 
+                "strPad": "H5T_STR_NULLTERM", 
+                "length": "H5T_VARIABLE",
+            },
+            "shape": 10,
+        }
+        self.assertGroupHasNLinks(self.root, 0, "domain starts empty")
+
+        payload["link"] = {"id": self.root, "name": self.linkname}
+
+        rsp = requests.post(
+                f"{self.endpoint}/datasets",
+                data=json.dumps(payload),
+                headers=self.headers)
+        self.assertEqual(rsp.status_code, 201, "unable to create dataset")
+        dset_uuid = rsp.json()['id']
+        self.assertTrue(helper.validateId(dset_uuid), "invalid uuid?")
+
+        self.assertGroupHasNLinks(self.root, 1, "one link to dataset")
+        self.assertLinkIsExpectedDataset(self.root, self.linkname, dset_uuid)
+        self.assertCanGetDatasetByUUID(dset_uuid)
+
+    def testIntegerMultiDimLinkedToNonRoot(self):
+        linkname = "g1"
+        payload = {
+            "type": "H5T_STD_U32LE",
+            "shape": [10, 8, 8],
+        }
+        gid = helper.postGroup(self.domain, path=f"/{linkname}")
+        self.assertGroupHasNLinks(gid, 0, "child group should have no links")
+
+        payload["link"] = {"id": gid, "name": self.linkname}
+
+        rsp = requests.post(
+                f"{self.endpoint}/datasets",
+                data=json.dumps(payload),
+                headers=self.headers)
+        self.assertEqual(rsp.status_code, 201, "unable to create dataset")
+        dset_uuid = rsp.json()['id']
+        self.assertTrue(helper.validateId(dset_uuid), "invalid uuid?")
+
+        self.assertGroupHasNLinks(gid, 1, "one link to dataset")
+        self.assertLinkIsExpectedDataset(gid, linkname, dset_uuid)
+        self.assertCanGetDatasetByUUID(dset_uuid)
 
 class DatasetTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -996,55 +1219,6 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue(chunk_size >= CHUNK_MIN)
         self.assertTrue(chunk_size <= CHUNK_MAX)
 
-
-    def testPostWithLink(self):
-        headers = helper.getRequestHeaders(domain=self.base_domain)
-
-        # get domain
-        req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("root" in rspJson)
-        root_uuid = rspJson["root"]
-
-        # get root group and verify link count is 0
-        req = helper.getEndpoint() + '/groups/' + root_uuid
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertEqual(rspJson["linkCount"], 0)
-        
-        type_vstr = {"charSet": "H5T_CSET_ASCII", 
-            "class": "H5T_STRING", 
-            "strPad": "H5T_STR_NULLTERM", 
-            "length": "H5T_VARIABLE" } 
-        payload = {'type': type_vstr, 'shape': 10,
-             'link': {'id': root_uuid, 'name': 'linked_dset'} }
-        req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)  # create dataset
-        rspJson = json.loads(rsp.text)
-        dset_uuid = rspJson['id']
-        self.assertTrue(helper.validateId(dset_uuid))
-
-        # get root group and verify link count is 1
-        req = helper.getEndpoint() + '/groups/' + root_uuid
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertEqual(rspJson["linkCount"], 1)
-
-        # read the link back and verify
-        req = helper.getEndpoint() + "/groups/" + root_uuid + "/links/linked_dset"
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)  # link doesn't exist yet
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("link" in rspJson)
-        link_json = rspJson["link"]
-        self.assertEqual(link_json["collection"], "datasets")
-        self.assertEqual(link_json["class"], "H5L_TYPE_HARD")
-        self.assertEqual(link_json["title"], "linked_dset")
-        self.assertEqual(link_json["id"], dset_uuid)
 
     def testPostCommittedType(self):
         headers = helper.getRequestHeaders(domain=self.base_domain)

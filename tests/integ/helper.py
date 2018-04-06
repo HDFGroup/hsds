@@ -135,10 +135,16 @@ def setupDomain(domain, folder=False):
 Helper function - get root uuid for domain (raises Exceptions if problem)
 """ 
 def getRootUUID(domain, username=None, password=None):
-    req = getEndpoint() + "/"
     headers = getRequestHeaders(
             domain=domain, username=username, password=password)
-    return requests.get(req, headers=headers).json()["root"]
+    response = requests.get(getEndpoint() + "/", headers=headers)
+    try:
+        return response.json()["root"]
+    except json.decoder.JSONDecodeError:
+        code = response.status_code
+        raise ValueError(
+                f"Unable to get root group uuid for `{domain}`.\n" + 
+                f"HTTP code {code}")
 
 """
 Helper function - get a domain for one of the test files
@@ -186,5 +192,80 @@ def getUUIDByPath(domain, path, username=None, password=None):
             parent_uuid = None # flags non-group object
 
     return tgt_uuid
+
+"""
+Helper - post group and return its UUID. ValueError raised if problem.
+Optionally links on absolute path is path is valid.
+"""
+def postGroup(domain, path=None):
+    endpoint = getEndpoint()
+    parent_uuid = None
+    if path is not None:
+        parentpath = getParentDomain(path)
+        parent_uuid = getUUIDByPath(domain, parentpath)
+
+    headers = getRequestHeaders(domain=domain)
+    
+    post_rsp = requests.post(
+            f"{endpoint}/groups",
+            headers=headers)
+    if post_rsp.status_code != 201:
+        raise ValueError(f"Unable to post group: {post_rsp.status_code}")
+    group_uuid = post_rsp.json()["id"]
+
+    # create link
+    if parent_uuid is not None :
+        linkname = path.split('/')[-1]
+        linkdef = json.dumps({"id": group_uuid})
+        link_rsp = requests.put(
+                f"{endpoint}/groups/{parent_uuid}/links/{linkname}",
+                headers=headers,
+                data=linkdef)
+        assert link_rsp.status_code == 201, f"Problem: {link_rsp.status_code}"
+
+    return group_uuid
+
+"""
+Helper - post dataset and return its UUID. ValueError raised if problem.
+Optionally links on absolute path if path is valid.
+"""
+def postDataset(domain, datatype, linkpath=None) :
+    endpoint = getEndpoint()
+    parent_uuid = None
+
+    if linkpath is not None :
+        # check that we can create intended link
+        # if not, abort before creating dataset
+#        try:
+#            getUUIDByPath(linkpath)
+#        except KeyError:
+#            pass
+#        else :
+#            raise ValueError("conflict with existing link!")
+        # unintuitive function name, but same pathing operation
+        parentpath = getParentDomain(linkpath)
+        parent_uuid = getUUIDByPath(domain, parentpath)
+
+    headers = getRequestHeaders(domain=domain)
+    post_rsp = requests.post(
+            f"{endpoint}/datasets",
+            headers=headers,
+            data=datatype)
+    if post_rsp.status_code != 201:
+        raise ValueError(f"Unable to post dataset: {post_rsp.status_code}")
+    dset_id = post_rsp.json()["id"]
+
+    # create link
+    if linkpath is not None :
+        assert parent_uuid is not None
+        linkname = linkpath.split('/')[-1]
+        linkdef = json.dumps({"id": dset_id})
+        link_rsp = requests.put(
+                f"{endpoint}/groups/{parent_uuid}/links/{linkname}",
+                headers=headers,
+                data=linkdef)
+        assert link_rsp.status_code == 201, f"Problem: {link_rsp.status_code}"
+
+    return dset_id
 
 
