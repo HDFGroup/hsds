@@ -19,7 +19,6 @@ cfg = {
     #'hsds_endpoint': 'http://192.168.1.100:5101',
     'user_name': 'test_user1',
     'user_password': 'test',
-    'test_noauth': False,
     'test_on_uploaded_file': False,
 }
    
