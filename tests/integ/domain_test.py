@@ -703,7 +703,61 @@ class DomainTest(unittest.TestCase):
                     410,
                     f"domain {domain} was not deleted")
 
+    def testObjectsNotPresentInReplacementDomain(self):
+        domain = helper.getTestDomainName(self.__class__.__name__)
+        headers = helper.getRequestHeaders(domain=domain)
+        helper.setupDomain(domain)
+        endpoint = helper.getEndpoint()
+
+        # place a group and dataset in the domain
+        gid = helper.postGroup(domain, path="/g1")
+        did = helper.postDataset(
+                domain,
+                {"type": "H5T_IEEE_F32LE"},
+                linkpath="/g1/dset")
+
+        # pre-deletion verification
+        get_res = requests.get(
+                f"{endpoint}/groups/{gid}/links/dset",
+                headers=headers)
+        self.assertEqual(
+                get_res.json()["link"]["id"],
+                did,
+                "should be able to get dataset through link")
+        get2_res = requests.get(f"{endpoint}/datasets/{did}", headers=headers)
+        self.assertEqual(
+                get2_res.json()["id"],
+                did,
+                "should be able to get dataset via id")
+        list_res = requests.get(f"{endpoint}/datasets", headers=headers)
+        self.assertEqual(len(list_res.json()["datasets"]), 1, "one dataset")
+
+        # delete and replace
+        del_res = requests.delete(f"{endpoint}/", headers=headers)
+        self.assertEqual(del_res.status_code, 200, "unable to delete")
+        put_res = requests.put(f"{endpoint}/", headers=headers)
+        self.assertEqual(put_res.status_code, 201, "unable to replace")
+
+        # post-replacement verification
+        get_res = requests.get(
+                f"{endpoint}/groups/{gid}/links/dset",
+                headers=headers)
+        self.assertEqual(
+                get_res.status_code,
+                400,
+                "should not be able to go through link")
+        get2_res = requests.get(f"{endpoint}/datasets/{did}", headers=headers)
+        self.assertEqual(
+                get2_res.status_code,
+                400,
+                "should not be able to get dataset via id")
+        list_res = requests.get(f"{endpoint}/datasets", headers=headers)
+        self.assertEqual(len(list_res.json()["datasets"]), 0, "no datasets")
+        
+
     # TODO: refactor the snot out of this
+    # TODO: these membership checks belong in tests specific to those
+    #       collection families?
     def testNewDomainCollections(self):
         # verify that newly added groups/datasets show up in the collections
         headers = helper.getRequestHeaders(domain=self.base_domain)
