@@ -462,47 +462,75 @@ class DatasetTest(unittest.TestCase):
     def assertLooksLikeUUID(self, s):
         self.assertTrue(helper.validateId(s), "maybe not UUID: " + s)
 
-    def testScalarEmptyDimsDataset(self):
-        # Test creation/deletion of scalar dataset obj
-
+    def testScalarShapeEmptyArray(self):
         headers = helper.getRequestHeaders(domain=self.base_domain)
-        req = self.endpoint + '/'
-
-        # Get root uuid
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        root_uuid = rspJson["root"]
-        helper.validateId(root_uuid)
-
-        # create a dataset obj
         data = { "type": "H5T_IEEE_F32LE", "shape": [] }
-        req = self.endpoint + '/datasets' 
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
-        self.assertEqual(rsp.status_code, 201)
-        rspJson = json.loads(rsp.text)
-        self.assertEqual(rspJson["attributeCount"], 0)   
-        dset_id = rspJson["id"]
-        self.assertTrue(helper.validateId(dset_id))
+        dset_id = helper.postDataset(self.base_domain, data)
 
-        # read back the obj
-        req = self.endpoint + '/datasets/' + dset_id 
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("id" in rspJson)
+        rsp = requests.get(
+                f"{self.endpoint}/datasets/{dset_id}",
+                headers=headers)
+        self.assertEqual(rsp.status_code, 200, "unable to get dataset")
+        rspJson = rsp.json()
+        for key in GET_DATASET_KEYS :
+            self.assertTrue(key in rspJson, f"missing `{key}`")
+        self.assertEqual(len(rspJson), len(GET_DATASET_KEYS))
         self.assertEqual(rspJson["id"], dset_id)
-        self.assertTrue("created" in rspJson)
-        self.assertTrue("lastModified" in rspJson)
-        self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("attributeCount" in rspJson)
         self.assertEqual(rspJson["attributeCount"], 0)
-        self.assertTrue("shape" in rspJson)
-        shape_json = rspJson["shape"]
-        self.assertTrue(shape_json["class"], "H5S_SCALAR")
-        self.assertFalse("dims" in shape_json)
-        self.assertTrue("type" in rspJson)
+        self.assertDictEqual(rspJson["shape"], {"class": "H5S_SCALAR"})
         self.assertTrue(rspJson["type"], "H5T_IEEE_F32LE")
+
+    def testShapeZero(self):
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        data = { "type": "H5T_IEEE_F32LE", "shape": 0 }
+        dset_id = helper.postDataset(self.base_domain, data)
+
+        rsp = requests.get(
+                f"{self.endpoint}/datasets/{dset_id}",
+                headers=headers)
+        self.assertEqual(rsp.status_code, 200, "unable to get dataset")
+        rspJson = rsp.json()
+        for key in GET_DATASET_KEYS :
+            self.assertTrue(key in rspJson, f"missing `{key}`")
+        self.assertEqual(len(rspJson), len(GET_DATASET_KEYS))
+        self.assertEqual(rspJson["id"], dset_id)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        self.assertDictEqual(
+                rspJson["shape"], 
+               {"class": "H5S_SIMPLE", "dims": [0]})
+        self.assertTrue(rspJson["type"], "H5T_IEEE_F32LE")
+
+    def testShapeArrayWithZero(self):
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        data = { "type": "H5T_IEEE_F32LE", "shape": [0] }
+        dset_id = helper.postDataset(self.base_domain, data)
+
+        rsp = requests.get(
+                f"{self.endpoint}/datasets/{dset_id}",
+                headers=headers)
+        self.assertEqual(rsp.status_code, 200, "unable to get dataset")
+        rspJson = rsp.json()
+        for key in GET_DATASET_KEYS :
+            self.assertTrue(key in rspJson, f"missing `{key}`")
+        self.assertEqual(len(rspJson), len(GET_DATASET_KEYS))
+        self.assertEqual(rspJson["id"], dset_id)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        self.assertDictEqual(
+                rspJson["shape"], 
+               {"class": "H5S_SIMPLE", "dims": [0]})
+        self.assertTrue(rspJson["type"], "H5T_IEEE_F32LE")
+
+    def testShapeNegativeDim_Fails400(self):
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        data = { "type": "H5T_IEEE_F32LE", "shape": [-4] }
+
+        res = requests.post(
+                f"{self.endpoint}/datasets",
+                headers=headers,
+                data=json.dumps(data))
+        self.assertEqual(res.status_code, 400, "post dataset should fail")
+        with self.assertRaises(json.decoder.JSONDecodeError):
+            res_json = res.json()
 
     @unittest.skipUnless(config.get("test_on_uploaded_file"), "requires file")
     def testGet(self):
