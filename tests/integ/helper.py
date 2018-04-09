@@ -228,8 +228,10 @@ def postGroup(domain, path=None):
 """
 Helper - post dataset and return its UUID. ValueError raised if problem.
 Optionally links on absolute path if path is valid.
+If keyword argument `response` is True, will return `requests` response;
+else returns UUID of dataset.
 """
-def postDataset(domain, data, linkpath=None) :
+def postDataset(domain, data, linkpath=None, response=False) :
     endpoint = getEndpoint()
     parent_uuid = None
     headers = getRequestHeaders(domain=domain)
@@ -245,8 +247,28 @@ def postDataset(domain, data, linkpath=None) :
             headers=headers,
             data=json.dumps(data))
 
+    if response:
+        return post_rsp
     if post_rsp.status_code != 201:
         raise ValueError(f"Unable to post dataset: {post_rsp.status_code}")
     return post_rsp.json()["id"]
+
+"""
+Helper - Update a dataset with given dimensions. Raises Exceptions.
+If response is true, returns the `requests` response; else attempts to verify
+that the operation was successful.
+"""
+def resizeDataset(domain, dset_uuid, dims, response=False):
+    endpoint = getEndpoint()
+    headers = getRequestHeaders(domain=domain)
+    res = requests.put(
+            f"{endpoint}/datasets/{dset_uuid}/shape",
+            headers=headers,
+            data=json.dumps({"shape": dims}))
+    if response == True:
+        return res
+    code = res.status_code
+    if code != 201:
+        raise ValueError(f"Unable to update dataset shape: {code}")
 
 

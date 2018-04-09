@@ -170,7 +170,7 @@ class postDatasetTest(unittest.TestCase) :
         root = helper.getRootUUID(self.domain)
         assert helper.validateId(root), "domain invalid!"
 
-    def testCanPutAndGetDataset(self):
+    def testPostAndGetViaUUID(self):
         did = helper.postDataset(
                 self.domain,
                 self.datatype)
@@ -202,6 +202,15 @@ class postDatasetTest(unittest.TestCase) :
                 f"{self.endpoint}/groups/{root}/links/{linkname}",
                 headers=self.headers)
         self.assertEqual(get_rsp.status_code, 200, "problem getting via link")
+
+    def testGetBackFullResponse(self):
+        rsp = helper.postDataset(self.domain, self.datatype, response=True)
+        self.assertEqual(
+                rsp.status_code,
+                201,
+                "should have CREATED status code")
+        rspJson = rsp.json()
+        self.assertTrue(helper.validateId(rspJson["id"]))
 
     # TODO: link conflicts (err)
     # TODO: link to child group (err)

@@ -46,20 +46,49 @@ GET_DATASET_KEYS = [
     "root",
     "domain",
 ]
+GET_DATASET_HREFS_RELS = [
+    "attributes",
+    "data",
+    "home",
+    "root",
+    "self",
+]
 
 LIST_DATASETS_KEYS = [
     "datasets",
     "hrefs",
 ]
-
 LIST_DATASETS_HREFS_RELS = [
     "home",
     "root",
     "self",
 ]
 
+GET_SHAPE_KEYS = [
+    "created",
+    "hrefs",
+    "lastModified",
+    "shape",
+]
+GET_SHAPE_RELS = [
+    "owner",
+    "root",
+    "self",
+]
+
 def _assertLooksLikeUUID(testcase, s):
     testcase.assertTrue(helper.validateId(s), "probably not UUID: " + s)
+
+def _assertDictHasOnlyKeys(testcase, _d, _keys):
+    for key in _keys:
+        testcase.assertTrue(key in _d, f"missing key `{key}`")
+    testcase.assertEqual(len(_d), len(_keys), "extra keys")
+
+def _assertHrefsHasOnlyRels(testcase, _hrefs, _rels):
+    href_rels = [item["rel"] for item in _hrefs]
+    for rel in _rels:
+        testcase.assertTrue(rel in href_rels, f"missing rel `{rel}`")
+    testcase.assertEqual(len(href_rels), len(_rels), "extra rels")
 
 class CommonDatasetOperationsTest(unittest.TestCase):
     base_domain = None
@@ -244,23 +273,15 @@ class CommonDatasetOperationsTest(unittest.TestCase):
         pass
 
 class ListDomainDatasetsTest(unittest.TestCase):
+    assertJSONHasOnlyKeys = _assertDictHasOnlyKeys
+    assertHrefsHasOnlyRels = _assertHrefsHasOnlyRels
+
     def __init__(self, *args, **kwargs):
         super(ListDomainDatasetsTest, self).__init__(*args, **kwargs)
         self.domain = helper.getTestDomainName(self.__class__.__name__)
         helper.setupDomain(self.domain)
         self.endpoint = helper.getEndpoint()
         self.headers = helper.getRequestHeaders(domain=self.domain)
-
-    def assertJSONHasOnlyKeys(self, _json, _keys):
-        for key in _keys:
-            self.assertTrue(key in _json, f"missing key {key}")
-        self.assertEqual(len(_json), len(_keys), "extra keys")
-
-    def assertHrefsHasOnlyRels(self, _hrefs, _rels):
-        href_rels = [item["rel"] for item in _hrefs]
-        for rel in _rels:
-            self.assertTrue(rel in href_rels, f"missing rel `{rel}`")
-        self.assertEqual(len(href_rels), len(_rels), "extra rels")
 
     def testListDatasetsUnlinked(self):
         dtype = {"type": "H5T_STD_U32LE"} # arbitrary
@@ -411,7 +432,7 @@ class PostDatasetWithLinkTest(unittest.TestCase):
                 "strPad": "H5T_STR_NULLTERM", 
                 "length": "H5T_VARIABLE",
             },
-            "shape": 10,
+            "shape": [10],
         }
         self.assertGroupHasNLinks(self.root, 0, "domain starts empty")
 
@@ -453,145 +474,173 @@ class PostDatasetWithLinkTest(unittest.TestCase):
         self.assertCanGetDatasetByUUID(dset_uuid)
 
 class DatasetTest(unittest.TestCase):
+    assertJSONHasOnlyKeys = _assertDictHasOnlyKeys
+    assertHrefsHasOnlyRels = _assertHrefsHasOnlyRels
+
     def __init__(self, *args, **kwargs):
         super(DatasetTest, self).__init__(*args, **kwargs)
-        self.base_domain = helper.getTestDomainName(self.__class__.__name__)
-        helper.setupDomain(self.base_domain)
+        self.domain = helper.getTestDomainName(self.__class__.__name__)
+        helper.setupDomain(self.domain)
         self.endpoint = helper.getEndpoint()
+        self.headers = helper.getRequestHeaders(domain=self.domain)
 
     def assertLooksLikeUUID(self, s):
         self.assertTrue(helper.validateId(s), "maybe not UUID: " + s)
 
+    def verifyShape(self, dset_uuid, shapedict):
+        rsp = requests.get(
+                f"{self.endpoint}/datasets/{dset_uuid}/shape",
+                headers=self.headers)
+        self.assertEqual(rsp.status_code, 200, "unable to get shape")
+        rspJson = rsp.json()
+        self.assertJSONHasOnlyKeys(rspJson, GET_SHAPE_KEYS)
+        self.assertHrefsHasOnlyRels(rspJson["hrefs"], GET_SHAPE_RELS)
+        self.assertDictEqual(rspJson["shape"], shapedict)
+
     def testScalarShapeEmptyArray(self):
-        headers = helper.getRequestHeaders(domain=self.base_domain)
         data = { "type": "H5T_IEEE_F32LE", "shape": [] }
-        dset_id = helper.postDataset(self.base_domain, data)
+        dset_id = helper.postDataset(self.domain, data)
 
         rsp = requests.get(
                 f"{self.endpoint}/datasets/{dset_id}",
-                headers=headers)
+                headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "unable to get dataset")
         rspJson = rsp.json()
-        for key in GET_DATASET_KEYS :
-            self.assertTrue(key in rspJson, f"missing `{key}`")
-        self.assertEqual(len(rspJson), len(GET_DATASET_KEYS))
+        self.assertJSONHasOnlyKeys(rspJson, GET_DATASET_KEYS)
         self.assertEqual(rspJson["id"], dset_id)
         self.assertEqual(rspJson["attributeCount"], 0)
         self.assertDictEqual(rspJson["shape"], {"class": "H5S_SCALAR"})
-        self.assertTrue(rspJson["type"], "H5T_IEEE_F32LE")
+        self.assertDictEqual(
+                rspJson["type"], 
+               {"class": "H5T_FLOAT", "base": "H5T_IEEE_F32LE"})
+        self.assertHrefsHasOnlyRels(rspJson["hrefs"], GET_DATASET_HREFS_RELS)
 
     def testShapeZero(self):
-        headers = helper.getRequestHeaders(domain=self.base_domain)
         data = { "type": "H5T_IEEE_F32LE", "shape": 0 }
-        dset_id = helper.postDataset(self.base_domain, data)
+        dset_id = helper.postDataset(self.domain, data)
 
         rsp = requests.get(
                 f"{self.endpoint}/datasets/{dset_id}",
-                headers=headers)
+                headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "unable to get dataset")
         rspJson = rsp.json()
-        for key in GET_DATASET_KEYS :
-            self.assertTrue(key in rspJson, f"missing `{key}`")
-        self.assertEqual(len(rspJson), len(GET_DATASET_KEYS))
+        self.assertJSONHasOnlyKeys(rspJson, GET_DATASET_KEYS)
         self.assertEqual(rspJson["id"], dset_id)
         self.assertEqual(rspJson["attributeCount"], 0)
         self.assertDictEqual(
                 rspJson["shape"], 
                {"class": "H5S_SIMPLE", "dims": [0]})
-        self.assertTrue(rspJson["type"], "H5T_IEEE_F32LE")
+        self.assertDictEqual(
+                rspJson["type"], 
+               {"class": "H5T_FLOAT", "base": "H5T_IEEE_F32LE"})
+        self.assertHrefsHasOnlyRels(rspJson["hrefs"], GET_DATASET_HREFS_RELS)
 
     def testShapeArrayWithZero(self):
-        headers = helper.getRequestHeaders(domain=self.base_domain)
         data = { "type": "H5T_IEEE_F32LE", "shape": [0] }
-        dset_id = helper.postDataset(self.base_domain, data)
+        dset_id = helper.postDataset(self.domain, data)
 
         rsp = requests.get(
                 f"{self.endpoint}/datasets/{dset_id}",
-                headers=headers)
+                headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "unable to get dataset")
         rspJson = rsp.json()
-        for key in GET_DATASET_KEYS :
-            self.assertTrue(key in rspJson, f"missing `{key}`")
-        self.assertEqual(len(rspJson), len(GET_DATASET_KEYS))
+        self.assertJSONHasOnlyKeys(rspJson, GET_DATASET_KEYS)
         self.assertEqual(rspJson["id"], dset_id)
         self.assertEqual(rspJson["attributeCount"], 0)
         self.assertDictEqual(
                 rspJson["shape"], 
                {"class": "H5S_SIMPLE", "dims": [0]})
-        self.assertTrue(rspJson["type"], "H5T_IEEE_F32LE")
+        self.assertDictEqual(
+                rspJson["type"], 
+               {"class": "H5T_FLOAT", "base": "H5T_IEEE_F32LE"})
+        self.assertHrefsHasOnlyRels(rspJson["hrefs"], GET_DATASET_HREFS_RELS)
 
     def testShapeNegativeDim_Fails400(self):
-        headers = helper.getRequestHeaders(domain=self.base_domain)
         data = { "type": "H5T_IEEE_F32LE", "shape": [-4] }
 
         res = requests.post(
                 f"{self.endpoint}/datasets",
-                headers=headers,
+                headers=self.headers,
                 data=json.dumps(data))
         self.assertEqual(res.status_code, 400, "post dataset should fail")
         with self.assertRaises(json.decoder.JSONDecodeError):
             res_json = res.json()
 
-    def testCompound(self):
-        # test Dataset with compound type
-        headers = helper.getRequestHeaders(domain=self.base_domain)
-
-        # get domain
-        req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("root" in rspJson)
-        root_uuid = rspJson["root"]
-
-        fields = ({'name': 'temp', 'type': 'H5T_STD_I32LE'}, 
-                    {'name': 'pressure', 'type': 'H5T_IEEE_F32LE'}) 
-        datatype = {'class': 'H5T_COMPOUND', 'fields': fields }
-        payload = {'type': datatype, 'shape': 10}
-        req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)  # create dataset
-        rspJson = json.loads(rsp.text)
+    def testCompoundType(self):
+        expected_shape = {"class": "H5S_SIMPLE", "dims": [10]}
+        expected_type = {
+            "class": "H5T_COMPOUND",
+            "fields": [
+                {"name": "temp", "type": "H5T_STD_I32LE"},
+                {"name": "pressure", "type": "H5T_IEEE_F32LE"}
+            ]
+        }
+        payload = {
+            "type": {
+                "class": "H5T_COMPOUND",
+                "fields": (
+                    {"name": "temp", "type": "H5T_STD_I32LE"}, 
+                    {"name": "pressure", "type": "H5T_IEEE_F32LE"},
+                ),
+            },
+            "shape": [10],
+        }
+        rsp = requests.post(
+                f"{self.endpoint}/datasets",
+                data=json.dumps(payload),
+                headers=self.headers)
+        self.assertEqual(rsp.status_code, 201, "unable to create dataset")
+        rspJson = rsp.json()
+        self.assertJSONHasOnlyKeys(rspJson, POST_DATASET_KEYS)
         dset_uuid = rspJson['id']
-        self.assertTrue(helper.validateId(dset_uuid))
-         
-        # link the new dataset 
-        name = "dset"
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
-        payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)
+        self.assertLooksLikeUUID(dset_uuid)
+        self.assertDictEqual(rspJson["shape"], expected_shape)
+        self.assertDictEqual(rspJson["type"], expected_type)
 
-    def testCompoundDuplicateMember(self):
-        # test Dataset with compound type but field that is repeated
-        headers = helper.getRequestHeaders(domain=self.base_domain)
+        rsp = requests.get(
+                f"{self.endpoint}/datasets/{dset_uuid}",
+                headers=self.headers)
+        self.assertEqual(rsp.status_code, 200, "unable to get dataset")
+        rspJson = rsp.json()
+        self.assertJSONHasOnlyKeys(rspJson, GET_DATASET_KEYS)
+        self.assertDictEqual(rspJson["shape"], expected_shape)
+        self.assertDictEqual(rspJson["type"], expected_type)
+        self.assertDictEqual(
+                rspJson["layout"], 
+                {"class": "H5D_CHUNKED", "dims": [10]})
+        self.assertHrefsHasOnlyRels(rspJson["hrefs"], GET_DATASET_HREFS_RELS)
 
-        # get domain
-        req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("root" in rspJson)
-        root_uuid = rspJson["root"]
-        self.assertTrue(helper.validateId(root_uuid))
+    def testCompoundDuplicateMember_Fails400(self):
+        field = {"name": "x", "type": "H5T_STD_I32LE"}
+        payload = {
+            "type": {
+                "class": "H5T_COMPOUND",
+                "fields": (field, field),
+            },
+            "shape": [10]
+        }
+        rsp = requests.post(
+               f"{self.endpoint}/datasets",
+               data=json.dumps(payload),
+               headers=self.headers)
+        self.assertEqual(rsp.status_code, 400, "should be a bad request")
 
-        fields = ({'name': 'x', 'type': 'H5T_STD_I32LE'}, 
-                    {'name': 'x', 'type': 'H5T_IEEE_F32LE'}) 
-        datatype = {'class': 'H5T_COMPOUND', 'fields': fields }
-        payload = {'type': datatype, 'shape': 10}
-        req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 400)  # Bad Request
-
-    def testNullShape(self):
+    def testTypeFloatShapeH5S_NULL(self):
         data = {
             "type": "H5T_IEEE_F32LE", # arbirary type
             "shape": "H5S_NULL"
         }
-        dset_id = helper.postDataset(self.base_domain, data, linkpath="/dset1")
+        odd_href_rels = [ # has different hrefs from usual dataset-get
+            "attributes",
+            "home",
+            "root",
+            "self",
+        ]
+        dset_id = helper.postDataset(self.domain, data, linkpath="/dset1")
 
-        headers = helper.getRequestHeaders(domain=self.base_domain)
         rsp = requests.get(
                 f"{self.endpoint}/datasets/{dset_id}",
-                headers=headers)
+                headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "unable to get dataset")
         rspJson = rsp.json()
         self.assertDictEqual(
@@ -601,176 +650,165 @@ class DatasetTest(unittest.TestCase):
                 rspJson["type"],
                 {"class": "H5T_FLOAT", "base": "H5T_IEEE_F32LE"},
                 "sanity check on datatype")
+        self.assertHrefsHasOnlyRels(rspJson["hrefs"], odd_href_rels)
 
-    def testResizableDataset(self):
-        # test Dataset with null dataspace type
-        headers = helper.getRequestHeaders(domain=self.base_domain)
-
-        # get domain
-        req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("root" in rspJson)
-        root_uuid = rspJson["root"]
-
-        # create the dataset 
-        req = self.endpoint + "/datasets"
-        payload = {'type': 'H5T_IEEE_F32LE', 'shape': 10, 'maxdims': 20}
-        payload['creationProperties'] = {'fillValue': 3.12 }
-        req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)  # create dataset
-        rspJson = json.loads(rsp.text)
+    def testResizableDatasetRank1(self):
+        newdims = [15]
+        expected_shape_10 = {
+            "class": "H5S_SIMPLE",
+            "dims": [10],
+            "maxdims": [20],
+        }
+        expected_shape_15 = {
+            "class": "H5S_SIMPLE",
+            "dims": newdims,
+            "maxdims": [20],
+        }
+        expected_type = {
+            "class": "H5T_FLOAT",
+            "base": "H5T_IEEE_F32LE",
+        }
+        payload = {
+            "type": "H5T_IEEE_F32LE",
+            "shape": [10],
+            "maxdims": [20],
+        }
+        rsp = requests.post(
+                f"{self.endpoint}/datasets",
+                data=json.dumps(payload),
+                headers=self.headers)
+        self.assertEqual(rsp.status_code, 201, "unable to create dataset")
+        rspJson = rsp.json()
+        self.assertJSONHasOnlyKeys(rspJson, POST_DATASET_KEYS)
         dset_uuid = rspJson['id']
-        self.assertTrue(helper.validateId(dset_uuid))
-         
-        # link new dataset as 'resizable'
-        name = 'resizable'
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
-        payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)
-        
-        # verify type and shape
-        req = helper.getEndpoint() + "/datasets/" + dset_uuid
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        type_json = rspJson['type']
-        self.assertEqual(type_json['class'], 'H5T_FLOAT')
-        self.assertEqual(type_json['base'], 'H5T_IEEE_F32LE')
-        shape = rspJson['shape']
-        self.assertEqual(shape['class'], 'H5S_SIMPLE')
-        
-        self.assertEqual(len(shape['dims']), 1)
-        self.assertEqual(shape['dims'][0], 10)  
-        self.assertTrue('maxdims' in shape)
-        self.assertEqual(shape['maxdims'][0], 20)
+        self.assertLooksLikeUUID(dset_uuid)
+        self.assertDictEqual(rspJson["shape"], expected_shape_10)
+        self.assertDictEqual(rspJson["type"], expected_type)
 
-        creationProps = rspJson["creationProperties"]
-        self.assertEqual(creationProps["fillValue"], 3.12)
+        # verify type and shape with get dataset
+        rsp = requests.get(
+                f"{self.endpoint}/datasets/{dset_uuid}",
+                headers=self.headers)
+        self.assertEqual(rsp.status_code, 200, "unable to get dataset")
+        rspJson = rsp.json()
+        self.assertJSONHasOnlyKeys(rspJson, GET_DATASET_KEYS)
+        self.assertDictEqual(rspJson["shape"], expected_shape_10)
+        self.assertDictEqual(rspJson["type"], expected_type)
+        self.assertDictEqual(rspJson["creationProperties"], {})
 
-        # verify shape using the GET shape request
-        req = req + "/shape"
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("type" not in rspJson)
-        self.assertTrue("shape" in rspJson)
-        shape = rspJson['shape']
-        self.assertEqual(shape['class'], 'H5S_SIMPLE') 
-        self.assertEqual(len(shape['dims']), 1)
-        self.assertEqual(shape['dims'][0], 10)  
-        self.assertTrue('maxdims' in shape)
-        self.assertEqual(shape['maxdims'][0], 20)
+        # re-verify shape with get shape
+        self.verifyShape(dset_uuid, expected_shape_10)
 
-        # resize the dataset to 15 elements
-        payload = {"shape": 15}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)
-        rspJson = json.loads(rsp.text)
+        # resize dataset
+        rsp = helper.resizeDataset(
+                self.domain,
+                dset_uuid,
+                newdims,
+                response=True)
+        self.assertEqual(rsp.status_code, 201, "unable to update shape")
+        rspJson = rsp.json()
+        self.assertDictEqual(rspJson, {"hrefs": []})
 
-        # verify updated-shape using the GET shape request
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("shape" in rspJson)
-        shape = rspJson['shape']
-        self.assertEqual(shape['class'], 'H5S_SIMPLE') 
-        self.assertEqual(len(shape['dims']), 1)
-        self.assertEqual(shape['dims'][0], 15)  # increased to 15  
-        self.assertTrue('maxdims' in shape)
-        self.assertEqual(shape['maxdims'][0], 20)
+        self.verifyShape(dset_uuid, expected_shape_15)
 
-    def testResizableUnlimitedDataset(self):
-        # test Dataset with unlimited dimension
-        headers = helper.getRequestHeaders(domain=self.base_domain)
-
-        # get domain
-        req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("root" in rspJson)
-        root_uuid = rspJson["root"]
-
-        # create the dataset 
-        req = self.endpoint + "/datasets"
-        payload = {'type': 'H5T_IEEE_F32LE', 'shape': [10, 20], 'maxdims': [30, 0]}
-        payload['creationProperties'] = {'fillValue': 3.12 }
-        req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)  # create dataset
-        rspJson = json.loads(rsp.text)
+    def testResizeToMaxdimRank1(self):
+        maxdims = [20]
+        expected_shape_10 = {
+            "class": "H5S_SIMPLE",
+            "dims": [10],
+            "maxdims": maxdims,
+        }
+        expected_shape_20 = {
+            "class": "H5S_SIMPLE",
+            "dims": [20],
+            "maxdims": maxdims,
+        }
+        expected_type = {
+            "class": "H5T_FLOAT",
+            "base": "H5T_IEEE_F32LE",
+        }
+        payload = {
+            "type": "H5T_IEEE_F32LE",
+            "shape": [10],
+            "maxdims": maxdims,
+        }
+        rsp = helper.postDataset(self.domain, payload, response=True)
+        self.assertEqual(rsp.status_code, 201, "unable to create dataset")
+        rspJson = rsp.json()
+        self.assertJSONHasOnlyKeys(rspJson, POST_DATASET_KEYS)
         dset_uuid = rspJson['id']
-        self.assertTrue(helper.validateId(dset_uuid))
-         
-        # link new dataset as 'resizable'
-        name = 'resizable'
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
-        payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)
-        
-        # verify type and shape
-        req = helper.getEndpoint() + "/datasets/" + dset_uuid
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        type_json = rspJson['type']
-        self.assertEqual(type_json['class'], 'H5T_FLOAT')
-        self.assertEqual(type_json['base'], 'H5T_IEEE_F32LE')
-        shape = rspJson['shape']
-        self.assertEqual(shape['class'], 'H5S_SIMPLE')
-        
-        self.assertEqual(len(shape['dims']), 2)
-        self.assertEqual(shape['dims'][0], 10) 
-        self.assertEqual(shape['dims'][1], 20)  
-        self.assertTrue('maxdims' in shape)
-        self.assertEqual(shape['maxdims'][0], 30)
-        self.assertEqual(shape['maxdims'][1], 0)
+        self.assertDictEqual(rspJson["shape"], expected_shape_10)
+        self.assertDictEqual(rspJson["type"], expected_type)
 
-        # verify shape using the GET shape request
-        req = req + "/shape"
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("type" not in rspJson)
-        self.assertTrue("shape" in rspJson)
-        shape = rspJson['shape']
-        self.assertEqual(shape['class'], 'H5S_SIMPLE') 
-        self.assertEqual(len(shape['dims']), 2)
-        self.assertEqual(shape['dims'][0], 10)  
-        self.assertEqual(shape['dims'][1], 20)  
-        self.assertTrue('maxdims' in shape)
-        self.assertEqual(len(shape['maxdims']), 2)
-        self.assertEqual(shape['maxdims'][0], 30)
-        self.assertEqual(shape['maxdims'][1], 0)
+        rsp = helper.resizeDataset(
+                self.domain,
+                dset_uuid,
+                maxdims,
+                response=True)
+        self.assertEqual(rsp.status_code, 201, "unable to update shape")
+        rspJson = rsp.json()
+        self.assertDictEqual(rspJson, {"hrefs": []})
 
-        # resize the second dimension  to 500 elements
-        payload = {"shape": [10, 500]}
+        self.verifyShape(dset_uuid, expected_shape_20)
 
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)
-        rspJson = json.loads(rsp.text)
+    def testResizePastMaxdimsRank1(self):
+        maxdims = [20]
+        expected_shape_10 = {
+            "class": "H5S_SIMPLE",
+            "dims": [10],
+            "maxdims": maxdims,
+        }
+        payload = {
+            "type": "H5T_IEEE_F32LE",
+            "shape": [10],
+            "maxdims": maxdims,
+        }
+        dset_uuid = helper.postDataset(self.domain, payload)
 
-        # verify updated-shape using the GET shape request
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("shape" in rspJson)
-        shape = rspJson['shape']
-        self.assertEqual(shape['class'], 'H5S_SIMPLE') 
-        self.assertEqual(len(shape['dims']), 2)
-        self.assertEqual(shape['dims'][0], 10)  
-        self.assertEqual(shape['dims'][1], 500)  
-        self.assertTrue('maxdims' in shape)
-        self.assertEqual(len(shape['maxdims']), 2)
-        self.assertEqual(shape['maxdims'][0], 30)
-        self.assertEqual(shape['maxdims'][1], 0)
+        res = helper.resizeDataset(self.domain, dset_uuid, [25], response=True)
+        self.assertEqual(res.status_code, 400, "too large should fail")
+
+        # shape should be unchanged
+        self.verifyShape(dset_uuid, expected_shape_10)
+
+    def testResizableUnlimitedRank2(self):
+        start_shape = [10, 20]
+        resized_shape = [10, 500]
+        maxdims = [20, 0]
+        payload = {
+            "type": "H5T_IEEE_F32LE", # arbitrary type
+            "shape": start_shape,
+            "maxdims": maxdims,
+        }
+        dset_uuid = helper.postDataset(self.domain, payload)
+
+        expected = {
+            "class": "H5S_SIMPLE",
+            "dims": start_shape,
+            "maxdims": maxdims,
+        }
+        self.verifyShape(dset_uuid, expected)
+
+        helper.resizeDataset(self.domain, dset_uuid, resized_shape)
+
+        expected = {
+            "class": "H5S_SIMPLE",
+            "dims": resized_shape,
+            "maxdims": maxdims,
+        }
+        self.verifyShape(dset_uuid, expected)
+
+# TODO? separate test class devoted to stress-checking resize behavior:
+# TODO: resize too many / too few dimensions
+# TODO: resize smaller
+# TODO: resize smaller and larger (and/xor too large)
+# TODO: resize same size
+
+# TODO: refactoring reached here
 
     def testCreationPropertiesLayoutDataset(self):
         # test Dataset with creation property list
-        headers = helper.getRequestHeaders(domain=self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.domain)
         # get domain
         req = helper.getEndpoint() + '/'
         rsp = requests.get(req, headers=headers)
@@ -830,7 +868,7 @@ class DatasetTest(unittest.TestCase):
     
     def testInvalidFillValue(self):
         # test Dataset with simple type and fill value that is incompatible with the type
-        headers = helper.getRequestHeaders(domain=self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.domain)
 
         # get domain
         req = helper.getEndpoint() + '/'
@@ -849,7 +887,7 @@ class DatasetTest(unittest.TestCase):
 
     def testAutoChunk1dDataset(self):
         # test Dataset where chunk layout is set automatically
-        headers = helper.getRequestHeaders(domain=self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.domain)
         # get domain
         req = helper.getEndpoint() + '/'
         rsp = requests.get(req, headers=headers)
@@ -905,7 +943,7 @@ class DatasetTest(unittest.TestCase):
      
     def testAutoChunk2dDataset(self):
         # test Dataset where chunk layout is set automatically
-        headers = helper.getRequestHeaders(domain=self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.domain)
         # get domain
         req = helper.getEndpoint() + '/'
         rsp = requests.get(req, headers=headers)
@@ -957,7 +995,7 @@ class DatasetTest(unittest.TestCase):
     def testMinChunkSizeDataset(self):
         # test Dataset where chunk layout is adjusted if provided
         # layout is too small
-        headers = helper.getRequestHeaders(domain=self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.domain)
         # get domain
         req = helper.getEndpoint() + '/'
         rsp = requests.get(req, headers=headers)
@@ -1008,7 +1046,7 @@ class DatasetTest(unittest.TestCase):
 
 
     def testPostCommittedType(self):
-        headers = helper.getRequestHeaders(domain=self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.domain)
 
         # get domain
         req = helper.getEndpoint() + '/'
