@@ -806,6 +806,70 @@ class DatasetTest(unittest.TestCase):
 
 # TODO: refactoring reached here
 
+    def testPostCommittedType(self):
+        headers = helper.getRequestHeaders(domain=self.domain)
+
+        # get domain
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # create the datatype
+        payload = {'type': 'H5T_IEEE_F32LE'}
+        req = self.endpoint + "/datatypes"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create datatype
+        rspJson = json.loads(rsp.text)
+        dtype_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dtype_uuid))
+
+        # link new datatype as 'dtype1'
+        name = 'dtype1'
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {'id': dtype_uuid}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # create the dataset
+        payload = {'type': dtype_uuid, 'shape': [10, 10]}
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dset_uuid))
+
+        # link new dataset as 'dset1'
+        name = 'dset1'
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {"id": dset_uuid}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # Fetch the dataset type and verify dtype_uuid
+        req = helper.getEndpoint() + "/datasets/" + dset_uuid + "/type"
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("type" in rspJson)
+        rsp_type = rspJson["type"]
+        self.assertTrue("base" in rsp_type)
+        self.assertEqual(rsp_type["base"], 'H5T_IEEE_F32LE')
+        self.assertTrue("class" in rsp_type)
+        self.assertEqual(rsp_type["class"], 'H5T_FLOAT')
+        self.assertTrue("id" in rsp_type)
+        self.assertEqual(rsp_type["id"], dtype_uuid)
+
+class CreationPropertiesTest(unittest.TestCase):
+    def __init__(self, *args, **kwargs):
+        super(CreationPropertiesTest, self).__init__(*args, **kwargs)
+        self.domain = helper.getTestDomainName(self.__class__.__name__)
+        helper.setupDomain(self.domain)
+        self.endpoint = helper.getEndpoint()
+        self.headers = helper.getRequestHeaders(domain=self.domain)
+
     def testCreationPropertiesLayoutDataset(self):
         # test Dataset with creation property list
         headers = helper.getRequestHeaders(domain=self.domain)
@@ -1043,63 +1107,6 @@ class DatasetTest(unittest.TestCase):
         # chunk size should be between chunk min and max
         self.assertTrue(chunk_size >= CHUNK_MIN)
         self.assertTrue(chunk_size <= CHUNK_MAX)
-
-
-    def testPostCommittedType(self):
-        headers = helper.getRequestHeaders(domain=self.domain)
-
-        # get domain
-        req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("root" in rspJson)
-        root_uuid = rspJson["root"]
-        
-        # create the datatype
-        payload = {'type': 'H5T_IEEE_F32LE'}
-        req = self.endpoint + "/datatypes"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)  # create datatype
-        rspJson = json.loads(rsp.text)
-        dtype_uuid = rspJson['id']
-        self.assertTrue(helper.validateId(dtype_uuid))
-         
-        # link new datatype as 'dtype1'
-        name = 'dtype1'
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
-        payload = {'id': dtype_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)
-        
-        # create the dataset
-        payload = {'type': dtype_uuid, 'shape': [10, 10]}
-        req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)  # create dataset
-        rspJson = json.loads(rsp.text)
-        dset_uuid = rspJson['id']
-        self.assertTrue(helper.validateId(dset_uuid))
-         
-        # link new dataset as 'dset1'
-        name = 'dset1'
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
-        payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)
-
-        # Fetch the dataset type and verify dtype_uuid
-        req = helper.getEndpoint() + "/datasets/" + dset_uuid + "/type"
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("type" in rspJson)
-        rsp_type = rspJson["type"]
-        self.assertTrue("base" in rsp_type)
-        self.assertEqual(rsp_type["base"], 'H5T_IEEE_F32LE')
-        self.assertTrue("class" in rsp_type)
-        self.assertEqual(rsp_type["class"], 'H5T_FLOAT')
-        self.assertTrue("id" in rsp_type)
-        self.assertEqual(rsp_type["id"], dtype_uuid)
 
 @unittest.skipUnless(config.get("test_on_uploaded_file"), "requires file")
 class FileWithDatasetsTest(unittest.TestCase):
