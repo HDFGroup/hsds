@@ -532,174 +532,6 @@ class DatasetTest(unittest.TestCase):
         with self.assertRaises(json.decoder.JSONDecodeError):
             res_json = res.json()
 
-    @unittest.skipUnless(config.get("test_on_uploaded_file"), "requires file")
-    def testGet(self):
-        domain = helper.getTestDomain("tall.h5")
-        headers = helper.getRequestHeaders(domain=domain)
-        
-        # verify domain exists
-        req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
-        if rsp.status_code != 200:
-            print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
-            return  # abort rest of test
-        domainJson = json.loads(rsp.text)
-        root_uuid = domainJson["root"]
-         
-        # get the dataset uuid 
-        dset_uuid = helper.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1")
-        self.assertTrue(dset_uuid.startswith("d-"))
-
-        # get the dataset json
-        req = helper.getEndpoint() + '/datasets/' + dset_uuid
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        for name in ("id", "shape", "hrefs", "layout", "creationProperties", 
-            "attributeCount", "created", "lastModified", "root", "domain"):
-            self.assertTrue(name in rspJson)
-         
-        self.assertEqual(rspJson["id"], dset_uuid) 
-        self.assertEqual(rspJson["root"], root_uuid) 
-        self.assertEqual(rspJson["domain"], domain) 
-        hrefs = rspJson["hrefs"]
-        self.assertEqual(len(hrefs), 5)
-        self.assertEqual(rspJson["id"], dset_uuid)
-
-        shape = rspJson["shape"]
-        for name in ("class", "dims", "maxdims"):
-            self.assertTrue(name in shape)
-        self.assertEqual(shape["class"], 'H5S_SIMPLE')
-        self.assertEqual(shape["dims"], [10,10])
-        self.assertEqual(shape["maxdims"], [10,10])
-
-        layout = rspJson["layout"]
-        self.assertEqual(layout["class"], 'H5D_CHUNKED')
-        self.assertEqual(layout["dims"], [10,10])
-         
-        type = rspJson["type"]
-        for name in ("base", "class"):
-            self.assertTrue(name in type)
-        self.assertEqual(type["class"], 'H5T_INTEGER')
-        self.assertEqual(type["base"], 'H5T_STD_I32BE')
-
-        cpl = rspJson["creationProperties"]
-        for name in ("layout", "fillTime"):
-            self.assertTrue(name in cpl)
-
-        self.assertEqual(rspJson["attributeCount"], 2)
-
-        # these properties should only be available when verbose is used
-        self.assertFalse("num_chunks" in rspJson)
-        self.assertFalse("allocated_size" in rspJson)
-
-        now = time.time()
-        # the object shouldn't have been just created or updated
-        self.assertTrue(rspJson["created"] < now - 60 * 5)
-        self.assertTrue(rspJson["lastModified"] < now - 60 * 5)
-
-        # request the dataset path
-        req = helper.getEndpoint() + '/datasets/' + dset_uuid
-        params = {"getalias": 1}
-        rsp = requests.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("alias" in rspJson)
-        self.assertEqual(rspJson["alias"], ['/g1/g1.1/dset1.1.1'])
-
-    @unittest.skipUnless(config.get("test_on_uploaded_file"), "requires file")
-    def testGetByPath(self):
-        domain = helper.getTestDomain("tall.h5")
-        headers = helper.getRequestHeaders(domain=domain)
-        
-        # verify domain exists
-        req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
-        if rsp.status_code != 200:
-            print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
-            return  # abort rest of test
-        domainJson = json.loads(rsp.text)
-        root_uuid = domainJson["root"]
-         
-        # get the dataset at "/g1/g1.1/dset1.1.1"
-        h5path = "/g1/g1.1/dset1.1.1"
-        req = helper.getEndpoint() + "/datasets/"
-        params = {"h5path": h5path}
-        rsp = requests.get(req, headers=headers, params=params)
-        self.assertEqual(rsp.status_code, 200)
-
-        rspJson = json.loads(rsp.text)
-        for name in ("id", "shape", "hrefs", "layout", "creationProperties", 
-            "attributeCount", "created", "lastModified", "root", "domain"):
-            self.assertTrue(name in rspJson)
-
-        # get the dataset via a relative apth "g1/g1.1/dset1.1.1"
-        h5path = "g1/g1.1/dset1.1.1"
-        req = helper.getEndpoint() + "/datasets/"
-        params = {"h5path": h5path, "grpid": root_uuid}
-        rsp = requests.get(req, headers=headers, params=params)
-        self.assertEqual(rsp.status_code, 200)
-
-        rspJson = json.loads(rsp.text)
-        for name in ("id", "shape", "hrefs", "layout", "creationProperties", 
-            "attributeCount", "created", "lastModified", "root", "domain"):
-            self.assertTrue(name in rspJson)
-
-
-        # get the dataset uuid and verify it matches what we got by h5path
-        dset_uuid = helper.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1")
-        self.assertTrue(dset_uuid.startswith("d-"))
-        self.assertEqual(dset_uuid, rspJson["id"])
-
-        # try a invalid link and verify a 404 is returened
-        h5path = "/g1/foobar"
-        req = helper.getEndpoint() + "/datasets/"
-        params = {"h5path": h5path}
-        rsp = requests.get(req, headers=headers, params=params)
-        self.assertEqual(rsp.status_code, 404)
-
-        # try passing a path to a group and verify we get 404
-        h5path = "/g1/g1.1"
-        req = helper.getEndpoint() + "/datasets/"
-        params = {"h5path": h5path}
-        rsp = requests.get(req, headers=headers, params=params)
-        self.assertEqual(rsp.status_code, 404)
-
-    @unittest.skipUnless(config.get("test_on_uploaded_file"), "requires file")
-    def testGetVerbose(self):
-        domain = helper.getTestDomain("tall.h5")
-        headers = helper.getRequestHeaders(domain=domain)
-        
-        # verify domain exists
-        req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
-        if rsp.status_code != 200:
-            print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
-            return  # abort rest of test
-        domainJson = json.loads(rsp.text)
-        root_uuid = domainJson["root"]
-        self.assertTrue(helper.validateId(root_uuid))
-         
-        # get the dataset uuid 
-        dset_uuid = helper.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1")
-        self.assertTrue(dset_uuid.startswith("d-"))
-
-        # get the dataset json
-        req = helper.getEndpoint() + '/datasets/' + dset_uuid
-        params = {"verbose": 1}
-        rsp = requests.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        for name in ("id", "shape", "hrefs", "layout", "creationProperties", 
-            "attributeCount", "created", "lastModified", "root", "domain"):
-            self.assertTrue(name in rspJson)
-         
-        # these properties should only be available when verbose is used
-        self.assertTrue("num_chunks" in rspJson)
-        self.assertTrue("allocated_size" in rspJson)
-        self.assertEqual(rspJson["num_chunks"], 1)
-        self.assertEqual(rspJson["allocated_size"], 400) # this will likely change once compression is working
-
     def testCompound(self):
         # test Dataset with compound type
         headers = helper.getRequestHeaders(domain=self.base_domain)
@@ -1230,6 +1062,179 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(rsp_type["class"], 'H5T_FLOAT')
         self.assertTrue("id" in rsp_type)
         self.assertEqual(rsp_type["id"], dtype_uuid)
+
+@unittest.skipUnless(config.get("test_on_uploaded_file"), "requires file")
+class FileWithDatasetsTest(unittest.TestCase):
+    def __init__(self, *args, **kwargs):
+        super(FileWithDatasetsTest, self).__init__(*args, **kwargs)
+        self.base_domain = helper.getTestDomainName(self.__class__.__name__)
+        helper.setupDomain(self.base_domain)
+        self.endpoint = helper.getEndpoint()
+
+    def testGet(self):
+        domain = helper.getTestDomain("tall.h5")
+        headers = helper.getRequestHeaders(domain=domain)
+        
+        # verify domain exists
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        if rsp.status_code != 200:
+            print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
+            return  # abort rest of test
+        domainJson = json.loads(rsp.text)
+        root_uuid = domainJson["root"]
+         
+        # get the dataset uuid 
+        dset_uuid = helper.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1")
+        self.assertTrue(dset_uuid.startswith("d-"))
+
+        # get the dataset json
+        req = helper.getEndpoint() + '/datasets/' + dset_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        for name in ("id", "shape", "hrefs", "layout", "creationProperties", 
+            "attributeCount", "created", "lastModified", "root", "domain"):
+            self.assertTrue(name in rspJson)
+         
+        self.assertEqual(rspJson["id"], dset_uuid) 
+        self.assertEqual(rspJson["root"], root_uuid) 
+        self.assertEqual(rspJson["domain"], domain) 
+        hrefs = rspJson["hrefs"]
+        self.assertEqual(len(hrefs), 5)
+        self.assertEqual(rspJson["id"], dset_uuid)
+
+        shape = rspJson["shape"]
+        for name in ("class", "dims", "maxdims"):
+            self.assertTrue(name in shape)
+        self.assertEqual(shape["class"], 'H5S_SIMPLE')
+        self.assertEqual(shape["dims"], [10,10])
+        self.assertEqual(shape["maxdims"], [10,10])
+
+        layout = rspJson["layout"]
+        self.assertEqual(layout["class"], 'H5D_CHUNKED')
+        self.assertEqual(layout["dims"], [10,10])
+         
+        type = rspJson["type"]
+        for name in ("base", "class"):
+            self.assertTrue(name in type)
+        self.assertEqual(type["class"], 'H5T_INTEGER')
+        self.assertEqual(type["base"], 'H5T_STD_I32BE')
+
+        cpl = rspJson["creationProperties"]
+        for name in ("layout", "fillTime"):
+            self.assertTrue(name in cpl)
+
+        self.assertEqual(rspJson["attributeCount"], 2)
+
+        # these properties should only be available when verbose is used
+        self.assertFalse("num_chunks" in rspJson)
+        self.assertFalse("allocated_size" in rspJson)
+
+        now = time.time()
+        # the object shouldn't have been just created or updated
+        self.assertTrue(rspJson["created"] < now - 60 * 5)
+        self.assertTrue(rspJson["lastModified"] < now - 60 * 5)
+
+        # request the dataset path
+        req = helper.getEndpoint() + '/datasets/' + dset_uuid
+        params = {"getalias": 1}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("alias" in rspJson)
+        self.assertEqual(rspJson["alias"], ['/g1/g1.1/dset1.1.1'])
+
+    def testGetByPath(self):
+        domain = helper.getTestDomain("tall.h5")
+        headers = helper.getRequestHeaders(domain=domain)
+        
+        # verify domain exists
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        if rsp.status_code != 200:
+            print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
+            return  # abort rest of test
+        domainJson = json.loads(rsp.text)
+        root_uuid = domainJson["root"]
+         
+        # get the dataset at "/g1/g1.1/dset1.1.1"
+        h5path = "/g1/g1.1/dset1.1.1"
+        req = helper.getEndpoint() + "/datasets/"
+        params = {"h5path": h5path}
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+
+        rspJson = json.loads(rsp.text)
+        for name in ("id", "shape", "hrefs", "layout", "creationProperties", 
+            "attributeCount", "created", "lastModified", "root", "domain"):
+            self.assertTrue(name in rspJson)
+
+        # get the dataset via a relative apth "g1/g1.1/dset1.1.1"
+        h5path = "g1/g1.1/dset1.1.1"
+        req = helper.getEndpoint() + "/datasets/"
+        params = {"h5path": h5path, "grpid": root_uuid}
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+
+        rspJson = json.loads(rsp.text)
+        for name in ("id", "shape", "hrefs", "layout", "creationProperties", 
+            "attributeCount", "created", "lastModified", "root", "domain"):
+            self.assertTrue(name in rspJson)
+
+
+        # get the dataset uuid and verify it matches what we got by h5path
+        dset_uuid = helper.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1")
+        self.assertTrue(dset_uuid.startswith("d-"))
+        self.assertEqual(dset_uuid, rspJson["id"])
+
+        # try a invalid link and verify a 404 is returened
+        h5path = "/g1/foobar"
+        req = helper.getEndpoint() + "/datasets/"
+        params = {"h5path": h5path}
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 404)
+
+        # try passing a path to a group and verify we get 404
+        h5path = "/g1/g1.1"
+        req = helper.getEndpoint() + "/datasets/"
+        params = {"h5path": h5path}
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 404)
+
+    def testGetVerbose(self):
+        domain = helper.getTestDomain("tall.h5")
+        headers = helper.getRequestHeaders(domain=domain)
+        
+        # verify domain exists
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        if rsp.status_code != 200:
+            print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
+            return  # abort rest of test
+        domainJson = json.loads(rsp.text)
+        root_uuid = domainJson["root"]
+        self.assertTrue(helper.validateId(root_uuid))
+         
+        # get the dataset uuid 
+        dset_uuid = helper.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1")
+        self.assertTrue(dset_uuid.startswith("d-"))
+
+        # get the dataset json
+        req = helper.getEndpoint() + '/datasets/' + dset_uuid
+        params = {"verbose": 1}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        for name in ("id", "shape", "hrefs", "layout", "creationProperties", 
+            "attributeCount", "created", "lastModified", "root", "domain"):
+            self.assertTrue(name in rspJson)
+         
+        # these properties should only be available when verbose is used
+        self.assertTrue("num_chunks" in rspJson)
+        self.assertTrue("allocated_size" in rspJson)
+        self.assertEqual(rspJson["num_chunks"], 1)
+        self.assertEqual(rspJson["allocated_size"], 400) # this will likely change once compression is working
 
 if __name__ == '__main__':
     unittest.main()
