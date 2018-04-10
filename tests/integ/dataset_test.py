@@ -303,6 +303,10 @@ class CommonDatasetOperationsTest(unittest.TestCase):
         self.assertEqual(res.status_code, 200, "unable to delete dset")
 
         # verify domain structure
+        res = requests.get(f"{self.endpoint}/datasets/{did0}", headers=headers)
+        self.assertEqual(res.status_code, 410, "d0 should be gone")
+        res = requests.get(f"{self.endpoint}/datasets/{did1}", headers=headers)
+        self.assertEqual(res.status_code, 200, "d1 should be ok")
         res = requests.get(
                 f"{self.endpoint}/groups/{root}/links",
                 headers=headers)
