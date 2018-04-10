@@ -801,7 +801,6 @@ class DatasetTest(unittest.TestCase):
 # TODO? separate test class devoted to stress-checking resize behavior:
 # TODO: resize too many / too few dimensions
 # TODO: resize smaller
-# TODO: resize smaller and larger (and/xor too large)
 # TODO: resize same size
 
     def testCommittedType(self):
@@ -841,241 +840,146 @@ class CreationPropertiesTest(unittest.TestCase):
         self.endpoint = helper.getEndpoint()
         self.headers = helper.getRequestHeaders(domain=self.domain)
 
-    def testCreationPropertiesLayoutDataset(self):
-        # test Dataset with creation property list
-        headers = helper.getRequestHeaders(domain=self.domain)
-        # get domain
-        req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("root" in rspJson)
-        root_uuid = rspJson["root"]
-
-        # create the dataset 
-        req = self.endpoint + "/datasets"
+    def testChunkedAndCompression(self):
         # Create ~1GB dataset
-        
-        payload = {'type': 'H5T_IEEE_F32LE', 'shape': [365, 780, 1024], 'maxdims': [0, 780, 1024]}
+        payload = {
+            "type": "H5T_IEEE_F32LE",
+            "shape": [365, 780, 1024],
+            "maxdims": [0, 780, 1024]
+        }
         # define a chunk layout with 4 chunks per 'slice'
         # chunk size is 798720 bytes
-        gzip_filter = {'class': 'H5Z_FILTER_DEFLATE', 'id': 1, 'level': 9, 'name': 'deflate'}
-        payload['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [1, 390, 512] }, 'filters': [gzip_filter,] }
-        req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)  # create dataset
-        rspJson = json.loads(rsp.text)
-        dset_uuid = rspJson['id']
-        self.assertTrue(helper.validateId(dset_uuid))
-         
-        # link new dataset as 'chunktest'
-        name = 'chunktest'
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
-        payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)
+        # (TODO: document how these comment details are related to the source)
+        gzip_filter = {
+            "class": "H5Z_FILTER_DEFLATE",
+            "id": 1,
+            "level": 9,
+            "name": "deflate",
+        }
+        payload["creationProperties"] = {
+            "layout": {
+                "class": "H5D_CHUNKED",
+                 "dims": [1, 390, 512] 
+            },
+            "filters": [gzip_filter] 
+        }
+        dset_uuid = helper.postDataset(self.domain, payload)
+
         # verify layout
-        req = helper.getEndpoint() + "/datasets/" + dset_uuid
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("layout" in rspJson)
-        layout_json = rspJson["layout"]
-        self.assertTrue("class" in layout_json)
-        self.assertEqual(layout_json["class"], 'H5D_CHUNKED')
-        self.assertTrue("dims" in layout_json)
-        self.assertEqual(layout_json["dims"], [1, 390, 1024])
+        rsp = requests.get(
+                f"{self.endpoint}/datasets/{dset_uuid}",
+                headers=self.headers)
+        self.assertEqual(rsp.status_code, 200, "unable to get dataset")
+        rspJson = rsp.json()
+        self.assertDictEqual(
+                rspJson["layout"],
+                {   "class": "H5D_CHUNKED",
+                    "dims": [1, 390, 1024]
+                })
 
         # verify compression
-        self.assertTrue("creationProperties" in rspJson)
-        cpl = rspJson["creationProperties"]
-        self.assertTrue("filters") in cpl
-        filters = cpl["filters"]
-        self.assertEqual(len(filters), 1)
-        filter = filters[0]
-        self.assertTrue("class") in filter
-        self.assertEqual(filter["class"], 'H5Z_FILTER_DEFLATE')
-        self.assertTrue("level" in filter)
-        self.assertEqual(filter["level"], 9)
-        self.assertTrue("id" in filter)
-        self.assertEqual(filter["id"], 1)
-         
+        self.assertDictEqual(
+                rspJson["creationProperties"],
+                payload["creationProperties"])
 
-    
-    def testInvalidFillValue(self):
-        # test Dataset with simple type and fill value that is incompatible with the type
-        headers = helper.getRequestHeaders(domain=self.domain)
+    def testInvalidFillValue_Fails400(self):
+        fill_value = "XXXX" # can't convert to dataset's type (float)
+        payload = {
+            "type": "H5T_STD_I32LE",
+            "shape": 10,
+            "creationProperties": { "fillValue": fill_value },
+        }
+        rsp = helper.postDataset(self.domain, payload, response=True)
+        self.assertEqual(rsp.status_code, 400, "post should fail")
 
-        # get domain
-        req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("root" in rspJson)
-        
-        fill_value = 'XXXX'  # can't convert to int!
-        # create the dataset 
-        req = self.endpoint + "/datasets"
-        payload = {'type': 'H5T_STD_I32LE', 'shape': 10}
-        payload['creationProperties'] = {'fillValue': fill_value }
-        req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 400)  # invalid param
-
-    def testAutoChunk1dDataset(self):
-        # test Dataset where chunk layout is set automatically
-        headers = helper.getRequestHeaders(domain=self.domain)
-        # get domain
-        req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("root" in rspJson)
-        root_uuid = rspJson["root"]
-
-        # create the dataset 
-        req = self.endpoint + "/datasets"
-        # 50K x 80K dataset
+    def testAutoChunkRank1(self):
         extent = 1000 * 1000 * 1000
-        dims = [extent,]
-        fields = (  {'name': 'x', 'type': 'H5T_IEEE_F64LE'}, 
-                    {'name': 'y', 'type': 'H5T_IEEE_F64LE'},
-                    {'name': 'z', 'type': 'H5T_IEEE_F64LE'}) 
-        datatype = {'class': 'H5T_COMPOUND', 'fields': fields }
-
-        payload = {'type': datatype, 'shape': dims }
-        # the following should get ignored as too small
-        payload['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [10,] }}
-        req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)  # create dataset
-        rspJson = json.loads(rsp.text)
-         
-        dset_uuid = rspJson['id']
-        self.assertTrue(helper.validateId(dset_uuid))
-         
-        # link new dataset as 'dset'
-        name = 'dset'
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
-        payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)
+        dims = [extent]
+        fields = (
+            {"name": "x", "type": "H5T_IEEE_F64LE"}, 
+            {"name": "y", "type": "H5T_IEEE_F64LE"},
+            {"name": "z", "type": "H5T_IEEE_F64LE"},
+        ) 
+        datatype = {"class": "H5T_COMPOUND", "fields": fields }
+        dcpl = { # TODO: "ignored as too small"??
+            "layout": {
+                "class": "H5D_CHUNKED",
+                "dims": [10],
+            }
+        }
+        payload = {
+            "type": datatype,
+            "shape": dims,
+            "creationProperties": dcpl,
+        }
+        dset_uuid = helper.postDataset(self.domain, payload)
 
         # verify layout
-        req = helper.getEndpoint() + "/datasets/" + dset_uuid
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("layout" in rspJson)
-        layout_json = rspJson["layout"]
-        self.assertTrue("class" in layout_json)
-        self.assertEqual(layout_json["class"], 'H5D_CHUNKED')
-        self.assertTrue("dims" in layout_json)
-        layout = layout_json["dims"]
-        self.assertEqual(len(layout), 1)
-        self.assertTrue(layout[0] < dims[0])
-        chunk_size = layout[0] * 8 * 3  # three 64bit 
-        # chunk size should be between chunk min and max
+        rsp = requests.get(
+                f"{self.endpoint}/datasets/{dset_uuid}",
+                headers=self.headers)
+        self.assertEqual(rsp.status_code, 200, "unable to get dataset")
+        rspJson = rsp.json()
+        self.assertDictEqual(
+                rspJson["layout"],
+                {"dims": [81920], "class": "H5D_CHUNKED"}) # TODO: 'magic' num
+        layout_dims = rspJson["layout"]["dims"]
+        self.assertTrue(layout_dims[0] < dims[0])
+        chunk_size = layout_dims[0] * 8 * 3  # three 64bit 
         self.assertTrue(chunk_size >= CHUNK_MIN)
         self.assertTrue(chunk_size <= CHUNK_MAX)
-     
-    def testAutoChunk2dDataset(self):
-        # test Dataset where chunk layout is set automatically
-        headers = helper.getRequestHeaders(domain=self.domain)
-        # get domain
-        req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("root" in rspJson)
-        root_uuid = rspJson["root"]
 
-        # create the dataset 
-        req = self.endpoint + "/datasets"
+    def testAutoChunkRank2(self):
         # 50K x 80K dataset
         dims = [50000, 80000]
-        payload = {'type': 'H5T_IEEE_F32LE', 'shape': dims }
-        
-        req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)  # create dataset
-        rspJson = json.loads(rsp.text)
-         
-        dset_uuid = rspJson['id']
-        self.assertTrue(helper.validateId(dset_uuid))
-         
-        # link new dataset as 'dset'
-        name = 'dset'
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
-        payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)
+        payload = {"type": "H5T_IEEE_F32LE", "shape": dims }
+        dset_uuid = helper.postDataset(self.domain, payload)
 
         # verify layout
-        req = helper.getEndpoint() + "/datasets/" + dset_uuid
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("layout" in rspJson)
+        rsp = requests.get(
+                f"{self.endpoint}/datasets/{dset_uuid}",
+                headers=self.headers)
+        self.assertEqual(rsp.status_code, 200, "unable to get dataset")
+        rspJson = rsp.json()
         layout_json = rspJson["layout"]
-        self.assertTrue("class" in layout_json)
         self.assertEqual(layout_json["class"], 'H5D_CHUNKED')
-        self.assertTrue("dims" in layout_json)
         layout = layout_json["dims"]
         self.assertEqual(len(layout), 2)
         self.assertTrue(layout[0] < dims[0])
         self.assertTrue(layout[1] < dims[1])
-        chunk_size = layout[0] * layout[1] * 4
-        # chunk size should be between chunk min and max
+        chunk_size = layout[0] * layout[1] * 4 # TODO: explain
         self.assertTrue(chunk_size >= CHUNK_MIN)
         self.assertTrue(chunk_size <= CHUNK_MAX)
 
-    
-    def testMinChunkSizeDataset(self):
-        # test Dataset where chunk layout is adjusted if provided
-        # layout is too small
-        headers = helper.getRequestHeaders(domain=self.domain)
-        # get domain
-        req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("root" in rspJson)
-        root_uuid = rspJson["root"]
-
-        # create the dataset 
-        req = self.endpoint + "/datasets"
-        # 50K x 80K dataset
+    def testMinChunkSize(self):
+        # test that chunk layout is adjusted if provided layout is too small
         dims = [50000, 80000]
-        payload = {'type': 'H5T_IEEE_F32LE', 'shape': dims }
-        # define a chunk layout with lots of small chunks
-        payload['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [10, 10] }}
-      
-        req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)  # create dataset
-        rspJson = json.loads(rsp.text)
-        dset_uuid = rspJson['id']
-        self.assertTrue(helper.validateId(dset_uuid))
-         
-        # link new dataset as 'dset'
-        name = 'dset'
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
-        payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)
+        dcpl = { # chunk layout with lots of small chunks
+            'layout': {
+                'class': 'H5D_CHUNKED',
+                'dims': [10, 10]
+            }
+        }
+        payload = {
+            "type": "H5T_IEEE_F32LE",
+            "shape": dims,
+            "creationProperties": dcpl,
+        }
+        dset_uuid = helper.postDataset(self.domain, payload)
 
         # verify layout
-        req = helper.getEndpoint() + "/datasets/" + dset_uuid
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("layout" in rspJson)
+        rsp = requests.get(
+                f"{self.endpoint}/datasets/{dset_uuid}",
+                headers=self.headers)
+        self.assertEqual(rsp.status_code, 200, "unable to get dataset")
+        rspJson = rsp.json()
         layout_json = rspJson["layout"]
-        self.assertTrue("class" in layout_json)
         self.assertEqual(layout_json["class"], 'H5D_CHUNKED')
-        self.assertTrue("dims" in layout_json)
         layout = layout_json["dims"]
         self.assertEqual(len(layout), 2)
         self.assertTrue(layout[0] < dims[0])
         self.assertTrue(layout[1] < dims[1])
-        chunk_size = layout[0] * layout[1] * 4
-        # chunk size should be between chunk min and max
+        chunk_size = layout[0] * layout[1] * 4 # TODO: explain
         self.assertTrue(chunk_size >= CHUNK_MIN)
         self.assertTrue(chunk_size <= CHUNK_MAX)
 
