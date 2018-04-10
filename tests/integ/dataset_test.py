@@ -90,6 +90,19 @@ def _assertHrefsHasOnlyRels(testcase, _hrefs, _rels):
         testcase.assertTrue(rel in href_rels, f"missing rel `{rel}`")
     testcase.assertEqual(len(href_rels), len(_rels), "extra rels")
 
+def _verifyShape(testcase, dset_uuid, shapedict):
+    # requires that the test case have:
+    # + 'endpoint' uri to hsds endpoint
+    # + 'headers' request headers targeting the relevant domain
+    rsp = requests.get(
+            f"{testcase.endpoint}/datasets/{dset_uuid}/shape",
+            headers=testcase.headers)
+    testcase.assertEqual(rsp.status_code, 200, "unable to get shape")
+    rspJson = rsp.json()
+    _assertDictHasOnlyKeys(testcase, rspJson, GET_SHAPE_KEYS)
+    _assertHrefsHasOnlyRels(testcase, rspJson["hrefs"], GET_SHAPE_RELS)
+    testcase.assertDictEqual(rspJson["shape"], shapedict)
+
 class CommonDatasetOperationsTest(unittest.TestCase):
     base_domain = None
     root_uuid = None
@@ -476,6 +489,7 @@ class PostDatasetWithLinkTest(unittest.TestCase):
 class DatasetTest(unittest.TestCase):
     assertJSONHasOnlyKeys = _assertDictHasOnlyKeys
     assertHrefsHasOnlyRels = _assertHrefsHasOnlyRels
+    verifyShape = _verifyShape
 
     def __init__(self, *args, **kwargs):
         super(DatasetTest, self).__init__(*args, **kwargs)
@@ -486,16 +500,6 @@ class DatasetTest(unittest.TestCase):
 
     def assertLooksLikeUUID(self, s):
         self.assertTrue(helper.validateId(s), "maybe not UUID: " + s)
-
-    def verifyShape(self, dset_uuid, shapedict):
-        rsp = requests.get(
-                f"{self.endpoint}/datasets/{dset_uuid}/shape",
-                headers=self.headers)
-        self.assertEqual(rsp.status_code, 200, "unable to get shape")
-        rspJson = rsp.json()
-        self.assertJSONHasOnlyKeys(rspJson, GET_SHAPE_KEYS)
-        self.assertHrefsHasOnlyRels(rspJson["hrefs"], GET_SHAPE_RELS)
-        self.assertDictEqual(rspJson["shape"], shapedict)
 
     def testScalarShapeEmptyArray(self):
         data = { "type": "H5T_IEEE_F32LE", "shape": [] }
@@ -743,6 +747,7 @@ class DatasetTest(unittest.TestCase):
 class ResizeDatasetTest(unittest.TestCase):
     assertHrefsHasOnlyRels = _assertHrefsHasOnlyRels
     assertJSONHasOnlyKeys = _assertDictHasOnlyKeys
+    verifyShape = _verifyShape
 
     def __init__(self, *args, **kwargs):
         super(ResizeDatasetTest, self).__init__(*args, **kwargs)
@@ -750,16 +755,6 @@ class ResizeDatasetTest(unittest.TestCase):
         helper.setupDomain(self.domain)
         self.endpoint = helper.getEndpoint()
         self.headers = helper.getRequestHeaders(domain=self.domain)
-
-    def verifyShape(self, dset_uuid, shapedict):
-        rsp = requests.get(
-                f"{self.endpoint}/datasets/{dset_uuid}/shape",
-                headers=self.headers)
-        self.assertEqual(rsp.status_code, 200, "unable to get shape")
-        rspJson = rsp.json()
-        self.assertJSONHasOnlyKeys(rspJson, GET_SHAPE_KEYS)
-        self.assertHrefsHasOnlyRels(rspJson["hrefs"], GET_SHAPE_RELS)
-        self.assertDictEqual(rspJson["shape"], shapedict)
 
     def testToMaxdimRank1(self):
         maxdims = [20]
