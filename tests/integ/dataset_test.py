@@ -76,6 +76,16 @@ GET_SHAPE_RELS = [
     "self",
 ]
 
+GET_TYPE_KEYS = [
+    "hrefs",
+    "type",
+]
+GET_TYPE_RELS = [
+    "owner",
+    "root",
+    "self",
+]
+
 def _assertLooksLikeUUID(testcase, s):
     testcase.assertTrue(helper.validateId(s), "probably not UUID: " + s)
 
@@ -157,9 +167,7 @@ class CommonDatasetOperationsTest(unittest.TestCase):
         rsp = requests.get(req, headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "problem getting dataset")
         rspJson = rsp.json()
-        for name in GET_DATASET_KEYS:
-            self.assertTrue(name in rspJson, name)
-        self.assertEqual(len(rspJson), len(GET_DATASET_KEYS))
+        _assertDictHasOnlyKeys(self, rspJson, GET_DATASET_KEYS)
         self.assertEqual(rspJson["id"], self.given_dset_id)
         self.assertEqual(rspJson["root"], self.root_uuid) 
         self.assertEqual(rspJson["domain"], self.base_domain) 
@@ -172,20 +180,18 @@ class CommonDatasetOperationsTest(unittest.TestCase):
         rsp = requests.get(req, headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "problem getting dset's type")
         rspJson = rsp.json()
-        self.assertEqual(len(rspJson), 2)
+        _assertDictHasOnlyKeys(self, rspJson, GET_TYPE_KEYS)
         self.assertEqual(type(rspJson["type"]), dict)
-        self.assertEqual(len(rspJson["hrefs"]), 3) 
+        _assertHrefsHasOnlyRels(self, rspJson["hrefs"], GET_TYPE_RELS)
 
     def testGetShape(self):
         req = f"{self.endpoint}/datasets/{self.given_dset_id}/shape"
         rsp = requests.get(req, headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "problem getting dset's shape")
         rspJson = rsp.json()
-        self.assertEqual(len(rspJson), 4)
-        self.assertTrue("created" in rspJson)
-        self.assertTrue("lastModified" in rspJson)
+        _assertDictHasOnlyKeys(self, rspJson, GET_SHAPE_KEYS)
         self.assertEqual(type(rspJson["shape"]), dict)
-        self.assertEqual(len(rspJson["hrefs"]), 3)
+        _assertHrefsHasOnlyRels(self, rspJson["hrefs"], GET_SHAPE_RELS)
 
     def testGet_VerboseNotYetImplemented(self):
         req = f"{self.endpoint}/datasets/{self.given_dset_id}"
