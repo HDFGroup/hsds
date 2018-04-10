@@ -158,9 +158,7 @@ class CommonDatasetOperationsTest(unittest.TestCase):
         self.assertEqual(rspJson["attributeCount"], 0)
         dset_id = rspJson["id"]
         self.assertLooksLikeUUID(dset_id)
-        for name in POST_DATASET_KEYS:
-            self.assertTrue(name in rspJson, name)
-        self.assertEqual(len(rspJson), len(POST_DATASET_KEYS))
+        _assertDictHasOnlyKeys(self, rspJson, POST_DATASET_KEYS)
 
     def testGet(self):
         req = f"{self.endpoint}/datasets/{self.given_dset_id}"
