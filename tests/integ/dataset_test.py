@@ -613,7 +613,7 @@ class PostDatasetWithLinkTest(unittest.TestCase):
                 f"{self.endpoint}/datasets",
                 data=json.dumps(payload),
                 headers=self.headers)
-        self.assertEqual(rsp.status_code, 400, "should fail with conflict")
+        self.assertEqual(rsp.status_code, 400, "should fail")
 
     def testDuplicateLink_Fails409(self):
         # put dataset and link to root as link `self.linkname`
