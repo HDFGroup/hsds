@@ -711,7 +711,57 @@ class DatasetTest(unittest.TestCase):
 
         self.verifyShape(dset_uuid, expected_shape_15)
 
-    def testResizeToMaxdimRank1(self):
+    def testCommittedType(self):
+        # create the datatype
+        payload = {"type": "H5T_IEEE_F32LE"}
+        rsp = requests.post(
+                f"{self.endpoint}/datatypes",
+                data=json.dumps(payload),
+                headers=self.headers)
+        self.assertEqual(rsp.status_code, 201, "unable to create type")
+        rspJson = rsp.json()
+        dtype_uuid = rspJson["id"]
+        self.assertLooksLikeUUID(dtype_uuid)
+
+        # create the dataset
+        payload = {"type": dtype_uuid, "shape": [10, 10]}
+        dset_uuid = helper.postDataset(self.domain, payload)
+
+        # get dataset type and verify
+        rsp = requests.get(
+                f"{self.endpoint}/datasets/{dset_uuid}/type",
+                headers=self.headers)
+        self.assertEqual(rsp.status_code, 200, "unable to get type")
+        rspJson = rsp.json()
+        expected_type = {
+            "base": "H5T_IEEE_F32LE",
+            "class": "H5T_FLOAT",
+            "id": dtype_uuid,
+        }
+        self.assertDictEqual(rspJson["type"], expected_type)
+
+class ResizeDatasetTest(unittest.TestCase):
+    assertHrefsHasOnlyRels = _assertHrefsHasOnlyRels
+    assertJSONHasOnlyKeys = _assertDictHasOnlyKeys
+
+    def __init__(self, *args, **kwargs):
+        super(ResizeDatasetTest, self).__init__(*args, **kwargs)
+        self.domain = helper.getTestDomainName(self.__class__.__name__)
+        helper.setupDomain(self.domain)
+        self.endpoint = helper.getEndpoint()
+        self.headers = helper.getRequestHeaders(domain=self.domain)
+
+    def verifyShape(self, dset_uuid, shapedict):
+        rsp = requests.get(
+                f"{self.endpoint}/datasets/{dset_uuid}/shape",
+                headers=self.headers)
+        self.assertEqual(rsp.status_code, 200, "unable to get shape")
+        rspJson = rsp.json()
+        self.assertJSONHasOnlyKeys(rspJson, GET_SHAPE_KEYS)
+        self.assertHrefsHasOnlyRels(rspJson["hrefs"], GET_SHAPE_RELS)
+        self.assertDictEqual(rspJson["shape"], shapedict)
+
+    def testToMaxdimRank1(self):
         maxdims = [20]
         expected_shape_10 = {
             "class": "H5S_SIMPLE",
@@ -751,7 +801,7 @@ class DatasetTest(unittest.TestCase):
 
         self.verifyShape(dset_uuid, expected_shape_20)
 
-    def testResizePastMaxdimsRank1(self):
+    def testPastMaxdimsRank1_Fails400(self):
         maxdims = [20]
         expected_shape_10 = {
             "class": "H5S_SIMPLE",
@@ -771,7 +821,7 @@ class DatasetTest(unittest.TestCase):
         # shape should be unchanged
         self.verifyShape(dset_uuid, expected_shape_10)
 
-    def testResizableUnlimitedRank2(self):
+    def testUnlimitedRank2(self):
         start_shape = [10, 20]
         resized_shape = [10, 500]
         maxdims = [20, 0]
@@ -798,39 +848,91 @@ class DatasetTest(unittest.TestCase):
         }
         self.verifyShape(dset_uuid, expected)
 
-# TODO? separate test class devoted to stress-checking resize behavior:
-# TODO: resize too many / too few dimensions
-# TODO: resize smaller
-# TODO: resize same size
-
-    def testCommittedType(self):
-        # create the datatype
-        payload = {"type": "H5T_IEEE_F32LE"}
-        rsp = requests.post(
-                f"{self.endpoint}/datatypes",
-                data=json.dumps(payload),
-                headers=self.headers)
-        self.assertEqual(rsp.status_code, 201, "unable to create type")
-        rspJson = rsp.json()
-        dtype_uuid = rspJson["id"]
-        self.assertLooksLikeUUID(dtype_uuid)
-
-        # create the dataset
-        payload = {"type": dtype_uuid, "shape": [10, 10]}
+    def testShrink_Fails400(self):
+        maxdims = [20]
+        payload = {
+            "type": "H5T_IEEE_F32LE",
+            "shape": [10],
+            "maxdims": maxdims,
+        }
         dset_uuid = helper.postDataset(self.domain, payload)
 
-        # get dataset type and verify
-        rsp = requests.get(
-                f"{self.endpoint}/datasets/{dset_uuid}/type",
-                headers=self.headers)
-        self.assertEqual(rsp.status_code, 200, "unable to get type")
-        rspJson = rsp.json()
-        expected_type = {
-            "base": "H5T_IEEE_F32LE",
-            "class": "H5T_FLOAT",
-            "id": dtype_uuid,
+        res = helper.resizeDataset(self.domain, dset_uuid, [5], response=True)
+        self.assertEqual(res.status_code, 400, "too large should fail")
+
+        # shape should be unchanged
+        expected = {
+            "class": "H5S_SIMPLE",
+            "dims": [10],
+            "maxdims": maxdims,
         }
-        self.assertDictEqual(rspJson["type"], expected_type)
+        self.verifyShape(dset_uuid, expected)
+
+    def testNoMaxdimsOnPost_Fails400(self):
+        payload = {
+            "type": "H5T_IEEE_F32LE",
+            "shape": [10],
+        }
+        dset_uuid = helper.postDataset(self.domain, payload)
+
+        res = helper.resizeDataset(self.domain, dset_uuid, [20], response=True)
+        self.assertEqual(res.status_code, 400, "resize should fail")
+
+        # shape should be unchanged
+        expected = {
+            "class": "H5S_SIMPLE",
+            "dims": [10],
+        }
+        self.verifyShape(dset_uuid, expected)
+
+    def testPartialResize(self):
+        maxdims = [10, 20]
+        newdims = [8]
+        payload = {
+            "type": "H5T_IEEE_F32LE",
+            "shape": [5, 10],
+            "maxdims": maxdims,
+        }
+        dset_uuid = helper.postDataset(self.domain, payload)
+
+        res = helper.resizeDataset(
+                self.domain,
+                dset_uuid,
+                newdims,
+                response=True)
+        self.assertEqual(res.status_code, 400, "should fail")
+
+        expected = {
+            "class": "H5S_SIMPLE",
+            "dims": [5, 10],
+            "maxdims": maxdims,
+        }
+        self.verifyShape(dset_uuid, expected)
+
+    def testTooManyDimensions_Fails400(self):
+        maxdims = [10, 20]
+        payload = {
+            "type": "H5T_IEEE_F32LE",
+            "shape": [5, 10],
+            "maxdims": maxdims,
+        }
+        dset_uuid = helper.postDataset(self.domain, payload)
+
+        newdims = [10, 10, 10]
+        res = helper.resizeDataset(
+                self.domain,
+                dset_uuid,
+                newdims,
+                response=True)
+        self.assertEqual(res.status_code, 400, f"resize should fail")
+
+        # shape should be unchanged
+        expected = {
+            "class": "H5S_SIMPLE",
+            "dims": [5, 10],
+            "maxdims": maxdims,
+        }
+        self.verifyShape(dset_uuid, expected)
 
 class CreationPropertiesTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
