@@ -222,19 +222,57 @@ class postDatasetTest(unittest.TestCase) :
 class PostGroupTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(PostGroupTest, self).__init__(*args, **kwargs)
-        self.base_domain = helper.getTestDomainName(self.__class__.__name__)
-        helper.setupDomain(self.base_domain)
-        self.base_endpoint = helper.getEndpoint() + "/"
-        self.common_headers = helper.getRequestHeaders(domain=self.base_domain)
-        self.domain_root = helper.getRootUUID(domain=self.base_domain)
+        self.domain = helper.getTestDomainName(self.__class__.__name__)
+        helper.setupDomain(self.domain)
+        self.endpoint = helper.getEndpoint()
+        self.headers = helper.getRequestHeaders(domain=self.domain)
+        self.root_uuid = helper.getRootUUID(domain=self.domain)
 
-    def testPutGroupWithPath(self):
+    def testCreateAndLink(self):
         path = "/group1"
-        gid = helper.postGroup(self.base_domain, path=path)
+        gid = helper.postGroup(self.domain, path=path)
         self.assertTrue(helper.validateId(gid), "doesn't look like UUID")
 
-        uuid = helper.getUUIDByPath(self.base_domain, path)
+        uuid = helper.getUUIDByPath(self.domain, path)
         self.assertEqual(uuid, gid, "fetched idea should matched returned")
+
+    def testJustPost(self):
+        # verify starting condition
+        rsp = requests.get(
+                f"{self.endpoint}/groups/{self.root_uuid}",
+                headers=self.headers)
+        rspJson = rsp.json()
+        self.assertEqual(rspJson["linkCount"], 0, "should have no links")
+        rsp = requests.get(
+                f"{self.endpoint}/groups",
+                headers=self.headers)
+        rspJson = rsp.json()
+        self.assertEqual(rspJson["groups"], [], "expect no non-root groups")
+
+        # create
+        gid = helper.postGroup(self.domain)
+
+        # verify end condition
+        rsp = requests.get(
+                f"{self.endpoint}/groups/{self.root_uuid}",
+                headers=self.headers)
+        rspJson = rsp.json()
+        self.assertEqual(rspJson["linkCount"], 0, "should have no links")
+        rsp = requests.get(
+                f"{self.endpoint}/groups",
+                headers=self.headers)
+        rspJson = rsp.json()
+        self.assertEqual(rspJson["groups"], [], "new group not part of tree")
+        rsp = requests.get(
+                f"{self.endpoint}/groups/{gid}",
+                headers=self.headers)
+        self.assertEqual(rsp.status_code, 200, "problem getting by UUID")
+
+    def testGetResponseBack(self):
+        response = helper.postGroup(self.domain, response=True)
+        self.assertEqual(response.status_code, 201, "should report CREATED")
+        rspJson = response.json()
+        self.assertEqual(type(rspJson), dict)
 
 if __name__ == "__main__":
     unittest.main()

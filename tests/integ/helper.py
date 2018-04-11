@@ -197,33 +197,8 @@ def getUUIDByPath(domain, path, username=None, password=None):
 Helper - post group and return its UUID. ValueError raised if problem.
 Optionally links on absolute path is path is valid.
 """
-def postGroup(domain, path=None):
-    endpoint = getEndpoint()
-    parent_uuid = None
-    if path is not None:
-        parentpath = getParentDomain(path)
-        parent_uuid = getUUIDByPath(domain, parentpath)
-
-    headers = getRequestHeaders(domain=domain)
-    
-    post_rsp = requests.post(
-            f"{endpoint}/groups",
-            headers=headers)
-    if post_rsp.status_code != 201:
-        raise ValueError(f"Unable to post group: {post_rsp.status_code}")
-    group_uuid = post_rsp.json()["id"]
-
-    # create link
-    if parent_uuid is not None :
-        linkname = path.split('/')[-1]
-        linkdef = json.dumps({"id": group_uuid})
-        link_rsp = requests.put(
-                f"{endpoint}/groups/{parent_uuid}/links/{linkname}",
-                headers=headers,
-                data=linkdef)
-        assert link_rsp.status_code == 201, f"Problem: {link_rsp.status_code}"
-
-    return group_uuid
+def postGroup(domain, path=None, response=False):
+    return _post("groups", domain, {}, path=path, response=response)
 
 """
 Helper - post dataset and return its UUID. ValueError raised if problem.
@@ -232,25 +207,29 @@ If keyword argument `response` is True, will return `requests` response;
 else returns UUID of dataset.
 """
 def postDataset(domain, data, linkpath=None, response=False) :
+    return _post("datasets", domain, data, path=linkpath, response=response)
+
+"""
+Helper - Go-to util function to create objects
+"""
+def _post(collection, domain, data, path=None, response=False):
     endpoint = getEndpoint()
     parent_uuid = None
     headers = getRequestHeaders(domain=domain)
-
-    if linkpath is not None :
-        path = op.dirname(linkpath)
-        linkname = linkpath.split('/')[-1]
+    if path is not None:
+        linkname = path.split('/')[-1]
+        path = op.dirname(path)
         parent_uuid = getUUIDByPath(domain, path)
         data["link"] = {"id": parent_uuid, "name": linkname}
-
     post_rsp = requests.post(
-            f"{endpoint}/datasets",
+            f"{endpoint}/{collection}",
             headers=headers,
             data=json.dumps(data))
-
     if response:
         return post_rsp
-    if post_rsp.status_code != 201:
-        raise ValueError(f"Unable to post dataset: {post_rsp.status_code}")
+    code = post_rsp.status_code
+    if code != 201:
+        raise ValueError(f"Unable to post to {collection}: {code}")
     return post_rsp.json()["id"]
 
 """
