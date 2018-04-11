@@ -157,7 +157,7 @@ class HardLinkTest(unittest.TestCase):
             self.assertEqual(
                     rsp.status_code,
                     409,
-                    "{kind} should have conflict with existing link")
+                    f"{kind} should have conflict with existing link")
             self.assertGroupHasNLinks(self.root_uuid, 1)
             self.assertGroupListCountIs(1)
 
