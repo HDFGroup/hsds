@@ -258,6 +258,118 @@ class HardLinkTest(unittest.TestCase):
                 rsp.status_code,
                 201)
 
+    def testGetLinks_Many_Hard(self):
+        headers = self.headers
+        endpoint = self.endpoint
+        root_id = self.root_uuid
+        link_names = [
+            "first",
+            "second",
+            "third",
+            "fourth",
+            "fifth",
+            "sixth",
+            "seventh",
+            "eighth",
+            "ninth",
+            "tenth",
+            "eleventh",
+            "twelfth"
+        ]
+        sorted_names = sorted(link_names)
+
+        self.assertGroupHasNLinks(self.root_uuid, 0)
+        self.assertGroupListCountIs(0)
+
+        # create subgroups and link them to root using the above names
+        for link_name in link_names:
+            gid = helper.postGroup(self.domain, path="/"+link_name)
+            self.assertTrue(helper.validateId(gid))
+
+        expCount = len(link_names)
+        self.assertGroupHasNLinks(self.root_uuid, expCount)
+        self.assertGroupListCountIs(expCount)
+
+        # get all the links for the root group
+        rsp = requests.get(
+                f"{endpoint}/groups/{root_id}/links",
+                headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = rsp.json()
+        links = rspJson["links"]
+        for link in links: # verify link integrity
+            self.assertEqual(link["class"], "H5L_TYPE_HARD")
+            self.assertEqual(link["collection"], "groups")
+            self.assertTrue("title" in link)
+            #ret_names.append(link["title"])
+
+        # result should come back in sorted order
+        ret_names = [link["title"] for link in links]
+        self.assertEqual(ret_names, sorted_names)
+
+        # get links with a result limit of 4
+        limit=4
+        params = { "Limit": limit }
+        rsp = requests.get(
+                f"{endpoint}/groups/{root_id}/links",
+                params=params,
+                headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = rsp.json()
+        self.assertTrue("links" in rspJson)
+        self.assertTrue("hrefs" in rspJson)
+        links = rspJson["links"]
+        self.assertEqual(len(links), limit)
+        last_link = links[-1]
+        self.assertEqual(last_link["title"], sorted_names[limit-1])
+        linknames = [link["title"] for link in links]
+        self.assertListEqual(linknames, sorted_names[:limit])
+
+        # get links after the one with name: "seventh"
+        marker = "seventh"
+        params = { "Marker": marker }
+        rsp = requests.get(
+                f"{endpoint}/groups/{root_id}/links",
+                params=params,
+                headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = rsp.json()
+        self.assertTrue("links" in rspJson)
+        self.assertTrue("hrefs" in rspJson)
+        links = rspJson["links"]
+        expected_names = [n for n in sorted_names if n > marker]
+        names = [link["title"] for link in links]
+        self.assertListEqual(names, expected_names)
+        last_link = links[-1]
+        self.assertEqual(last_link["title"], "twelfth")
+
+        # Use a marker that is not present (should return 404)
+        marker = "foobar"
+        self.assertTrue(marker not in sorted_names)
+        params = { "Marker": marker }
+        rsp = requests.get(
+                f"{endpoint}/groups/{root_id}/links",
+                params=params,
+                headers=headers)
+        self.assertEqual(rsp.status_code, 404)
+
+        # get links starting with name: "seventh", and limit to 3 results
+        marker = "seventh"
+        limit = 3
+        params = { "Limit" : 3, "Marker" : "seventh" }
+        rsp = requests.get(
+                f"{endpoint}/groups/{root_id}/links",
+                params=params,
+                headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = rsp.json()
+        links = rspJson["links"]
+        expected_names = [n for n in sorted_names if n > marker][:limit]
+        names = [link["title"] for link in links]
+        self.assertListEqual(names, expected_names)
+        last_link = links[-1]
+        self.assertEqual(last_link["title"], "third")
+
 # ----------------------------------------------------------------------
 
 class LinkTest(unittest.TestCase):
@@ -355,120 +467,6 @@ class LinkTest(unittest.TestCase):
         ext_path = rspLink["h5path"]
         with self.assertRaises(KeyError):
             helper.getUUIDByPath(ext_domain, ext_path)
-
-    def testGetLinks(self):
-        headers = helper.getRequestHeaders(domain=self.base_domain)
-        req = helper.getEndpoint() + '/'
-
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        root_id = rspJson["root"]
-
-        # get root group and check it has no links
-        req = helper.getEndpoint() + "/groups/" + root_id 
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)  
-        rspJson = json.loads(rsp.text)
-        self.assertEqual(rspJson["linkCount"], 0)  # no links
-
-        link_names = ["first", "second", "third", "fourth", "fifth", "sixth",
-            "seventh", "eighth", "ninth", "tenth", "eleventh", "twelfth"]
-
-        # create subgroups and link them to root using the above names
-        for link_name in link_names:
-            req = helper.getEndpoint() + '/groups'
-            rsp = requests.post(req, headers=headers)
-            self.assertEqual(rsp.status_code, 201) 
-            rspJson = json.loads(rsp.text)
-            grp_id = rspJson["id"]
-            # link the new group
-            req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_name
-            payload = {"id": grp_id} 
-            rsp = requests.put(req, data=json.dumps(payload), headers=headers)
-            self.assertEqual(rsp.status_code, 201)  # created
-
-        # get the root group and verify the link count is correct
-        req = helper.getEndpoint() + "/groups/" + root_id 
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)  
-        rspJson = json.loads(rsp.text)
-        self.assertEqual(rspJson["linkCount"], len(link_names))   
-
-        # get all the links for the root group
-        req = helper.getEndpoint() + "/groups/" + root_id + "/links"
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("links" in rspJson)
-        self.assertTrue("hrefs" in rspJson)
-        links = rspJson["links"]
-        self.assertEqual(len(links), len(link_names))
-        ret_names = []
-        for link in links:
-            self.assertTrue("title" in link)
-            self.assertTrue("class" in link)
-            self.assertEqual(link["class"], "H5L_TYPE_HARD")
-            self.assertTrue("collection" in link)
-            self.assertEqual(link["collection"], "groups")
-            self.assertTrue("created" in link)
-            ret_names.append(link["title"])
-
-        # result should come back in sorted order
-        sorted_names = copy(link_names)
-        sorted_names.sort()
-        # sorted list should be:
-        # ['eighth', 'eleventh', 'fifth', 'first', 'fourth', 'ninth',
-        #  'second', 'seventh', 'sixth', 'tenth', 'third', 'twelfth']
-
-        self.assertEqual(ret_names, sorted_names)
-
-        # get links with a result limit of 4
-        limit=4
-        req = helper.getEndpoint() + "/groups/" + root_id + "/links?Limit=" + str(limit)
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("links" in rspJson)
-        self.assertTrue("hrefs" in rspJson)
-        links = rspJson["links"]
-        self.assertEqual(len(links), limit)
-        last_link = links[-1]
-        self.assertEqual(last_link["title"], sorted_names[limit-1])
-
-        # get links after the one with name: "seventh"
-        marker = "seventh"
-        req = helper.getEndpoint() + "/groups/" + root_id + "/links?Marker=" + marker
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("links" in rspJson)
-        self.assertTrue("hrefs" in rspJson)
-        links = rspJson["links"]
-        self.assertEqual(len(links), 4)  #   "sixth", "tenth", "third", "twelfth"
-        last_link = links[-1]
-        self.assertEqual(last_link["title"], "twelfth")
-
-        # Use a marker that is not present (should return 404)
-        marker = "foobar"
-        req = helper.getEndpoint() + "/groups/" + root_id + "/links?Marker=" + marker
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 404)
-
-        # get links starting with name: "seventh", and limit to 3 results
-        marker = "seventh"
-        limit = 3
-        req = helper.getEndpoint() + "/groups/" + root_id + "/links"
-        req += "?Marker=" + marker + "&Limit=" + str(limit)
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("links" in rspJson)
-        self.assertTrue("hrefs" in rspJson)
-        links = rspJson["links"]
-        self.assertEqual(len(links), 3)  #  "sixth", "tenth", "third" 
-        last_link = links[-1]
-        self.assertEqual(last_link["title"], "third")    
 
     @unittest.skipUnless(
             config.get("test_on_uploaded_file"),
