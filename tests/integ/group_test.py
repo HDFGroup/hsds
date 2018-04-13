@@ -36,6 +36,15 @@ class GroupTest(unittest.TestCase):
         "self"
     ]
 
+    post_group_keys = [
+        "attributeCount",
+        "created",
+        "id",
+        "lastModified",
+        "linkCount",
+        "root",
+    ]
+
     def __init__(self, *args, **kwargs):
         super(GroupTest, self).__init__(*args, **kwargs)
         self.base_domain = helper.getTestDomainName(self.__class__.__name__)
@@ -117,6 +126,7 @@ class GroupTest(unittest.TestCase):
         rsp = requests.post(req, headers=headers)
         self.assertEqual(rsp.status_code, 201) 
         rspJson = json.loads(rsp.text)
+        self.assertJSONHasOnlyKeys(rspJson, self.post_group_keys)
         self.assertEqual(rspJson["linkCount"], 0)   
         self.assertEqual(rspJson["attributeCount"], 0)   
         group_id = rspJson["id"]
@@ -167,6 +177,7 @@ class GroupTest(unittest.TestCase):
         rsp = requests.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201) 
         rspJson = json.loads(rsp.text)
+        self.assertJSONHasOnlyKeys(rspJson, self.post_group_keys)
         self.assertEqual(rspJson["linkCount"], 0)
         self.assertEqual(rspJson["attributeCount"], 0)
         new_group_id = rspJson["id"]
