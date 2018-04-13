@@ -258,6 +258,8 @@ class HardLinkTest(unittest.TestCase):
                 rsp.status_code,
                 201)
 
+# ----------------------------------------------------------------------
+
 class LinkTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(LinkTest, self).__init__(*args, **kwargs)
@@ -273,8 +275,9 @@ class LinkTest(unittest.TestCase):
         root_req = f"{endpoint}/groups/{root_id}"
         link_req = f"{root_req}/links/{link_title}"
 
+        rsp = requests.get(root_req, headers=headers)
         self.assertEqual(
-                requests.get(root_req, headers=headers).json()["linkCount"],
+                rsp.json()["linkCount"],
                 0,
                 "domain should have no links")
 
@@ -282,8 +285,9 @@ class LinkTest(unittest.TestCase):
         rsp = requests.put(link_req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201, "problem creating soft link")
 
+        rsp = requests.get(root_req, headers=headers)
         self.assertEqual(
-                requests.get(root_req, headers=headers).json()["linkCount"],
+                rsp.json()["linkCount"],
                 1,
                 "root should report one and only one link")
 
@@ -307,11 +311,11 @@ class LinkTest(unittest.TestCase):
         headers = helper.getRequestHeaders(domain=self.base_domain)
         root_id = helper.getRootUUID(self.base_domain)
 
+        rsp = requests.get(
+                f"{endpoint}/groups/{root_id}",
+                headers=headers)
         self.assertEqual(
-                requests.get(
-                        f"{endpoint}/groups/{root_id}",
-                         headers=headers
-                ).json()["linkCount"],
+                rsp.json()["linkCount"],
                 0,
                 "domain should have no links")
 
@@ -551,6 +555,8 @@ class LinkTest(unittest.TestCase):
         self.assertFalse("h5domain" in link)  # only for external links
         self.assertEqual(link["title"], "slink")
         self.assertEqual(link["h5path"], "somevalue")
+
+# ----------------------------------------------------------------------
 
 if __name__ == '__main__':
     unittest.main()
