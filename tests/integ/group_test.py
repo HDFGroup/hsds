@@ -17,54 +17,87 @@ import config
 import helper
 
 class GroupTest(unittest.TestCase):
+    get_group_by_id_keys = [
+        "attributeCount",
+        "created",
+        "domain",
+        "hrefs",
+        "id",
+        "lastModified",
+        "linkCount",
+        "root",
+    ]
+
+    get_group_by_id_rels = [
+        "attributes",
+        "home",
+        "links",
+        "root",
+        "self"
+    ]
+
     def __init__(self, *args, **kwargs):
         super(GroupTest, self).__init__(*args, **kwargs)
         self.base_domain = helper.getTestDomainName(self.__class__.__name__)
         helper.setupDomain(self.base_domain)
 
+    def assertListMembershipEqual(self, actual, expected):
+        missing = [key for key in expected if key not in actual]
+        self.assertEqual(len(missing), 0, f"missing: {missing}")
+        extra = [key for key in actual if key not in expected]
+        self.assertEqual(len(extra), 0, f"extra: {extra}")
+
+    def assertJSONHasOnlyKeys(self, _json, keylist):
+        return self.assertListMembershipEqual(_json.keys(), keylist)
+
+    def assertHrefsHasOnlyRels(self, hrefs_list, expected_rels):
+        json_rels = [obj["rel"] for obj in hrefs_list]
+        return self.assertListMembershipEqual(json_rels, expected_rels)
+
     def testGetRootGroup(self):
         headers = helper.getRequestHeaders(domain=self.base_domain)
-        req = helper.getEndpoint() + '/'
+        endpoint = helper.getEndpoint()
+        root_uuid = helper.getRootUUID(self.base_domain)
+        req = f"{endpoint}/groups/{root_uuid}"
 
+        # get domain
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        root_uuid = rspJson["root"]
-        helper.validateId(root_uuid)
-        req = helper.getEndpoint() + '/groups/' + root_uuid
-        rsp = requests.get(req, headers=headers)
+        rspJson = rsp.json()
+        self.assertJSONHasOnlyKeys(rspJson, self.get_group_by_id_keys)
+        hrefs = rspJson["hrefs"]
+        self.assertHrefsHasOnlyRels(hrefs, self.get_group_by_id_rels)
+        self.assertEqual(rspJson["domain"], self.base_domain)
+
+        # try get with alias
+        params = {"getalias": 1}
+        rsp = requests.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("id" in rspJson)
-        group_id = rspJson["id"]
-        helper.validateId(group_id)
-        self.assertTrue("root" in rspJson)
-        root_id = rspJson["root"]
-        self.assertEqual(group_id, root_id)
-        self.assertTrue("domain" in rspJson)
-        #self.assertEqual(rspJson["domain"], self.base_domain) #TBD
-        self.assertTrue("created" in rspJson)
-        self.assertTrue("lastModified" in rspJson)
-        self.assertTrue("linkCount" in rspJson)
-        self.assertTrue("attributeCount" in rspJson)
+        rspJson = rsp.json()
+        get_keys = self.get_group_by_id_keys[:]
+        get_keys.append("alias")
+        self.assertJSONHasOnlyKeys(rspJson, get_keys)
+        hrefs = rspJson["hrefs"]
+        self.assertHrefsHasOnlyRels(hrefs, self.get_group_by_id_rels)
+        self.assertListEqual(rspJson["alias"], ['/'], "root should have alias")
 
         # try get with a different user (who has read permission)
-        headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
-        rsp = requests.get(req, headers=headers)
+        otheruser_headers = helper.getRequestHeaders(
+                domain=self.base_domain,
+                username="test_user2") # TODO: programmatic selection?
+        rsp = requests.get(req, headers=otheruser_headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["root"], root_uuid)
 
         # try to do a GET with a different domain (should fail)
         another_domain = helper.getParentDomain(self.base_domain)
-        headers = helper.getRequestHeaders(domain=another_domain)
-        req = helper.getEndpoint() + '/groups/' + root_uuid
-        rsp = requests.get(req, headers=headers)
+        otherdomain_headers = helper.getRequestHeaders(domain=another_domain)
+        rsp = requests.get(req, headers=otherdomain_headers)
         self.assertEqual(rsp.status_code, 400)
 
     def testGetInvalidUUID(self):
         headers = helper.getRequestHeaders(domain=self.base_domain)
-        req = helper.getEndpoint() + '/'  
         invalid_uuid = "foobar"  
         req = helper.getEndpoint() + "/groups/" + invalid_uuid
         rsp = requests.get(req, headers=headers)
@@ -94,12 +127,12 @@ class GroupTest(unittest.TestCase):
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        self.assertTrue("id" in rspJson)
+        self.assertJSONHasOnlyKeys(rspJson, self.get_group_by_id_keys)
+        hrefs = rspJson["hrefs"]
+        self.assertHrefsHasOnlyRels(hrefs, self.get_group_by_id_rels)
         self.assertEqual(rspJson["id"], group_id)
-        self.assertTrue("root" in rspJson)
-        self.assertTrue(rspJson["root"] != group_id)
-        self.assertTrue("domain" in rspJson)
-        #self.assertEqual(rspJson["domain"], domain) # TBD
+        self.assertNotEqual(rspJson["root"], group_id)
+        self.assertEqual(rspJson["domain"], self.base_domain)
 
         # try getting the path of the group 
         params = {"getalias": 1}
@@ -116,43 +149,21 @@ class GroupTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 403) # forbidden
 
     def testPostWithLink(self):
+        linkname = "linked_group"
         headers = helper.getRequestHeaders(domain=self.base_domain)
-
-        # get root id
-        req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        root_uuid = rspJson["root"]
-        helper.validateId(root_uuid)
-
-        # delete the domain
-        rsp = requests.delete(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-
-        # try getting the domain
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 410)
-
-        # try re-creating a domain
-        rsp = requests.put(req, headers=headers)
-        self.assertEqual(rsp.status_code, 201)
-        rspJson = json.loads(rsp.text)
-        new_root_id = rspJson["root"]
-        self.assertTrue(new_root_id != root_uuid)
-
-        root_uuid = new_root_id
+        endpoint = helper.getEndpoint()
+        root_uuid = helper.getRootUUID(self.base_domain)
 
         # get root group and verify link count is 0
-        req = helper.getEndpoint() + '/groups/' + root_uuid
+        req = f"{endpoint}/groups/{root_uuid}"
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["linkCount"], 0)
 
         # create new group  
-        payload = { 'link': { 'id': root_uuid, 'name': 'linked_group' } }
-        req = helper.getEndpoint() + "/groups"
+        payload = { 'link': { 'id': root_uuid, 'name': linkname } }
+        req = f"{endpoint}/groups"
         rsp = requests.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201) 
         rspJson = json.loads(rsp.text)
@@ -163,64 +174,44 @@ class GroupTest(unittest.TestCase):
         self.assertTrue(new_group_id != root_uuid)
 
         # get root group and verify link count is 1
-        req = helper.getEndpoint() + '/groups/' + root_uuid
+        req = f"{endpoint}/groups/{root_uuid}"
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["linkCount"], 1)
 
         # read the link back and verify
-        req = helper.getEndpoint() + "/groups/" + root_uuid + "/links/linked_group"
+        req = f"{endpoint}/groups/{root_uuid}/links/{linkname}"
         rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)  # link doesn't exist yet
+        self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("link" in rspJson)
         link_json = rspJson["link"]
         self.assertEqual(link_json["collection"], "groups")
         self.assertEqual(link_json["class"], "H5L_TYPE_HARD")
-        self.assertEqual(link_json["title"], "linked_group")
+        self.assertEqual(link_json["title"], linkname)
         self.assertEqual(link_json["id"], new_group_id)
 
         # try getting the path of the group 
-        req = helper.getEndpoint() + "/groups/" + new_group_id 
+        req = f"{endpoint}/groups/{new_group_id}"
         params = {"getalias": 1}
         rsp = requests.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("alias" in rspJson)
-        self.assertEqual(rspJson["alias"], ['/linked_group',])
+        aliasname = "/" + linkname
+        self.assertEqual(rspJson["alias"], [aliasname,])
 
     def testDelete(self):
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
-        # get domain
-        req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("root" in rspJson)
-        root_id = rspJson["root"]
-
-        req = helper.getEndpoint() + '/groups'  
-
         # create a new group
-        rsp = requests.post(req, headers=headers)
-        self.assertEqual(rsp.status_code, 201) 
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("id" in rspJson)
-        group_id = rspJson["id"]
-        self.assertTrue(helper.validateId(group_id))
+        group_id = helper.postGroup(self.base_domain)
 
         # verify we can do a get on the new group
         req = helper.getEndpoint() + '/groups/' + group_id
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("id" in rspJson)
-        self.assertEqual(rspJson["id"], group_id)
-        self.assertTrue("root" in rspJson)
-        self.assertTrue(rspJson["root"] != group_id)
-        self.assertTrue("domain" in rspJson)
-        #self.assertEqual(rspJson["domain"], self.base_domain)  #TBD
 
         # try DELETE with user who doesn't have create permission on this domain
         headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
@@ -246,6 +237,7 @@ class GroupTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 410)
 
         # try deleting the root group
+        root_id = helper.getRootUUID(self.base_domain)
         req = helper.getEndpoint() + '/groups/' + root_id
         rsp = requests.delete(req, headers=headers)
         self.assertEqual(rsp.status_code, 403)  # Forbidden    
