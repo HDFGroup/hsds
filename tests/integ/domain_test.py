@@ -387,6 +387,13 @@ class DomainTest(unittest.TestCase):
     def assertLooksLikeUUID(self, s):
         self.assertTrue(helper.validateId(s))
 
+    def assertHrefsHasOnlyRels(self, json_dict, rel_list):
+        json_rels = [obj["rel"] for obj in json_dict["hrefs"]]
+        missing = [rel for rel in rel_list if rel not in json_rels]
+        extra = [rel for rel in json_rels if rel not in rel_list]
+        self.assertEqual(len(missing), 0, f"missing {missing}")
+        self.assertEqual(len(extra), 0, f"extra {extra}")
+
     def assertDictHasOnlyTheseKeys(self, keys, d):
         for key in keys :
             self.assertTrue(key in d, "missing element: {key}")
@@ -397,47 +404,63 @@ class DomainTest(unittest.TestCase):
 
     def assertLooksLikePutFolderResponse(self, _json):
         putfolder_keys = (
-            "owner",
             "acls",
             "created",
             "lastModified",
+            "owner",
         )
         self.assertDictHasOnlyTheseKeys(putfolder_keys, _json)
 
     def assertLooksLikeGetFolderResponse(self, _json):
         getfolder_keys = (
-            "owner",
-            "hrefs",
-            "created",
             "class",
+            "created",
+            "hrefs",
             "lastModified",
+            "owner",
+        )
+        getfolder_rels = (
+            "acls",
+            "parent",
+            "self",
         )
         self.assertDictHasOnlyTheseKeys(getfolder_keys, _json)
         self.assertEqual(_json["class"], "folder")
+        self.assertHrefsHasOnlyRels(_json, getfolder_rels)
 
     def assertLooksLikePutDomainResponse(self, _json):
         putdomain_keys = (
-            "root",
-            "owner",
             "acls",
             "created",
             "lastModified",
+            "owner",
+            "root",
         )
         self.assertDictHasOnlyTheseKeys(putdomain_keys, _json)
         self.assertLooksLikeUUID(_json["root"])
 
     def assertLooksLikeGetDomainResponse(self, _json):
         getdomain_keys = (
-            "root",
-            "owner",
-            "created",
-            "lastModified",
             "class",
+            "created",
             "hrefs",
+            "lastModified",
+            "owner",
+            "root",
+        )
+        getdomain_rels = (
+            "acls",
+            "database",
+            "groupbase",
+            "parent",
+            "root",
+            "self",
+            "typebase"
         )
         self.assertDictHasOnlyTheseKeys(getdomain_keys, _json)
         self.assertEqual(_json["class"], "domain")
         self.assertLooksLikeUUID(_json["root"])
+        self.assertHrefsHasOnlyRels(_json, getdomain_rels)
 
     def testGetFolderDomains(self):
         username = config.get("user_name")
@@ -455,7 +478,7 @@ class DomainTest(unittest.TestCase):
                     f"Unable to get domain {domain}")
             self.assertLooksLikeGetFolderResponse(response.json())
 
-    def testCreateAndGetDomain(self):
+    def testPost_Get_PostDuplicateDomain(self):
         domain = self.base_domain + "/newdomain.h6"
         headers = helper.getRequestHeaders(domain=domain)
 
@@ -476,8 +499,9 @@ class DomainTest(unittest.TestCase):
         root_id = rspJson["root"]
 
         # putting the same domain again fails with a 409 error
+        res = requests.put(self.base_endpoint, headers=headers)
         self.assertEqual(
-                requests.put( self.base_endpoint, headers=headers).status_code,
+                res.status_code,
                 409,
                 "creating duplicate domain name not allowed")
 
@@ -486,7 +510,7 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         self.assertLooksLikeGetDomainResponse(rsp.json())
 
-    def testCreateDomainNotAuthorizedFails401(self):
+    def testCreateDomainNotAuthorized_Fails401(self):
         domain = self.base_domain + "/user_infringement.h6"
         headers = helper.getRequestHeaders(domain=domain)
         other_user = "user2" if config.get("user_name") != "user2" else "user3"
@@ -533,7 +557,7 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200, "can't get folder")
         self.assertLooksLikeGetFolderResponse(rsp.json())
 
-    def testCreateIndirectChildDomainFails404(self):
+    def testCreateIndirectChildDomain_Fails404(self):
         """New domains must be direct children of existing domain/folder."""
         domain = self.base_domain + "/nonexistent/newdomain.h5"
         headers = helper.getRequestHeaders(domain=domain)
@@ -541,7 +565,7 @@ class DomainTest(unittest.TestCase):
         rsp = requests.put(self.base_endpoint, headers=headers)
         self.assertEqual(rsp.status_code, 404)
 
-    def testGetMissingDomainFails404(self):
+    def testGetMissingDomain_Fails404(self):
         domain =  self.base_domain + "/doesnotexist.h6"
         headers = helper.getRequestHeaders(domain=domain)
 
@@ -554,36 +578,49 @@ class DomainTest(unittest.TestCase):
         headers = helper.getRequestHeaders(domain=domain)
         endpoint = self.base_endpoint
 
+        rsp = requests.get(endpoint, headers=headers)
         self.assertEqual(
-                requests.get(endpoint, headers=headers).status_code,
+                rsp.status_code,
                 404,
-                "domain {domain} extant")
+                "there should be no domain yet")
 
+        rsp = requests.delete(endpoint, headers=headers)
         self.assertEqual(
-                requests.put(endpoint, headers=headers).status_code,
+                rsp.status_code,
+                404,
+                "deleting nonexistent domain should fail")
+
+        rsp = requests.put(endpoint, headers=headers)
+        self.assertEqual(
+                rsp.status_code,
                 201,
-                "cannot create domain")
+                "problem creating domain")
 
+        rsp = requests.get(endpoint, headers=headers)
         self.assertEqual(
-                requests.get(endpoint, headers=headers).status_code,
+                rsp.status_code,
                 200,
                 "can't get domain")
 
         other_headers = helper.getRequestHeaders(
                 domain=domain,
                 username="test_user2")
+        rsp = requests.delete(endpoint, headers=other_headers)
         self.assertEqual(
-                requests.delete(endpoint, headers=other_headers).status_code,
+                rsp.status_code,
                 403,
                 "other user should lack permssion to delete the domain")
 
+        rsp = requests.delete(endpoint, headers=headers)
         self.assertEqual(
-                requests.delete(endpoint, headers=headers).status_code,
+                rsp.status_code,
                 200,
                 "original user should be able to delete the domain")
+        self.assertDictEqual(rsp.json(), {"domain": domain})
 
+        rsp = requests.get(endpoint, headers=headers)
         self.assertEqual(
-                requests.get(endpoint, headers=headers).status_code,
+                rsp.status_code,
                 410,
                 "domain should be deleted")
 
@@ -594,26 +631,30 @@ class DomainTest(unittest.TestCase):
         endpoint = self.base_endpoint
 
         # SETUP: create domain
+        rsp = requests.put(endpoint, headers=headers)
         self.assertEqual(
-                requests.put(endpoint, headers=headers).status_code,
+                rsp.status_code,
                 201,
                 "can't create domain")
 
         # SETUP: delete the domain
+        rsp = requests.delete(endpoint, headers=headers)
         self.assertEqual(
-                requests.delete(endpoint, headers=headers).status_code,
+                rsp.status_code,
                 200,
                 "can't delete domain")
 
         # TEST: can create new domain with same name
+        rsp = requests.put(endpoint, headers=headers)
         self.assertEqual(
-                requests.put(endpoint, headers=headers).status_code,
+                rsp.status_code,
                 201,
                 "can't replace domain")
 
         # CLEANUP: remove domain again
+        rsp = requests.delete(endpoint, headers=headers)
         self.assertEqual(
-                requests.delete(endpoint, headers=headers).status_code,
+                rsp.status_code,
                 200,
                 "unable to re-delete domain")
 
@@ -657,8 +698,9 @@ class DomainTest(unittest.TestCase):
                 "/home/<user> should exist")
 
         # user cannot replace their home folder?!?
+        rsp = requests.put(endpoint, headers=headers)
         self.assertEqual(
-                requests.put(endpoint, headers=headers).status_code,
+                rsp.status_code,
                 403,
                 "unable to recreate user folder")
 
@@ -695,11 +737,11 @@ class DomainTest(unittest.TestCase):
         # verify that we can't get folder nor domains
         domainpaths.append(folderpath)
         for domain in domainpaths:
+            rsp = requests.get(
+                        endpoint,
+                        headers=helper.getRequestHeaders(domain=domain))
             self.assertEqual(
-                    requests.get(
-                            endpoint,
-                            headers=helper.getRequestHeaders(domain=domain)
-                    ).status_code,
+                    rsp.status_code,
                     410,
                     f"domain {domain} was not deleted")
 
