@@ -18,11 +18,12 @@ from aiohttp.errors import HttpBadRequest, HttpProcessingError
 
 from util.httpUtil import  http_post, http_put, http_get_json, http_delete, jsonResponse, getHref
 from util.idUtil import  getDataNodeUrl, createObjId, getS3Key, getCollectionForId
-from util.s3Util import getS3Keys, isS3Obj, getS3Bytes, getS3ObjStats
+from util.s3Util import getS3Keys, isS3Obj, getS3Bytes
 from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
 from util.domainUtil import getParentDomain, getDomainFromRequest, getS3PrefixForDomain, validateDomain, isIPAddress, isValidDomainPath
-from servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath, getPathForObjectId
+from servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath
+from basenode import getAsyncNodeUrl
 import hsds_logger as log
 
 async def get_domain_json(app, domain):
@@ -40,83 +41,65 @@ async def domain_query(app, domain, rsp_dict):
     except HttpProcessingError as hpe:
         rsp_dict[domain] = { "status_code": hpe.code}
 
-async def get_collection(app, domain, collection, marker=None, limit=None):
-    """ Return the object ids from the collections.txt obj for given collection.
-    """    
-    col_s3key = domain[1:] + "/." + collection + ".txt"  
-    log.info("get collection list: {}".format(col_s3key))
-    col_found = await isS3Obj(app, col_s3key)
-    if not col_found:
-        return []
-    rows = []
-    
-    data = await getS3Bytes(app, col_s3key)
-    data = data.decode('utf8')
-    lines = data.split('\n')
-    for line in lines:
-        # format is: 
-        # <objid> <size>\n
-        if not line:
-            continue
-        fields = line.split(' ')
-        if len(fields) < 4:
-            log.warn("Unexpected contents line: {}".format(line))
-            continue
-        objid = fields[0]
-        if not objid:
-            continue
-        try:
-            if getCollectionForId(objid) != collection:
-                log.warn("unexpected objectid: {}".format(objid))
-                continue
-        except ValueError as ve:
-            log.warn("unexpected exception for get collections: {}".format(str(ve)))
-            continue
+async def getRootInfo(app, root_id):
+    """ Get extra information about the given domain """
+    # Gather additional info on the domain
+    an_url = getAsyncNodeUrl(app)
+    req = an_url + "/root/" + root_id
+    log.info("ASync GET: {}".format(root_id))
+    try:
+        root_info = await http_get_json(app, req)
+    except HttpProcessingError as hpe:
+        if hpe.code == 501:
+            log.warn("sqlite db not available")
+            return None
+        if hpe.code == 404:
+            # sqlite db not sync'd?
+            log.warn("root id: {} not found in db".format(root_id))
+            return None
+        else:
+            log.error("Async error: {}".format(hpe))
+            raise HttpProcessingError(code=500, message="Unexpected Error")
+    return root_info
 
+
+async def get_collection(app, root_id, collection, marker=None, limit=None):
+    """ Return the object ids for given collection.
+    """   
+    root_info = await getRootInfo(app, root_id)
+    if root_info is None:
+        return None
+    log.info("got root_info: {}".format(root_info))
+    objects = root_info["objects"] 
+    rows = []
+     
+    for object in objects:
+        # expected keys:
+        #   id - objectid
+        #   etag
+        #   size
+        #   lastModified
+        objid = object["id"]
+        if getCollectionForId(objid) != collection:
+            continue
+         
         if marker:
             if marker == objid:
                 # got to the marker, clear it so we will start 
                 # return ids on the next iteration
                 marker = None
         else:
-            # return objid, etag, lastModified, and size
-            row = []
-            row.append(objid)
-            row.append(fields[1])  # etag
-            try:
-                row.append(float(fields[2]))
-            except ValueError:
-                log.warn("Unexpected contents line (3rd element should be float): {}".format(line))
-                continue
-            try:
-                row.append(int(fields[3]))
-            except ValueError:
-                log.warn("Unexpected contents line (4th element should be int): {}".format(line))
-                continue
-            # dataset contents will have extra fields for numchunks and chunk size
-            if len(fields) > 4:
-                try:
-                    row.append(int(fields[4]))
-                except ValueError:
-                    log.warn("Unexpected contents line (5th element should be int): {}".format(line))
-                    continue
-            if len(fields) > 5:
-                try:
-                    row.append(int(fields[5]))
-                except ValueError:
-                    log.warn("Unexpected contents line (6th element should be int): {}".format(line))
-                    continue
-
-            rows.append(row)
+            # return id, etag, lastModified, and size
+             
+            rows.append(object)
             if limit is not None and len(rows) == limit:
                 log.info("got to limit, breaking")
                 break
     return rows
 
-
+"""
 async def get_collection_ids(app, domain, collection, marker=None, limit=None):
-    """ Return the object ids for given collection.
-    """    
+    # Return the object ids for given collection.    
   
     try:
         domain_json = await getDomainJson(app, domain, reload=True)
@@ -152,41 +135,8 @@ async def get_collection_ids(app, domain, collection, marker=None, limit=None):
                 log.info("got to limit, breaking")
                 break
     return ret_ids
-       
-     
+ """      
 
-async def getDomainInfo(app, domain):
-    """ Get extra information about the given domain """
-    # Gather additional info on the domain
-    results = {}
-    allocated_bytes = 0
-    num_chunks = 0
-
-    group_collection = await get_collection(app, domain, "groups")
-    results["num_groups"] = len(group_collection) 
-    for row in group_collection:
-        allocated_bytes += row[3]
-
-    datatype_collection = await get_collection(app, domain, "datatypes")
-    results["num_datatypes"] = len(datatype_collection) 
-    for row in datatype_collection:
-        allocated_bytes += row[3]
-    
-    dataset_collection = await get_collection(app, domain, "datasets")
-    results["num_datasets"] = len(dataset_collection) 
-    for row in dataset_collection:
-        allocated_bytes += row[3]
-        if len(row) > 5:
-            num_chunks += row[4]
-            allocated_bytes += row[5]
-    # get size of the domain json object itself
-    s3_key = getS3Key(domain)
-    stats = await getS3ObjStats(app, s3_key)
-                  
-    allocated_bytes += stats["Size"]
-    results["allocated_bytes"] = allocated_bytes
-    results["num_chunks"] = num_chunks
-    return results
         
 async def get_domains(request):
     """ This method is called by GET_Domains and GET_Domain when no domain is passed in.
@@ -350,12 +300,31 @@ async def get_domains(request):
             domain_rsp["class"] = "domain"
         else:
             domain_rsp["class"] = "folder"
-        if verbose:
+        if verbose and "root" in sub_domain_json:
             # get info from collection files
-            results = await getDomainInfo(app, sub_domain)
-            for k in ("num_groups", "num_datatypes", "num_datasets", "allocated_bytes", "num_chunks"):
-                if k in results:
-                    domain_rsp[k] = results[k]
+            results = await getRootInfo(app, sub_domain)
+            if results:
+                # {'etag': '', 'lastModified': 1495494946, 'size': 842, 'groupCount': 1, 
+                # 'datasetCount': 0, 'chunkCount': 0, 'id': 'g-89e4f386-3f44-11e7-995f-0242ac110009',
+                #  'typeCount': 0}
+                obj_count = 0
+                if "lastModified" in results:
+                    domain_rsp["lastModified"] = results["lastModified"]
+                if "size" in results:
+                    domain_rsp["allocated_bytes"] = results["size"]
+                if "groupCount" in results:
+                    domain_rsp["num_groups"] = results["groupCount"]
+                    obj_count += results["groupCount"]
+                if "typeCount" in results:
+                    domain_rsp["num_datatypes"] = results["typeCount"]
+                    obj_count += results["typeCount"]
+                if "datasetCount" in results:
+                    domain_rsp["num_datasets"] = results["datasetCount"]
+                    obj_count += results["datasetCount"]
+                if "chunkCount" in results:
+                    obj_count += results["chunkCount"]
+                domain_rsp["num_objects"] = obj_count
+
 
         domains.append(domain_rsp)
     rsp_json = {}
@@ -436,8 +405,7 @@ async def GET_Domain(request):
         resp = await jsonResponse(request, obj_json)
         log.response(request, resp=resp)
         return resp
-         
-
+    
     # return just the keys as per the REST API
     rsp_json = { }
     if "root" in domain_json:
@@ -451,6 +419,28 @@ async def GET_Domain(request):
         rsp_json["created"] = domain_json["created"]
     if "lastModified" in domain_json:
         rsp_json["lastModified"] = domain_json["lastModified"]
+
+    if "verbose" in request.GET and request.GET["verbose"] and "root" in domain_json:
+        results = await getRootInfo(app, domain_json["root"])
+        if results:
+            obj_count = 0
+            if "lastModified" in results:
+                rsp_json["lastModified"] = results["lastModified"]
+            if "size" in results:
+                rsp_json["allocated_bytes"] = results["size"]
+            if "groupCount" in results:
+                rsp_json["num_groups"] = results["groupCount"]
+                obj_count += results["groupCount"]
+            if "typeCount" in results:
+                rsp_json["num_datatypes"] = results["typeCount"]
+                obj_count += results["typeCount"]
+            if "datasetCount" in results:
+                rsp_json["num_datasets"] = results["datasetCount"]
+                obj_count += results["datasetCount"]
+            if "chunkCount" in results:
+                obj_count += results["chunkCount"]
+            rsp_json["num_objects"] = obj_count   
+    
      
     hrefs = []
     hrefs.append({'rel': 'self', 'href': getHref(request, '/')})
@@ -467,11 +457,7 @@ async def GET_Domain(request):
     if parent_domain:
         hrefs.append({'rel': 'parent', 'href': getHref(request, '/', domain=parent_domain)})
 
-    if "verbose" in request.GET and request.GET["verbose"]:
-        results = await getDomainInfo(app, domain)
-        for k in ("num_groups", "num_datatypes", "num_datasets", "allocated_bytes", "num_chunks"):
-            if k in results:
-                rsp_json[k] = results[k]
+    
          
     rsp_json["hrefs"] = hrefs
     resp = await jsonResponse(request, rsp_json)
@@ -910,9 +896,12 @@ async def GET_Datasets(request):
     if "Marker" in request.GET:
         marker = request.GET["Marker"]
 
-
-    # get the dataset collection list
-    obj_ids = await get_collection_ids(app, domain, "datasets", marker=marker, limit=limit)
+    obj_ids = []
+    if "root" in domain_json or domain_json["root"]:
+        # get the dataset collection list
+        objects = await get_collection(app, domain_json["root"], "datasets", marker=marker, limit=limit)
+        for object in objects:
+            obj_ids.append(object["id"])
      
     # create hrefs 
     hrefs = []
@@ -982,9 +971,13 @@ async def GET_Groups(request):
     if "Marker" in request.GET:
         marker = request.GET["Marker"]
 
-    # get the groups collection list
-    obj_ids = await get_collection_ids(app, domain, "groups", marker=marker, limit=limit)
-     
+    obj_ids = []
+    if "root" in domain_json or domain_json["root"]:
+        # get the dataset collection list
+        objects = await get_collection(app, domain_json["root"], "groups", marker=marker, limit=limit)
+        for object in objects:
+            obj_ids.append(object["id"])
+ 
     # create hrefs 
     hrefs = []
     hrefs.append({'rel': 'self', 'href': getHref(request, '/groups')})
@@ -1053,7 +1046,12 @@ async def GET_Datatypes(request):
         marker = request.GET["Marker"]
 
     # get the datatype collection list
-    obj_ids = await get_collection_ids(app, domain, "datatypes", marker=marker, limit=limit)
+    obj_ids = []
+    if "root" in domain_json or domain_json["root"]:
+        # get the dataset collection list
+        objects = await get_collection(app, domain_json["root"], "datatypes", marker=marker, limit=limit)
+        for object in objects:
+            obj_ids.append(object["id"])
  
     # create hrefs 
     hrefs = []

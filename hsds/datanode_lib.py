@@ -22,21 +22,10 @@ from util.attrUtil import getRequestCollectionName
 from util.httpUtil import http_put, http_delete
 from util.chunkUtil import getDatasetId
 from util.arrayUtil import arrayToBytes
+from basenode import getAsyncNodeUrl
 import config
 import hsds_logger as log
 
-
-def getAsyncNodeUrl(app):
-    """ Return host/port for async node
-    Throw exception if service is not ready"""
-    if "an_url" not in app or not app["an_url"]:
-        msg="Service not ready"
-        log.warn(msg)
-        raise HttpProcessingError(message=msg, code=503)
-
-    an_url = app["an_url"]
-    log.debug("got an url: {}".format(an_url))
-    return an_url
 
 def get_obj_id(request, body=None):
     """ Get object id from request 

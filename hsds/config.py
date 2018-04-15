@@ -50,7 +50,8 @@ cfg = {
     'gc_freq': 20*60,  # time between gc runs
     'password_file': '/usr/local/src/hsds/passwd.txt',  # filepath to a text file of username/passwords
     'server_name': 'Highly Scalable Data Service (HSDS)', # this gets returned in the about request
-    'bucket_db': 'bucket.db'  # SQLite db file used by AN node
+    'db_file': 'bucket.db',  # SQLite db file used by AN node
+    'db_dir': '/data' # Directory path to store db file
 }
    
 def get(x): 

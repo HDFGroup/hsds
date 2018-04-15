@@ -83,7 +83,7 @@ def batchInsertChunkTable(conn, items):
     conn.commit()
 
 #
-# Add given object to chunk table
+# Add given object to object table
 #
 def insertObjectTable(conn, id, etag='', objSize=0, lastModified='', rootid=None):
     if not rootid:

@@ -66,6 +66,7 @@ class DomainTest(unittest.TestCase):
         
         req = helper.getEndpoint() + '/'
         rsp = requests.get(req, headers=headers)
+        print("Status: ", rsp.status_code)
         if rsp.status_code != 200:
             print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
             return  # abort rest of test
@@ -157,9 +158,11 @@ class DomainTest(unittest.TestCase):
         req = helper.getEndpoint() + '/'
         params = {"verbose": 1}
         rsp = requests.get(req, params=params, headers=headers)
-        if rsp.status_code != 200:
+        print("status:", rsp.status_code)
+        if rsp.status_code == 404:
             print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
             return  # abort rest of test
+        self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers['content-type'], 'application/json')
         rspJson = json.loads(rsp.text)
          
@@ -186,8 +189,7 @@ class DomainTest(unittest.TestCase):
         # test that allocated_bytes falls in a given range
         self.assertTrue(rspJson["allocated_bytes"] > 5000)  
         self.assertTrue(rspJson["allocated_bytes"] < 6000)  
-        self.assertTrue("num_chunks" in rspJson)
-        self.assertTrue(rspJson["num_chunks"], 4)
+         
  
         
 

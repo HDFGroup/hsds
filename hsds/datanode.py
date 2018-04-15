@@ -96,7 +96,7 @@ if __name__ == '__main__':
     app['notify_ids'] = set()
     app['dirty_ids'] = {}
     app['deflate_map'] = {} # map of dataset ids to deflate levels (if compressed)
-    # TODO - there's nothing to prevent the defalte_map from getting ever larger 
+    # TODO - there's nothing to prevent the deflate_map from getting ever larger 
     # (though it is only one int per dataset id)
     # add a timestamp and remove at a certain time?
     # delete entire map whenver the synch queue is empty?

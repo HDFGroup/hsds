@@ -496,7 +496,7 @@ async def _fetch_all(app, pages, key_names, prefix='', deliminator='', suffix=''
                     count += 1
         # done with all items in this response
         if callback is not None and len(key_names) > 0:
-            callback(app, key_names)
+            await callback(app, key_names)
             # reset key_names
             log.debug("reset key_names")
             key_names.clear()
