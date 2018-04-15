@@ -27,10 +27,10 @@ from basenode import baseInit, healthCheck
 #from util.s3Util import getS3JSONObj
 from util.idUtil import isValidChunkId, isValidUuid #, getCollectionForId  #isS3ObjKey, getObjId
 from util.httpUtil import jsonResponse, StreamResponse
-from util.domainUtil import getDomainFromRequest, isValidDomain
+from util.domainUtil import  isValidDomain
 #from asyncnode_lib import listKeys, markObjs, deleteObj, getS3Obj, getRootProperty, clearUsedFlags, getDomainForObjId
 #from util.dbutil import dbInitTable, insertDomainTable, batchInsertChunkTable, insertObjectTable, insertTLDTable
-from util.dbutil import getRow
+from util.dbutil import getRow, getTopLevelDomains
 import hsds_logger as log
 
 
@@ -314,14 +314,18 @@ async def GET_Domain(request):
     log.request(request)
     
     app = request.app
-    try:
-        domain = getDomainFromRequest(request)
-    except ValueError:
-        msg = "Invalid domain"
+    if "domain" not in request.GET:
+        msg = "No domain provided"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
+    domain = request.GET["domain"]
 
     log.info("GET_Domain: {}".format(domain))
+
+    if not domain.startswith("/"):
+        msg = "Domain expected to start with /"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
 
     conn = app["conn"]
     if not conn:
@@ -329,13 +333,19 @@ async def GET_Domain(request):
         log.warn(msg)
         raise HttpProcessingError(code=501, message=msg)
 
-    resp_json = getRow(conn, domain)
-    if not resp_json:
-        msg = "domain: {} not found".format(domain)
-        log.warn(msg)
-        raise HttpProcessingError(code=404, message=msg)
+    if domain == '/':
+        # get top level domains
+        domains = getTopLevelDomains(conn)
+        print("got domains:", domains)
+        resp_json = {"domains": domains}
+    else:
+        resp_json = getRow(conn, domain)
+        if not resp_json:
+            msg = "domain: {} not found".format(domain)
+            log.warn(msg)
+            raise HttpProcessingError(code=404, message=msg)
 
-    log.info("GET_Domain response: {}".format(resp_json))
+        log.info("GET_Domain response: {}".format(resp_json))
     
     resp = await jsonResponse(request, resp_json, status=200)
     log.response(request, resp=resp)

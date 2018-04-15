@@ -18,7 +18,7 @@ from aiohttp.errors import HttpBadRequest, HttpProcessingError
 
 from util.httpUtil import  http_post, http_put, http_get_json, http_delete, jsonResponse, getHref
 from util.idUtil import  getDataNodeUrl, createObjId, getS3Key, getCollectionForId
-from util.s3Util import getS3Keys, isS3Obj, getS3Bytes
+from util.s3Util import getS3Keys
 from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
 from util.domainUtil import getParentDomain, getDomainFromRequest, getS3PrefixForDomain, validateDomain, isIPAddress, isValidDomainPath
@@ -61,6 +61,32 @@ async def getRootInfo(app, root_id):
             log.error("Async error: {}".format(hpe))
             raise HttpProcessingError(code=500, message="Unexpected Error")
     return root_info
+
+async def get_toplevel_domains(app):
+    """ Get list of top level domains """
+    an_url = getAsyncNodeUrl(app)
+    req = an_url + "/domains"
+    params = {"domain": "/"}
+    log.info("ASync GET TopLevelDomains")
+    try:
+        rsp_json = await http_get_json(app, req, params=params)
+    except HttpProcessingError as hpe:
+        if hpe.code == 501:
+            log.warn("sqlite db not available")
+            return None
+        if hpe.code == 404:
+            # sqlite db not sync'd?
+            log.warn("404 repsonse for get_toplevel_domains")
+            return None
+        else:
+            log.error("Async error: {}".format(hpe))
+            raise HttpProcessingError(code=500, message="Unexpected Error")
+    if "domains" not in rsp_json:
+        log.error("domains not found in get_toplevel_domain request")
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+
+    return rsp_json["domains"]
+
 
 
 async def get_collection(app, root_id, collection, marker=None, limit=None):
@@ -200,22 +226,9 @@ async def get_domains(request):
     s3_keys = []
     if domain is None:
         # return list of toplevel domains
-        topleveldomains_key = "topleveldomains.txt"
-        col_found = await isS3Obj(app, topleveldomains_key)
-        if not col_found:
-            log.warn("{} key not found".format(topleveldomains_key))
-        else:
-            data = await getS3Bytes(app, topleveldomains_key)
-            data = data.decode('utf8')
-            lines = data.split('\n')
-            log.info("{} lines: {}".format(topleveldomains_key, lines))
-            for line in lines:
-                if not line:
-                    continue
-                if line[0] != '/':
-                    log.warn("unexpected line in {}: {}".format(topleveldomains_key, line))
-                    continue
-                s3_keys.append(line[1:])  # strip of leading slash
+        toplevel_domains = await get_toplevel_domains(app)
+        for item in toplevel_domains:
+            s3_keys.append(item)
     else:
         s3_keys = await getS3Keys(app, prefix=domain_prefix, deliminator='/')
         log.debug("got {} keys".format(len(s3_keys)))
