@@ -283,6 +283,30 @@ class HardLinkTest(unittest.TestCase):
                 rsp.status_code,
                 201)
 
+    def testLinkTwoDatasetsOnCreate_Fails500(self):
+        d1 = "d1"
+        d11 = "d1.1"
+        dset_payload = { # arbitrary
+            "type": "H5T_STD_U16LE",
+            "dims": [4, 4],
+        }
+        d1id = helper.postDataset(
+                self.domain,
+                copy(dset_payload),
+                linkpath="/"+d1)
+
+        # link-on-create from dataset
+        payload = copy(dset_payload)
+        payload["link"] = {
+            "id": d1id,
+            "name": d11,
+        }
+        rsp = requests.post(
+                f"{self.endpoint}/datasets",
+                data=json.dumps(payload),
+                headers=self.headers)
+        self.assertEqual(rsp.status_code, 500, "should not succeed")
+
     def testGetLinks_Many_Hard(self):
         headers = self.headers
         endpoint = self.endpoint
@@ -423,6 +447,8 @@ class LinkTest(unittest.TestCase):
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "could not get group")  
         self.assertEqual(rsp.json()["linkCount"], num)
+
+
 
     def testSoftLink(self):
         link_title = "softlink"
