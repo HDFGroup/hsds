@@ -410,11 +410,6 @@ class LinkTest(unittest.TestCase):
 
     assertHrefsHasOnlyRels = _verifyHrefsMembership
 
-#    def assertLooksLikeUUID(self, s):
-#        self.assertTrue(
-#                helper.validateId(s),
-#                f"Helper thinks `{s}` does not look like a valid UUID")
-
     def assertGroupListCountIs(self, num):
         rsp = requests.get(
                 f"{self.endpoint}/groups",
@@ -527,15 +522,6 @@ class LinkTest(unittest.TestCase):
                     "h5path": target_path,
                     "h5domain": target_domain,
                 })
-
-#        # how to get the object at external link -- should fail as nonexistent
-#        # continued from above section; uses link info returned
-#        ext_domain = rspLink["h5domain"]
-#        ext_path = rspLink["h5path"]
-#        with self.assertRaises(KeyError):
-#            helper.getUUIDByPath(ext_domain, ext_path)
-
-        # 
 
 # ----------------------------------------------------------------------
 
