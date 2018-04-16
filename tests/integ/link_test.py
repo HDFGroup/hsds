@@ -468,9 +468,17 @@ class LinkTest(unittest.TestCase):
         with self.assertRaises(KeyError):
             helper.getUUIDByPath(ext_domain, ext_path)
 
-    @unittest.skipUnless(
-            config.get("test_on_uploaded_file"),
-            "don't test without uploaded file")
+# ----------------------------------------------------------------------
+
+@unittest.skipUnless(
+        config.get("test_on_uploaded_file"),
+        "don't test without uploaded file")
+class LinksInFileTest(unittest.TestCase):
+    def __init__(self, *args, **kwargs):
+        super(LinksInFileTest, self).__init__(*args, **kwargs)
+        self.base_domain = helper.getTestDomainName(self.__class__.__name__)
+        helper.setupDomain(self.base_domain)
+
     def testGet(self):
         # test getting links from an existing domain
         domain = helper.getTestDomain("tall.h5")
