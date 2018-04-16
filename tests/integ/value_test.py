@@ -315,57 +315,62 @@ class ValueTest(unittest.TestCase):
                 "layout": {
                     "class": "H5D_CHUNKED",
                     "dims": [10, 10],
-                 }
-            }
+                 },
+            },
         }
         dset_id = helper.postDataset(self.base_domain, payload)
 
-        # write a horizontal strip of 22s
+        # write a horizontal strip of 22s on row 22
         req = self.endpoint + "/datasets/" + dset_id + "/value" 
-        data = [22,] * 50
+        data = [22 for _ in range(50)]
         payload = { 'start': [22, 2], 'stop': [23, 52], 'value': data }
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # read back a vertical strip that crossed the horizontal strip
         req = self.endpoint + "/datasets/" + dset_id + "/value"  # test
-        # read 6 elements, starting at index 20
         params = {"select": "[20:25,21:22]"}
+        expected = [
+            [0],
+            [0],
+            [22],
+            [0],
+            [0],
+        ]
         rsp = requests.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("value" in rspJson)
         value = rspJson["value"]
-        self.assertEqual(len(value), 5)
-        self.assertEqual(value, [[0,],[0,],[22,],[0,],[0,]])
+        self.assertListEqual(value, expected)
 
-        # write 44's to a region with a step value of 2 and 3
+        # write 44s to a region with a step value of 2 and 3
         req = self.endpoint + "/datasets/" + dset_id + "/value" 
-        data = [44,] * 20
+        data = [44 for _ in range(20)]
         payload = {
-            'start': [10, 20],
-            'stop': [20, 32],
-            'step': [2, 3],
-            'value': data,
+            "start": [10, 20],
+            "stop": [20, 32],
+            "step": [2, 3],
+            "value": data,
         }
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # read back a sub-block
         req = self.endpoint + "/datasets/" + dset_id + "/value"  # test
-        # read 6 elements, starting at index (12,14)
-        params = {"select": "[12:13,23:26]"}
+        params = {"select": "[12:18,20:25]"}
+        expected = [
+            [44, 0, 0,44, 0],
+            [ 0, 0, 0, 0, 0],
+            [44, 0, 0,44, 0],
+            [ 0, 0, 0, 0, 0],
+            [44, 0, 0,44, 0],
+            [ 0, 0, 0, 0, 0],
+        ]
         rsp = requests.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("value" in rspJson)
         value = rspJson["value"]
-        self.assertEqual(len(value), 1)
-        value = value[0]
-        self.assertEqual(len(value), 3)
-        self.assertEqual(value, [44, 0, 0])
+        self.assertListEqual(value, expected)
 
     def testPutNullPadString(self):
         headers = helper.getRequestHeaders(domain=self.base_domain)
