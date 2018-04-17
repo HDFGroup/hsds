@@ -9,73 +9,55 @@
 # distribution tree.  If you do not have access to this file, you may        #
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
+import json
+import time
 import unittest
 import requests
-import time
-import json
 import config
 import helper
 
-class GroupTest(unittest.TestCase):
-    get_group_by_id_keys = [
-        "attributeCount",
-        "created",
-        "domain",
-        "hrefs",
-        "id",
-        "lastModified",
-        "linkCount",
-        "root",
-    ]
+GET_GROUP_BY_ID_KEYS = [
+    "attributeCount",
+    "created",
+    "domain",
+    "hrefs",
+    "id",
+    "lastModified",
+    "linkCount",
+    "root",
+]
+GET_GROUP_BY_ID_RELS = [
+    "attributes",
+    "home",
+    "links",
+    "root",
+    "self"
+]
 
-    get_group_by_id_rels = [
-        "attributes",
-        "home",
-        "links",
-        "root",
-        "self"
-    ]
+POST_GROUP_KEYS = [
+    "attributeCount",
+    "created",
+    "id",
+    "lastModified",
+    "linkCount",
+    "root",
+]
 
-    post_group_keys = [
-        "attributeCount",
-        "created",
-        "id",
-        "lastModified",
-        "linkCount",
-        "root",
-    ]
+# ----------------------------------------------------------------------
 
+class GroupTest(helper.TestCase):
     def __init__(self, *args, **kwargs):
         super(GroupTest, self).__init__(*args, **kwargs)
-        self.domain = helper.getTestDomainName(self.__class__.__name__)
-        helper.setupDomain(self.domain)
-        self.headers = helper.getRequestHeaders(domain=self.domain)
-        self.endpoint = helper.getEndpoint()
-
-    def assertListMembershipEqual(self, actual, expected):
-        missing = [key for key in expected if key not in actual]
-        self.assertEqual(len(missing), 0, f"missing: {missing}")
-        extra = [key for key in actual if key not in expected]
-        self.assertEqual(len(extra), 0, f"extra: {extra}")
-
-    def assertJSONHasOnlyKeys(self, _json, keylist):
-        return self.assertListMembershipEqual(_json.keys(), keylist)
-
-    def assertHrefsHasOnlyRels(self, hrefs_list, expected_rels):
-        json_rels = [obj["rel"] for obj in hrefs_list]
-        return self.assertListMembershipEqual(json_rels, expected_rels)
 
     def testGetRootGroup(self):
-        root_uuid = helper.getRootUUID(self.domain)
-        req = f"{self.endpoint}/groups/{root_uuid}"
+        req = f"{self.endpoint}/groups/{self.root_uuid}"
 
         # get domain
         rsp = requests.get(req, headers=self.headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = rsp.json()
-        self.assertJSONHasOnlyKeys(rspJson, self.get_group_by_id_keys)
-        hrefs = rspJson["hrefs"]
-        self.assertHrefsHasOnlyRels(hrefs, self.get_group_by_id_rels)
+        self.assertJSONHasOnlyKeys(rspJson, GET_GROUP_BY_ID_KEYS)
+        self.assertHrefsHasOnlyRels(rspJson, GET_GROUP_BY_ID_RELS)
         self.assertEqual(rspJson["domain"], self.domain)
 
         # try get with alias
@@ -83,11 +65,10 @@ class GroupTest(unittest.TestCase):
         rsp = requests.get(req, params=params, headers=self.headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = rsp.json()
-        get_keys = self.get_group_by_id_keys[:]
+        get_keys = GET_GROUP_BY_ID_KEYS[:]
         get_keys.append("alias")
         self.assertJSONHasOnlyKeys(rspJson, get_keys)
-        hrefs = rspJson["hrefs"]
-        self.assertHrefsHasOnlyRels(hrefs, self.get_group_by_id_rels)
+        self.assertHrefsHasOnlyRels(rspJson, GET_GROUP_BY_ID_RELS)
         self.assertListEqual(rspJson["alias"], ['/'], "root should have alias")
 
         # try get with a different user (who has read permission)
@@ -97,7 +78,7 @@ class GroupTest(unittest.TestCase):
         rsp = requests.get(req, headers=otheruser_headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = rsp.json()
-        self.assertEqual(rspJson["root"], root_uuid)
+        self.assertEqual(rspJson["root"], self.root_uuid)
 
         # try to do a GET with a different domain (should fail)
         another_domain = helper.getParentDomain(self.domain)
@@ -124,7 +105,7 @@ class GroupTest(unittest.TestCase):
         rsp = requests.post(req, headers=self.headers)
         self.assertEqual(rsp.status_code, 201) 
         rspJson = rsp.json()
-        self.assertJSONHasOnlyKeys(rspJson, self.post_group_keys)
+        self.assertJSONHasOnlyKeys(rspJson, POST_GROUP_KEYS)
         self.assertEqual(rspJson["linkCount"], 0)   
         self.assertEqual(rspJson["attributeCount"], 0)   
         group_id = rspJson["id"]
@@ -135,9 +116,8 @@ class GroupTest(unittest.TestCase):
         rsp = requests.get(req, headers=self.headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = rsp.json()
-        self.assertJSONHasOnlyKeys(rspJson, self.get_group_by_id_keys)
-        hrefs = rspJson["hrefs"]
-        self.assertHrefsHasOnlyRels(hrefs, self.get_group_by_id_rels)
+        self.assertJSONHasOnlyKeys(rspJson, GET_GROUP_BY_ID_KEYS)
+        self.assertHrefsHasOnlyRels(rspJson, GET_GROUP_BY_ID_RELS)
         self.assertEqual(rspJson["id"], group_id)
         self.assertNotEqual(rspJson["root"], group_id)
         self.assertEqual(rspJson["domain"], self.domain)
@@ -160,11 +140,10 @@ class GroupTest(unittest.TestCase):
 
     def testPostWithLink(self):
         linkname = "linked_group"
-        root_uuid = helper.getRootUUID(self.domain)
 
         # get root group and verify link count is 0
         rsp = requests.get(
-                f"{self.endpoint}/groups/{root_uuid}",
+                f"{self.endpoint}/groups/{self.root_uuid}",
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = rsp.json()
@@ -173,7 +152,7 @@ class GroupTest(unittest.TestCase):
         # create new group  
         payload = {
             "link": {
-                "id": root_uuid,
+                "id": self.root_uuid,
                 "name": linkname 
             }
         }
@@ -183,16 +162,16 @@ class GroupTest(unittest.TestCase):
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 201) 
         rspJson = rsp.json()
-        self.assertJSONHasOnlyKeys(rspJson, self.post_group_keys)
+        self.assertJSONHasOnlyKeys(rspJson, POST_GROUP_KEYS)
         self.assertEqual(rspJson["linkCount"], 0)
         self.assertEqual(rspJson["attributeCount"], 0)
         new_group_id = rspJson["id"]
         self.assertTrue(helper.validateId(rspJson["id"]) )
-        self.assertTrue(new_group_id != root_uuid)
+        self.assertTrue(new_group_id != self.root_uuid)
 
         # get root group and verify link count is 1
         rsp = requests.get(
-                f"{self.endpoint}/groups/{root_uuid}",
+                f"{self.endpoint}/groups/{self.root_uuid}",
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = rsp.json()
@@ -200,7 +179,7 @@ class GroupTest(unittest.TestCase):
 
         # read the link back and verify
         rsp = requests.get(
-                f"{self.endpoint}/groups/{root_uuid}/links/{linkname}",
+                f"{self.endpoint}/groups/{self.root_uuid}/links/{linkname}",
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = rsp.json()
@@ -277,7 +256,6 @@ class GroupTest(unittest.TestCase):
     def testDeleteGroupWithChildGroup(self):
         g1 = "g1"
         g11 = "g1.1"
-        root_uuid = helper.getRootUUID(self.domain)
         g1id = helper.postGroup(self.domain, path="/"+g1)
         g11id = helper.postGroup(self.domain, path=f"/{g1}/{g11}")
 
@@ -289,7 +267,7 @@ class GroupTest(unittest.TestCase):
 
         # root has one link (to g1)
         rsp = requests.get(
-                f"{self.endpoint}/groups/{root_uuid}/links",
+                f"{self.endpoint}/groups/{self.root_uuid}/links",
                 headers=self.headers)
         self.assertListMembershipEqual(
                 self.getLinkIDsFromGetGroupLinks(rsp.json()),
@@ -317,14 +295,14 @@ class GroupTest(unittest.TestCase):
 
         # root's link to g1 should persist
         rsp = requests.get(
-                f"{self.endpoint}/groups/{root_uuid}",
+                f"{self.endpoint}/groups/{self.root_uuid}",
                 headers=self.headers)
         self.assertEqual(
                 rsp.json()["linkCount"],
                 1,
                 "link to deleted group should persist")
         rsp = requests.get(
-                f"{self.endpoint}/groups/{root_uuid}/links",
+                f"{self.endpoint}/groups/{self.root_uuid}/links",
                 headers=self.headers)
         self.assertListMembershipEqual(
                 self.getLinkIDsFromGetGroupLinks(rsp.json()),
@@ -354,7 +332,7 @@ class GroupTest(unittest.TestCase):
 
         # DELETE dead Link to g1
         rsp = requests.delete(
-                f"{self.endpoint}/groups/{root_uuid}/links/{g1}",
+                f"{self.endpoint}/groups/{self.root_uuid}/links/{g1}",
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "problem deleting link")
 
