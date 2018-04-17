@@ -9,6 +9,7 @@
 # distribution tree.  If you do not have access to this file, you may        #
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
+from copy import copy
 import requests
 import json
 import os.path as op
@@ -16,6 +17,7 @@ from datetime import datetime
 import time
 import pytz
 import base64
+import unittest
 
 import config
 """
@@ -198,7 +200,12 @@ Helper - post group and return its UUID. ValueError raised if problem.
 Optionally links on absolute path is path is valid.
 """
 def postGroup(domain, path=None, response=False):
-    return _post("groups", domain, {}, path=path, response=response)
+    return _post(
+            "groups",
+            domain,
+            {},
+            path=path,
+            response=response)
 
 """
 Helper - post dataset and return its UUID. ValueError raised if problem.
@@ -207,7 +214,12 @@ If keyword argument `response` is True, will return `requests` response;
 else returns UUID of dataset.
 """
 def postDataset(domain, data, linkpath=None, response=False) :
-    return _post("datasets", domain, data, path=linkpath, response=response)
+    return _post(
+            "datasets",
+            domain,
+            copy(data),
+            path=linkpath,
+            response=response)
 
 """
 Helper - Go-to util function to create objects
@@ -249,5 +261,47 @@ def resizeDataset(domain, dset_uuid, dims, response=False):
     code = res.status_code
     if code != 201:
         raise ValueError(f"Unable to update dataset shape: {code}")
+
+# ----------------------------------------------------------------------
+
+def verifyUUID(testcase, s):
+    testcase.assertTrue(validateId(s), "probably not UUID: " + s)
+
+def verifyListMembership(testcase, actual, expected):
+    are_same_set = (sorted(actual) == sorted(expected))
+    if are_same_set:
+        return
+    which = "extra"
+    diff = [x for x in actual if x not in expected]
+    if diff == [] :
+        which = "missing"
+        diff = [m for m in expected if m not in actual]
+    assert len(diff) != 0, "sanity check"
+    testcase.assertTrue(are_same_set, f"{which}: {diff}")
+
+def verifyDictionaryKeys(testcase, d, keys):
+    verifyListMembership(testcase, list(d.keys()), keys)
+
+def verifyRelsInJSONHrefs(testcase, _json, _rels):
+    href_rels = [item["rel"] for item in _json["hrefs"]]
+    verifyListMembership(testcase, href_rels, _rels)
+
+"""
+Helper - unittest TestCase wrapper with default self-setup
+"""
+class TestCase(unittest.TestCase):
+    def __init__(self, *args, **kwargs):
+        super(TestCase, self).__init__(*args, **kwargs)
+        self.domain = getTestDomainName(self.__class__.__name__)
+        setupDomain(self.domain)
+        self.endpoint = getEndpoint()
+        self.headers = getRequestHeaders(domain=self.domain)
+        self.root_uuid = getRootUUID(self.domain)
+
+    assertDictHasOnlyKeys = verifyDictionaryKeys
+    assertHrefsHasOnlyRels = verifyRelsInJSONHrefs
+    assertJSONHasOnlyKeys = verifyDictionaryKeys
+    assertListMembershipEqual = verifyListMembership
+    assertLooksLikeUUID = verifyUUID
 
 

@@ -30,151 +30,92 @@ class TestGetDNSDomain(unittest.TestCase):
                 helper.getDNSDomain("/path/to/a/file"),
                 "file.a.to.path")
 
-class GetUUIDByPathTest(unittest.TestCase):
-    def setUp(self):
-        """Set up the test domain as follows...
+# ----------------------------------------------------------------------
 
-        /
-        /g1/dset10
-        /g2/g21/dset210
-        /dset0
-        /dset210_soft   (soft link to /g2/g21/dset210)
-        """
-        self.base_domain = helper.getTestDomainName(self.__class__.__name__)
-        helper.setupDomain(self.base_domain)
-        headers = helper.getRequestHeaders(domain=self.base_domain)
-        endpoint = helper.getEndpoint()
-        groups_endpt = endpoint + "/groups"
-        dsets_endpt = endpoint + "/datasets"
-        dset_payload = '{ "type": "H5T_STD_U32LE", "shape": [8] }'
+class GetUUIDByPathTest(helper.TestCase):
+    def __init__(self, *args, **kwargs):
+        super(GetUUIDByPathTest, self).__init__(*args, **kwargs)
 
-        # create all groups and datasets
-        rootid = helper.getRootUUID(self.base_domain)
-        g1id = requests.post(groups_endpt, headers=headers).json()["id"]
-        g2id = requests.post(groups_endpt, headers=headers).json()["id"]
-        g21id = requests.post(groups_endpt, headers=headers).json()["id"]
-        d0id = requests.post(
-                dsets_endpt, headers=headers, data=dset_payload).json()["id"]
-        d10id = requests.post(
-                dsets_endpt, headers=headers, data=dset_payload).json()["id"]
-        d210id = requests.post(
-                dsets_endpt, headers=headers, data=dset_payload).json()["id"]
+    def testGetByPath(self):
+        payload = {
+            "type": "H5T_STD_U32LE",
+            "shape": [8],
+        }
 
-        # link objects into tree
-        assert requests.put(
-                f"{groups_endpt}/{rootid}/links/g1", 
-                data=f'{{"id": "{g1id}"}}', # {"id": "<some_id>"}
-                headers=headers
-        ).status_code == 201, "unable to link `/g1`"
-        assert requests.put(
-                f"{groups_endpt}/{rootid}/links/g2", 
-                data=f'{{"id": "{g2id}"}}',
-                headers=headers
-        ).status_code == 201, "unable to link `/g2`"
-        assert requests.put(
-                f"{groups_endpt}/{g2id}/links/g21", 
-                data=f'{{"id": "{g21id}"}}',
-                headers=headers
-        ).status_code == 201, "unable to link `/g2/g21`"
-        assert requests.put(
-                f"{groups_endpt}/{rootid}/links/dset0", 
-                data=f'{{"id": "{d0id}"}}',
-                headers=headers
-        ).status_code == 201, "unable to link `/dset0`"
-        assert requests.put(
-                f"{groups_endpt}/{g1id}/links/dset10", 
-                data=f'{{"id": "{d10id}"}}',
-                headers=headers
-        ).status_code == 201, "unable to link `/g1/dset0`"
-        assert requests.put(
-                f"{groups_endpt}/{g21id}/links/dset210", 
-                data=f'{{"id": "{d210id}"}}',
-                headers=headers
-        ).status_code == 201, "unable to link `/g2/g21/dset0`"
-        assert requests.put(
-                f"{groups_endpt}/{rootid}/links/dset210_soft", 
-                data=f'{{"h5path": "/g2/g21/dset210"}}',
-                headers=headers
-        ).status_code == 201, "unable to link `/dset210_soft`"
+        # create and link all groups and datasets
+        # /
+        # /dset0
+        # /g1/dset10
+        # /g2/g21/dset210
+        # /dset210_soft   (soft link to /g2/g21/dset210)
+        g1id = helper.postGroup(self.domain, "/g1")
+        g2id = helper.postGroup(self.domain, "/g2")
+        g21id = helper.postGroup(self.domain, "/g2/g21")
+        d0id = helper.postDataset(self.domain, payload, "/dset0")
+        d10id = helper.postDataset(self.domain, payload, "/g1/dset10")
+        d210id = helper.postDataset(self.domain, payload, "/g2/g21/dset210")
+        rsp = requests.put(
+                f"{self.endpoint}/groups/{self.root_uuid}/links/dset210_soft", 
+                data='{"h5path": "/g2/g21/dset210"}',
+                headers=self.headers)
+        self.assertEqual(rsp.status_code, 201, "unable to link dset210_soft")
 
-        # remember ids for tests
-        self.root = rootid
-        self.g1 = g1id
-        self.g2 = g2id
-        self.g21 = g21id
-        self.d0 = d0id
-        self.d10 = d10id
-        self.d210 = d210id
-
-    def test_on_provided_domain(self):
-        # Do most or all of the tests in one function because of the overhead
-        # of creating the tree... 1-3 seconds per setup is _huge_.
+        # TESTS
 
         self.assertEqual(
-                helper.getUUIDByPath(self.base_domain, "/"),
-                self.root,
+                helper.getUUIDByPath(self.domain, "/"),
+                self.root_uuid,
                 "root group")
 
         self.assertEqual(
-                helper.getUUIDByPath(self.base_domain, "/g1"),
-                self.g1,
+                helper.getUUIDByPath(self.domain, "/g1"),
+                g1id,
                 "group linked from root")
 
         self.assertEqual(
-                helper.getUUIDByPath(self.base_domain, "/dset0"),
-                self.d0,
+                helper.getUUIDByPath(self.domain, "/dset0"),
+                d0id,
                 "dataset linked from root")
 
         self.assertEqual(
-                helper.getUUIDByPath(self.base_domain, "/g2/g21"),
-                self.g21,
+                helper.getUUIDByPath(self.domain, "/g2/g21"),
+                g21id,
                 "group linked away from root")
 
         self.assertEqual(
-                helper.getUUIDByPath(self.base_domain, "/g2/g21/dset210"),
-                self.d210,
+                helper.getUUIDByPath(self.domain, "/g2/g21/dset210"),
+                d210id,
                 "dataset linked away from root")
 
-        # softlink to dataset from root (not allowed)
+        # unable to get softlink to dataset from root
         with self.assertRaises(KeyError):
-            helper.getUUIDByPath(self.base_domain, "/dset210_soft")
+            helper.getUUIDByPath(self.domain, "/dset210_soft")
 
         # object does not exist at target path
         with self.assertRaises(KeyError):
-            helper.getUUIDByPath(self.base_domain, "/nonexistent/thing")
+            helper.getUUIDByPath(self.domain, "/nonexistent/thing")
 
         # object does not exist at target path (partially viable)
         with self.assertRaises(KeyError):
-            helper.getUUIDByPath(self.base_domain, "/g1/dset_gone")
+            helper.getUUIDByPath(self.domain, "/g1/dset_missing")
 
         # path must begin with a slash
         with self.assertRaises(KeyError):
-            helper.getUUIDByPath(self.base_domain, "g2/g21")
+            helper.getUUIDByPath(self.domain, "g2/g21")
 
-        # TODO: link dataset to dataset?
+# ----------------------------------------------------------------------
 
-class postDatasetTest(unittest.TestCase) :
-    endpoint = None
-    domain = None
-    headers = None
+class PostDatasetTest(helper.TestCase):
     datatype = {"type": "H5T_STD_U32LE"}
 
-    @classmethod
-    def setUpClass(cls):
-        cls.domain = helper.getTestDomainName(cls.__name__)
-        helper.setupDomain(cls.domain)
-        cls.endpoint = helper.getEndpoint()
-        cls.headers = helper.getRequestHeaders(domain=cls.domain)
-
-    def setUp(self):
-        root = helper.getRootUUID(self.domain)
-        assert helper.validateId(root), "domain invalid!"
+    def __init__(self, *args, **kwargs):
+        super(PostDatasetTest, self).__init__(*args, **kwargs)
 
     def testPostAndGetViaUUID(self):
         did = helper.postDataset(
                 self.domain,
                 self.datatype)
-        self.assertTrue(helper.validateId(did), "invalid dataset id?")
+        self.assertLooksLikeUUID(did)
 
         get_rsp = requests.get(
                 f"{self.endpoint}/datasets/{did}",
@@ -187,7 +128,7 @@ class postDatasetTest(unittest.TestCase) :
                 self.domain,
                 self.datatype,
                 linkpath=linkpath)
-        self.assertTrue(helper.validateId(did), "invalid dataset id?")
+        self.assertLooksLikeUUID(did)
 
         # can get back by ID
         get_rsp = requests.get(
@@ -210,7 +151,7 @@ class postDatasetTest(unittest.TestCase) :
                 201,
                 "should have CREATED status code")
         rspJson = rsp.json()
-        self.assertTrue(helper.validateId(rspJson["id"]))
+        self.assertLooksLikeUUID(rspJson["id"])
 
     # TODO: link conflicts (err)
     # TODO: link to child group (err)
@@ -219,22 +160,18 @@ class postDatasetTest(unittest.TestCase) :
     # TODO: type-checking?
     # TODO: pass-in username and password
 
-class PostGroupTest(unittest.TestCase):
+# ----------------------------------------------------------------------
+
+class PostGroupTest(helper.TestCase):
     def __init__(self, *args, **kwargs):
         super(PostGroupTest, self).__init__(*args, **kwargs)
-        self.domain = helper.getTestDomainName(self.__class__.__name__)
-        helper.setupDomain(self.domain)
-        self.endpoint = helper.getEndpoint()
-        self.headers = helper.getRequestHeaders(domain=self.domain)
-        self.root_uuid = helper.getRootUUID(domain=self.domain)
 
     def testCreateAndLink(self):
         path = "/group1"
         gid = helper.postGroup(self.domain, path=path)
-        self.assertTrue(helper.validateId(gid), "doesn't look like UUID")
-
+        self.assertLooksLikeUUID(gid)
         uuid = helper.getUUIDByPath(self.domain, path)
-        self.assertEqual(uuid, gid, "fetched idea should matched returned")
+        self.assertEqual(uuid, gid)
 
     def testJustPost(self):
         # verify starting condition
@@ -273,6 +210,113 @@ class PostGroupTest(unittest.TestCase):
         self.assertEqual(response.status_code, 201, "should report CREATED")
         rspJson = response.json()
         self.assertEqual(type(rspJson), dict)
+
+# ----------------------------------------------------------------------
+
+class HelperVerificationRoutinesTest(unittest.TestCase):
+    def __init__(self, *args, **kwargs):
+        super(HelperVerificationRoutinesTest, self).__init__(*args, **kwargs)
+
+    def testListMembership(self):
+        with self.assertRaises(TypeError):
+            helper.verifyListMembership(self, None, [])
+
+        with self.assertRaises(TypeError):
+            helper.verifyListMembership(self, [], None)
+
+        # unable to sort heterogeneous types
+        with self.assertRaises(TypeError):
+            helper.verifyListMembership(self, ["a", 7], [7, "a"])
+
+        with self.assertRaises(AssertionError):
+            helper.verifyListMembership(self, [3], [3,1])
+
+        with self.assertRaises(AssertionError):
+            helper.verifyListMembership(self, [3,2], [3,1])
+
+        with self.assertRaises(AssertionError):
+            helper.verifyListMembership(self, [3,2], [])
+
+        helper.verifyListMembership(self, [], [])
+        helper.verifyListMembership(self, [3,2], [3,2])
+        helper.verifyListMembership(self, [2,3], [3,2])
+        helper.verifyListMembership(self, [1,2,3,4,5], [5,4,3,1,2])
+
+        # tuple sequence intepreted as valid sequence
+        helper.verifyListMembership(self, (3,1), [3,1])
+
+        # dictionary's keys interpreted as valid sequence
+        helper.verifyListMembership(self, {"a": 5}, ["a"])
+        with self.assertRaises(AssertionError):
+            helper.verifyListMembership(self, [], {"a": 5})
+
+    def testDictKeys(self):
+        helper.verifyDictionaryKeys(
+                self,
+                {"a":5, "L": 2, "None": []},
+                ["a", "L", "None"])
+
+        with self.assertRaises(AssertionError):
+            helper.verifyDictionaryKeys(self, {"a":5, "b":7}, ["b"])
+
+        with self.assertRaises(AssertionError):
+            helper.verifyDictionaryKeys(self, {"a":5}, ["b", "a"])
+
+        with self.assertRaises(AssertionError):
+            helper.verifyDictionaryKeys(self, {"a":5, "b":7}, ["7"])
+
+    def testHrefsInJSON(self):
+        helper.verifyRelsInJSONHrefs(self, {"hrefs": []}, [])
+
+        _json = {
+            "hrefs": [
+                {"rel": "a", "href": "http"},
+                {"rel": "b", "href": "http"},
+                {"rel": "c", "href": "http"},
+            ],
+        }
+
+        helper.verifyRelsInJSONHrefs(self, _json, ["a", "b", "c"])
+
+        with self.assertRaises(AssertionError):
+            helper.verifyRelsInJSONHrefs(self, _json, ["b", "c"])
+
+        with self.assertRaises(AssertionError):
+            helper.verifyRelsInJSONHrefs(self, _json, ["b", "c", "a", "d"])
+
+# ----------------------------------------------------------------------
+
+class HelperTestCaseTest(helper.TestCase):
+    def __init__(self, *args, **kwargs):
+        super(HelperTestCaseTest, self).__init__(*args, **kwargs)
+
+    def testGetRoot(self):
+        expKeys = [
+            "attributeCount",
+            "created",
+            "domain",
+            "hrefs",
+            "id",
+            "lastModified",
+            "linkCount",
+            "root",
+        ]
+        expRels = [
+            "attributes",
+            "home",
+            "links",
+            "root",
+            "self",
+        ]
+        rsp = requests.get(
+                f"{self.endpoint}/groups/{self.root_uuid}",
+                headers=self.headers)
+        rspJson = rsp.json()
+        self.assertJSONHasOnlyKeys(rspJson, expKeys)
+        self.assertHrefsHasOnlyRels(rspJson, expRels)
+        self.assertEqual(rspJson["domain"], self.domain)
+
+# ----------------------------------------------------------------------
 
 if __name__ == "__main__":
     unittest.main()
