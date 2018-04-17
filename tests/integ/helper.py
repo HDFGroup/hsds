@@ -304,4 +304,18 @@ class TestCase(unittest.TestCase):
     assertListMembershipEqual = verifyListMembership
     assertLooksLikeUUID = verifyUUID
 
+    def assertGroupsListLenIs(self, num):
+        rsp = requests.get(
+                f"{self.endpoint}/groups",
+                headers=self.headers)
+        self.assertEqual(rsp.status_code, 200, "could not get groups")
+        self.assertEqual(len(rsp.json()["groups"]), num)
+
+    def assertGroupHasNLinks(self, group_uuid, num):
+        rsp = requests.get(
+                f"{self.endpoint}/groups/{group_uuid}",
+                headers=self.headers)
+        self.assertEqual(rsp.status_code, 200, "could not get group")
+        self.assertEqual(rsp.json()["linkCount"], num)
+
 

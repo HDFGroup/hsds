@@ -34,68 +34,22 @@ GET_SOFTLINK_HREFS_RELS = [
     "home",
     "owner",
     "self",
-#    "target",
 ]
 
-def _verifyListMembership(testcase, act, exp):
-    are_same_set = (sorted(act) == sorted(exp))
-    if are_same_set:
-        return
-    which = "extra"
-    diff = [x for x in act if x not in exp]
-    if diff == [] :
-        which = "missing"
-        diff = [m for m in exp if m not in act]
-    assert len(diff) != 0, "sanity check"
-    testcase.assertTrue(are_same_set, f"{which}: {diff}")
+# ----------------------------------------------------------------------
 
-def _verifyHrefsMembership(testcase, _json, exp):
-    json_rels = [obj["rel"] for obj in _json["hrefs"]]
-    _verifyListMembership(testcase, json_rels, exp)
-
-class HardLinkTest(unittest.TestCase):
+class HardLinkTest(helper.TestCase):
     def __init__(self, *args, **kwargs):
         super(HardLinkTest, self).__init__(*args, **kwargs)
-        self.domain = helper.getTestDomainName(self.__class__.__name__)
-        helper.setupDomain(self.domain)
-        self.endpoint = helper.getEndpoint()
-        self.headers = helper.getRequestHeaders(domain=self.domain)
-        self.root_uuid = helper.getRootUUID(domain=self.domain)
-
-    assertListMembershipEqual = _verifyListMembership
-
-    assertHrefsHasOnlyRels = _verifyHrefsMembership
-
-    def assertLooksLikeUUID(self, s):
-        self.assertTrue(
-                helper.validateId(s),
-                f"Helper thinks `{s}` does not look like a valid UUID")
-
-    def assertGroupListCountIs(self, num):
-        rsp = requests.get(
-                f"{self.endpoint}/groups",
-                headers=self.headers)
-        self.assertEqual(rsp.status_code, 200, "could not get groups")  
-        self.assertEqual(len(rsp.json()["groups"]), num)
-
-    def assertGroupHasNLinks(self, group_uuid, num):
-        rsp = requests.get(
-                f"{self.endpoint}/groups/{group_uuid}",
-                headers=self.headers)
-        self.assertEqual(rsp.status_code, 200, "could not get group")  
-        self.assertEqual(rsp.json()["linkCount"], num)
-
-
 
     def testRootGroupHasNoLinksAtStart(self):
         self.assertGroupHasNLinks(self.root_uuid, 0)
-        self.assertGroupListCountIs(0)
+        self.assertGroupsListLenIs(0)
 
     def testUnlinkedGroupIsUnlinked(self):
         group_uuid = helper.postGroup(self.domain)
         self.assertLooksLikeUUID(group_uuid)
-
-        self.assertGroupListCountIs(0)
+        self.assertGroupsListLenIs(0)
 
     def testGetMissingLink_Fails404(self):
         linkname = "g1"
@@ -113,7 +67,7 @@ class HardLinkTest(unittest.TestCase):
 
         grp1_id = helper.postGroup(self.domain)
         self.assertLooksLikeUUID(grp1_id)
-        self.assertGroupListCountIs(0)
+        self.assertGroupsListLenIs(0)
 
         req = f"{self.endpoint}/groups/{self.root_uuid}/links/{linkname}"
         headers = helper.getRequestHeaders(
@@ -124,12 +78,12 @@ class HardLinkTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 403, "unauthorized put is forbidden")
 
         self.assertGroupHasNLinks(self.root_uuid, 0)
-        self.assertGroupListCountIs(0)
+        self.assertGroupsListLenIs(0)
 
     def testLinkFromRoot(self):
         linkname = "g1"
         gid = helper.postGroup(self.domain)
-        self.assertGroupListCountIs(0)
+        self.assertGroupsListLenIs(0)
 
         payload = {"id": gid}
         rsp = requests.put(
@@ -139,7 +93,7 @@ class HardLinkTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 201, "problem making link")
         self.assertGroupHasNLinks(self.root_uuid, 1)
         self.assertGroupHasNLinks(gid, 0)
-        self.assertGroupListCountIs(1)
+        self.assertGroupsListLenIs(1)
 
         # get the link and inspect
         expected_keys = GET_LINK_KEYS
@@ -171,7 +125,7 @@ class HardLinkTest(unittest.TestCase):
         dset_id = helper.postDataset(self.domain, dset_payload)
         gid1 = helper.postGroup(self.domain, path=f"/{linkname}")
         gid2 = helper.postGroup(self.domain)
-        self.assertGroupListCountIs(1)
+        self.assertGroupsListLenIs(1)
 
         for id, kind in ((dset_id, "dataset"), (gid2, "group")):
             payload = {"id": id}
@@ -184,7 +138,7 @@ class HardLinkTest(unittest.TestCase):
                     409,
                     f"{kind} should have conflict with existing link")
             self.assertGroupHasNLinks(self.root_uuid, 1)
-            self.assertGroupListCountIs(1)
+            self.assertGroupsListLenIs(1)
 
     def testDeleteLinkWithouPermission_Fails403(self):
         linkname = "g1"
@@ -193,7 +147,7 @@ class HardLinkTest(unittest.TestCase):
         grp1_id = helper.postGroup(self.domain, path=f"/{linkname}")
         self.assertLooksLikeUUID(grp1_id)
         self.assertGroupHasNLinks(self.root_uuid, 1)
-        self.assertGroupListCountIs(1)
+        self.assertGroupsListLenIs(1)
 
         headers = helper.getRequestHeaders(
                 domain=self.domain,
@@ -204,14 +158,14 @@ class HardLinkTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 403, "unauthorized put is forbidden")
 
         self.assertGroupHasNLinks(self.root_uuid, 1)
-        self.assertGroupListCountIs(1)
+        self.assertGroupsListLenIs(1)
 
     def testDelete(self):
         linkname = "g1"
         grp1_id = helper.postGroup(self.domain, path=f"/{linkname}")
         self.assertLooksLikeUUID(grp1_id)
         self.assertGroupHasNLinks(self.root_uuid, 1)
-        self.assertGroupListCountIs(1)
+        self.assertGroupsListLenIs(1)
 
         rsp = requests.delete(
                 f"{self.endpoint}/groups/{self.root_uuid}/links/{linkname}",
@@ -219,7 +173,7 @@ class HardLinkTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200, "problem deleting")
 
         self.assertGroupHasNLinks(self.root_uuid, 0)
-        self.assertGroupListCountIs(0)
+        self.assertGroupsListLenIs(0)
         rsp = requests.get(
                 f"{self.endpoint}/groups/{grp1_id}",
                 headers=self.headers)
@@ -328,7 +282,7 @@ class HardLinkTest(unittest.TestCase):
         sorted_names = sorted(link_names)
 
         self.assertGroupHasNLinks(self.root_uuid, 0)
-        self.assertGroupListCountIs(0)
+        self.assertGroupsListLenIs(0)
 
         # create subgroups and link them to root using the above names
         for link_name in link_names:
@@ -337,7 +291,7 @@ class HardLinkTest(unittest.TestCase):
 
         expCount = len(link_names)
         self.assertGroupHasNLinks(self.root_uuid, expCount)
-        self.assertGroupListCountIs(expCount)
+        self.assertGroupsListLenIs(expCount)
 
         # get all the links for the root group
         rsp = requests.get(
@@ -421,42 +375,17 @@ class HardLinkTest(unittest.TestCase):
 
 # ----------------------------------------------------------------------
 
-class LinkTest(unittest.TestCase):
+class LinkTest(helper.TestCase):
     def __init__(self, *args, **kwargs):
         super(LinkTest, self).__init__(*args, **kwargs)
-        self.domain = helper.getTestDomainName(self.__class__.__name__)
-        self.base_domain = self.domain
-        helper.setupDomain(self.domain)
-        self.headers = helper.getRequestHeaders(domain=self.domain)
-        self.endpoint = helper.getEndpoint()
-
-    assertListMembershipEqual = _verifyListMembership
-
-    assertHrefsHasOnlyRels = _verifyHrefsMembership
-
-    def assertGroupListCountIs(self, num):
-        rsp = requests.get(
-                f"{self.endpoint}/groups",
-                headers=self.headers)
-        self.assertEqual(rsp.status_code, 200, "could not get groups")  
-        self.assertEqual(len(rsp.json()["groups"]), num)
-
-    def assertGroupHasNLinks(self, group_uuid, num):
-        rsp = requests.get(
-                f"{self.endpoint}/groups/{group_uuid}",
-                headers=self.headers)
-        self.assertEqual(rsp.status_code, 200, "could not get group")  
-        self.assertEqual(rsp.json()["linkCount"], num)
-
-
 
     def testSoftLink(self):
         link_title = "softlink"
         target_path = "somewhere"
-        root_id = helper.getRootUUID(self.domain)
+        root_id = self.root_uuid
         link_req = f"{self.endpoint}/groups/{root_id}/links/{link_title}"
 
-        self.assertGroupListCountIs(0)
+        self.assertGroupsListLenIs(0)
         self.assertGroupHasNLinks(root_id, 0)
 
         payload = {"h5path": target_path}
@@ -466,7 +395,7 @@ class LinkTest(unittest.TestCase):
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 201, "problem creating soft link")
 
-        self.assertGroupListCountIs(0)
+        self.assertGroupsListLenIs(0)
         self.assertGroupHasNLinks(root_id, 1)
 
         rsp = requests.get(link_req, headers=self.headers)
@@ -487,7 +416,7 @@ class LinkTest(unittest.TestCase):
         root = helper.getRootUUID(self.domain)
         g1id = helper.postGroup(self.domain, f"/{hardname}")
 
-        self.assertGroupListCountIs(1)
+        self.assertGroupsListLenIs(1)
         self.assertGroupHasNLinks(root, 1)
         rsp = requests.get(
                 f"{self.endpoint}/groups/{g1id}",
@@ -503,7 +432,7 @@ class LinkTest(unittest.TestCase):
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 201, "problem creating soft link")
 
-        self.assertGroupListCountIs(1)
+        self.assertGroupsListLenIs(1)
         self.assertGroupHasNLinks(root, 2)
         rsp = requests.get(
                 f"{self.endpoint}/groups/{g1id}",
@@ -515,13 +444,13 @@ class LinkTest(unittest.TestCase):
                 [f"/{hardname}"])
 
     def testExternalLink(self):
-        root_id = helper.getRootUUID(self.base_domain)
+        root_id = self.root_uuid
         parent_domain = helper.getParentDomain(self.domain)
         target_domain = f"external_target.{parent_domain}"
         target_path = 'somewhere'
         link_title = 'external_link'
 
-        self.assertGroupListCountIs(0)
+        self.assertGroupsListLenIs(0)
         self.assertGroupHasNLinks(root_id, 0)
 
         # create external link
@@ -530,7 +459,7 @@ class LinkTest(unittest.TestCase):
         rsp = requests.put(req, data=json.dumps(payload), headers=self.headers)
         self.assertEqual(rsp.status_code, 201, "problem creating ext. link")
 
-        self.assertGroupListCountIs(0)
+        self.assertGroupsListLenIs(0)
         self.assertGroupHasNLinks(root_id, 1)
 
         # get the link
