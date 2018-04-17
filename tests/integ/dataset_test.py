@@ -10,7 +10,7 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import unittest
-import requests
+from requests import delete as DELETE, get as GET, post as POST, put as PUT
 import json
 import time
 import config
@@ -90,7 +90,7 @@ def _verifyShape(testcase, dset_uuid, shapedict):
     # requires that the test case have:
     # + 'endpoint' uri to hsds endpoint
     # + 'headers' request headers targeting the relevant domain
-    rsp = requests.get(
+    rsp = GET(
             f"{testcase.endpoint}/datasets/{dset_uuid}/shape",
             headers=testcase.headers)
     testcase.assertEqual(rsp.status_code, 200, "unable to get shape")
@@ -109,6 +109,7 @@ class CommonDatasetOperationsTest(unittest.TestCase):
     assertLooksLikeUUID = helper.verifyUUID
     assertJSONHasOnlyKeys = helper.verifyDictionaryKeys
     assertHrefsHasOnlyRels = helper.verifyRelsInJSONHrefs
+    assertListMembershipEqual = helper.verifyListMembership
     given_payload = {"type": "H5T_IEEE_F32LE"} # arbitrary scalar datatype
     given_dset_id = None
 
@@ -132,7 +133,7 @@ class CommonDatasetOperationsTest(unittest.TestCase):
         """Sanity checks before each test."""
         assert helper.validateId(helper.getRootUUID(self.base_domain)) == True
         assert self.headers is not None
-        get_given = requests.get(
+        get_given = GET(
                 f"{self.endpoint}/datasets/{self.given_dset_id}",
                 headers = self.headers)
         assert get_given.status_code == 200, "given dataset inexplicably gone"
@@ -142,7 +143,7 @@ class CommonDatasetOperationsTest(unittest.TestCase):
     def testPost(self):
         data = { "type": "H5T_IEEE_F32LE" } # arbitrary
         req = f"{self.endpoint}/datasets"
-        rsp = requests.post(req, data=json.dumps(data), headers=self.headers)
+        rsp = POST(req, data=json.dumps(data), headers=self.headers)
         self.assertEqual(rsp.status_code, 201, "problem creating dataset")
         rspJson = rsp.json()
         self.assertEqual(rspJson["attributeCount"], 0)
@@ -152,7 +153,7 @@ class CommonDatasetOperationsTest(unittest.TestCase):
 
     def testGet(self):
         req = f"{self.endpoint}/datasets/{self.given_dset_id}"
-        rsp = requests.get(req, headers=self.headers)
+        rsp = GET(req, headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "problem getting dataset")
         rspJson = rsp.json()
         self.assertJSONHasOnlyKeys(rspJson, GET_DATASET_KEYS)
@@ -165,7 +166,7 @@ class CommonDatasetOperationsTest(unittest.TestCase):
 
     def testGetType(self):
         req = f"{self.endpoint}/datasets/{self.given_dset_id}/type"
-        rsp = requests.get(req, headers=self.headers)
+        rsp = GET(req, headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "problem getting dset's type")
         rspJson = rsp.json()
         self.assertJSONHasOnlyKeys(rspJson, GET_TYPE_KEYS)
@@ -174,7 +175,7 @@ class CommonDatasetOperationsTest(unittest.TestCase):
 
     def testGetShape(self):
         req = f"{self.endpoint}/datasets/{self.given_dset_id}/shape"
-        rsp = requests.get(req, headers=self.headers)
+        rsp = GET(req, headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "problem getting dset's shape")
         rspJson = rsp.json()
         self.assertJSONHasOnlyKeys(rspJson, GET_SHAPE_KEYS)
@@ -184,7 +185,7 @@ class CommonDatasetOperationsTest(unittest.TestCase):
     def testGet_VerboseNotYetImplemented(self):
         req = f"{self.endpoint}/datasets/{self.given_dset_id}"
         params = {"verbose": 1}
-        rsp = requests.get(req, headers=self.headers, params=params)
+        rsp = GET(req, headers=self.headers, params=params)
         self.assertEqual(rsp.status_code, 200, "problem getting dataset")
         rspJson = rsp.json()
         self.assertFalse("num_chunks" in rspJson)
@@ -204,7 +205,7 @@ class CommonDatasetOperationsTest(unittest.TestCase):
         headers = helper.getRequestHeaders(
                 domain=self.base_domain,
                 username=other_user)
-        rsp = requests.get(req, headers=headers)
+        rsp = GET(req, headers=headers)
         self.assertEqual(rsp.status_code, 200, "unable to get dataset")
         self.assertEqual(rsp.json()["id"], self.given_dset_id)
 
@@ -212,7 +213,7 @@ class CommonDatasetOperationsTest(unittest.TestCase):
         req = f"{self.endpoint}/datasets/{self.given_dset_id}"
         another_domain = helper.getParentDomain(self.base_domain)
         headers = helper.getRequestHeaders(domain=another_domain)
-        response = requests.get(req, headers=headers)
+        response = GET(req, headers=headers)
         self.assertEqual(response.status_code, 400, "fail 400 to hide details")
 
     def testDelete_OtherUserWithoutPermission_Fails403(self):
@@ -225,7 +226,7 @@ class CommonDatasetOperationsTest(unittest.TestCase):
         headers = helper.getRequestHeaders(
                 domain=self.base_domain,
                 username=other_user)
-        rsp = requests.delete(req, headers=headers)
+        rsp = DELETE(req, headers=headers)
         self.assertEqual(rsp.status_code, 403, "should be forbidden")
 
     def testDelete_UnknownUser_Fails401(self):
@@ -238,14 +239,14 @@ class CommonDatasetOperationsTest(unittest.TestCase):
         headers = helper.getRequestHeaders(
                 domain=self.base_domain,
                 username=other_user)
-        rsp = requests.delete(req, headers=headers)
+        rsp = DELETE(req, headers=headers)
         self.assertEqual(rsp.status_code, 401, "should be unauthorized")
 
     def testDeleteInOtherDomain_Fails400(self):
         req = f"{self.endpoint}/datasets/{self.given_dset_id}"
         another_domain = helper.getParentDomain(self.base_domain)
         headers = helper.getRequestHeaders(domain=another_domain)
-        response = requests.delete(req, headers=headers)
+        response = DELETE(req, headers=headers)
         self.assertEqual(response.status_code, 400, "fail 400 to hide details")
 
     def testDelete(self):
@@ -253,14 +254,14 @@ class CommonDatasetOperationsTest(unittest.TestCase):
         dset_id = helper.postDataset(self.base_domain, datatype)
         req = f"{self.endpoint}/datasets/{dset_id}"
 
-        get_rsp = requests.get(req, headers=self.headers)
+        get_rsp = GET(req, headers=self.headers)
         self.assertEqual(get_rsp.status_code, 200, "should be OK")
 
-        del_rsp = requests.delete(req, headers=self.headers)
+        del_rsp = DELETE(req, headers=self.headers)
         self.assertEqual(del_rsp.status_code, 200, "problem deleting dataset")
         self.assertDictEqual(del_rsp.json(), {}, "should return empty object")
 
-        get_rsp = requests.get(req, headers=self.headers)
+        get_rsp = GET(req, headers=self.headers)
         self.assertEqual(
                 get_rsp.status_code,
                 410,
@@ -273,40 +274,58 @@ class CommonDatasetOperationsTest(unittest.TestCase):
         root = helper.getRootUUID(domain)
 
         payload = { "type": "H5T_IEEE_F32LE" }
-        did0 = helper.postDataset(domain, payload, linkpath="/d0")
-        did1 = helper.postDataset(domain, payload, linkpath="/d1")
+        d0id = helper.postDataset(domain, payload, linkpath="/d0")
+        d1id = helper.postDataset(domain, payload, linkpath="/d1")
 
         # verify setup
-        res = requests.get(
+        res = GET(
                 f"{self.endpoint}/groups/{root}/links",
                 headers=headers)
         links = res.json()["links"]
         self.assertEqual(len(links), 2, "only the two links") 
-        res = requests.get(f"{self.endpoint}/datasets", headers=headers)
+        res = GET(f"{self.endpoint}/datasets", headers=headers)
         dsets = res.json()["datasets"]
-        for id in (did0, did1) :
+        for id in (d0id, d1id) :
             self.assertTrue(id in dsets, f"missing {id}")
         self.assertEqual(len(dsets), 2, "only the two datasets")
 
-        # delete d1 while still linked
-        res = requests.delete(
-                f"{self.endpoint}/datasets/{did0}",
+        # delete d0 while still linked
+        res = DELETE(
+                f"{self.endpoint}/datasets/{d0id}",
                 headers=headers)
         self.assertEqual(res.status_code, 200, "unable to delete dset")
 
         # verify domain structure
-        res = requests.get(f"{self.endpoint}/datasets/{did0}", headers=headers)
+        res = GET(f"{self.endpoint}/datasets/{d0id}", headers=headers)
         self.assertEqual(res.status_code, 410, "d0 should be gone")
-        res = requests.get(f"{self.endpoint}/datasets/{did1}", headers=headers)
+        res = GET(f"{self.endpoint}/datasets/{d1id}", headers=headers)
         self.assertEqual(res.status_code, 200, "d1 should be ok")
-        res = requests.get(
+        res = GET(
                 f"{self.endpoint}/groups/{root}/links",
                 headers=headers)
         links = res.json()["links"]
-        self.assertEqual(len(links), 1, "only the one link") 
-        res = requests.get(f"{self.endpoint}/datasets", headers=headers)
+        self.assertEqual(len(links), 2, "dead link persists") 
+        res = GET(f"{self.endpoint}/datasets", headers=headers)
         dsets = res.json()["datasets"]
-        self.assertEqual(dsets, [did1], "only the one dset should remain")
+        self.assertListMembershipEqual(dsets, [d0id, d1id]) # persists!
+
+        # delete link to d0
+        res = DELETE(
+                f"{self.endpoint}/groups/{root}/links/d0",
+                headers=headers)
+        self.assertEqual(res.status_code, 200, "unable to delete dset")
+
+        # verify domain structure
+        res = GET(f"{self.endpoint}/datasets/{d0id}", headers=headers)
+        self.assertEqual(res.status_code, 410, "d0 should be gone")
+        res = GET(f"{self.endpoint}/datasets/{d1id}", headers=headers)
+        self.assertEqual(res.status_code, 200, "d1 should be ok")
+        res = GET(f"{self.endpoint}/groups/{root}/links", headers=headers)
+        links = res.json()["links"]
+        self.assertEqual(len(links), 1, "dead link gone") 
+        res = GET(f"{self.endpoint}/datasets", headers=headers)
+        dsets = res.json()["datasets"]
+        self.assertListMembershipEqual(dsets, [d1id]) # deleted
 
     @unittest.skip("TODO")
     def testPostWithMalformedPayload(self):
@@ -322,12 +341,12 @@ class ListDomainDatasetsTest(helper.TestCase):
         dtype = {"type": "H5T_STD_U32LE"} # arbitrary
         dset0 = helper.postDataset(self.domain, dtype)
 
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/groups/{self.root_uuid}",
                 headers=self.headers)
         self.assertEqual(rsp.json()["linkCount"], 0, "should have no links")
 
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/datasets",
                 headers=self.headers)
         rspJson = rsp.json()
@@ -349,12 +368,12 @@ class ListDomainDatasetsTest(helper.TestCase):
             id = helper.postDataset(self.domain, dtype, linkpath=path)
             dset_ids[name] = id
 
-        rsp = requests.get(
+        rsp = GET(
             f"{self.endpoint}/groups/{self.root_uuid}",
             headers=self.headers)
         self.assertEqual(rsp.json()["linkCount"], 3, "should have 3 links")
 
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/datasets",
                 headers=self.headers)
         rspJson = rsp.json()
@@ -379,13 +398,13 @@ class ListDomainDatasetsTest(helper.TestCase):
         d122id = helper.postDataset(domain, dtype, linkpath="/g1/g2/d2")
         d123id = helper.postDataset(domain, dtype, linkpath="/g1/g2/d3")
 
-        rsp = requests.get(f"{endpoint}/groups/{root}", headers=headers)
+        rsp = GET(f"{endpoint}/groups/{root}", headers=headers)
         self.assertEqual(rsp.json()["linkCount"], 1, "root links to g1")
 
-        rsp = requests.get(f"{endpoint}/groups/{g1id}", headers=headers)
+        rsp = GET(f"{endpoint}/groups/{g1id}", headers=headers)
         self.assertEqual(rsp.json()["linkCount"], 2, "g1 links to g2 and d1")
 
-        rsp = requests.get(f"{endpoint}/datasets", headers=headers)
+        rsp = GET(f"{endpoint}/datasets", headers=headers)
         rspJson = rsp.json()
         listing = rspJson["datasets"]
         for path, id in [("d1", d11id), ("d2", d122id), ("d3", d123id)]:
@@ -403,14 +422,14 @@ class PostDatasetWithLinkTest(helper.TestCase):
         super(PostDatasetWithLinkTest, self).__init__(*args, **kwargs)
 
     def assertGroupHasNLinks(self, group_uuid, count, msg):
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/groups/{group_uuid}",
                 headers=self.headers)
         rsp_json = json.loads(rsp.text)
         self.assertEqual(rsp_json["linkCount"], count, msg)
 
     def assertLinkIsExpectedDataset(self, group_uuid, linkname, dset_uuid):
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/groups/{group_uuid}/links/{linkname}",
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "problem getting link")
@@ -426,7 +445,7 @@ class PostDatasetWithLinkTest(helper.TestCase):
                 })
 
     def assertCanGetDatasetByUUID(self, dset_uuid):
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/datasets/{dset_uuid}",
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "unable to get dataset")
@@ -439,7 +458,7 @@ class PostDatasetWithLinkTest(helper.TestCase):
 
         payload["link"] = {"id": self.root_uuid, "name": self.linkname}
 
-        rsp = requests.post(
+        rsp = POST(
                 f"{self.endpoint}/datasets",
                 data=json.dumps(payload),
                 headers=self.headers)
@@ -468,7 +487,7 @@ class PostDatasetWithLinkTest(helper.TestCase):
 
         payload["link"] = {"id": self.root_uuid, "name": self.linkname}
 
-        rsp = requests.post(
+        rsp = POST(
                 f"{self.endpoint}/datasets",
                 data=json.dumps(payload),
                 headers=self.headers)
@@ -494,7 +513,7 @@ class PostDatasetWithLinkTest(helper.TestCase):
 
         payload["link"] = {"id": gid, "name": self.linkname}
 
-        rsp = requests.post(
+        rsp = POST(
                 f"{self.endpoint}/datasets",
                 data=json.dumps(payload),
                 headers=self.headers)
@@ -510,18 +529,18 @@ class PostDatasetWithLinkTest(helper.TestCase):
         gid = helper.postGroup(self.domain)
 
         # group is valid but unattached; no dataset found
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/groups/{gid}",
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "problem getting group")
         self.assertGroupHasNLinks(self.root_uuid, 0, "root has no links")
         self.assertGroupHasNLinks(gid, 0, "new group has no links")
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/groups",
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "problem getting list")
         self.assertEqual(len(rsp.json()["groups"]), 0, "list should be empty")
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/datasets",
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "problem getting list")
@@ -532,7 +551,7 @@ class PostDatasetWithLinkTest(helper.TestCase):
             "type": "H5T_STD_U8LE",
             "link": {"id": gid, "name": self.linkname}
         }
-        rsp = requests.post(
+        rsp = POST(
                 f"{self.endpoint}/datasets",
                 data=json.dumps(payload),
                 headers=self.headers)
@@ -544,12 +563,12 @@ class PostDatasetWithLinkTest(helper.TestCase):
         self.assertGroupHasNLinks(gid, 1, "group should have link")
         self.assertLinkIsExpectedDataset(gid, self.linkname, dset_uuid)
         self.assertCanGetDatasetByUUID(dset_uuid)
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/groups",
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "problem getting list")
         self.assertEqual(len(rsp.json()["groups"]), 0, "list should be empty")
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/datasets",
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "problem getting list")
@@ -558,11 +577,11 @@ class PostDatasetWithLinkTest(helper.TestCase):
     def testLinkFromDeletedGroup_Fails400(self):
         gid = helper.postGroup(self.domain)
 
-        res = requests.delete(
+        res = DELETE(
                 f"{self.endpoint}/groups/{gid}",
                 headers=self.headers)
         self.assertEqual(res.status_code, 200, "delete group")
-        res = requests.get(
+        res = GET(
                 f"{self.endpoint}/groups/{gid}",
                 headers=self.headers)
         self.assertEqual(res.status_code, 410, "group should be GONE")
@@ -572,7 +591,7 @@ class PostDatasetWithLinkTest(helper.TestCase):
             "type": "H5T_STD_U8LE",
             "link": {"id": gid, "name": self.linkname}
         }
-        rsp = requests.post(
+        rsp = POST(
                 f"{self.endpoint}/datasets",
                 data=json.dumps(payload),
                 headers=self.headers)
@@ -584,7 +603,7 @@ class PostDatasetWithLinkTest(helper.TestCase):
             "type": "H5T_STD_U8LE",
             "link": {"id": did1, "name": self.linkname}
         }
-        rsp = requests.post(
+        rsp = POST(
                 f"{self.endpoint}/datasets",
                 data=json.dumps(payload),
                 headers=self.headers)
@@ -596,7 +615,7 @@ class PostDatasetWithLinkTest(helper.TestCase):
             "type": "H5T_STD_U8LE",
             "link": {"id": false_uuid, "name": self.linkname}
         }
-        rsp = requests.post(
+        rsp = POST(
                 f"{self.endpoint}/datasets",
                 data=json.dumps(payload),
                 headers=self.headers)
@@ -613,7 +632,7 @@ class PostDatasetWithLinkTest(helper.TestCase):
             "type": "H5T_STD_U8LE",
             "link": {"id": root_uuid, "name": self.linkname}
         }
-        rsp = requests.post(
+        rsp = POST(
                 f"{self.endpoint}/datasets",
                 data=json.dumps(payload),
                 headers=self.headers)
@@ -631,7 +650,7 @@ class DatasetTest(helper.TestCase):
         data = { "type": "H5T_IEEE_F32LE", "shape": [] }
         dset_id = helper.postDataset(self.domain, data)
 
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/datasets/{dset_id}",
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "unable to get dataset")
@@ -649,7 +668,7 @@ class DatasetTest(helper.TestCase):
         data = { "type": "H5T_IEEE_F32LE", "shape": 0 }
         dset_id = helper.postDataset(self.domain, data)
 
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/datasets/{dset_id}",
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "unable to get dataset")
@@ -669,7 +688,7 @@ class DatasetTest(helper.TestCase):
         data = { "type": "H5T_IEEE_F32LE", "shape": [0] }
         dset_id = helper.postDataset(self.domain, data)
 
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/datasets/{dset_id}",
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "unable to get dataset")
@@ -688,7 +707,7 @@ class DatasetTest(helper.TestCase):
     def testShapeNegativeDim_Fails400(self):
         data = { "type": "H5T_IEEE_F32LE", "shape": [-4] }
 
-        res = requests.post(
+        res = POST(
                 f"{self.endpoint}/datasets",
                 headers=self.headers,
                 data=json.dumps(data))
@@ -715,7 +734,7 @@ class DatasetTest(helper.TestCase):
             },
             "shape": [10],
         }
-        rsp = requests.post(
+        rsp = POST(
                 f"{self.endpoint}/datasets",
                 data=json.dumps(payload),
                 headers=self.headers)
@@ -727,7 +746,7 @@ class DatasetTest(helper.TestCase):
         self.assertDictEqual(rspJson["shape"], expected_shape)
         self.assertDictEqual(rspJson["type"], expected_type)
 
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/datasets/{dset_uuid}",
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "unable to get dataset")
@@ -749,7 +768,7 @@ class DatasetTest(helper.TestCase):
             },
             "shape": [10]
         }
-        rsp = requests.post(
+        rsp = POST(
                f"{self.endpoint}/datasets",
                data=json.dumps(payload),
                headers=self.headers)
@@ -768,7 +787,7 @@ class DatasetTest(helper.TestCase):
         ]
         dset_id = helper.postDataset(self.domain, data, linkpath="/dset1")
 
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/datasets/{dset_id}",
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "unable to get dataset")
@@ -803,7 +822,7 @@ class DatasetTest(helper.TestCase):
             "shape": [10],
             "maxdims": [20],
         }
-        rsp = requests.post(
+        rsp = POST(
                 f"{self.endpoint}/datasets",
                 data=json.dumps(payload),
                 headers=self.headers)
@@ -816,7 +835,7 @@ class DatasetTest(helper.TestCase):
         self.assertDictEqual(rspJson["type"], expected_type)
 
         # verify type and shape with get dataset
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/datasets/{dset_uuid}",
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "unable to get dataset")
@@ -844,7 +863,7 @@ class DatasetTest(helper.TestCase):
     def testCommittedType(self):
         # create the datatype
         payload = {"type": "H5T_IEEE_F32LE"}
-        rsp = requests.post(
+        rsp = POST(
                 f"{self.endpoint}/datatypes",
                 data=json.dumps(payload),
                 headers=self.headers)
@@ -858,7 +877,7 @@ class DatasetTest(helper.TestCase):
         dset_uuid = helper.postDataset(self.domain, payload)
 
         # get dataset type and verify
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/datasets/{dset_uuid}/type",
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "unable to get type")
@@ -1083,7 +1102,7 @@ class CreationPropertiesTest(helper.TestCase):
         dset_uuid = helper.postDataset(self.domain, payload)
 
         # verify layout
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/datasets/{dset_uuid}",
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "unable to get dataset")
@@ -1132,7 +1151,7 @@ class CreationPropertiesTest(helper.TestCase):
         dset_uuid = helper.postDataset(self.domain, payload)
 
         # verify layout
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/datasets/{dset_uuid}",
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "unable to get dataset")
@@ -1153,7 +1172,7 @@ class CreationPropertiesTest(helper.TestCase):
         dset_uuid = helper.postDataset(self.domain, payload)
 
         # verify layout
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/datasets/{dset_uuid}",
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "unable to get dataset")
@@ -1185,7 +1204,7 @@ class CreationPropertiesTest(helper.TestCase):
         dset_uuid = helper.postDataset(self.domain, payload)
 
         # verify layout
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/datasets/{dset_uuid}",
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "unable to get dataset")
@@ -1216,7 +1235,7 @@ class FileWithDatasetsTest(unittest.TestCase):
         
         # verify domain exists
         req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
+        rsp = GET(req, headers=headers)
         if rsp.status_code != 200:
             print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
             return  # abort rest of test
@@ -1229,7 +1248,7 @@ class FileWithDatasetsTest(unittest.TestCase):
 
         # get the dataset json
         req = helper.getEndpoint() + '/datasets/' + dset_uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = GET(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         for name in ("id", "shape", "hrefs", "layout", "creationProperties", 
@@ -1278,7 +1297,7 @@ class FileWithDatasetsTest(unittest.TestCase):
         # request the dataset path
         req = helper.getEndpoint() + '/datasets/' + dset_uuid
         params = {"getalias": 1}
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = GET(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("alias" in rspJson)
@@ -1290,7 +1309,7 @@ class FileWithDatasetsTest(unittest.TestCase):
         
         # verify domain exists
         req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
+        rsp = GET(req, headers=headers)
         if rsp.status_code != 200:
             print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
             return  # abort rest of test
@@ -1301,7 +1320,7 @@ class FileWithDatasetsTest(unittest.TestCase):
         h5path = "/g1/g1.1/dset1.1.1"
         req = helper.getEndpoint() + "/datasets/"
         params = {"h5path": h5path}
-        rsp = requests.get(req, headers=headers, params=params)
+        rsp = GET(req, headers=headers, params=params)
         self.assertEqual(rsp.status_code, 200)
 
         rspJson = json.loads(rsp.text)
@@ -1313,7 +1332,7 @@ class FileWithDatasetsTest(unittest.TestCase):
         h5path = "g1/g1.1/dset1.1.1"
         req = helper.getEndpoint() + "/datasets/"
         params = {"h5path": h5path, "grpid": root_uuid}
-        rsp = requests.get(req, headers=headers, params=params)
+        rsp = GET(req, headers=headers, params=params)
         self.assertEqual(rsp.status_code, 200)
 
         rspJson = json.loads(rsp.text)
@@ -1331,14 +1350,14 @@ class FileWithDatasetsTest(unittest.TestCase):
         h5path = "/g1/foobar"
         req = helper.getEndpoint() + "/datasets/"
         params = {"h5path": h5path}
-        rsp = requests.get(req, headers=headers, params=params)
+        rsp = GET(req, headers=headers, params=params)
         self.assertEqual(rsp.status_code, 404)
 
         # try passing a path to a group and verify we get 404
         h5path = "/g1/g1.1"
         req = helper.getEndpoint() + "/datasets/"
         params = {"h5path": h5path}
-        rsp = requests.get(req, headers=headers, params=params)
+        rsp = GET(req, headers=headers, params=params)
         self.assertEqual(rsp.status_code, 404)
 
     def testGetVerbose(self):
@@ -1347,7 +1366,7 @@ class FileWithDatasetsTest(unittest.TestCase):
         
         # verify domain exists
         req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
+        rsp = GET(req, headers=headers)
         if rsp.status_code != 200:
             print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
             return  # abort rest of test
@@ -1362,7 +1381,7 @@ class FileWithDatasetsTest(unittest.TestCase):
         # get the dataset json
         req = helper.getEndpoint() + '/datasets/' + dset_uuid
         params = {"verbose": 1}
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = GET(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         for name in ("id", "shape", "hrefs", "layout", "creationProperties", 

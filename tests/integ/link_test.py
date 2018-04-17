@@ -12,7 +12,7 @@
 from copy import copy
 import unittest
 import time
-import requests
+from requests import delete as DELETE, get as GET, post as POST, put as PUT
 import json
 import uuid
 import config
@@ -53,7 +53,7 @@ class HardLinkTest(helper.TestCase):
 
     def testGetMissingLink_Fails404(self):
         linkname = "g1"
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/groups/{self.root_uuid}/links/{linkname}",
                 headers=self.headers)
         self.assertEqual(
@@ -74,7 +74,7 @@ class HardLinkTest(helper.TestCase):
                 domain=self.domain,
                 username=wrong_username)
         payload = {"id": grp1_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = PUT(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 403, "unauthorized put is forbidden")
 
         self.assertGroupHasNLinks(self.root_uuid, 0)
@@ -86,7 +86,7 @@ class HardLinkTest(helper.TestCase):
         self.assertGroupsListLenIs(0)
 
         payload = {"id": gid}
-        rsp = requests.put(
+        rsp = PUT(
                 f"{self.endpoint}/groups/{self.root_uuid}/links/{linkname}",
                 headers=self.headers,
                 data=json.dumps(payload))
@@ -98,7 +98,7 @@ class HardLinkTest(helper.TestCase):
         # get the link and inspect
         expected_keys = GET_LINK_KEYS
         expected_rels = GET_LINK_HREFS_RELS
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/groups/{self.root_uuid}/links/{linkname}",
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 200, f"problem getting {linkname}")
@@ -129,7 +129,7 @@ class HardLinkTest(helper.TestCase):
 
         for id, kind in ((dset_id, "dataset"), (gid2, "group")):
             payload = {"id": id}
-            rsp = requests.put(
+            rsp = PUT(
                     f"{self.endpoint}/groups/{root}/links/{linkname}",
                     headers=self.headers,
                     data=json.dumps(payload))
@@ -152,7 +152,7 @@ class HardLinkTest(helper.TestCase):
         headers = helper.getRequestHeaders(
                 domain=self.domain,
                 username=wrong_username)
-        rsp = requests.delete(
+        rsp = DELETE(
                 f"{self.endpoint}/groups/{self.root_uuid}/links/{linkname}",
                 headers=headers)
         self.assertEqual(rsp.status_code, 403, "unauthorized put is forbidden")
@@ -167,14 +167,14 @@ class HardLinkTest(helper.TestCase):
         self.assertGroupHasNLinks(self.root_uuid, 1)
         self.assertGroupsListLenIs(1)
 
-        rsp = requests.delete(
+        rsp = DELETE(
                 f"{self.endpoint}/groups/{self.root_uuid}/links/{linkname}",
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "problem deleting")
 
         self.assertGroupHasNLinks(self.root_uuid, 0)
         self.assertGroupsListLenIs(0)
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/groups/{grp1_id}",
                 headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "group should still exist")
@@ -182,7 +182,7 @@ class HardLinkTest(helper.TestCase):
     def testLinkToBogusID_Fails404(self):
         fake_id = "g-" + str(uuid.uuid1())
         payload = {"id": fake_id}
-        rsp = requests.put(
+        rsp = PUT(
                 f"{self.endpoint}/groups/{self.root_uuid}/links/nojoy",
                 data=json.dumps(payload),
                 headers=self.headers)
@@ -193,7 +193,7 @@ class HardLinkTest(helper.TestCase):
     def testEmptyLinkName_Fails404(self):
         gid = helper.postGroup(self.domain)
         payload = {"id": gid}
-        rsp = requests.put(
+        rsp = PUT(
                 f"{self.endpoint}/groups/{self.root_uuid}/links/",
                 data=json.dumps(payload),
                 headers=self.headers)
@@ -205,7 +205,7 @@ class HardLinkTest(helper.TestCase):
         linkname = "with/slashes"
         gid = helper.postGroup(self.domain)
         payload = {"id": gid}
-        rsp = requests.put(
+        rsp = PUT(
                 f"{self.endpoint}/groups/{self.root_uuid}/links/{linkname}",
                 data=json.dumps(payload),
                 headers=self.headers)
@@ -217,7 +217,7 @@ class HardLinkTest(helper.TestCase):
         linkname = "with\\backslashes"
         gid = helper.postGroup(self.domain)
         payload = {"id": gid}
-        rsp = requests.put(
+        rsp = PUT(
                 f"{self.endpoint}/groups/{self.root_uuid}/links/{linkname}",
                 data=json.dumps(payload),
                 headers=self.headers)
@@ -229,7 +229,7 @@ class HardLinkTest(helper.TestCase):
         linkname = "with spaces ok"
         gid = helper.postGroup(self.domain)
         payload = {"id": gid}
-        rsp = requests.put(
+        rsp = PUT(
                 f"{self.endpoint}/groups/{self.root_uuid}/links/{linkname}",
                 data=json.dumps(payload),
                 headers=self.headers)
@@ -255,7 +255,7 @@ class HardLinkTest(helper.TestCase):
             "id": d1id,
             "name": d11,
         }
-        rsp = requests.post(
+        rsp = POST(
                 f"{self.endpoint}/datasets",
                 data=json.dumps(payload),
                 headers=self.headers)
@@ -294,7 +294,7 @@ class HardLinkTest(helper.TestCase):
         self.assertGroupsListLenIs(expCount)
 
         # get all the links for the root group
-        rsp = requests.get(
+        rsp = GET(
                 f"{endpoint}/groups/{root_id}/links",
                 headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -313,7 +313,7 @@ class HardLinkTest(helper.TestCase):
         # get links with a result limit of 4
         limit=4
         params = { "Limit": limit }
-        rsp = requests.get(
+        rsp = GET(
                 f"{endpoint}/groups/{root_id}/links",
                 params=params,
                 headers=headers)
@@ -331,7 +331,7 @@ class HardLinkTest(helper.TestCase):
         # get links after the one with name: "seventh"
         marker = "seventh"
         params = { "Marker": marker }
-        rsp = requests.get(
+        rsp = GET(
                 f"{endpoint}/groups/{root_id}/links",
                 params=params,
                 headers=headers)
@@ -350,7 +350,7 @@ class HardLinkTest(helper.TestCase):
         marker = "foobar"
         self.assertTrue(marker not in sorted_names)
         params = { "Marker": marker }
-        rsp = requests.get(
+        rsp = GET(
                 f"{endpoint}/groups/{root_id}/links",
                 params=params,
                 headers=headers)
@@ -360,7 +360,7 @@ class HardLinkTest(helper.TestCase):
         marker = "seventh"
         limit = 3
         params = { "Limit" : 3, "Marker" : "seventh" }
-        rsp = requests.get(
+        rsp = GET(
                 f"{endpoint}/groups/{root_id}/links",
                 params=params,
                 headers=headers)
@@ -389,7 +389,7 @@ class LinkTest(helper.TestCase):
         self.assertGroupHasNLinks(root_id, 0)
 
         payload = {"h5path": target_path}
-        rsp = requests.put(
+        rsp = PUT(
                 link_req,
                 data=json.dumps(payload),
                 headers=self.headers)
@@ -398,7 +398,7 @@ class LinkTest(helper.TestCase):
         self.assertGroupsListLenIs(0)
         self.assertGroupHasNLinks(root_id, 1)
 
-        rsp = requests.get(link_req, headers=self.headers)
+        rsp = GET(link_req, headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "problem getting soft link")
         rspJson = rsp.json()
         self.assertListMembershipEqual(rspJson, GET_LINK_KEYS)
@@ -418,7 +418,7 @@ class LinkTest(helper.TestCase):
 
         self.assertGroupsListLenIs(1)
         self.assertGroupHasNLinks(root, 1)
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/groups/{g1id}",
                 params={"getalias": 1},
                 headers=self.headers)
@@ -426,7 +426,7 @@ class LinkTest(helper.TestCase):
         self.assertListMembershipEqual(rspJson["alias"], [f"/{hardname}"])
 
         payload = {"h5path": hardname}
-        rsp = requests.put(
+        rsp = PUT(
                 f"{self.endpoint}/groups/{root}/links/{softname}",
                 data=json.dumps(payload),
                 headers=self.headers)
@@ -434,7 +434,7 @@ class LinkTest(helper.TestCase):
 
         self.assertGroupsListLenIs(1)
         self.assertGroupHasNLinks(root, 2)
-        rsp = requests.get(
+        rsp = GET(
                 f"{self.endpoint}/groups/{g1id}",
                 params={"getalias": 1},
                 headers=self.headers)
@@ -456,7 +456,7 @@ class LinkTest(helper.TestCase):
         # create external link
         req = f"{self.endpoint}/groups/{root_id}/links/{link_title}"
         payload = {"h5path": target_path, "h5domain": target_domain}
-        rsp = requests.put(req, data=json.dumps(payload), headers=self.headers)
+        rsp = PUT(req, data=json.dumps(payload), headers=self.headers)
         self.assertEqual(rsp.status_code, 201, "problem creating ext. link")
 
         self.assertGroupsListLenIs(0)
@@ -464,7 +464,7 @@ class LinkTest(helper.TestCase):
 
         # get the link
         req = f"{self.endpoint}/groups/{root_id}/links/{link_title}"
-        rsp = requests.get(req, headers=self.headers)
+        rsp = GET(req, headers=self.headers)
         self.assertEqual(rsp.status_code, 200, "problem getting softlink")
         rspJson = rsp.json()
         self.assertListMembershipEqual(rspJson, GET_LINK_KEYS)
@@ -496,7 +496,7 @@ class LinksInFileTest(unittest.TestCase):
 
         # verify domain exists
         req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
+        rsp = GET(req, headers=headers)
         self.assertEqual(
                 rsp.status_code,
                 200, 
@@ -513,7 +513,7 @@ class LinksInFileTest(unittest.TestCase):
 
         # get links for /g1/g1.2:
         req = helper.getEndpoint() + '/groups/' + g1_2_uuid + '/links'
-        rsp = requests.get(req, headers=headers)
+        rsp = GET(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -552,7 +552,7 @@ class LinksInFileTest(unittest.TestCase):
 
         # get link by title
         req = helper.getEndpoint() + '/groups/' + g1_2_1_uuid + '/links/slink'
-        rsp = requests.get(req, headers=headers)
+        rsp = GET(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         for name in ("created", "lastModified", "link", "hrefs"):
