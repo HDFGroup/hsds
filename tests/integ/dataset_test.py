@@ -1077,27 +1077,35 @@ class CreationPropertiesTest(helper.TestCase):
         super(CreationPropertiesTest, self).__init__(*args, **kwargs)
 
     def testChunkedAndCompression(self):
+        depth = 365
+        height = 780
+        width = 1024
+        chunk_h = 390
+        chunk_w = 512
+        assert (height // 2) == chunk_h, "chunk_h sanity check"
+        assert (width // 2) == chunk_w, "chunk_w sanity check"
+
         # Create ~1GB dataset
-        payload = {
-            "type": "H5T_IEEE_F32LE",
-            "shape": [365, 780, 1024],
-            "maxdims": [0, 780, 1024]
-        }
-        # define a chunk layout with 4 chunks per 'slice'
-        # chunk size is 798720 bytes
-        # (TODO: document how these comment details are related to the source)
+        # define a chunk layout with 4 chunks per 'horizontal slice'
+        # chunk size == (1 * 390 * 512 * 4) == 798720 bytes
+        #      "H5T_IEEE_F32LE" -> 4 bytes
         gzip_filter = {
             "class": "H5Z_FILTER_DEFLATE",
             "id": 1,
             "level": 9,
             "name": "deflate",
         }
-        payload["creationProperties"] = {
-            "layout": {
-                "class": "H5D_CHUNKED",
-                 "dims": [1, 390, 512] 
+        payload = {
+            "type": "H5T_IEEE_F32LE",
+            "shape": [depth, height, width],
+            "maxdims": [0, height, width],
+            "creationProperties": {
+                "filters": [gzip_filter],
+                "layout": {
+                    "class": "H5D_CHUNKED",
+                    "dims": [1, chunk_h, chunk_w],
+                },
             },
-            "filters": [gzip_filter] 
         }
         dset_uuid = helper.postDataset(self.domain, payload)
 
@@ -1110,7 +1118,7 @@ class CreationPropertiesTest(helper.TestCase):
         self.assertDictEqual(
                 rspJson["layout"],
                 {   "class": "H5D_CHUNKED",
-                    "dims": [1, 390, 1024]
+                    "dims": [1, chunk_h, width] # TODO; why mixed?
                 })
 
         # verify compression
@@ -1122,7 +1130,7 @@ class CreationPropertiesTest(helper.TestCase):
         fill_value = "XXXX" # can't convert to dataset's type (float)
         payload = {
             "type": "H5T_STD_I32LE",
-            "shape": 10,
+            "shape": [10],
             "creationProperties": { "fillValue": fill_value },
         }
         rsp = helper.postDataset(self.domain, payload, response=True)
@@ -1158,7 +1166,9 @@ class CreationPropertiesTest(helper.TestCase):
         rspJson = rsp.json()
         self.assertDictEqual(
                 rspJson["layout"],
-                {"dims": [81920], "class": "H5D_CHUNKED"}) # TODO: 'magic' num
+                {   "dims": [81920], # TODO: 'magic' num; whence comes 81920?
+                    "class": "H5D_CHUNKED",
+                })
         layout_dims = rspJson["layout"]["dims"]
         self.assertTrue(layout_dims[0] < dims[0])
         chunk_size = layout_dims[0] * 8 * 3  # three 64bit 
