@@ -9,71 +9,71 @@
 # distribution tree.  If you do not have access to this file, you may        #
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
-import requests
+from copy import copy
+from requests import delete as DELETE, get as GET, post as POST, put as PUT
 import json
 import os.path as op
 from datetime import datetime
 import time
 import pytz
 import base64
+import unittest
 
 import config
+
 """
-    Helper function - get endpoint we'll send http requests to 
+Helper - Get endpoint we'll send http requests to .
 """ 
 def getEndpoint():
-    
-    endpoint = config.get("hsds_endpoint")
-    return endpoint
+    return config.get("hsds_endpoint")
 
 """
-Helper function - return true if the parameter looks like a UUID
+Helper - Return true if the parameter looks like a UUID.
 """
 def validateId(id):
-    if type(id) != str: 
-        # should be a string
-        return False
-    if len(id) != 38:
-        # id's returned by uuid.uuid1() are always 38 chars long
-        return False
-    return True
+    try:
+        return type(id) == str and len(id) == 38
+    except Exception:
+        pass
+    return False
 
 """
-Helper - return number of active sn/dn nodes
+Helper - Return number of active sn/dn nodes.
 """
 def getActiveNodeCount():
-    req = getEndpoint("head") + "/info"
-    rsp = requests.get(req)   
-    rsp_json = json.loads(rsp.text)
-    sn_count = rsp_json["active_sn_count"]
-    dn_count = rsp_json["active_dn_count"]
-    return sn_count, dn_count
+    rsp_json = GET(getEndpoint("head") + "/info").json()
+    return rsp_json["active_sn_count"], rsp_json["active_dn_count"]
 
 """
-Helper - get base domain to use for test_cases
+Helper - Get base domain to use for test_cases.
 """
 def getTestDomainName(name):
     now = time.time()
     dt = datetime.fromtimestamp(now, pytz.utc)
-    domain = "/home/"
-    domain += config.get('user_name')
-    domain += '/' 
-    domain += 'hsds_test'
-    domain += '/' 
-    domain += name.lower()
-    domain += '/' 
-    domain += "{:04d}{:02d}{:02d}T{:02d}{:02d}{:02d}_{:06d}Z".format(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, dt.microsecond)  
-    return domain
+    return '/'.join([
+        "", # for leading (root) slash
+        "home",
+        config.get("user_name"),
+        "hsds_test",
+        name.lower(),
+        "{:04d}{:02d}{:02d}T{:02d}{:02d}{:02d}_{:06d}Z".format(
+                dt.year,
+                dt.month,
+                dt.day,
+                dt.hour,
+                dt.minute,
+                dt.second,
+                dt.microsecond)
+    ])
 
 """
-Helper - get default request headers for domain
+Helper - Get default request headers for domain.
 """
 def getRequestHeaders(domain=None, username=None, password=None, **kwargs):
-    if username is None:
-        username = config.get("user_name")
-    if password is None:
-        password = config.get("user_password")
-    headers = { }
+    headers = {}
+    username = username or config.get("user_name")
+    password = password or config.get("user_password")
+
     if domain is not None:
         headers['host'] = domain
     if username and password:
@@ -82,9 +82,8 @@ def getRequestHeaders(domain=None, username=None, password=None, **kwargs):
         auth_string = base64.b64encode(auth_string)
         auth_string = b"Basic " + auth_string
         headers['Authorization'] = auth_string
-
-    for k in kwargs.keys():
-        headers[k] = kwargs[k]
+    for k,v in kwargs.items():
+        headers[k] = v 
     return headers
 
 """
@@ -93,123 +92,231 @@ Helper - Get parent domain of given domain.
 def getParentDomain(domain):
     parent = op.dirname(domain)
     if not parent:
-        raise ValueError("Invalid domain") # can't end with dot
+        raise ValueError("Invalid domain")
     return parent
 
 """
-Helper - Get DNS-style domain name given a filepath domain
+Helper - Get DNS-style domain name given a filepath domain.
 """
 def getDNSDomain(domain):
-    names = domain.split('/')
-    names.reverse()
-    dns_domain = ''
-    for name in names:
-        if name:
-            dns_domain += name
-            dns_domain += '.'
-    dns_domain = dns_domain[:-1]  # str trailing dot
-    return dns_domain
+    # slice at end to cut off tailing dot from leading (root) slash in domain
+    return '.'.join(reversed(domain.split('/')))[:-1]
 
 """
-Helper - Create domain (and parent domin if needed)
+Helper - Create domain, creating parent folder(s) for complete heirarchy.
 """
 def setupDomain(domain, folder=False):
     endpoint = config.get("hsds_endpoint")
     headers = getRequestHeaders(domain=domain)
     req = endpoint + "/"
-    rsp = requests.get(req, headers=headers)
+    rsp = GET(req, headers=headers)
     if rsp.status_code == 200:
         return  # already have domain
     if rsp.status_code != 404:
         # something other than "not found"
-        raise ValueError("Unexpected get domain error: {}".format(rsp.status_code))
+        raise ValueError(f"Unexpected get domain error: {rsp.status_code}")
+
     parent_domain = getParentDomain(domain)
-    if parent_domain is None:
-        raise ValueError("Invalid parent domain: {}".format(domain))
-    # create parent domain if needed
-    setupDomain(parent_domain)  
-     
+    if GET(
+            req,
+            headers=getRequestHeaders(domain=parent_domain)
+    ).status_code != 200:
+        setupDomain(parent_domain, folder=True)
+
     headers = getRequestHeaders(domain=domain)
-    body=None
     if folder:
         body = {"folder": True}
-        rsp = requests.put(req, data=json.dumps(body), headers=headers)
+        rsp = PUT(req, data=json.dumps(body), headers=headers)
     else:
-        rsp = requests.put(req, headers=headers)
+        rsp = PUT(req, headers=headers)
     if rsp.status_code != 201:
-        raise ValueError("Unexpected put domain error: {}".format(rsp.status_code))
+        which = "folder" if folder else "domain"
+        raise ValueError(
+                f"Unable to put {which}: {domain}\nError {rsp.status_code}")
 
 """
-Helper function - get root uuid for domain
+Helper - Get root uuid for domain (raises Exceptions if problem).
 """ 
 def getRootUUID(domain, username=None, password=None):
-    req = getEndpoint() + "/"
-    headers = getRequestHeaders(domain=domain, username=username, password=password)
-    
-    rsp = requests.get(req, headers=headers)
-    root_uuid= None
-    if rsp.status_code == 200:
-        rspJson = json.loads(rsp.text)
-        root_uuid = rspJson["root"]
-    return root_uuid
-
+    headers = getRequestHeaders(
+            domain=domain, username=username, password=password)
+    response = GET(getEndpoint() + "/", headers=headers)
+    try:
+        return response.json()["root"]
+    except json.decoder.JSONDecodeError:
+        code = response.status_code
+        raise ValueError(
+                f"Unable to get root group uuid for `{domain}`.\n" + 
+                f"HTTP code {code}")
 
 """
-Helper function - get a domain for one of the test files
+Helper - Get a domain for one of the test files.
 """
 def getTestDomain(name):
-    folder = '/home/test_user1/test/'
+    folder = '/home/test_user1/test/' #TODO: un-hardcode "test_user1"?
     return folder + name
 
 """
-Helper function - get uuid for a given path
+Helper - Get uuid for a given path (must be reached via hard link).
 """
 def getUUIDByPath(domain, path, username=None, password=None):
-    if path[0] != '/':
-        raise KeyError("only abs paths") # only abs paths
-            
+    if not path.startswith("/"):
+        raise KeyError("only abs paths")
+
     parent_uuid = getRootUUID(domain, username=username, password=password)  
-     
+
     if path == '/':
         return parent_uuid
 
     headers = getRequestHeaders(domain=domain)
-          
-    # make a fake tgt_json to represent 'link' to root group
-    tgt_json = {'collection': "groups", 'class': "H5L_TYPE_HARD", 'id': parent_uuid }
     tgt_uuid = None
-            
-    names = path.split('/')         
-                      
-    for name in names:
-        if not name: 
-            continue
+    endpoint = getEndpoint()
+    path = path[1:] # strip leading slash (root)
+
+    for name in path.split('/'):
         if parent_uuid is None:
+            # found non-group object that is not last name in path
             raise KeyError("not found")
-                 
-        req = getEndpoint() + "/groups/" + parent_uuid + "/links/" + name
-        rsp = requests.get(req, headers=headers)
-        if rsp.status_code != 200:
+
+        response = GET(
+                f"{endpoint}/groups/{parent_uuid}/links/{name}",
+                headers=headers)
+        if response.status_code != 200:
             raise KeyError("not found")
-        rsp_json = json.loads(rsp.text)    
-        tgt_json = rsp_json['link']
-            
-        if tgt_json['class'] == 'H5L_TYPE_HARD':
-            if tgt_json['collection'] == 'groups':
-                parent_uuid = tgt_json['id']    
-            else:
-                parent_uuid = None
-            tgt_uuid = tgt_json['id']
-        else:
+        link = response.json()["link"]
+
+        if link['class'] != 'H5L_TYPE_HARD':
             raise KeyError("non-hard link")
+
+        tgt_uuid = link['id']
+        if link['collection'] == 'groups':
+            parent_uuid = tgt_uuid
+        else:
+            parent_uuid = None # flags non-group object
+
     return tgt_uuid
 
-       
+"""
+Helper - Post group and return its UUID. ValueError raised if problem.
+Optionally links on absolute path is path is valid.
+"""
+def postGroup(domain, path=None, response=False):
+    return _post(
+            "groups",
+            domain,
+            {},
+            path=path,
+            response=response)
 
-     
+"""
+Helper - Post dataset and return its UUID. ValueError raised if problem.
+Optionally links on absolute path if path is valid.
+If keyword argument `response` is True, will return `requests` response;
+else returns UUID of dataset.
+"""
+def postDataset(domain, data, linkpath=None, response=False) :
+    return _post(
+            "datasets",
+            domain,
+            copy(data),
+            path=linkpath,
+            response=response)
 
-    
+"""
+Helper - Go-to util function to create objects.
+"""
+def _post(collection, domain, data, path=None, response=False):
+    endpoint = getEndpoint()
+    parent_uuid = None
+    headers = getRequestHeaders(domain=domain)
+    if path is not None:
+        linkname = path.split('/')[-1]
+        path = op.dirname(path)
+        parent_uuid = getUUIDByPath(domain, path)
+        data["link"] = {"id": parent_uuid, "name": linkname}
+    post_rsp = POST(
+            f"{endpoint}/{collection}",
+            headers=headers,
+            data=json.dumps(data))
+    if response:
+        return post_rsp
+    code = post_rsp.status_code
+    if code != 201:
+        raise ValueError(f"Unable to post to {collection}: {code}")
+    return post_rsp.json()["id"]
+
+"""
+Helper - Update a dataset with given dimensions. Raises Exceptions.
+If response is true, returns the `requests` response; else attempts to verify
+that the operation was successful.
+"""
+def resizeDataset(domain, dset_uuid, dims, response=False):
+    endpoint = getEndpoint()
+    headers = getRequestHeaders(domain=domain)
+    res = PUT(
+            f"{endpoint}/datasets/{dset_uuid}/shape",
+            headers=headers,
+            data=json.dumps({"shape": dims}))
+    if response == True:
+        return res
+    code = res.status_code
+    if code != 201:
+        raise ValueError(f"Unable to update dataset shape: {code}")
+
+# ----------------------------------------------------------------------
+
+def verifyUUID(testcase, s):
+    testcase.assertTrue(validateId(s), "probably not UUID: " + s)
+
+def verifyListMembership(testcase, actual, expected):
+    are_same_set = (sorted(actual) == sorted(expected))
+    if are_same_set:
+        return
+    which = "extra"
+    diff = [x for x in actual if x not in expected]
+    if diff == [] :
+        which = "missing"
+        diff = [m for m in expected if m not in actual]
+    assert len(diff) != 0, "sanity check"
+    testcase.assertTrue(are_same_set, f"{which}: {diff}")
+
+def verifyDictionaryKeys(testcase, d, keys):
+    verifyListMembership(testcase, list(d.keys()), keys)
+
+def verifyRelsInJSONHrefs(testcase, _json, _rels):
+    href_rels = [item["rel"] for item in _json["hrefs"]]
+    verifyListMembership(testcase, href_rels, _rels)
+
+"""
+Helper - `unittest.TestCase` wrapper with default domain self-setup.
+"""
+class TestCase(unittest.TestCase):
+    def __init__(self, *args, **kwargs):
+        super(TestCase, self).__init__(*args, **kwargs)
+        self.domain = getTestDomainName(self.__class__.__name__)
+        setupDomain(self.domain)
+        self.endpoint = getEndpoint()
+        self.headers = getRequestHeaders(domain=self.domain)
+        self.root_uuid = getRootUUID(self.domain)
+
+    assertDictHasOnlyKeys = verifyDictionaryKeys
+    assertHrefsHasOnlyRels = verifyRelsInJSONHrefs
+    assertJSONHasOnlyKeys = verifyDictionaryKeys
+    assertListMembershipEqual = verifyListMembership
+    assertLooksLikeUUID = verifyUUID
+
+    def assertGroupsListLenIs(self, num):
+        rsp = GET(
+                f"{self.endpoint}/groups",
+                headers=self.headers)
+        self.assertEqual(rsp.status_code, 200, "could not get groups")
+        self.assertEqual(len(rsp.json()["groups"]), num)
+
+    def assertGroupHasNLinks(self, group_uuid, num):
+        rsp = GET(
+                f"{self.endpoint}/groups/{group_uuid}",
+                headers=self.headers)
+        self.assertEqual(rsp.status_code, 200, "could not get group")
+        self.assertEqual(rsp.json()["linkCount"], num)
 
 
-
-        
