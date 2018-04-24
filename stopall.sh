@@ -14,19 +14,23 @@ fi
 
 echo "stopping headnode"
 docker stop hsds_head &
+HSDS_HEAD_PID=$!
 
 echo "stoping asyncnode"
 docker stop hsds_async &
+HSDS_ASYNC_PID=$!
 
 echo "stopping datanodes"
 ./run.sh stopdn $count &
+HSDS_DN_PID=$!
+
 
 echo "stopping service nodes"
 ./run.sh stopsn $count &
+HSDS_SN_PID=$!
 
-sleep 10  # allow some time for containers to shutdown
-docker ps
-sleep 10
+wait $HSDS_{HEAD,ASYNC,DN,SN}_PID 
+
 docker ps
    
  
