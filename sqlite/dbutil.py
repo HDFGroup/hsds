@@ -111,7 +111,6 @@ def getDomain(conn, domain):
         # domain is primary key, so this shouldn't happen
         raise KeyError("Unexpected result for domain query")
     row = all_rows[0]
-    print(row)
     result = {"domain": domain}
     result["etag"] = row[1]
     result["size"] = row[2]

@@ -351,8 +351,11 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("num_chunks" in rspJson)
         self.assertTrue("allocated_size" in rspJson)
         self.assertEqual(rspJson["num_chunks"], 1)
-        self.assertEqual(rspJson["allocated_size"], 400) # this will likely change once compression is working
-
+        # allocated size should be the size of the chunk (400) plus size of dset metadata
+        # This may change if metadata layout is changed, or metadata gets serialized to 
+        # JSON differently
+        self.assertEqual(rspJson["allocated_size"], 1426) 
+        
     def testDelete(self):
         # test Delete
         print("testDelete", self.base_domain)

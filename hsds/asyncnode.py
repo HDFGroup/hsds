@@ -218,19 +218,98 @@ async def PUT_Objects(request):
     log.request(request)
     app = request.app
     log.info("PUT_Objects")
+    conn = app["conn"]
+    if not conn:
+        msg = "db not initizalized"
+        log.warn(msg)
+        raise HttpProcessingError(code=501, message=msg)
+
     if not request.has_body:
         msg = "PUT objects with no body"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
 
     body = await request.json()
-    if "objids" not in body:
-        msg = "expected to find objids key in body"
+    if "objs" not in body:
+        msg = "expected to find objs key in body"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-    objids = body["objids"]
-    for objid in objids:
-        if not isValidDomain(objid) and not isValidUuid(objid):
+    objs = body["objs"]
+    for obj in objs:
+        if "id" not in obj:
+            log.error("Expected id in PUT_Objects request")
+            continue
+        if "lastModified" not in obj:
+            log.error("Expected lastModified in PUT_Objects request for id: {}".format(obj["id"]))
+            continue
+        if "size" not in obj:
+            log.error("Expected size in PUT_Objects request for id: {}".format(obj["id"]))
+            continue
+        
+        objid = obj["id"]
+        lastModified = obj["lastModified"]
+        etag = ''
+        if "root"  in obj:
+            rootid = obj["root"]
+        else:
+            rootid = ''
+        if isValidDomain(objid):
+            try:
+                insertRow(conn, "DomainTable", objid, lastModified=lastModified, objSize=objSize, rootid=rootid)
+            except KeyError:
+                log.warn("got KeyError inserting domain: {}".format(id))
+                continue
+            # is this a top-level domain?
+            index = id[1:-1].find('/')  # look for interior slash - isValidDomain implies len > 2
+            if index == -1:
+                log.info("Top-level-domain name received: {}".format(objid))
+                try:
+                    insertTLDTable(conn, objid)
+                except KeyError:
+                    log.warn("got KeyError inserting TLD: {}".format(objid))
+                    continue
+        elif isValidUuid(objid):
+            if not rootid:
+                log.error("no rootid provided for obj: {}".format(objid))
+                continue
+            collection = getCollectionForId(id)
+            if collection == "groups":
+                table = "GroupTable"
+            elif collection == "datatypes":
+                table = "TypeTable"
+            elif collection == "datasets":
+                table = "DatasetTable"
+            else:
+                log.error("Unexpected collection: {}".format(collection))
+                continue
+            try:
+                insertRow(conn, table, objid, etag=etag, lastModified=lastModified, objSize=objSize, rootid=rootid)
+            except KeyError:
+                log.error("got KeyError inserting object: {}".format(id))
+                continue
+            # if this is a new root group, add to root table
+            if collection == "groups" and objid == rootid:
+                try:
+                    insertRow(conn, "RootTable", rootid, etag=etag, lastModified=lastModified, objSize=objsize, groupCount=1)            
+                except KeyError:
+                    log.error("got KeyError inserting root: {}".format(rootid))
+                    continue
+            else:
+                # update size and lastModified in root table
+                try:
+                    rootEntry = getRow(conn, rootid, table="RootTable")
+                except KeyError:
+                    log.error("Unable to find {} in RootTable".format(rootid))
+                    continue
+                if "size" not in rootEntry:
+                    log.error("Expected to find size in RootTable for root: {}".format(rootid))
+                    continue
+                domain_size = rootEntry["size"] + objsize
+
+                updateRowColumn(conn, "RootTable", "size", rootid, domain_size)
+                # update lastModified timestamp
+                updateLastModified(conn, "RootTable", "lastModified", rootid, lastModified)
+        else:
             msg = "PUT_Objects Invalid id: {}".format(objid)
             log.warn(msg)
             raise HttpBadRequest(message=msg)
@@ -253,7 +332,7 @@ async def DELETE_Objects(request):
     log.info("DELETE_Objects")
 
     if not request.has_body:
-        msg = "PUT objects with no body"
+        msg = "DELETE objects with no body"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
 

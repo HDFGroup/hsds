@@ -18,7 +18,7 @@ import json
 import numpy as np
 from aiohttp.errors import HttpBadRequest, HttpProcessingError
  
-from util.httpUtil import http_post, http_put, http_delete, jsonResponse, getHref
+from util.httpUtil import http_get_json, http_post, http_put, http_delete, jsonResponse, getHref
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
 from util.dsetUtil import  getPreviewQuery
 from util.arrayUtil import getNumElements
@@ -26,8 +26,8 @@ from util.chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson, getItemSize
-from util.s3Util import isS3Obj, getS3Bytes
 from servicenode_lib import getDomainJson, getObjectJson, validateAction, getObjectIdByPath, getPathForObjectId
+from basenode import getAsyncNodeUrl
 import config
 import hsds_logger as log
 
@@ -110,54 +110,30 @@ def validateChunkLayout(shape_json, item_size, body):
      
     return chunk_dims
 
-async def getDatasetDetails(app, dset_id, domain):
-    """ Return the object ids from the collections.txt obj for given collection.
-    """    
-    col_s3key = domain[1:] + "/.datasets.txt"  
-    log.info("get dataset list: {}".format(col_s3key))
-    col_found = await isS3Obj(app, col_s3key)
-    if not col_found:
-        return None
-    num_chunks = None
-    allocated_size = None
+async def getDatasetDetails(app, dset_id, root_id):  
+    """ Get extra information about the given dataset """
+    # Gather additional info on the domain
+    an_url = getAsyncNodeUrl(app)
+    req = an_url + "/objects/" + dset_id
+    params = {"Root": root_id}
+    log.info("ASync GET: /objects/{}".format(root_id))
+    try:
+        obj_info = await http_get_json(app, req, params=params)
+    except HttpProcessingError as hpe:
+        if hpe.code == 501:
+            log.warn("sqlite db not available")
+            return None
+        if hpe.code == 404:
+            # sqlite db not sync'd?
+            log.warn("dset id: {} not found in db".format(dset_id))
+            return None
+        else:
+            log.error("Async error: {}".format(hpe))
+            raise HttpProcessingError(code=500, message="Unexpected Error")
+    log.info("got details: {}".format(obj_info))
+    return obj_info
 
-    data = await getS3Bytes(app, col_s3key)
-    data = data.decode('utf8')
-    lines = data.split('\n')
-    for line in lines:
-        # format is: 
-        # <objid> <size>\n
-        if not line:
-            continue
-        fields = line.split(' ')
-        if len(fields) < 4:
-            log.warn("Unexpected contents line: {}".format(line))
-            continue
-        if fields[0] != dset_id:
-            continue # not the dataset we're looking for
-        
-        objid = fields[0]
-        if not objid:
-            continue
-        num_chunks = 0
-        allocated_size = 0
-        if len(fields) >= 6:
-            # chunks have been allocated yet
-            try:
-                num_chunks = int(fields[4])
-            except ValueError:
-                log.warn("Unexpected contents line (5th element should be int): {}".format(line))
-            try:
-                allocated_size = int(fields[5])
-            except ValueError:
-                log.warn("Unexpected contents line (6th element should be int): {}".format(line))
-        break  # no need to go through rest of the lines
-                    
-    if num_chunks is None:
-        return None
-    result = {"num_chunks": num_chunks, "allocated_size": allocated_size}
-    return result
-
+   
 
 async def GET_Dataset(request):
     """HTTP method to return JSON description of a dataset"""
@@ -294,12 +270,12 @@ async def GET_Dataset(request):
 
     if verbose:
         # get allocated size and num_chunks for the dataset if available
-        dset_detail = await getDatasetDetails(app, dset_id, domain)
+        dset_detail = await getDatasetDetails(app, dset_id, dset_json["root"])
         if dset_detail is not None:
-            if "num_chunks" in dset_detail:
-                resp_json["num_chunks"] = dset_detail["num_chunks"]
-            if "allocated_size" in dset_detail:
-                resp_json["allocated_size"] = dset_detail["allocated_size"]
+            if "chunkCount" in dset_detail:
+                resp_json["num_chunks"] = dset_detail["chunkCount"]
+            if "size" in dset_detail:
+                resp_json["allocated_size"] = dset_detail["size"]
 
     resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)

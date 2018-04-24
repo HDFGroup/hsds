@@ -154,7 +154,7 @@ def batchInsertChunkTable(conn, items):
 #
 def getRow(conn, objid, rootid=None, table=None):
     if not table:
-        if objid.startwith("g-"):
+        if objid.startswith("g-"):
             table = "GroupTable"
         elif objid.startswith("d-"):
             table = "DatasetTable"

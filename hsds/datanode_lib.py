@@ -175,8 +175,13 @@ def save_metadata_obj(app, obj_id, obj_json, notify=True):
 
     # set flag if AN should be notified on S3 write
     if notify:
-        notify_ids = app['notify_ids']
-        notify_ids.add(obj_id)
+        notify_obj = {"id": obj_id, "lastModified": now}
+        if "root" in obj_json:
+            notify_obj["root"] = obj_json["root"]
+        if "size" in obj_json:
+            notify_obj["size"] = obj_json["size"]
+        notify_objs = app["notify_objs"]
+        notify_objs.add(notify_obj)
 
 
 async def delete_metadata_obj(app, obj_id, notify=True):
@@ -208,8 +213,8 @@ async def delete_metadata_obj(app, obj_id, notify=True):
         now = time.time()
         dirty_ids[obj_id] = now
     if notify:
-        notify_ids = app['notify_ids']
-        notify_ids.add(obj_id)
+        notify_objs = app['notify_objs']
+        notify_objss.add(notify_obj)
 
     
 
@@ -220,7 +225,7 @@ async def s3sync(app):
     s3_sync_interval = config.get("s3_sync_interval")
     dirty_ids = app["dirty_ids"]
     deleted_ids = app["deleted_ids"]
-    notify_ids = app["notify_ids"]
+    notify_objs = app["notify_objs"]
     meta_cache = app["meta_cache"] 
     chunk_cache = app["chunk_cache"] 
     deflate_map = app['deflate_map']
