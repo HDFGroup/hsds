@@ -22,7 +22,7 @@ from util.s3Util import getS3Keys, isS3Obj, getS3Bytes, getS3ObjStats
 from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
 from util.domainUtil import getParentDomain, getDomainFromRequest, getS3PrefixForDomain, validateDomain, isIPAddress, isValidDomainPath
-from servicenode_lib import getDomainJson
+from servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath, getPathForObjectId
 import hsds_logger as log
 
 async def get_domain_json(app, domain):
@@ -113,12 +113,55 @@ async def get_collection(app, domain, collection, marker=None, limit=None):
                 break
     return rows
 
+
+async def get_collection_ids(app, domain, collection, marker=None, limit=None):
+    """ Return the object ids for given collection.
+    """    
+  
+    try:
+        domain_json = await getDomainJson(app, domain, reload=True)
+    except HttpProcessingError as hpe:
+        msg = "domain not found"
+        log.warn(msg)
+        raise HttpProcessingError(code=404, message=msg)
+    if "root" not in domain_json:
+        return [] # return empty list for folders
+    root_uuid = domain_json["root"]    
+    idpath_map = {root_uuid: '/'}  
+
+    # populate idpath_map with all ids in this domain
+    await getPathForObjectId(app, root_uuid, idpath_map)
+    objids = []
+    for objid in idpath_map:
+        if objid == root_uuid:
+            continue  # don't include root id
+        if collection is None or getCollectionForId(objid) == collection:
+            objids.append(objid)
+    objids.sort()
+    
+    ret_ids = []
+    for objid in objids:
+        if marker:
+            if marker == objid:
+                # got to the marker, clear it so we will start 
+                # return ids on the next iteration
+                marker = None
+        else:
+            ret_ids.append(objid)
+            if limit is not None and len(ret_ids) == limit:
+                log.info("got to limit, breaking")
+                break
+    return ret_ids
+       
+     
+
 async def getDomainInfo(app, domain):
     """ Get extra information about the given domain """
     # Gather additional info on the domain
     results = {}
     allocated_bytes = 0
     num_chunks = 0
+
     group_collection = await get_collection(app, domain, "groups")
     results["num_groups"] = len(group_collection) 
     for row in group_collection:
@@ -379,6 +422,22 @@ async def GET_Domain(request):
     # validate that the requesting user has permission to read this domain
     aclCheck(domain_json, "read", username)  # throws exception if not authorized
 
+    if "h5path" in request.GET:
+        # if h5path is passed in, return object info for that path
+        #   (if exists)
+        h5path = request.GET["h5path"]
+        root_id = domain_json["root"]
+        obj_id = await getObjectIdByPath(app, root_id, h5path)  # throws 404 if not found
+        log.info("get obj_id: {} from h5path: {}".format(obj_id, h5path))
+        # get authoritative state for object from DN (even if it's in the meta_cache).
+        obj_json = await getObjectJson(app, obj_id, refresh=True)
+        obj_json["domain"] = domain
+        # Not bothering with hrefs for h5path lookups...
+        resp = await jsonResponse(request, obj_json)
+        log.response(request, resp=resp)
+        return resp
+         
+
     # return just the keys as per the REST API
     rsp_json = { }
     if "root" in domain_json:
@@ -448,7 +507,7 @@ async def PUT_Domain(request):
     try:
         parent_json = await getDomainJson(app, parent_domain, reload=True)
     except HttpProcessingError as hpe:
-        msg = "Parent domain not found"
+        msg = "Parent domain: {} not found".format(parent_domain)
         log.warn(msg)
         raise HttpProcessingError(code=404, message=msg)
 
@@ -508,13 +567,38 @@ async def DELETE_Domain(request):
     log.request(request)
     app = request.app 
 
-    try:
-        domain = getDomainFromRequest(request)
-    except ValueError:
-        msg = "Invalid domain"
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
- 
+    domain = None
+    meta_only = False  # if True, just delete the meta cache value
+    if request.has_body:
+        body = await request.json() 
+        if "domain" in body:
+            domain = body["domain"]
+        else:
+            msg = "No domain in request body"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+
+        if "meta_only" in body:
+            meta_only = body["meta_only"]
+    else:
+        # get domain from request uri
+        try:
+            domain = getDomainFromRequest(request)
+        except ValueError:
+            msg = "Invalid domain"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+
+    log.info("meta_only domain delete: {}".format(meta_only))
+    if meta_only:
+        # remove from domain cache if present
+        domain_cache = app["domain_cache"]
+        if domain in domain_cache:
+            log.info("deleting {} from domain_cache".format(domain))
+            del domain_cache[domain]
+        resp = await jsonResponse(request, {})
+        return resp
+
     username, pswd = getUserPasswordFromRequest(request)
     validateUserPassword(app, username, pswd)
 
@@ -552,6 +636,27 @@ async def DELETE_Domain(request):
     rsp_json = await http_delete(app, req, data=body)
  
     resp = await jsonResponse(request, rsp_json)
+
+    # remove from domain cache if present
+    domain_cache = app["domain_cache"]
+    if domain in domain_cache:
+        del domain_cache[domain]
+
+    # delete domain cache from other sn_urls
+    sn_urls = app["sn_urls"]
+    body["meta_only"] = True 
+    for node_no in sn_urls:
+        if node_no == app["node_number"]:
+            continue # don't send to ourselves
+        sn_url = sn_urls[node_no]
+        req = sn_url + "/"
+        log.info("sending sn request: {}".format(req))
+        try: 
+            sn_rsp = await http_delete(app, req, data=body)
+            log.info("{} response: {}".format(req, sn_rsp))
+        except HttpProcessingError as hpe:
+            log.warn("got hpe for sn_delete: {}".format(hpe))
+
     log.response(request, resp=resp)
     return resp
 
@@ -807,12 +912,7 @@ async def GET_Datasets(request):
 
 
     # get the dataset collection list
-    datasets = await get_collection(app, domain, "datasets", marker=marker, limit=limit)
-    obj_ids = []
-    for row in datasets:
-        # row consist of objectid, etag, lastmodified, and size
-        # return just the objid
-        obj_ids.append(row[0]) 
+    obj_ids = await get_collection_ids(app, domain, "datasets", marker=marker, limit=limit)
      
     # create hrefs 
     hrefs = []
@@ -882,13 +982,8 @@ async def GET_Groups(request):
     if "Marker" in request.GET:
         marker = request.GET["Marker"]
 
-    # get the dataset collection list
-    groups = await get_collection(app, domain, "groups", marker=marker, limit=limit)
-    obj_ids = []
-    for row in groups:
-        # row consist of objectid, etag, lastmodified, and size
-        # return just the objid
-        obj_ids.append(row[0]) 
+    # get the groups collection list
+    obj_ids = await get_collection_ids(app, domain, "groups", marker=marker, limit=limit)
      
     # create hrefs 
     hrefs = []
@@ -958,14 +1053,8 @@ async def GET_Datatypes(request):
         marker = request.GET["Marker"]
 
     # get the datatype collection list
-    datatypes = await get_collection(app, domain, "datatypes", marker=marker, limit=limit)
-
-    obj_ids = []
-    for row in datatypes:
-        # row consist of objectid, etag, lastmodified, and size
-        # return just the objid
-        obj_ids.append(row[0]) 
-     
+    obj_ids = await get_collection_ids(app, domain, "datatypes", marker=marker, limit=limit)
+ 
     # create hrefs 
     hrefs = []
     hrefs.append({'rel': 'self', 'href': getHref(request, '/datatypes')})

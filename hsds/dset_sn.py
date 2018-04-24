@@ -16,17 +16,18 @@
  
 import json
 import numpy as np
-from aiohttp.errors import HttpBadRequest 
+from aiohttp.errors import HttpBadRequest, HttpProcessingError
  
 from util.httpUtil import http_post, http_put, http_delete, jsonResponse, getHref
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
-from util.dsetUtil import  getNumElements, getPreviewQuery
+from util.dsetUtil import  getPreviewQuery
+from util.arrayUtil import getNumElements
 from util.chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson, getItemSize
 from util.s3Util import isS3Obj, getS3Bytes
-from servicenode_lib import getDomainJson, getObjectJson, validateAction
+from servicenode_lib import getDomainJson, getObjectJson, validateAction, getObjectIdByPath, getPathForObjectId
 import config
 import hsds_logger as log
 
@@ -163,15 +164,41 @@ async def GET_Dataset(request):
     log.request(request)
     app = request.app 
 
+    h5path = None
+    getAlias = False
     dset_id = request.match_info.get('id')
-    if not dset_id:
+    if not dset_id and "h5path" not in request.GET:
         msg = "Missing dataset id"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-    if not isValidUuid(dset_id, "Dataset"):
-        msg = "Invalid dataset id: {}".format(dset_id)
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
+
+    if dset_id:
+        if not isValidUuid(dset_id, "Dataset"):
+            msg = "Invalid dataset id: {}".format(dset_id)
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        if "getalias" in request.GET:
+            if request.GET["getalias"]:
+                getAlias = True 
+    else:
+        group_id = None
+        if "grpid" in request.GET:
+            group_id = request.GET["grpid"]
+            if not isValidUuid(group_id, "Group"):
+                msg = "Invalid parent group id: {}".format(group_id)
+                log.warn(msg)
+                raise HttpBadRequest(message=msg)
+        if "h5path" not in request.GET:
+            msg = "Expecting either ctype id or h5path url param"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+
+        h5path = request.GET["h5path"]
+        if not group_id and h5path[0] != '/':
+            msg = "h5paths must be absolute"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        log.info("GET_Dataset, h5path: {}".format(h5path))
 
     username, pswd = getUserPasswordFromRequest(request)
     if username is None and app['allow_noauth']:
@@ -188,6 +215,21 @@ async def GET_Dataset(request):
     verbose = False
     if "verbose" in request.GET and request.GET["verbose"]:
         verbose = True
+
+    if h5path:
+        if group_id is None:
+            domain_json = await getDomainJson(app, domain)
+            if "root" not in domain_json:
+                msg = "Expected root key for domain: {}".format(domain)
+                log.warn(msg)
+                raise HttpBadRequest(message=msg)
+            group_id = domain_json["root"]
+        dset_id = await getObjectIdByPath(app, group_id, h5path)  # throws 404 if not found
+        if not isValidUuid(dset_id, "Dataset"):
+            msg = "No dataset exist with the path: {}".format(h5path)
+            log.warn(msg)
+            raise HttpProcessingError(code=404, message=msg)
+        log.info("get dataset_id: {} from h5path: {}".format(dset_id, h5path))
     
     # check that we have permissions to read the object
     await validateAction(app, domain, dset_id, username, "read")
@@ -213,6 +255,15 @@ async def GET_Dataset(request):
     resp_json["created"] = dset_json["created"]
     resp_json["lastModified"] = dset_json["lastModified"]
     resp_json["domain"] = domain
+
+    if getAlias:
+        root_id = dset_json["root"]
+        alias = []
+        idpath_map = {root_id: '/'}
+        h5path = await getPathForObjectId(app, root_id, idpath_map, tgt_id=dset_id)
+        if h5path:
+            alias.append(h5path)
+        resp_json["alias"] = alias
     
     hrefs = []
     dset_uri = '/datasets/'+dset_id

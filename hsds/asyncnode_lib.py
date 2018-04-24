@@ -680,7 +680,7 @@ async def markObjs(app, removeInvalidDomains=False):
          
         if rootid not in s3objs:
             log.warn("markObjs: root {} for domain {} not found in s3objs".format(rootid, domain))
-            invalid_domains.add(domain)
+             #invalid_domains.add(domain)
             continue
         s3root = s3objs[rootid]
         if not s3root.isRoot:
@@ -692,11 +692,12 @@ async def markObjs(app, removeInvalidDomains=False):
         # this will recurse into each linked object
         log.debug("markObjs domain: {} root: {}".format(domain, rootid))
         await markObj(app, rootid)
-    if len(invalid_domains) > 0 and removeInvalidDomains:
-        log.debug("removing {} invalid domains".format(len(invalid_domains)))
-        for domain in invalid_domains:
-            log.info("remove: {}".format(domain))
-            await deleteObj(app, domain)
+    if len(invalid_domains) > 0:
+        log.debug("{} invalid domains".format(len(invalid_domains)))
+        if removeInvalidDomains:
+            for domain in invalid_domains:
+                log.info("remove: {}".format(domain))
+                await deleteObj(app, domain)
 
        
 

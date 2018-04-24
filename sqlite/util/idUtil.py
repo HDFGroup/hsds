@@ -15,7 +15,6 @@
 # 
 import hashlib
 import uuid
-from aiohttp.errors import HttpProcessingError
 import hsds_logger as log
 
 def getIdHash(id):
@@ -204,7 +203,7 @@ def getDataNodeUrl(app, obj_id):
         log.info("node_number:".format(node_number))
         msg="Service not ready"
         log.warn(msg)
-        raise HttpProcessingError(message=msg, code=503)
+        raise ValueError(msg)
     dn_number = getObjPartition(obj_id, app['node_count'])
       
     url = dn_urls[dn_number]

@@ -181,6 +181,7 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("shape" in rspJson)
         shape_json = rspJson["shape"]
         self.assertTrue(shape_json["class"], "H5S_SCALAR")
+        self.assertFalse("dims" in shape_json)
         self.assertTrue("type" in rspJson)
         self.assertTrue(rspJson["type"], "H5T_IEEE_F32LE")
 
@@ -250,6 +251,73 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue(rspJson["created"] < now - 60 * 5)
         self.assertTrue(rspJson["lastModified"] < now - 60 * 5)
 
+        # request the dataset path
+        req = helper.getEndpoint() + '/datasets/' + dset_uuid
+        params = {"getalias": 1}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("alias" in rspJson)
+        self.assertEqual(rspJson["alias"], ['/g1/g1.1/dset1.1.1'])
+
+    def testGetByPath(self):
+        domain = helper.getTestDomain("tall.h5")
+        print("testGetDomain", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        
+        # verify domain exists
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        if rsp.status_code != 200:
+            print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
+            return  # abort rest of test
+        domainJson = json.loads(rsp.text)
+        root_uuid = domainJson["root"]
+         
+        # get the dataset at "/g1/g1.1/dset1.1.1"
+        h5path = "/g1/g1.1/dset1.1.1"
+        req = helper.getEndpoint() + "/datasets/"
+        params = {"h5path": h5path}
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+
+        rspJson = json.loads(rsp.text)
+        for name in ("id", "shape", "hrefs", "layout", "creationProperties", 
+            "attributeCount", "created", "lastModified", "root", "domain"):
+            self.assertTrue(name in rspJson)
+
+        # get the dataset via a relative apth "g1/g1.1/dset1.1.1"
+        h5path = "g1/g1.1/dset1.1.1"
+        req = helper.getEndpoint() + "/datasets/"
+        params = {"h5path": h5path, "grpid": root_uuid}
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+
+        rspJson = json.loads(rsp.text)
+        for name in ("id", "shape", "hrefs", "layout", "creationProperties", 
+            "attributeCount", "created", "lastModified", "root", "domain"):
+            self.assertTrue(name in rspJson)
+
+
+        # get the dataset uuid and verify it matches what we got by h5path
+        dset_uuid = helper.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1")
+        self.assertTrue(dset_uuid.startswith("d-"))
+        self.assertEqual(dset_uuid, rspJson["id"])
+
+        # try a invalid link and verify a 404 is returened
+        h5path = "/g1/foobar"
+        req = helper.getEndpoint() + "/datasets/"
+        params = {"h5path": h5path}
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 404)
+
+        # try passing a path to a group and verify we get 404
+        h5path = "/g1/g1.1"
+        req = helper.getEndpoint() + "/datasets/"
+        params = {"h5path": h5path}
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 404)
+
     def testGetVerbose(self):
         domain = helper.getTestDomain("tall.h5")
         print("testGetDomain", domain)
@@ -263,6 +331,7 @@ class DatasetTest(unittest.TestCase):
             return  # abort rest of test
         domainJson = json.loads(rsp.text)
         root_uuid = domainJson["root"]
+        self.assertTrue(helper.validateId(root_uuid))
          
         # get the dataset uuid 
         dset_uuid = helper.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1")
@@ -381,6 +450,7 @@ class DatasetTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
         root_uuid = rspJson["root"]
+        self.assertTrue(helper.validateId(root_uuid))
 
         fields = ({'name': 'x', 'type': 'H5T_STD_I32LE'}, 
                     {'name': 'x', 'type': 'H5T_IEEE_F32LE'}) 
@@ -612,10 +682,12 @@ class DatasetTest(unittest.TestCase):
         # create the dataset 
         req = self.endpoint + "/datasets"
         # Create ~1GB dataset
+        
         payload = {'type': 'H5T_IEEE_F32LE', 'shape': [365, 780, 1024], 'maxdims': [0, 780, 1024]}
         # define a chunk layout with 4 chunks per 'slice'
         # chunk size is 798720 bytes
-        payload['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [1, 390, 512] }}
+        gzip_filter = {'class': 'H5Z_FILTER_DEFLATE', 'id': 1, 'level': 9, 'name': 'deflate'}
+        payload['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [1, 390, 512] }, 'filters': [gzip_filter,] }
         req = self.endpoint + "/datasets"
         rsp = requests.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
@@ -640,6 +712,21 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(layout_json["class"], 'H5D_CHUNKED')
         self.assertTrue("dims" in layout_json)
         self.assertEqual(layout_json["dims"], [1, 390, 1024])
+
+        # verify compression
+        self.assertTrue("creationProperties" in rspJson)
+        cpl = rspJson["creationProperties"]
+        self.assertTrue("filters") in cpl
+        filters = cpl["filters"]
+        self.assertEqual(len(filters), 1)
+        filter = filters[0]
+        self.assertTrue("class") in filter
+        self.assertEqual(filter["class"], 'H5Z_FILTER_DEFLATE')
+        self.assertTrue("level" in filter)
+        self.assertEqual(filter["level"], 9)
+        self.assertTrue("id" in filter)
+        self.assertEqual(filter["id"], 1)
+         
 
     
     def testInvalidFillValue(self):
@@ -931,6 +1018,81 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(rsp_type["class"], 'H5T_FLOAT')
         self.assertTrue("id" in rsp_type)
         self.assertEqual(rsp_type["id"], dtype_uuid)
+
+    def testDatasetwithDomainDelete(self):
+        domain = self.base_domain + "/datasetwithdomaindelete.h6"
+        print("testDatasetwithDomainDelete", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+
+        # create a domain
+        req = helper.getEndpoint() + '/'
+        rsp = requests.put(req, headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+         
+        # get root group and verify link count is 0
+        req = helper.getEndpoint() + '/groups/' + root_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 0)
+        
+        type_vstr = {"charSet": "H5T_CSET_ASCII", 
+            "class": "H5T_STRING", 
+            "strPad": "H5T_STR_NULLTERM", 
+            "length": "H5T_VARIABLE" } 
+        payload = {'type': type_vstr, 'shape': 10,
+             'link': {'id': root_uuid, 'name': 'linked_dset'} }
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dset_uuid))
+        self.assertEqual(root_uuid, rspJson["root"])
+
+        # get root group and verify link count is 1
+        req = helper.getEndpoint() + '/groups/' + root_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 1)
+
+        # delete the domain (with the orginal user)
+        req = helper.getEndpoint() + '/'
+        rsp = requests.delete(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # try getting the domain again
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 410)  # GONE
+ 
+        # re-create a domain
+        rsp = requests.put(req, headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        self.assertTrue(root_uuid != rspJson["root"])
+        root_uuid = rspJson["root"]
+
+        # try getting the dataset
+        req = self.endpoint + "/datasets/" + dset_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 400) # Not Found
+
+        # create a dataset again
+        req = self.endpoint + "/datasets"
+        payload = {'type': type_vstr, 'shape': 10,
+             'link': {'id': root_uuid, 'name': 'linked_dset'} }
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dset_uuid))
+        self.assertEqual(root_uuid, rspJson["root"])
          
         
              

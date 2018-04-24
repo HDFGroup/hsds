@@ -119,10 +119,28 @@ class LinkTest(unittest.TestCase):
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 404)  # Not Found
 
+        # try creating a link with a forward slash in link name
+        link_title = "one/two"
+        payload = {"id": grp1_id}
+        req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 404)  # Not Found
+
+        # try creating a link with a backward slash in link name
+        link_title = "two\\one"
+        payload = {"id": grp1_id}
+        req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # Created
+
+        # delete the link
+        rsp = requests.delete(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200) 
+
+
         # got a real id, but outside this domain
         req = helper.getEndpoint() + "/groups/" + root_id + "/links/another_domain"
         another_domain = helper.getParentDomain(self.base_domain)
-        print("another_domain:", another_domain)
         another_id = helper.getRootUUID(another_domain)
         payload = {"id": another_id}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)

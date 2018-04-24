@@ -156,6 +156,32 @@ class DatatypeTest(unittest.TestCase):
             rsp = requests.put(req, data=json.dumps(data), headers=headers)
             self.assertEqual(rsp.status_code, 201)
 
+            # Try getting the datatype by h5path
+            req = self.endpoint + '/datatypes/' 
+            h5path = '/' + datatype
+            params = {"h5path": h5path} 
+            rsp = requests.get(req, headers=headers, params=params)
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+            self.assertEqual(rspJson["id"], dtype_uuid)
+
+            # Try again using relative h5path
+            req = self.endpoint + '/datatypes/' 
+            h5path = datatype
+            params = {"h5path": h5path} 
+            rsp = requests.get(req, headers=headers, params=params)
+            self.assertEqual(rsp.status_code, 400)
+
+            # try using relative h5path and parent group id
+            req = self.endpoint + '/datatypes/' 
+            h5path = datatype
+            params = {"h5path": h5path, "grpid": root_uuid} 
+            rsp = requests.get(req, headers=headers, params=params)
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+            self.assertEqual(rspJson["id"], dtype_uuid)
+
+
     def testPostCompoundType(self):
         print("testPostCompoundType", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
@@ -303,6 +329,15 @@ class DatatypeTest(unittest.TestCase):
         self.assertEqual(link_json["class"], "H5L_TYPE_HARD")
         self.assertEqual(link_json["title"], "linked_dtype")
         self.assertEqual(link_json["id"], dtype_uuid)
+
+        # request the dataset path
+        req = helper.getEndpoint() + '/datatypes/' + dtype_uuid
+        params = {"getalias": 1}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("alias" in rspJson)
+        self.assertEqual(rspJson["alias"], ['/linked_dtype'])
 
     
              

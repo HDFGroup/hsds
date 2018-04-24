@@ -158,7 +158,8 @@ async def healthCheck(app):
             except HttpProcessingError as he:
                 log.warn("HttpProcessingError <{}> for health check".format(he.code))
 
-        log.debug("health check sleep: {}".format(sleep_secs))
+        svmem = psutil.virtual_memory()
+        log.debug("health check sleep: {}, vm: {}".format(sleep_secs, svmem.percent))
         await asyncio.sleep(sleep_secs)
 
 async def about(request):
@@ -175,7 +176,7 @@ async def about(request):
     answer['start_time'] =  app["start_time"] #unixTimeToUTC(app['start_time'])
     answer['state'] = app['node_state'] 
     answer["hsds_version"] = HSDS_VERSION
-    answer["name"] = "Highly Scalable Data Service (HSDS)"
+    answer["name"] = config.get("server_name")
     answer["greeting"] = "Welcome to HSDS!"
     answer["about"] = "HSDS is a webservice for HSDS data"
     resp = await jsonResponse(request, answer) 

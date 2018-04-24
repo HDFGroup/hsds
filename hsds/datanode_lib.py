@@ -20,6 +20,8 @@ from util.s3Util import getS3JSONObj, putS3JSONObj, putS3Bytes, isS3Obj, deleteS
 from util.domainUtil import isValidDomain
 from util.attrUtil import getRequestCollectionName
 from util.httpUtil import http_put, http_delete
+from util.chunkUtil import getDatasetId
+from util.arrayUtil import arrayToBytes
 import config
 import hsds_logger as log
 
@@ -192,6 +194,7 @@ async def delete_metadata_obj(app, obj_id, notify=True):
     """ Delete the given object """
     meta_cache = app['meta_cache'] 
     dirty_ids = app["dirty_ids"]
+    log.info("delete_meta_data_obj: {} notify: {}".format(obj_id, notify))
     if not isValidDomain(obj_id) and not isValidUuid(obj_id):
         msg = "Invalid obj id: {}".format(obj_id)
         log.error(msg)
@@ -231,6 +234,8 @@ async def s3sync(app):
     notify_ids = app["notify_ids"]
     meta_cache = app["meta_cache"] 
     chunk_cache = app["chunk_cache"] 
+    deflate_map = app['deflate_map']
+        
 
     while True:
         while app["node_state"] != "READY":
@@ -245,7 +250,7 @@ async def s3sync(app):
 
         if len(keys_to_update) == 0:
             log.info("s3sync task - nothing to update, sleeping")
-            await asyncio.sleep(sleep_secs)
+            await asyncio.sleep(1)  # was sleep_secs
         else:
             # some objects need to be flushed to S3
             log.info("{} objects to be synced to S3".format(len(keys_to_update)))
@@ -280,9 +285,17 @@ async def s3sync(app):
                         continue
                     chunk_arr = chunk_cache[obj_id]
                     chunk_cache.clearDirty(obj_id)  # chunk may get evicted from cache now
-                    chunk_bytes = chunk_arr.tobytes()
+                    #chunk_bytes = chunk_arr.tobytes()
+                    chunk_bytes = arrayToBytes(chunk_arr)
+                    dset_id = getDatasetId(obj_id)
+                    deflate_level = None
+                    if dset_id in deflate_map:
+                        deflate_level = deflate_map[dset_id]
+                        log.info("got deflate_level: {} for dset: {}".format(deflate_level, dset_id))
+
+                    log.info("writing S3 object: {}, num_bytes: {}".format(s3_key, len(chunk_bytes)))
                     try:
-                        await putS3Bytes(app, s3_key, chunk_bytes)
+                        await putS3Bytes(app, s3_key, chunk_bytes, deflate_level=deflate_level)
                         success_keys.append(obj_id)
                     except HttpProcessingError as hpe:
                         log.error("got S3 error writing obj_id: {} to S3: {}".format(obj_id, str(hpe)))
@@ -366,18 +379,4 @@ async def s3sync(app):
                     except HttpProcessingError as hpe:
                         msg = "got error notifying async node: {}".format(hpe.code)
                         log.error(msg)
-
-            
-
-
-
-
-         
-            
-
      
-    
-
-    
- 
-   

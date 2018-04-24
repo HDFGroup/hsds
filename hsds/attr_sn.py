@@ -12,14 +12,17 @@
 #
 # attribute methods for SN
 # 
- 
-from aiohttp.errors import HttpBadRequest 
-from util.httpUtil import  http_get_json, http_put, http_delete, jsonResponse, getHref
+
+import numpy as np 
+from aiohttp.errors import HttpBadRequest, HttpProcessingError 
+from aiohttp.web import StreamResponse
+from util.httpUtil import  http_get_json, http_put, http_delete, jsonResponse, getHref, getAcceptType
 from util.idUtil import   isValidUuid, getDataNodeUrl
 from util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.attrUtil import  validateAttributeName, getRequestCollectionName
-from util.hdf5dtype import validateTypeItem, getBaseTypeJson
+from util.hdf5dtype import validateTypeItem, getBaseTypeJson, createDataType, getItemSize
+from util.arrayUtil import jsonToArray, getShapeDims, getNumElements, bytesArrayToList
 from servicenode_lib import getDomainJson, getObjectJson, validateAction
 import hsds_logger as log
 
@@ -67,12 +70,6 @@ async def GET_Attributes(request):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-    
-    # get domain JSON
-    domain_json = await getDomainJson(app, domain)
-    if "root" not in domain_json:
-        log.error("Expected root key for domain: {}".format(domain))
-        raise HttpBadRequest(message="Unexpected Error")
 
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "read")
@@ -142,12 +139,6 @@ async def GET_Attribute(request):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-    
-    # get domain JSON
-    domain_json = await getDomainJson(app, domain)
-    if "root" not in domain_json:
-        log.error("Expected root key for domain: {}".format(domain))
-        raise HttpBadRequest(message="Unexpected Error")
 
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "read")
@@ -228,16 +219,12 @@ async def PUT_Attribute(request):
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "create")
 
-    dims = None
-    datatype = None
-    shape = None
-    value = None
-
     if "type" not in body:
         msg = "PUT attribute with no type in body"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     datatype = body["type"]
+    
     if isinstance(datatype, str) and datatype.startswith("t-"):
         # Committed type - fetch type json from DN
         ctype_id = datatype
@@ -258,55 +245,86 @@ async def PUT_Attribute(request):
             datatype = getBaseTypeJson(datatype)
             log.debug("got datatype: {}".format(datatype))
         except TypeError:
-            msg = "POST Dataset with invalid predefined type"
+            msg = "PUT attribute with invalid predefined type"
             log.warn(msg)
             raise HttpBadRequest(message=msg) 
 
     validateTypeItem(datatype)
-
-    dims = []  # default as empty tuple (will create a scalar attribute)
+    
+    dims = None
+    shape_json = {}
     if "shape" in body:
-        shape = body["shape"]
-        if isinstance(shape, int):
-            dims = [shape,]
-        elif isinstance(shape, list) or isinstance(shape, tuple):
-            dims = shape  # can use as is
-        elif isinstance(shape, str):
-            # only valid string value is H5S_NULL
-            if shape != "H5S_NULL":
-                msg = "PUT attribute with invalid shape value"
+        shape_body = body["shape"]
+        shape_class = None
+        if isinstance(shape_body, dict) and "class" in shape_body:
+            shape_class = shape_body["class"]
+        elif isinstance(shape_body, str):
+            shape_class = shape_body
+        if shape_class:
+            if shape_class == "H5S_NULL":
+                shape_json["class"] = "H5S_NULL"
+                if isinstance(shape_body, dict) and "dims" in shape_body:
+                    msg = "can't include dims with null shape"
+                    log.warn(msg)
+                    raise HttpBadRequest(message=msg)
+                if isinstance(shape_body, dict) and "value" in body:
+                    msg = "can't have H5S_NULL shape with value"
+                    log.warn(msg)
+                    raise HttpBadRequest(message=msg)
+            elif shape_class == "H5S_SCALAR":
+                shape_json["class"] = "H5S_SCALAR"
+                dims = getShapeDims(shape_body)
+                if len(dims) != 1 or dims[0] != 1:
+                    msg = "dimensions aren't valid for scalar attribute"
+                    log.warn(msg)
+                    raise HttpBadRequest(message=msg)
+            elif shape_class == "H5S_SIMPLE":
+                shape_json["class"] = "H5S_SIMPLE"
+                dims = getShapeDims(shape_body)
+                shape_json["dims"] = dims
+            else:
+                msg = "Unknown shape class: {}".format(shape_class)
                 log.warn(msg)
                 raise HttpBadRequest(message=msg)
-            dims = None
         else:
-            msg = "Bad Request: shape is invalid!"
-            log.warn(msg)
-            raise HttpBadRequest(message=msg)  
-
-    if dims is not None:
-        if "value" not in body:
-            msg = "Bad Request: value not specified"
-            log.warn(msg)
-            raise HttpBadRequest(message=msg)  
-                
-        value = body["value"]
-        # TBD - validate that the value agrees with type/shape
-
-    shape_json = {}
-    if dims is None:
-        # For no shape, if value is supplied, then this is a scalar
-        # otherwise a null space attribute
-        if value is None:
-            shape_json["class"] = "H5S_NULL"
-        else:
-            shape_json["class"] = "H5S_SCALAR"
+            # no class, interpet shape value as dimensions and 
+            # use H5S_SIMPLE as class
+            if isinstance(shape_body, list) and len(shape_body) == 0:
+                shape_json["class"] = "H5S_SCALAR"
+                dims = [1,]
+            else:
+                shape_json["class"] = "H5S_SIMPLE"
+                dims = getShapeDims(shape_body)
+                shape_json["dims"] = dims
     else:
+        shape_json["class"] = "H5S_SCALAR"
+        dims = [1,]
+ 
+    
+    if "value" in body:
+        if dims is None:
+            msg = "Bad Request: data can not be included with H5S_NULL space"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        value = body["value"]
+        # validate that the value agrees with type/shape
+        arr_dtype = createDataType(datatype)  # np datatype
         if len(dims) == 0:
-            shape_json["class"] = "H5S_SCALAR"
+            np_dims = [1,]
         else:
-            shape_json["class"] = "H5S_SIMPLE"
-            shape_json["dims"] = dims
-     
+            np_dims = dims
+        log.debug("attribute dims: {}".format(np_dims))
+        log.debug("attribute value: {}".format(value))
+        try:
+            arr = jsonToArray(np_dims, arr_dtype, value)
+        except ValueError:
+            msg = "Bad Request: input data doesn't match selection"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        log.info("Got: {} array elements".format(arr.size))
+    else:
+        value = None
+
     # ready to add attribute now
     req = getDataNodeUrl(app, obj_id)
     req += '/' + collection + '/' + obj_id + "/attributes/" + attr_name
@@ -315,7 +333,8 @@ async def PUT_Attribute(request):
     attr_json = {}
     attr_json["type"] = datatype
     attr_json["shape"] = shape_json
-    attr_json["value"] = value
+    if value is not None:
+        attr_json["value"] = value
     
     put_rsp = await http_put(app, req, data=attr_json)
     log.info("PUT Attribute resp: " + str(put_rsp))
@@ -378,4 +397,245 @@ async def DELETE_Attribute(request):
     log.response(request, resp=resp)
     return resp
 
- 
+async def GET_AttributeValue(request):
+    """HTTP method to return an attribute value"""
+    log.request(request)
+    app = request.app 
+    log.info("GET_AttributeValue")
+    collection = getRequestCollectionName(request) # returns datasets|groups|datatypes
+
+    obj_id = request.match_info.get('id')
+    if not obj_id:
+        msg = "Missing object id"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    if not isValidUuid(obj_id, obj_class=collection):
+        msg = "Invalid object id: {}".format(obj_id)
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    attr_name = request.match_info.get('name')
+    validateAttributeName(attr_name)
+
+    username, pswd = getUserPasswordFromRequest(request)
+    if username is None and app['allow_noauth']:
+        username = "default"
+    else:
+        validateUserPassword(app, username, pswd)
+    
+    domain = getDomainFromRequest(request)
+    if not isValidDomain(domain):
+        msg = "Invalid host value: {}".format(domain)
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    
+    # get domain JSON
+    domain_json = await getDomainJson(app, domain)
+    if "root" not in domain_json:
+        log.error("Expected root key for domain: {}".format(domain))
+        raise HttpBadRequest(message="Unexpected Error")
+
+    # TBD - verify that the obj_id belongs to the given domain
+    await validateAction(app, domain, obj_id, username, "read")
+
+    req = getDataNodeUrl(app, obj_id)
+    req += '/' + collection + '/' + obj_id + "/attributes/" + attr_name
+    log.debug("get Attribute: " + req)
+    dn_json = await http_get_json(app, req)
+    log.debug("got attributes json from dn for obj_id: " + str(dn_json)) 
+
+    attr_shape = dn_json["shape"]
+    log.debug("attribute shape: {}".format(attr_shape))
+    if attr_shape["class"] == 'H5S_NULL':
+        msg = "Null space attributes can not be read"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+
+    accept_type = getAcceptType(request)
+    response_type = accept_type    # will adjust later if binary not possible
+    type_json = dn_json["type"]
+    shape_json = dn_json["shape"]
+    item_size = getItemSize(type_json)
+    
+    if item_size == 'H5T_VARIABLE' and accept_type != "json":
+        msg = "Client requested binary, but only JSON is supported for variable length data types"
+        log.info(msg)
+        response_type = "json"
+
+    if response_type == "binary":
+        arr_dtype = createDataType(type_json)  # np datatype
+        np_shape = getShapeDims(shape_json)
+        try:
+            arr = jsonToArray(np_shape, arr_dtype, dn_json["value"])
+        except ValueError:
+            msg = "Bad Request: input data doesn't match selection"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        output_data = arr.tobytes()
+        log.debug("GET AttributeValue - returning {} bytes binary data".format(len(output_data)))
+        # write response
+        resp = StreamResponse(status=200)
+        resp.headers['Content-Type'] = "application/octet-stream"
+        resp.content_length = len(output_data)
+        await resp.prepare(request)
+        resp.write(output_data)
+        await resp.write_eof()
+    else:
+        resp_json = {}
+        if "value" in dn_json:
+            resp_json["value"] = dn_json["value"] 
+
+        hrefs = []
+        obj_uri = '/' + collection + '/' + obj_id
+        attr_uri = obj_uri + '/attributes/' + attr_name
+        hrefs.append({'rel': 'self', 'href': getHref(request, attr_uri)})
+        hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
+        hrefs.append({'rel': 'owner', 'href': getHref(request, obj_uri)})
+        resp_json["hrefs"] = hrefs
+    
+        resp = await jsonResponse(request, resp_json)
+        log.response(request, resp=resp)
+    return resp
+
+async def PUT_AttributeValue(request):
+    """HTTP method to update an attributes data"""
+    log.request(request)
+    log.info("PUT_AttributeValue")
+    app = request.app
+    collection = getRequestCollectionName(request) # returns datasets|groups|datatypes
+
+    obj_id = request.match_info.get('id')
+    if not obj_id:
+        msg = "Missing object id"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    if not isValidUuid(obj_id, obj_class=collection):
+        msg = "Invalid object id: {}".format(obj_id)
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    attr_name = request.match_info.get('name')
+    log.debug("Attribute name: [{}]".format(attr_name) )
+    validateAttributeName(attr_name)
+
+    log.info("PUT Attribute Value id: {} name: {}".format(obj_id, attr_name))
+    username, pswd = getUserPasswordFromRequest(request)
+    # write actions need auth
+    validateUserPassword(app, username, pswd)
+
+    if not request.has_body:
+        msg = "PUT AttributeValue with no body"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    
+    domain = getDomainFromRequest(request)
+    if not isValidDomain(domain):
+        msg = "Invalid host value: {}".format(domain)
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    
+    # get domain JSON
+    domain_json = await getDomainJson(app, domain)
+    if "root" not in domain_json:
+        log.error("Expected root key for domain: {}".format(domain))
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+
+    # TBD - verify that the obj_id belongs to the given domain
+    await validateAction(app, domain, obj_id, username, "update")
+
+    req = getDataNodeUrl(app, obj_id)
+    req += '/' + collection + '/' + obj_id + "/attributes/" + attr_name
+    log.debug("get Attribute: " + req)
+    dn_json = await http_get_json(app, req)
+    log.debug("got attributes json from dn for obj_id: " + str(obj_id)) 
+    log.debug("got dn_json: {}".format(dn_json))
+
+    attr_shape = dn_json["shape"]
+    if attr_shape["class"] == 'H5S_NULL':
+        msg = "Null space attributes can not be updated"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+
+    np_shape = getShapeDims(attr_shape)
+    type_json = dn_json["type"]
+    np_dtype = createDataType(type_json)  # np datatype
+
+    request_type = "json"
+    if "Content-Type" in request.headers:
+        # client should use "application/octet-stream" for binary transfer
+        content_type = request.headers["Content-Type"]
+        if content_type not in ("application/json", "application/octet-stream"):
+            msg = "Unknown content_type: {}".format(content_type)
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        if content_type == "application/octet-stream":
+            log.debug("PUT AttributeValue - request_type is binary")
+            request_type = "binary"
+        else:
+            log.debug("PUT AttribueValue - request type is json")
+
+    binary_data = None
+    if request_type == "binary":
+        item_size = getItemSize(type_json)
+
+        if item_size == 'H5T_VARIABLE':
+            msg = "Only JSON is supported for variable length data types"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        # read binary data
+        binary_data = await request.read()
+        if len(binary_data) != request.content_length:
+            msg = "Read {} bytes, expecting: {}".format(len(binary_data), request.content_length)
+            log.error(msg)
+            raise HttpProcessingError(code=500, message="Unexpected Error")
+
+    arr = None  # np array to hold request data
+
+    if binary_data:
+        npoints = getNumElements(np_shape)
+        if npoints*item_size != len(binary_data):
+            msg = "Expected: " + str(npoints*item_size) + " bytes, but got: " + str(len(binary_data))
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        arr = np.fromstring(binary_data, dtype=np_dtype)
+        arr = arr.reshape(np_shape)  # conform to selection shape
+        # convert to JSON for transmission to DN
+        data = arr.tolist()
+        value = bytesArrayToList(data)
+    else:
+        body = await request.json()   
+
+        if "value" not in body:
+            msg = "PUT attribute value with no value in body"
+            log.warn(msg)
+            raise HttpProcessingError(code=400, message=msg)
+        value = body["value"]
+
+        # validate that the value agrees with type/shape
+        try:
+            arr = jsonToArray(np_shape, np_dtype, value)
+        except ValueError:
+            msg = "Bad Request: input data doesn't match selection"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+    log.info("Got: {} array elements".format(arr.size))
+     
+    # ready to add attribute now
+    attr_json = {}
+    attr_json["type"] = type_json
+    attr_json["shape"] = attr_shape
+    attr_json["value"] = value
+
+    req = getDataNodeUrl(app, obj_id)
+    req += '/' + collection + '/' + obj_id + "/attributes/" + attr_name  
+    log.info("PUT Attribute Value: " + req)
+
+    dn_json["value"] = value
+    params = {"replace": 1}  # let the DN know we can overwrite the attribute
+    put_rsp = await http_put(app, req, params=params, data=attr_json)
+    log.info("PUT Attribute Value resp: " + str(put_rsp))
+    
+    hrefs = []  # TBD
+    req_rsp = { "hrefs": hrefs }
+    # attribute creation successful     
+    resp = await jsonResponse(request, req_rsp, status=200)
+    log.response(request, resp=resp)
+    return resp

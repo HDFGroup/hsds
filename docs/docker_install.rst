@@ -11,7 +11,7 @@ Installation with Docker
 6. Go to admin/config directory: `$ cd hsds/admin/config`
 7. Copy the file "passwd.default" to "passwd.txt".  Add any usernames/passwords you wish 
 8. Create an enviroment variable to pass the bucket name: `$ export BUCKET_NAME=<your_bucket>`
-9. Build docker image:  `$ ./build.sh --nolint` 
+9. From hsds directory, build docker image:  `$ ./build.sh --nolint` 
 10. Run the docker containers: `$ ./runall.sh 4 s3`  For Minio, just: `$ ./runall.sh` 
 11. Run `$ docker ps` and verify that 10 containers are running: hsds_head, hsds_async, hsds_sn[0-4], hsds_dn[0-4]
 12. Get the external IP for the docker containers (just 127.0.0.1 if running directly on host, otherwise run: `$docker-machine ip`
@@ -36,15 +36,16 @@ These environment variables will be passed to the Docker containers on start up.
     export AWS_ACCESS_KEY_ID=1234567890            # user your AWS account access key if using S3
     export AWS_SECRET_ACCESS_KEY=ABCDEFGHIJKL      # use your AWS account access secret key if using S3
     export BUCKET_NAME=hsds                        # set to the name of the bucket you will be usings
-    export AWS_REGION=us-east-1                    # for boto compatibility
-    export AWS_S3_GATEWAY="http://127,0.0.1:9000"  # if running docker machine set to machine ip
-
+    export AWS_REGION=us-east-1                    # for boto compatibility - for S3 set to the region the bucket is in
+    export AWS_S3_GATEWAY="http://127.0.0.1:9000"  # if running docker machine set to machine ip 
+    # For S3, set AWS_S3_GATEWAY to endpoint for the region the bucket is in.  E.g.: http://s3.amazonaws.com.
+    # See http://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region for list of endpoints.
 
 Minio Setup
 -----------
 
-Minio is a docker container you can run on your desktop rather than using S3.  To HSDS treats the Minio just like
-it would the real S3 endpoint.
+Minio is a docker container you can run on your desktop rather than using S3.  To HSDS Minio just like
+works just like the real S3 endpoint.
 
 To setup minio:
 
@@ -67,7 +68,9 @@ Run the following commands to install Docker on Linux/CentOS:
     $ sudo yum install docker
     $ sudo service docker start
     $ sudo chkconfig --level 300 docker on
-    $ sudo usermod -aG docker $(whoami)
+    $ sudo groupadd docker # if group docker doesn't exist already
+    $ sudo gpasswd -a $USER docker
+    # log out and back in again (may also need to stop/start docker service)
     $ docker ps  # verify
 
 
@@ -76,14 +79,12 @@ Test Data Setup
 
 Using the following procedure to import test files into hsds
 
-1. Get project source code: `$ git clone https://github.com/HDFGroup/h5pyd`
-2. Go to install directory: `$ cd h5pyd`
-3. Build and install: `$ python setup.py install`
-4. Go to apps dir: `$ cd apps`
-5. Download the following file: `$ wget https://s3.amazonaws.com/hdfgroup/data/hdf5test/tall.h5`
-6. In the following steps use the password that was setup for the test_user1 account in place of <passwd>
-7. Create a test folder on HSDS: `$ python hstouch.py -u test_user1 -p <passwd> /home/test_user1/test/` 
-8. Import into hsds: `$ python hsload.py -v -u test_user1 -p <passwd> tall.h5 /home/test_user1/test/tall.h5`
-9. Verify upload: `$ python hsls.py -r -u test_user1 -p <passwd> /home/test_user1/test/tall.h5
+1. Install h5py: `$ pip install h5py`
+2. Install h5pyd (Python client SDK): `$ pip install h5pyd`
+3. Download the following file: `$ wget https://s3.amazonaws.com/hdfgroup/data/hdf5test/tall.h5`
+4. In the following steps use the password that was setup for the test_user1 account in place of <passwd>
+5. Create a test folder on HSDS: `$ hstouch -u test_user1 -p <passwd> /home/test_user1/test/` 
+6. Import into hsds: `$ hsload -v -u test_user1 -p <passwd> tall.h5 /home/test_user1/test/tall.h5`
+7. Verify upload: `$ hsls -r -u test_user1 -p <passwd> /home/test_user1/test/tall.h5
  
 

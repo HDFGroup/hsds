@@ -80,7 +80,7 @@ def main():
             printUsage()
 
     print("prefix:", prefix)
-    print("delimantor:", deliminator)
+    print("deliminator:", deliminator)
     print("showstats:", showstats)
     
     # we need to setup a asyncio loop to query s3

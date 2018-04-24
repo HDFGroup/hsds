@@ -20,21 +20,30 @@ HEAD_PORT=5100
 AN_PORT=6100
 SN_PORT=5101
 DN_PORT=6101
-AN_RAM=4g  # AN needs to store the entire object dictionary in memory
-SN_RAM=1g
-DN_RAM=3g  # should be comfortably larger than CHUNK_MEM_CACHE_SIZE
-HEAD_RAM=512m
+AN_RAM=256m  # AN needs to store the entire object dictionary in memory
+SN_RAM=256m
+DN_RAM=512m  # should be comfortably larger than CHUNK_MEM_CACHE_SIZE
+HEAD_RAM=256m
 # set chunk cache size to 2GB
-CHUNK_MEM_CACHE_SIZE=2147483648
+#CHUNK_MEM_CACHE_SIZE=2147483648
+CHUNK_MEM_CACHE_SIZE=128m
 # set max chunk size to 8MB
-MAX_CHUNK_SIZE=20971520
+MAX_CHUNK_SIZE=8m
 # set the log level  
 LOG_LEVEL=DEBUG
 # Restart policy: no, on-failure, always, unless-stopped (see docker run reference)
-RESTART_POLICY=always
+RESTART_POLICY=on-failure
 
 MINIO_BASE="http://minio:9000"
 BUCKET_NAME="minio.hsdsdev"  # use a diferent bucket name to avoid any confusion with AWS S3
+
+#the following is returned when /about is invoked
+SERVER_NAME=${SERVER_NAME:='Highly Scalable Data Service (HSDS)'}
+
+# Set ANONYMOUS_TTL to 0 to disable GC, default to 10 minutes
+#ANONYMOUS_TTL=${ANONYMOUS_TTL:=600}
+ANONYMOUS_TTL=${ANONYMOUS_TTL:=0}
+ 
 
 #
 # run container given in arguments
@@ -52,6 +61,7 @@ if [ $1 == "head" ]; then
   --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
   --env AWS_S3_GATEWAY=${MINIO_BASE} \
   --env BUCKET_NAME=${BUCKET_NAME} \
+  --env SYS_BUCKET_NAME=${SYS_BUCKET_NAME} \
   --env LOG_LEVEL=${LOG_LEVEL} \
   --link minio:minio \
   hdfgroup/hsds  
@@ -66,6 +76,7 @@ elif [ $1 == "an" ]; then
   --env AWS_S3_GATEWAY=${MINIO_BASE} \
   --env BUCKET_NAME=${BUCKET_NAME} \
   --env LOG_LEVEL=${LOG_LEVEL} \
+  --env ANONYMOUS_TTL=${ANONYMOUS_TTL} \
   --link hsds_head:hsds_head \
   --link minio:minio \
   hdfgroup/hsds
@@ -105,6 +116,7 @@ elif [ $1 == "sn" ]; then
         --env AWS_S3_GATEWAY=${MINIO_BASE} \
         --env BUCKET_NAME=${BUCKET_NAME} \
         --env LOG_LEVEL=${LOG_LEVEL} \
+        --env SERVER_NAME="${SERVER_NAME}" \
         --link hsds_head:hsds_head \
         --link minio:minio \
         hdfgroup/hsds

@@ -325,46 +325,6 @@ def setChunkDimQueryParam(params, dims):
         params["dim"] = dim_param
  
 
-"""
-Helper - get num elements defined by a shape
-"""
-def getNumElements(dims):
-    num_elements = 0
-    if isinstance(dims, int):
-        num_elements = dims
-    elif isinstance(dims, (list, tuple)):
-        num_elements = 1
-        for dim in dims:
-            num_elements *= dim
-    else:
-        raise ValueError("Unexpected argument")
-    return num_elements
-
-
-""" 
-Get dims from a given shape.  Return [1,] for Scalar datasets
-
-Use with H5S_NULL datasets will throw a 400 error.
-"""
-def getDsetDims(dset_json):
-    if "shape" not in dset_json:
-        log.error("No shape found in dset_json")
-        raise HttpProcessingError(message="Unexpected error", code=500)
-    shape_json = dset_json["shape"]
-    dims = None
-    if shape_json['class'] == 'H5S_NULL':
-        msg = "Expected shape class other than H5S_NULL"
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
-    elif shape_json['class'] == 'H5S_SCALAR':
-        dims = [1,]
-    elif shape_json['class'] == 'H5S_SIMPLE':
-        dims = shape_json["dims"]
-    else:
-        log.error("Unexpected shape class: {}".format(shape_json['class']))
-        raise HttpProcessingError(message="Unexpected error", code=500)
-    return dims
-
 
 """ 
 Get maxdims from a given shape.  Return [1,] for Scalar datasets
@@ -403,6 +363,31 @@ def getChunkLayout(dset_json):
         raise HttpProcessingError(message="Unexpected error", code=500)
     layout = layout_json["dims"]
     return layout
+
+""" Get the Deflate compression value.
+"""
+def getDeflateLevel(dset_json):
+    
+    if "creationProperties" not in dset_json:
+        return None
+    creationProperties = dset_json["creationProperties"]
+    if "filters" not in creationProperties:
+        return None
+    filters = creationProperties["filters"]
+    deflate_level = None
+    for filter in filters:
+        if "class" not in filter:
+            continue
+        filterClass = filter["class"]
+        if filterClass != "H5Z_FILTER_DEFLATE":
+            continue
+        if "level" not in filter:
+            deflate_level = 5  # medium level
+        else:
+            deflate_level = filter["level"]
+    return deflate_level
+
+
 
 
 """Helper method - return query options for a "reasonable" size

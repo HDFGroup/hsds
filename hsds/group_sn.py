@@ -14,13 +14,14 @@
 # 
  
 import json
+
 from aiohttp.errors import HttpBadRequest, HttpProcessingError
  
 from util.httpUtil import http_post, http_put, http_delete, jsonResponse, getHref
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
-from servicenode_lib import getDomainJson, getObjectJson, validateAction
+from servicenode_lib import getDomainJson, getObjectJson, validateAction, getObjectIdByPath, getPathForObjectId
 import hsds_logger as log
 
 
@@ -29,17 +30,32 @@ async def GET_Group(request):
     log.request(request)
     app = request.app 
 
+    h5path = None
+    getAlias = False
     group_id = request.match_info.get('id')
-    if not group_id:
+    if not group_id and "h5path" not in request.GET:
+        # no id, or path provided, so bad request
         msg = "Missing group id"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-    log.info("GET_Group, id: {}".format(group_id))
-    if not isValidUuid(group_id, "Group"):
-        msg = "Invalid group id: {}".format(group_id)
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
-
+    if group_id:
+        log.info("GET_Group, id: {}".format(group_id))
+        # is the id a group id and not something else?
+        if not isValidUuid(group_id, "Group"):
+            msg = "Invalid group id: {}".format(group_id)
+            log.warn(msg)
+            raise HttpBadRequest(message=msg) 
+        if "getalias" in request.GET:
+            if request.GET["getalias"]:
+                getAlias = True       
+    if "h5path" in request.GET:
+        h5path = request.GET["h5path"]
+        if not group_id and h5path[0] != '/':
+            msg = "h5paths must be absolute if no parent id is provided"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        log.info("GET_Group, h5path: {}".format(h5path))
+    
     username, pswd = getUserPasswordFromRequest(request)
     if username is None and app['allow_noauth']:
         username = "default"
@@ -51,14 +67,45 @@ async def GET_Group(request):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-
-    # veriful authorization to read the group
-    await validateAction(app, domain, group_id, username, "read")
     
+    if h5path and h5path[0] == '/':
+        # ignore the request path id (if given) and start
+        # from root group for absolute paths
+        
+        domain_json = await getDomainJson(app, domain)
+        if "root" not in domain_json:
+            msg = "Expected root key for domain: {}".format(domain)
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        group_id = domain_json["root"]
+
+    if h5path:
+        group_id = await getObjectIdByPath(app, group_id, h5path)  # throws 404 if not found
+        if not isValidUuid(group_id, "Group"):
+            msg = "No group exist with the path: {}".format(h5path)
+            log.warn(msg)
+            raise HttpProcessingError(code=404, message=msg)
+        log.info("get group_id: {} from h5path: {}".format(group_id, h5path))
+
+    # verify authorization to read the group
+    await validateAction(app, domain, group_id, username, "read")
+        
     # get authoritative state for group from DN (even if it's in the meta_cache).
     group_json = await getObjectJson(app, group_id, refresh=True)  
-    
+
     group_json["domain"] = domain
+
+    if getAlias:
+        root_id = group_json["root"]
+        alias = []
+        if group_id == root_id:
+            alias.append('/')
+        else:
+            idpath_map = {root_id: '/'}
+            h5path = await getPathForObjectId(app, root_id, idpath_map, tgt_id=group_id)
+            if h5path:
+                alias.append(h5path)
+        group_json["alias"] = alias
 
     hrefs = []
     group_uri = '/groups/'+group_id
@@ -197,5 +244,7 @@ async def DELETE_Group(request):
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp
+
+ 
 
  

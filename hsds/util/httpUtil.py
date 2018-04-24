@@ -7,7 +7,7 @@
 # terms governing use, modification, and redistribution, is contained in     #
 # the file COPYING, which can be found at the root of the source code        #
 # distribution tree.  If you do not have access to this file, you may        #
-# request a copy from help@hdfgroup.org.                                     #
+# request a copy from  help@hdfgroup.org.                                     #
 ##############################################################################
 #
 # httpUtil:
@@ -17,7 +17,7 @@ import json
 from asyncio import CancelledError
 from aiohttp.web import StreamResponse
 from aiohttp import  ClientSession, TCPConnector
-from aiohttp.errors import ClientError, HttpBadRequest, HttpProcessingError
+from aiohttp.errors import ClientError, HttpProcessingError
 
 
 import hsds_logger as log
@@ -223,11 +223,17 @@ async def jsonResponse(request, data, status=200):
     resp.headers['Content-Type'] = 'application/json'
     if CORS_DOMAIN:
         resp.headers['Access-Control-Allow-Origin'] = CORS_DOMAIN
-    answer = json.dumps(data)
-    answer = answer.encode('utf8')
-    resp.content_length = len(answer)
-    await resp.prepare(request)
-    resp.write(answer)
+        resp.headers['Access-Control-Allow-Methods'] = "GET, POST, DELETE, PUT, OPTIONS"
+        resp.headers['Access-Control-Allow-Headers'] = "Content-Type, api_key, Authorization"
+
+    if request.method != "OPTIONS":
+        answer = json.dumps(data)
+        answer = answer.encode('utf8')
+        resp.content_length = len(answer)
+        await resp.prepare(request)
+        resp.write(answer)
+    else:
+        await resp.prepare(request)
     await resp.write_eof()
     return resp
 
@@ -268,11 +274,11 @@ Currently does not support q fields.
 def getAcceptType(request):
     accept_type = "json"  # default to JSON
     if "accept" in request.headers:
-        if request.headers["accept"] not in ("application/json", "application/octet-stream", "*/*"):
-            msg = "Unexpected accept value: {}".format(accept_type)
-            log.warn(msg)
-            raise HttpBadRequest(message=msg)
-        if request.headers["accept"] == "application/octet-stream":
+        # treat everything as json unless octet-stream is given
+        if request.headers["accept"] != "application/octet-stream":
+            msg = "Ignoring accept value: {}".format(request.headers["accept"])
+            log.info(msg)
+        else:
             accept_type = "binary"
     return accept_type
 

@@ -24,6 +24,14 @@ if [ ! -z ${s3} ] && [ ${s3} -ne 0 ]; then
   [ -z ${AWS_S3_GATEWAY} ] && echo "Need to set AWS_S3_GATEWAY" && exit 1
 fi
 
+[ -z ${BUCKET_NAME} ] && echo "Need to set BUCKET_NAME" && exit 1
+[ -z ${AWS_S3_GATEWAY} ] && echo "Need to set AWS_S3_GATEWAY" && exit 1
+[ -z ${AWS_REGION} ] && echo "Need to AWS_REGION"  && exit 1
+if [ -z $s3 ]; then
+  # if not using s3 and EC2 IAM roles, need to define AWS access keys
+  [ -z ${AWS_ACCESS_KEY_ID} ] && echo "Need to set AWS_ACCESS_KEY_ID" && exit 1
+  [ -z ${AWS_SECRET_ACCESS_KEY} ] && echo "Need to set AWS_SECRET_ACCESS_KEY" && exit 1
+fi
 
 if [ $(docker ps -aq -f status=exited | wc -l) -gt 0 ]; then
    echo "clean stopped containers"

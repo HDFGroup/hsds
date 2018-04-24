@@ -12,6 +12,7 @@
 #
 # service node of hsds cluster
 #  
+import os.path as op
 from aiohttp.errors import HttpBadRequest, HttpProcessingError
 
 from util.idUtil import getDataNodeUrl, getCollectionForId
@@ -126,5 +127,86 @@ async def getObjectJson(app, obj_id, refresh=False):
         log.warn(msg)
         raise HttpProcessingError(code=404, message=msg)
     return obj_json
+
+async def getObjectIdByPath(app, obj_id, h5path, refresh=False):
+    """ Find the object at the provided h5path location.
+    If not found raise 404 error.
+    """
+    log.info("getObjectIdByPath obj_id: {} h5path: {} refresh: {}".format(obj_id, h5path, refresh))
+    if h5path.startswith("./"):
+        h5path = h5path[2:]  # treat as relative path
+    links = h5path.split('/')
+    for link in links:
+        if not link:
+            continue  # skip empty link
+        log.debug("getObjectIdByPath for objid: {} got link: {}".format(obj_id, link))
+        if getCollectionForId(obj_id) != "groups":
+            # not a group, so won't have links
+            msg = "h5path: {} not found".format(h5path)
+            log.warn(msg)
+            raise HttpProcessingError(code=404, message=msg)
+        req = getDataNodeUrl(app, obj_id)
+        req += "/groups/" + obj_id + "/links/" + link
+        log.debug("get LINK: " + req)
+        link_json = await http_get_json(app, req)
+        log.debug("got link_json: " + str(link_json)) 
+        if link_json["class"] != 'H5L_TYPE_HARD':
+            # don't follow soft/external links
+            msg = "h5path: {} not found".format(h5path)
+            log.warn(msg)
+            raise HttpProcessingError(code=404, message=msg)
+        obj_id = link_json["id"]
+    # if we get here, we've traveresed the entire path and found the object
+    return obj_id
+
+async def getPathForObjectId(app, parent_id, idpath_map, tgt_id=None):
+    """ Search the object starting with the given parent_id.
+    idpath should be a dict with at minimum the key: parent_id: <parent_path>.
+    If tgt_id is not None, returns first path that matches the tgt_id or None if not found.
+    If Tgt_id is no, returns the idpath_map.
+    """
+
+    if not parent_id:
+        log.error("No parent_id passed to getPathForObjectId")
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+
+    if parent_id not in idpath_map:
+        msg = "Obj {} expected to be found in idpath_map".format(parent_id)
+        log.error(msg)
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+    
+    parent_path = idpath_map[parent_id]
+    if parent_id == tgt_id:
+        return parent_path
+
+    req = getDataNodeUrl(app, parent_id)
+    req += "/groups/" + parent_id + "/links" 
+        
+    log.debug("getPathForObjectId LINKS: " + req)
+    links_json = await http_get_json(app, req)
+    log.debug("getPathForObjectId got links json from dn for parent_id: {}".format(parent_id)) 
+    links = links_json["links"]
+
+    h5path = None
+    for link in links:
+        if link["class"] != "H5L_TYPE_HARD":
+            continue  # ignore everything except hard links
+        link_id = link["id"]
+        if link_id in idpath_map:
+            continue  # this node has already been visited
+        title = link["title"]
+        if tgt_id is not None and link_id == tgt_id:
+            # found it!
+            h5path = op.join(parent_path, title)
+            break
+        idpath_map[link_id] = op.join(parent_path, title)
+        if getCollectionForId(link_id) != "groups":
+            continue
+        h5path = await getPathForObjectId(app, link_id, idpath_map, tgt_id) # recursive call
+        if tgt_id is not None and h5path:
+            break
+    
+    return h5path
+
     
 

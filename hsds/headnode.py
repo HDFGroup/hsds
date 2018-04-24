@@ -20,6 +20,7 @@ import time
 from aiohttp.web import Application, StreamResponse, run_app
 from aiohttp import  ClientSession, TCPConnector
 from aiohttp.errors import HttpBadRequest, HttpProcessingError
+from asyncio import TimeoutError
 import aiobotocore
 
 import config
@@ -90,6 +91,7 @@ async def healthCheck(app):
          
         log.info("putS3JSONObj complete")
         fail_count = 0
+        HEALTH_CHECK_RETRY_COUNT = 3 # times to try before calling a node dead
         for node in nodes:         
             if node["host"] is None:
                 continue
@@ -125,19 +127,32 @@ async def healthCheck(app):
                 app_node_stats[node_id] = node_stats
                 # mark the last time we got a response from this node
                 node["healthcheck"] = unixTimeToUTC(int(time.time()))
+                node["failcount"] = 0 # rest
             except OSError as ose:
                 log.warn("OSError for req: {}: {}".format(url, str(ose)))
                 # node has gone away?
-                log.warn("removing {}:{} from active list".format(node["host"], node["port"]))
-                node["host"] = None
-                fail_count += 1
+                node["failcount"] += 1
+                if node["failcount"] >= HEALTH_CHECK_RETRY_COUNT:
+                    log.warn("removing {}:{} from active list".format(node["host"], node["port"]))
+                    node["host"] = None
+                    fail_count += 1
                 
             except HttpProcessingError as hpe:
                 log.warn("HttpProcessingError for req: {}: {}".format(url, str(hpe)))
                 # node has gone away?
-                log.warn("removing {}:{} from active list".format(node["host"], node["port"]))
-                node["host"] = None
-                fail_count += 1
+                node["failcount"] += 1
+                if node["failcount"] >= HEALTH_CHECK_RETRY_COUNT:
+                    log.warn("removing {}:{} from active list".format(node["host"], node["port"]))
+                    node["host"] = None
+                    fail_count += 1
+            except TimeoutError as toe:
+                log.warn("Timeout error for req: {}: {}".format(url, str(toe)))
+                # node has gone away?
+                node["failcount"] += 1
+                if node["failcount"] >= HEALTH_CHECK_RETRY_COUNT:
+                    log.warn("removing {}:{} from active list".format(node["host"], node["port"]))
+                    node["host"] = None
+                    fail_count += 1
         if fail_count > 0:
             if app["cluster_state"] == "READY":
                 # go back to INITIALIZING state until another node is registered
@@ -215,6 +230,7 @@ async def register(request):
                 node['port'] = body["port"]
                 node['id'] =   body["id"]
                 node["connected"] = unixTimeToUTC(int(time.time()))
+                node['failcount'] = 0
                 ret_node = node
                 node_ids[body["id"]] = ret_node
                 break
@@ -368,7 +384,10 @@ async def init(loop):
     app["start_time"] = int(time.time())  # seconds after epoch 
     app["target_sn_count"] = int(config.get("target_sn_count"))
     app["target_dn_count"] = int(config.get("target_dn_count"))
-    bucket_name = config.get("bucket_name")
+    bucket_name = config.get("sys_bucket_name")
+    if not bucket_name:
+        # use a combine data/sys bucket
+        bucket_name = config.get("bucket_name")
     if not bucket_name:
         log.error("BUCKET_NAME environment variable not set")
         sys.exit()

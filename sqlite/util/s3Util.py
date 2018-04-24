@@ -19,7 +19,6 @@ import zlib
 import subprocess
 import datetime
 from botocore.exceptions import ClientError
-from aiohttp.errors import HttpProcessingError 
 
 import hsds_logger as log
 import config
@@ -159,13 +158,13 @@ async def getS3JSONObj(app, key):
         if is_404:
             msg = "s3_key: {} not found ".format(key,)
             log.info(msg)
-            raise HttpProcessingError(code=404, message=msg)
+            raise ValueError(msg)
         else:
             s3_stats_increment(app, "error_count")
             log.warn("got ClientError on s3 get: {}".format(str(ce)))
             msg = "Error getting s3 obj: " + str(ce)
             log.error(msg)
-            raise HttpProcessingError(code=500, message=msg)
+            raise ValueError(msg)
 
     s3_stats_increment(app, "bytes_in", inc=len(data)) 
     try:
@@ -174,7 +173,7 @@ async def getS3JSONObj(app, key):
         s3_stats_increment(app, "error_count")
         log.error("Error loading JSON at key: {}".format(key))
         msg = "Unexpected i/o error"
-        raise HttpProcessingError(code=500, message=msg)
+        raise ValueError(msg)
 
     log.debug("s3 returned: {}".format(json_dict))
     return json_dict
@@ -205,13 +204,13 @@ async def getS3Bytes(app, key, deflate_level=None):
         if is_404:
             msg = "s3_key: {} not found ".format(key,)
             log.warn(msg)
-            raise HttpProcessingError(code=404, message=msg)
+            raise ValueError(msg)
         else:
             s3_stats_increment(app, "error_count")
             log.warn("got ClientError on s3 get: {}".format(str(ce)))
             msg = "Error getting s3 obj: " + str(ce)
             log.error(msg)
-            raise HttpProcessingError(code=500, message=msg)
+            raise ValueError(msg)
 
     if data and len(data) > 0:
         s3_stats_increment(app, "bytes_in", inc=len(data))
@@ -245,7 +244,7 @@ async def putS3JSONObj(app, key, json_obj):
         s3_stats_increment(app, "error_count")
         msg = "Error putting s3 obj: " + str(ce)
         log.error(msg)
-        raise HttpProcessingError(code=500, message=msg)
+        raise ValueError(msg)
     if data and len(data) > 0:
         s3_stats_increment(app, "bytes_out", inc=len(data))
     log.debug("putS3JSONObj complete")
@@ -277,7 +276,7 @@ async def putS3Bytes(app, key, data, deflate_level=None):
         s3_stats_increment(app, "error_count")
         msg = "Error putting s3 obj: " + str(ce)
         log.error(msg)
-        raise HttpProcessingError(code=500, message=msg)
+        raise ValueError(msg)
     if data and len(data) > 0:
         s3_stats_increment(app, "bytes_in", inc=len(data))
     log.debug("putS3Bytes complete")
@@ -299,7 +298,7 @@ async def deleteS3Obj(app, key):
         s3_stats_increment(app, "error_count")
         msg = "Error deleting s3 obj: " + str(ce)
         log.error(msg)
-        raise HttpProcessingError(code=500, message=msg)
+        raise ValueError(msg)
     log.debug("deleteS3Obj complete")
 
 async def getS3ObjStats(app, key):
@@ -326,11 +325,11 @@ async def getS3ObjStats(app, key):
         s3_stats_increment(app, "error_count")
         msg = "Error listing s3 obj: " + str(ce)
         log.error(msg)
-        raise HttpProcessingError(code=500, message=msg)
+        raise ValueError(msg)
     if 'Contents' not in resp:
         msg = "key: {} not found".format(key)
         log.info(msg)
-        raise HttpProcessingError(code=404, message=msg)
+        raise ValueError(msg)
     contents = resp['Contents']
     log.debug("s3_contents: {}".format(contents))
     
@@ -359,7 +358,7 @@ async def getS3ObjStats(app, key):
     if not found:
         msg = "key: {} not found".format(key)
         log.info(msg)
-        raise HttpProcessingError(code=404, message=msg)
+        raise ValueError(msg)
 
     return stats
     
@@ -411,7 +410,7 @@ async def _fetch_all(app, pages, key_names, prefix='', deliminator='', suffix=''
                 # back off and try again
                 if retry_number == retry_limit - 1:
                     log.error("Error retreiving s3 keys")
-                    raise HttpProcessingError(code=500, message="Unexpected Error retreiving S3 keys")
+                    raise ValueError("Unexpected Error retreiving S3 keys")
                 log.warn("Error retrieving S3 keys, retrying")
                 sleep_seconds = (retry_number+1)**2  # sleep, 1,4,9, etc. seconds
                 await asyncio.sleep(sleep_seconds)
@@ -443,6 +442,7 @@ async def _fetch_all(app, pages, key_names, prefix='', deliminator='', suffix=''
                 
                 if prefix:
                     key_name = key_name[len(prefix):]  # just include after prefix
+                    print("adjusted key_name:", key_name)
                 if suffix:
                     n = len(suffix)
                     key_name = key_name[:-n]
@@ -496,7 +496,7 @@ async def _fetch_all(app, pages, key_names, prefix='', deliminator='', suffix=''
                     count += 1
         # done with all items in this response
         if callback is not None and len(key_names) > 0:
-            callback(app, key_names)
+            await callback(app, key_names)
             # reset key_names
             log.debug("reset key_names")
             key_names.clear()

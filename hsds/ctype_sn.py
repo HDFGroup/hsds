@@ -15,14 +15,14 @@
 # 
  
 import json
-from aiohttp.errors import HttpBadRequest 
+from aiohttp.errors import HttpBadRequest, HttpProcessingError
  
 from util.httpUtil import http_post, http_put, http_delete, jsonResponse, getHref
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.hdf5dtype import validateTypeItem, getBaseTypeJson
-from servicenode_lib import getDomainJson, getObjectJson, validateAction
+from servicenode_lib import getDomainJson, getObjectJson, validateAction, getObjectIdByPath, getPathForObjectId
 import hsds_logger as log
 
 
@@ -31,15 +31,41 @@ async def GET_Datatype(request):
     log.request(request)
     app = request.app 
 
+    h5path = None
+    getAlias = False
     ctype_id = request.match_info.get('id')
-    if not ctype_id:
+    if not ctype_id and "h5path" not in request.GET:
         msg = "Missing type id"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-    if not isValidUuid(ctype_id, "Type"):
-        msg = "Invalid type id: {}".format(ctype_id)
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
+
+    if ctype_id:
+        if not isValidUuid(ctype_id, "Type"):
+            msg = "Invalid type id: {}".format(ctype_id)
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        if "getalias" in request.GET:
+            if request.GET["getalias"]:
+                getAlias = True 
+    else:
+        group_id = None
+        if "grpid" in request.GET:
+            group_id = request.GET["grpid"]
+            if not isValidUuid(group_id, "Group"):
+                msg = "Invalid parent group id: {}".format(group_id)
+                log.warn(msg)
+                raise HttpBadRequest(message=msg)
+        if "h5path" not in request.GET:
+            msg = "Expecting either ctype id or h5path url param"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+
+        h5path = request.GET["h5path"]
+        if h5path[0] != '/' and group_id is None:
+            msg = "h5paths must be absolute"
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        log.info("GET_Datatype, h5path: {}".format(h5path))
 
     username, pswd = getUserPasswordFromRequest(request)
     if username is None and app['allow_noauth']:
@@ -53,11 +79,35 @@ async def GET_Datatype(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
 
+    if h5path:
+        domain_json = await getDomainJson(app, domain)
+        if "root" not in domain_json:
+            msg = "Expected root key for domain: {}".format(domain)
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        if group_id is None:
+            group_id = domain_json["root"]
+        ctype_id = await getObjectIdByPath(app, group_id, h5path)  # throws 404 if not found
+        if not isValidUuid(ctype_id, "Datatype"):
+            msg = "No datatype exist with the path: {}".format(h5path)
+            log.warn(msg)
+            raise HttpProcessingError(code=404, message=msg)
+        log.info("got ctype_id: {} from h5path: {}".format(ctype_id, h5path))
+
     await validateAction(app, domain, ctype_id, username, "read")
 
     # get authoritative state for group from DN (even if it's in the meta_cache).
     type_json = await getObjectJson(app, ctype_id, refresh=True)  
     type_json["domain"] = domain
+
+    if getAlias:
+        root_id = type_json["root"]
+        alias = []
+        idpath_map = {root_id: '/'}
+        h5path = await getPathForObjectId(app, root_id, idpath_map, tgt_id=ctype_id)
+        if h5path:
+            alias.append(h5path)
+        type_json["alias"] = alias
 
     hrefs = []
     ctype_uri = '/datatypes/'+ctype_id

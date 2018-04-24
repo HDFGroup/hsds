@@ -899,6 +899,13 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(chunk_id[2:-2], dset_id[2:])
         self.assertEqual(len(chunk_id), 2+36+2)
 
+        layout = (100,)        
+        chunk_id = getChunkId(dset_id, 2, layout)
+        self.assertTrue(chunk_id.startswith("c-"))
+        self.assertTrue(chunk_id.endswith('_0'))
+        self.assertEqual(chunk_id[2:-2], dset_id[2:])
+        self.assertEqual(len(chunk_id), 2+36+2)
+ 
         layout = (10,)
         chunk_id = getChunkId(dset_id, 23, layout)
         self.assertTrue(chunk_id.startswith("c-"))

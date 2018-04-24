@@ -81,6 +81,10 @@ class IdUtilTest(unittest.TestCase):
                 node_number = getObjPartition(id, node_count)
                 self.assertTrue(node_number >= 0)
                 self.assertTrue(node_number < node_count)
+        # try a domain partition
+        node_number = getObjPartition("/home/test_user1", node_count)
+        self.assertTrue(node_number >= 0)
+        self.assertTrue(node_number < node_count)
 
     def testGetCollection(self):
         group_id = "g-314d61b8-9954-11e6-a733-3c15c2da029e"

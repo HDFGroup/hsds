@@ -25,10 +25,10 @@ from util.idUtil import   isValidUuid, getDataNodeUrl
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.hdf5dtype import getItemSize, createDataType
 from util.dsetUtil import getSliceQueryParam, setSliceQueryParam, getFillValue, isExtensible 
-from util.dsetUtil import getSelectionShape, getNumElements, getDsetDims, getDsetMaxDims, getChunkLayout
+from util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout, getDeflateLevel
 from util.chunkUtil import getNumChunks, getChunkIds, getChunkId
 from util.chunkUtil import getChunkCoverage, getDataCoverage
-from util.arrayUtil import bytesArrayToList, toTuple 
+from util.arrayUtil import bytesArrayToList, jsonToArray, getShapeDims, getNumElements, arrayToBytes, bytesToArray
 from util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from servicenode_lib import getObjectJson, validateAction
 import config
@@ -38,13 +38,15 @@ import hsds_logger as log
 """
 Write data to given chunk_id.  Pass in type, dims, and selection area.
 """
-async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr):
+async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level, arr):
     """ write the chunk selection to the DN
     chunk_id: id of chunk to write to
     chunk_sel: chunk-relative selection to write to
     np_arr: numpy array of data to be written
     """
     log.info("write_chunk_hyperslab, chunk_id:{}, slices:{}".format(chunk_id, slices))
+    if deflate_level is not None:
+        log.info("deflate_level: {}".format(deflate_level))
     if "layout" not in dset_json:
         log.error("No layout found in dset_json: {}".format(dset_json))
         raise HttpProcessingError(message="Unexpected error", code=500)
@@ -52,8 +54,7 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr):
     if "type" not in dset_json:
         log.error("No type found in dset_json: {}".format(dset_json))
         raise HttpProcessingError(message="Unexpected error", code=500)
-    #type_json = dset_json["type"]
-    #dims = getDsetDims(dset_json)
+    
     layout = getChunkLayout(dset_json)
 
     chunk_sel = getChunkCoverage(chunk_id, slices, layout)
@@ -63,10 +64,11 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr):
     log.debug("arr.shape: {}".format(arr.shape))
     arr_chunk = arr[data_sel]
     req = getDataNodeUrl(app, chunk_id)
-    req += "/chunks/" + chunk_id 
+    req += "/chunks/" + chunk_id  
+
     log.debug("PUT chunk req: " + req)
     client = get_http_client(app)
-    data = arr_chunk.tobytes()  # TBD - this makes a copy, use np_arr.data to get memoryview and avoid copy
+    data = arrayToBytes(arr_chunk)  
     # pass itemsize, type, dimensions, and selection as query params
     params = {}
     params["dset"] = json.dumps(dset_json)
@@ -131,11 +133,12 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr):
             log.debug("http_get {} status: <{}>".format(req, rsp.status))
             if rsp.status == 200:
                 data = await rsp.read()  # read response as bytes
-                chunk_arr = np.fromstring(data, dtype=dt) 
+                chunk_arr = bytesToArray(data, dt, chunk_shape)  
                 npoints_read = getNumElements(chunk_arr.shape)
                 npoints_expected = getNumElements(chunk_shape)
                 if npoints_read != npoints_expected:
-                    msg = "Expected {} points, but got: {}".format(npoints_expected, npoints_read)
+                    log.error("Expected {} points, but got: {}".format(npoints_expected, npoints_read))
+                    raise HttpProcessingError(message="Unexpected error", code=500)
                 chunk_arr = chunk_arr.reshape(chunk_shape)
             elif rsp.status == 404:
                 # no data, return zero array
@@ -174,7 +177,7 @@ arr: numpy array to store read bytes
 async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_arr):
     
     #msg = "read_point_sel, chunk_id:{}, points: {}, index: {}".format(chunk_id, point_list, point_index)
-    msg = "read_ooint_sel, chunk_id: {}".format(chunk_id)
+    msg = "read_point_sel, chunk_id: {}".format(chunk_id)
     log.info(msg)
 
     req = getDataNodeUrl(app, chunk_id)
@@ -195,6 +198,7 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_a
     # pass dset_json as query params
     params = {}
     params["dset"] = json.dumps(dset_json)
+    params["action"] = "get"
      
     fill_value = getFillValue(dset_json)
      
@@ -204,7 +208,8 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_a
         async with client.post(req, params=params, data=post_data) as rsp:
             log.debug("http_post {} status: <{}>".format(req, rsp.status))
             if rsp.status == 200:
-                rsp_data = await rsp.read()  # read response as bytes         
+                rsp_data = await rsp.read()  # read response as bytes  
+                # TBD - Does not support VLEN response data       
                 np_arr_rsp = np.fromstring(rsp_data, dtype=dt) 
                 npoints_read = len(np_arr_rsp)
                 if npoints_read != num_points:
@@ -236,6 +241,84 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_a
     for i in range(num_points):
         index = point_index[i]
         np_arr[index] = np_arr_rsp[i]
+
+"""
+Write point selection
+--
+app: application object
+chunk_id: id of chunk to write to
+dset_json: dset JSON
+point_list: array of points to write
+point_data: index of arr element to update for a given point
+"""
+async def write_point_sel(app, chunk_id, dset_json, point_list, point_data):
+    
+    msg = "write_point_sel, chunk_id:{}, points: {}, data: {}".format(chunk_id, point_list, point_data)
+    #msg = "write_point_sel, chunk_id: {}".format(chunk_id)
+    log.info(msg)
+    if "type" not in dset_json:
+        log.error("No type found in dset_json: {}".format(dset_json))
+        raise HttpProcessingError(message="Unexpected error", code=500)
+
+    datashape = dset_json["shape"]
+    dims = getShapeDims(datashape)
+    rank = len(dims)
+    type_json = dset_json["type"]
+    dset_dtype = createDataType(type_json)  # np datatype
+
+    req = getDataNodeUrl(app, chunk_id)
+    req += "/chunks/" + chunk_id 
+    log.debug("POST chunk req: " + req)
+    client = get_http_client(app)
+       
+    num_points = len(point_list)
+
+    #create a numpy array with point_data
+    data_arr = jsonToArray((num_points,), dset_dtype, point_data)
+
+    # create a numpy array with the following type:
+    #   (coord1, coord2, ...) | dset_dtype
+    if rank == 1:
+        coord_type_str = "uint64"
+    else:
+        coord_type_str = "({},)uint64".format(rank)
+    comp_type = np.dtype([("coord", np.dtype(coord_type_str)), ("value", dset_dtype)])
+    np_arr = np.zeros((num_points,),dtype=comp_type)
+    
+    # Zip together coordinate and point_data to one numpy array
+    for i in range(num_points):
+        if rank == 1:
+            elem = (point_list[i], data_arr[i])
+        else:
+            elem = (tuple(point_list[i]), data_arr[i])
+        np_arr[i] = elem
+
+    # TBD - support VLEN data
+    post_data = np_arr.tobytes()
+    
+    # pass dset_json as query params
+    params = {}
+    params["dset"] = json.dumps(dset_json)
+    params["action"] = "put"
+    params["count"] = num_points
+       
+    try:
+        async with client.post(req, params=params, data=post_data) as rsp:
+            log.debug("http_post {} status: <{}>".format(req, rsp.status))
+            if rsp.status == 200:
+                log.info("req: {} OK".format(req))
+            else:
+                msg = "request to {} failed with code: {}".format(req, rsp.status)
+                log.warn(msg)
+                raise HttpProcessingError(message=msg, code=rsp.status)
+            
+    except ClientError as ce:
+        log.error("Error for http_get({}): {} ".format(req, str(ce)))
+        raise HttpProcessingError(message="Unexpected error", code=500)
+    except CancelledError as cle:
+        log.error("CancelledError for http_get({}): {}".format(req, str(cle)))
+        raise HttpProcessingError(message="Unexpected error", code=500)
+
 
 """
 Query for a given chunk_id.  Pass in type, dims, selection area, and query.
@@ -343,7 +426,7 @@ async def PUT_Value(request):
         body = await request.json()
     
     # get  state for dataset from DN.
-    dset_json = await getObjectJson(app, dset_id)  
+    dset_json = await getObjectJson(app, dset_id, refresh=False)  
 
     layout = None 
     datashape = dset_json["shape"]
@@ -351,19 +434,21 @@ async def PUT_Value(request):
         msg = "Null space datasets can not be used as target for PUT value"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-    dims = getDsetDims(dset_json)
+    dims = getShapeDims(datashape)
     maxdims = getDsetMaxDims(dset_json)
     rank = len(dims)
     layout = getChunkLayout(dset_json)
+    deflate_level = getDeflateLevel(dset_json)
      
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
+    log.debug("item size: {}".format(item_size))
 
-    if item_size == 'H5T_VARIABLE':
-        # keep this check until we have variable length supported
-        msg = "variable length data types not yet supported"
-        log.warn(msg)
-        raise HttpProcessingError(code=501, message="Variable length data not yet supported")
+    #if item_size == 'H5T_VARIABLE':
+    #    # keep this check until we have variable length supported
+    #    msg = "variable length data types not yet supported"
+    #    log.warn(msg)
+    #    raise HttpProcessingError(code=501, message="Variable length data not yet supported")
       
 
     if item_size == 'H5T_VARIABLE' and request_type != "json":
@@ -375,47 +460,56 @@ async def PUT_Value(request):
     await validateAction(app, domain, dset_id, username, "update")
  
     binary_data = None
+    np_shape = None  # expected shape of input data
+    points = None # used for point selection writes
     # refetch the dims if the dataset is extensible 
     if isExtensible(dims, maxdims):
         dset_json = await getObjectJson(app, dset_id, refresh=True)
-        dims = getDsetDims(dset_json) 
-    slices = []  # selection for write 
-    
-    # Get query parameter for selection
-    for dim in range(rank):
+        dims = getShapeDims(dset_json["shape"]) 
+
+    if request_type == "json":
+        body_json = body
+    else:
         body_json = None
-        if request_type == "json":
-            body_json = body
-        # if they selection region is invalid here, it's really invalid
+
+    slices = []  # selection for write 
+    for dim in range(rank):    
+        # if the selection region is invalid here, it's really invalid
         dim_slice = getSliceQueryParam(request, dim, dims[dim], body=body_json)
         slices.append(dim_slice)   
     slices = tuple(slices)  
-    log.debug("PUT Value selection: {}".format(slices))   
-     
-    log.debug("item size: {}".format(item_size))
-
-    np_shape = getSelectionShape(slices)
-                 
-    log.debug("selection shape:" + str(np_shape))
-
-    npoints = getNumElements(np_shape)
-    log.debug("selection num points: " + str(npoints))
-    if npoints <= 0:
-        msg = "Selection is empty"
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
-
+    # The selection parameters will determine expected put value shape
+    log.debug("PUT Value selection: {}".format(slices)) 
+    
     if request_type == "json":
         if "value" in body:
             json_data = body["value"]
         elif "value_base64" in body:
             base64_data = body["value_base64"]
             base64_data = base64_data.encode("ascii")
-            binary_data = base64.b64decode(base64_data)
+            binary_data = base64.b64decode(base64_data)      
         else:
             msg = "PUT value has no value or value_base64 key in body"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)   
+            raise HttpBadRequest(message=msg)  
+
+        # body could also contain a point selection specifier 
+        if "points" in body:
+            json_points = body["points"]
+            num_points = len(json_points)
+            if rank == 1:
+                point_shape = (num_points,)
+                log.info("rank 1: point_shape: {}".format(point_shape))
+            else:
+                point_shape = (num_points, rank)
+                log.info("rank >1: point_shape: {}".format(point_shape))
+            try:
+                dt = np.dtype(np.uint64) # use uint64 so we can address large array extents
+                points = jsonToArray(point_shape, dt, json_points)
+            except ValueError:
+                msg = "Bad Request: point list not valid for dataset shape"
+                log.warn(msg)
+                raise HttpBadRequest(message=msg)
     else:
         # read binary data
         binary_data = await request.read()
@@ -423,44 +517,57 @@ async def PUT_Value(request):
             msg = "Read {} bytes, expecting: {}".format(len(binary_data), request.content_length)
             log.error(msg)
             raise HttpProcessingError(code=500, message="Unexpected Error")
+       
+    if points is None:
+        # not point selection, get hyperslab selection shape
+        np_shape = getSelectionShape(slices)  
+        num_elements = getNumElements(np_shape)
+    else:
+        np_shape = (num_points,)     
+        num_elements = num_points
+    log.debug("selection shape: {}".format(np_shape))
+
+    num_elements = getNumElements(np_shape)
+    log.debug("selection num elements: {}".format(num_elements))
+    if num_elements <= 0:
+        msg = "Selection is empty"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
 
     arr = None  # np array to hold request data
     if binary_data:
-        if npoints*item_size != len(binary_data):
-            msg = "Expected: " + str(npoints*item_size) + " bytes, but got: " + str(len(binary_data))
+        if num_elements*item_size != len(binary_data):
+            msg = "Expected: " + str(num_elements*item_size) + " bytes, but got: " + str(len(binary_data))
             log.warn(msg)
             raise HttpBadRequest(message=msg)
         arr = np.fromstring(binary_data, dtype=dset_dtype)
-        arr = arr.reshape(np_shape)  # conform to selection shape
-                
+        try:
+            arr = arr.reshape(np_shape)  # conform to selection shape    
+        except ValueError:
+            msg = "Bad Request: binary input data doesn't match selection" 
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)      
     else:
+        #
         # data is json
-
-        # need some special conversion for compound types --
-        # each element must be a tuple, but the JSON decoder
-        # gives us a list instead.
-        if len(dset_dtype) > 1 and type(json_data) in (list, tuple):
-            np_shape_rank = len(np_shape)
-            #log.info("np_shape_rank: {}".format(np_shape_rank))
-            converted_data = []
-            if npoints == 1:
-                converted_data.append(toTuple(0, json_data))
-            else:  
-                converted_data = toTuple(np_shape_rank, json_data)
-            json_data = converted_data
-
-        arr = np.array(json_data, dtype=dset_dtype)
-        # raise an exception of the array shape doesn't match the selection shape
-        # allow if the array is a scalar and the selection shape is one element,
-        # numpy is ok with this
-        if arr.size != npoints:
-            msg = "Input data doesn't match selection number of elements"
-            msg += " Expected {}, but received: {}".format(npoints, arr.size)
+        #
+        try:
+            msg = "input data doesn't match selection"
+            arr = jsonToArray(np_shape, dset_dtype, json_data)
+        except ValueError:
             log.warn(msg)
             raise HttpBadRequest(message=msg)
-        if arr.shape != np_shape:
-            arr = arr.reshape(np_shape)  # reshape to match selection
+        except TypeError:
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        except IndexError:
+            log.warn(msg)
+            raise HttpBadRequest(message=msg)
+        log.debug("got json arr: {}".format(arr.shape))
 
+    if points is None:
+        # for hyperslab selection, verify the input shape matches the
+        # selection
         np_index = 0
         for dim in range(len(arr.shape)):
             data_extent = arr.shape[dim]
@@ -483,27 +590,92 @@ async def PUT_Value(request):
             log.warn(msg)
             raise HttpBadRequest(message=msg)
 
-    #log.info("got np array: {}".format(arr))
-    num_chunks = getNumChunks(slices, layout)
-    log.debug("num_chunks: {}".format(num_chunks))
-    if num_chunks > config.get("max_chunks_per_request"):
-        msg = "PUT value request too large"
-        log.warn(msg)
-        raise HttpProcessingError(code=413, message=msg)
+        #log.info("got np array: {}".format(arr))
+        num_chunks = getNumChunks(slices, layout)
+        log.debug("num_chunks: {}".format(num_chunks))
+        if num_chunks > config.get("max_chunks_per_request"):
+            msg = "PUT value request too large"
+            log.warn(msg)
+            raise HttpProcessingError(code=413, message=msg)
 
-    chunk_ids = getChunkIds(dset_id, slices, layout)
-    log.debug("chunk_ids: {}".format(chunk_ids))
+        chunk_ids = getChunkIds(dset_id, slices, layout)
+        log.debug("chunk_ids: {}".format(chunk_ids))
 
-    tasks = []
-    for chunk_id in chunk_ids:
-        task = asyncio.ensure_future(write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr))
-        tasks.append(task)
-    await asyncio.gather(*tasks, loop=loop)
+        tasks = []
+        task_batch_size = len(app["dn_urls"]) * 10
+        for chunk_id in chunk_ids:
+            task = asyncio.ensure_future(write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level, arr))
+            tasks.append(task)
+            if len(tasks) == task_batch_size:
+                await asyncio.gather(*tasks, loop=loop)
+                tasks = []
+        if tasks:
+            await asyncio.gather(*tasks, loop=loop)
+    else:
+        #
+        # Do point PUT
+        #
+        log.debug("num_points: {}".format(num_points))
+        
+        chunk_dict = {}  # chunk ids to list of points in chunk
 
+        for pt_indx in range(num_points):
+            if rank == 1:
+                point = int(points[pt_indx])
+            else:
+                point_tuple = points[pt_indx]
+                point = []
+                for i in range(len(point_tuple)):
+                    point.append(int(point_tuple[i]))
+            if rank == 1:
+                if point < 0 or point >= dims[0]:
+                    msg = "PUT Value point: {} is not within the bounds of the dataset"
+                    msg = msg.format(point)
+                    log.warn(msg)
+                    raise HttpBadRequest(message=msg) 
+            else:
+                if len(point) != rank:
+                    msg = "PUT Value point value did not match dataset rank"
+                    log.warn(msg)
+                    raise HttpBadRequest(message=msg) 
+                for i in range(rank):
+                    if point[i] < 0 or point[i] >= dims[i]:
+                        msg = "PUT Value point: {} is not within the bounds of the dataset"
+                        msg = msg.format(point)
+                        log.warn(msg)
+                        raise HttpBadRequest(message=msg) 
+            chunk_id = getChunkId(dset_id, point, layout)
+            # get the pt_indx element from the input data
+            value = arr[pt_indx]
+            if chunk_id not in chunk_dict:
+                point_list = [point,]
+                point_data = [value,]
+                chunk_dict[chunk_id] = {"points": point_list, "values": point_data}
+            else:
+                item = chunk_dict[chunk_id]
+                point_list = item["points"]
+                point_list.append(point)
+                point_data = item["values"]
+                point_data.append(value)
+
+        num_chunks = len(chunk_dict)
+        log.debug("num_chunks: {}".format(num_chunks))
+        if num_chunks > config.get("max_chunks_per_request"):
+            msg = "PUT value request too large"
+            log.warn(msg)
+            raise HttpProcessingError(code=413, message=msg)
+        tasks = []
+        for chunk_id in chunk_dict.keys():
+            item = chunk_dict[chunk_id]
+            point_list = item["points"]
+            point_data = item["values"]
+            task = asyncio.ensure_future(write_point_sel(app, chunk_id, dset_json, 
+                point_list, point_data))
+            tasks.append(task)
+        await asyncio.gather(*tasks, loop=loop)
+         
     resp_json = {}
-
     resp = await jsonResponse(request, resp_json)
-    log.response(request, resp=resp)
     return resp
 
 """
@@ -552,17 +724,14 @@ async def GET_Value(request):
     # get state for dataset from DN.
     dset_json = await getObjectJson(app, dset_id)  
     log.debug("got dset_json: {}".format(dset_json))
-
-    type_json = dset_json["type"]
-    item_size = getItemSize(type_json)
-
-    if item_size == 'H5T_VARIABLE':
-        # keep this check until we have variable length supported
-        msg = "variable length data types not yet supported"
+    
+    datashape = dset_json["shape"]
+    if datashape["class"] == 'H5S_NULL':
+        msg = "Null space datasets can not be used as target for GET value"
         log.warn(msg)
-        raise HttpProcessingError(code=501, message="Variable length data not yet supported")
+        raise HttpBadRequest(message=msg)
 
-    dims = getDsetDims(dset_json)  # throws 400 for HS_NULL dsets
+    dims = getShapeDims(datashape)  # throws 400 for HS_NULL dsets
     maxdims = getDsetMaxDims(dset_json)
     rank = len(dims)
     layout = getChunkLayout(dset_json)
@@ -573,7 +742,7 @@ async def GET_Value(request):
     # an explicit region
     if isExtensible(dims, maxdims) and "select" not in request.GET:
         dset_json = await getObjectJson(app, dset_id, refresh=True)
-        dims = getDsetDims(dset_json)  
+        dims = getShapeDims(dset_json["shape"])  
 
     slices = None  # selection for read 
      
@@ -587,7 +756,7 @@ async def GET_Value(request):
         except HttpBadRequest:
             # exception might be due to us having stale version of dims, refresh
             dset_json = await getObjectJson(app, dset_id, refresh=True)
-            dims = getDsetDims(dset_json) 
+            dims = getShapeDims(dset_json["shape"]) 
             slices = None  # retry below
             
     if slices is None:
@@ -613,7 +782,10 @@ async def GET_Value(request):
         raise HttpProcessingError(code=413, message=msg)
     chunk_ids = getChunkIds(dset_id, slices, layout)
 
-    if "query" in request.GET:
+    if request.method == "OPTIONS":
+        # skip doing any big data load for options request
+        resp = await jsonResponse(request, None)
+    elif "query" in request.GET:
         if rank > 1:
             msg = "Query string is not supported for multidimensional arrays"
             log.warn(msg)
@@ -703,6 +875,19 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices):
     # create array to hold response data
     np_shape = getSelectionShape(slices)   
     log.debug("selection shape: {}".format(np_shape))
+
+    # check that the array size is reasonable
+    request_size = np.prod(np_shape)
+    if item_size == 'H5T_VARIABLE':
+        request_size *= 512  # random guess of avg item_size
+    else:
+        request_size *= item_size
+    log.debug("request_size: {}".format(request_size))
+    if request_size > int(config.get("max_request_size")):
+        msg = "GET value request too large"
+        log.warn(msg)
+        raise HttpProcessingError(code=413, message=msg)
+
     arr = np.zeros(np_shape, dtype=dset_dtype, order='C')
     tasks = []
     for chunk_id in chunk_ids:
@@ -793,7 +978,7 @@ async def POST_Value(request):
             log.debug("POST value - request type is json")
 
     if not request.has_body:
-        msg = "PPST Value with no body"
+        msg = "POST Value with no body"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     
@@ -810,7 +995,7 @@ async def POST_Value(request):
         msg = "POST value not supported for datasets with SCALAR shape"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-    dims = getDsetDims(dset_json)
+    dims = getShapeDims(datashape)
     rank = len(dims)
     
     layout = getChunkLayout(dset_json)
@@ -852,8 +1037,8 @@ async def POST_Value(request):
             log.warn(msg)
             raise HttpBadRequest(message=msg)
         num_points = request.content_length // point_dt.itemsize
+        log.debug("got {} num_points".format(num_points))
         arr_points = np.fromstring(binary_data, dtype=point_dt)
-        log.debug("got arr_points: {}".format(arr_points))
         if rank > 1:
             if num_points % rank != 0:
                 msg = "Number of points is not consistent with dataset rank"
@@ -862,37 +1047,29 @@ async def POST_Value(request):
             num_points //= rank
             arr_points = arr_points.reshape((num_points, rank))  # conform to point index shape
         points = arr_points.tolist()  # convert to Python list
-    
-    log.debug("points: {}".format(points))        
-    log.debug("num_points: {}".format(num_points))
-    
-    # TBD - return 413 if too many points requested
 
     chunk_dict = {}  # chunk ids to list of points in chunk
 
     for pt_indx in range(num_points):
         point = points[pt_indx]
-        log.debug("checking point: {}".format(point))
-        log.debug("point type: {}".format(type(point)))
         if rank == 1:
             if point < 0 or point >= dims[0]:
-                msg = "PUT Value point: {} is not within the bounds of the dataset"
+                msg = "POST Value point: {} is not within the bounds of the dataset"
                 msg = msg.format(point)
                 log.warn(msg)
                 raise HttpBadRequest(message=msg) 
         else:
             if len(point) != rank:
-                msg = "PUT Value point value did not match dataset rank"
+                msg = "POST Value point value did not match dataset rank"
                 log.warn(msg)
                 raise HttpBadRequest(message=msg) 
             for i in range(rank):
                 if point[i] < 0 or point[i] >= dims[i]:
-                    msg = "PUT Value point: {} is not within the bounds of the dataset"
+                    msg = "POST Value point: {} is not within the bounds of the dataset"
                     msg = msg.format(point)
                     log.warn(msg)
                     raise HttpBadRequest(message=msg) 
         chunk_id = getChunkId(dset_id, point, layout)
-        log.debug("chunk_id: {}".format(chunk_id))
         if chunk_id not in chunk_dict:
             point_list = [point,]
             point_index =[pt_indx]
@@ -942,7 +1119,7 @@ async def POST_Value(request):
         log.debug("POST Value - returning JSON data")
         rsp_json = {}
         data = arr_rsp.tolist()
-        log.debug("got rsp data: {}".format(data))
+        log.debug("got rsp data {} points".format(len(data)))
         json_data = bytesArrayToList(data)
         rsp_json["value"] = json_data  
         resp = await jsonResponse(request, rsp_json)
