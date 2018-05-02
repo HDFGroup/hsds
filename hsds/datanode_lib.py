@@ -16,7 +16,7 @@ import asyncio
 import time 
 from aiohttp.errors import HttpProcessingError   
 from util.idUtil import validateInPartition, getS3Key, isValidUuid, isValidChunkId
-from util.s3Util import getS3JSONObj, putS3JSONObj, putS3Bytes, isS3Obj, deleteS3Obj
+from util.s3Util import getS3JSONObj, putS3JSONObj, putS3Bytes, isS3Obj
 from util.domainUtil import isValidDomain
 from util.attrUtil import getRequestCollectionName
 from util.httpUtil import http_put, http_delete
@@ -134,10 +134,10 @@ async def get_metadata_obj(app, obj_id):
         meta_cache[obj_id] = obj_json  # add to cache
     return obj_json
 
-def save_metadata_obj(app, obj_id, obj_json, notify=True):
+async def save_metadata_obj(app, obj_id, obj_json, notify=False):
     """ Persist the given object """
     log.info("save_metadata_obj {} notify={}".format(obj_id, notify))
-    if not isValidDomain(obj_id) and not isValidUuid(obj_id):
+    if not obj_id.startswith('/') and not isValidUuid(obj_id):
         msg = "Invalid obj id: {}".format(obj_id)
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
@@ -173,15 +173,48 @@ def save_metadata_obj(app, obj_id, obj_json, notify=True):
     dirty_ids = app["dirty_ids"]
     dirty_ids[obj_id] = now
 
-    # set flag if AN should be notified on S3 write
-    if notify:
-        notify_obj = {"id": obj_id, "lastModified": now}
+    # create/update object to be sent to AN
+    notify_map = app["notify_map"]
+    if obj_id in notify_map:
+        notify_obj = notify_map[obj_id]
+    else:
+        notify_obj = {"id": obj_id}
         if "root" in obj_json:
             notify_obj["root"] = obj_json["root"]
-        if "size" in obj_json:
-            notify_obj["size"] = obj_json["size"]
-        notify_objs = app["notify_objs"]
-        notify_objs.add(notify_obj)
+    
+    notify_obj["size"] = 0  # will be updated when persisted to S3
+    notify_obj["lastModified"] = now
+
+    # message AN immediately if notify flag is set
+    # otherwise AN will be notified at next S3 sync
+    if notify:
+        an_url = getAsyncNodeUrl(app)
+
+        if obj_id.startswith("/"):
+            # domain update
+            req = an_url + "/domain"
+            params = {"domain": obj_id}
+            if "root" in obj_json:
+                params["root"] = obj_json["root"]
+            try:
+                log.info("ASync PUT notify: {} params: {}".format(req, params))
+                await http_put(app, req, params=params)
+            except HttpProcessingError as hpe:
+                msg = "got error notifying async node: {}".format(hpe.code)
+                log.error(msg)
+
+        else:
+            notify_objs = []
+            notify_objs.append(notify_obj)
+            body = {"objs": notify_objs}
+            req = an_url + "/objects"
+            try:
+                log.info("ASync PUT notify: {} body: {}".format(req, body))
+                await http_put(app, req, data=body)
+            except HttpProcessingError as hpe:
+                msg = "got error notifying async node: {}".format(hpe.code)
+                log.error(msg)
+        
 
 
 async def delete_metadata_obj(app, obj_id, notify=True):
@@ -197,24 +230,48 @@ async def delete_metadata_obj(app, obj_id, notify=True):
     try:
         validateInPartition(app, obj_id)
     except KeyError as ke:
-        msg = "Domain not in partition"
+        msg = "obj: {} not in partition".format(obj_id)
         log.error(msg)
         raise HttpProcessingError(code=500, message=msg) 
 
-    deleted_ids = app['deleted_ids']
-    if obj_id in deleted_ids:
-        log.warn("{} has already been deleted".format(obj_id))
-    else:
-        deleted_ids.add(obj_id)
+    if isValidUuid(obj_id):
+        deleted_ids = app['deleted_ids']
+        if obj_id in deleted_ids:
+            log.warn("{} has already been deleted".format(obj_id))
+        else:
+            deleted_ids.add(obj_id)
      
     if obj_id in meta_cache:
         del meta_cache[obj_id]
-    if obj_id not in dirty_ids:
-        now = time.time()
-        dirty_ids[obj_id] = now
+    
+    if obj_id in dirty_ids:
+        dirty_ids.remove(obj_id)
+    
     if notify:
-        notify_objs = app['notify_objs']
-        notify_objss.add(notify_obj)
+        an_url = getAsyncNodeUrl(app)
+        if obj_id.startswith("/"):
+            # domain delete
+            req = an_url + "/domain"
+            params = {"domain": obj_id}
+            
+            try:
+                log.info("ASync DELETE notify: {} params: {}".format(req, params))
+                await http_delete(app, req, params=params)
+            except HttpProcessingError as hpe:
+                msg = "got error notifying async node: {}".format(hpe.code)
+                log.error(msg)
+        else:
+            now = int(time.time())
+            notify_obj = {"id": obj_id, "lastModified": now}
+            body = []
+            body.append(notify_obj)
+            req = an_url + "/objects"
+            try:
+                log.info("ASync DELETE notify: {} body: {}".format(req, body))
+                await http_delete(app, req, data=body)
+            except HttpProcessingError as hpe:
+                msg = "got error notifying async node: {}".format(hpe.code)
+                log.error(msg)
 
     
 
@@ -224,11 +281,11 @@ async def s3sync(app):
     sleep_secs = config.get("node_sleep_time")
     s3_sync_interval = config.get("s3_sync_interval")
     dirty_ids = app["dirty_ids"]
-    deleted_ids = app["deleted_ids"]
-    notify_objs = app["notify_objs"]
+    #deleted_ids = app["deleted_ids"]
+    notify_map = app["notify_map"] # map of objs to send to the AN 
     meta_cache = app["meta_cache"] 
     chunk_cache = app["chunk_cache"] 
-    deflate_map = app['deflate_map']
+    deflate_map = app["deflate_map"]
         
 
     while True:
@@ -238,7 +295,10 @@ async def s3sync(app):
         keys_to_update = []
         now = int(time.time())
         for obj_id in dirty_ids:
-            if obj_id in deleted_ids or dirty_ids[obj_id] + s3_sync_interval < now:
+            if obj_id not in notify_map:
+                log.error("Expected to find {} in notify_map".format(obj_id))
+                continue
+            if dirty_ids[obj_id] + s3_sync_interval < now:
                 # time to write to S3
                 keys_to_update.append(obj_id)
 
@@ -263,6 +323,9 @@ async def s3sync(app):
                 log.info("s3sync for obj_id: {}".format(obj_id))
                 s3_key = getS3Key(obj_id)  
                 log.debug("s3sync for s3_key: {}".format(s3_key))
+                notify_obj = notify_map[obj_id]
+                log.debug("pre s3 update notify_obj: {}".format(notify_obj))
+                """
                 if obj_id in deleted_ids:
                     # delete the s3 obj
                     try:
@@ -271,10 +334,11 @@ async def s3sync(app):
                     except HttpProcessingError as hpe:
                         log.error("got S3 error deleting obj_id: {} to S3: {}".format(obj_id, str(hpe)))
                         retry_keys.append(obj_id)
-                elif isValidChunkId(obj_id):
+                """
+                if isValidChunkId(obj_id):
                     # chunk update
                     if obj_id not in chunk_cache:
-                        log.error("expected to find obj_id: {} in data cache".format(obj_id))
+                        log.error("expected to find obj_id: {} in chunk cache".format(obj_id))
                         retry_keys.append(obj_id)
                         continue
                     chunk_arr = chunk_cache[obj_id]
@@ -289,7 +353,11 @@ async def s3sync(app):
 
                     log.info("writing S3 object: {}, num_bytes: {}".format(s3_key, len(chunk_bytes)))
                     try:
-                        await putS3Bytes(app, s3_key, chunk_bytes, deflate_level=deflate_level)
+                        s3_rsp = await putS3Bytes(app, s3_key, chunk_bytes, deflate_level=deflate_level)
+                        # s3_rsp should have keys: "etag", "lastModified", and "size", add in obj_id    
+                        notify_obj["etag"] = s3_rsp["etag"]
+                        notify_obj["size"] = s3_rsp["size"]
+                        notify_obj["lastModified"] = s3_rsp["lastModified"]
                         success_keys.append(obj_id)
                     except HttpProcessingError as hpe:
                         log.error("got S3 error writing obj_id: {} to S3: {}".format(obj_id, str(hpe)))
@@ -308,9 +376,14 @@ async def s3sync(app):
                     meta_cache.clearDirty(obj_id)
                     log.debug("writing s3_key: {}".format(s3_key))
                     try:
-                        await putS3JSONObj(app, s3_key, obj_json) 
+                        s3_rsp = await putS3JSONObj(app, s3_key, obj_json) 
+                        # add id to s3_rsp
+                        notify_obj["etag"] = s3_rsp["etag"]
+                        notify_obj["size"] = s3_rsp["size"]
+                        notify_obj["lastModified"] = s3_rsp["lastModified"]
                         log.info("adding {} to success_keys".format(obj_id))
                         success_keys.append(obj_id)
+
                     except HttpProcessingError as hpe:
                         log.error("got S3 error writing obj_id: {} to S3: {}".format(obj_id, str(hpe)))
                         retry_keys.append(obj_id)
@@ -330,47 +403,17 @@ async def s3sync(app):
             # notify AN of key updates 
             an_url = getAsyncNodeUrl(app)
             log.info("processing success_keys: {}".format(success_keys))
-            while len(success_keys) > 0:
-                # package multiple updates or multiple deletes together as much
-                # as possible
-                action = None
-                keys = []
-                while len(success_keys) > 0:
-                    key = success_keys.pop(0)
-                    log.debug("pop success_key: {}".format(key))
-                    if key in notify_ids:
-                        notify_ids.remove(key)
-                    else:
-                        log.debug("notify not set for key: {}".format(key))
-                        continue
-                    if key in deleted_ids:
-                        if action is None:
-                            action = "DELETE"
-                        elif action == "DELETE":
-                            pass # keep going
-                        else:
-                            break
-                    else:
-                        if action is None:
-                            action = "PUT"
-                        elif action == "PUT":
-                            pass # keep going
-                        else:
-                            break
-                    keys.append(key)
-                    log.debug("appended_keys: {}".format(keys))
-
-                if len(keys) > 0:
-                    body = { "objids": keys }
-                    req = an_url + "/objects"
-                    try:
-                        if action == "PUT":
-                            log.info("ASync PUT notify: {} body: {}".format(req, body))
-                            await http_put(app, req, data=body)
-                        else:
-                            log.info("ASync DELETE notify: {} body: {}".format(req, body))
-                            await http_delete(app, req, data=body)
-                    except HttpProcessingError as hpe:
-                        msg = "got error notifying async node: {}".format(hpe.code)
-                        log.error(msg)
+            if len(success_keys) > 0:
+                notify_objs = []
+                for objid in success_keys:
+                    notify_obj = notify_map[objid]
+                    notify_objs.append(notify_obj)
+                body = { "objids": notify_objs }
+                req = an_url + "/objects"
+                try:
+                    log.info("ASync PUT notify: {} body: {}".format(req, body))
+                    await http_put(app, req, data=body)
+                except HttpProcessingError as hpe:
+                    msg = "got error notifying async node: {}".format(hpe.code)
+                    log.error(msg)
      

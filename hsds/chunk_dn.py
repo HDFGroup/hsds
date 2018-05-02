@@ -78,6 +78,11 @@ async def PUT_Chunk(request):
     dims = getChunkLayout(dset_json)
     deflate_level = getDeflateLevel(dset_json)
     log.info("got deflate_level: {}".format(deflate_level))
+    if "root" not in dset_json:
+        msg = "expected root key in dset_json"
+        log.error(msg)
+        raise KeyError(msg)
+    rootid = dset_json["root"]
     
     rank = len(dims)  
    
@@ -189,9 +194,15 @@ async def PUT_Chunk(request):
     now = int(time.time())
     dirty_ids[chunk_id] = now
 
-    # set notify flag for AN
-    notify_ids = app['notify_ids']
-    notify_ids.add(chunk_id)
+    # set notify obj for AN
+    notify_map = app['notify_map']
+    if chunk_id in notify_map:
+        notify_obj = notify_map[chunk_id]
+        if "root" not in notify_obj or notify_obj["rootid"] != rootid:
+            log.error('invalid root in notify_obj: {}'.format(notify_obj))
+    else:
+        notify_obj[chunk_id] = {"id": chunk_id, "rootid": rootid}
+    notify_map[chunk_id] = notify_obj
     
     # chunk update successful     
     resp = await jsonResponse(request, {}, status=201)

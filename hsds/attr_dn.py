@@ -200,7 +200,7 @@ async def PUT_Attribute(request):
     attributes[attr_name] = attr_json
      
     # write back to S3, save to metadata cache
-    save_metadata_obj(app, obj_id, obj_json)
+    await save_metadata_obj(app, obj_id, obj_json)
  
     resp_json = { } 
 
@@ -239,7 +239,7 @@ async def DELETE_Attribute(request):
 
     del attributes[attr_name] 
 
-    save_metadata_obj(app, obj_id, obj_json)
+    await save_metadata_obj(app, obj_id, obj_json)
 
     resp_json = { } 
     resp = await jsonResponse(request, resp_json)

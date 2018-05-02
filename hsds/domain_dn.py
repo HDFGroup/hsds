@@ -120,7 +120,7 @@ async def PUT_Domain(request):
     domain_json["created"] = now
     domain_json["lastModified"] = now
 
-    save_metadata_obj(app, domain, domain_json)
+    await save_metadata_obj(app, domain, domain_json, notify=True)
  
     resp = await jsonResponse(request, domain_json, status=201)
     log.response(request, resp=resp)
@@ -145,14 +145,9 @@ async def DELETE_Domain(request):
     if domain_json:
         log.debug("got domain json")
     # delete domain
-    notify=False
-    # Note: Don't notify async node on domain deleteion since recreation of 
-    # the domain may cause a race condition where the new domain gets 
-    # removed.  Instead rely on AN garbage collection to remove any objects
-    # that have no parent domain.
-    await delete_metadata_obj(app, domain, notify=notify)
+    await delete_metadata_obj(app, domain, notify=True)
 
- 
+
     json_response = { "domain": domain }
 
     resp = await jsonResponse(request, json_response, status=200)
@@ -211,7 +206,7 @@ async def PUT_ACL(request):
     domain_json["lastModified"] = now
      
     # write back to S3
-    save_metadata_obj(app, domain, domain_json)
+    await save_metadata_obj(app, domain, domain_json)
     
     resp_json = { } 
      

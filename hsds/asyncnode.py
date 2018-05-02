@@ -22,15 +22,11 @@ import sqlite3
 
 import config
 from basenode import baseInit, healthCheck
-#from util.timeUtil import unixTimeToUTC
-#from util.s3Util import putS3Bytes, isS3Obj, deleteS3Obj, getS3Keys
-#from util.s3Util import getS3JSONObj
-from util.idUtil import isValidChunkId, isValidUuid #, getCollectionForId  #isS3ObjKey, getObjId
+from util.s3Util import deleteS3Obj
+from util.chunkUtil import getDatasetId
+from util.idUtil import isValidChunkId, isValidUuid, getCollectionForId, getS3Key   
 from util.httpUtil import jsonResponse, StreamResponse
-from util.domainUtil import  isValidDomain
-#from asyncnode_lib import listKeys, markObjs, deleteObj, getS3Obj, getRootProperty, clearUsedFlags, getDomainForObjId
-#from util.dbutil import dbInitTable, insertDomainTable, batchInsertChunkTable, insertObjectTable, insertTLDTable
-from util.dbutil import getRow, getTopLevelDomains
+from util.dbutil import getRow, getDomains, insertRow, deleteRow, updateRowColumn
 import hsds_logger as log
 
 
@@ -66,43 +62,66 @@ async def getRootProperty(app, objid):
 # pending queue handler
 #
 
-     
 
-async def rootDelete(app, rootid):
-    """ get root obj for rootid """
-    log.info("rootDelete {}".format(rootid))
-     
-    # await deleteObj(app, rootid, notify=False)
-     
-async def domainDelete(app, domain):
-    """ Process domain deletion event """
-    log.info("domainDelete: {}".format(domain))
-     
+async def objDelete(app, objid, rootid=None):
+    """ Delete object from it's table and then delete the s3obj """
+    log.info("objDelete: {}".format(objid))
+    conn = app["conn"]
+    dbRow = getRow(conn, objid, rootid=rootid)
+    if not dbRow:
+        log.warn("obj: {} not found for deleteRow")
+    else:
+        log.info("deleting db row: {}".format(objid))
+        deleteRow(conn, objid, rootid=rootid)
     
+    # delete the s3 obj
+    s3_key = getS3Key(objid)
+    log.info("deleting s3_key: {}".format(s3_key))
+    try:
+        await deleteS3Obj(app, s3_key)
+        #TODO - keep track of deleted ids
+    except HttpProcessingError as hpe:
+        # this might happen if the DN hasn't synched to S3 yet
+        log.warn("got S3 error deleting obj_id: {} to S3: {}".format(objid, str(hpe)))
 
-async def domainCreate(app, domain):
-    """ Process domain creation event """
-    log.info("domainCreate: {}".format(domain))
-     
+    # get the rootentry from the root table
+    if rootid:
+        if "totalSize" in dbRow:
+            # For dataset objs
+            objSize = dbRow["totalSize"]
+        else:
+            objSize = dbRow["size"]
+        try:
+            rootEntry = getRow(conn, rootid, table="RootTable")
+            domain_size = rootEntry["totalSize"]
+            domain_size -= objSize
+            if domain_size < 0:
+                log.warn("got negative totalSize for root: {}".format(rootid))
+            else:
+                updateRowColumn(conn, rootid, "totalSize", domain_size, table="RootTable")
+            # adjust the object count in root table
+            collection = getCollectionForId(objid)
+            if collection == "groups":
+                col_name = "groupCount"
+            elif collection == "datasets":
+                col_name = "datasetCount"
+            elif collection == "datatypes":
+                col_name = "typeCount"
+            else:
+                col_name = None
+            if col_name:
+                object_count = rootEntry[col_name]
+                object_count -= 1 
+                if object_count < 0:
+                    log.warn("got invalid number of {} for root: {}".format(col_name, rootid))
+                else:
+                    updateRowColumn(conn, rootid, col_name, object_count, table="RootTable")
+        except KeyError:
+            # this will happen if the domain is being deleted
+            log.info("No row for rootid: {} in RootTable".format(rootid))
+        
 
-
-async def objUpdate(app, objid):
-    """ Process object update event """
-    log.info("objUpdate: {}".format(objid))
-    
-    if not isValidChunkId(objid) and not isValidUuid(objid):
-        log.error("Got unexpected objid: {}".format(objid))
-        return
-
-async def objDelete(app, objid):
-    """ Process object update event """
-    log.info("objUpdate: {}".format(objid))
-
-    if not isValidChunkId(objid) and not isValidUuid(objid):
-        log.error("Got unexpected objid: {}".format(objid))
-        return
-
-    
+            
  
 async def processPendingQueue(app):
     """ Process any pending queue events """      
@@ -112,41 +131,16 @@ async def processPendingQueue(app):
     if pending_count == 0:
         return # nothing to do
     log.info("processPendingQueue start - {} items".format(pending_count))    
-    domain_updates = set()  # set of ids for which we'll need to update domain content
-    dataset_updates = set()
+     
     # TBD - this could starve other work if items are getting added to the pending
     # queue continually.  Copy items off pending queue synchronously and then process?
     while len(pending_queue) > 0:
         log.debug("pending_queue len: {}".format(len(pending_queue)))
         item = pending_queue.pop(0)  # remove from the front
         objid = item["objid"]
-        action = item["action"]
-        log.debug("pop from pending queue: obj: {} action: {}".format(objid, action))
+        log.debug("pop from pending queue: obj: {}".format(objid))
             
-        if isValidDomain(objid):
-            if action == "DELETE":
-                await domainDelete(app, objid)
-            elif action == "PUT":
-                await domainCreate(app, objid)
-                domain_updates.add(objid)
-            else:
-                log.error("Unexpected action: {}".format(action))
-        elif isValidChunkId(objid) or isValidUuid(objid):
-            if action == "PUT":
-                await objUpdate(app, objid)
-            elif action == "DELETE":
-                await objDelete(app, objid)
-            else:
-                log.error("Unexpected action: {}".format(action))
-                continue
-            domain_updates.add(objid)
-            if isValidChunkId(objid):
-                dataset_updates.add(objid)
-
-    log.info("processPendingQueue stop")
-    log.info("domains to be updated: {}".format(len(domain_updates)))
-    log.info("datasets to be updated: {}".format(len(dataset_updates)))
-                 
+      
  
 
 async def bucketCheck(app):
@@ -236,6 +230,7 @@ async def PUT_Objects(request):
         raise HttpBadRequest(message=msg)
     objs = body["objs"]
     for obj in objs:
+        log.debug("PUT_Objects, obj: {}".format(obj))
         if "id" not in obj:
             log.error("Expected id in PUT_Objects request")
             continue
@@ -247,78 +242,93 @@ async def PUT_Objects(request):
             continue
         
         objid = obj["id"]
+        if not isValidUuid(objid):
+            log.error("Invalid id for PUT_Objects: {}".format(objid))
+            continue
+
         lastModified = obj["lastModified"]
         etag = ''
+        if "etag" in obj:
+            etag = obj["etag"]
         if "root"  in obj:
             rootid = obj["root"]
         else:
             rootid = ''
-        if isValidDomain(objid):
+        if "size" in obj:
+            objSize = obj["size"]
+        else:
+            objSize = 0
+
+ 
+        if not isValidChunkId(objid) and not rootid:
+            # root id is required for all non-chunk updates
+            log.error("no rootid provided for obj: {}".format(objid))
+            continue
+         
+        dbRow = getRow(conn, objid, rootid=rootid)
+        if not dbRow:
+            # insert new object
+            log.info("insertRow for {}".format(objid))
             try:
-                insertRow(conn, "DomainTable", objid, lastModified=lastModified, objSize=objSize, rootid=rootid)
-            except KeyError:
-                log.warn("got KeyError inserting domain: {}".format(id))
-                continue
-            # is this a top-level domain?
-            index = id[1:-1].find('/')  # look for interior slash - isValidDomain implies len > 2
-            if index == -1:
-                log.info("Top-level-domain name received: {}".format(objid))
-                try:
-                    insertTLDTable(conn, objid)
-                except KeyError:
-                    log.warn("got KeyError inserting TLD: {}".format(objid))
-                    continue
-        elif isValidUuid(objid):
-            if not rootid:
-                log.error("no rootid provided for obj: {}".format(objid))
-                continue
-            collection = getCollectionForId(id)
-            if collection == "groups":
-                table = "GroupTable"
-            elif collection == "datatypes":
-                table = "TypeTable"
-            elif collection == "datasets":
-                table = "DatasetTable"
-            else:
-                log.error("Unexpected collection: {}".format(collection))
-                continue
-            try:
-                insertRow(conn, table, objid, etag=etag, lastModified=lastModified, objSize=objSize, rootid=rootid)
+                insertRow(conn, objid, etag=etag, lastModified=lastModified, objSize=objSize, rootid=rootid)
             except KeyError:
                 log.error("got KeyError inserting object: {}".format(id))
                 continue
             # if this is a new root group, add to root table
-            if collection == "groups" and objid == rootid:
+            if getCollectionForId(objid) == "groups" and objid == rootid:
                 try:
-                    insertRow(conn, "RootTable", rootid, etag=etag, lastModified=lastModified, objSize=objsize, groupCount=1)            
+                    insertRow(conn, rootid, etag=etag, lastModified=lastModified, objSize=objSize, table="RootTable")            
                 except KeyError:
                     log.error("got KeyError inserting root: {}".format(rootid))
                     continue
-            else:
-                # update size and lastModified in root table
-                try:
-                    rootEntry = getRow(conn, rootid, table="RootTable")
-                except KeyError:
-                    log.error("Unable to find {} in RootTable".format(rootid))
-                    continue
-                if "size" not in rootEntry:
-                    log.error("Expected to find size in RootTable for root: {}".format(rootid))
-                    continue
-                domain_size = rootEntry["size"] + objsize
-
-                updateRowColumn(conn, "RootTable", "size", rootid, domain_size)
-                # update lastModified timestamp
-                updateLastModified(conn, "RootTable", "lastModified", rootid, lastModified)
         else:
-            msg = "PUT_Objects Invalid id: {}".format(objid)
-            log.warn(msg)
-            raise HttpBadRequest(message=msg)
-
-    pending_queue = app["pending_queue"]
-    for objid in objids:
-        item = {"objid": objid, "action": "PUT"}
-        log.info("adding item: {} to pending queue".format(item))
-        pending_queue.append(item)
+            # update existing object
+            log.info("updateRow for {}".format(objid))
+            updateRowColumn(conn, objid,  "lastModified", lastModified, rootid=rootid)
+            if objSize:
+                updateRowColumn(conn, objid, "size", objSize, rootid=rootid)
+            if etag:
+                updateRowColumn(conn, objid, "etag",  etag, rootid=rootid)
+        if isValidChunkId(objid):
+            # get the dset row for this chunk
+            dsetid = getDatasetId(objid)
+            dset_row = getRow(conn, dsetid, rootid=rootid)
+            dset_size_delta = objSize
+            if not dset_row:
+                log.warn("dset: {} not found in DatasetTable - deleted?".format(dsetid))
+            if dbRow:
+                # existing chunk is being updated - update dataset size and lastModified
+                if objSize:
+                    dset_size_delta -= dbRow["size"]
+            else:
+                # new chunk - update number of chunks
+                chunkCount = dset_row["chunkCount"] + 1
+                updateRowColumn(conn, dsetid, "chunkCount", chunkCount, rootid=rootid)
+            updateRowColumn(conn, dsetid, "lastModified", lastModified, rootid=rootid)
+            if dset_size_delta:
+                new_dset_size = dset_row["totalSize"] + dset_size_delta
+                updateRowColumn(conn, dsetid, "totalSize", new_dset_size, rootid=rootid)
+        elif isValidUuid(objid):
+            # update size and lastModified in root table
+            try:
+                rootEntry = getRow(conn, rootid, table="RootTable")
+            except KeyError:
+                log.error("Unable to find {} in RootTable".format(rootid))
+                continue
+            if "totalSize" not in rootEntry:
+                log.error("Expected to find size in RootTable for root: {}".format(rootid))
+                continue
+            domain_size_delta = objSize
+            if dbRow:
+                # existing object is being updated - get difference in obj size
+                if objSize:
+                    domain_size_delta -= dbRow["size"]
+            if objSize:
+                domain_size = rootEntry["totalSize"] + domain_size_delta
+                updateRowColumn(conn, rootid, "totalSize", domain_size, table="RootTable")
+            # update lastModified timestamp
+            updateRowColumn(conn, rootid, "lastModified", lastModified, table="RootTable")
+         
 
     resp_json = {  } 
     resp = await jsonResponse(request, resp_json, status=201)
@@ -326,9 +336,10 @@ async def PUT_Objects(request):
     return resp
 
 async def DELETE_Objects(request):
-    """HTTP method to notify deletion of objid"""
+    """ HTTP method to notify deletion of objid """
     log.request(request)
     app = request.app
+    pending_queue = app["pending_queue"]
     log.info("DELETE_Objects")
 
     if not request.has_body:
@@ -341,23 +352,56 @@ async def DELETE_Objects(request):
         msg = "expected to find objids key in body"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
-    objids = body["objids"]
-    for objid in objids:
-        if not isValidDomain(objid) and not isValidUuid(objid):
+    objs = body["objs"]
+    for obj in objs:
+        if "id" not in obj:
+            log.error("Expected id in PUT_Objects request")
+            continue
+        
+        objid = obj["id"]
+         
+        log.info("Delete for objid: {}".format(objid))
+        if  not isValidUuid(objid):
             msg = "DELETE_Objects Invalid id: {}".format(objid)
-            log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            log.error(msg)
+            continue
 
-    pending_queue = app["pending_queue"]
-    for objid in objids:
-        item = {"objid": objid, "action": "DELETE"}
-        log.info("adding item: {} to pending queue".format(item))
-        pending_queue.append(item)
+        if isValidChunkId(objid):
+            log.error("Chunks should not be explicitly deleted")
+            continue
 
+        if not isValidChunkId(objid) and not "root" in obj:
+            # root id is required for all non-chunk updates
+            log.error("no rootid provided for obj: {}".format(objid))
+            continue
+
+        rootid = obj["root"]
+ 
+        dbRow = getRow(conn, objid, rootid=rootid)
+        if not dbRow:
+            log.warn("obj: {} not found for deleteRow")
+
+        if objid == rootid:
+            log.info("deleting root object row: {}".format(objid))
+            deleteRow(conn, rootid, table="RootTable")
+
+        log.info("deleting row: {}".format(objid))
+        objDelete(app, objid, rootid=rootid)
+
+        if getCollectionForId(objid) == "datasets":
+            # add object to pending queue to delete all chunks for this dataset
+            log.info("adding dataset: {} to pending queue for chunk removal".format(objid))
+            pending_queue.append(objid)
+        elif objid == rootid:
+            # add id to pending queue to delete all objects in this domain
+            log.info("adding root: {} to pending queue for domain cleanup".format(objid))
+            pending_queue.append(objid)
+  
     resp_json = {  } 
     resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
     return resp
+
 
 async def GET_Object(request):
     """HTTP method to get object s3 state """
@@ -388,7 +432,80 @@ async def GET_Object(request):
     log.response(request, resp=resp)
     return resp
 
-async def GET_Domain(request):
+async def GET_Domains(request):
+    """HTTP method to get object s3 state """
+    log.request(request)
+    
+    app = request.app
+    if "prefix" not in request.GET:
+        msg = "No domain prefix provided"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    prefix = request.GET["prefix"]
+
+    if "verbose" in request.GET and request.GET["verbose"]:
+        verbose = True
+        
+    else:
+        verbose = False
+
+    log.info("GET_Domains: {} verbose={}".format(prefix, verbose))
+
+    limit = None
+    if "Limit" in request.GET:
+        try:
+            limit = int(request.GET["Limit"])
+            log.debug("GET_Domains - using Limit: {}".format(limit))
+        except ValueError:
+            msg = "Bad Request: Expected int type for limit"
+            log.error(msg)  # should be validated by SN
+            raise HttpBadRequest(message=msg)
+    marker_key = None
+    if "Marker" in request.GET:
+        marker = request.GET["Marker"]
+        log.debug("got Marker request param: {}".format(marker))
+        log.debug("GET_Domains - using Marker key: {}".format(marker_key))
+
+    if not prefix.startswith("/"):
+        msg = "Prefix expected to start with /"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+
+    if not prefix.endswith("/"):
+        msg = "Prefix expected to end with /"
+
+    conn = app["conn"]
+    if not conn:
+        msg = "db not initizalized"
+        log.warn(msg)
+        raise HttpProcessingError(code=501, message=msg)
+
+    domains = getDomains(conn, prefix, limit=limit, marker=marker_key)
+
+    if verbose:
+        # copy in totalSize, num groups/datasets/datatypes, lastModified for each domain
+        for domain in domains:
+            if "root" not in domain:
+                continue
+            dbRow = getRow(conn, domain["root"], table="RootTable")
+            if not dbRow:
+                log.warn("missing RootTable row for id: {}".format(domain["root"]))
+                continue
+            domain["size"] = dbRow["totalSize"]
+            domain["lastModified"] = dbRow["lastModified"]
+            domain["chunkCount"] = dbRow["chunkCount"]
+            domain["groupCount"] = dbRow["groupCount"]
+            domain["datasetCount"] = dbRow["datasetCount"]
+            domain["typeCount"] = dbRow["typeCount"]
+        
+    resp_json = {"domains": domains}
+    log.info("GET_Domains response: {}".format(resp_json))
+    
+    resp = await jsonResponse(request, resp_json, status=200)
+    log.response(request, resp=resp)
+    return resp
+
+async def PUT_Domain(request):
     """HTTP method to get object s3 state """
     log.request(request)
     
@@ -399,36 +516,92 @@ async def GET_Domain(request):
         raise HttpBadRequest(message=msg)
     domain = request.GET["domain"]
 
-    log.info("GET_Domain: {}".format(domain))
+    log.info("PUT_Domain: {}".format(domain))
 
     if not domain.startswith("/"):
         msg = "Domain expected to start with /"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
 
+    if len(domain) < 2:
+        msg = "Invalid domain"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+
+    rootid=''
+    if "root" in request.GET:
+        rootid = request.GET["root"]
+   
     conn = app["conn"]
-    if not conn:
+    if not conn: 
         msg = "db not initizalized"
         log.warn(msg)
         raise HttpProcessingError(code=501, message=msg)
 
-    if domain == '/':
-        # get top level domains
-        domains = getTopLevelDomains(conn)
-        print("got domains:", domains)
-        resp_json = {"domains": domains}
-    else:
-        resp_json = getRow(conn, domain)
-        if not resp_json:
-            msg = "domain: {} not found".format(domain)
-            log.warn(msg)
-            raise HttpProcessingError(code=404, message=msg)
+    dbRow = getRow(conn, domain)
+    if dbRow:
+        msg = "domain: {} already found in db"
+        log.warn(msg)
+        raise HttpProcessingError(code=409, message=msg)
 
-        log.info("GET_Domain response: {}".format(resp_json))
+    try:
+        insertRow(conn, domain, rootid=rootid)
+    except KeyError:
+        msg = "got KeyError inserting object: {}".format(id)
+        log.error(msg)
+        raise HttpProcessingError(code=500, message=msg)
+
+    resp_json = {}
+    
+    resp = await jsonResponse(request, resp_json, status=201)
+    log.response(request, resp=resp)
+    return resp
+
+async def DELETE_Domain(request):
+    app = request.app
+    if "domain" not in request.GET:
+        msg = "No domain provided"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+    domain = request.GET["domain"]
+
+    log.info("PUT_Domain: {}".format(domain))
+
+    if not domain.startswith("/"):
+        msg = "Domain expected to start with /"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+
+    if len(domain) < 2:
+        msg = "Invalid domain"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+
+    conn = app["conn"]
+    if not conn: 
+        msg = "db not initizalized"
+        log.warn(msg)
+        raise HttpProcessingError(code=501, message=msg)
+
+    dbRow = getRow(conn, domain)
+    if dbRow:
+        msg = "domain: {} not found in db"
+        log.warn(msg)
+        raise HttpProcessingError(code=404, message=msg)
+
+    try:
+        deleteRow(conn, domain)
+    except KeyError:
+        msg = "got KeyError inserting domain: {}".format(domain)
+        log.error(msg)
+        raise HttpProcessingError(code=500, message=msg)
+
+    resp_json = {}
     
     resp = await jsonResponse(request, resp_json, status=200)
     log.response(request, resp=resp)
     return resp
+
 
 async def GET_Root(request):
     """HTTP method to get root object state """
@@ -463,7 +636,9 @@ async def init(loop):
     app.router.add_route('PUT', '/objects', PUT_Objects)
     app.router.add_route('DELETE', '/objects', DELETE_Objects)
     app.router.add_route('GET', '/objects/{id}', GET_Object)
-    app.router.add_route('GET', '/domains', GET_Domain)
+    app.router.add_route('GET', '/domains', GET_Domains)
+    app.router.add_route('PUT', '/domain', PUT_Domain)
+    app.router.add_route('DELETE', '/domain', DELETE_Domain)
     app.router.add_route('GET', '/root/{id}', GET_Root)
     app["bucket_stats"] = {}
     # object and domain updates will be posted here to be worked on offline

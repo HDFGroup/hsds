@@ -4,9 +4,9 @@ import sys
 import sqlite3
 from aiobotocore import get_session
 from util.s3Util import getS3JSONObj, releaseClient, getS3Keys
-from util.idUtil import isS3ObjKey, isValidUuid, isValidChunkId, getS3Key, getObjId, getCollectionForId
+from util.idUtil import isS3ObjKey, isValidUuid, isValidChunkId, getS3Key, getObjId
 from util.domainUtil import isValidDomain
-from util.dbutil import  insertRow, batchInsertChunkTable, insertTLDTable, listObjects, getDatasetChunks, updateRowColumn, dbInitTable
+from util.dbutil import  insertRow, batchInsertChunkTable, listObjects, getDatasetChunks, updateRowColumn, dbInitTable
 import hsds_logger as log
 import config
 
@@ -37,7 +37,7 @@ async def gets3keys_callback(app, s3keys):
     # this is called for each page of results by getS3Keys 
     #
     
-    log.debug("getS3Keys count: {} keys".format(len(s3keys)))   
+    log.debug("gets3keys_callback count: {} keys".format(len(s3keys)))   
     chunk_items = [] # batch up chunk inserts for faster processing 
 
     for s3key in s3keys:
@@ -72,36 +72,19 @@ async def gets3keys_callback(app, s3keys):
         if isValidDomain(id):
             rootid = await getRootProperty(app, id)  # get Root property from S3
             try:
-                insertRow(conn, "DomainTable", id, etag=etag, lastModified=lastModified, objSize=objSize, rootid=rootid)
+                insertRow(conn, id, etag=etag, lastModified=lastModified, objSize=objSize, rootid=rootid)
             except KeyError:
                 log.warn("got KeyError inserting domain: {}".format(id))
                 continue
-            # add to Top-Level-Domain table if this is not a subdomain
-            index = id[1:-1].find('/')  # look for interior slash - isValidDomain implies len > 2
-            if index == -1:
-                try:
-                    insertTLDTable(conn, id)
-                except KeyError:
-                    log.warn("got KeyError inserting TLD: {}".format(id))
-                    continue
+
         elif isValidChunkId(id):
             log.debug("Got chunk: {}".format(id))
             chunk_items.append((id, etag, objSize, lastModified))
         else:
             rootid = await getRootProperty(app, id)  # get Root property from S3
-            collection = getCollectionForId(id)
-            if collection == "groups":
-                table = "GroupTable"
-            elif collection == "datatypes":
-                table = "TypeTable"
-            elif collection == "datasets":
-                table = "DatasetTable"
-            else:
-                log.error("Unexpected collection: {}".format(collection))
-                continue
-      
+             
             try:
-                insertRow(conn, table, id, etag=etag, lastModified=lastModified, objSize=objSize, rootid=rootid)
+                insertRow(conn, id, etag=etag, lastModified=lastModified, objSize=objSize, rootid=rootid)
             except KeyError:
                 log.error("got KeyError inserting object: {}".format(id))
                    
@@ -133,47 +116,64 @@ async def listKeys(app):
     conn = app["conn"]
     
     roots = listObjects(conn)
+    log.info("got roots: {}".format(roots))
     for rootid in roots:
         root = roots[rootid]
+        log.info("got root obj: {}".format(root))
+        root["totalSize"] = 0
+        root["chunkCount"] = 0
+        root["groupCount"] = 0
+        root["datsaetCount"] = 0
+        root["datatypeCount"] = 0
         log.info("root: {} -- {}".format(rootid, root))
-
         datasets = root["datasets"]
         for datasetid in datasets:
             dataset = datasets[datasetid]
             chunks = getDatasetChunks(conn, datasetid)
+            dataset["totalSize"] = dataset["size"]
             for chunkid in chunks:
                 chunk = chunks[chunkid]
-                dataset["size"] += chunk["size"]
+                dataset["totalSize"] += chunk["size"]
                 if chunk["lastModified"] > dataset["lastModified"]:
                     dataset["lastModified"] = chunk["lastModified"]
-            updateRowColumn(conn, "DatasetTable", "size", datasetid, dataset["size"], rootid=rootid)
-            updateRowColumn(conn, "DatasetTable", "lastModified", datasetid, dataset["lastModified"], rootid=rootid)
-            updateRowColumn(conn, "DatasetTable", "chunkCount", datasetid, len(chunks), rootid=rootid)
+            updateRowColumn(conn, datasetid, "totalSize", dataset["totalSize"], rootid=rootid)
+            updateRowColumn(conn, datasetid, "lastModified", dataset["lastModified"], rootid=rootid)
+            updateRowColumn(conn, datasetid, "chunkCount",  len(chunks), rootid=rootid)
             root["chunkCount"] += len(chunks)
-            root["size"] += dataset["size"]
+            root["totalSize"] += dataset["totalSize"]
             if dataset["lastModified"] > root["lastModified"]:
                 root["lastModified"] = dataset["lastModified"]
         
         groups = root["groups"]
         for groupid in groups:
             group = groups[groupid]
-            root["size"] += group["size"]
+            root["totalSize"] += group["size"]
             if group["lastModified"] > root["lastModified"]:
                 root["lastModified"] = group["lastModified"]
 
         datatypes = root["datatypes"]
         for typeid in datatypes:
             datatype = datatypes[typeid]
-            root["size"] += datatype["size"]
+            root["totalSize"] += datatype["size"]
             if datatype["lastModified"] > root["lastModified"]:
                 root["lastModified"] = datatype["lastModified"]
         
         try:
-            insertRow(conn, "RootTable", rootid, etag='', lastModified=root["lastModified"],
-                objSize=root["size"], chunkCount=root["chunkCount"], groupCount=len(groups),
-                datasetCount=len(datasets), typeCount=len(datatypes))
-        except KeyError:
-            log.warn("got KeyError inserting root: {}".format(rootid))
+            log.info("updating roottable with: {}".format(root))
+            insertRow(conn, rootid, etag='', lastModified=root["lastModified"], objSize=root["size"], table="RootTable")
+            
+        except KeyError as e:
+            log.warn("got KeyError inserting root {}: {}".format(rootid, e))
+            continue
+        try:
+            log.info("updating row")
+            updateRowColumn(conn, rootid, "chunkCount", root["chunkCount"], table="RootTable")
+            updateRowColumn(conn, rootid, "groupCount", len(groups), table="RootTable")
+            updateRowColumn(conn, rootid, "datasetCount", len(datasets), table="RootTable")
+            updateRowColumn(conn, rootid, "typeCount", len(datatypes), table="RootTable")
+            updateRowColumn(conn, rootid, "totalSize", root["totalSize"], table="RootTable")
+        except KeyError as e:
+            log.warn("got KeyError updating RootTable row {}: {}".format(rootid, e))
             continue
     listObjects(conn)
 

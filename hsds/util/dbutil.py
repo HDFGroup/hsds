@@ -30,6 +30,7 @@ def dbInitTable(conn):
     c.execute("ALTER TABLE  DatasetTable ADD COLUMN size INTEGER")
     c.execute("ALTER TABLE  DatasetTable ADD COLUMN lastModified INTEGER")
     c.execute("ALTER TABLE  DatasetTable ADD COLUMN chunkCount INTEGER")
+    c.execute("ALTER TABLE  DatasetTable ADD COLUMN totalSize INTEGER")
     conn.commit()
 
     # Create Chunk Table
@@ -48,6 +49,7 @@ def dbInitTable(conn):
     c.execute("ALTER TABLE  RootTable ADD COLUMN groupCount INTEGER")
     c.execute("ALTER TABLE  RootTable ADD COLUMN datasetCount INTEGER")
     c.execute("ALTER TABLE  RootTable ADD COLUMN typeCount INTEGER")
+    c.execute("ALTER TABLE  RootTable ADD COLUMN totalSize INTEGER")
     
     
     conn.commit()
@@ -60,9 +62,6 @@ def dbInitTable(conn):
     c.execute("ALTER TABLE  DomainTable ADD COLUMN root TEXT") 
     conn.commit()
 
-    # Create Top Level Domain Table
-    c.execute("CREATE TABLE TLDTable (id TEXT PRIMARY KEY)") 
-    conn.commit()
 
 #
 # Get primary key given objid and rootid (for Group, Type, and Dataset tables)
@@ -77,41 +76,41 @@ def getPrimaryKey(table, objid, rootid=None):
     else:
         raise ValueError("Invalid table name: {}".format(table))
     return id
- 
 
 #
-# Add given domain to Top Level Domain table
-#
-def insertTLDTable(conn, id ):
-    c = conn.cursor()
-    try:
-        c.execute("INSERT INTO TLDTable (id) VALUES ('{}')". \
-          format(id) )
-    except sqlite3.IntegrityError:
-        raise KeyError("Error, id already exists: {}".format(id))
-    conn.commit()
+# Get Table name for given objid
+def getTableForId(objid):
+    if objid.startswith("g-"):
+        table = "GroupTable"
+    elif objid.startswith("d-"):
+        table = "DatasetTable"
+    elif objid.startswith("t-"):
+        table = "TypeTable"
+    elif objid.startswith("c-"):
+        table = "ChunkTable"
+    elif objid.startswith("/"):
+        table = "DomainTable"
+    else:
+        raise ValueError("Unexpected objid: {}".format(objid))
+    return table
+ 
+
 
 #
 # Add given row to table
 #
-def insertRow(conn, table, objid, etag='', objSize=0, lastModified=0, chunkCount=0, groupCount=0, datasetCount=0, typeCount=0, rootid=''):
+def insertRow(conn, objid, etag='', objSize=0, lastModified=0, rootid='', table=None):
+    if not table:
+        table = getTableForId(objid)
     # For Group, Type, and Dataset table, primary key is <objid>#<rootid>
     id = getPrimaryKey(table, objid, rootid)
     query = "INSERT INTO {} (id, etag, size, lastModified".format(table)
-    if table == "DatasetTable":
-        query += ", chunkCount)"
-    elif table == "RootTable":
-        query += ", chunkCount, groupCount, datasetCount, typeCount)"
-    elif table == "DomainTable":
+    if table == "DomainTable":
         query += ", root)"
     else:
         query += ")"
     query += " VALUES ('{}', '{}', {}, {}".format(id, etag, objSize, lastModified)
-    if table == "DatasetTable":
-        query += ", {})".format(chunkCount)
-    elif table == "RootTable":
-        query += ", {}, {}, {}, {})".format(chunkCount, groupCount, datasetCount, typeCount)
-    elif table == "DomainTable":
+    if table == "DomainTable":
         query += ", '{}')".format(rootid)
     else:
         query += ")"
@@ -125,7 +124,9 @@ def insertRow(conn, table, objid, etag='', objSize=0, lastModified=0, chunkCount
 #
 # Update specified column in db row
 #
-def updateRowColumn(conn, table, column, objid, value, rootid=0):
+def updateRowColumn(conn, objid, column, value, rootid=0, table=None):
+    if not table:
+        table = getTableForId(objid)
     id = getPrimaryKey(table, objid, rootid)
     query = "UPDATE {} SET {}={} WHERE id='{}'".format(table, column, value, id)
     c = conn.cursor()
@@ -134,6 +135,23 @@ def updateRowColumn(conn, table, column, objid, value, rootid=0):
     except sqlite3.Error as e:
         raise KeyError("Error updating table, error: {}".format(e))
     conn.commit()
+
+#
+# Delete the given row
+#
+def deleteRow(conn, objid, rootid=0, table=None):
+    if not table:
+        table = getTableForId(objid)
+    id = getPrimaryKey(table, objid, rootid)
+    query = "DELETE FROM {} WHERE id='{}'".format(table, id)
+    c = conn.cursor()
+    try:
+        c.execute(query)
+    except sqlite3.Error as e:
+        raise KeyError("Error deleting row from table, error: {}".format(e))
+    conn.commit()
+
+
 
 
 #
@@ -154,16 +172,8 @@ def batchInsertChunkTable(conn, items):
 #
 def getRow(conn, objid, rootid=None, table=None):
     if not table:
-        if objid.startswith("g-"):
-            table = "GroupTable"
-        elif objid.startswith("d-"):
-            table = "DatasetTable"
-        elif objid.startswith("t-"):
-            table = "TypeTable"
-        elif objid.startswith("/"):
-            table = "DomainTable"
-        else:
-            raise ValueError("Unexpected objid: {}".format(objid))
+        table = getTableForId(objid)
+         
     id = getPrimaryKey(table, objid, rootid)
     c = conn.cursor()
     
@@ -181,11 +191,13 @@ def getRow(conn, objid, rootid=None, table=None):
     result["lastModified"] = row[3]
     if table == "DatasetTable":
         result["chunkCount"] = row[4]
+        result["totalSize"] = row[5]
     elif table == "RootTable":
         result["chunkCount"] = row[4]
         result["groupCount"] = row[5]
         result["datasetCount"] = row[6]
         result["typeCount"] = row[7]
+        result["totalSize"] = row[8]
     elif table == "DomainTable":
         result["root"] = row[4]
     
@@ -212,18 +224,31 @@ def getRootObjects(conn, root):
     return results
 """
 
+
 #
-# Get all Top-Level Domains
+# Get domains with given prefix
 #
-def getTopLevelDomains(conn):
+def getDomains(conn, prefix, limit=None, marker=None):
     c = conn.cursor()
-    c.execute("SELECT * FROM TLDTable ")
+    query = "SELECT * from DomainTable WHERE id LIKE '{}%'".format(prefix)
+    c.execute(query)
     all_rows = c.fetchall()
-    results = []
+    domains = []
     for row in all_rows:
-        key = row[0]
-        results.append(key)
-    return results
+        id = row[0]
+        # don't include sub-items of this folder
+        if id[len(prefix):].find('/') == -1:
+            domain = {"name": id}
+            if marker and marker == domain:
+                marker = None
+                continue
+            if row[4]:
+                domain["root"] = row[4]
+            domains.append(domain)
+            if limit and len(domains) == limit:
+                break
+    return domains
+
 
 #
 # Get all chunks for given dataset

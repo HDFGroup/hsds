@@ -93,7 +93,7 @@ if __name__ == '__main__':
     app['meta_cache'] = LruCache(mem_target=metadata_mem_cache_size, chunk_cache=False)
     app['chunk_cache'] = LruCache(mem_target=chunk_mem_cache_size, chunk_cache=True)
     app['deleted_ids'] = set()
-    app['notify_ids'] = set()
+    app['notify_map'] = {} # of map of updates to send to AN at S3 Sync time
     app['dirty_ids'] = {}
     app['deflate_map'] = {} # map of dataset ids to deflate levels (if compressed)
     # TODO - there's nothing to prevent the deflate_map from getting ever larger 

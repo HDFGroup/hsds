@@ -15,6 +15,7 @@
 # 
 import asyncio
 import json
+import time
 import zlib
 import subprocess
 import datetime
@@ -240,7 +241,9 @@ async def putS3JSONObj(app, key, json_obj):
     data = json.dumps(json_obj)
     data = data.encode('utf8')
     try:
-        await client.put_object(Bucket=bucket, Key=key, Body=data)
+        rsp = await client.put_object(Bucket=bucket, Key=key, Body=data)
+        now = int(time.time())
+        s3_rsp = {"etag": rsp["ETag"], "size": len(data), "lastModified": now}
     except ClientError as ce:
         s3_stats_increment(app, "error_count")
         msg = "Error putting s3 obj: " + str(ce)
@@ -248,7 +251,8 @@ async def putS3JSONObj(app, key, json_obj):
         raise HttpProcessingError(code=500, message=msg)
     if data and len(data) > 0:
         s3_stats_increment(app, "bytes_out", inc=len(data))
-    log.debug("putS3JSONObj complete")
+    log.debug("putS3JSONObj complete, s3_rsp: {}".format(s3_rsp))
+    return s3_rsp
 
 async def putS3Bytes(app, key, data, deflate_level=None):
     """ Store byte string as S3 object with given key
@@ -272,7 +276,9 @@ async def putS3Bytes(app, key, data, deflate_level=None):
             log.warn("unable to compress s3 obj: {}, using raw bytes".format(key))
     
     try:
-        await client.put_object(Bucket=bucket, Key=key, Body=data)
+        rsp = await client.put_object(Bucket=bucket, Key=key, Body=data)
+        now = int(time.time())
+        s3_rsp = {"etag": rsp["ETag"], "size": len(data), "lastModified": now}
     except ClientError as ce:
         s3_stats_increment(app, "error_count")
         msg = "Error putting s3 obj: " + str(ce)
@@ -280,7 +286,12 @@ async def putS3Bytes(app, key, data, deflate_level=None):
         raise HttpProcessingError(code=500, message=msg)
     if data and len(data) > 0:
         s3_stats_increment(app, "bytes_in", inc=len(data))
-    log.debug("putS3Bytes complete")
+    log.debug("putS3Bytes complete, s3_rsp: {}".format(s3_rsp))
+    # s3 rsp format:
+    # {'ETag': '"1b95a7bf5fab6f5c0620b8e3b30a53b9"', 'ResponseMetadata': 
+    #     {'HostId': '', 'HTTPHeaders': {'X-Amz-Request-Id': '1529F570A809AD26', 'Server': 'Minio/RELEASE.2017-08-05T00-00-53Z (linux; amd64)', 'Vary': 'Origin', 'Date': 'Sun, 29 Apr 2018 16:36:53 GMT', 'Content-Length': '0', 'Content-Type': 'text/plain; charset=utf-8', 'Etag': '"1b95a7bf5fab6f5c0620b8e3b30a53b9"', 'X-Amz-Bucket-Region': 'us-east-1', 'Accept-Ranges': 'bytes'}, 
+    #       'HTTPStatusCode': 200, 'RequestId': '1529F570A809AD26'}}
+    return s3_rsp
 
 async def deleteS3Obj(app, key):
     """ Delete S3 object identfied by given key
@@ -522,7 +533,7 @@ async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=Fal
         key_names = []
      
     # TBD - for some reason passing in non-null deliminator doesn't work
-    pages = paginator.paginate(MaxKeys=1000, Bucket=bucket_name, Prefix=prefix, Delimiter=deliminator)
+    pages = paginator.paginate(MaxKeys=10, Bucket=bucket_name, Prefix=prefix, Delimiter=deliminator)
     # fetch all will fill in key_names unless callback is provided
     count = await _fetch_all(app, pages, key_names, prefix=prefix, deliminator=deliminator, suffix=suffix, include_stats=include_stats, callback=callback)
 
