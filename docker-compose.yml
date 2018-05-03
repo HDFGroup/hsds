@@ -1,0 +1,84 @@
+version: '3'
+services:
+  head:
+    build: .
+    container_name: hsds_head
+    restart: ${RESTART_POLICY}
+    environment:
+      - TARGET_SN_COUNT=${count}
+      - TARGET_DN_COUNT=${count}
+      - HEAD_PORT=${HEAD_PORT}
+      - HEAD_HOST=${HEAD_HOST}
+      - NODE_TYPE=${HEAD_TYPE}
+      - AWS_S3_GATEWAY=${MINIO_BASE}
+      - AWS_REGION=${AWS_REGION}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - BUCKET_NAME=${BUCKET_NAME}
+      - SYS_BUCKET_NAME=${SYS_BUCKET_NAME}
+      - LOG_LEVEL=${LOG_LEVEL}
+    ports:
+      - ${HEAD_PORT}:${HEAD_PORT}
+  an:
+    build: .
+    container_name: hsds_async
+    restart: ${RESTART_POLICY}
+    environment:
+      - AN_PORT=${AN_PORT}
+      - NODE_TYPE=${AN_TYPE}
+      - AWS_S3_GATEWAY=${MINIO_BASE}
+      - AWS_REGION=${AWS_REGION}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - BUCKET_NAME=${BUCKET_NAME}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - ANONYMOUS_TTL=${ANONYMOUS_TTL}
+    ports:
+      - ${AN_PORT}:${AN_PORT}
+  dn:
+    build: .
+    restart: ${RESTART_POLICY}
+    environment:
+      - DN_PORT=${DN_PORT}
+      - NODE_TYPE=${DN_TYPE}
+      - AWS_S3_GATEWAY=${MINIO_BASE}
+      - AWS_REGION=${AWS_REGION}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - BUCKET_NAME=${BUCKET_NAME}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - CHUNK_MEM_CACHE_SIZE=${CHUNK_MEM_CACHE_SIZE}
+      - MAX_CHUNK_SIZE=${MAX_CHUNK_SIZE}
+    ports:
+      - ${DN_PORT}
+  sn:
+    build: .
+    restart: ${RESTART_POLICY}
+    environment:
+      - SN_PORT=${SN_PORT}
+      - NODE_TYPE=${SN_TYPE}
+      - AWS_S3_GATEWAY=${MINIO_BASE}
+      - AWS_REGION=${AWS_REGION}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - BUCKET_NAME=${BUCKET_NAME}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - SERVER_NAME=${SERVER_NAME}
+      - CHUNK_MEM_CACHE_SIZE=${CHUNK_MEM_CACHE_SIZE}
+      - MAX_CHUNK_SIZE=${MAX_CHUNK_SIZE}
+    ports:
+      - ${SN_PORT}
+  minio:
+    image: minio/minio
+    container_name: minio
+    restart: ${RESTART_POLICY}
+    command: server /export
+    environment:
+      - BUCKET_NAME=${BUCKET_NAME}
+      - MINIO_ACCESS_KEY=${AWS_ACCESS_KEY_ID}
+      - MINIO_SECRET_KEY=${AWS_SECRET_ACCESS_KEY}
+    volumes:
+      - ${MINIO_DATA}:/export
+      - ${MINIO_CONFIG}:/root/.minio
+    ports:
+      - 9000:9000
