@@ -5,6 +5,7 @@ services:
     container_name: hsds_head
     restart: ${RESTART_POLICY}
     environment:
+      - AWS_IAM_ROLE=${AWS_IAM_ROLE}
       - TARGET_SN_COUNT=${CORES}
       - TARGET_DN_COUNT=${CORES}
       - HEAD_PORT=${HEAD_PORT}
@@ -24,6 +25,7 @@ services:
     container_name: hsds_async
     restart: ${RESTART_POLICY}
     environment:
+      - AWS_IAM_ROLE=${AWS_IAM_ROLE}
       - AN_PORT=${AN_PORT}
       - NODE_TYPE=an
       - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
@@ -41,6 +43,7 @@ services:
     build: .
     restart: ${RESTART_POLICY}
     environment:
+      - AWS_IAM_ROLE=${AWS_IAM_ROLE}
       - DN_PORT=${DN_PORT}
       - NODE_TYPE=dn
       - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
@@ -59,6 +62,7 @@ services:
     build: .
     restart: ${RESTART_POLICY}
     environment:
+      - AWS_IAM_ROLE=${AWS_IAM_ROLE}
       - SN_PORT=${SN_PORT}
       - NODE_TYPE=sn
       - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
