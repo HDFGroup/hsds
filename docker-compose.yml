@@ -1,9 +1,10 @@
-version: '3'
+version: '2'
 services:
   head:
     build: .
     container_name: hsds_head
     restart: ${RESTART_POLICY}
+    mem_limit: ${HEAD_RAM}
     environment:
       - TARGET_SN_COUNT=${CORES}
       - TARGET_DN_COUNT=${CORES}
@@ -23,6 +24,7 @@ services:
     build: .
     container_name: hsds_async
     restart: ${RESTART_POLICY}
+    mem_limit: ${AN_RAM}
     environment:
       - AN_PORT=${AN_PORT}
       - NODE_TYPE=an
@@ -40,6 +42,7 @@ services:
   dn:
     build: .
     restart: ${RESTART_POLICY}
+    mem_limit: ${DN_RAM}
     environment:
       - DN_PORT=${DN_PORT}
       - NODE_TYPE=dn
@@ -58,6 +61,7 @@ services:
   sn:
     build: .
     restart: ${RESTART_POLICY}
+    mem_limit: ${SN_RAM}
     environment:
       - SN_PORT=${SN_PORT}
       - NODE_TYPE=sn
@@ -70,6 +74,7 @@ services:
       - SERVER_NAME=${SERVER_NAME}
       - CHUNK_MEM_CACHE_SIZE=${CHUNK_MEM_CACHE_SIZE}
       - MAX_CHUNK_SIZE=${MAX_CHUNK_SIZE}
+      - DYNAMO_USERS_TABLE=${DYNAMO_USERS_TABLE}
     depends_on:
       - an
     ports:
