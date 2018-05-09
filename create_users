@@ -1,0 +1,26 @@
+#!/bin/bash
+
+if [ $# -eq 0 ] || [ $1 == "-h" ] || [ $1 == "--help" ]; then
+   echo "Usage: create_users [users]"
+   exit 1
+fi
+
+echo 'admin':$(echo 'admin' |md5sum | awk '{print $1}') >> /home/ubuntu/hsds/admin/config/passwd.txt
+
+aws --region us-east-1 dynamodb put-item --table-name $2 --item '{"username": {"S": "admin"}, "password": {"S": "admin"}}'
+
+docker exec hsds_head python /usr/local/src/hsds/create_toplevel_domain_json.py --user=admin --domain=/home
+
+for username in $1
+
+do
+
+passwd=$(echo $username |md5sum | awk '{print $1}')
+
+echo $username:$passwd >> /home/ubuntu/hsds/admin/config/passwd.txt
+
+aws --region us-east-1 dynamodb put-item --table-name $2 --item '{"username": {"S": "'$username'"}, "password": {"S": "'$passwd'"}}'
+
+docker exec hsds_head python /usr/local/src/hsds/create_toplevel_domain_json.py --user=$username --domain=/home/$username
+
+done
