@@ -18,7 +18,7 @@ from util.authUtil import  getAclKeys
 from util.httpUtil import  jsonResponse
 from util.domainUtil import isValidDomain
 from util.idUtil import validateInPartition
-from datanode_lib import get_metadata_obj, save_metadata_obj, delete_metadata_obj
+from datanode_lib import get_metadata_obj, save_metadata_obj, delete_metadata_obj, check_metadata_obj
 import hsds_logger as log
 
 def get_domain(request, body=None):
@@ -91,9 +91,10 @@ async def PUT_Domain(request):
         raise HttpProcessingError(code=500, message=msg) 
 
     # try getting the domain, should raise 404
-    domain_json = None
+    domain_exists = False
     try:
-        domain_json = await get_metadata_obj(app, domain)
+        await check_metadata_obj(app, domain)
+        domain_exists = True
     except HttpProcessingError as hpe:
         if hpe.code in (404, 410):
             pass # Expected
@@ -102,7 +103,7 @@ async def PUT_Domain(request):
             log.error(msg)
             raise HttpProcessingError(code=500, message=msg)
 
-    if domain_json != None:
+    if domain_exists:
         # domain already exists
         msg = "Conflict: resource exists: " + domain
         log.info(msg)

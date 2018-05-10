@@ -23,7 +23,7 @@ from aiohttp.web import StreamResponse
 from util.arrayUtil import bytesArrayToList, bytesToArray, arrayToBytes
 from util.httpUtil import  jsonResponse
 from util.idUtil import getS3Key, validateInPartition, isValidUuid
-from util.s3Util import  isS3Obj, getS3Bytes, deleteS3Obj   
+from util.s3Util import  isS3Obj, getS3Bytes   
 from util.hdf5dtype import createDataType
 from util.dsetUtil import  getSelectionShape, getSliceQueryParam
 from util.dsetUtil import getFillValue, getChunkLayout, getEvalStr, getDeflateLevel
@@ -82,7 +82,6 @@ async def PUT_Chunk(request):
         msg = "expected root key in dset_json"
         log.error(msg)
         raise KeyError(msg)
-    rootid = dset_json["root"]
     
     rank = len(dims)  
    
@@ -145,10 +144,7 @@ async def PUT_Chunk(request):
         log.error(msg)
         raise HttpProcessingError(code=500, message="Unexpected Error")
         
-    #input_arr = np.fromstring(input_bytes, dtype=dt)
     input_arr = bytesToArray(input_bytes, dt, input_shape)
-    #log.info("input arr: {}".format(input_arr))
-    #input_arr = input_arr.reshape(input_shape)
 
     chunk_arr = None 
     if deflate_level is not None:
@@ -193,16 +189,6 @@ async def PUT_Chunk(request):
     dirty_ids = app["dirty_ids"]
     now = int(time.time())
     dirty_ids[chunk_id] = now
-
-    # set notify obj for AN
-    notify_map = app['notify_map']
-    if chunk_id in notify_map:
-        notify_obj = notify_map[chunk_id]
-        if "root" not in notify_obj or notify_obj["rootid"] != rootid:
-            log.error('invalid root in notify_obj: {}'.format(notify_obj))
-    else:
-        notify_obj[chunk_id] = {"id": chunk_id, "rootid": rootid}
-    notify_map[chunk_id] = notify_obj
     
     # chunk update successful     
     resp = await jsonResponse(request, {}, status=201)
@@ -525,10 +511,6 @@ async def POST_Chunk(request):
         now = int(time.time())
         dirty_ids[chunk_id] = now
         log.info("set {} to dirty".format(chunk_id))
-
-        # set notify flag for AN
-        notify_ids = app['notify_ids']
-        notify_ids.add(chunk_id)
     
     else:
         # reading point data  
@@ -591,10 +573,6 @@ async def DELETE_Chunk(request):
 
     if chunk_id in chunk_cache:
         del chunk_cache[chunk_id]
-    
-    await deleteS3Obj(app, s3_key)
-        
-    resp_json = {  } 
 
     deflate_map = app["deflate_map"]
     dset_id = getDatasetId(chunk_id)
@@ -603,7 +581,8 @@ async def DELETE_Chunk(request):
         # so it should be save to remove this entry now
         log.info("Removing deflate_map entry for {}".format(dset_id))
         del deflate_map[dset_id]
-      
+
+    resp_json = {  }   
     resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
     return resp

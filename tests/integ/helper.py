@@ -127,7 +127,7 @@ def setupDomain(domain, folder=False):
     if parent_domain is None:
         raise ValueError("Invalid parent domain: {}".format(domain))
     # create parent domain if needed
-    setupDomain(parent_domain)  
+    setupDomain(parent_domain, folder=True)  
      
     headers = getRequestHeaders(domain=domain)
     body=None

@@ -82,7 +82,6 @@ async def check_metadata_obj(app, obj_id):
         raise HttpProcessingError(code=410, message="Object has been deleted") 
     
     meta_cache = app['meta_cache'] 
-    obj_json = None 
     if obj_id in meta_cache:
         log.debug("check_metadata_obj, {} found in meta cache".format(obj_id))
     else:   
@@ -93,7 +92,6 @@ async def check_metadata_obj(app, obj_id):
         if not found:
             raise HttpProcessingError(code=404, message="Object not found")
  
-    return obj_json
 
 async def get_metadata_obj(app, obj_id):
     """ Get object from metadata cache (if present).
@@ -173,18 +171,7 @@ async def save_metadata_obj(app, obj_id, obj_json, notify=False):
     dirty_ids = app["dirty_ids"]
     dirty_ids[obj_id] = now
 
-    # create/update object to be sent to AN
-    notify_map = app["notify_map"]
-    if obj_id in notify_map:
-        notify_obj = notify_map[obj_id]
-    else:
-        notify_obj = {"id": obj_id}
-        if "root" in obj_json:
-            notify_obj["root"] = obj_json["root"]
-    
-    notify_obj["size"] = 0  # will be updated when persisted to S3
-    notify_obj["lastModified"] = now
-
+     
     # message AN immediately if notify flag is set
     # otherwise AN will be notified at next S3 sync
     if notify:
@@ -196,6 +183,8 @@ async def save_metadata_obj(app, obj_id, obj_json, notify=False):
             params = {"domain": obj_id}
             if "root" in obj_json:
                 params["root"] = obj_json["root"]
+            if "owner" in obj_json:
+                params["owner"] = obj_json["owner"]
             try:
                 log.info("ASync PUT notify: {} params: {}".format(req, params))
                 await http_put(app, req, params=params)
@@ -205,6 +194,11 @@ async def save_metadata_obj(app, obj_id, obj_json, notify=False):
 
         else:
             notify_objs = []
+            notify_obj = {"id": obj_id}
+            notify_obj["size"] = 0  # will be updated when persisted to S3
+            notify_obj["lastModified"] = now
+            if "root" in obj_json:
+                notify_obj["root"] = obj_json["root"]
             notify_objs.append(notify_obj)
             body = {"objs": notify_objs}
             req = an_url + "/objects"
@@ -217,7 +211,7 @@ async def save_metadata_obj(app, obj_id, obj_json, notify=False):
         
 
 
-async def delete_metadata_obj(app, obj_id, notify=True):
+async def delete_metadata_obj(app, obj_id, notify=True, root_id=None):
     """ Delete the given object """
     meta_cache = app['meta_cache'] 
     dirty_ids = app["dirty_ids"]
@@ -234,18 +228,31 @@ async def delete_metadata_obj(app, obj_id, notify=True):
         log.error(msg)
         raise HttpProcessingError(code=500, message=msg) 
 
-    if isValidUuid(obj_id):
-        deleted_ids = app['deleted_ids']
-        if obj_id in deleted_ids:
-            log.warn("{} has already been deleted".format(obj_id))
-        else:
-            deleted_ids.add(obj_id)
+    deleted_ids = app['deleted_ids']
+    if obj_id in deleted_ids:
+        log.warn("{} has already been deleted".format(obj_id))
+    else:
+        deleted_ids.add(obj_id)
      
     if obj_id in meta_cache:
+        if not root_id:
+            # retreive the root id before deleting
+            obj_json = meta_cache[obj_id]
+            if "root" in obj_json:
+                root_id = obj_json["root"]
         del meta_cache[obj_id]
+    elif not root_id and notify:
+        # read from S3 to get rootid
+        s3_key = getS3Key(obj_id)
+        log.debug("getS3JSONObj({})".format(s3_key))
+        # read S3 object as JSON - will raise 404 if not found
+        obj_json = await getS3JSONObj(app, s3_key)
+        if "root" in obj_json:
+            root_id = obj_json["root"]
+        
     
     if obj_id in dirty_ids:
-        dirty_ids.remove(obj_id)
+        del dirty_ids[obj_id]
     
     if notify:
         an_url = getAsyncNodeUrl(app)
@@ -263,8 +270,9 @@ async def delete_metadata_obj(app, obj_id, notify=True):
         else:
             now = int(time.time())
             notify_obj = {"id": obj_id, "lastModified": now}
-            body = []
-            body.append(notify_obj)
+            notify_obj["root"] = root_id
+            notify_objs = [notify_obj,]
+            body = {"objs": notify_objs}
             req = an_url + "/objects"
             try:
                 log.info("ASync DELETE notify: {} body: {}".format(req, body))
@@ -282,7 +290,6 @@ async def s3sync(app):
     s3_sync_interval = config.get("s3_sync_interval")
     dirty_ids = app["dirty_ids"]
     #deleted_ids = app["deleted_ids"]
-    notify_map = app["notify_map"] # map of objs to send to the AN 
     meta_cache = app["meta_cache"] 
     chunk_cache = app["chunk_cache"] 
     deflate_map = app["deflate_map"]
@@ -295,9 +302,7 @@ async def s3sync(app):
         keys_to_update = []
         now = int(time.time())
         for obj_id in dirty_ids:
-            if obj_id not in notify_map:
-                log.error("Expected to find {} in notify_map".format(obj_id))
-                continue
+             
             if dirty_ids[obj_id] + s3_sync_interval < now:
                 # time to write to S3
                 keys_to_update.append(obj_id)
@@ -316,25 +321,15 @@ async def s3sync(app):
                 del dirty_ids[obj_id]
             
             retry_keys = []  # add any write failures back here
-            success_keys = [] # keys we successfully wrote to S3
+            notify_objs = []  # notifications to send to AN, also flags success write to S3
             for obj_id in keys_to_update:
                 # write back to S3  
                 s3_key = None
                 log.info("s3sync for obj_id: {}".format(obj_id))
                 s3_key = getS3Key(obj_id)  
-                log.debug("s3sync for s3_key: {}".format(s3_key))
-                notify_obj = notify_map[obj_id]
-                log.debug("pre s3 update notify_obj: {}".format(notify_obj))
-                """
-                if obj_id in deleted_ids:
-                    # delete the s3 obj
-                    try:
-                        await deleteS3Obj(app, s3_key)
-                        success_keys.append(obj_id)
-                    except HttpProcessingError as hpe:
-                        log.error("got S3 error deleting obj_id: {} to S3: {}".format(obj_id, str(hpe)))
-                        retry_keys.append(obj_id)
-                """
+                log.debug("s3sync for s3_key: {}".format(s3_key))  
+                notify_obj = {"id": obj_id}
+                 
                 if isValidChunkId(obj_id):
                     # chunk update
                     if obj_id not in chunk_cache:
@@ -358,7 +353,7 @@ async def s3sync(app):
                         notify_obj["etag"] = s3_rsp["etag"]
                         notify_obj["size"] = s3_rsp["size"]
                         notify_obj["lastModified"] = s3_rsp["lastModified"]
-                        success_keys.append(obj_id)
+                        notify_objs.append(notify_obj)
                     except HttpProcessingError as hpe:
                         log.error("got S3 error writing obj_id: {} to S3: {}".format(obj_id, str(hpe)))
                         retry_keys.append(obj_id)
@@ -381,8 +376,10 @@ async def s3sync(app):
                         notify_obj["etag"] = s3_rsp["etag"]
                         notify_obj["size"] = s3_rsp["size"]
                         notify_obj["lastModified"] = s3_rsp["lastModified"]
+                        if "root" in obj_json:
+                            notify_obj["root"] = obj_json["root"]
                         log.info("adding {} to success_keys".format(obj_id))
-                        success_keys.append(obj_id)
+                        notify_objs.append(notify_obj)
 
                     except HttpProcessingError as hpe:
                         log.error("got S3 error writing obj_id: {} to S3: {}".format(obj_id, str(hpe)))
@@ -402,13 +399,10 @@ async def s3sync(app):
 
             # notify AN of key updates 
             an_url = getAsyncNodeUrl(app)
-            log.info("processing success_keys: {}".format(success_keys))
-            if len(success_keys) > 0:
-                notify_objs = []
-                for objid in success_keys:
-                    notify_obj = notify_map[objid]
-                    notify_objs.append(notify_obj)
-                body = { "objids": notify_objs }
+            log.info("Notifying AN for S3 Updates")
+            if len(notify_objs) > 0:
+                 
+                body = { "objs": notify_objs }
                 req = an_url + "/objects"
                 try:
                     log.info("ASync PUT notify: {} body: {}".format(req, body))

@@ -22,11 +22,12 @@ class DomainTest(unittest.TestCase):
         super(DomainTest, self).__init__(*args, **kwargs)
         self.base_domain = helper.getTestDomainName(self.__class__.__name__)
         print("base_domain: {}".format(self.base_domain))
-        helper.setupDomain(self.base_domain)
+        helper.setupDomain(self.base_domain, folder=True)
         
         # main
      
     def testBaseDomain(self):
+        # make a non-folder domain
         print("testBaseDomain", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
         
@@ -35,29 +36,21 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers['content-type'], 'application/json')
         rspJson = json.loads(rsp.text)
-        root_uuid = rspJson["root"]
-        helper.validateId(root_uuid)
-
+        
         # verify that passing domain as query string works as well
         del headers["host"]
         req += "?host=" + self.base_domain
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers['content-type'], 'application/json')
-        rspJson = json.loads(rsp.text)
-        root_uuid_2 = rspJson["root"]
-        self.assertEqual(root_uuid, root_uuid_2)
-
+        
         # try using DNS-style domain name  
         domain = helper.getDNSDomain(self.base_domain)
         params = { "host": domain }
         rsp = requests.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers['content-type'], 'application/json')
-        rspJson = json.loads(rsp.text)
-        root_uuid_3 = rspJson["root"]
-        self.assertEqual(root_uuid, root_uuid_3)
-
+        
 
     def testGetDomain(self):
         domain = helper.getTestDomain("tall.h5")
@@ -158,7 +151,6 @@ class DomainTest(unittest.TestCase):
         req = helper.getEndpoint() + '/'
         params = {"verbose": 1}
         rsp = requests.get(req, params=params, headers=headers)
-        print("status:", rsp.status_code)
         if rsp.status_code == 404:
             print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
             return  # abort rest of test
@@ -178,6 +170,7 @@ class DomainTest(unittest.TestCase):
         
         root_uuid = rspJson["root"]
         helper.validateId(root_uuid)
+        print(rspJson)
 
         self.assertTrue("num_groups" in rspJson)
         self.assertEqual(rspJson["num_groups"], 5)
@@ -312,7 +305,6 @@ class DomainTest(unittest.TestCase):
                 self.assertTrue(k in rspJson)
             self.assertFalse("root" in rspJson)   
 
-    
 
     def testInvalidChildDomain(self):
         domain = self.base_domain + "/notafolder/newdomain.h5"
@@ -345,9 +337,6 @@ class DomainTest(unittest.TestCase):
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers['content-type'], 'application/json')
-        rspJson = json.loads(rsp.text)
-        root_uuid = rspJson["root"]
-        helper.validateId(root_uuid)
 
         # can't have two consecutive dots'       
         domain = 'two.dots..are.bad.' + dns_domain 
@@ -379,11 +368,20 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 400)  # 400 == bad syntax
 
     def testDeleteDomain(self):
-        domain = self.base_domain + "/deleteme.h6"
+        import os.path as op
+        parent_domain = op.dirname(self.base_domain)
+        domain = parent_domain + "/deleteme.h6"
         print("testDeleteDomain", domain)
         
         headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/'
+
+        # do a get on the domain
+        rsp = requests.get(req, headers=headers)
+        if rsp.status_code == 200:
+            # delete the domain first
+            rsp = requests.delete(req, headers=headers)
+            self.assertEqual(rsp.status_code, 200)
 
         # create a domain
         rsp = requests.put(req, headers=headers)
@@ -533,8 +531,10 @@ class DomainTest(unittest.TestCase):
 
     def testNewDomainCollections(self):
         # verify that newly added groups/datasets show up in the collections 
-        print("testNewDomainCollections", self.base_domain)
-        headers = helper.getRequestHeaders(domain=self.base_domain)
+        domain = self.base_domain +  "/newDomainCollection.h5"
+        helper.setupDomain(domain)
+        print("testNewDomainCollections", domain)
+        headers = helper.getRequestHeaders(domain=domain)
 
         # get root id
         req = helper.getEndpoint() + '/'
@@ -638,26 +638,27 @@ class DomainTest(unittest.TestCase):
 
 
     def testGetDomains(self):
-        print("testGetDomains", self.base_domain)
-    
-        import os.path as op
-        # back up two levels
-        domain = op.dirname(self.base_domain)
-        domain = op.dirname(domain) + '/'
-        headers = helper.getRequestHeaders(domain=domain)
+        folder = self.base_domain + "/testGetDomains"
+        helper.setupDomain(folder, folder=True)
+        print("testGetDomains", folder)
+
+        # create some domains in the base_domain folder
+        domain_count = 8
+        for i in range(domain_count):
+            domain = "domain_" + str(i) + ".h5"
+            helper.setupDomain(folder + '/' + domain)
+
+        headers = helper.getRequestHeaders()
+        params = {"domain": folder+'/'}
         req = helper.getEndpoint() + '/domains'
-        rsp = requests.get(req, headers=headers)
+        rsp = requests.get(req, headers=headers, params=params)
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers['content-type'], 'application/json')
         rspJson = json.loads(rsp.text)
         self.assertTrue("domains" in rspJson)
         domains = rspJson["domains"]
-        
-        domain_count = len(domains)
-        if domain_count < 9:
-            # this should only happen in the very first test run
-            print("Expected to find more domains!")
-            return
+
+        self.assertEqual(domain_count, len(domains))
 
         for item in domains:
             self.assertTrue("name" in item)
@@ -665,19 +666,18 @@ class DomainTest(unittest.TestCase):
             self.assertEqual(name[0], '/')
             self.assertTrue(name[-1] != '/')
             self.assertTrue("owner" in item)
-            self.assertTrue("created" in item)
-            self.assertTrue("lastModified" in item)
-            self.assertTrue("class") in item
-            self.assertTrue(item["class"] in ("domain", "folder"))
+            self.assertTrue("class" in item)
+            self.assertEqual(item["class"], "domain")
+            self.assertFalse("lastModified" in item)
+            self.assertFalse("size" in item)
        
         # try getting the first 4 domains
-        params = {"domain": domain, "Limit": 4}
+        params = {"domain": folder+'/', "Limit": 4}
         rsp = requests.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("domains" in rspJson)
         part1 = rspJson["domains"]
-        
         self.assertEqual(len(part1), 4)
         for item in part1:
             self.assertTrue("name" in item)
@@ -686,7 +686,7 @@ class DomainTest(unittest.TestCase):
             self.assertTrue(name[-1] != '/')
              
         # get next batch of 4
-        params = {"domain": domain, "Marker": name, "Limit": 4}
+        params = {"domain": folder+'/', "Marker": name, "Limit": 4}
         rsp = requests.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
@@ -722,6 +722,7 @@ class DomainTest(unittest.TestCase):
             rspJson = json.loads(rsp.text)
             self.assertTrue("domains" in rspJson)
             domains = rspJson["domains"]
+            print("domains:", domains)
         
             domain_count = len(domains)
             if domain_count == 0:
@@ -736,8 +737,9 @@ class DomainTest(unittest.TestCase):
                 self.assertEqual(name[0], '/')
                 self.assertTrue(name[-1] != '/')
                 self.assertTrue("owner" in item)
-                self.assertTrue("created" in item)
-                self.assertTrue("lastModified" in item)
+                self.assertFalse("created" in item)
+                self.assertFalse("lastModified" in item)
+                self.assertFalse("size" in item)
                 self.assertTrue("class") in item
                 self.assertTrue(item["class"] in ("domain", "folder"))
           

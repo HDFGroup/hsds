@@ -207,11 +207,11 @@ async def GET_Dataset(request):
             raise HttpProcessingError(code=404, message=msg)
         log.info("get dataset_id: {} from h5path: {}".format(dset_id, h5path))
     
-    # check that we have permissions to read the object
-    await validateAction(app, domain, dset_id, username, "read")
-
     # get authoritative state for dataset from DN (even if it's in the meta_cache).
     dset_json = await getObjectJson(app, dset_id, refresh=True)  
+
+    # check that we have permissions to read the object
+    await validateAction(app, domain, dset_id, username, "read")
 
     log.debug("got dset_json: {}".format(dset_json))
 
@@ -491,7 +491,7 @@ async def POST_Dataset(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     
-    domain_json = await getDomainJson(app, domain)
+    domain_json = await getDomainJson(app, domain, reload=True)
     root_id = domain_json["root"]
 
     aclCheck(domain_json, "create", username)  # throws exception if not allowed

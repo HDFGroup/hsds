@@ -59,7 +59,8 @@ def dbInitTable(conn):
     c.execute("ALTER TABLE  DomainTable ADD COLUMN etag TEXT") 
     c.execute("ALTER TABLE  DomainTable ADD COLUMN size INTEGER")
     c.execute("ALTER TABLE  DomainTable ADD COLUMN lastModified INTEGER")
-    c.execute("ALTER TABLE  DomainTable ADD COLUMN root TEXT") 
+    c.execute("ALTER TABLE  DomainTable ADD COLUMN root TEXT")
+    c.execute('ALTER TABLE  DomainTable ADD COLUMN owner TEXT') 
     conn.commit()
 
 
@@ -93,25 +94,46 @@ def getTableForId(objid):
     else:
         raise ValueError("Unexpected objid: {}".format(objid))
     return table
+
+#
+# Get the column name in RootTable for given id
+#
+def getCountColumnName(objid):
+    if objid.startswith("g-"):
+        col_name = "groupCount"
+    elif objid.startswith("d-"):
+        col_name = "datasetCount"
+    elif objid.startswith("t-"):
+        col_name = "typeCount"
+    elif objid.startswith("c-"):
+        col_name = "chunkCount"
+    else:
+        col_name = None
+    return col_name
  
 
 
 #
 # Add given row to table
 #
-def insertRow(conn, objid, etag='', objSize=0, lastModified=0, rootid='', table=None):
+def insertRow(conn, objid, etag='', objSize=0, lastModified=0, rootid='', owner='', table=None):
     if not table:
         table = getTableForId(objid)
     # For Group, Type, and Dataset table, primary key is <objid>#<rootid>
+
     id = getPrimaryKey(table, objid, rootid)
     query = "INSERT INTO {} (id, etag, size, lastModified".format(table)
     if table == "DomainTable":
-        query += ", root)"
+        query += ", root, owner)"
+    elif table == "RootTable":
+        query += ", chunkCount, groupCount, datasetCount, typeCount, totalSize)"
     else:
         query += ")"
     query += " VALUES ('{}', '{}', {}, {}".format(id, etag, objSize, lastModified)
     if table == "DomainTable":
-        query += ", '{}')".format(rootid)
+        query += ", '{}', '{}')".format(rootid, owner)
+    elif table == "RootTable":
+        query += ", {}, {}, {}, {}, {})".format(0,0,0,0,0)
     else:
         query += ")"
     c = conn.cursor()
@@ -150,9 +172,6 @@ def deleteRow(conn, objid, rootid=0, table=None):
     except sqlite3.Error as e:
         raise KeyError("Error deleting row from table, error: {}".format(e))
     conn.commit()
-
-
-
 
 #
 # Add batch of chunks to chunk table (much faster than inserting one by one)
@@ -200,6 +219,7 @@ def getRow(conn, objid, rootid=None, table=None):
         result["totalSize"] = row[8]
     elif table == "DomainTable":
         result["root"] = row[4]
+        result["owner"] = row[5]
     
     return result
 """
@@ -239,11 +259,15 @@ def getDomains(conn, prefix, limit=None, marker=None):
         # don't include sub-items of this folder
         if id[len(prefix):].find('/') == -1:
             domain = {"name": id}
-            if marker and marker == domain:
-                marker = None
+            if marker:
+                if marker == id:
+                    marker = None
                 continue
+            
             if row[4]:
                 domain["root"] = row[4]
+            if row[5]:
+                domain["owner"] = row[5]
             domains.append(domain)
             if limit and len(domains) == limit:
                 break
@@ -271,12 +295,16 @@ def getDatasetChunks(conn, dsetid):
 #
 # Iterate through all objects
 #
-def listObjects(conn):
+def listObjects(conn, rootid=None, limit=None):
     objs = {}
     c = conn.cursor()
     tableCollectionMap = {"Group": "groups", "Dataset": "datasets", "Type": "datatypes"}
     for table in tableCollectionMap:
         query = "SELECT * FROM {}Table".format(table)
+        if rootid:
+            query += " WHERE id LIKE '{}%'".format(rootid)
+        if limit:
+            query += " LIMIT {}".format(limit)
         for row in c.execute(query):
             rowid = row[0]
             parts = rowid.split('#')

@@ -10,9 +10,9 @@ from util.dbutil import  insertRow, batchInsertChunkTable, listObjects, getDatas
 import hsds_logger as log
 import config
 
-async def getRootProperty(app, objid):
+async def getObjProperties(app, objid):
     """ Get the root property if not already set """
-    log.debug("getRootProperty {}".format(objid))
+    log.debug("getObjProperties {}".format(objid))
     
     if isValidDomain(objid):
         log.debug("got domain id: {}".format(objid))
@@ -30,7 +30,13 @@ async def getRootProperty(app, objid):
     else:
         rootid = obj_json["root"]
         log.debug("got rootid {} for obj: {}".format(rootid, objid))
-    return rootid
+
+    rsp = {"root": rootid}
+
+    if "owner" in obj_json:
+        rsp["owner"] = obj_json["owner"]
+     
+    return rsp
 
 async def gets3keys_callback(app, s3keys):
     #
@@ -70,9 +76,9 @@ async def gets3keys_callback(app, s3keys):
 
         # save to a table based on the type of object this is
         if isValidDomain(id):
-            rootid = await getRootProperty(app, id)  # get Root property from S3
+            props = await getObjProperties(app, id)  # get Root property from S3
             try:
-                insertRow(conn, id, etag=etag, lastModified=lastModified, objSize=objSize, rootid=rootid)
+                insertRow(conn, id, etag=etag, lastModified=lastModified, objSize=objSize, rootid=props["root"], owner=props["owner"])
             except KeyError:
                 log.warn("got KeyError inserting domain: {}".format(id))
                 continue
@@ -81,10 +87,10 @@ async def gets3keys_callback(app, s3keys):
             log.debug("Got chunk: {}".format(id))
             chunk_items.append((id, etag, objSize, lastModified))
         else:
-            rootid = await getRootProperty(app, id)  # get Root property from S3
+            props = await getObjProperties(app, id)  # get Root property from S3
              
             try:
-                insertRow(conn, id, etag=etag, lastModified=lastModified, objSize=objSize, rootid=rootid)
+                insertRow(conn, id, etag=etag, lastModified=lastModified, objSize=objSize, rootid=props["root"])
             except KeyError:
                 log.error("got KeyError inserting object: {}".format(id))
                    

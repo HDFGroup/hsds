@@ -17,7 +17,7 @@ import json
 from aiohttp.errors import HttpBadRequest, HttpProcessingError
 
 from util.httpUtil import  http_post, http_put, http_get_json, http_delete, jsonResponse, getHref
-from util.idUtil import  getDataNodeUrl, createObjId, getCollectionForId
+from util.idUtil import  getDataNodeUrl, createObjId
 #from util.s3Util import getS3Keys
 from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
@@ -41,14 +41,17 @@ async def domain_query(app, domain, rsp_dict):
     except HttpProcessingError as hpe:
         rsp_dict[domain] = { "status_code": hpe.code}
 
-async def getRootInfo(app, root_id):
+async def getRootInfo(app, root_id, verbose=False):
     """ Get extra information about the given domain """
     # Gather additional info on the domain
     an_url = getAsyncNodeUrl(app)
     req = an_url + "/root/" + root_id
     log.info("ASync GET: {}".format(root_id))
+    params = {}
+    if verbose:
+        params["verbose"] = 1
     try:
-        root_info = await http_get_json(app, req)
+        root_info = await http_get_json(app, req, params=params)
     except HttpProcessingError as hpe:
         if hpe.code == 501:
             log.warn("sqlite db not available")
@@ -92,31 +95,42 @@ async def get_toplevel_domains(app):
 async def get_collection(app, root_id, collection, marker=None, limit=None):
     """ Return the object ids for given collection.
     """   
-    root_info = await getRootInfo(app, root_id)
+    root_info = await getRootInfo(app, root_id, verbose=True)
     if root_info is None:
         return None
     log.info("got root_info: {}".format(root_info))
-    objects = root_info["objects"] 
-    rows = []
      
-    for object in objects:
+    obj_map = root_info["objects"] 
+    if root_id not in obj_map:
+        msg = "Expected to get root_id: {} in collection map".formt(root_id)
+        log.error(msg)
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+
+    root = obj_map[root_id]
+    if collection not in root:
+        msg = "Expected to find key: {} in obj_map".format(collection)
+        log.error(msg)
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+    
+    obj_col = root[collection]
+
+    rows = []
+    for obj_id in obj_col:
+        object = obj_col[obj_id]
+        object["id"] = obj_id
         # expected keys:
         #   id - objectid
         #   etag
         #   size
         #   lastModified
-        objid = object["id"]
-        if getCollectionForId(objid) != collection:
-            continue
-         
+           
         if marker:
-            if marker == objid:
+            if marker == obj_id:
                 # got to the marker, clear it so we will start 
                 # return ids on the next iteration
                 marker = None
         else:
             # return id, etag, lastModified, and size
-             
             rows.append(object)
             if limit is not None and len(rows) == limit:
                 log.info("got to limit, breaking")
@@ -136,8 +150,11 @@ async def get_domains(request):
     else:
         params["prefix"] = request.GET["domain"]
 
-    if "verbose" in request.GET and request.GET["verbose"]:
+    # always use "verbose" to pull info from RootTable
+    if "verbose" in request and request.GET["verbose"]:
         params["verbose"] = 1
+    else:
+        params["verbose"] = 0
 
     if not params["prefix"].startswith('/'):
         msg = "Prefix must start with '/'"
@@ -159,6 +176,7 @@ async def get_domains(request):
 
     an_url = getAsyncNodeUrl(app)
     req = an_url + "/domains"
+    log.debug("get /domains: {}".format(params))
     obj_json = await http_get_json(app, req, params=params)
     log.info("got /domains {}: {}".format(params["prefix"], obj_json))
     if "domains" in obj_json:
@@ -271,10 +289,11 @@ async def GET_Domain(request):
             obj_count = 0
             if "lastModified" in results:
                 rsp_json["lastModified"] = results["lastModified"]
-            if "size" in results:
-                rsp_json["allocated_bytes"] = results["size"]
+            if "totalSize" in results:
+                rsp_json["allocated_bytes"] = results["totalSize"]
             if "groupCount" in results:
-                rsp_json["num_groups"] = results["groupCount"]
+                # don't count the root group
+                rsp_json["num_groups"] = results["groupCount"] - 1
                 obj_count += results["groupCount"]
             if "typeCount" in results:
                 rsp_json["num_datatypes"] = results["typeCount"]
@@ -341,6 +360,12 @@ async def PUT_Domain(request):
         msg = "Parent domain: {} not found".format(parent_domain)
         log.warn(msg)
         raise HttpProcessingError(code=404, message=msg)
+
+    log.debug("parent_json {}: {}".format(parent_domain, parent_json))
+    if "root" in parent_json and parent_json["root"]:
+        msg = "Parent domain must be a folder"
+        log.warn(msg)
+        raise HttpProcessingError(code=400, message=msg)
 
     body = None
     is_folder = False
@@ -810,6 +835,11 @@ async def GET_Groups(request):
     # validate that the requesting user has permission to read this domain
     aclCheck(domain_json, "read", username)  # throws exception if not authorized
 
+    if "root" in domain_json and domain_json["root"]:
+        rootid = domain_json["root"]
+    else:
+        rootid = None
+
     # get the groups collection list
     limit = None
     if "Limit" in request.GET:
@@ -828,7 +858,9 @@ async def GET_Groups(request):
         # get the dataset collection list
         objects = await get_collection(app, domain_json["root"], "groups", marker=marker, limit=limit)
         for object in objects:
-            obj_ids.append(object["id"])
+            # don't include root id in return collection
+            if object["id"] != rootid:
+                obj_ids.append(object["id"])
  
     # create hrefs 
     hrefs = []
