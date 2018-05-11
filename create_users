@@ -5,9 +5,13 @@ if [ $# -eq 0 ] || [ $1 == "-h" ] || [ $1 == "--help" ]; then
    exit 1
 fi
 
-echo 'admin':$(echo 'admin' |md5sum | awk '{print $1}') >> /home/ubuntu/hsds/admin/config/passwd.txt
+admin_passwd=$(echo admin |md5sum | awk '{print $1}')
 
-aws --region us-east-1 dynamodb put-item --table-name $2 --item '{"username": {"S": "admin"}, "password": {"S": "admin"}}'
+echo 'admin':$admin_passwd >> /home/ubuntu/hsds/admin/config/passwd.txt
+
+aws dynamodb put-item --table-name $2 --item '{"username": {"S": "admin"}, "password": {"S": "'$admin_passwd'"}}' --region us-east-1
+
+aws ssm put-parameter --name "admin" --value admin_passwd --type String --region us-east-1
 
 docker exec hsds_head python /usr/local/src/hsds/create_toplevel_domain_json.py --user=admin --domain=/home
 
@@ -17,10 +21,16 @@ do
 
 passwd=$(echo $username |md5sum | awk '{print $1}')
 
+# Store into textfile. NOTE: to be deprecated
 echo $username:$passwd >> /home/ubuntu/hsds/admin/config/passwd.txt
 
-aws --region us-east-1 dynamodb put-item --table-name $2 --item '{"username": {"S": "'$username'"}, "password": {"S": "'$passwd'"}}'
+# Store credentials in dynamoDB
+aws dynamodb put-item --table-name $2 --item '{"username": {"S": "'$username'"}, "password": {"S": "'$passwd'"}}' --region us-east-1
 
+# Store credentials in SSM parameter store
+aws ssm put-parameter --name $username --value $username:$passwd --type String --region us-east-1
+
+# Create TLD for user
 docker exec hsds_head python /usr/local/src/hsds/create_toplevel_domain_json.py --user=$username --domain=/home/$username
 
 done
