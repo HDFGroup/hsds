@@ -1,0 +1,108 @@
+version: '2'
+services:
+  head:
+    build: .
+    container_name: hsds_head
+    restart: ${RESTART_POLICY}
+    mem_limit: ${HEAD_RAM}
+    environment:
+      - TARGET_SN_COUNT=${CORES}
+      - TARGET_DN_COUNT=${CORES}
+      - HEAD_PORT=${HEAD_PORT}
+      - HEAD_HOST=hsds_head
+      - NODE_TYPE=head_node
+      - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_REGION=${AWS_REGION}
+      - BUCKET_NAME=${BUCKET_NAME}
+      - SYS_BUCKET_NAME=${SYS_BUCKET_NAME}
+      - LOG_LEVEL=${LOG_LEVEL}
+    ports:
+      - ${HEAD_PORT}:${HEAD_PORT}
+  an:
+    build: .
+    container_name: hsds_async
+    restart: ${RESTART_POLICY}
+    mem_limit: ${AN_RAM}
+    environment:
+      - AN_PORT=${AN_PORT}
+      - NODE_TYPE=an
+      - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_REGION=${AWS_REGION}
+      - BUCKET_NAME=${BUCKET_NAME}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - ANONYMOUS_TTL=${ANONYMOUS_TTL}
+    depends_on:
+      - head
+    ports:
+      - ${AN_PORT}:${AN_PORT}
+  dn:
+    build: .
+    restart: ${RESTART_POLICY}
+    mem_limit: ${DN_RAM}
+    environment:
+      - DN_PORT=${DN_PORT}
+      - DN_HOST=${PUBLIC_DNS}
+      - NODE_TYPE=dn
+      - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_REGION=${AWS_REGION}
+      - BUCKET_NAME=${BUCKET_NAME}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - CHUNK_MEM_CACHE_SIZE=${CHUNK_MEM_CACHE_SIZE}
+      - MAX_CHUNK_SIZE=${MAX_CHUNK_SIZE}
+    depends_on:
+      - an
+    ports:
+      - ${DN_PORT}
+  sn:
+    build: .
+    restart: ${RESTART_POLICY}
+    mem_limit: ${SN_RAM}
+    environment:
+      - SN_PORT=${SN_PORT}
+      - NODE_TYPE=sn
+      - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_REGION=${AWS_REGION}
+      - BUCKET_NAME=${BUCKET_NAME}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - SERVER_NAME=${SERVER_NAME}
+      - CHUNK_MEM_CACHE_SIZE=${CHUNK_MEM_CACHE_SIZE}
+      - MAX_CHUNK_SIZE=${MAX_CHUNK_SIZE}
+      - DYNAMO_USERS_TABLE=${DYNAMO_USERS_TABLE}
+      - VIRTUAL_HOST=${PUBLIC_DNS}
+      - VIRTUAL_PORT=${SN_PORT}
+      - HSDS_ENDPOINT=${PUBLIC_DNS}
+      - SN_HOST=${PUBLIC_DNS}
+    depends_on:
+      - an
+    ports:
+      - ${SN_PORT}
+  minio:
+    image: minio/minio
+    container_name: minio
+    restart: ${RESTART_POLICY}
+    command: server /export
+    environment:
+      - BUCKET_NAME=${BUCKET_NAME}
+    volumes:
+      - ${MINIO_DATA}:/export
+      - ${MINIO_CONFIG}:/root/.minio  
+    ports:
+    - 9000:9000
+  proxy:
+    image: jwilder/nginx-proxy
+    container_name: hsds_proxy
+    volumes:
+    - /var/run/docker.sock:/tmp/docker.sock:ro
+    depends_on:
+      - sn
+      - dn
+    ports:
+      - "80:80"
