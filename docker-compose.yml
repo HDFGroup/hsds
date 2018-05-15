@@ -13,8 +13,6 @@ services:
       - HEAD_HOST=hsds_head
       - NODE_TYPE=head_node
       - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
-      #- AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      #- AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_REGION=${AWS_REGION}
       - BUCKET_NAME=${BUCKET_NAME}
       - SYS_BUCKET_NAME=${SYS_BUCKET_NAME}
@@ -31,8 +29,6 @@ services:
       - AN_PORT=${AN_PORT}
       - NODE_TYPE=an
       - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
-      #- AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      #- AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_REGION=${AWS_REGION}
       - BUCKET_NAME=${BUCKET_NAME}
       - LOG_LEVEL=${LOG_LEVEL}
@@ -51,8 +47,6 @@ services:
       - DN_HOST=${PUBLIC_DNS}
       - NODE_TYPE=dn
       - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
-      #- AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      #- AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_REGION=${AWS_REGION}
       - BUCKET_NAME=${BUCKET_NAME}
       - LOG_LEVEL=${LOG_LEVEL}
@@ -71,8 +65,6 @@ services:
       - SN_PORT=${SN_PORT}
       - NODE_TYPE=sn
       - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
-      #- AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      #- AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_REGION=${AWS_REGION}
       - BUCKET_NAME=${BUCKET_NAME}
       - LOG_LEVEL=${LOG_LEVEL}
@@ -88,18 +80,6 @@ services:
       - an
     ports:
       - ${SN_PORT}
-  # minio:
-  #   image: minio/minio
-  #   container_name: minio
-  #   restart: ${RESTART_POLICY}
-  #   command: server /export
-  #   environment:
-  #     - BUCKET_NAME=${BUCKET_NAME}
-  #   volumes:
-  #     - ${MINIO_DATA}:/export
-  #     - ${MINIO_CONFIG}:/root/.minio  
-  #   ports:
-  #   - 9000:9000
   proxy:
     image: jwilder/nginx-proxy
     container_name: hsds_proxy
@@ -110,3 +90,9 @@ services:
       - dn
     ports:
       - "80:80"
+  logs:
+    image: mdsol/logspout
+    command: cloudwatch://auto
+    container_name: logspout
+    volumes:
+    - /var/run/docker.sock:/tmp/docker.sock:ro
