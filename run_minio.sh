@@ -43,6 +43,8 @@ SERVER_NAME=${SERVER_NAME:='Highly Scalable Data Service (HSDS)'}
 # Set ANONYMOUS_TTL to 0 to disable GC, default to 10 minutes
 #ANONYMOUS_TTL=${ANONYMOUS_TTL:=600}
 ANONYMOUS_TTL=${ANONYMOUS_TTL:=0}
+
+DB_HOST_DIR=${DB_HOST_DIR:='/tmp'}
  
 
 #
@@ -77,6 +79,8 @@ elif [ $1 == "an" ]; then
   --env BUCKET_NAME=${BUCKET_NAME} \
   --env LOG_LEVEL=${LOG_LEVEL} \
   --env ANONYMOUS_TTL=${ANONYMOUS_TTL} \
+  --env DB_DIR=/data \
+  -v ${DB_HOST_DIR}:/data \
   --link hsds_head:hsds_head \
   --link minio:minio \
   hdfgroup/hsds

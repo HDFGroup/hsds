@@ -93,7 +93,7 @@ async def POST_Group(request):
     group_json = {"id": group_id, "root": root_id, "created": now, "lastModified": now,  
         "links": {}, "attributes": {} }
 
-    save_metadata_obj(app, group_id, group_json)
+    await save_metadata_obj(app, group_id, group_json, notify=True)
      
     # formulate response 
     resp_json = {} 

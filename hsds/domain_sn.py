@@ -12,17 +12,18 @@
 #
 # service node of hsds cluster
 # 
-import asyncio 
+#import asyncio 
 import json
 from aiohttp.errors import HttpBadRequest, HttpProcessingError
 
 from util.httpUtil import  http_post, http_put, http_get_json, http_delete, jsonResponse, getHref
-from util.idUtil import  getDataNodeUrl, createObjId, getS3Key, getCollectionForId
-from util.s3Util import getS3Keys, isS3Obj, getS3Bytes, getS3ObjStats
+from util.idUtil import  getDataNodeUrl, createObjId
+#from util.s3Util import getS3Keys
 from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
-from util.domainUtil import getParentDomain, getDomainFromRequest, getS3PrefixForDomain, validateDomain, isIPAddress, isValidDomainPath
-from servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath, getPathForObjectId
+from util.domainUtil import getParentDomain, getDomainFromRequest, isIPAddress
+from servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath
+from basenode import getAsyncNodeUrl
 import hsds_logger as log
 
 async def get_domain_json(app, domain):
@@ -40,331 +41,155 @@ async def domain_query(app, domain, rsp_dict):
     except HttpProcessingError as hpe:
         rsp_dict[domain] = { "status_code": hpe.code}
 
-async def get_collection(app, domain, collection, marker=None, limit=None):
-    """ Return the object ids from the collections.txt obj for given collection.
-    """    
-    col_s3key = domain[1:] + "/." + collection + ".txt"  
-    log.info("get collection list: {}".format(col_s3key))
-    col_found = await isS3Obj(app, col_s3key)
-    if not col_found:
-        return []
-    rows = []
-    
-    data = await getS3Bytes(app, col_s3key)
-    data = data.decode('utf8')
-    lines = data.split('\n')
-    for line in lines:
-        # format is: 
-        # <objid> <size>\n
-        if not line:
-            continue
-        fields = line.split(' ')
-        if len(fields) < 4:
-            log.warn("Unexpected contents line: {}".format(line))
-            continue
-        objid = fields[0]
-        if not objid:
-            continue
-        try:
-            if getCollectionForId(objid) != collection:
-                log.warn("unexpected objectid: {}".format(objid))
-                continue
-        except ValueError as ve:
-            log.warn("unexpected exception for get collections: {}".format(str(ve)))
-            continue
-
-        if marker:
-            if marker == objid:
-                # got to the marker, clear it so we will start 
-                # return ids on the next iteration
-                marker = None
-        else:
-            # return objid, etag, lastModified, and size
-            row = []
-            row.append(objid)
-            row.append(fields[1])  # etag
-            try:
-                row.append(float(fields[2]))
-            except ValueError:
-                log.warn("Unexpected contents line (3rd element should be float): {}".format(line))
-                continue
-            try:
-                row.append(int(fields[3]))
-            except ValueError:
-                log.warn("Unexpected contents line (4th element should be int): {}".format(line))
-                continue
-            # dataset contents will have extra fields for numchunks and chunk size
-            if len(fields) > 4:
-                try:
-                    row.append(int(fields[4]))
-                except ValueError:
-                    log.warn("Unexpected contents line (5th element should be int): {}".format(line))
-                    continue
-            if len(fields) > 5:
-                try:
-                    row.append(int(fields[5]))
-                except ValueError:
-                    log.warn("Unexpected contents line (6th element should be int): {}".format(line))
-                    continue
-
-            rows.append(row)
-            if limit is not None and len(rows) == limit:
-                log.info("got to limit, breaking")
-                break
-    return rows
-
-
-async def get_collection_ids(app, domain, collection, marker=None, limit=None):
-    """ Return the object ids for given collection.
-    """    
-  
-    try:
-        domain_json = await getDomainJson(app, domain, reload=True)
-    except HttpProcessingError as hpe:
-        msg = "domain not found"
-        log.warn(msg)
-        raise HttpProcessingError(code=404, message=msg)
-    if "root" not in domain_json:
-        return [] # return empty list for folders
-    root_uuid = domain_json["root"]    
-    idpath_map = {root_uuid: '/'}  
-
-    # populate idpath_map with all ids in this domain
-    await getPathForObjectId(app, root_uuid, idpath_map)
-    objids = []
-    for objid in idpath_map:
-        if objid == root_uuid:
-            continue  # don't include root id
-        if collection is None or getCollectionForId(objid) == collection:
-            objids.append(objid)
-    objids.sort()
-    
-    ret_ids = []
-    for objid in objids:
-        if marker:
-            if marker == objid:
-                # got to the marker, clear it so we will start 
-                # return ids on the next iteration
-                marker = None
-        else:
-            ret_ids.append(objid)
-            if limit is not None and len(ret_ids) == limit:
-                log.info("got to limit, breaking")
-                break
-    return ret_ids
-       
-     
-
-async def getDomainInfo(app, domain):
+async def getRootInfo(app, root_id, verbose=False):
     """ Get extra information about the given domain """
     # Gather additional info on the domain
-    results = {}
-    allocated_bytes = 0
-    num_chunks = 0
+    an_url = getAsyncNodeUrl(app)
+    req = an_url + "/root/" + root_id
+    log.info("ASync GET: {}".format(root_id))
+    params = {}
+    if verbose:
+        params["verbose"] = 1
+    try:
+        root_info = await http_get_json(app, req, params=params)
+    except HttpProcessingError as hpe:
+        if hpe.code == 501:
+            log.warn("sqlite db not available")
+            return None
+        if hpe.code == 404:
+            # sqlite db not sync'd?
+            log.warn("root id: {} not found in db".format(root_id))
+            return None
+        else:
+            log.error("Async error: {}".format(hpe))
+            raise HttpProcessingError(code=500, message="Unexpected Error")
+    return root_info
 
-    group_collection = await get_collection(app, domain, "groups")
-    results["num_groups"] = len(group_collection) 
-    for row in group_collection:
-        allocated_bytes += row[3]
+async def get_toplevel_domains(app):
+    """ Get list of top level domains """
+    an_url = getAsyncNodeUrl(app)
+    req = an_url + "/domains"
+    params = {"domain": "/"}
+    log.info("ASync GET TopLevelDomains")
+    try:
+        rsp_json = await http_get_json(app, req, params=params)
+    except HttpProcessingError as hpe:
+        if hpe.code == 501:
+            log.warn("sqlite db not available")
+            return None
+        if hpe.code == 404:
+            # sqlite db not sync'd?
+            log.warn("404 repsonse for get_toplevel_domains")
+            return None
+        else:
+            log.error("Async error: {}".format(hpe))
+            raise HttpProcessingError(code=500, message="Unexpected Error")
+    if "domains" not in rsp_json:
+        log.error("domains not found in get_toplevel_domain request")
+        raise HttpProcessingError(code=500, message="Unexpected Error")
 
-    datatype_collection = await get_collection(app, domain, "datatypes")
-    results["num_datatypes"] = len(datatype_collection) 
-    for row in datatype_collection:
-        allocated_bytes += row[3]
+    return rsp_json["domains"]
+
+
+
+async def get_collection(app, root_id, collection, marker=None, limit=None):
+    """ Return the object ids for given collection.
+    """   
+    root_info = await getRootInfo(app, root_id, verbose=True)
+    if root_info is None:
+        return None
+    log.info("got root_info: {}".format(root_info))
+     
+    obj_map = root_info["objects"] 
+    if root_id not in obj_map:
+        msg = "Expected to get root_id: {} in collection map".formt(root_id)
+        log.error(msg)
+        raise HttpProcessingError(code=500, message="Unexpected Error")
+
+    root = obj_map[root_id]
+    if collection not in root:
+        msg = "Expected to find key: {} in obj_map".format(collection)
+        log.error(msg)
+        raise HttpProcessingError(code=500, message="Unexpected Error")
     
-    dataset_collection = await get_collection(app, domain, "datasets")
-    results["num_datasets"] = len(dataset_collection) 
-    for row in dataset_collection:
-        allocated_bytes += row[3]
-        if len(row) > 5:
-            num_chunks += row[4]
-            allocated_bytes += row[5]
-    # get size of the domain json object itself
-    s3_key = getS3Key(domain)
-    stats = await getS3ObjStats(app, s3_key)
-                  
-    allocated_bytes += stats["Size"]
-    results["allocated_bytes"] = allocated_bytes
-    results["num_chunks"] = num_chunks
-    return results
+    obj_col = root[collection]
+
+    rows = []
+    for obj_id in obj_col:
+        object = obj_col[obj_id]
+        object["id"] = obj_id
+        # expected keys:
+        #   id - objectid
+        #   etag
+        #   size
+        #   lastModified
+           
+        if marker:
+            if marker == obj_id:
+                # got to the marker, clear it so we will start 
+                # return ids on the next iteration
+                marker = None
+        else:
+            # return id, etag, lastModified, and size
+            if obj_id == root_id:
+                continue  # don't include root obj
+            rows.append(object)
+            if limit is not None and len(rows) == limit:
+                log.info("got to limit of: {}, breaking".format(limit))
+                break
+    log.debug("get_collection returning: {}".format(rows))
+    return rows
+ 
         
 async def get_domains(request):
     """ This method is called by GET_Domains and GET_Domain when no domain is passed in.
     """
     app = request.app
-    loop = app["loop"]
     # if there is no domain passed in, get a list of top level domains
     log.info("get_domains")
-    domain = None
-    if "domain" in request.GET or "host" in request.GET or not isIPAddress(request.host):
-        try:
-            log.debug("getDomainFromRequest")
-            domain = getDomainFromRequest(request, domain_path=True, validate=False)
-        except ValueError:
-            msg = "Invalid domain"
-            log.warn(msg)
-            raise HttpBadRequest(message=msg)
-
-        log.info("got domain: [{}]".format(domain))
+    params = {}
+    if "domain" not in request.GET:
+        params["prefix"] = '/'
     else:
-        log.info("get top level domains")
+        params["prefix"] = request.GET["domain"]
 
-    log.debug("getDomainFromRequest returned: [{}]".format(domain))
-    if domain and not isValidDomainPath(domain):
-        msg = "Invalid domain"
+    # always use "verbose" to pull info from RootTable
+    if "verbose" in request and request.GET["verbose"]:
+        params["verbose"] = 1
+    else:
+        params["verbose"] = 0
+
+    if not params["prefix"].startswith('/'):
+        msg = "Prefix must start with '/'"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HttpBadRequest(message=msg)     
 
-    if domain == '/':
-        domain = None  # to simplify logic below
-    if domain is not None:
-        domain_prefix = getS3PrefixForDomain(domain)
-        log.debug("using domain prefix: {}".format(domain_prefix))
-     
-    limit = None
     if "Limit" in request.GET:
         try:
-            limit = int(request.GET["Limit"])
-            log.debug("GET_Domains - using Limit: {}".format(limit))
+            params["Limit"] = int(request.GET["Limit"])
+            log.debug("GET_Domains - using Limit: {}".format(params["Limit"]))
         except ValueError:
             msg = "Bad Request: Expected int type for limit"
-            log.error(msg)  # should be validated by SN
+            log.warn(msg)   
             raise HttpBadRequest(message=msg)
-    marker_key = None
     if "Marker" in request.GET:
-        marker = request.GET["Marker"]
-        log.debug("got Marker request param: {}".format(marker))
-        try:
-            # marker should be a valid domain
-            validateDomain(marker)
-        except ValueError:
-            msg = "Invalid marker value: {}".format(marker)
-            log.warn(msg)
-            raise HttpBadRequest(message=msg)
-        marker_key = getS3Key(marker)
-        log.debug("GET_Domains - using Marker key: {}".format(marker_key))
-    verbose = False
-    if "verbose" in request.GET and request.GET["verbose"]:
-        verbose = True
+        params["Marker"] = request.GET["Marker"]
+        log.debug("got Marker request param: {}".format(params["Marker"]))
 
-    s3_keys = []
-    if domain is None:
-        # return list of toplevel domains
-        topleveldomains_key = "topleveldomains.txt"
-        col_found = await isS3Obj(app, topleveldomains_key)
-        if not col_found:
-            log.warn("{} key not found".format(topleveldomains_key))
-        else:
-            data = await getS3Bytes(app, topleveldomains_key)
-            data = data.decode('utf8')
-            lines = data.split('\n')
-            log.info("{} lines: {}".format(topleveldomains_key, lines))
-            for line in lines:
-                if not line:
-                    continue
-                if line[0] != '/':
-                    log.warn("unexpected line in {}: {}".format(topleveldomains_key, line))
-                    continue
-                s3_keys.append(line[1:])  # strip of leading slash
+
+    an_url = getAsyncNodeUrl(app)
+    req = an_url + "/domains"
+    log.debug("get /domains: {}".format(params))
+    obj_json = await http_get_json(app, req, params=params)
+    log.info("got /domains {}: {}".format(params["prefix"], obj_json))
+    if "domains" in obj_json:
+        domains = obj_json["domains"]
     else:
-        s3_keys = await getS3Keys(app, prefix=domain_prefix, deliminator='/')
-        log.debug("got {} keys".format(len(s3_keys)))
-    # filter out anything without a '/' in the key
-    # note: sometimes a ".domain.json" key shows up, not sure why
-    keys = []
-    for key in s3_keys:
-        if domain is not None and key.find('/') == -1:
-            log.debug('skipping key: {}'.format(key))
-            continue
-        keys.append(key)
-
-    log.debug("s3keys: {}".format(keys))
-    if marker_key:
-        # trim everything up to and including marker
-        log.debug("using marker key: {}".format(marker_key))
-        index = 0
-        for key in keys:
-            index += 1
-            log.debug("compare {} to {}".format(key, marker_key))
-            if key == marker_key:
-                break
-            # also check if this matches key with ".domain.json" appended
-            if key + ".domain.json" == marker_key:
-                break
-
-        if index > 0:
-            keys = keys[index:]
-
-    if limit and len(keys) > limit:
-        keys = keys[:limit]  
-        log.debug("restricting number of keys returned to limit value")
-
-    log.debug("s3keys trim to marker and limit: {}".format(keys))
+        log.error("Unexepected response from AN")
+        domains = None
     
-    if len(keys) > 0:
-        dn_rsp = {} # dictionary keyed by chunk_id
-        tasks = []
-        log.debug("async query with {} domain keys".format(len(keys)))
-        for key in keys:
-            sub_domain = '/' + key
-            if sub_domain[-1] == '/':
-                sub_domain = sub_domain[:-1]  # specific sub-domains don't have trailing slash
-            log.debug("query for subdomain: {}".format(sub_domain))
-            task = asyncio.ensure_future(domain_query(app, sub_domain, dn_rsp))
-            tasks.append(task)
-        await asyncio.gather(*tasks, loop=loop)
-        log.debug("async query complete")
+    return domains
 
-    domains = []
-    for key in keys:
-        sub_domain = '/' + key  
-        if sub_domain[-1] == '/':
-            sub_domain = sub_domain[:-1]  # specific sub-domains don't have trailing slash
-        log.debug("sub_domain: {}".format(sub_domain))
-        if sub_domain not in dn_rsp:
-            log.warn("expected to find sub-domain: {} in dn_rsp".format(sub_domain))
-            continue
-        sub_domain_json = dn_rsp[sub_domain]
-        if "status_code" in sub_domain_json:
-            # some error happened for this request
-            status_code = sub_domain_json["status_code"]
-            if status_code == 401:
-                log.warn("No permission for reading sub_domain: {}".format(sub_domain))
-            elif status_code == 404:
-                log.warn("Not found error for sub_domain: {}".format(sub_domain))
-            elif status_code == 410:
-                log.info("Key removed error for sub_domain: {}".format(sub_domain))
-            else:
-                msg = "Unexpected error: {}".format(status_code)
-                log.warn(msg)
-                raise HttpProcessingError(code=status_code, message=msg)
-            continue  # go on to next key
-        domain_rsp = {"name": sub_domain}
-        if "owner" in sub_domain_json:
-            domain_rsp["owner"] = sub_domain_json["owner"]
-        if "created" in sub_domain_json:
-            domain_rsp["created"] = sub_domain_json["created"]
-        if "lastModified" in sub_domain_json:
-            domain_rsp["lastModified"] = sub_domain_json["lastModified"]
-        if "root" in sub_domain_json:
-            domain_rsp["class"] = "domain"
-        else:
-            domain_rsp["class"] = "folder"
-        if verbose:
-            # get info from collection files
-            results = await getDomainInfo(app, sub_domain)
-            for k in ("num_groups", "num_datatypes", "num_datasets", "allocated_bytes", "num_chunks"):
-                if k in results:
-                    domain_rsp[k] = results[k]
-
-        domains.append(domain_rsp)
-    rsp_json = {}
-    rsp_json["domains"] = domains
-    rsp_json["href"] = [] # TBD
-
-    resp = await jsonResponse(request, rsp_json)
-    log.response(request, resp=resp)
-    return resp
 
 async def GET_Domains(request):
     """HTTP method to return JSON for child domains of given domain"""
@@ -377,7 +202,13 @@ async def GET_Domains(request):
     else:
         validateUserPassword(app, username, pswd)
 
-    return await get_domains(request)
+    domains = await get_domains(request)
+
+    rsp_json = {"domains": domains}
+    rsp_json["hrefs"] = []
+    resp = await jsonResponse(request, rsp_json)
+    log.response(request, resp=resp)
+    return resp
 
  
 async def GET_Domain(request):
@@ -393,7 +224,11 @@ async def GET_Domain(request):
 
     if "domain" not in request.GET and "host" not in request.GET and isIPAddress(request.host):
         # no domain passed in, return top-level domains for this request
-        return await get_domains(request)
+        domains = await get_domains(request)
+        rsp_json = {"domains": domains}
+        rsp_json["hrefs"] = []
+        resp = await jsonResponse(request, rsp_json)
+        log.response(request, resp=resp)
 
     try:
         domain = getDomainFromRequest(request)
@@ -436,8 +271,7 @@ async def GET_Domain(request):
         resp = await jsonResponse(request, obj_json)
         log.response(request, resp=resp)
         return resp
-         
-
+    
     # return just the keys as per the REST API
     rsp_json = { }
     if "root" in domain_json:
@@ -451,6 +285,33 @@ async def GET_Domain(request):
         rsp_json["created"] = domain_json["created"]
     if "lastModified" in domain_json:
         rsp_json["lastModified"] = domain_json["lastModified"]
+
+    if "verbose" in request.GET and request.GET["verbose"] and "root" in domain_json:
+        results = await getRootInfo(app, domain_json["root"])
+        if results:
+            obj_count = 0
+            if "lastModified" in results:
+                rsp_json["lastModified"] = results["lastModified"]
+            if "totalSize" in results:
+                rsp_json["allocated_bytes"] = results["totalSize"]
+            if "groupCount" in results:
+                # don't count the root group
+                if results["groupCount"] < 1:
+                    log.error("Should see at least one group for root: {}".format(domain_json["root"]))
+                    rsp_json["num_groups"] = 0
+                else:
+                    rsp_json["num_groups"] = results["groupCount"] - 1
+                obj_count += results["groupCount"]
+            if "typeCount" in results:
+                rsp_json["num_datatypes"] = results["typeCount"]
+                obj_count += results["typeCount"]
+            if "datasetCount" in results:
+                rsp_json["num_datasets"] = results["datasetCount"]
+                obj_count += results["datasetCount"]
+            if "chunkCount" in results:
+                obj_count += results["chunkCount"]
+            rsp_json["num_objects"] = obj_count   
+    
      
     hrefs = []
     hrefs.append({'rel': 'self', 'href': getHref(request, '/')})
@@ -467,11 +328,7 @@ async def GET_Domain(request):
     if parent_domain:
         hrefs.append({'rel': 'parent', 'href': getHref(request, '/', domain=parent_domain)})
 
-    if "verbose" in request.GET and request.GET["verbose"]:
-        results = await getDomainInfo(app, domain)
-        for k in ("num_groups", "num_datatypes", "num_datasets", "allocated_bytes", "num_chunks"):
-            if k in results:
-                rsp_json[k] = results[k]
+    
          
     rsp_json["hrefs"] = hrefs
     resp = await jsonResponse(request, rsp_json)
@@ -510,6 +367,12 @@ async def PUT_Domain(request):
         msg = "Parent domain: {} not found".format(parent_domain)
         log.warn(msg)
         raise HttpProcessingError(code=404, message=msg)
+
+    log.debug("parent_json {}: {}".format(parent_domain, parent_json))
+    if "root" in parent_json and parent_json["root"]:
+        msg = "Parent domain must be a folder"
+        log.warn(msg)
+        raise HttpProcessingError(code=400, message=msg)
 
     body = None
     is_folder = False
@@ -636,6 +499,13 @@ async def DELETE_Domain(request):
     rsp_json = await http_delete(app, req, data=body)
  
     resp = await jsonResponse(request, rsp_json)
+
+    if "root" in domain_json:
+        # delete the root group
+        root_id = domain_json["root"]
+        req = getDataNodeUrl(app, root_id)
+        req += "/groups/" + root_id
+        await http_delete(app, req)
 
     # remove from domain cache if present
     domain_cache = app["domain_cache"]
@@ -910,9 +780,13 @@ async def GET_Datasets(request):
     if "Marker" in request.GET:
         marker = request.GET["Marker"]
 
-
-    # get the dataset collection list
-    obj_ids = await get_collection_ids(app, domain, "datasets", marker=marker, limit=limit)
+    obj_ids = []
+    if "root" in domain_json or domain_json["root"]:
+        # get the dataset collection list
+        objects = await get_collection(app, domain_json["root"], "datasets", marker=marker, limit=limit)
+        for object in objects:
+            obj_ids.append(object["id"])
+    log.debug("returning obj_ids: {}".format(obj_ids))
      
     # create hrefs 
     hrefs = []
@@ -982,9 +856,13 @@ async def GET_Groups(request):
     if "Marker" in request.GET:
         marker = request.GET["Marker"]
 
-    # get the groups collection list
-    obj_ids = await get_collection_ids(app, domain, "groups", marker=marker, limit=limit)
-     
+    obj_ids = []
+    if "root" in domain_json or domain_json["root"]:
+        # get the dataset collection list
+        objects = await get_collection(app, domain_json["root"], "groups", marker=marker, limit=limit)
+        for object in objects:
+            obj_ids.append(object["id"])
+ 
     # create hrefs 
     hrefs = []
     hrefs.append({'rel': 'self', 'href': getHref(request, '/groups')})
@@ -1053,7 +931,12 @@ async def GET_Datatypes(request):
         marker = request.GET["Marker"]
 
     # get the datatype collection list
-    obj_ids = await get_collection_ids(app, domain, "datatypes", marker=marker, limit=limit)
+    obj_ids = []
+    if "root" in domain_json or domain_json["root"]:
+        # get the dataset collection list
+        objects = await get_collection(app, domain_json["root"], "datatypes", marker=marker, limit=limit)
+        for object in objects:
+            obj_ids.append(object["id"])
  
     # create hrefs 
     hrefs = []

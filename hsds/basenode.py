@@ -54,6 +54,18 @@ async def getHeadUrl(app):
     log.debug("head_url: {}".format(head_url))
     return head_url
 
+def getAsyncNodeUrl(app):
+    """ Return host/port for async node
+    Throw exception if service is not ready"""
+    if "an_url" not in app or not app["an_url"]:
+        msg="Service not ready"
+        log.warn(msg)
+        raise HttpProcessingError(message=msg, code=503)
+
+    an_url = app["an_url"]
+    log.debug("got an url: {}".format(an_url))
+    return an_url
+
 
 
 async def register(app):

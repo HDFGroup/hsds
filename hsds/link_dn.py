@@ -186,7 +186,7 @@ async def PUT_Link(request):
     group_json["lastModified"] = now
 
     # write back to S3, save to metadata cache
-    save_metadata_obj(app, group_id, group_json)
+    await save_metadata_obj(app, group_id, group_json)
     
     resp_json = { } 
      
@@ -229,7 +229,7 @@ async def DELETE_Link(request):
     group_json["lastModified"] = now
 
     # write back to S3
-    save_metadata_obj(app, group_id, group_json)
+    await save_metadata_obj(app, group_id, group_json)
 
     hrefs = []  # TBD
     resp_json = {"href":  hrefs} 

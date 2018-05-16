@@ -12,6 +12,12 @@ elif [ $NODE_TYPE == "sn" ]; then
   echo "running servicenode.py"
   python -u servicenode.py 
 elif [ $NODE_TYPE == "an" ]; then
+  if [ -f /data/bucket.db ]; then
+    echo "Using /data/bucket.db for sqlite"
+  else
+    echo "Missing sqlite db -- rebuilding"
+    python -u rebuild_db.py
+  fi
   echo "running asyncnode.py"
   python -u asyncnode.py
 elif [ $NODE_TYPE == "head_node" ]; then

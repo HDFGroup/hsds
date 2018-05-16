@@ -89,6 +89,7 @@ async def validateAction(app, domain, obj_id, username, action):
         obj_json = await http_get_json(app, req) 
         meta_cache[obj_id] = obj_json
 
+    log.debug("obj_json[root]: {} domain_json[root]: {}".format(obj_json["root"], domain_json["root"]))
     if obj_json["root"] != domain_json["root"]:
         log.info("unexpected root, reloading domain")
         domain_json = await getDomainJson(app, domain, reload=True)

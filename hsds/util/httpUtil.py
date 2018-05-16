@@ -243,7 +243,7 @@ Convience method to compute href links
 def getHref(request, uri, query=None, domain=None):
     href = config.get("hsds_endpoint")
     if not href:
-        href = request.scheme + "://" + request.host  
+        href = request.scheme + "://127.0.0.1"   
     href += uri
     delimiter = '?'
     if domain:

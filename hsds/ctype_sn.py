@@ -160,7 +160,7 @@ async def POST_Datatype(request):
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     
-    domain_json = await getDomainJson(app, domain)
+    domain_json = await getDomainJson(app, domain, reload=True)
 
     aclCheck(domain_json, "create", username)  # throws exception if not allowed
 

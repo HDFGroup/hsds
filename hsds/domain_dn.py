@@ -18,7 +18,7 @@ from util.authUtil import  getAclKeys
 from util.httpUtil import  jsonResponse
 from util.domainUtil import isValidDomain
 from util.idUtil import validateInPartition
-from datanode_lib import get_metadata_obj, save_metadata_obj, delete_metadata_obj
+from datanode_lib import get_metadata_obj, save_metadata_obj, delete_metadata_obj, check_metadata_obj
 import hsds_logger as log
 
 def get_domain(request, body=None):
@@ -91,9 +91,10 @@ async def PUT_Domain(request):
         raise HttpProcessingError(code=500, message=msg) 
 
     # try getting the domain, should raise 404
-    domain_json = None
+    domain_exists = False
     try:
-        domain_json = await get_metadata_obj(app, domain)
+        await check_metadata_obj(app, domain)
+        domain_exists = True
     except HttpProcessingError as hpe:
         if hpe.code in (404, 410):
             pass # Expected
@@ -102,7 +103,7 @@ async def PUT_Domain(request):
             log.error(msg)
             raise HttpProcessingError(code=500, message=msg)
 
-    if domain_json != None:
+    if domain_exists:
         # domain already exists
         msg = "Conflict: resource exists: " + domain
         log.info(msg)
@@ -120,7 +121,7 @@ async def PUT_Domain(request):
     domain_json["created"] = now
     domain_json["lastModified"] = now
 
-    save_metadata_obj(app, domain, domain_json)
+    await save_metadata_obj(app, domain, domain_json, notify=True)
  
     resp = await jsonResponse(request, domain_json, status=201)
     log.response(request, resp=resp)
@@ -145,14 +146,9 @@ async def DELETE_Domain(request):
     if domain_json:
         log.debug("got domain json")
     # delete domain
-    notify=False
-    # Note: Don't notify async node on domain deleteion since recreation of 
-    # the domain may cause a race condition where the new domain gets 
-    # removed.  Instead rely on AN garbage collection to remove any objects
-    # that have no parent domain.
-    await delete_metadata_obj(app, domain, notify=notify)
+    await delete_metadata_obj(app, domain, notify=True)
 
- 
+
     json_response = { "domain": domain }
 
     resp = await jsonResponse(request, json_response, status=200)
@@ -211,7 +207,7 @@ async def PUT_ACL(request):
     domain_json["lastModified"] = now
      
     # write back to S3
-    save_metadata_obj(app, domain, domain_json)
+    await save_metadata_obj(app, domain, domain_json)
     
     resp_json = { } 
      

@@ -116,7 +116,7 @@ async def POST_Dataset(request):
     if layout is not None:
         dset_json["layout"] = layout
 
-    save_metadata_obj(app, dset_id, dset_json)
+    await save_metadata_obj(app, dset_id, dset_json, notify=True)
      
     resp_json = {} 
     resp_json["id"] = dset_id 
@@ -199,7 +199,7 @@ async def PUT_DatasetShape(request):
         dims[i] = shape_update[i]
          
     # write back to S3, save to metadata cache
-    save_metadata_obj(app, dset_id, dset_json)
+    await save_metadata_obj(app, dset_id, dset_json)
  
     resp_json = { } 
 

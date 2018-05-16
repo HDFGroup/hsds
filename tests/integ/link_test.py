@@ -21,13 +21,15 @@ class LinkTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(LinkTest, self).__init__(*args, **kwargs)
         self.base_domain = helper.getTestDomainName(self.__class__.__name__)
-        helper.setupDomain(self.base_domain)
+        helper.setupDomain(self.base_domain, folder=True)
         
         # main
      
     def testHardLink(self):
-        print("testHardLink", self.base_domain)
-        headers = helper.getRequestHeaders(domain=self.base_domain)
+        domain = self.base_domain + "/testHardLink.h5"
+        print("testHardLink", domain)
+        helper.setupDomain(domain)
+        headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/'
 
         rsp = requests.get(req, headers=headers)
@@ -59,13 +61,13 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 404)  # link doesn't exist yet
         
         # try creating a link with a different user (should fail)
-        headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
+        headers = helper.getRequestHeaders(domain=domain, username="test_user2")
         payload = {"id": grp1_id}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 403)  # forbidden
 
         # create "/g1" with original user
-        headers = helper.getRequestHeaders(domain=self.base_domain)
+        headers = helper.getRequestHeaders(domain=domain)
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # created
 
@@ -95,14 +97,14 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(rspJson["linkCount"], 1)  # link count is 1
         
         # try deleting link with a different user (should fail)
-        headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
+        headers = helper.getRequestHeaders(domain=domain, username="test_user2")
         req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title 
         rsp = requests.delete(req, headers=headers)
         self.assertEqual(rsp.status_code, 403)   # forbidden
 
         # delete the link with original user
         req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title 
-        headers = helper.getRequestHeaders(domain=self.base_domain)
+        headers = helper.getRequestHeaders(domain=domain)
         rsp = requests.delete(req, headers=headers)
         self.assertEqual(rsp.status_code, 200) 
 
@@ -140,7 +142,8 @@ class LinkTest(unittest.TestCase):
 
         # got a real id, but outside this domain
         req = helper.getEndpoint() + "/groups/" + root_id + "/links/another_domain"
-        another_domain = helper.getParentDomain(self.base_domain)
+        another_domain = self.base_domain + "/testHardLink2.h5"
+        helper.setupDomain(another_domain)
         another_id = helper.getRootUUID(another_domain)
         payload = {"id": another_id}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
@@ -163,15 +166,17 @@ class LinkTest(unittest.TestCase):
 
         # get the root group and verify the link count is zero
         req = helper.getEndpoint() + "/groups/" + root_id 
-        headers = helper.getRequestHeaders(domain=self.base_domain)
+        headers = helper.getRequestHeaders(domain=domain)
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)  
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["linkCount"], 0)  # link count should zero
 
     def testSoftLink(self):
-        print("testSoftLink", self.base_domain)
-        headers = helper.getRequestHeaders(domain=self.base_domain)
+        domain = self.base_domain + "/testSoftLink.h5"
+        print("testSoftLink", domain)
+        helper.setupDomain(domain)
+        headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/'
 
         rsp = requests.get(req, headers=headers)
@@ -216,8 +221,10 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(rspLink["h5path"], target_path)
 
     def testExternalLink(self):
-        print("testExternalLink", self.base_domain)
-        headers = helper.getRequestHeaders(domain=self.base_domain)
+        domain = self.base_domain + "/testExternalLink.h5"
+        print("testExternalLink", domain)
+        helper.setupDomain(domain)
+        headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/'
 
         rsp = requests.get(req, headers=headers)
@@ -233,7 +240,7 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(rspJson["linkCount"], 0)  # no links
 
         # create external link
-        target_domain = 'external_target.' + helper.getParentDomain(self.base_domain)
+        target_domain = self.base_domain + '/external_target.h5'  
         target_path = 'somewhere'
         link_title = 'external_link'
         req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title 
@@ -265,8 +272,10 @@ class LinkTest(unittest.TestCase):
         
 
     def testGetLinks(self):
-        print("testGetLinks", self.base_domain)
-        headers = helper.getRequestHeaders(domain=self.base_domain)
+        domain = self.base_domain + "/testGetLinks.h5"
+        print("testGetLinks", domain)
+        helper.setupDomain(domain)
+        headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/'
 
         rsp = requests.get(req, headers=headers)
@@ -464,14 +473,6 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(link["title"], "slink")
         self.assertEqual(link["h5path"], "somevalue")
         
-
-
-
-
-
-
-        
- 
              
 if __name__ == '__main__':
     #setup test files
