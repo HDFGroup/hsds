@@ -96,5 +96,6 @@ services:
     image: mdsol/logspout
     command: cloudwatch://auto
     container_name: logspout
+    hostname: hsds_${PUBLIC_DNS}
     volumes:
     - /var/run/docker.sock:/tmp/docker.sock:ro
