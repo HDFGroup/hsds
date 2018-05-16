@@ -33,6 +33,8 @@ services:
       - BUCKET_NAME=${BUCKET_NAME}
       - LOG_LEVEL=${LOG_LEVEL}
       - ANONYMOUS_TTL=${ANONYMOUS_TTL}
+    volumes:
+      - /data:/data
     depends_on:
       - head
     ports:
@@ -89,7 +91,7 @@ services:
       - sn
       - dn
     ports:
-      - "80:80"
+      - "5000:80"
   logs:
     image: mdsol/logspout
     command: cloudwatch://auto

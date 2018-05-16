@@ -1,0 +1,12 @@
+#!/bin/bash
+
+docker exec hsds_head python /usr/local/src/hsds/create_toplevel_domain_json.py --user=admin --domain=/home
+
+for username in $1
+
+do
+
+# Create TLD for user
+docker exec hsds_head python /usr/local/src/hsds/create_toplevel_domain_json.py --user=$username --domain=/home/$username
+
+done

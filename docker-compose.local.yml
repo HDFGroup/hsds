@@ -75,7 +75,6 @@ services:
       - SERVER_NAME=${SERVER_NAME}
       - CHUNK_MEM_CACHE_SIZE=${CHUNK_MEM_CACHE_SIZE}
       - MAX_CHUNK_SIZE=${MAX_CHUNK_SIZE}
-      - DYNAMO_USERS_TABLE=${DYNAMO_USERS_TABLE}
       - VIRTUAL_HOST=${PUBLIC_DNS}
       - VIRTUAL_PORT=${SN_PORT}
       - HSDS_ENDPOINT=${PUBLIC_DNS}
@@ -105,4 +104,15 @@ services:
       - sn
       - dn
     ports:
-      - "80:80"
+      - "5000:80"
+  # proxy:
+  #   image: nginx
+  #   container_name: hsds_proxy
+  #   volumes:
+  #   - ./hdf.conf:/etc/nginx/conf.d/hdf.conf
+  #   depends_on:
+  #     - sn
+  #     - dn
+  #   ports:
+  #     - "80:80"
+  #     - "5000:5000"
