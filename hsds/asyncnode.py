@@ -26,7 +26,7 @@ from util.s3Util import deleteS3Obj
 from util.chunkUtil import getDatasetId
 from util.idUtil import isValidChunkId, isValidUuid, getCollectionForId, getS3Key   
 from util.httpUtil import jsonResponse, StreamResponse
-from util.dbutil import getRow, getDomains, insertRow, deleteRow, updateRowColumn, listObjects, getCountColumnName
+from util.dbutil import getRow, getDomains, insertRow, deleteRow, updateRowColumn, listObjects, getCountColumnName, getDatasetChunks
 import hsds_logger as log
 
 
@@ -93,7 +93,7 @@ async def objDelete(app, objid, rootid=None):
  
 async def processPendingQueue(app):
     """ Process any pending queue events """      
-
+    DB_LIMIT=1000 # max number of rows to pull in one query
     pending_queue = app["pending_queue"]
     pending_count = len(pending_queue)
     conn = app["conn"]
@@ -105,8 +105,8 @@ async def processPendingQueue(app):
     # queue continually.  Copy items off pending queue synchronously and then process?
     while len(pending_queue) > 0:
         log.debug("pending_queue len: {}".format(len(pending_queue)))
-        item = pending_queue.pop(0)  # remove from the front
-        objid = item["objid"]
+        log.debug("pending queue: {}".format(pending_queue))
+        objid = pending_queue.pop(0)  # remove from the front
         log.debug("pop from pending queue: obj: {}".format(objid))
         collection = getCollectionForId(objid)
         if collection == "groups":
@@ -116,11 +116,31 @@ async def processPendingQueue(app):
             if dbRow:
                 log.error("RootTable row not expected for id: {}".format(rootid))
                 continue
-            if False:
-                domain_objs = listObjects(conn, rootid=rootid)
-                for domain_obj in domain_objs:
-                    log.info("domain delete: Item: {}".format(domain_obj))
-            
+            domain_objs = listObjects(conn, rootid=rootid, limit=DB_LIMIT)
+            for domain_obj in domain_objs:
+                log.info("domain delete: Item: {}".format(domain_obj))
+
+        elif collection == "datasets":
+            # remove any chunks in the pending queue
+            chunk_rows = getDatasetChunks(conn, objid, limit=DB_LIMIT)
+            log.debug("getDatasetChunks returned: {} rows".format(len(chunk_rows)))
+            for chunk_id in chunk_rows:
+                s3_key = getS3Key(chunk_id)
+                log.info("deleting s3_key: {}".format(s3_key))
+                try:
+                    await deleteS3Obj(app, s3_key)
+                except HttpProcessingError as hpe:
+                    # this might happen if the DN hasn't synched to S3 yet
+                    log.warn("got S3 error deleting obj_id: {} to S3: {}".format(objid, str(hpe)))
+                    continue
+                deleteRow(conn, chunk_id)
+                # TO DO - adjust dataset and domain totalSize
+            if len(chunk_rows) == DB_LIMIT:
+                # there maybe more chunks to delete, so re-add to pending queue
+                log.info("Adding {} to pending queue".format(objid))
+                pending_queue.append(objid) 
+        else:
+            log.error("unexpected collection type for: {}".format(objid))
       
  
 
@@ -256,8 +276,11 @@ async def PUT_Objects(request):
             except KeyError:
                 log.error("got KeyError inserting object: {}".format(id))
                 continue
+            if isValidChunkId(objid):
+                # will update dataset/root for new chunks below
+                pass    
             # if this is a new root group, add to root table
-            if getCollectionForId(objid) == "groups" and objid == rootid:
+            elif getCollectionForId(objid) == "groups" and objid == rootid:
                 try:
                     insertRow(conn, rootid, etag=etag, lastModified=lastModified, objSize=objSize, table="RootTable")            
                 except KeyError:
@@ -277,7 +300,12 @@ async def PUT_Objects(request):
                 updateRowColumn(conn, objid, "etag",  etag, rootid=rootid)
         if isValidChunkId(objid):
             # get the dset row for this chunk
+            pass
+            # TODO - this triggers an error because rootid is not defined
+            # Need to either pass in root with chunk updates or fetch it from the db 
             dsetid = getDatasetId(objid)
+            log.debug("dsetid for chunk: {}".format(dsetid))
+            """
             dset_row = getRow(conn, dsetid, rootid=rootid)
             dset_size_delta = objSize
             if not dset_row:
@@ -294,6 +322,7 @@ async def PUT_Objects(request):
             if dset_size_delta:
                 new_dset_size = dset_row["totalSize"] + dset_size_delta
                 updateRowColumn(conn, dsetid, "totalSize", new_dset_size, rootid=rootid)
+            """
         elif isValidUuid(objid):
             # update size and lastModified in root table
             try:
@@ -597,12 +626,7 @@ async def DELETE_Domain(request):
         msg = "db not initizalized"
         log.warn(msg)
         raise HttpProcessingError(code=501, message=msg)
-
-    domains = getDomains(conn, "/home/test_user1/hsds_test/domaintest/")
-    log.debug("Got domains (pre delete):")
-    for item in domains:
-        log.debug("  {}".format(item))
-
+  
     dbRow = getRow(conn, domain)
     if not dbRow:
         msg = "domain: {} not found in db".format(domain)
@@ -616,11 +640,6 @@ async def DELETE_Domain(request):
         msg = "got KeyError inserting domain: {}".format(domain)
         log.error(msg)
         raise HttpProcessingError(code=500, message=msg)
-
-    domains = getDomains(conn, "/home/test_user1/hsds_test/domaintest/")
-    log.debug("Got domains (post delete):")
-    for item in domains:
-        log.debug("  {}".format(item))
 
     resp_json = {}
     

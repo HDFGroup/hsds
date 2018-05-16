@@ -6,7 +6,7 @@ from aiobotocore import get_session
 from util.s3Util import getS3JSONObj, releaseClient, getS3Keys
 from util.idUtil import isS3ObjKey, isValidUuid, isValidChunkId, getS3Key, getObjId
 from util.domainUtil import isValidDomain
-from util.dbutil import  insertRow, batchInsertChunkTable, listObjects, getDatasetChunks, updateRowColumn, dbInitTable
+from util.dbutil import  insertRow, batchInsertChunkTable, getRootObjects, getDatasetChunks, updateRowColumn, dbInitTable, getRow, listObjects
 import hsds_logger as log
 import config
 
@@ -78,6 +78,7 @@ async def gets3keys_callback(app, s3keys):
         if isValidDomain(id):
             props = await getObjProperties(app, id)  # get Root property from S3
             try:
+                log.debug("insert domain: {}  root: {} owner: {}".format(id, props["root"], props["owner"]))
                 insertRow(conn, id, etag=etag, lastModified=lastModified, objSize=objSize, rootid=props["root"], owner=props["owner"])
             except KeyError:
                 log.warn("got KeyError inserting domain: {}".format(id))
@@ -90,7 +91,15 @@ async def gets3keys_callback(app, s3keys):
             props = await getObjProperties(app, id)  # get Root property from S3
              
             try:
-                insertRow(conn, id, etag=etag, lastModified=lastModified, objSize=objSize, rootid=props["root"])
+                rootid = props["root"]
+                if not rootid:
+                    log.error("Expected to find root property in object: {}".format(id))
+                else:
+                    log.debug("insert row id: {} root: {}".format(id, rootid))
+                    insertRow(conn, id, etag=etag, lastModified=lastModified, objSize=objSize, rootid=rootid)
+                    if id == rootid:
+                        log.info("adding {} to rootTable".format(rootid))
+                        insertRow(conn, rootid, etag=etag, lastModified=lastModified, objSize=objSize, table="RootTable") 
             except KeyError:
                 log.error("got KeyError inserting object: {}".format(id))
                    
@@ -121,9 +130,82 @@ async def listKeys(app):
     await asyncio.sleep(0)
     conn = app["conn"]
     
-    roots = listObjects(conn)
-    log.info("got roots: {}".format(roots))
-    for rootid in roots:
+    roots = getRootObjects(conn)
+    log.info("getRootObjects got {} roots".format(len(roots)))
+    for root_obj in roots:
+        rootid = root_obj["id"]
+        log.debug("list objects for root: {}".format(rootid))
+        list_map = listObjects(conn, rootid=rootid)
+        if rootid not in list_map:
+            log.error("expected to find {} in listObjectMap".format(rootid))
+            continue
+        root_object = list_map[rootid]
+        totalSize = 0
+        totalChunks = 0
+        lastModified = 0
+        for collection in ("groups", "datasets", "datatypes"):
+            log.debug("{}:".format(collection))
+            collection_objs = root_object[collection]
+            for id in collection_objs:
+                log.debug("   {}".format(id))
+                obj = collection_objs[id]
+                if obj["size"] > 0:
+                    totalSize += obj["size"]
+                if obj["lastModified"] > lastModified:
+                    lastModified = obj["lastModified"]
+
+        # update group count
+        if len(root_object["groups"]) == 0:
+            log.error("expected to find at least one group obj for root: {}".format(rootid))
+            continue
+        updateRowColumn(conn, rootid, "groupCount", len(root_object["groups"]), table="RootTable")
+
+        # update datatype count
+        if len(root_object["datatypes"]) > 0:
+            updateRowColumn(conn, rootid, "typeCount", len(root_object["datatypes"]), table="RootTable")
+
+        # update dataset count    
+        if len(root_object["datasets"]) > 0:
+            updateRowColumn(conn, rootid, "datasetCount", len(root_object["datasets"]), table="RootTable")
+        dataset_objs = root_object["datasets"]
+
+        # gather info about chunks for each dataset
+        for datasetid in dataset_objs:
+            dset_obj = dataset_objs[datasetid]
+            dset_size = dset_obj["size"]
+            dset_lastModified = dset_obj["lastModified"]
+            # TODO - get chunks in batches
+            chunks = getDatasetChunks(conn, datasetid)
+            for chunkid in chunks:
+                chunk = chunks[chunkid]
+                if chunk["size"] > 0:
+                    dset_size += chunk["size"]
+                    totalSize += chunk["size"]
+                if chunk["lastModified"] > dset_lastModified:
+                    dset_lastModified = chunk["lastModified"]
+                    if chunk["lastModified"] > lastModified:
+                        lastModified = chunk["lastModified"]
+            if dset_size > dset_obj["size"]:
+                updateRowColumn(conn, datasetid, "totalSize", dset_size, rootid=rootid)
+            if dset_lastModified > dset_obj["lastModified"]:
+                updateRowColumn(conn, datasetid, "lastModified", dset_lastModified, rootid=rootid)
+            if len(chunks) > 0:
+                updateRowColumn(conn, datasetid, "chunkCount",  len(chunks), rootid=rootid)
+                totalChunks += len(chunks)
+         
+        # update any root properities that have changed
+        if totalChunks > 0:
+            updateRowColumn(conn, rootid, "chunkCount", totalChunks, table="RootTable")
+        if totalSize > 0:
+            updateRowColumn(conn, rootid, "totalSize", totalSize, table="RootTable")
+        if lastModified > 0:
+            updateRowColumn(conn, rootid, "lastModified", lastModified, table="RootTable")
+        row = getRow(conn, rootid, table="RootTable")
+        log.info("Updated row: {}".format(row))
+
+
+        continue
+
         root = roots[rootid]
         log.info("got root obj: {}".format(root))
         root["totalSize"] = 0
@@ -172,7 +254,7 @@ async def listKeys(app):
             log.warn("got KeyError inserting root {}: {}".format(rootid, e))
             continue
         try:
-            log.info("updating row")
+            log.info("updating row for {}, groupCount: {}".format(rootid, len(groups)))
             updateRowColumn(conn, rootid, "chunkCount", root["chunkCount"], table="RootTable")
             updateRowColumn(conn, rootid, "groupCount", len(groups), table="RootTable")
             updateRowColumn(conn, rootid, "datasetCount", len(datasets), table="RootTable")
@@ -181,7 +263,9 @@ async def listKeys(app):
         except KeyError as e:
             log.warn("got KeyError updating RootTable row {}: {}".format(rootid, e))
             continue
-    listObjects(conn)
+        row = getRow(conn, rootid, table="RootTable")
+        log.info("Updated row: {}".format(row))
+    
 
 #
 # Main

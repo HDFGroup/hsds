@@ -131,10 +131,13 @@ async def get_collection(app, root_id, collection, marker=None, limit=None):
                 marker = None
         else:
             # return id, etag, lastModified, and size
+            if obj_id == root_id:
+                continue  # don't include root obj
             rows.append(object)
             if limit is not None and len(rows) == limit:
-                log.info("got to limit, breaking")
+                log.info("got to limit of: {}, breaking".format(limit))
                 break
+    log.debug("get_collection returning: {}".format(rows))
     return rows
  
         
@@ -293,7 +296,11 @@ async def GET_Domain(request):
                 rsp_json["allocated_bytes"] = results["totalSize"]
             if "groupCount" in results:
                 # don't count the root group
-                rsp_json["num_groups"] = results["groupCount"] - 1
+                if results["groupCount"] < 1:
+                    log.error("Should see at least one group for root: {}".format(domain_json["root"]))
+                    rsp_json["num_groups"] = 0
+                else:
+                    rsp_json["num_groups"] = results["groupCount"] - 1
                 obj_count += results["groupCount"]
             if "typeCount" in results:
                 rsp_json["num_datatypes"] = results["typeCount"]
@@ -779,6 +786,7 @@ async def GET_Datasets(request):
         objects = await get_collection(app, domain_json["root"], "datasets", marker=marker, limit=limit)
         for object in objects:
             obj_ids.append(object["id"])
+    log.debug("returning obj_ids: {}".format(obj_ids))
      
     # create hrefs 
     hrefs = []
@@ -835,11 +843,6 @@ async def GET_Groups(request):
     # validate that the requesting user has permission to read this domain
     aclCheck(domain_json, "read", username)  # throws exception if not authorized
 
-    if "root" in domain_json and domain_json["root"]:
-        rootid = domain_json["root"]
-    else:
-        rootid = None
-
     # get the groups collection list
     limit = None
     if "Limit" in request.GET:
@@ -858,9 +861,7 @@ async def GET_Groups(request):
         # get the dataset collection list
         objects = await get_collection(app, domain_json["root"], "groups", marker=marker, limit=limit)
         for object in objects:
-            # don't include root id in return collection
-            if object["id"] != rootid:
-                obj_ids.append(object["id"])
+            obj_ids.append(object["id"])
  
     # create hrefs 
     hrefs = []

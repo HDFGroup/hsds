@@ -222,27 +222,24 @@ def getRow(conn, objid, rootid=None, table=None):
         result["owner"] = row[5]
     
     return result
-"""
+
 # 
-# Get all objects with given root
+# Get all rows from rootTable
 #
-def getRootObjects(conn, root):
+def getRootObjects(conn):
     c = conn.cursor()
-    c.execute("SELECT * FROM ObjectTable WHERE id LIKE '{}%'".format(root))
+    c.execute("SELECT * FROM RootTable")
     all_rows = c.fetchall()
     results = []
     for row in all_rows:
-        key = row[0]
-        if key[38] != '#':
-            raise ValueError("Unexpected db key value: {}".format(key))
-        objid = key[39:]
-        result = {"id": objid}
+        rootid = row[0]
+        result = {"id": rootid}
         result["etag"] = row[1]
         result["size"] = row[2]
         result["lastModified"] = row[3]
         results.append(result)
     return results
-"""
+
 
 
 #
@@ -277,10 +274,12 @@ def getDomains(conn, prefix, limit=None, marker=None):
 #
 # Get all chunks for given dataset
 #
-def getDatasetChunks(conn, dsetid):
+def getDatasetChunks(conn, dsetid, limit=None):
     c = conn.cursor()
     chunkid_prefix = "c" + dsetid[1:]
     query = "SELECT * FROM ChunkTable WHERE id LIKE '{}%'".format(chunkid_prefix)
+    if limit:
+        query += " LIMIT {}".format(limit)
     c.execute(query)
     all_rows = c.fetchall()
     results = {}

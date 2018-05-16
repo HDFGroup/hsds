@@ -59,7 +59,6 @@ class DomainTest(unittest.TestCase):
         
         req = helper.getEndpoint() + '/'
         rsp = requests.get(req, headers=headers)
-        print("Status: ", rsp.status_code)
         if rsp.status_code != 200:
             print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
             return  # abort rest of test
@@ -169,8 +168,8 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rspJson["class"], "domain")
         
         root_uuid = rspJson["root"]
+        
         helper.validateId(root_uuid)
-        print(rspJson)
 
         self.assertTrue("num_groups" in rspJson)
         self.assertEqual(rspJson["num_groups"], 5)
@@ -182,9 +181,7 @@ class DomainTest(unittest.TestCase):
         # test that allocated_bytes falls in a given range
         self.assertTrue(rspJson["allocated_bytes"] > 5000)  
         self.assertTrue(rspJson["allocated_bytes"] < 6000)  
-         
- 
-        
+             
 
     def testGetTopLevelDomain(self):
         domain = "/home"
@@ -442,6 +439,7 @@ class DomainTest(unittest.TestCase):
              self.assertTrue(k in rspJson)
 
         root_id = rspJson["root"]
+        print("root_id:", root_id)
         helper.validateId(root_id)
 
         # get the datasets collection
@@ -722,7 +720,6 @@ class DomainTest(unittest.TestCase):
             rspJson = json.loads(rsp.text)
             self.assertTrue("domains" in rspJson)
             domains = rspJson["domains"]
-            print("domains:", domains)
         
             domain_count = len(domains)
             if domain_count == 0:
