@@ -40,6 +40,8 @@ SERVER_NAME=${SERVER_NAME:='Highly Scalable Data Service (HSDS)'}
 #ANONYMOUS_TTL=${ANONYMOUS_TTL:=600}
 ANONYMOUS_TTL=${ANONYMOUS_TTL:=0}
 
+DB_HOST_DIR=${DB_HOST_DIR:='/tmp'}
+
 
 #
 # run container given in arguments
@@ -74,6 +76,8 @@ elif [ $1 == "an" ]; then
   --env BUCKET_NAME=${BUCKET_NAME} \
   --env LOG_LEVEL=${LOG_LEVEL} \
   --env ANONYMOUS_TTL=${ANONYMOUS_TTL} \
+  --env DB_DIR=/data \
+  -v ${DB_HOST_DIR}:/data \
   --link hsds_head:hsds_head \
   hdfgroup/hsds
 elif [ $1 == "dn" ]; then
