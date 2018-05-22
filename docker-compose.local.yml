@@ -35,6 +35,8 @@ services:
       - BUCKET_NAME=${BUCKET_NAME}
       - LOG_LEVEL=${LOG_LEVEL}
       - ANONYMOUS_TTL=${ANONYMOUS_TTL}
+    volumes:
+      - ${DB_HOST_DIR}:/data
     depends_on:
       - head
     ports:
@@ -67,7 +69,7 @@ services:
       - SN_PORT=${SN_PORT}
       - NODE_TYPE=sn
       - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
-      - AWS_DYNAMODB_GATEWAY=${AWS_DYNAMODB_GATEWAY}
+      - AWS_DYNAMODB_GATEWAY=''
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_REGION=${AWS_REGION}
