@@ -10,22 +10,113 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import base64
+import json
 import binascii
+import subprocess
+import datetime
+from botocore.exceptions import ClientError
 from aiohttp.errors import HttpBadRequest, HttpProcessingError
 import hsds_logger as log
+import config
 
-def initUserDB(app, password_file):
+
+def getDynamoDBClient(app):
+    """ Return dynamodb handle
     """
-    Called at startup to initialize user/passwd dictionary from a password text file
+    if "session" not in app:
+        # app startup should have set this
+        raise KeyError("Session not initialized")
+    session = app["session"]
+
+    if "dynamodb" in app:
+        if "token_expiration" in app:
+            # check that our token is not about to expire
+            expiration = app["token_expiration"]
+            now = datetime.datetime.now()
+            delta = expiration - now
+            if delta.total_seconds() > 10:
+                return app["dynamodb"]
+            # otherwise, fall through and get a new token
+            log.info("DynamoDB access token has expired - renewing")
+        else:
+            return app["dynamodb"]
+    
+    # first time setup of s3 client or limited time token has expired
+    aws_region = config.get("aws_region")
+    aws_secret_access_key = None
+    aws_access_key_id = None 
+    aws_session_token = None
+    aws_iam_role = config.get("aws_iam_role")
+    log.info("using iam role: {}".format(aws_iam_role))
+    aws_secret_access_key = config.get("aws_secret_access_key")
+    aws_access_key_id = config.get("aws_access_key_id")
+    if not aws_secret_access_key or aws_secret_access_key == 'xxx':
+        log.info("aws secret access key not set")
+        aws_secret_access_key = None
+    if not aws_access_key_id or aws_access_key_id == 'xxx':
+        log.info("aws access key id not set")
+        aws_access_key_id = None
+  
+    if aws_iam_role and not aws_secret_access_key:
+        # TODO - refactor with similar code in s3Util
+        log.info("getted EC2 IAM role credentials")
+        # Use EC2 IAM role to get credentials
+        # See: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html?icmpid=docs_ec2_console
+        curl_cmd = ["curl", "http://169.254.169.254/latest/meta-data/iam/security-credentials/{}".format(aws_iam_role)]
+        p = subprocess.run(curl_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if p.returncode != 0:
+            msg = "Error getting IAM role credentials: {}".format(p.stderr)
+            log.error(msg)
+        else:
+            stdout = p.stdout.decode("utf-8")
+            try:
+                cred = json.loads(stdout)
+                aws_secret_access_key = cred["SecretAccessKey"]
+                aws_access_key_id = cred["AccessKeyId"]
+                log.info("Got ACCESS_KEY_ID: {} from EC2 metadata".format(aws_access_key_id))     
+                aws_session_token = cred["Token"]
+                log.info("Got Expiration of: {}".format(cred["Expiration"]))
+                expiration_str = cred["Expiration"][:-1] + "UTC" # trim off 'Z' and add 'UTC'
+                # save the expiration
+                app["token_expiration"] = datetime.datetime.strptime(expiration_str, "%Y-%m-%dT%H:%M:%S%Z")
+            except json.JSONDecodeError:
+                msg = "Unexpected error decoding EC2 meta-data response"
+                log.error(msg)
+            except KeyError:
+                msg = "Missing expected key from EC2 meta-data response"
+                log.error(msg)
+       
+    dynamodb_gateway = config.get('aws_dynamodb_gateway')
+    if not dynamodb_gateway:
+        msg="Invalid aws dynamodb gateway"
+        log.error(msg)
+        raise ValueError(msg)
+    use_ssl = False
+    if dynamodb_gateway.startswith("https"):
+        use_ssl = True
+    dynamodb = session.create_client('dynamodb', region_name=aws_region,
+                                   aws_secret_access_key=aws_secret_access_key,
+                                   aws_access_key_id=aws_access_key_id,
+                                   aws_session_token=aws_session_token,
+                                   endpoint_url=dynamodb_gateway,
+                                   use_ssl=use_ssl)
+
+    app['dynamodb'] = dynamodb  # save so same client can be returned in subsiquent calls
+
+    return dynamodb
+
+def releaseDynamoDBClient(app):
+    """ release the client collection to dynamoDB
+     (Used for cleanup on application exit)
     """
-    log.info("initUserDB")
-    if "user_db" in app:
-        msg = "user_db already initilized"
-        log.warn(msg)
-        return
+    if 'dynamodb' in app:
+        client = app['dynamodb']
+        client.close()
+        del app['dynamodb']
+
+def loadPasswordFile(password_file):
     log.info("using password file: {}".format(password_file))
     line_number = 0
-    user_count = 0
     user_db = {}
     try:
         with open(password_file) as f:
@@ -54,15 +145,77 @@ def initUserDB(app, password_file):
                     continue
                 user_db[username] = {"pwd": passwd}                
                 log.info("added user: {}".format(username))
-                user_count += 1
     except FileNotFoundError:
         log.error("unable to open password file")
+    return user_db
+
+def initUserDB(app):
+    """
+    Called at startup to initialize user/passwd dictionary from a password text file
+    """
+    log.info("initUserDB")
+    if "user_db" in app:
+        msg = "user_db already initilized"
+        log.warn(msg)
+        return
+ 
+    if config.get("AWS_DYNAMODB_GATEWAY") and config.get("AWS_DYNAMODB_USERS_TABLE"):
+        # user entries will be obtained dynamicaly
+        log.info("Getting DynamoDB client")
+        getDynamoDBClient(app)  # get client here so any errors will be seen right away
+        user_db = {}
+    else:
+        password_file = config.get("password_file")
+        log.info("Loading password file: {}".format(password_file))
+        user_db = loadPasswordFile(password_file)
+
     app["user_db"] = user_db
-    log.info("added: {} users".format(user_count))
     
+    log.info("user_db initialized: {} users".format(len(user_db)))
+ 
 
+async def validateUserPasswordDynamoDB(app, user_name, password):
+    """
+    validateUserPassword: verify user and password.
+        throws exception if not valid
+    Note: make this async since we'll eventually need some sort of http request to validate user/passwords
+    """
+    user_db = app["user_db"]    
+    if user_name not in user_db:
+        # look up name in dynamodb table
+        dynamodb = getDynamoDBClient(app)
+        table_name = config.get("AWS_DYNAMODB_USERS_TABLE")  
+        log.info("looking for user: {} in DynamoDB table: {}".format(user_name, table_name))
+        try:
+            response = await dynamodb.get_item(
+                TableName=table_name,
+                Key={'username': {'S': user_name}}
+            )
+        except ClientError as e:
+            log.error("Unable to read dyanamodb table: {}".format(e.response['Error']['Message']))
+            raise HttpProcessingError(code=500, message="Unexpected Error")
+        if "Item" not in response:
+            log.info("user: {} not found".format(user_name))
+            raise HttpProcessingError(code=401, message="provide user and password")
+        item = response['Item']
+        if "password" not in item:
+            log.error("Expected to find password key in DynamoDB table")
+            raise HttpProcessingError(code=500, message="Unexpected Error")
+        password_item = item["password"]
+        if 'S' not in password_item:
+            log.error("Expected to find 'S' key for password item")
+            raise HttpProcessingError(code=500, message="Unexpected Error")
+        log.debug("password: {}".format(password_item))
+        if password_item['S'] != password:
+            log.info("user password is not valid")
+            raise HttpProcessingError(code=401, message="provide user and password")
+        # add user/password to user_db map
+        # TODO - have the entry expire after x minutes
+        log.info("Saving user/password to user_db")
+        user_data = {"pwd": password}
+        user_db[user_name] = user_data
 
-def validateUserPassword(app, user_name, password):
+async def validateUserPassword(app, user_name, password):
     """
     validateUserPassword: verify user and password.
         throws exception if not valid
@@ -83,8 +236,12 @@ def validateUserPassword(app, user_name, password):
         raise HttpProcessingError(code=500, message=msg)
     user_db = app["user_db"]    
     if user_name not in user_db:
-        log.info("user not found")
-        raise HttpProcessingError(code=401, message="provide user and password")
+        if config.get("AWS_DYNAMODB_USERS_TABLE"):
+            # look up in Dyanmo db - will throw exception if user not found
+            await validateUserPasswordDynamoDB(app, user_name, password)
+        else:
+            log.info("user not found")
+            raise HttpProcessingError(code=401, message="provide user and password")
 
     user_data = user_db[user_name] 
     

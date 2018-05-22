@@ -155,7 +155,8 @@ if __name__ == '__main__':
         app['allow_noauth'] = True
     else:
         app['allow_noauth'] = False
-    initUserDB(app, config.get("password_file"))
+
+    initUserDB(app)
 
     # run background task
     asyncio.ensure_future(healthCheck(app), loop=loop)

@@ -71,7 +71,7 @@ async def GET_Datatype(request):
     if username is None and app['allow_noauth']:
         username = "default"
     else:
-        validateUserPassword(app, username, pswd)
+        await validateUserPassword(app, username, pswd)
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
@@ -129,7 +129,7 @@ async def POST_Datatype(request):
 
     username, pswd = getUserPasswordFromRequest(request)
     # write actions need auth
-    validateUserPassword(app, username, pswd)
+    await validateUserPassword(app, username, pswd)
 
     if not request.has_body:
         msg = "POST Datatype with no body"
@@ -226,7 +226,7 @@ async def DELETE_Datatype(request):
         raise HttpBadRequest(message=msg)
 
     username, pswd = getUserPasswordFromRequest(request)
-    validateUserPassword(app, username, pswd)
+    await validateUserPassword(app, username, pswd)
     
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):

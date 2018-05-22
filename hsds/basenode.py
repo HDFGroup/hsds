@@ -181,7 +181,7 @@ async def about(request):
     app = request.app
     (username, pswd) = getUserPasswordFromRequest(request)
     if username:
-        validateUserPassword(app, username, pswd)
+        await validateUserPassword(app, username, pswd)
     resp = StreamResponse()
     resp.headers['Content-Type'] = 'application/json'
     answer = {}

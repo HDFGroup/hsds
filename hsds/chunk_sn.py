@@ -396,7 +396,7 @@ async def PUT_Value(request):
         raise HttpBadRequest(message=msg)
 
     username, pswd = getUserPasswordFromRequest(request)
-    validateUserPassword(app, username, pswd)
+    await validateUserPassword(app, username, pswd)
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
@@ -713,7 +713,7 @@ async def GET_Value(request):
     if username is None and app['allow_noauth']:
         username = "default"
     else:
-        validateUserPassword(app, username, pswd)
+        await validateUserPassword(app, username, pswd)
      
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
@@ -951,7 +951,7 @@ async def POST_Value(request):
     if username is None and app['allow_noauth']:
         username = "default"
     else:
-        validateUserPassword(app, username, pswd)
+        await validateUserPassword(app, username, pswd)
      
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):

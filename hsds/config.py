@@ -21,6 +21,8 @@ cfg = {
     'hsds_endpoint': '', # used for hateos links in response
     'head_endpoint': '', # optionally used for nodes to register
     'aws_s3_gateway': 'https://s3.amazonaws.com',  
+    'aws_dynamodb_gateway': 'https://dynamodb.us-east-1.amazonaws.com',
+    'aws_dynamodb_users_table': '',
     'bucket_name': 'hdfgroup_hsdsdev',
     'sys_bucket_name': '',
     'head_host': 'localhost',
@@ -69,7 +71,7 @@ def get(x):
     if not retval and  x.upper() in os.environ:
         retval = os.environ[x.upper()]
     # no command line override, just return the cfg value  
-    if not retval:    
+    if not retval and x in cfg:    
         retval = cfg[x]
     if isinstance(retval, str) and len(retval) > 1 and retval[-1] in ('g', 'm', 'k') and retval[:-1].isdigit():
         # convert values like 512m to corresponding integer
