@@ -2,7 +2,7 @@
 
 admin_passwd=$(echo admin |md5sum | awk '{print $1}')
 
-echo 'admin':$admin_passwd >> /home/ubuntu/hsds/admin/config/passwd.txt
+#echo 'admin':$admin_passwd >> /home/ubuntu/hsds/admin/config/passwd.txt
 
 aws dynamodb put-item --table-name $2 --item '{"username": {"S": "admin"}, "password": {"S": "'$admin_passwd'"}}' --region $3
 
@@ -15,7 +15,7 @@ do
 passwd=$(echo $username |md5sum | awk '{print $1}')
 
 # Store into textfile. NOTE: to be deprecated
-echo $username:$passwd >> /home/ubuntu/hsds/admin/config/passwd.txt
+#echo $username:$passwd >> /home/ubuntu/hsds/admin/config/passwd.txt
 
 # Store credentials in dynamoDB
 aws dynamodb put-item --table-name $2 --item '{"username": {"S": "'$username'"}, "password": {"S": "'$passwd'"}}' --region $3
