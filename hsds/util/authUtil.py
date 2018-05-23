@@ -10,6 +10,7 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import base64
+import hashlib
 import json
 import binascii
 import subprocess
@@ -164,6 +165,9 @@ def initUserDB(app):
         log.info("Getting DynamoDB client")
         getDynamoDBClient(app)  # get client here so any errors will be seen right away
         user_db = {}
+    elif config.get("PASSWORD_SALT"):
+        # use salt key to verify passwords
+        user_db = {}
     else:
         password_file = config.get("password_file")
         log.info("Loading password file: {}".format(password_file))
@@ -174,28 +178,28 @@ def initUserDB(app):
     log.info("user_db initialized: {} users".format(len(user_db)))
  
 
-async def validateUserPasswordDynamoDB(app, user_name, password):
+async def validateUserPasswordDynamoDB(app, username, password):
     """
     validateUserPassword: verify user and password.
         throws exception if not valid
     Note: make this async since we'll eventually need some sort of http request to validate user/passwords
     """
     user_db = app["user_db"]    
-    if user_name not in user_db:
+    if username not in user_db:
         # look up name in dynamodb table
         dynamodb = getDynamoDBClient(app)
         table_name = config.get("AWS_DYNAMODB_USERS_TABLE")  
-        log.info("looking for user: {} in DynamoDB table: {}".format(user_name, table_name))
+        log.info("looking for user: {} in DynamoDB table: {}".format(username, table_name))
         try:
             response = await dynamodb.get_item(
                 TableName=table_name,
-                Key={'username': {'S': user_name}}
+                Key={'username': {'S': username}}
             )
         except ClientError as e:
             log.error("Unable to read dyanamodb table: {}".format(e.response['Error']['Message']))
             raise HttpProcessingError(code=500, message="Unexpected Error")
         if "Item" not in response:
-            log.info("user: {} not found".format(user_name))
+            log.info("user: {} not found".format(username))
             raise HttpProcessingError(code=401, message="provide user and password")
         item = response['Item']
         if "password" not in item:
@@ -207,48 +211,64 @@ async def validateUserPasswordDynamoDB(app, user_name, password):
             raise HttpProcessingError(code=500, message="Unexpected Error")
         log.debug("password: {}".format(password_item))
         if password_item['S'] != password:
-            log.info("user password is not valid")
+            log.warn("user password is not valid for user: {}".format(username))
             raise HttpProcessingError(code=401, message="provide user and password")
         # add user/password to user_db map
         # TODO - have the entry expire after x minutes
-        log.info("Saving user/password to user_db")
+        log.info("Saving user/password to user_db for: {}".format(username))
         user_data = {"pwd": password}
-        user_db[user_name] = user_data
+        user_db[username] = user_data
 
-async def validateUserPassword(app, user_name, password):
+def validatePasswordSHA512(app, username, password):
+    user_db = app["user_db"] 
+    if username not in user_db:
+        log.info("SHA512 check for username: {}".format(username))
+        salt = config.get("PASSWORD_SALT")
+        hex_hash = hashlib.sha512(username.encode('utf-8') + salt.encode('utf-8')).hexdigest()
+        if hex_hash[:32] != password:
+            log.warn("user password is not valid (didn't equal sha512 hash) for user: {}".format(username))
+            raise HttpProcessingError(code=401, message="provide user and password")
+        log.info("Saving user/password to user_db for: {}".format(username))
+        user_data = {"pwd": password}
+        user_db[username] = user_data
+
+
+async def validateUserPassword(app, username, password):
     """
     validateUserPassword: verify user and password.
         throws exception if not valid
     Note: make this async since we'll eventually need some sort of http request to validate user/passwords
     """
     
-    if not user_name:
+    if not username:
         log.info('validateUserPassword - null user')
         raise HttpBadRequest("provide user name and password")
     if not password:
         log.info('isPasswordValid - null password')
         raise HttpBadRequest("provide  password")
 
-    log.debug("looking up username: {}".format(user_name))
+    log.debug("looking up username: {}".format(username))
     if "user_db" not in app:
         msg = "user_db not intialized"
         log.error(msg)
         raise HttpProcessingError(code=500, message=msg)
     user_db = app["user_db"]    
-    if user_name not in user_db:
+    if username not in user_db:
         if config.get("AWS_DYNAMODB_USERS_TABLE"):
             # look up in Dyanmo db - will throw exception if user not found
-            await validateUserPasswordDynamoDB(app, user_name, password)
+            await validateUserPasswordDynamoDB(app, username, password)
+        elif config.get("PASSWORD_SALT"):
+            validatePasswordSHA512(app, username, password)
         else:
             log.info("user not found")
             raise HttpProcessingError(code=401, message="provide user and password")
 
-    user_data = user_db[user_name] 
+    user_data = user_db[username] 
     
     if user_data['pwd'] == password:
         log.debug("user  password validated")
     else:
-        log.info("user password is not valid")
+        log.info("user password is not valid for user: {}".format(username))
         raise HttpProcessingError(code=401, message="provide user and password")
 
 

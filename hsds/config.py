@@ -23,6 +23,7 @@ cfg = {
     'aws_s3_gateway': 'https://s3.amazonaws.com',  
     'aws_dynamodb_gateway': 'https://dynamodb.us-east-1.amazonaws.com',
     'aws_dynamodb_users_table': '',
+    'password_salt': '',
     'bucket_name': 'hdfgroup_hsdsdev',
     'sys_bucket_name': '',
     'head_host': 'localhost',

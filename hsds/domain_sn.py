@@ -181,7 +181,6 @@ async def get_domains(request):
     req = an_url + "/domains"
     log.debug("get /domains: {}".format(params))
     obj_json = await http_get_json(app, req, params=params)
-    log.info("got /domains {}: {}".format(params["prefix"], obj_json))
     if "domains" in obj_json:
         domains = obj_json["domains"]
     else:

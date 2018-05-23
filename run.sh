@@ -113,6 +113,9 @@ elif [ $1 == "sn" ]; then
         --env NODE_TYPE="sn"  \
         --env AWS_S3_GATEWAY=${AWS_S3_GATEWAY} \
         --env AWS_REGION=${AWS_REGION} \
+        --env AWS_DYNAMODB_GATEWAY=${AWS_DYNAMODB_GATEWAY} \
+        --env AWS_DYNAMODB_USERS_TABLE=${AWS_DYNAMODB_USERS_TABLE} \
+        --env PASSWORD_SALT=${PASSWORD_SALT} \
         --env AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
         --env AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
         --env BUCKET_NAME=${BUCKET_NAME} \
