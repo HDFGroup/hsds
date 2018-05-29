@@ -20,6 +20,8 @@ DOMAIN_SUFFIX = "/.domain.json"  # key suffix used to hold domain info
 def isIPAddress(s):
     """Return True if the string looks like an IP address:
         n.n.n.n where n is between 0 and 255 """
+    if not s:
+        return False
     # see if there is a port specifier
     if s.find(':') > 0:
         return True
