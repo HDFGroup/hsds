@@ -20,6 +20,8 @@ DOMAIN_SUFFIX = "/.domain.json"  # key suffix used to hold domain info
 def isIPAddress(s):
     """Return True if the string looks like an IP address:
         n.n.n.n where n is between 0 and 255 """
+    if not s:
+        return False
     # see if there is a port specifier
     if s.find(':') > 0:
         return True
@@ -166,10 +168,13 @@ def getDomainFromRequest(request, domain_path=False, validate=True):
     else:
         if 'host' in request.GET:
             domain = request.GET['host']
+        elif "X-Hdf-domain" in request.headers:
+            domain = request.headers['X-Hdf-domain']
+        elif "X-Forwarded-Host" in request.headers:
+            domain = request.headers["X-Forwarded-Host"]
         else:
             domain = request.host
-            if "X-Forwarded-Host" in request.headers:
-                domain = request.headers["X-Forwarded-Host"]
+            
     if domain and not domain.find('/') > -1:  #DNS style host
         if domain_path and validate:
             raise ValueError("Domain paths can not be DNS-style")

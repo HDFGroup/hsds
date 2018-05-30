@@ -86,5 +86,15 @@ Using the following procedure to import test files into hsds
 5. Create a test folder on HSDS: `$ hstouch -u test_user1 -p <passwd> /home/test_user1/test/` 
 6. Import into hsds: `$ hsload -v -u test_user1 -p <passwd> tall.h5 /home/test_user1/test/tall.h5`
 7. Verify upload: `$ hsls -r -u test_user1 -p <passwd> /home/test_user1/test/tall.h5
+
+Installing Software Updates
+---------------------------
+
+To get the latest codes changes from the HSDS repo do the following:
+
+1. Shutdown the service: `$ stopall.sh`
+2. Get code changes: `$ git pull`
+3. Build a new Docker image: `$ ./build.sh --nolint`
+4. Start the service: `$ ./runall.sh 4 s3`  
  
 

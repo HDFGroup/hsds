@@ -38,7 +38,7 @@ class DomainTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         
         # verify that passing domain as query string works as well
-        del headers["host"]
+        del headers["X-Hdf-domain"]
         req += "?host=" + self.base_domain
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -80,7 +80,7 @@ class DomainTest(unittest.TestCase):
         helper.validateId(root_uuid)
 
         # verify that passing domain as query string works as well
-        del headers["host"]
+        del headers["X-Hdf-domain"]
         params = {"host": domain}
         rsp = requests.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)

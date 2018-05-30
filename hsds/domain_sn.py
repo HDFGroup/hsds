@@ -21,7 +21,7 @@ from util.idUtil import  getDataNodeUrl, createObjId
 #from util.s3Util import getS3Keys
 from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
-from util.domainUtil import getParentDomain, getDomainFromRequest, isIPAddress
+from util.domainUtil import getParentDomain, getDomainFromRequest
 from servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath
 from basenode import getAsyncNodeUrl
 import hsds_logger as log
@@ -212,6 +212,7 @@ async def GET_Domains(request):
  
 async def GET_Domain(request):
     """HTTP method to return JSON for given domain"""
+    print("GET_Domain, headers:", request.headers)
     log.request(request)
     app = request.app
 
@@ -221,13 +222,23 @@ async def GET_Domain(request):
     else:
         await validateUserPassword(app, username, pswd)
 
-    if "domain" not in request.GET and "host" not in request.GET and isIPAddress(request.host):
+    domain = None
+    try:
+        domain = getDomainFromRequest(request)
+    except ValueError:
+        msg = "Invalid domain"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+
+    if not domain: 
+        log.info("no domain passed in, returning all top-level domains")
         # no domain passed in, return top-level domains for this request
         domains = await get_domains(request)
         rsp_json = {"domains": domains}
         rsp_json["hrefs"] = []
         resp = await jsonResponse(request, rsp_json)
         log.response(request, resp=resp)
+        return resp
 
     try:
         domain = getDomainFromRequest(request)

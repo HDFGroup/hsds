@@ -75,7 +75,7 @@ def getRequestHeaders(domain=None, username=None, password=None, **kwargs):
         password = config.get("user_password")
     headers = { }
     if domain is not None:
-        headers['host'] = domain
+        headers['X-Hdf-domain'] = domain.encode('utf-8')
     if username and password:
         auth_string = username + ':' + password
         auth_string = auth_string.encode('utf-8')
