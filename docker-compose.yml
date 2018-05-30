@@ -84,15 +84,25 @@ services:
     ports:
       - ${SN_PORT}
   proxy:
-    image: jwilder/nginx-proxy
+    image: nginx
     container_name: hsds_proxy
     volumes:
-    - /var/run/docker.sock:/tmp/docker.sock:ro
-    depends_on:
-      - sn
-      - dn
+      - /etc/nginx/certs
+      - /etc/nginx/conf.d
+      - /etc/nginx/vhost.d
+      - /usr/share/nginx/html
+      - /var/run/docker.sock:/tmp/docker.sock:ro
     ports:
       - "80:80"
+  dockergen:
+    image: jwilder/docker-gen
+    container_name: hsds_gen
+    command: -notify-sighup hsds_proxy -watch /etc/docker-gen/templates/nginx.tmpl /etc/nginx/conf.d/default.conf
+    volumes_from:
+      - proxy
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - ./nginx.tmpl:/etc/docker-gen/templates/nginx.tmpl
   logs:
     image: mdsol/logspout
     command: cloudwatch://auto
