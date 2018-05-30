@@ -67,7 +67,6 @@ class GroupTest(unittest.TestCase):
 
     def testGet(self):
         domain = helper.getTestDomain("tall.h5")
-        print("testGetDomain", domain)
         
         headers = helper.getRequestHeaders(domain=domain)
         
@@ -79,6 +78,7 @@ class GroupTest(unittest.TestCase):
             return  # abort rest of test
          
         rspJson = json.loads(rsp.text)
+         
         grp_uuid = root_uuid = rspJson["root"]
         self.assertTrue(grp_uuid.startswith("g-"))
 

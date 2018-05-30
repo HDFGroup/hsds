@@ -12,8 +12,8 @@
 import os
 
 cfg = {
-    #'hsds_endpoint': 'http://cf.hdf.test:5000',
-    'hsds_endpoint': 'http://192.168.99.100:5101',
+    'hsds_endpoint': 'http://cf.hdf.test:5000',
+    #'hsds_endpoint': 'http://192.168.99.100:5101',
     'head_endpoint': 'http://cf.hdf.test:5100',
     'user_name': 'test_user1',
     'user_password': 'test',
