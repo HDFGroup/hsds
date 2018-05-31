@@ -105,7 +105,7 @@ services:
     image: jrcs/letsencrypt-nginx-proxy-companion
     container_name: hsds_certs
     environment:
-    - ACME_CA_URI=https://acme-staging.api.letsencrypt.org/directory
+    #- ACME_CA_URI=https://acme-staging.api.letsencrypt.org/directory
     - NGINX_DOCKER_GEN_CONTAINER=hsds_gen
     volumes:
     - "/var/run/docker.sock:/var/run/docker.sock:ro"
