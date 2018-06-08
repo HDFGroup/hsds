@@ -110,6 +110,15 @@ services:
       - dn
     ports:
       - "5000:80"
+    dockergen:
+    image: jwilder/docker-gen
+    container_name: hsds_gen
+   command: -notify-sighup hsds_proxy -watch /etc/docker-gen/templates/nginx.tmpl /etc/nginx/conf.d/default.conf
+   volumes_from:
+      - proxy
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - ./nginx.tmpl:/etc/docker-gen/templates/nginx.tmpl
   # proxy:
   #   image: nginx
   #   container_name: hsds_proxy
