@@ -91,15 +91,17 @@ async def healthCheck(app):
          
         log.info("putS3JSONObj complete")
         fail_count = 0
-        HEALTH_CHECK_RETRY_COUNT = 3 # times to try before calling a node dead
+        HEALTH_CHECK_RETRY_COUNT = 1 # times to try before calling a node dead
         for node in nodes:         
             if node["host"] is None:
+                fail_count += 1
                 continue
             url = getUrl(node["host"], node["port"]) + "/info"  
             try:
                 rsp_json = await http_get_json(app, url)
                 if "node" not in rsp_json:
                     log.error("Unexpected response from node")
+                    fail_count += 1
                     continue
                 node_state = rsp_json["node"]
                 node_id = node_state["id"]
@@ -108,17 +110,17 @@ async def healthCheck(app):
                     log.warn("unexpected node_id: {} (expecting: {})".format(node_id, node['id']))
                     node['host'] = None
                     node['id'] = None
-                    if app["cluster_state"] != "INITIALIZING":
-                        log.warn("setting cluster state to INITIALIZING")
-                        app["cluster_state"] = "INITIALIZING"
-                elif 'number' in node_state and node_state['number'] != node['node_number']:
+                    fail_count += 1
+                    continue
+
+                if 'number' in node_state and node_state['number'] != node['node_number']:
                     msg = "unexpected node_number got {} (expecting: {})"
                     log.warn(msg.format(node_state["number"], node['node_number']))
                     node['host'] = None
                     node['id'] = None
-                    if app["cluster_state"] != "INITIALIZING":
-                        log.warn("setting cluster state to INITIALIZING")
-                        app["cluster_state"] = "INITIALIZING"
+                    fail_count += 1
+                    continue
+                    
                 # save off other useful info from the node
                 app_node_stats = app["node_stats"]
                 node_stats = {}
@@ -133,8 +135,7 @@ async def healthCheck(app):
                 # node has gone away?
                 node["failcount"] += 1
                 if node["failcount"] >= HEALTH_CHECK_RETRY_COUNT:
-                    log.warn("removing {}:{} from active list".format(node["host"], node["port"]))
-                    node["host"] = None
+                    log.warn("node {}:{} not responding".format(node["host"], node["port"]))
                     fail_count += 1
                 
             except HttpProcessingError as hpe:
@@ -143,7 +144,6 @@ async def healthCheck(app):
                 node["failcount"] += 1
                 if node["failcount"] >= HEALTH_CHECK_RETRY_COUNT:
                     log.warn("removing {}:{} from active list".format(node["host"], node["port"]))
-                    node["host"] = None
                     fail_count += 1
             except TimeoutError as toe:
                 log.warn("Timeout error for req: {}: {}".format(url, str(toe)))
@@ -151,13 +151,16 @@ async def healthCheck(app):
                 node["failcount"] += 1
                 if node["failcount"] >= HEALTH_CHECK_RETRY_COUNT:
                     log.warn("removing {}:{} from active list".format(node["host"], node["port"]))
-                    node["host"] = None
                     fail_count += 1
+        log.info("node health check fail_count: {}".format(fail_count))
         if fail_count > 0:
             if app["cluster_state"] == "READY":
                 # go back to INITIALIZING state until another node is registered
                 log.warn("Fail_count > 0, Setting cluster_state from READY to INITIALIZING")
                 app["cluster_state"] = "INITIALIZING"
+        elif fail_count == 0 and app["cluster_state"] != "READY":
+            log.info("All nodes healthy, changing cluster state to READY")
+            app["cluster_state"] = "READY"
 
         
 
@@ -384,6 +387,8 @@ async def init(loop):
     app["start_time"] = int(time.time())  # seconds after epoch 
     app["target_sn_count"] = int(config.get("target_sn_count"))
     app["target_dn_count"] = int(config.get("target_dn_count"))
+    log.info("target_sn_count: {}".format(app["target_sn_count"]))
+    log.info("target_dn_count: {}".format(app["target_dn_count"]))
     bucket_name = config.get("sys_bucket_name")
     if not bucket_name:
         # use a combine data/sys bucket
