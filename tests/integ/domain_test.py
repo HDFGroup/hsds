@@ -455,6 +455,7 @@ class DomainTest(unittest.TestCase):
         datasets = rspJson["datasets"]
         for objid in datasets:
             helper.validateId(objid)
+            print("="+objid)
         self.assertEqual(len(datasets), 4)
 
         # get the first 2 datasets
@@ -467,9 +468,12 @@ class DomainTest(unittest.TestCase):
         batch = rspJson["datasets"]
         self.assertEqual(len(batch), 2)
         helper.validateId(batch[0])
+        print(">" + batch[0])
+        print(">" + batch[1])
         self.assertEqual(batch[0], datasets[0])
         helper.validateId(batch[1])
         self.assertEqual(batch[1], datasets[1])
+        
         # next batch
         params["Marker"] = batch[1]
         rsp = requests.get(req, params=params, headers=headers)
@@ -734,6 +738,7 @@ class DomainTest(unittest.TestCase):
             for item in domains:
                 self.assertTrue("name" in item)
                 name = item["name"]
+                print(name)
                 self.assertEqual(name[0], '/')
                 self.assertTrue(name[-1] != '/')
                 self.assertTrue("owner" in item)
