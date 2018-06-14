@@ -79,7 +79,7 @@ services:
       - VIRTUAL_PORT=${SN_PORT}
       - HSDS_ENDPOINT=${PUBLIC_DNS}
       - SN_HOST=${PUBLIC_DNS}
-      - PASSWORD_SALE=${PASSWORD_SALT}
+      - PASSWORD_SALT=${PASSWORD_SALT}
     depends_on:
       - an
     ports:
