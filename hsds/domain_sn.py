@@ -114,8 +114,13 @@ async def get_collection(app, root_id, collection, marker=None, limit=None):
     
     obj_col = root[collection]
 
-    rows = []
+    obj_ids = []
     for obj_id in obj_col:
+        obj_ids.append(obj_id)
+    obj_ids.sort()  # sort keys 
+
+    rows = []
+    for obj_id in obj_ids:
         object = obj_col[obj_id]
         object["id"] = obj_id
         # expected keys:
@@ -212,7 +217,6 @@ async def GET_Domains(request):
  
 async def GET_Domain(request):
     """HTTP method to return JSON for given domain"""
-    print("GET_Domain, headers:", request.headers)
     log.request(request)
     app = request.app
 
@@ -352,6 +356,10 @@ async def PUT_Domain(request):
     # yet exist
     username, pswd = getUserPasswordFromRequest(request) # throws exception if user/password is not valid
     await validateUserPassword(app, username, pswd)
+
+    # inital perms for owner and default
+    owner_perm = {'create': True, 'read': True, 'update': True, 'delete': True, 'readACL': True, 'updateACL': True } 
+    default_perm = {'create': False, 'read': True, 'update': False, 'delete': False, 'readACL': False, 'updateACL': False } 
     
     try:
         domain = getDomainFromRequest(request)
@@ -364,8 +372,8 @@ async def PUT_Domain(request):
 
     parent_domain = getParentDomain(domain)
 
-    if not parent_domain:
-        msg = "creation of top-level domains is not supported"
+    if not parent_domain and username != "admin":
+        msg = "creation of top-level domains is only supported by admin users"
         log.warn(msg)
         raise HttpBadRequest(message=msg)
     log.debug("parent_domain: {}".format(parent_domain))
@@ -386,12 +394,19 @@ async def PUT_Domain(request):
 
     body = None
     is_folder = False
+    owner = username
     if request.has_body:
         body = await request.json()   
         log.debug("PUT domain with body: {}".format(body))
         if body and "folder" in body:
             if body["folder"]:
                 is_folder = True
+        if body and "owner" in body:
+            owner = body["owner"]
+
+    if owner != username and username != "admin":
+        log.warn("Only admin users are allowed to set owner for new domains");   
+        raise HttpProcessingError(code=403, message="Forbidden")
 
     aclCheck(parent_json, "create", username)  # throws exception if not allowed
     
@@ -415,10 +430,21 @@ async def PUT_Domain(request):
  
     domain_json = { }
 
+    if parent_json:
+        domain_acls = parent_json["acls"]  # copy parent acls to new domain
+        if owner not in domain_acls:
+            domain_acls[owner] = owner_perm
+    else:
+        domain_acls = {}
+        # owner gets full control
+        domain_acls[owner] = owner_perm
+        # for top-level folders, make the folder public read
+        domain_acls["default"] =  default_perm
+
     # construct dn request to create new domain
     req = getDataNodeUrl(app, domain)
     req += "/domains" 
-    body = { "owner": username, "domain": domain }
+    body = { "owner": owner, "domain": domain }
     body["acls"] = parent_json["acls"]  # copy parent acls to new domain
 
     if not is_folder:

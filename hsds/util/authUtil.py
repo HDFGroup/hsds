@@ -312,6 +312,8 @@ def getUserPasswordFromRequest(request):
 
 def aclCheck(obj_json, req_action, req_user):
     log.info("aclCheck: {} for user: {}".format(req_action, req_user))
+    if req_user == "admin":
+        return  # allow admin user to do anything
     if obj_json is None:
         log.error("no acls found")
         raise HttpProcessingError(code=500, message="Unexpected error")

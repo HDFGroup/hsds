@@ -371,18 +371,12 @@ class DomainTest(unittest.TestCase):
     def testDeleteDomain(self):
         import os.path as op
         parent_domain = op.dirname(self.base_domain)
-        domain = parent_domain + "/deleteme.h6"
+    
+        domain = self.base_domain + "/deleteme.h6"
         print("testDeleteDomain", domain)
         
         headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/'
-
-        # do a get on the domain
-        rsp = requests.get(req, headers=headers)
-        if rsp.status_code == 200:
-            # delete the domain first
-            rsp = requests.delete(req, headers=headers)
-            self.assertEqual(rsp.status_code, 200)
 
         # create a domain
         rsp = requests.put(req, headers=headers)
@@ -423,6 +417,32 @@ class DomainTest(unittest.TestCase):
         rsp = requests.get(root_req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
+        # delete the domain with the admin account
+        try:
+            admin_passwd = config.get("admin_password")
+            headers = helper.getRequestHeaders(domain=domain, username="admin", password=admin_passwd)
+            rsp = requests.delete(req, headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+        except KeyError:
+            print("Skipping admin delete test, set ADMIN_PASSWORD environment variable to enable")
+
+        # try creating a folder using the owner flag
+        try:
+            admin_passwd = config.get("admin_password")
+            new_domain = self.base_domain + "/test_user2s_folder"
+            body = {"folder": True, "owner": "test_user2"}
+            headers = helper.getRequestHeaders(domain=new_domain, username="admin", password=admin_passwd)
+            rsp = requests.put(req, headers=headers, data=json.dumps(body))
+            self.assertEqual(rsp.status_code, 201)
+
+            headers = helper.getRequestHeaders(domain=new_domain, username="test_user2")
+            rsp = requests.get(req, headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+        except KeyError:
+            print("Skipping domain create with owner test, set ADMIN_PASSWORD environment variable to enable")
+
+
         # TBD - try deleting a top-level domain
 
         # TBD - try deleting a domain that has child-domains
@@ -455,7 +475,6 @@ class DomainTest(unittest.TestCase):
         datasets = rspJson["datasets"]
         for objid in datasets:
             helper.validateId(objid)
-            print("="+objid)
         self.assertEqual(len(datasets), 4)
 
         # get the first 2 datasets
@@ -468,8 +487,7 @@ class DomainTest(unittest.TestCase):
         batch = rspJson["datasets"]
         self.assertEqual(len(batch), 2)
         helper.validateId(batch[0])
-        print(">" + batch[0])
-        print(">" + batch[1])
+         
         self.assertEqual(batch[0], datasets[0])
         helper.validateId(batch[1])
         self.assertEqual(batch[1], datasets[1])
@@ -738,7 +756,6 @@ class DomainTest(unittest.TestCase):
             for item in domains:
                 self.assertTrue("name" in item)
                 name = item["name"]
-                print(name)
                 self.assertEqual(name[0], '/')
                 self.assertTrue(name[-1] != '/')
                 self.assertTrue("owner" in item)
