@@ -1,34 +1,16 @@
 #!/bin/bash
 
-# script to stop hsds docker containers
-if [ $# -eq 1 ] && ([ $1 == "-h" ] || [ $1 == "--help" ]); then
-   echo "Usage: runall.sh [count]"
-   exit 1
+#
+# Shutdown HSDS with "docker-compose down" using the appropriate compose file
+#
+if [ ${AWS_S3_GATEWAY} == "http://minio:9000" ] ; then
+   docker-compose -f docker-compose.local.yml down  
+elif [[ ${HSDS_ENDPOINT} == "https"* ]] ; then
+   docker-compose -f docker-compose.secure.yml down
+else
+   docker-compose down  
 fi
 
-
-count=4
-if [ $# -eq 1 ]; then 
-  count=$1
-fi
-
-echo "stopping headnode"
-docker stop hsds_head &
-
-echo "stoping asyncnode"
-docker stop hsds_async &
-
-echo "stopping datanodes"
-./run.sh stopdn $count &
-
-echo "stopping service nodes"
-./run.sh stopsn $count &
-
-sleep 10  # allow some time for containers to shutdown
-docker ps
-sleep 10
-docker ps
-   
  
 
 

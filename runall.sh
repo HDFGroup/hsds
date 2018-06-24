@@ -1,66 +1,59 @@
 #!/bin/bash
 
-# script to startup hsds docker containers
+# script to startup hsds service
 if [ $# -eq 1 ] && ([ $1 == "-h" ] || [ $1 == "--help" ]); then
-   echo "Usage: runall.sh [count] [s3]"
+   echo "Usage: runall.sh [count]"
    exit 1
 fi
 
-
-count=4
-if [ $# -gt 0 ]; then 
-  count=$1
-fi
-
-s3=0
-if [ $# -gt 1 ]; then
-  s3=$2
-fi
+[ -z ${AWS_S3_GATEWAY}  ] && echo "Need to set AWS_S3_GATEWAY" && exit 1
 
 [ -z ${BUCKET_NAME} ] && echo "Need to set BUCKET_NAME" && exit 1
 
-# If not using s3, don't worry about setting AWS_S3_GATEWAY and AWS_REGION
-if [ ! -z ${s3} ] && [ ${s3} -ne 0 ]; then
-  [ -z ${AWS_S3_GATEWAY} ] && echo "Need to set AWS_S3_GATEWAY" && exit 1
-  [ -z ${AWS_REGION} ] && echo "Need to AWS_REGION"  && exit 1
-fi
+[ -z ${SYS_BUCKET_NAME} ] && export SYS_BUCKET_NAME=${BUCKET_NAME}
 
-if [ -z $s3 ]; then
-  # if not using s3 and EC2 IAM roles, need to define AWS access keys
+[ -z ${HSDS_ENDPOINT} ] && echo "Need to set HSDS_ENDPOINT" && exit 1
+if [[ ${HSDS_ENDPOINT} == "https://"* ]] ; then
+   export PUBLIC_DNS=${HSDS_ENDPOINT:8}
+elif [[ ${HSDS_ENDPOINT} == "http://"* ]] ; then
+   export PUBLIC_DNS=${HSDS_ENDPOINT:7}
+else
+   echo "Invalid HSDS_ENDPOINT: ${HSDS_ENDPOINT}"  && exit 1 
+fi 
+
+if [ ${AWS_S3_GATEWAY} == "http://minio:9000" ] || [ -z $AWS_IAM_ROLE ] ; then
+  # if not using s3 or S3 without EC2 IAM roles, need to define AWS access keys
   [ -z ${AWS_ACCESS_KEY_ID} ] && echo "Need to set AWS_ACCESS_KEY_ID" && exit 1
   [ -z ${AWS_SECRET_ACCESS_KEY} ] && echo "Need to set AWS_SECRET_ACCESS_KEY" && exit 1
 fi
 
-if [ $(docker ps -aq -f status=exited | wc -l) -gt 0 ]; then
-   echo "clean stopped containers"
-   docker rm -v $(docker ps -aq -f status=exited) 
-fi
-
-echo "count: " $count
-echo "s3:" $s3
-if [ $s3 == "s3" ]; then
-  echo "using s3"
-  echo "starting headnode"
-  ./run.sh head $count
-  echo "starting asyncnode"
-  ./run.sh an
-  echo "starting datanodes"
-  ./run.sh dn $count
-  echo "starting service nodes"
-  ./run.sh sn $count
+if [ $# -gt 0 ]; then 
+  export CORES=$1
 else
-  echo "using minio"
-  echo "starting headnode"
-  ./run_minio.sh head $count
-  echo "starting asyncnode"
-  ./run_minio.sh an
-  echo "starting datanodes"
-  ./run_minio.sh dn $count
-  echo "starting service nodes"
-  ./run_minio.sh sn $count
+  export CORES=1
+fi
+ 
+echo "AWS_S3_GATEWAY:" $AWS_S3_GATEWAY
+echo "AWS_ACCESS_KEY_ID:" $AWS_ACCESS_KEY_ID
+echo "AWS_SECRET_ACCESS_KEY:" $AWS_SECRET_ACCESS_KEY
+echo "BUCKET_NAME:"  $BUCKET_NAME
+echo "SYS_BUCKET_NAME:" $SYS_BUCKET_NAME
+echo "CORES:" $CORES
+echo "HSDS_ENDPOINT:" $HSDS_ENDPOINT
+echo "PUBLIC_DNS:" $PUBLIC_DNS
+
+if [ ${AWS_S3_GATEWAY} == "http://minio:9000" ] ; then
+   echo "docker-compose.local"
+   docker-compose -f docker-compose.local.yml up -d --scale sn=${CORES} --scale dn=${CORES}
+elif [[ ${HSDS_ENDPOINT} == "https"* ]] ; then
+   echo "docker-compose.secure"
+   docker-compose -f docker-compose.secure.yml up -d --scale sn=${CORES} --scale dn=${CORES}
+else
+   echo "docker-compose"
+   docker-compose up -d --scale sn=${CORES} --scale dn=${CORES}
 fi
 
-docker ps
+
    
  
 
