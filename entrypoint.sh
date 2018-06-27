@@ -4,7 +4,7 @@ cd /usr/local/src/hsds
 if [ -z $NODE_TYPE ]; then
   # run client
   cd /usr/local/src/
-  if [ -z $RUN_COMMAND ]; then
+  if [ -z "$RUN_COMMAND" ]; then
     /bin/bash
   else
     /bin/bash -c "$RUN_COMMAND"
