@@ -330,6 +330,9 @@ async def PUT_Objects(request):
             except KeyError:
                 log.error("Unable to find {} in RootTable".format(rootid))
                 continue
+            if not rootEntry:
+                log.error("Unable to find {} in RootTable".format(rootid))
+                continue
             if "totalSize" not in rootEntry:
                 log.error("Expected to find size in RootTable for root: {}".format(rootid))
                 continue
@@ -507,7 +510,9 @@ async def GET_Domains(request):
     # for verbose copy in totalSize, num groups/datasets/datatypes, lastModified for each domain
     # otherwise jsut return name, owner and root
     for domain in domains:
+        log.debug("domain: {}".format(domain))
         if "root" in domain and domain["root"]:
+            log.info("domain: {} root: {}".format(domain, domain["root"]))
             domain["class"] = "domain"
         
             if verbose:

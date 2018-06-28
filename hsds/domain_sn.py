@@ -159,7 +159,7 @@ async def get_domains(request):
         params["prefix"] = request.GET["domain"]
 
     # always use "verbose" to pull info from RootTable
-    if "verbose" in request and request.GET["verbose"]:
+    if "verbose" in request.GET and request.GET["verbose"]:
         params["verbose"] = 1
     else:
         params["verbose"] = 0
