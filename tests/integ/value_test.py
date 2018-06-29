@@ -95,6 +95,7 @@ class ValueTest(unittest.TestCase):
     def testPut1DDatasetBinary(self):
         # Test PUT value for 1d dataset using binary data
         print("testPut1DDatasetBinary", self.base_domain)
+        NUM_ELEMENTS=10     # 1000000 - this value is hitting nginx request size limit
 
         headers = helper.getRequestHeaders(domain=self.base_domain)
         headers_bin_req = helper.getRequestHeaders(domain=self.base_domain) 
@@ -113,7 +114,7 @@ class ValueTest(unittest.TestCase):
         helper.validateId(root_uuid)
 
         # create dataset
-        data = { "type": "H5T_STD_I32LE", "shape": 10 }
+        data = { "type": "H5T_STD_I32LE", "shape": NUM_ELEMENTS }
         req = self.endpoint + '/datasets' 
         rsp = requests.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
@@ -134,8 +135,8 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers['Content-Type'], "application/octet-stream")
         data = rsp.content
-        self.assertEqual(len(data), 40)
-        for i in range(10):
+        self.assertEqual(len(data), NUM_ELEMENTS * 4)
+        for i in range(NUM_ELEMENTS):
             offset = i*4
             self.assertEqual(data[offset+0], 0)
             self.assertEqual(data[offset+1], 0)
@@ -144,9 +145,9 @@ class ValueTest(unittest.TestCase):
  
         # write to the dset
         # write 0-9 as four-byte little-endian integers
-        data = bytearray(4*10)
-        for i in range(10):
-            data[i*4] = i
+        data = bytearray(4*NUM_ELEMENTS)
+        for i in range(NUM_ELEMENTS):
+            data[i*4] = i%256
         rsp = requests.put(req, data=data, headers=headers_bin_req)
         self.assertEqual(rsp.status_code, 200)
         
@@ -154,10 +155,10 @@ class ValueTest(unittest.TestCase):
         rsp = requests.get(req, headers=headers_bin_rsp)
         self.assertEqual(rsp.status_code, 200)
         data = rsp.content
-        self.assertEqual(len(data), 40)
-        for i in range(10):
+        self.assertEqual(len(data), NUM_ELEMENTS*4)
+        for i in range(NUM_ELEMENTS):
             offset = i*4
-            self.assertEqual(data[offset+0], i)
+            self.assertEqual(data[offset+0], i%256)
             self.assertEqual(data[offset+1], 0)
             self.assertEqual(data[offset+2], 0)
             self.assertEqual(data[offset+3], 0)
