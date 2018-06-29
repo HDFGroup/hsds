@@ -113,6 +113,7 @@ server {
     ssl_session_tickets off;
     ssl_certificate /etc/nginx/certs/default.crt;
     ssl_certificate_key /etc/nginx/certs/default.key;
+    client_max_body_size 20M
 }
 {{ end }}
 
