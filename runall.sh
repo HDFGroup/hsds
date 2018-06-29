@@ -29,7 +29,7 @@ fi
 
 if [ $# -gt 0 ]; then 
   export CORES=$1
-else
+elif [ -z ${CORES} ] ; then
   export CORES=1
 fi
  
