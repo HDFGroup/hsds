@@ -84,6 +84,7 @@ services:
       - an
   proxy:
     image: nginx
+    restart: always
     container_name: hsds_proxy
     volumes:
       - /etc/nginx/certs
@@ -96,6 +97,7 @@ services:
       - "443:443"
   logs:
     image: mdsol/logspout
+    restart: always
     command: cloudwatch://auto
     container_name: logspout
     hostname: hsds_${PUBLIC_DNS}
@@ -115,6 +117,7 @@ services:
     - proxy
   dockergen:
     image: jwilder/docker-gen
+    restart: always
     container_name: hsds_gen
     command: -notify-sighup hsds_proxy -watch /etc/docker-gen/templates/nginx.tmpl /etc/nginx/conf.d/default.conf
     volumes_from:
