@@ -39,6 +39,7 @@ These environment variables will be passed to the Docker containers on start up.
     export AWS_REGION=us-east-1                    # for boto compatibility - for S3 set to the region the bucket is in
     export AWS_S3_GATEWAY="http://minio:9000"      # if running docker machine set to machine ip 
     export HSDS_ENDPOINT="http://hsds.hdf.test"    # use https protocal if SSL is desired
+    export DB_HOST_DIR=${HOME}/sqlite              # directory where sqlite db will be stored
     # For S3, set AWS_S3_GATEWAY to endpoint for the region the bucket is in.  E.g.: http://s3.amazonaws.com.
     # See http://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region for list of endpoints.
 
