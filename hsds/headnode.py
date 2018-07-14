@@ -42,24 +42,9 @@ async def healthCheck(app):
     # update/initialize root object before starting node updates
     headnode_key = getHeadNodeS3Key()
     log.info("headnode S3 key: {}".format(headnode_key))
-    headnode_obj_found = await isS3Obj(app, headnode_key)
-
+    headnode_obj_found = False
     head_url = getUrl(app["head_host"], app["head_port"])  
     
-    if not headnode_obj_found:
-        # first time hsds has run with this bucket name?
-        log.warn("need to create headnode obj")
-        head_state = {  }
-        head_state["created"] = int(time.time())
-        head_state["id"] = app["id"]
-        head_state["last_health_check"] = app["last_health_check"]
-        head_state["head_url"] = head_url
-        log.info("write head_state to S3: {}".format(head_state))
-        await putS3JSONObj(app, headnode_key, head_state)
-
-    headnode_stats = await getS3ObjStats(app, headnode_key)
-    log.info("headnode_stats: {}".format(headnode_stats))
-
     nodes = app["nodes"]
     while True:
         # sleep for a bit
@@ -68,6 +53,28 @@ async def healthCheck(app):
 
         now = int(time.time())
         log.info("health check {}".format(unixTimeToUTC(now)))
+        
+        if not headnode_obj_found:
+            log.info("checking for headnode_key: {}".format(headnode_key))
+            if await isS3Obj(app, headnode_key):
+                headnode_obj_found = True
+                headnode_stats = await getS3ObjStats(app, headnode_key)
+                log.info("headnode_stats: {}".format(headnode_stats))
+            else:
+                # first time hsds has run with this bucket name?
+                log.warn("need to create headnode obj")
+                head_state = {  }
+                head_state["created"] = int(time.time())
+                head_state["id"] = app["id"]
+                head_state["last_health_check"] = app["last_health_check"]
+                head_state["head_url"] = head_url
+                log.info("write head_state to S3: {}".format(head_state))
+                try:
+                    await putS3JSONObj(app, headnode_key, head_state)
+                except HttpProcessingError as hpe:
+                    # Might be bad AWS config, transient S3 error, or minio not initialized yet...
+                    log.warn("HttpProcessingError writing head_state: {}: {}".format(headnode_key, str(hpe)))
+            continue # start health check on next iteration
         
         head_state = await getS3JSONObj(app, headnode_key)
         log.info("head_state: {}".format(head_state))
