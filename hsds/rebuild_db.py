@@ -172,26 +172,24 @@ async def listKeys(app):
         # gather info about chunks for each dataset
         for datasetid in dataset_objs:
             dset_obj = dataset_objs[datasetid]
-            dset_size = dset_obj["size"]
+            allocated_size = 0
             dset_lastModified = dset_obj["lastModified"]
             # TODO - get chunks in batches
             chunks = getDatasetChunks(conn, datasetid)
             for chunkid in chunks:
                 chunk = chunks[chunkid]
                 if chunk["size"] > 0:
-                    dset_size += chunk["size"]
+                    allocated_size += chunk["size"]
                     totalSize += chunk["size"]
                 if chunk["lastModified"] > dset_lastModified:
                     dset_lastModified = chunk["lastModified"]
                     if chunk["lastModified"] > lastModified:
                         lastModified = chunk["lastModified"]
-            if dset_size > dset_obj["size"]:
-                updateRowColumn(conn, datasetid, "totalSize", dset_size, rootid=rootid)
+            updateRowColumn(conn, datasetid, "totalSize", allocated_size, rootid=rootid)
             if dset_lastModified > dset_obj["lastModified"]:
                 updateRowColumn(conn, datasetid, "lastModified", dset_lastModified, rootid=rootid)
-            if len(chunks) > 0:
-                updateRowColumn(conn, datasetid, "chunkCount",  len(chunks), rootid=rootid)
-                totalChunks += len(chunks)
+            updateRowColumn(conn, datasetid, "chunkCount",  len(chunks), rootid=rootid)
+            totalChunks += len(chunks)
          
         # update any root properities that have changed
         if totalChunks > 0:
@@ -203,68 +201,6 @@ async def listKeys(app):
         row = getRow(conn, rootid, table="RootTable")
         log.info("Updated row: {}".format(row))
 
-
-        continue
-
-        root = roots[rootid]
-        log.info("got root obj: {}".format(root))
-        root["totalSize"] = 0
-        root["chunkCount"] = 0
-        root["groupCount"] = 0
-        root["datsaetCount"] = 0
-        root["datatypeCount"] = 0
-        log.info("root: {} -- {}".format(rootid, root))
-        datasets = root["datasets"]
-        for datasetid in datasets:
-            dataset = datasets[datasetid]
-            chunks = getDatasetChunks(conn, datasetid)
-            dataset["totalSize"] = dataset["size"]
-            for chunkid in chunks:
-                chunk = chunks[chunkid]
-                dataset["totalSize"] += chunk["size"]
-                if chunk["lastModified"] > dataset["lastModified"]:
-                    dataset["lastModified"] = chunk["lastModified"]
-            updateRowColumn(conn, datasetid, "totalSize", dataset["totalSize"], rootid=rootid)
-            updateRowColumn(conn, datasetid, "lastModified", dataset["lastModified"], rootid=rootid)
-            updateRowColumn(conn, datasetid, "chunkCount",  len(chunks), rootid=rootid)
-            root["chunkCount"] += len(chunks)
-            root["totalSize"] += dataset["totalSize"]
-            if dataset["lastModified"] > root["lastModified"]:
-                root["lastModified"] = dataset["lastModified"]
-        
-        groups = root["groups"]
-        for groupid in groups:
-            group = groups[groupid]
-            root["totalSize"] += group["size"]
-            if group["lastModified"] > root["lastModified"]:
-                root["lastModified"] = group["lastModified"]
-
-        datatypes = root["datatypes"]
-        for typeid in datatypes:
-            datatype = datatypes[typeid]
-            root["totalSize"] += datatype["size"]
-            if datatype["lastModified"] > root["lastModified"]:
-                root["lastModified"] = datatype["lastModified"]
-        
-        try:
-            log.info("updating roottable with: {}".format(root))
-            insertRow(conn, rootid, etag='', lastModified=root["lastModified"], objSize=root["size"], table="RootTable")
-            
-        except KeyError as e:
-            log.warn("got KeyError inserting root {}: {}".format(rootid, e))
-            continue
-        try:
-            log.info("updating row for {}, groupCount: {}".format(rootid, len(groups)))
-            updateRowColumn(conn, rootid, "chunkCount", root["chunkCount"], table="RootTable")
-            updateRowColumn(conn, rootid, "groupCount", len(groups), table="RootTable")
-            updateRowColumn(conn, rootid, "datasetCount", len(datasets), table="RootTable")
-            updateRowColumn(conn, rootid, "typeCount", len(datatypes), table="RootTable")
-            updateRowColumn(conn, rootid, "totalSize", root["totalSize"], table="RootTable")
-        except KeyError as e:
-            log.warn("got KeyError updating RootTable row {}: {}".format(rootid, e))
-            continue
-        row = getRow(conn, rootid, table="RootTable")
-        log.info("Updated row: {}".format(row))
     
 
 #

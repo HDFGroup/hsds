@@ -21,7 +21,7 @@ else
    echo "Invalid HSDS_ENDPOINT: ${HSDS_ENDPOINT}"  && exit 1 
 fi 
 
-[ - ${DB_HOST_DIR} ] && echo "Need to set DB_HOST_DIR" && exit 1
+[ -z ${DB_HOST_DIR} ] && echo "Need to set DB_HOST_DIR" && exit 1
 
 if [ ${AWS_S3_GATEWAY} == "http://minio:9000" ] || [ -z $AWS_IAM_ROLE ] ; then
   # if not using s3 or S3 without EC2 IAM roles, need to define AWS access keys

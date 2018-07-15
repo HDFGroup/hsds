@@ -274,8 +274,8 @@ async def GET_Dataset(request):
         if dset_detail is not None:
             if "chunkCount" in dset_detail:
                 resp_json["num_chunks"] = dset_detail["chunkCount"]
-            if "size" in dset_detail:
-                resp_json["allocated_size"] = dset_detail["size"]
+            if "totalSize" in dset_detail:
+                resp_json["allocated_size"] = dset_detail["totalSize"]
 
     resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)

@@ -266,94 +266,102 @@ async def PUT_Objects(request):
             # root id is required for all non-chunk updates
             log.error("no rootid provided for obj: {}".format(objid))
             continue
-         
-        dbRow = getRow(conn, objid, rootid=rootid)
-        if not dbRow:
-            # insert new object
-            log.info("insertRow for {}".format(objid))
-            try:
-                insertRow(conn, objid, etag=etag, lastModified=lastModified, objSize=objSize, rootid=rootid)
-            except KeyError:
-                log.error("got KeyError inserting object: {}".format(id))
-                continue
-            if isValidChunkId(objid):
-                # will update dataset/root for new chunks below
-                pass    
-            # if this is a new root group, add to root table
-            elif getCollectionForId(objid) == "groups" and objid == rootid:
-                try:
-                    insertRow(conn, rootid, etag=etag, lastModified=lastModified, objSize=objSize, table="RootTable")            
-                except KeyError:
-                    log.error("got KeyError inserting root: {}".format(rootid))
-                    continue
-            elif getCollectionForId(objid) == "datasets":
-                updateRowColumn(conn, objid,  "totalSize", objSize, rootid=rootid)
-                updateRowColumn(conn, objid,  "chunkCount", 0, rootid=rootid)
 
-        else:
-            # update existing object
-            log.info("updateRow for {}".format(objid))
-            updateRowColumn(conn, objid,  "lastModified", lastModified, rootid=rootid)
-            if objSize:
-                updateRowColumn(conn, objid, "size", objSize, rootid=rootid)
-            if etag:
-                updateRowColumn(conn, objid, "etag",  etag, rootid=rootid)
+        domain_size_delta = 0 
+        dbRow = getRow(conn, objid, rootid=rootid)
         if isValidChunkId(objid):
             # get the dset row for this chunk
-            pass
-            # TODO - this triggers an error because rootid is not defined
-            # Need to either pass in root with chunk updates or fetch it from the db 
             dsetid = getDatasetId(objid)
             log.debug("dsetid for chunk: {}".format(dsetid))
-            """
             dset_row = getRow(conn, dsetid, rootid=rootid)
-            dset_size_delta = objSize
+            log.debug("for {} got dset_row: {}".format(dsetid, dset_row))
+            allocated_size_delta = objSize
             if not dset_row:
                 log.warn("dset: {} not found in DatasetTable - deleted?".format(dsetid))
             if dbRow:
                 # existing chunk is being updated - update dataset size and lastModified
-                if objSize:
-                    dset_size_delta -= dbRow["size"]
+                if objSize and "totalSize" in dbRow:
+                    allocated_size_delta -= dbRow["totalSize"]
             else:
                 # new chunk - update number of chunks
                 chunkCount = dset_row["chunkCount"] + 1
+                log.debug("update chunkCount for {} to {}".format(dsetid, chunkCount))
                 updateRowColumn(conn, dsetid, "chunkCount", chunkCount, rootid=rootid)
+            
             updateRowColumn(conn, dsetid, "lastModified", lastModified, rootid=rootid)
-            if dset_size_delta:
-                new_dset_size = dset_row["totalSize"] + dset_size_delta
-                updateRowColumn(conn, dsetid, "totalSize", new_dset_size, rootid=rootid)
-            """
-        elif isValidUuid(objid):
-            # update size and lastModified in root table
-            try:
-                rootEntry = getRow(conn, rootid, table="RootTable")
-            except KeyError:
-                log.error("Unable to find {} in RootTable".format(rootid))
-                continue
-            if not rootEntry:
-                log.error("Unable to find {} in RootTable".format(rootid))
-                continue
-            if "totalSize" not in rootEntry:
-                log.error("Expected to find size in RootTable for root: {}".format(rootid))
-                continue
-            domain_size_delta = objSize
-            if dbRow:
-                # existing object is being updated - get difference in obj size
-                if objSize:
-                    domain_size_delta -= dbRow["size"]
-            if objSize:
-                domain_size = domain_size_delta
-                if "totalSize" in rootEntry and rootEntry["totalSize"]:
-                    domain_size += rootEntry["totalSize"]
-                updateRowColumn(conn, rootid, "totalSize", domain_size, table="RootTable")
-            # update lastModified timestamp
-            updateRowColumn(conn, rootid, "lastModified", lastModified, table="RootTable")
+            if allocated_size_delta != 0:
+                if dbRow and "totalSize" in dbRow:
+                    allocated_size = dbRow["totalSize"] + allocated_size_delta
+                else:
+                    allocated_size = allocated_size_delta
+                log.debug("udpate totalSize for {} to {}".format(dsetid, allocated_size))
+                updateRowColumn(conn, dsetid, "totalSize", allocated_size, rootid=rootid)
+                log.debug("udpate chunkCount for {} to {}".format(dsetid, chunkCount))
+                updateRowColumn(conn, dsetid, "chunkCount", chunkCount, rootid=rootid)
+                domain_size_delta = allocated_size_delta # for when we update domain size below        
+        else:
+            # non-chunk update 
             if not dbRow:
-                # new object, update object count in root table
-                col_name = getCountColumnName(objid)
-                count = rootEntry[col_name] + 1
-                updateRowColumn(conn, rootid, col_name, count, table="RootTable")
+                # insert new object
+                log.info("insertRow for {}".format(objid))
+                try:
+                    insertRow(conn, objid, etag=etag, lastModified=lastModified, objSize=objSize, rootid=rootid)
+                except KeyError:
+                    log.error("got KeyError inserting object: {}".format(id))
+                    continue  
+                # if this is a new root group, add to root table
+                if getCollectionForId(objid) == "groups" and objid == rootid:
+                    try:
+                        insertRow(conn, rootid, etag=etag, lastModified=lastModified, objSize=objSize, table="RootTable")            
+                    except KeyError:
+                        log.error("got KeyError inserting root: {}".format(rootid))
+                        continue
+                    updateRowColumn(conn, rootid, "totalSize", objSize, table="RootTable")
+                elif getCollectionForId(objid) == "datasets":
+                    updateRowColumn(conn, objid,  "totalSize", 0, rootid=rootid)
+                    updateRowColumn(conn, objid,  "chunkCount", 0, rootid=rootid)
+                    domain_size_delta = objSize
+                else:
+                    # new group or datatype
+                    domain_size_delta = objSize
 
+            else:
+                # update existing object
+                log.info("updateRow for {}".format(objid))
+                updateRowColumn(conn, objid,  "lastModified", lastModified, rootid=rootid)
+                if objSize:
+                    updateRowColumn(conn, objid, "size", objSize, rootid=rootid)
+                if etag:
+                    updateRowColumn(conn, objid, "etag",  etag, rootid=rootid)
+                domain_size_delta -= dbRow["size"]
+        
+        
+        # update size and lastModified in root table
+        try:
+            rootEntry = getRow(conn, rootid, table="RootTable")
+        except KeyError:
+            log.error("Unable to find {} in RootTable".format(rootid))
+            continue
+        if not rootEntry:
+            log.error("Unable to find {} in RootTable".format(rootid))
+            continue
+        if "totalSize" not in rootEntry:
+            log.error("Expected to find size in RootTable for root: {}".format(rootid))
+            continue
+        
+        if domain_size_delta != 0:
+            domain_size = domain_size_delta
+            if "totalSize" in rootEntry and rootEntry["totalSize"]:
+                domain_size += rootEntry["totalSize"]
+            updateRowColumn(conn, rootid, "totalSize", domain_size, table="RootTable")
+        # update lastModified timestamp
+        updateRowColumn(conn, rootid, "lastModified", lastModified, table="RootTable")
+        if not dbRow:
+            # new object, update object count in root table
+            col_name = getCountColumnName(objid)
+            count = rootEntry[col_name] + 1
+            updateRowColumn(conn, rootid, col_name, count, table="RootTable")
+        # go on to next obj
          
 
     resp_json = {  } 

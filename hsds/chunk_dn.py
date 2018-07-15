@@ -75,6 +75,7 @@ async def PUT_Chunk(request):
         raise HttpBadRequest(message=msg)
     dset_json = json.loads(request.GET["dset"])
     log.debug("dset_json: {}".format(dset_json))
+
     dims = getChunkLayout(dset_json)
     deflate_level = getDeflateLevel(dset_json)
     log.info("got deflate_level: {}".format(deflate_level))
@@ -147,13 +148,17 @@ async def PUT_Chunk(request):
     input_arr = bytesToArray(input_bytes, dt, input_shape)
 
     chunk_arr = None 
+    dset_id = getDatasetId(chunk_id)
     if deflate_level is not None:
-        deflate_map = app['deflate_map']
-        dset_id = getDatasetId(chunk_id)
+        deflate_map = app['deflate_map']  
         if dset_id not in deflate_map:
             # save the deflate level so the lazy chunk writer can access it
             deflate_map[dset_id] = deflate_level
             log.info("update deflate_map: {}: {}".format(dset_id, deflate_level))
+    
+    dset_root_map = app["dset_root_map"]
+    if dset_id not in dset_root_map:
+        dset_root_map[dset_id] = dset_json["root"]
     
     s3_key = getS3Key(chunk_id)
     log.debug("PUT_Chunks s3_key: {}".format(s3_key))

@@ -293,6 +293,7 @@ async def s3sync(app):
     meta_cache = app["meta_cache"] 
     chunk_cache = app["chunk_cache"] 
     deflate_map = app["deflate_map"]
+    dset_root_map = app["dset_root_map"]
         
 
     while True:
@@ -345,14 +346,23 @@ async def s3sync(app):
                     if dset_id in deflate_map:
                         deflate_level = deflate_map[dset_id]
                         log.info("got deflate_level: {} for dset: {}".format(deflate_level, dset_id))
+                    
+                    root_id = ""
+                    if dset_id not in dset_root_map:
+                        log.warn("expected to find {} in dset_root_map".format(dset_id))
+                    else:
+                        root_id = dset_root_map[dset_id]
 
-                    log.info("writing S3 object: {}, num_bytes: {}".format(s3_key, len(chunk_bytes)))
+                    log.info("writing chunk to S3: {}, num_bytes: {} root_id: {}".format(s3_key, len(chunk_bytes), root_id))
+            
                     try:
                         s3_rsp = await putS3Bytes(app, s3_key, chunk_bytes, deflate_level=deflate_level)
                         # s3_rsp should have keys: "etag", "lastModified", and "size", add in obj_id    
                         notify_obj["etag"] = s3_rsp["etag"]
                         notify_obj["size"] = s3_rsp["size"]
                         notify_obj["lastModified"] = s3_rsp["lastModified"]
+                        notify_obj["root"] = root_id
+
                         notify_objs.append(notify_obj)
                     except HttpProcessingError as hpe:
                         log.error("got S3 error writing obj_id: {} to S3: {}".format(obj_id, str(hpe)))
