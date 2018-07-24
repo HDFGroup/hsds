@@ -44,7 +44,19 @@ async def getHeadUrl(app):
     else:
         # pull url form headnode object in bucket
         headnode_key = getHeadNodeS3Key()
-        head_state = await getS3JSONObj(app, headnode_key)
+        head_state = None
+        # With Minio, reading from S3 may trigger an error if the minio container
+        # is initializing.  Cycle around till we get a valid response.
+        while not head_state:
+            try:
+                head_state = await getS3JSONObj(app, headnode_key)
+            except ClientError as ce:
+                log.warn("ClientError: {} for health check".format(str(ce)))
+                await asyncio.sleep(1)
+            except HttpProcessingError as he:
+                log.warn("HttpProcessingError <{}> for health check".format(he.code))
+                await asyncio.sleep(1)
+
         if "head_url" not in head_state:
             msg = "head_url not found in head_state"
             log.error(msg)
