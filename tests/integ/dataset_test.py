@@ -14,6 +14,7 @@ import requests
 import json
 import time
 import helper
+import config
 
 # min/max chunk size - these can be set by config, but 
 # practially the min config value should be larger than 
@@ -107,9 +108,12 @@ class DatasetTest(unittest.TestCase):
         # try get with a different user (who has read permission)
         headers = helper.getRequestHeaders(domain=domain, username="test_user2")
         rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertEqual(rspJson["id"], dset_id)
+        if config.get("default_public"):
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+            self.assertEqual(rspJson["id"], dset_id)
+        else:
+            self.assertEqual(rsp.status_code, 403)
 
         # try to do a GET with a different domain (should fail)
         another_domain = self.base_domain + "/testScalarDataset2.h5"

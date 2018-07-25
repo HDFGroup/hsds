@@ -13,7 +13,8 @@ import os
 import sys
 
 cfg = {
-    'allow_noauth': True,
+    'allow_noauth': True,  # enable unauthenticated requests
+    'default_public': False, # new domains are publically readable by default
     'aws_access_key_id': 'xxx',  # Replace with access key for account
     'aws_secret_access_key': 'xxx',   # Replace with secret key for account
     'aws_iam_role': "hsds_role",  # For EC2 using IAM roles

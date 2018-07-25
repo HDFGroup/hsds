@@ -13,6 +13,7 @@ import unittest
 import requests
 import json
 import helper
+import config
  
 
 class DatatypeTest(unittest.TestCase):
@@ -69,9 +70,12 @@ class DatatypeTest(unittest.TestCase):
         # try get with a different user (who has read permission)
         headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
         rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertEqual(rspJson["root"], root_uuid)
+        if config.get("default_public"):
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+            self.assertEqual(rspJson["root"], root_uuid)
+        else:
+            self.assertEqual(rsp.status_code, 403)
 
         # try to do a GET with a different domain (should fail)
         another_domain = helper.getParentDomain(self.base_domain)

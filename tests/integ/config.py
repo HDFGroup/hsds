@@ -16,7 +16,8 @@ cfg = {
     'head_endpoint': 'http://cf.hdf.test:5100',
     'user_name': 'test_user1',
     'user_password': 'test',
-    'test_noauth': True
+    'test_noauth': True,
+    'default_public': False  # set to true if the server makes new domains publically readable
 }
    
 def get(x):     

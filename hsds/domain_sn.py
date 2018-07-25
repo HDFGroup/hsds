@@ -25,6 +25,7 @@ from util.domainUtil import getParentDomain, getDomainFromRequest
 from servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath
 from basenode import getAsyncNodeUrl
 import hsds_logger as log
+import config
 
 async def get_domain_json(app, domain):
     req = getDataNodeUrl(app, domain)
@@ -429,26 +430,25 @@ async def PUT_Domain(request):
         log.debug("no root group, creating folder")
  
     domain_json = { }
-
-    if parent_json:
-        domain_acls = parent_json["acls"]  # copy parent acls to new domain
-        if owner not in domain_acls:
-            domain_acls[owner] = owner_perm
-    else:
-        domain_acls = {}
-        # owner gets full control
-        domain_acls[owner] = owner_perm
-        # for top-level folders, make the folder public read
+    
+    domain_acls = {}
+    # owner gets full control
+    domain_acls[owner] = owner_perm
+    if config.get("default_public"):
+        # this will make the domain public readable
+        log.debug("adding default perm for domain: {}".format(domain))
         domain_acls["default"] =  default_perm
 
     # construct dn request to create new domain
     req = getDataNodeUrl(app, domain)
     req += "/domains" 
     body = { "owner": owner, "domain": domain }
-    body["acls"] = parent_json["acls"]  # copy parent acls to new domain
+    body["acls"] = domain_acls
 
     if not is_folder:
         body["root"] = root_id
+
+    log.debug("creating domain: {} with body: {}".format(domain, body))
     try:
         domain_json = await http_put(app, req, data=body)
     except HttpProcessingError as ce:

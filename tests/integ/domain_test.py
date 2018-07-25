@@ -255,7 +255,7 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
 
         # try doing a un-authenticated request
-        if config.get("test_noauth"):
+        if config.get("test_noauth") and config.get("default_public"):
             headers = helper.getRequestHeaders()
             req = helper.getEndpoint() + "/?host=" + domain
             # do a get on the domain with a query arg for host
@@ -295,7 +295,7 @@ class DomainTest(unittest.TestCase):
          
 
         # try doing a un-authenticated request
-        if config.get("test_noauth"):
+        if config.get("test_noauth") and config.get("default_public"):
             headers = helper.getRequestHeaders()
             req = helper.getEndpoint() + "/?host=" + domain
             # do a get on the folder with a query arg for host
