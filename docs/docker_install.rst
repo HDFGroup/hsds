@@ -32,7 +32,7 @@ These environment variables will be passed to the Docker containers on start up.
 ::
 
     export MINIO_DATA=${HOME}/minio_dat            # only needed for minio installs
-    export MINIO_CONFIG=${HOME}/minio_confi        # only needed for minio installs
+    export MINIO_CONFIG=${HOME}/minio_config       # only needed for minio installs
     export AWS_ACCESS_KEY_ID=1234567890            # user your AWS account access key if using S3 (Not needed if running on EC2 and AWS_IAM_ROLE is defined)
     export AWS_SECRET_ACCESS_KEY=ABCDEFGHIJKL      # use your AWS account access secret key if using S3  (Not needed if running on EC2 and AWS_IAM_ROLE is defined)
     export BUCKET_NAME=hsds.test                   # set to the name of the bucket you will be usings
@@ -52,9 +52,10 @@ works just like the real S3 endpoint.
 To setup minio:
 
 1. Create directories for minio data and config files based what the MINIO environemnt varaibles were set to - these can be on any local drive
-2. Start Minio container.  From the hsds install directory: `$ run_minio.sh minio`
+2. Start Minio container.  From the hsds install directory: `$ run_minio.sh`
 3. Run: `$ docker logs minio` and verify that minio started correctly.  It shold list the AWS keys specified in the enviornment variables.
 4. Go to the minio web app: http://127.0.0.1:9000 or (http://<docker-machine ip>:9000 for docker machine) and sign in using the AWS access keys
+5. After creating the HSDS bucket in the Minio web app, you can shut down Minio: `$ docker stop minio`.  The runall and stopall scripts will bring up and shut down the minio container as needed.
 
 
 Docker Setup
