@@ -18,12 +18,14 @@ Export environment variables as shown in "Sample .bashrc" below.
 11. Run `$ docker ps` and verify that the containers are running: hsds_head, hsds_async, hsds_sn_[1-n], hsds_dn_[1-n]
 12. Get the external IP for the docker containers (just 127.0.0.1 if running directly on host, otherwise run: `$docker-machine ip`
 13. Go to http://hsds.hdf.test/about and verify that "cluster_state" is "READY" (might need to give it a minute or two)
-14. Create "/home" folder (TBD)
-15. For each other username in the passwd file, create a top-level domain: TBD
-16. Install h5pyd on the host: `$pip install h5pyd`
-17. Run the client container interactively: `$ ./run_client.sh hsds_test`
-18. In the container, run the test suite: `# python testall.py`
-19. The test suite will emit some warnings due to test domains not being loaded.  To address see test_data_setup below.
+14. Install Anaconda: https://conda.io/docs/user-guide/install/linux.html  (install for python 3.6)
+15. Install h5pyd: `$ pip install h5pyd`
+16. Run: `$ hsconfigure`.  Set hs endpoint with DNS name (e.g. http://hsds.hdf.test) and admin username/password.  Ignore API Key.
+17. Run: `$ hsinfo`.  Server state should be "`READY`".
+18. Create "/home" folder: `$ hstouch /home/`
+19. For each other username in the passwd file, create a top-level domain: `$ hstouch /home/<username>/`
+20. Run the integration test: `$ python testall.py --skip_unit` 
+21. The test suite will emit some warnings due to test domains not being loaded.  To address see test_data_setup below.
  
 Sample .bashrc
 --------------
