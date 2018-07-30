@@ -228,7 +228,7 @@ def getTypeResponse(typeItem):
           For compound types return array of dictionary items
 """
 
-def getTypeItem(dt):
+def getTypeItem(dt, metadata=None):
     predefined_int_types = {
         'int8':    'H5T_STD_I8',
         'uint8':   'H5T_STD_U8',
@@ -243,6 +243,17 @@ def getTypeItem(dt):
         'float32': 'H5T_IEEE_F32',
         'float64': 'H5T_IEEE_F64'
     }
+    #print(">getTypeItem:", dt.str)
+    if not metadata and dt.metadata:
+        metadata = dt.metadata
+    #if metadata:
+    #    print(">  metadata:", metadata)
+    #if dt.shape:
+    #    print(">  shape:", dt.shape)
+    #if len(dt) > 1:
+    #    print(">  len:", len(dt))
+
+    
 
     type_info = {}
     if len(dt) > 1:
@@ -262,19 +273,22 @@ def getTypeItem(dt):
         # array type
         type_info['dims'] = dt.shape
         type_info['class'] = 'H5T_ARRAY'
-        type_info['base'] = getTypeItem(dt.base)
+        #print(">  array type, metadata:", metadata)
+        type_info['base'] = getTypeItem(dt.base, metadata=metadata)
     elif dt.kind == 'O':
         # vlen string or data
         #
         # check for h5py variable length extension
+          
+        if metadata and "vlen" in metadata:
+            vlen_check = metadata["vlen"]
+            if vlen_check is not None and not isinstance(vlen_check, np.dtype):        
+                vlen_check = np.dtype(vlen_check)
         
-
-        vlen_check = check_dtype(vlen=dt.base)
-        #if vlen_check is not None and isinstance(vlen_check, np.dtype):
-        if vlen_check is not None and not isinstance(vlen_check, np.dtype):        
-            vlen_check = np.dtype(vlen_check)
-        
-        ref_check = check_dtype(ref=dt.base)
+        if metadata and "ref" in metadata:
+            ref_check = metadata["ref"]
+        else:
+            ref_check = check_dtype(ref=dt.base)
         if vlen_check == bytes:
             type_info['class'] = 'H5T_STRING'
             type_info['length'] = 'H5T_VARIABLE'
@@ -370,10 +384,9 @@ def getTypeItem(dt):
 
         # numpy integer type - but check to see if this is the hypy
         # enum extension
-        mapping = check_dtype(enum=dt)
-
-        if mapping:
+        if metadata and "enum" in metadata:
             # yes, this is an enum!
+            mapping = metadata["enum"]
             type_info['class'] = 'H5T_ENUM'
             type_info['mapping'] = mapping
             if dt.name not in predefined_int_types:
@@ -407,7 +420,6 @@ def getTypeItem(dt):
     return the string "H5T_VARIABLE"
 """
 def getItemSize(typeItem):
-    print("getItemSize: {}".format(typeItem))
     # handle the case where we are passed a primitive type first
     if isinstance(typeItem, str) or isinstance(typeItem, bytes):
         for type_prefix in ("H5T_STD_I", "H5T_STD_U", "H5T_IEEE_F"):

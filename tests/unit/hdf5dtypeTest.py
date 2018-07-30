@@ -183,6 +183,29 @@ class Hdf5dtypeTest(unittest.TestCase):
         field_b_basetype = field_b_type['base']
         self.assertEqual(field_b_basetype['class'], 'H5T_STRING')
         self.assertEqual(typeSize, 11)
+
+    def testEnumArrayTypeItem(self):
+        mapping = {'RED': 0, 'GREEN': 1, 'BLUE': 2}
+        dt_enum = special_dtype(enum=(np.int8, mapping))
+        typeItem = hdf5dtype.getTypeItem(dt_enum)
+        dt_array = np.dtype('(2,3)'+dt_enum.str, metadata=dict(dt_enum.metadata))
+         
+        typeItem = hdf5dtype.getTypeItem(dt_array)
+         
+        self.assertEqual(typeItem['class'], 'H5T_ARRAY')
+        self.assertTrue("dims" in typeItem)
+        self.assertEqual(typeItem["dims"], (2,3))
+        baseItem = typeItem['base']
+        self.assertEqual(baseItem['class'], 'H5T_ENUM')
+        self.assertTrue('mapping' in baseItem)
+        self.assertEqual(baseItem['mapping']['GREEN'], 1)
+        self.assertTrue("base" in baseItem)
+        basePrim = baseItem["base"]
+        self.assertEqual(basePrim["class"], 'H5T_INTEGER')
+        self.assertEqual(basePrim['base'], 'H5T_STD_I8LE')
+        typeSize = hdf5dtype.getItemSize(typeItem)
+        self.assertEqual(typeSize, 6)  # one-byte for base enum type * shape of (2,3)
+        
     
         
     def testCompoundArrayVlenIntTypeItem(self):
@@ -594,7 +617,6 @@ class Hdf5dtypeTest(unittest.TestCase):
                           "strPad": "H5T_STR_NULLTERM", "length": "H5T_VARIABLE"}}, "name": "VALUE3"}]
         }
         dt = hdf5dtype.createDataType(typeItem) 
-        print("testCompoundArrayType, dt:", dt)
         typeSize = hdf5dtype.getItemSize(typeItem)
         self.assertEqual(typeSize, 'H5T_VARIABLE')
         self.assertEqual(len(dt), 3)
@@ -603,8 +625,6 @@ class Hdf5dtypeTest(unittest.TestCase):
         self.assertTrue("VALUE3" in dt.fields.keys())
         dt3 = dt["VALUE3"]
         self.assertEqual(check_dtype(vlen=dt3), bytes)
-
-        print("dt.metadata:", dt3.metadata)
 
 
 
