@@ -39,7 +39,7 @@ def get_domain(request, body=None):
         raise HttpProcessingError(code=500, message=msg) 
 
     if not isValidDomain(domain):
-        msg = "Expected valid domain"
+        msg = "Expected valid domain for [{}]".format(domain)
         log.error(msg)
         raise HttpProcessingError(code=500, message=msg) 
     try:

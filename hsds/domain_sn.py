@@ -371,28 +371,6 @@ async def PUT_Domain(request):
  
     log.info("PUT domain: {}, username: {}".format(domain, username))
 
-    parent_domain = getParentDomain(domain)
-
-    if not parent_domain and username != "admin":
-        msg = "creation of top-level domains is only supported by admin users"
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
-    log.debug("parent_domain: {}".format(parent_domain))
-
-    parent_json = None
-    try:
-        parent_json = await getDomainJson(app, parent_domain, reload=True)
-    except HttpProcessingError as hpe:
-        msg = "Parent domain: {} not found".format(parent_domain)
-        log.warn(msg)
-        raise HttpProcessingError(code=404, message=msg)
-
-    log.debug("parent_json {}: {}".format(parent_domain, parent_json))
-    if "root" in parent_json and parent_json["root"]:
-        msg = "Parent domain must be a folder"
-        log.warn(msg)
-        raise HttpProcessingError(code=400, message=msg)
-
     body = None
     is_folder = False
     owner = username
@@ -409,7 +387,38 @@ async def PUT_Domain(request):
         log.warn("Only admin users are allowed to set owner for new domains");   
         raise HttpProcessingError(code=403, message="Forbidden")
 
-    aclCheck(parent_json, "create", username)  # throws exception if not allowed
+
+    parent_domain = getParentDomain(domain)
+    log.debug("Parent domain: [{}]".format(parent_domain))
+    
+    if (not parent_domain or parent_domain == '/') and not is_folder:
+        msg = "Only folder domains can be created at the top-level"
+        log.warn(msg)
+        raise HttpBadRequest(message=msg)
+
+    if (not parent_domain or parent_domain == '/') and username != "admin":
+        msg = "creation of top-level domains is only supported by admin users"
+        log.warn(msg)
+        raise HttpProcessingError(code=403, message="Forbidden")
+    
+
+    parent_json = None
+    if parent_domain and parent_domain != '/':
+        try:
+            parent_json = await getDomainJson(app, parent_domain, reload=True)
+        except HttpProcessingError as hpe:
+            msg = "Parent domain: {} not found".format(parent_domain)
+            log.warn(msg)
+            raise HttpProcessingError(code=404, message=msg)
+
+        log.debug("parent_json {}: {}".format(parent_domain, parent_json))
+        if "root" in parent_json and parent_json["root"]:
+            msg = "Parent domain must be a folder"
+            log.warn(msg)
+            raise HttpProcessingError(code=400, message=msg)
+
+    if parent_json:
+        aclCheck(parent_json, "create", username)  # throws exception if not allowed
     
     if not is_folder:
         # create a root group for the new domain
@@ -502,23 +511,24 @@ async def DELETE_Domain(request):
     await validateUserPassword(app, username, pswd)
 
     parent_domain = getParentDomain(domain)
-
-    # verify that this is not a top-level domain
-    if not parent_domain:
-        msg = "Top level domain can not be deleted"
+    if (not parent_domain or parent_domain == '/') and username != "admin":
+        msg = "Deletion of top-level domains is only supported by admin users"
         log.warn(msg)
         raise HttpProcessingError(code=403, message="Forbidden")
 
-    # get the parent domain
-    try:
-        log.debug("get parent domain {}".format(parent_domain))
-        parent_json = await getDomainJson(app, parent_domain)
-    except HttpProcessingError as hpe:
-        msg = "Attempt to delete domain with no parent domain"
-        log.warn(msg)
-        raise HttpProcessingError(code=403, message="Forbidden")
-    log.debug("got parent json: {}".format(parent_json))
-    
+    """
+    parent_json = None
+    if (not parent_domain or parent_domain == '/'):
+        # get the parent domain
+        try:
+            log.debug("get parent domain {}".format(parent_domain))
+            parent_json = await getDomainJson(app, parent_domain)
+        except HttpProcessingError as hpe:
+            msg = "Attempt to delete domain with no parent domain"
+            log.warn(msg)
+            raise HttpProcessingError(code=403, message="Forbidden")
+        log.debug("got parent json: {}".format(parent_json))
+    """
     try:
         domain_json = await getDomainJson(app, domain, reload=True)
     except HttpProcessingError as hpe:
