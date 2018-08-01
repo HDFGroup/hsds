@@ -516,19 +516,6 @@ async def DELETE_Domain(request):
         log.warn(msg)
         raise HttpProcessingError(code=403, message="Forbidden")
 
-    """
-    parent_json = None
-    if (not parent_domain or parent_domain == '/'):
-        # get the parent domain
-        try:
-            log.debug("get parent domain {}".format(parent_domain))
-            parent_json = await getDomainJson(app, parent_domain)
-        except HttpProcessingError as hpe:
-            msg = "Attempt to delete domain with no parent domain"
-            log.warn(msg)
-            raise HttpProcessingError(code=403, message="Forbidden")
-        log.debug("got parent json: {}".format(parent_json))
-    """
     try:
         domain_json = await getDomainJson(app, domain, reload=True)
     except HttpProcessingError as hpe:
