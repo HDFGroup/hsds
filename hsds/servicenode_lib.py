@@ -102,7 +102,17 @@ async def validateAction(app, domain, obj_id, username, action):
         log.error("unexpected action: {}".format(action))
         raise HttpProcessingError(code=500, message="Unexpected error")
 
-    aclCheck(domain_json, action, username)  # throws exception if not allowed
+    reload = False
+    try:
+        aclCheck(domain_json, action, username)  # throws exception if not allowed
+    except HttpProcessingError as hpe:
+        log.info("got HttpProcessing error on validate action for domain: {}, reloading...".format(domain))
+        # just in case the ACL was recently updated, refetch the domain
+        reload = True
+    if reload:
+        domain_json = await getDomainJson(app, domain, reload=True)
+        aclCheck(domain_json, action, username) 
+
 
 async def getObjectJson(app, obj_id, refresh=False):
     """ Return top-level json (i.e. excluding attributes or links) for a given obj_id.
