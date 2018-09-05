@@ -39,8 +39,32 @@ def printUsage():
     print(" ------------------------------------------------------------------------------")
     print("  Example - ")
     print("       python create_toplevel_domain_json.py --user=joebob --domain=/home/joebob ")
+    print("  The user argument can also be a list of usernames (in this case the domain arg can't be used):")
+    print("       python create_toplevel_domain_json.py --user='user1 user2 user3'")
     sys.exit(); 
     
+async def createDomains(app, usernames, default_perm, domain_name=None):
+    now = time.time()
+    owner_perm = {'create': True, 'read': True, 'update': True, 'delete': True, 'readACL': True, 'updateACL': True } 
+    for username in usernames:
+        if domain_name is None:
+            domain = "/home/" + username
+        else:
+            domain = domain_name
+        validateDomain(domain)  # throws ValueError if invalid
+        if domain != domain.lower():
+            raise ValueError("top-level domains must be all lowercase")
+        # construct the json obj
+        domain_json = {}
+        domain_json["owner"] = username
+        acls = {}
+        acls["default"] = default_perm
+        acls[username] = owner_perm
+        domain_json["acls"] = acls
+        domain_json["lastModified"] = now
+        domain_json["created"] = now
+        await createDomain(app, domain, domain_json)
+
 async def createDomain(app, domain, domain_json):
     try:
         s3_key = getS3Key(domain)
@@ -61,7 +85,6 @@ async def createDomain(app, domain, domain_json):
 
                
 def main():
-    owner_perm = {'create': True, 'read': True, 'update': True, 'delete': True, 'readACL': True, 'updateACL': True } 
     default_public_perm =  {'create': False, 'read': True, 'update': False, 'delete': False, 'readACL': False, 'updateACL': False } 
     default_private_perm =  {'create': False, 'read': False, 'update': False, 'delete': False, 'readACL': False, 'updateACL': False } 
      
@@ -70,11 +93,11 @@ def main():
         sys.exit(1)
 
     default_perm = default_public_perm  # will switch if private is specified
-    username = None
+    userarg = None
     domain = None
     for arg in sys.argv[1:]:
         if arg.startswith('--user='):  
-            username = arg[len('--user='):]
+            userarg = arg[len('--user='):]
         elif arg == '--private':
             default_perm = default_private_perm
         elif arg.startswith('--domain='):
@@ -84,40 +107,29 @@ def main():
             printUsage()
             sys.exit(1)    
       
-    if not username:
+    if not userarg:
         print("No user supplied")
         printUsage()
         sys.exit(1)  
-    #print("username:", username)
-    if username != username.lower():
-        raise ValueError("username must be lowercase")
-    if not username[0].isalpha():
-        raise ValueError("first character of username must be character a-z")
-    for c in username:
-        if c != '_' and not c.isalnum():
-            raise ValueError("username must consist of the characters a-z, numeric or underscore")
-    if len(username) < 3:
-        raise ValueError("username must have at least three characters")
-    if domain is None:
-        domain = "/home/" + username
-    #print("domain:", domain)
-    #print("default_perm:", default_perm)
-    #print("owner_perm:", owner_perm)
-    validateDomain(domain)  # throws ValueError if invalid
-    if domain != domain.lower():
-        raise ValueError("top-level domains must be all lowercase")
-    
-    now = time.time()
+    usernames = []
+    if userarg[0] == '[' and userarg[-1] == ']':
+        names = userarg[1:-1].split(',')
+        for name in names:
+            usernames.append(name)
+    else:
+        usernames.append(userarg)
 
-    # construct the json obj
-    domain_json = {}
-    domain_json["owner"] = username
-    acls = {}
-    acls["default"] = default_perm
-    acls[username] = owner_perm
-    domain_json["acls"] = acls
-    domain_json["lastModified"] = now
-    domain_json["created"] = now
+    for username in usernames:
+        if username != username.lower():
+            raise ValueError("username must be lowercase")
+        if not username[0].isalpha():
+            raise ValueError("first character of username must be character a-z")
+        for c in username:
+            if c != '_' and not c.isalnum():
+                raise ValueError("username must consist of the characters a-z, numeric or underscore")
+        if len(username) < 3:
+            raise ValueError("username must have at least three characters")
+    
 
     # we need to setup a asyncio loop to query s3
     loop = asyncio.get_event_loop()
@@ -127,7 +139,7 @@ def main():
     app["loop"] = loop
     app["bucket_name"] = config.get("bucket_name")
 
-    loop.run_until_complete(createDomain(app, domain, domain_json))
+    loop.run_until_complete(createDomains(app, usernames, default_perm, domain_name=domain))
     releaseClient(app)
     
     loop.close()
