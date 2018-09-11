@@ -19,6 +19,10 @@ services:
       - LOG_LEVEL=${LOG_LEVEL}
     ports:
       - ${HEAD_PORT}:${HEAD_PORT}
+    logging:
+     options:
+        max-size: "5k"
+        max-file: "5"
     depends_on:
     - proxy
   an:
@@ -41,6 +45,10 @@ services:
       - head
     ports:
       - ${AN_PORT}:${AN_PORT}
+    logging:
+     options:
+        max-size: "5k"
+        max-file: "5"
   dn:
     build: .
     restart: ${RESTART_POLICY}
@@ -58,6 +66,10 @@ services:
       - MAX_CHUNK_SIZE=${MAX_CHUNK_SIZE}
     depends_on:
       - an
+    logging:
+     options:
+        max-size: "5k"
+        max-file: "5"
   sn:
     build: .
     restart: ${RESTART_POLICY}
@@ -82,6 +94,10 @@ services:
       - LETSENCRYPT_EMAIL=jguerrero@teravisiontech.com
     depends_on:
       - an
+    logging:
+     options:
+        max-size: "5k"
+        max-file: "5"
   proxy:
     image: nginx
     restart: always
@@ -95,6 +111,10 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    logging:
+     options:
+        max-size: "5k"
+        max-file: "5"
   logs:
     image: mdsol/logspout
     restart: always
@@ -103,6 +123,10 @@ services:
     hostname: hsds_${PUBLIC_DNS}
     volumes:
     - /var/run/docker.sock:/tmp/docker.sock:ro
+    logging:
+     options:
+        max-size: "5k"
+        max-file: "5"
   certs:
     image: jrcs/letsencrypt-nginx-proxy-companion
     container_name: hsds_certs
@@ -115,6 +139,10 @@ services:
     - proxy
     depends_on:
     - proxy
+    logging:
+     options:
+        max-size: "5k"
+        max-file: "5"
   dockergen:
     image: jwilder/docker-gen
     restart: always
@@ -125,3 +153,7 @@ services:
     volumes:
       - /var/run/docker.sock:/tmp/docker.sock:ro
       - ./nginx.tmpl:/etc/docker-gen/templates/nginx.tmpl
+    logging:
+     options:
+        max-size: "5k"
+        max-file: "5"
