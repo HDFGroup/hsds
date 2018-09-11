@@ -21,6 +21,10 @@ services:
       - LOG_LEVEL=${LOG_LEVEL}
     ports:
       - ${HEAD_PORT}:${HEAD_PORT}
+    logging:
+     options:
+        max-size: "5k"
+        max-file: "5"
   an:
     build: .
     container_name: hsds_async
@@ -43,6 +47,10 @@ services:
       - head
     ports:
       - ${AN_PORT}:${AN_PORT}
+    logging:
+     options:
+        max-size: "5k"
+        max-file: "5"
   dn:
     build: .
     restart: ${RESTART_POLICY}
@@ -64,6 +72,10 @@ services:
       - an
     ports:
       - ${DN_PORT}
+    logging:
+     options:
+        max-size: "5k"
+        max-file: "5"
   sn:
     build: .
     restart: ${RESTART_POLICY}
@@ -92,6 +104,10 @@ services:
       - an
     ports:
       - ${SN_PORT}
+    logging:
+     options:
+        max-size: "5k"
+        max-file: "5"
   proxy:
     image: nginx
     restart: always
@@ -104,6 +120,10 @@ services:
       - /var/run/docker.sock:/tmp/docker.sock:ro
     ports:
       - "80:80"
+    logging:
+     options:
+        max-size: "5k"
+        max-file: "5"
   dockergen:
     image: jwilder/docker-gen
     restart: always
@@ -122,3 +142,7 @@ services:
     hostname: hsds_${PUBLIC_DNS}
     volumes:
     - /var/run/docker.sock:/tmp/docker.sock:ro
+    logging:
+     options:
+        max-size: "5k"
+        max-file: "5"
