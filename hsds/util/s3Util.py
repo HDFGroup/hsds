@@ -20,7 +20,7 @@ import zlib
 import subprocess
 import datetime
 from botocore.exceptions import ClientError
-from aiohttp.errors import HttpProcessingError 
+from aiohttp.http_exceptions import HttpProcessingError 
 
 import hsds_logger as log
 import config
@@ -48,6 +48,7 @@ def getS3Client(app):
     
     # first time setup of s3 client or limited time token has expired
     aws_region = config.get("aws_region")
+    log.info(f"aws_region {aws_region}")
     aws_secret_access_key = None
     aws_access_key_id = None 
     aws_session_token = None
@@ -95,6 +96,7 @@ def getS3Client(app):
         msg="Invalid aws s3 gateway"
         log.error(msg)
         raise ValueError(msg)
+    log.info(f"Using S3Gateway: {s3_gateway}")
     use_ssl = False
     if s3_gateway.startswith("https"):
         use_ssl = True

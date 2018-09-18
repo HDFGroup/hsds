@@ -16,7 +16,7 @@ import asyncio
 import time
 
 from aiobotocore import get_session
-from aiohttp.errors import HttpProcessingError
+from aiohttp.http_exceptions import HttpProcessingError
 
 import config
 from util.timeUtil import unixTimeToUTC

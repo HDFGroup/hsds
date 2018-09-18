@@ -13,7 +13,7 @@
 # service node of hsds cluster
 # 
  
-from aiohttp.errors import HttpBadRequest
+from aiohttp.http_exceptions import HttpBadRequest
  
 from util.httpUtil import  http_get_json, http_put, http_delete, jsonResponse, getHref
 from util.idUtil import   isValidUuid, getDataNodeUrl, getCollectionForId

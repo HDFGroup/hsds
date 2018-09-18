@@ -14,7 +14,7 @@
 # 
 #import asyncio 
 import json
-from aiohttp.errors import HttpBadRequest, HttpProcessingError
+from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError
 
 from util.httpUtil import  http_post, http_put, http_get_json, http_delete, jsonResponse, getHref
 from util.idUtil import  getDataNodeUrl, createObjId

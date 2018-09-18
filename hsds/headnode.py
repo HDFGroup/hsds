@@ -19,7 +19,7 @@ import time
 
 from aiohttp.web import Application, StreamResponse, run_app
 from aiohttp import  ClientSession, TCPConnector
-from aiohttp.errors import HttpBadRequest, HttpProcessingError
+from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError
 from asyncio import TimeoutError
 import aiobotocore
 

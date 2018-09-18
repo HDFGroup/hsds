@@ -17,7 +17,7 @@ from os.path import isfile, join
 import time
 
 from aiohttp.web import run_app
-from aiohttp.errors import HttpBadRequest, HttpProcessingError
+from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError
 import sqlite3
 
 import config

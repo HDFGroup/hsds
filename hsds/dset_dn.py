@@ -14,7 +14,7 @@
 # 
 import time
 
-from aiohttp.errors import HttpBadRequest, HttpProcessingError
+from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError
  
 from util.idUtil import isValidUuid, validateUuid
 from util.httpUtil import jsonResponse

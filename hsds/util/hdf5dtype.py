@@ -13,7 +13,7 @@
 
 import weakref
 import numpy as np
-from aiohttp.errors import HttpBadRequest
+from aiohttp.http_exceptions import HttpBadRequest
 
 import hsds_logger as log
 

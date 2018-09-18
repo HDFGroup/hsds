@@ -10,7 +10,7 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 
-from aiohttp.errors import HttpBadRequest, HttpProcessingError
+from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError
 import hsds_logger as log
 
 

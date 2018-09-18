@@ -17,7 +17,8 @@ import json
 from asyncio import CancelledError
 from aiohttp.web import StreamResponse
 from aiohttp import  ClientSession, TCPConnector
-from aiohttp.errors import ClientError, HttpProcessingError
+from aiohttp.http_exceptions import HttpProcessingError
+from aiohttp.client_exceptions import ClientError
 
 
 import hsds_logger as log

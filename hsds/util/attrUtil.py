@@ -13,7 +13,7 @@
 # attribute related utilities
 # 
  
-from aiohttp.errors import HttpBadRequest, HttpProcessingError
+from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError
  
 import hsds_logger as log
 

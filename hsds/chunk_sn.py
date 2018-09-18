@@ -18,7 +18,8 @@ from asyncio import CancelledError
 import json
 import base64 
 import numpy as np
-from aiohttp.errors import HttpBadRequest, HttpProcessingError, ClientError
+from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError
+from aiohttp.client_exceptions import ClientError
 from aiohttp.web import StreamResponse
 from util.httpUtil import  jsonResponse, getHref, getAcceptType, get_http_client  
 from util.idUtil import   isValidUuid, getDataNodeUrl

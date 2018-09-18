@@ -13,7 +13,7 @@ import asyncio
 import sys
 import time
 from aiobotocore import get_session
-from aiohttp.errors import ClientOSError
+from aiohttp.client_exceptions import ClientOSError
 from util.domainUtil import validateDomain, getParentDomain
 from util.idUtil import getS3Key
 from util.s3Util import putS3JSONObj, isS3Obj, releaseClient

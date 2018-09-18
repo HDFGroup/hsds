@@ -18,7 +18,7 @@ import asyncio
 import json
 import time
 import numpy as np
-from aiohttp.errors import HttpBadRequest, HttpProcessingError 
+from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError 
 from aiohttp.web import StreamResponse
 from util.arrayUtil import bytesArrayToList, bytesToArray, arrayToBytes
 from util.httpUtil import  jsonResponse

@@ -15,7 +15,7 @@
 import time
 from bisect import bisect_left
 
-from aiohttp.errors import HttpBadRequest, HttpProcessingError
+from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError
  
 from util.httpUtil import jsonResponse
 from util.attrUtil import validateAttributeName

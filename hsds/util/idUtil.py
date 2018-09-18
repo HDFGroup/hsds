@@ -15,7 +15,7 @@
 # 
 import hashlib
 import uuid
-from aiohttp.errors import HttpProcessingError
+from aiohttp.http_exceptions import HttpProcessingError
 import hsds_logger as log
 
 def getIdHash(id):

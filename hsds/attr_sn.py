@@ -14,7 +14,7 @@
 # 
 
 import numpy as np 
-from aiohttp.errors import HttpBadRequest, HttpProcessingError 
+from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError 
 from aiohttp.web import StreamResponse
 from util.httpUtil import  http_get_json, http_put, http_delete, jsonResponse, getHref, getAcceptType
 from util.idUtil import   isValidUuid, getDataNodeUrl

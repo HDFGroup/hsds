@@ -13,7 +13,7 @@
 # data node of hsds cluster
 # 
 import time
-from aiohttp.errors import  HttpProcessingError
+from aiohttp.http_exceptions import  HttpProcessingError
 from util.authUtil import  getAclKeys
 from util.httpUtil import  jsonResponse
 from util.domainUtil import isValidDomain

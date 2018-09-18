@@ -13,7 +13,7 @@
 # service node of hsds cluster
 #  
 import os.path as op
-from aiohttp.errors import HttpBadRequest, HttpProcessingError
+from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError
 
 from util.idUtil import getDataNodeUrl, getCollectionForId
 from util.authUtil import aclCheck

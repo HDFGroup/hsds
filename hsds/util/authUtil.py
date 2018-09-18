@@ -16,7 +16,7 @@ import binascii
 import subprocess
 import datetime
 from botocore.exceptions import ClientError
-from aiohttp.errors import HttpBadRequest, HttpProcessingError
+from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError
 import hsds_logger as log
 import config
 
