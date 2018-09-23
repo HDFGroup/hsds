@@ -16,9 +16,10 @@
  
 import json
 import numpy as np
-from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPGone, HTTPInternalServerError, HTTPNotImplemented
+
  
-from util.httpUtil import http_get_json, http_post, http_put, http_delete, jsonResponse, getHref
+from util.httpUtil import http_get, http_post, http_put, http_delete, jsonResponse, getHref
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
 from util.dsetUtil import  getPreviewQuery
 from util.arrayUtil import getNumElements
@@ -56,22 +57,22 @@ def validateChunkLayout(shape_json, item_size, body):
     if "class" not in layout:
         msg = "class key not found in layout for creation property list"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if layout["class"] not in ('H5D_CHUNKED', 'H5D_CONTIGUOUS', 'H5D_COMPACT'):
         msg = "Unknown dataset layout class: {}".format(layout["class"])
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if layout["class"] != 'H5D_CHUNKED':
         return None # nothing else to validate
 
     if "dims" not in layout:
         msg = "dims key not found in layout for creation property list"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if shape_json["class"] != 'H5S_SIMPLE':
         msg = "Bad Request: chunked layout not valid with shape class: {}".format(shape_json["class"])
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     space_dims = shape_json["dims"]
     chunk_dims = layout["dims"]
     max_dims = None
@@ -82,28 +83,28 @@ def validateChunkLayout(shape_json, item_size, body):
     if len(chunk_dims) != len(space_dims):
         msg = "Layout rank does not match shape rank"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     for i in range(len(chunk_dims)):
         dim_extent = space_dims[i]
         chunk_extent = chunk_dims[i]
         if not isinstance(chunk_extent, int):
             msg = "Layout dims must be integer or integer array"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         if chunk_extent <= 0:
             msg = "Invalid layout value"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         if max_dims is None:
             if chunk_extent > dim_extent:
                 msg = "Invalid layout value"
                 log.warn(msg)
-                raise HttpBadRequest(message=msg)
+                raise HTTPBadRequest(reason=msg)
         elif max_dims[i] != 0:
             if chunk_extent > max_dims[i]:
                 msg = "Invalid layout value for extensible dimension"
                 log.warn(msg)
-                raise HttpBadRequest(message=msg)
+                raise HTTPBadRequest(reason=msg)
         else:
             pass # allow any positive value for unlimited dimensions
      
@@ -118,18 +119,22 @@ async def getDatasetDetails(app, dset_id, root_id):
     params = {"Root": root_id}
     log.info("ASync GET: /objects/{}".format(root_id))
     try:
-        obj_info = await http_get_json(app, req, params=params)
-    except HttpProcessingError as hpe:
-        if hpe.code == 501:
-            log.warn("sqlite db not available")
-            return None
-        if hpe.code == 404:
-            # sqlite db not sync'd?
-            log.warn("dset id: {} not found in db".format(dset_id))
-            return None
-        else:
-            log.error("Async error: {}".format(hpe))
-            raise HttpProcessingError(code=500, message="Unexpected Error")
+        obj_info = await http_get(app, req, params=params)
+    except HTTPGone:
+        # sqlite db not sync'd?
+        log.warn("dset id: {} removed from db".format(dset_id))
+        return None
+    except HTTPNotFound:
+        # sqlite db not sync'd?
+        log.warn("dset id: {} not found in db".format(dset_id))
+        return None
+    except HTTPNotImplemented:
+        log.warn("sqlite db not available")
+        return None
+    except HTTPInternalServerError:
+        log.error("Asuync error getting DatasetDetails")
+        return None
+
     log.info("got details: {}".format(obj_info))
     return obj_info
 
@@ -139,41 +144,42 @@ async def GET_Dataset(request):
     """HTTP method to return JSON description of a dataset"""
     log.request(request)
     app = request.app 
+    params = request.rel_url.query
 
     h5path = None
     getAlias = False
     dset_id = request.match_info.get('id')
-    if not dset_id and "h5path" not in request.GET:
+    if not dset_id and "h5path" not in params:
         msg = "Missing dataset id"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     if dset_id:
         if not isValidUuid(dset_id, "Dataset"):
             msg = "Invalid dataset id: {}".format(dset_id)
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
-        if "getalias" in request.GET:
-            if request.GET["getalias"]:
+            raise HTTPBadRequest(reason=msg)
+        if "getalias" in params:
+            if params["getalias"]:
                 getAlias = True 
     else:
         group_id = None
-        if "grpid" in request.GET:
-            group_id = request.GET["grpid"]
+        if "grpid" in params:
+            group_id = params["grpid"]
             if not isValidUuid(group_id, "Group"):
                 msg = "Invalid parent group id: {}".format(group_id)
                 log.warn(msg)
-                raise HttpBadRequest(message=msg)
-        if "h5path" not in request.GET:
+                raise HTTPBadRequest(reason=msg)
+        if "h5path" not in params:
             msg = "Expecting either ctype id or h5path url param"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
 
-        h5path = request.GET["h5path"]
+        h5path = params["h5path"]
         if not group_id and h5path[0] != '/':
             msg = "h5paths must be absolute"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         log.info("GET_Dataset, h5path: {}".format(h5path))
 
     username, pswd = getUserPasswordFromRequest(request)
@@ -186,10 +192,10 @@ async def GET_Dataset(request):
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     verbose = False
-    if "verbose" in request.GET and request.GET["verbose"]:
+    if "verbose" in params and params["verbose"]:
         verbose = True
 
     if h5path:
@@ -198,13 +204,13 @@ async def GET_Dataset(request):
             if "root" not in domain_json:
                 msg = "Expected root key for domain: {}".format(domain)
                 log.warn(msg)
-                raise HttpBadRequest(message=msg)
+                raise HTTPBadRequest(reason=msg)
             group_id = domain_json["root"]
         dset_id = await getObjectIdByPath(app, group_id, h5path)  # throws 404 if not found
         if not isValidUuid(dset_id, "Dataset"):
             msg = "No dataset exist with the path: {}".format(h5path)
             log.warn(msg)
-            raise HttpProcessingError(code=404, message=msg)
+            raise HTTPNotFound()
         log.info("get dataset_id: {} from h5path: {}".format(dset_id, h5path))
     
     # get authoritative state for dataset from DN (even if it's in the meta_cache).
@@ -290,11 +296,11 @@ async def GET_DatasetType(request):
     if not dset_id:
         msg = "Missing dataset id"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if not isValidUuid(dset_id, "Dataset"):
         msg = "Invalid dataset id: {}".format(dset_id)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     username, pswd = getUserPasswordFromRequest(request)
     if username is None and app['allow_noauth']:
@@ -306,7 +312,7 @@ async def GET_DatasetType(request):
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     
     # get authoritative state for group from DN (even if it's in the meta_cache).
     dset_json = await getObjectJson(app, dset_id, refresh=True)  
@@ -339,11 +345,11 @@ async def GET_DatasetShape(request):
     if not dset_id:
         msg = "Missing dataset id"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if not isValidUuid(dset_id, "Dataset"):
         msg = "Invalid dataset id: {}".format(dset_id)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     username, pswd = getUserPasswordFromRequest(request)
     if username is None and app['allow_noauth']:
@@ -355,7 +361,7 @@ async def GET_DatasetShape(request):
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     
     # get authoritative state for dataset from DN (even if it's in the meta_cache).
     dset_json = await getObjectJson(app, dset_id, refresh=True)  
@@ -390,11 +396,11 @@ async def PUT_DatasetShape(request):
     if not dset_id:
         msg = "Missing dataset id"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if not isValidUuid(dset_id, "Dataset"):
         msg = "Invalid dataset id: {}".format(dset_id)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     username, pswd = getUserPasswordFromRequest(request)
     await validateUserPassword(app, username, pswd)
@@ -403,13 +409,13 @@ async def PUT_DatasetShape(request):
     if not request.has_body:
         msg = "PUT shape with no body"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     data = await request.json()
     if "shape" not in data:
         msg = "PUT shape has no shape key in body"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)   
+        raise HTTPBadRequest(reason=msg)   
     shape_update = data["shape"]
     if isinstance(shape_update, int):
         # convert to a list
@@ -420,7 +426,7 @@ async def PUT_DatasetShape(request):
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     
     # get authoritative state for dataset from DN (even if it's in the meta_cache).
     dset_json = await getObjectJson(app, dset_id, refresh=True)  
@@ -431,26 +437,26 @@ async def PUT_DatasetShape(request):
     if shape_orig["class"] != "H5S_SIMPLE":
         msg = "Unable to extend shape of datasets who are not H5S_SIMPLE"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if "maxdims" not in shape_orig:
         msg = "Dataset is not extensible"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     dims = shape_orig["dims"]
     maxdims = shape_orig["maxdims"]
     if len(shape_update) != len(maxdims):
         msg = "Extent of update shape request does not match dataset sahpe"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     for i in range(len(dims)):
         if shape_update[i] < dims[i]:
             msg = "Dataspace can not be made smaller"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         if maxdims[i] != 0 and shape_update[i] > maxdims[i]:
             msg = "Database can not be extended past max extent"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)  
+            raise HTTPBadRequest(reason=msg)  
     
     # verify the user has permission to update shape
     await validateAction(app, domain, dset_id, username, "update")
@@ -480,7 +486,7 @@ async def POST_Dataset(request):
     if not request.has_body:
         msg = "POST Datasets with no body"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     body = await request.json()
 
@@ -489,7 +495,7 @@ async def POST_Dataset(request):
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     
     domain_json = await getDomainJson(app, domain, reload=True)
     root_id = domain_json["root"]
@@ -499,7 +505,7 @@ async def POST_Dataset(request):
     if "root" not in domain_json:
         msg = "Expected root key for domain: {}".format(domain)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     #
     # validate type input
@@ -507,7 +513,7 @@ async def POST_Dataset(request):
     if "type" not in body:
         msg = "POST Dataset has no type key in body"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)   
+        raise HTTPBadRequest(reason=msg)   
 
     datatype = body["type"]
     if isinstance(datatype, str) and datatype.startswith("t-"):
@@ -519,7 +525,7 @@ async def POST_Dataset(request):
         if ctype_json["root"] != root_id:
             msg = "Referenced committed datatype must belong in same domain"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         datatype = ctype_json["type"]
         # add the ctype_id to type type
         datatype["id"] = ctype_id
@@ -532,7 +538,7 @@ async def POST_Dataset(request):
         except TypeError:
             msg = "POST Dataset with invalid predefined type"
             log.warn(msg)
-            raise HttpBadRequest(message=msg) 
+            raise HTTPBadRequest(reason=msg) 
 
     validateTypeItem(datatype)
     item_size = getItemSize(datatype)
@@ -557,7 +563,7 @@ async def POST_Dataset(request):
             if shape != "H5S_NULL":
                 msg = "POST Datset with invalid shape value"
                 log.warn(msg)
-                raise HttpBadRequest(message=msg)
+                raise HTTPBadRequest(reason=msg)
             shape_json["class"] = "H5S_NULL"
         elif isinstance(shape, list):
             if len(shape) == 0:
@@ -569,7 +575,7 @@ async def POST_Dataset(request):
         else:
             msg = "Bad Request: shape is invalid"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
                 
     if dims is not None:
         for i  in range(len(dims)):
@@ -577,18 +583,18 @@ async def POST_Dataset(request):
             if not isinstance(extent, int):
                 msg = "Invalid shape type"
                 log.warn(msg)
-                raise HttpBadRequest(message=msg)
+                raise HTTPBadRequest(reason=msg)
             if extent < 0:
                 msg = "shape dimension is negative"
                 log.warn(msg)
-                raise HttpBadRequest(message=msg)                
+                raise HTTPBadRequest(reason=msg)                
 
     maxdims = None
     if "maxdims" in body:
         if dims is None:
             msg = "Maxdims cannot be supplied if space is NULL"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
 
         maxdims = body["maxdims"]
         if isinstance(maxdims, int):
@@ -599,40 +605,40 @@ async def POST_Dataset(request):
         else:
             msg = "Bad Request: maxdims is invalid"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         if len(dims) != len(maxdims):
             msg = "Maxdims rank doesn't match Shape"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
 
     if maxdims is not None:
         for extent in maxdims:
             if not isinstance(extent, int):
                 msg = "Invalid maxdims type"
                 log.warn(msg)
-                raise HttpBadRequest(message=msg)
+                raise HTTPBadRequest(reason=msg)
             if extent < 0:
                 msg = "maxdims dimension is negative"
                 log.warn(msg)
-                raise HttpBadRequest(message=msg)
+                raise HTTPBadRequest(reason=msg)
         if len(maxdims) != len(dims):
                 msg = "Bad Request: maxdims array length must equal shape array length"
                 log.warn(msg)
-                raise HttpBadRequest(message=msg)
+                raise HTTPBadRequest(reason=msg)
         shape_json["maxdims"] = []
         for i in range(len(dims)):
             maxextent = maxdims[i]
             if not isinstance(maxextent, int):
                 msg = "Bad Request: maxdims must be integer type"
                 log.warn(msg)
-                raise HttpBadRequest(message=msg)
+                raise HTTPBadRequest(reason=msg)
             elif maxextent == 0:
                 # unlimited dimension
                 shape_json["maxdims"].append(0)
             elif maxextent < dims[i]:
                 msg = "Bad Request: maxdims extent can't be smaller than shape extent"
                 log.warn(msg)
-                raise HttpBadRequest(message=msg)
+                raise HTTPBadRequest(reason=msg)
             else:
                 shape_json["maxdims"].append(maxextent) 
 
@@ -692,7 +698,7 @@ async def POST_Dataset(request):
             except (TypeError, ValueError) as e:
                 msg = "Fill value {} not compatible with dataset type: {}".format(fill_value, datatype)
                 log.warn(msg)
-                raise HttpBadRequest(message=msg)
+                raise HTTPBadRequest(reason=msg)
 
         dataset_json["creationProperties"] = creationProperties
 
@@ -733,11 +739,11 @@ async def DELETE_Dataset(request):
     if not dset_id:
         msg = "Missing dataset id"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if not isValidUuid(dset_id, "Dataset"):
         msg = "Invalid dataset id: {}".format(dset_id)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     username, pswd = getUserPasswordFromRequest(request)
     await validateUserPassword(app, username, pswd)
@@ -746,13 +752,13 @@ async def DELETE_Dataset(request):
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
     if "root" not in domain_json:
         log.error("Expected root key for domain: {}".format(domain))
-        raise HttpBadRequest(message="Unexpected Error")
+        raise HTTPBadRequest(reason="Unexpected Error")
 
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, dset_id, username, "delete")

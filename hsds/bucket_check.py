@@ -16,7 +16,8 @@ import asyncio
 import time
 
 from aiobotocore import get_session
-from aiohttp.http_exceptions import HttpProcessingError
+from aiohttp.web_exceptions import HTTPInternalServerError
+
 
 import config
 from util.timeUtil import unixTimeToUTC
@@ -50,7 +51,7 @@ async def bucketCheck(app):
                 s3obj = await getS3Obj(app, objid)
                 if s3obj.used is False:
                     unlinked_count += 1
-            except HttpProcessingError as hpe:
+            except HTTPInternalServerError as hpe:
                 log.warn("got error retreiving {}: {}".format(objid, hpe.code))
                 
     domains = app["domains"]

@@ -13,7 +13,8 @@
 
 import weakref
 import numpy as np
-from aiohttp.http_exceptions import HttpBadRequest
+from aiohttp.web_exceptions import HTTPBadRequest
+
 
 import hsds_logger as log
 
@@ -754,7 +755,7 @@ def validateTypeItem(typeItem):
         log.debug("got numpy type: {}".format(str(dt)))
     except (KeyError, TypeError, ValueError) as e:
         log.warn("Got error parsing type... {}".format(e))
-        raise HttpBadRequest(message=str(e))
+        raise HTTPBadRequest(reason=str(e))
      
 
 """

@@ -20,7 +20,7 @@ import zlib
 import subprocess
 import datetime
 from botocore.exceptions import ClientError
-from aiohttp.http_exceptions import HttpProcessingError 
+from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 
 import hsds_logger as log
 import config
@@ -111,13 +111,13 @@ def getS3Client(app):
 
     return s3
 
-def releaseClient(app):
+async def releaseClient(app):
     """ release the client collection to s3
      (Used for cleanup on application exit)
     """
     if 's3' in app:
         client = app['s3']
-        client.close()
+        await client.close()
         del app['s3']
 
 def s3_stats_increment(app, counter, inc=1):
@@ -153,22 +153,18 @@ async def getS3JSONObj(app, key):
         # key does not exist?
         # check for not found status
         # Note: Error.Code should always exist - cf https://github.com/boto/botocore/issues/885
-        is_404 = False
-        if "ResponseMetadata" in ce.response:
-            metadata = ce.response["ResponseMetadata"]
-            if "HTTPStatusCode" in metadata:
-                if metadata["HTTPStatusCode"] == 404:
-                    is_404 = True
-        if is_404:
+        response_code = ce.response['Error']['Code']
+         
+        if response_code == "NoSuchKey":
             msg = "s3_key: {} not found ".format(key,)
             log.info(msg)
-            raise HttpProcessingError(code=404, message=msg)
+            raise HTTPNotFound()
         else:
             s3_stats_increment(app, "error_count")
             log.warn("got ClientError on s3 get: {}".format(str(ce)))
             msg = "Error getting s3 obj: " + str(ce)
             log.error(msg)
-            raise HttpProcessingError(code=500, message=msg)
+            raise HTTPInternalServerError()
 
     s3_stats_increment(app, "bytes_in", inc=len(data)) 
     try:
@@ -177,7 +173,7 @@ async def getS3JSONObj(app, key):
         s3_stats_increment(app, "error_count")
         log.error("Error loading JSON at key: {}".format(key))
         msg = "Unexpected i/o error"
-        raise HttpProcessingError(code=500, message=msg)
+        raise HTTPInternalServerError()
 
     log.debug("s3 returned: {}".format(json_dict))
     return json_dict
@@ -199,22 +195,16 @@ async def getS3Bytes(app, key, deflate_level=None):
     except ClientError as ce:
         # key does not exist?
         # check for not found status
-        is_404 = False
-        if "ResponseMetadata" in ce.response:
-            metadata = ce.response["ResponseMetadata"]
-            if "HTTPStatusCode" in metadata:
-                if metadata["HTTPStatusCode"] == 404:
-                    is_404 = True
-        if is_404:
+        if ce.response["Error"]["Code"] == "NoSuchKey":
             msg = "s3_key: {} not found ".format(key,)
             log.warn(msg)
-            raise HttpProcessingError(code=404, message=msg)
+            raise HTTPInternalServerError()
         else:
             s3_stats_increment(app, "error_count")
             log.warn("got ClientError on s3 get: {}".format(str(ce)))
             msg = "Error getting s3 obj: " + str(ce)
             log.error(msg)
-            raise HttpProcessingError(code=500, message=msg)
+            raise HTTPInternalServerError()
 
     if data and len(data) > 0:
         s3_stats_increment(app, "bytes_in", inc=len(data))
@@ -250,7 +240,7 @@ async def putS3JSONObj(app, key, json_obj):
         s3_stats_increment(app, "error_count")
         msg = "Error putting s3 obj: " + str(ce)
         log.error(msg)
-        raise HttpProcessingError(code=500, message=msg)
+        raise HTTPInternalServerError()
     if data and len(data) > 0:
         s3_stats_increment(app, "bytes_out", inc=len(data))
     log.debug("putS3JSONObj complete, s3_rsp: {}".format(s3_rsp))
@@ -285,7 +275,7 @@ async def putS3Bytes(app, key, data, deflate_level=None):
         s3_stats_increment(app, "error_count")
         msg = "Error putting s3 obj: " + str(ce)
         log.error(msg)
-        raise HttpProcessingError(code=500, message=msg)
+        raise HTTPInternalServerError()
     if data and len(data) > 0:
         s3_stats_increment(app, "bytes_in", inc=len(data))
     log.debug("putS3Bytes complete, s3_rsp: {}".format(s3_rsp))
@@ -309,10 +299,16 @@ async def deleteS3Obj(app, key):
         await client.delete_object(Bucket=bucket, Key=key)
     except ClientError as ce:
         # key does not exist? 
+        key_found = await isS3Obj(app, key)
+        if not key_found:
+            log.warn(f"delete on s3key {key} but not found")
+            raise HTTPNotFound()
+        # else some other error
         s3_stats_increment(app, "error_count")
         msg = "Error deleting s3 obj: " + str(ce)
         log.error(msg)
-        raise HttpProcessingError(code=500, message=msg)
+
+        raise HTTPInternalServerError()
     log.debug("deleteS3Obj complete")
 
 async def getS3ObjStats(app, key):
@@ -339,11 +335,11 @@ async def getS3ObjStats(app, key):
         s3_stats_increment(app, "error_count")
         msg = "Error listing s3 obj: " + str(ce)
         log.error(msg)
-        raise HttpProcessingError(code=500, message=msg)
+        raise HTTPInternalServerError()
     if 'Contents' not in resp:
         msg = "key: {} not found".format(key)
         log.info(msg)
-        raise HttpProcessingError(code=404, message=msg)
+        raise HTTPInternalServerError()
     contents = resp['Contents']
     log.debug("s3_contents: {}".format(contents))
     
@@ -372,7 +368,7 @@ async def getS3ObjStats(app, key):
     if not found:
         msg = "key: {} not found".format(key)
         log.info(msg)
-        raise HttpProcessingError(code=404, message=msg)
+        raise HTTPNotFound()
 
     return stats
     
@@ -424,7 +420,7 @@ async def _fetch_all(app, pages, key_names, prefix='', deliminator='', suffix=''
                 # back off and try again
                 if retry_number == retry_limit - 1:
                     log.error("Error retreiving s3 keys")
-                    raise HttpProcessingError(code=500, message="Unexpected Error retreiving S3 keys")
+                    raise HTTPInternalServerError()
                 log.warn("Error retrieving S3 keys, retrying")
                 sleep_seconds = (retry_number+1)**2  # sleep, 1,4,9, etc. seconds
                 await asyncio.sleep(sleep_seconds)

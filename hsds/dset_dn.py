@@ -14,7 +14,8 @@
 # 
 import time
 
-from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalServerError
+
  
 from util.idUtil import isValidUuid, validateUuid
 from util.httpUtil import jsonResponse
@@ -31,7 +32,7 @@ async def GET_Dataset(request):
     
     if not isValidUuid(dset_id, obj_class="dataset"):
         log.error( "Unexpected type_id: {}".format(dset_id))
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
     
     dset_json = await get_metadata_obj(app, dset_id)
 
@@ -60,7 +61,7 @@ async def POST_Dataset(request):
     if not request.has_body:
         msg = "POST_Dataset with no body"
         log.error(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     body = await request.json()
     log.info("POST_Dataset, body: {}".format(body))
@@ -68,37 +69,35 @@ async def POST_Dataset(request):
     dset_id = get_obj_id(request, body=body)
     if not isValidUuid(dset_id, obj_class="dataset"):
         log.error( "Unexpected dataset_id: {}".format(dset_id))
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
 
-    try:
-        # verify the id doesn't already exist
-        await check_metadata_obj(app, dset_id)
+    # verify the id doesn't already exist
+    obj_found = await check_metadata_obj(app, dset_id)
+    if obj_found:
         log.error( "Post with existing dset_id: {}".format(dset_id))
-        raise HttpProcessingError(code=500, message="Unexpected Error")
-    except HttpProcessingError:
-        pass  # expected
+        raise HTTPInternalServerError()
        
     if "root" not in body:
         msg = "POST_Dataset with no root"
         log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
     root_id = body["root"]
     try:
         validateUuid(root_id, "group")
     except ValueError:
         msg = "Invalid root_id: " + root_id
         log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
     
     if "type" not in body:
         msg = "POST_Dataset with no type"
         log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
     type_json = body["type"]
     if "shape" not in body:
         msg = "POST_Dataset with no shape"
         log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
     shape_json = body["shape"]
      
     layout = None
@@ -137,20 +136,23 @@ async def DELETE_Dataset(request):
     """
     log.request(request)
     app = request.app
+    params = request.rel_url.query
     dset_id = request.match_info.get('id')
     log.info("DELETE dataset: {}".format(dset_id))
 
     if not isValidUuid(dset_id, obj_class="dataset"):
         log.error( "Unexpected dataset id: {}".format(dset_id))
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
 
     # verify the id  exist
-    await check_metadata_obj(app, dset_id) 
+    obj_found = await check_metadata_obj(app, dset_id) 
+    if not obj_found:
+        raise HTTPNotFound()
 
     log.debug("deleting dataset: {}".format(dset_id))
 
     notify=True
-    if "Notify" in request.GET and not request.GET["Notify"]:
+    if "Notify" in params and not params["Notify"]:
         notify=False
     await delete_metadata_obj(app, dset_id, notify=notify)
 
@@ -168,7 +170,7 @@ async def PUT_DatasetShape(request):
     
     if not isValidUuid(dset_id, obj_class="dataset"):
         log.error( "Unexpected type_id: {}".format(dset_id))
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
 
     body = await request.json()
 
@@ -192,7 +194,7 @@ async def PUT_DatasetShape(request):
         if shape_update[i] < dims[i]:
             msg = "Dataspace can not be made smaller"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
 
     # Update the shape!
     for i in range(len(dims)):    

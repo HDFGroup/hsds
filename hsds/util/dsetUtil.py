@@ -10,7 +10,8 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 
-from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
+
 import hsds_logger as log
 
 
@@ -27,12 +28,12 @@ def getHyperslabSelection(dsetshape, start=None, stop=None, step=None):
         if len(start) != rank:
             msg = "Bad Request: start array length not equal to dataset rank"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         for dim in range(rank):
             if start[dim] < 0 or start[dim] >= dsetshape[dim]:
                 msg = "Bad Request: start index invalid for dim: " + str(dim)
                 log.warn(msg)
-                raise HttpBadRequest(message=msg)
+                raise HTTPBadRequest(reason=msg)
     else:
         start = []
         for dim in range(rank):
@@ -44,12 +45,12 @@ def getHyperslabSelection(dsetshape, start=None, stop=None, step=None):
         if len(stop) != rank:
             msg = "Bad Request: stop array length not equal to dataset rank"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         for dim in range(rank):
             if stop[dim] <= start[dim] or stop[dim] > dsetshape[dim]:
                 msg = "Bad Request: stop index invalid for dim: " + str(dim)
                 log.warn(msg)
-                raise HttpBadRequest(message=msg)
+                raise HTTPBadRequest(reason=msg)
     else:
         stop = []
         for dim in range(rank):
@@ -61,12 +62,12 @@ def getHyperslabSelection(dsetshape, start=None, stop=None, step=None):
         if len(step) != rank:
             msg = "Bad Request: step array length not equal to dataset rank"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         for dim in range(rank):
             if step[dim] <= 0 or step[dim] > dsetshape[dim]:
                 msg = "Bad Request: step index invalid for dim: " + str(dim)
                 log.warn(msg)
-                raise HttpBadRequest(message=msg)
+                raise HTTPBadRequest(reason=msg)
     else:
         step = []
         for dim in range(rank):
@@ -81,7 +82,7 @@ def getHyperslabSelection(dsetshape, start=None, stop=None, step=None):
         except ValueError:
             msg = "Bad Request: invalid start/stop/step value"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         slices.append(s)
     return tuple(slices)
 
@@ -114,6 +115,7 @@ look for query param.  Return default value (or None) if not found
 """
 def getQueryParameter(request, query_name, body=None, default=None):
     # as a convience, look up different capitilizations of query name
+    params = request.rel_url.query
     query_names = []
     query_names.append(query_name.lower())
     query_names.append(query_name.upper())
@@ -130,8 +132,8 @@ def getQueryParameter(request, query_name, body=None, default=None):
     if val is None:
         # look for a query param
         for query_name in query_names:
-            if query_name in request.GET:
-                val = request.GET[query_name]
+            if query_name in params:
+                val = params[query_name]
 
     if val and default is not None and isinstance(default, int):
         # convert to int Type
@@ -140,14 +142,14 @@ def getQueryParameter(request, query_name, body=None, default=None):
         except ValueError:
             msg = "Invalid request parameter: {}".format(query_name)
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
     if val is None:
         if  default is not None:
             val = default
         else:
             msg = "Request parameter is missing: {}".format(query_name)
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
     return val
 
 """
@@ -163,6 +165,7 @@ Helper method - return slice for dim based on query params
 def getSliceQueryParam(request, dim, extent, body=None):        
     # Get optional query parameters for given dim
     log.debug("getSliceQueryParam: " + str(dim) + ", " + str(extent))
+    params = request.rel_url.query
 
     start = 0
     stop = extent
@@ -175,7 +178,7 @@ def getSliceQueryParam(request, dim, extent, body=None):
             if len(start_val) < dim:
                 msg = "Not enough dimensions supplied to body start key"
                 log.arn(msg)
-                raise HttpBadRequest(message=msg)
+                raise HTTPBadRequest(reason=msg)
             start = start_val[dim]
         else:
             start = start_val
@@ -186,7 +189,7 @@ def getSliceQueryParam(request, dim, extent, body=None):
             if len(stop_val) < dim:
                 msg = "Not enough dimensions supplied to body stop key"
                 log.arn(msg)
-                raise HttpBadRequest(message=msg)
+                raise HTTPBadRequest(reason=msg)
             stop = stop_val[dim]
         else:
             stop = stop_val
@@ -196,23 +199,23 @@ def getSliceQueryParam(request, dim, extent, body=None):
             if len(step_val) < dim:
                 msg = "Not enough dimensions supplied to body step key"
                 log.arn(msg)
-                raise HttpBadRequest(message=msg)
+                raise HTTPBadRequest(reason=msg)
             step = step_val[dim]
         else:
             step = step_val
 
-    if "select" in request.GET:
-        query = request.GET["select"]
+    if "select" in params:
+        query = params["select"]
         log.debug("select query value:" + query )
 
         if not query.startswith('['):
             msg = "Bad Request: selection query missing start bracket"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         if not query.endswith(']'):
             msg = "Bad Request: selection query missing end bracket"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
 
         # now strip out brackets
         query = query[1:-1]
@@ -221,7 +224,7 @@ def getSliceQueryParam(request, dim, extent, body=None):
         if dim > len(query_array):
             msg = "Not enough dimensions supplied to query argument"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         dim_query = query_array[dim].strip()
     
         if dim_query.find(':') < 0:
@@ -231,7 +234,7 @@ def getSliceQueryParam(request, dim, extent, body=None):
             except ValueError:
                 msg = "Bad Request: invalid selection parameter (can't convert to int) for dimension: " + str(dim)
                 log.warn(msg)
-                raise HttpBadRequest(message=msg)
+                raise HTTPBadRequest(reason=msg)
             stop = start
         elif dim_query == ':':
             # select everything
@@ -242,7 +245,7 @@ def getSliceQueryParam(request, dim, extent, body=None):
             if len(fields) > 3:
                 msg = "Bad Request: Too many ':' seperators for dimension: " + str(dim)
                 log.warn(msg)
-                raise HttpBadRequest(message=msg)
+                raise HTTPBadRequest(reason=msg)
             try:
                 if fields[0]:
                     start = int(fields[0])
@@ -253,21 +256,21 @@ def getSliceQueryParam(request, dim, extent, body=None):
             except ValueError:
                 msg = "Bad Request: invalid selection parameter (can't convert to int) for dimension: " + str(dim)
                 log.info(msg)
-                raise HttpBadRequest(message=msg)
+                raise HTTPBadRequest(reason=msg)
     log.debug("start: {}, stop: {}, step: {}".format(start, stop, step))
     # now, validate whaterver start/stop/step values we got
     if start < 0 or start > extent:
         msg = "Bad Request: Invalid selection start parameter for dimension: " + str(dim)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if stop > extent:
         msg = "Bad Request: Invalid selection stop parameter for dimension: " + str(dim)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if step <= 0:
         msg = "Bad Request: invalid selection step parameter for dimension: " + str(dim)
         log.debug(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     s = slice(start, stop, step)
     log.debug("dim query[" + str(dim) + "] returning: start: " +
             str(start) + " stop: " + str(stop) + " step: " + str(step))
@@ -334,13 +337,13 @@ Use with H5S_NULL datasets will throw a 400 error.
 def getDsetMaxDims(dset_json):
     if "shape" not in dset_json:
         log.error("No shape found in dset_json")
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        raise HTTPInternalServerError()
     shape_json = dset_json["shape"]
     maxdims = None
     if shape_json['class'] == 'H5S_NULL':
         msg = "Expected shape class other than H5S_NULL"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     elif shape_json['class'] == 'H5S_SCALAR':
         maxdims = [1,]
     elif shape_json['class'] == 'H5S_SIMPLE':
@@ -348,7 +351,7 @@ def getDsetMaxDims(dset_json):
             maxdims = shape_json["maxdims"]
     else:
         log.error("Unexpected shape class: {}".format(shape_json['class']))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        raise HTTPInternalServerError()
     return maxdims
 
 """ Get chunk layout.  Throw 500 if used with non-H5D_CHUNKED layout
@@ -356,11 +359,11 @@ def getDsetMaxDims(dset_json):
 def getChunkLayout(dset_json):
     if "layout" not in dset_json:
         log.error("No layout found in dset_json: {}".format(dset_json))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        raise HTTPInternalServerError()
     layout_json = dset_json["layout"]
     if layout_json["class"] != 'H5D_CHUNKED':
         log.error("Unexpected shape layout: {}".format(layout_json["class"]))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        raise HTTPInternalServerError()
     layout = layout_json["dims"]
     return layout
 
@@ -456,7 +459,7 @@ def getEvalStr(query, arr_name, field_names):
         if item in field_names:
             msg = "invalid field name"
             #log.warn("Bad query: " + msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
     while i < len(query):
         ch = query[i]
         if (i+1) < len(query):
@@ -469,7 +472,7 @@ def getEvalStr(query, arr_name, field_names):
                 # invalid
                 msg = "unknown field name"
                 #log.warn("Bad query: " + msg)
-                raise HttpBadRequest(message=msg)
+                raise HTTPBadRequest(reason=msg)
             eval_str += arr_name + "['" + var_name + "']"
             var_name = None
             var_count += 1
@@ -497,7 +500,7 @@ def getEvalStr(query, arr_name, field_names):
             if paren_count < 0:
                 msg = "Mismatched paren"
                 #log.warn("Bad query: " + msg)
-                raise HttpBadRequest(message=msg)
+                raise HTTPBadRequest(reason=msg)
             eval_str += ch
         else:
             # just add to eval_str
@@ -506,15 +509,15 @@ def getEvalStr(query, arr_name, field_names):
     if end_quote_char:
         msg = "no matching quote character"
         #log.warn("Bad Query: " + msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if var_count == 0:
         msg = "No field value"
         #log.warn("Bad query: " + msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if paren_count != 0:
         msg = "Mismatched paren"
         #log.warn("Bad query: " + msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     #log.info("eval_str: {}".format(eval_str))       
     return eval_str
 

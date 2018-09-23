@@ -18,7 +18,8 @@ import asyncio
 import json
 import time
 import numpy as np
-from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError 
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalServerError
+
 from aiohttp.web import StreamResponse
 from util.arrayUtil import bytesArrayToList, bytesToArray, arrayToBytes
 from util.httpUtil import  jsonResponse
@@ -38,7 +39,7 @@ Update the requested chunk/selection
 async def PUT_Chunk(request):
     log.request(request)
     app = request.app 
-    #loop = app["loop"]
+    params = request.rel_url.query
 
     task_count = len(asyncio.Task.all_tasks())
     log.debug("Task count: {}".format(task_count))
@@ -47,16 +48,16 @@ async def PUT_Chunk(request):
     if not chunk_id:
         msg = "Missing chunk id"
         log.error(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if not isValidUuid(chunk_id, "Chunk"):
         msg = "Invalid chunk id: {}".format(chunk_id)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
   
     if not request.has_body:
         msg = "PUT Value with no body"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     content_type = "application/octet-stream"
     if "Content-Type" in request.headers:
@@ -65,15 +66,15 @@ async def PUT_Chunk(request):
     if content_type != "application/octet-stream":
         msg = "Unexpected content_type: {}".format(content_type)
         log.error(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     validateInPartition(app, chunk_id)
-    log.debug("request params: {}".format(list(request.GET.keys())))
-    if "dset" not in request.GET:
+    log.debug("request params: {}".format(list(params.keys())))
+    if "dset" not in params:
         msg = "Missing dset in GET request"
         log.error(msg)
-        raise HttpBadRequest(message=msg)
-    dset_json = json.loads(request.GET["dset"])
+        raise HTTPBadRequest(reason=msg)
+    dset_json = json.loads(params["dset"])
     log.debug("dset_json: {}".format(dset_json))
 
     dims = getChunkLayout(dset_json)
@@ -106,11 +107,11 @@ async def PUT_Chunk(request):
     if rank == 0:
         msg = "No dimension passed to PUT chunk request"
         log.error(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if len(selection) != rank:
         msg = "Selection rank does not match shape rank"
         log.error(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     for i in range(rank):
         s = selection[i]
         log.debug("selection[{}]: {}".format(i, s))
@@ -129,7 +130,7 @@ async def PUT_Chunk(request):
     if itemsize != 'H5T_VARIABLE' and (num_elements * itemsize) != request.content_length:
         msg = "Expected content_length of: {}, but got: {}".format(num_elements*itemsize, request.content_length)
         log.error(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     # if the chunk cache has too many dirty items, wait till items get flushed to S3
     chunk_cache = app['chunk_cache']
@@ -143,7 +144,7 @@ async def PUT_Chunk(request):
     if len(input_bytes) != request.content_length:
         msg = "Read {} bytes, expecting: {}".format(len(input_bytes), request.content_length)
         log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
         
     input_arr = bytesToArray(input_bytes, dt, input_shape)
 
@@ -207,25 +208,25 @@ Return data from requested chunk and selection
 async def GET_Chunk(request):
     log.request(request)
     app = request.app 
-    #loop = app["loop"]
+    params = request.rel_url.query
 
     chunk_id = request.match_info.get('id')
     if not chunk_id:
         msg = "Missing chunk id"
         log.error(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if not isValidUuid(chunk_id, "Chunk"):
         msg = "Invalid chunk id: {}".format(chunk_id)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     
     validateInPartition(app, chunk_id)
-    log.debug("request params: {}".format(list(request.GET.keys())))
-    if "dset" not in request.GET:
+    log.debug("request params: {}".format(list(params.keys())))
+    if "dset" not in params:
         msg = "Missing dset in GET request"
         log.error(msg)
-        raise HttpBadRequest(message=msg)
-    dset_json = json.loads(request.GET["dset"])
+        raise HTTPBadRequest(reason=msg)
+    dset_json = json.loads(params["dset"])
     
     log.debug("dset_json: {}".format(dset_json)) 
     type_json = dset_json["type"]
@@ -242,8 +243,8 @@ async def GET_Chunk(request):
         log.info("deflate_level: {}".format(deflate_level))
          
     # get chunk selection from query params
-    if "select" in request.GET:
-        log.debug("select: {}".format(request.GET["select"]))
+    if "select" in params:
+        log.debug("select: {}".format(params["select"]))
     selection = []
     for i in range(rank):
         dim_slice = getSliceQueryParam(request, i, dims[i])
@@ -258,11 +259,11 @@ async def GET_Chunk(request):
     if rank == 0:
         msg = "No dimension passed to GET chunk request"
         log.error(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if len(selection) != rank:
         msg = "Selection rank does not match shape rank"
         log.error(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     for i in range(rank):
         s = selection[i]
         log.debug("selection[{}]: {}".format(i, s))
@@ -283,7 +284,7 @@ async def GET_Chunk(request):
             # return a 404
             msg = "Chunk {} does not exist".format(chunk_id)
             log.info(msg)
-            raise HttpProcessingError(code=404, message="Not found")
+            raise HTTPNotFound()
         log.debug("Reading chunk {} from S3".format(s3_key))
         chunk_bytes = await getS3Bytes(app, s3_key, deflate_level=deflate_level)
         #chunk_arr = np.fromstring(chunk_bytes, dtype=dt)
@@ -294,18 +295,18 @@ async def GET_Chunk(request):
      
     resp = None
     
-    if "query" in request.GET:
+    if "query" in params:
         # do query selection
-        query = request.GET["query"]
+        query = params["query"]
         log.info("query: {}".format(query))
         if rank != 1:
             msg = "Query selection only supported for one dimensional arrays"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
 
         limit = 0
-        if "Limit" in request.GET:
-            limit = int(request.GET["Limit"])
+        if "Limit" in params:
+            limit = int(params["Limit"])
 
         values = []
         indices = []
@@ -364,14 +365,14 @@ Return data from requested chunk and point selection
 async def POST_Chunk(request):
     log.request(request)
     app = request.app 
-    #loop = app["loop"]
+    params = request.rel_url.query
 
     put_points = False
     num_points = 0
-    if "count" in request.GET:
-        num_points = int(request.GET["count"])
+    if "count" in params:
+        num_points = int(params["count"])
 
-    if "action" in request.GET and request.GET["action"] == "put":
+    if "action" in params and params["action"] == "put":
         log.info("POST Chunk put points, num_points: {}".format(num_points))
 
         put_points = True
@@ -382,7 +383,7 @@ async def POST_Chunk(request):
     if not chunk_id:
         msg = "Missing chunk id"
         log.error(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     log.info("POST chunk_id: {}".format(chunk_id))
     chunk_index = getChunkIndex(chunk_id)
     log.debug("chunk_index: {}".format(chunk_index))
@@ -390,15 +391,15 @@ async def POST_Chunk(request):
     if not isValidUuid(chunk_id, "Chunk"):
         msg = "Invalid chunk id: {}".format(chunk_id)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     validateInPartition(app, chunk_id)
-    log.debug("request params: {}".format(list(request.GET.keys())))
-    if "dset" not in request.GET:
+    log.debug("request params: {}".format(list(params.keys())))
+    if "dset" not in params:
         msg = "Missing dset in GET request"
         log.error(msg)
-        raise HttpBadRequest(message=msg)
-    dset_json = json.loads(request.GET["dset"])
+        raise HTTPBadRequest(reason=msg)
+    dset_json = json.loads(params["dset"])
     log.debug("dset_json: {}".format(dset_json))
     chunk_layout = getChunkLayout(dset_json)
     chunk_coord = getChunkCoordinate(chunk_id, chunk_layout)
@@ -408,7 +409,7 @@ async def POST_Chunk(request):
     if not request.has_body:
         msg = "POST Value with no body"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     content_type = "application/octet-stream"
     if "Content-Type" in request.headers:
@@ -417,7 +418,7 @@ async def POST_Chunk(request):
     if content_type != "application/octet-stream":
         msg = "Unexpected content_type: {}".format(content_type)
         log.error(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
      
     type_json = dset_json["type"]
     dset_dtype = createDataType(type_json)
@@ -429,7 +430,7 @@ async def POST_Chunk(request):
     if rank == 0:
         msg = "POST chunk request with no dimensions"
         log.error(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     fill_value = getFillValue(dset_json)
 
     chunk_arr = None 
@@ -459,7 +460,7 @@ async def POST_Chunk(request):
                 # return a 404
                 msg = "Chunk {} does not exist".format(chunk_id)
                 log.warn(msg)
-                raise HttpProcessingError(code=404, message="Not found")
+                raise HTTPNotFound()
         if obj_exists:
             log.debug("Reading chunk {} from S3".format(s3_key))
             chunk_bytes = await getS3Bytes(app, s3_key, deflate_level=deflate_level)
@@ -483,7 +484,7 @@ async def POST_Chunk(request):
     if len(input_bytes) != request.content_length:
         msg = "Read {} bytes, expecting: {}".format(len(input_bytes), request.content_length)
         log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
 
 
     if put_points:
@@ -500,7 +501,7 @@ async def POST_Chunk(request):
         if len(point_arr) != num_points:
             msg = "Unexpected size of point array, got: {} expected: {}".format(len(point_arr), num_points)
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         for i in range(num_points):
             elem = point_arr[i]
             if rank == 1:
@@ -524,7 +525,7 @@ async def POST_Chunk(request):
         if len(point_arr) % rank != 0:
             msg = "Unexpected size of point array"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         num_points = len(point_arr) // rank
         log.debug("got {} points".format(num_points))
 
@@ -562,13 +563,13 @@ async def DELETE_Chunk(request):
     if not chunk_id:
         msg = "Missing chunk id"
         log.error(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     log.info("DELETE chunk: {}".format(chunk_id))
 
     if not isValidUuid(chunk_id, "Chunk"):
         msg = "Invalid chunk id: {}".format(chunk_id)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     validateInPartition(app, chunk_id)
 

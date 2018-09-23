@@ -14,11 +14,12 @@
 # 
 #import asyncio 
 import json
-from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPGone, HTTPInternalServerError
+from aiohttp import ClientResponseError
 
-from util.httpUtil import  http_post, http_put, http_get_json, http_delete, jsonResponse, getHref
+
+from util.httpUtil import  http_post, http_put, http_get, http_delete, jsonResponse, getHref
 from util.idUtil import  getDataNodeUrl, createObjId
-#from util.s3Util import getS3Keys
 from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
 from util.domainUtil import getParentDomain, getDomainFromRequest
@@ -27,20 +28,6 @@ from basenode import getAsyncNodeUrl
 import hsds_logger as log
 import config
 
-async def get_domain_json(app, domain):
-    req = getDataNodeUrl(app, domain)
-    req += "/domains" 
-    params = {"domain": domain}
-    log.info("sending dn req: {}".format(req))
-    domain_json = await http_get_json(app, req, params=params)
-    return domain_json
-
-async def domain_query(app, domain, rsp_dict):
-    try :
-        domain_json = await get_domain_json(app, domain)
-        rsp_dict[domain] = domain_json
-    except HttpProcessingError as hpe:
-        rsp_dict[domain] = { "status_code": hpe.code}
 
 async def getRootInfo(app, root_id, verbose=False):
     """ Get extra information about the given domain """
@@ -52,18 +39,18 @@ async def getRootInfo(app, root_id, verbose=False):
     if verbose:
         params["verbose"] = 1
     try:
-        root_info = await http_get_json(app, req, params=params)
-    except HttpProcessingError as hpe:
-        if hpe.code == 501:
+        root_info = await http_get(app, req, params=params)
+    except ClientResponseError as ce:
+        if ce.code == 501:
             log.warn("sqlite db not available")
             return None
-        if hpe.code == 404:
+        if ce.code == 404:
             # sqlite db not sync'd?
             log.warn("root id: {} not found in db".format(root_id))
             return None
         else:
-            log.error("Async error: {}".format(hpe))
-            raise HttpProcessingError(code=500, message="Unexpected Error")
+            log.error("Async error: {}".format(ce))
+            raise HTTPInternalServerError()
     return root_info
 
 async def get_toplevel_domains(app):
@@ -73,21 +60,21 @@ async def get_toplevel_domains(app):
     params = {"domain": "/"}
     log.info("ASync GET TopLevelDomains")
     try:
-        rsp_json = await http_get_json(app, req, params=params)
-    except HttpProcessingError as hpe:
-        if hpe.code == 501:
+        rsp_json = await http_get(app, req, params=params)
+    except ClientResponseError as ce:
+        if ce.code == 501:
             log.warn("sqlite db not available")
             return None
-        if hpe.code == 404:
+        if ce.code == 404:
             # sqlite db not sync'd?
             log.warn("404 repsonse for get_toplevel_domains")
             return None
         else:
-            log.error("Async error: {}".format(hpe))
-            raise HttpProcessingError(code=500, message="Unexpected Error")
+            log.error("Async error: {}".format(ce))
+            raise HTTPInternalServerError()
     if "domains" not in rsp_json:
         log.error("domains not found in get_toplevel_domain request")
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
 
     return rsp_json["domains"]
 
@@ -105,13 +92,13 @@ async def get_collection(app, root_id, collection, marker=None, limit=None):
     if root_id not in obj_map:
         msg = "Expected to get root_id: {} in collection map".formt(root_id)
         log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
 
     root = obj_map[root_id]
     if collection not in root:
         msg = "Expected to find key: {} in obj_map".format(collection)
         log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
     
     obj_col = root[collection]
 
@@ -148,47 +135,48 @@ async def get_collection(app, root_id, collection, marker=None, limit=None):
  
         
 async def get_domains(request):
-    """ This method is called by GET_Domains and GET_Domain when no domain is passed in.
-    """
+    """ This method is called by GET_Domains and GET_Domain """
     app = request.app
-    # if there is no domain passed in, get a list of top level domains
-    log.info("get_domains")
     params = {}
-    if "domain" not in request.GET:
+    
+    # if there is no domain passed in, get a list of top level domains
+    if "domain" not in request.rel_url.query:
         params["prefix"] = '/'
     else:
-        params["prefix"] = request.GET["domain"]
-
-    # always use "verbose" to pull info from RootTable
-    if "verbose" in request.GET and request.GET["verbose"]:
-        params["verbose"] = 1
-    else:
-        params["verbose"] = 0
+        params["prefix"] = request.rel_url.query["domain"]
+    log.info(f"get_domains for: {params['prefix']}")
 
     if not params["prefix"].startswith('/'):
         msg = "Prefix must start with '/'"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)     
+        raise HTTPBadRequest(reason=msg)  
 
-    if "Limit" in request.GET:
+    # always use "verbose" to pull info from RootTable
+    if "verbose" in request.rel_url.query and request.rel_url.query["verbose"]:
+        params["verbose"] = 1
+    else:
+        params["verbose"] = 0   
+
+    if "Limit" in request.rel_url.query:
         try:
-            params["Limit"] = int(request.GET["Limit"])
+            params["Limit"] = int(request.rel_url.query["Limit"])
             log.debug("GET_Domains - using Limit: {}".format(params["Limit"]))
         except ValueError:
             msg = "Bad Request: Expected int type for limit"
             log.warn(msg)   
-            raise HttpBadRequest(message=msg)
-    if "Marker" in request.GET:
-        params["Marker"] = request.GET["Marker"]
+            raise HTTPBadRequest(reason=msg)
+    if "Marker" in request.rel_url.query:
+        params["Marker"] = request.rel_url.query["Marker"]
         log.debug("got Marker request param: {}".format(params["Marker"]))
 
 
     an_url = getAsyncNodeUrl(app)
     req = an_url + "/domains"
     log.debug("get /domains: {}".format(params))
-    obj_json = await http_get_json(app, req, params=params)
+    obj_json = await http_get(app, req, params=params)
     if "domains" in obj_json:
         domains = obj_json["domains"]
+        log.debug(f"domains returned: {domains}")
     else:
         log.error("Unexepected response from AN")
         domains = None
@@ -220,6 +208,7 @@ async def GET_Domain(request):
     """HTTP method to return JSON for given domain"""
     log.request(request)
     app = request.app
+    params = request.rel_url.query
 
     (username, pswd) = getUserPasswordFromRequest(request)
     if username is None and app['allow_noauth']:
@@ -231,9 +220,8 @@ async def GET_Domain(request):
     try:
         domain = getDomainFromRequest(request)
     except ValueError:
-        msg = "Invalid domain"
-        log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        log.warn("Invalid domain")
+        raise HTTPBadRequest(reason="Invalid domain name")
 
     if not domain: 
         log.info("no domain passed in, returning all top-level domains")
@@ -250,32 +238,32 @@ async def GET_Domain(request):
     except ValueError:
         msg = "Invalid domain"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     log.info("got domain: {}".format(domain))
    
-    domain_json = await get_domain_json(app, domain)
-
+    domain_json = await getDomainJson(app, domain)
+     
     if domain_json is None:
         log.warn("domain: {} not found".format(domain))
-        raise HttpProcessingError(code=404, message="Not Found")
+        raise HTTPNotFound()
      
     if 'owner' not in domain_json:
-        log.warn("No owner key found in domain")
-        raise HttpProcessingError(code=500, message="Unexpected error")
+        log.error("No owner key found in domain")
+        raise HTTPInternalServerError()
 
     if 'acls' not in domain_json:
-        log.warn("No acls key found in domain")
-        raise HttpProcessingError(code=500, message="Unexpected error")
+        log.error("No acls key found in domain")
+        raise HTTPInternalServerError()
 
     log.debug("got domain_json: {}".format(domain_json))
     # validate that the requesting user has permission to read this domain
     aclCheck(domain_json, "read", username)  # throws exception if not authorized
 
-    if "h5path" in request.GET:
+    if "h5path" in params:
         # if h5path is passed in, return object info for that path
         #   (if exists)
-        h5path = request.GET["h5path"]
+        h5path = params["h5path"]
         root_id = domain_json["root"]
         obj_id = await getObjectIdByPath(app, root_id, h5path)  # throws 404 if not found
         log.info("get obj_id: {} from h5path: {}".format(obj_id, h5path))
@@ -301,7 +289,7 @@ async def GET_Domain(request):
     if "lastModified" in domain_json:
         rsp_json["lastModified"] = domain_json["lastModified"]
 
-    if "verbose" in request.GET and request.GET["verbose"] and "root" in domain_json:
+    if "verbose" in params and params["verbose"] and "root" in domain_json:
         results = await getRootInfo(app, domain_json["root"])
         if results:
             obj_count = 0
@@ -367,7 +355,7 @@ async def PUT_Domain(request):
     except ValueError:
         msg = "Invalid domain"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
  
     log.info("PUT domain: {}, username: {}".format(domain, username))
 
@@ -385,7 +373,7 @@ async def PUT_Domain(request):
 
     if owner != username and username != "admin":
         log.warn("Only admin users are allowed to set owner for new domains");   
-        raise HttpProcessingError(code=403, message="Forbidden")
+        raise HTTPForbidden()
 
 
     parent_domain = getParentDomain(domain)
@@ -394,28 +382,36 @@ async def PUT_Domain(request):
     if (not parent_domain or parent_domain == '/') and not is_folder:
         msg = "Only folder domains can be created at the top-level"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     if (not parent_domain or parent_domain == '/') and username != "admin":
         msg = "creation of top-level domains is only supported by admin users"
         log.warn(msg)
-        raise HttpProcessingError(code=403, message="Forbidden")
+        raise HTTPForbidden()
     
 
     parent_json = None
     if parent_domain and parent_domain != '/':
         try:
             parent_json = await getDomainJson(app, parent_domain, reload=True)
-        except HttpProcessingError as hpe:
-            msg = "Parent domain: {} not found".format(parent_domain)
-            log.warn(msg)
-            raise HttpProcessingError(code=404, message=msg)
+        except ClientResponseError as ce:
+            if ce.code == 404:
+                msg = "Parent domain: {} not found".format(parent_domain)
+                log.warn(msg)
+                raise HTTPNotFound()
+            elif ce.code == 410:
+                msg = "Parent domain: {} removed".format(parent_domain)
+                log.warn(msg)
+                raise HTTPGone()
+            else:
+                log.error(f"Unexpected error: {ce.code}")
+                raise HTTPInternalServerError()
 
         log.debug("parent_json {}: {}".format(parent_domain, parent_json))
         if "root" in parent_json and parent_json["root"]:
             msg = "Parent domain must be a folder"
             log.warn(msg)
-            raise HttpProcessingError(code=400, message=msg)
+            raise HTTPBadRequest(reason=msg)
 
     if parent_json:
         aclCheck(parent_json, "create", username)  # throws exception if not allowed
@@ -431,10 +427,10 @@ async def PUT_Domain(request):
         req = getDataNodeUrl(app, root_id) + "/groups"
         try:
             group_json = await http_post(app, req, data=group_json)
-        except HttpProcessingError as ce:
+        except ClientResponseError as ce:
             msg="Error creating root group for domain -- " + str(ce)
             log.error(msg)
-            raise ce
+            raise HTTPInternalServerError()
     else:
         log.debug("no root group, creating folder")
  
@@ -460,10 +456,10 @@ async def PUT_Domain(request):
     log.debug("creating domain: {} with body: {}".format(domain, body))
     try:
         domain_json = await http_put(app, req, data=body)
-    except HttpProcessingError as ce:
+    except ClientResponseError as ce:
         msg="Error creating domain state -- " + str(ce)
-        log.warn(msg)
-        raise ce
+        log.error(msg)
+        raise HTTPInternalServerError()
 
     # domain creation successful     
     resp = await jsonResponse(request, domain_json, status=201)
@@ -484,7 +480,7 @@ async def DELETE_Domain(request):
         else:
             msg = "No domain in request body"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
 
         if "meta_only" in body:
             meta_only = body["meta_only"]
@@ -495,7 +491,7 @@ async def DELETE_Domain(request):
         except ValueError:
             msg = "Invalid domain"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
 
     log.info("meta_only domain delete: {}".format(meta_only))
     if meta_only:
@@ -514,14 +510,20 @@ async def DELETE_Domain(request):
     if (not parent_domain or parent_domain == '/') and username != "admin":
         msg = "Deletion of top-level domains is only supported by admin users"
         log.warn(msg)
-        raise HttpProcessingError(code=403, message="Forbidden")
+        raise HTTPForbidden()
 
     try:
         domain_json = await getDomainJson(app, domain, reload=True)
-    except HttpProcessingError as hpe:
-        msg = "domain not found"
-        log.warn(msg)
-        raise HttpProcessingError(code=404, message=msg)
+    except ClientResponseError as ce:
+        if ce.code == 404:
+            log.warn("domain not found")
+            raise HTTPNotFound()
+        elif ce.code == 410:
+            log.warn("domain has been removed")
+            raise HTTPGone()
+        else:
+            log.error(f"unexpected error: {ce.code}")
+            raise HTTPInternalServerError()
 
     aclCheck(domain_json, "delete", username)  # throws exception if not allowed
 
@@ -557,8 +559,8 @@ async def DELETE_Domain(request):
         try: 
             sn_rsp = await http_delete(app, req, data=body)
             log.info("{} response: {}".format(req, sn_rsp))
-        except HttpProcessingError as hpe:
-            log.warn("got hpe for sn_delete: {}".format(hpe))
+        except ClientResponseError as ce:
+            log.warn("got error for sn_delete: {}".format(ce))
 
     log.response(request, resp=resp)
     return resp
@@ -572,7 +574,7 @@ async def GET_ACL(request):
     if not acl_username:
         msg = "Missing username for ACL"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     (username, pswd) = getUserPasswordFromRequest(request)
     if username is None and app['allow_noauth']:
@@ -585,15 +587,19 @@ async def GET_ACL(request):
     except ValueError:
         msg = "Invalid domain"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     # use reload to get authoritative domain json
     try:
         domain_json = await getDomainJson(app, domain, reload=True)
-    except HttpProcessingError as hpe:
-        msg = "domain not found"
-        log.warn(msg)
-        raise HttpProcessingError(code=404, message=msg)
+    except ClientResponseError as ce:
+        if ce.code in (404,410):
+            msg = "domain not found"
+            log.warn(msg)
+            raise HTTPNotFound()
+        else:
+            log.error(f"unexpected error: {ce.code}")
+            raise HTTPInternalServerError()
      
     # validate that the requesting user has permission to read ACLs in this domain
     if acl_username in (username, "default"):
@@ -604,11 +610,11 @@ async def GET_ACL(request):
      
     if 'owner' not in domain_json:
         log.warn("No owner key found in domain")
-        raise HttpProcessingError(code=500, message="Unexpected error")
+        raise HTTPInternalServerError()
 
     if 'acls' not in domain_json:
         log.warn("No acls key found in domain")
-        raise HttpProcessingError(code=500, message="Unexpected error")
+        raise HTTPInternalServerError()
 
     acls = domain_json["acls"]
 
@@ -617,7 +623,7 @@ async def GET_ACL(request):
     if acl_username not in acls:
         msg = "acl for username: [{}] not found".format(acl_username)
         log.warn(msg)
-        raise HttpProcessingError(code=404, message=msg)
+        raise HTTPNotFound()
 
     acl = acls[acl_username]
     acl_rsp = {}
@@ -656,23 +662,23 @@ async def GET_ACLs(request):
     except ValueError:
         msg = "Invalid domain"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(message=msg)
     
     # use reload to get authoritative domain json
     try:
         domain_json = await getDomainJson(app, domain, reload=True)
-    except HttpProcessingError as hpe:
+    except ClientResponseError as ce:
         msg = "domain not found"
         log.warn(msg)
-        raise HttpProcessingError(code=404, message=msg)
+        raise HTTPNotFound()
      
     if 'owner' not in domain_json:
-        log.warn("No owner key found in domain")
-        raise HttpProcessingError(code=500, message="Unexpected error")
+        log.error("No owner key found in domain")
+        raise HTTPInternalServerError()
 
     if 'acls' not in domain_json:
-        log.warn("No acls key found in domain")
-        raise HttpProcessingError(code=500, message="Unexpected error")
+        log.error("No acls key found in domain")
+        raise HTTPInternalServerError()
 
     acls = domain_json["acls"]
 
@@ -715,7 +721,7 @@ async def PUT_ACL(request):
     if not acl_username:
         msg = "Missing username for ACL"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     (username, pswd) = getUserPasswordFromRequest(request)
     await validateUserPassword(app, username, pswd)
@@ -723,7 +729,7 @@ async def PUT_ACL(request):
     if not request.has_body:
         msg = "PUT ACL with no body"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     body = await request.json()   
     acl_keys = getAclKeys()
@@ -732,18 +738,18 @@ async def PUT_ACL(request):
         if k not in acl_keys:
             msg = "Unexpected key in request body: {}".format(k)
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         if body[k] not in (True, False):
             msg = "Unexpected value for key in request body: {}".format(k)
             log.warn(k)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
 
     try:
         domain = getDomainFromRequest(request)
     except ValueError:
         msg = "Invalid domain"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
      
     # don't use app["domain_cache"]  if a direct domain request is made 
@@ -767,6 +773,7 @@ async def GET_Datasets(request):
     """HTTP method to return dataset collection for given domain"""
     log.request(request)
     app = request.app
+    params = request.rel_url.query
 
     (username, pswd) = getUserPasswordFromRequest(request)
     if username is None and app['allow_noauth']:
@@ -779,39 +786,50 @@ async def GET_Datasets(request):
     except ValueError:
         msg = "Invalid domain"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     # verify the domain 
     try:
         domain_json = await getDomainJson(app, domain)
-    except HttpProcessingError as hpe:
+    except ClientResponseError as ce:
+        if ce.code == 404:
+            msg = "Domain: {} not found".format(domain)
+            log.warn(msg)
+            raise HTTPNotFound()
+        elif ce.code == 410:
+            msg = "Domain: {} removed".format(domain)
+            log.warn(msg)
+            raise HTTPGone()
+        else:
+            log.error(f"Unexpected error: {ce.code}")
+            raise HTTPInternalServerError()
         msg = "domain not found"
         log.warn(msg)
-        raise HttpProcessingError(code=404, message=msg)
+        raise HTTPNotFound()
      
     if 'owner' not in domain_json:
-        log.warn("No owner key found in domain")
-        raise HttpProcessingError(code=500, message="Unexpected error")
+        log.error("No owner key found in domain")
+        raise HTTPInternalServerError()
 
     if 'acls' not in domain_json:
-        log.warn("No acls key found in domain")
-        raise HttpProcessingError(code=500, message="Unexpected error")
+        log.error("No acls key found in domain")
+        raise HTTPInternalServerError()
 
     log.debug("got domain_json: {}".format(domain_json))
     # validate that the requesting user has permission to read this domain
     aclCheck(domain_json, "read", username)  # throws exception if not authorized
 
     limit = None
-    if "Limit" in request.GET:
+    if "Limit" in params:
         try:
-            limit = int(request.GET["Limit"])
+            limit = int(params["Limit"])
         except ValueError:
             msg = "Bad Request: Expected int type for limit"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
     marker = None
-    if "Marker" in request.GET:
-        marker = request.GET["Marker"]
+    if "Marker" in params:
+        marker = params["Marker"]
 
     obj_ids = []
     if "root" in domain_json or domain_json["root"]:
@@ -842,6 +860,7 @@ async def GET_Groups(request):
     """HTTP method to return groups collection for given domain"""
     log.request(request)
     app = request.app
+    params = request.rel_url.query
 
     (username, pswd) = getUserPasswordFromRequest(request)
     if username is None and app['allow_noauth']:
@@ -854,23 +873,27 @@ async def GET_Groups(request):
     except ValueError:
         msg = "Invalid domain"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     
     # use reload to get authoritative domain json
     try:
         domain_json = await getDomainJson(app, domain, reload=True)
-    except HttpProcessingError as hpe:
-        msg = "domain not found"
-        log.warn(msg)
-        raise HttpProcessingError(code=404, message=msg)
+    except ClientResponseError as ce:
+        if ce.code == 404:
+            msg = "domain not found"
+            log.warn(msg)
+            raise HTTPNotFound()
+        else:
+            log.error(f"Unexpected error: {ce.code}")
+            raise HTTPInternalServerError()
      
     if 'owner' not in domain_json:
-        log.warn("No owner key found in domain")
-        raise HttpProcessingError(code=500, message="Unexpected error")
+        log.error("No owner key found in domain")
+        raise HTTPInternalServerError()
 
     if 'acls' not in domain_json:
-        log.warn("No acls key found in domain")
-        raise HttpProcessingError(code=500, message="Unexpected error")
+        log.error("No acls key found in domain")
+        raise HTTPInternalServerError()
 
     log.debug("got domain_json: {}".format(domain_json))
     # validate that the requesting user has permission to read this domain
@@ -878,16 +901,16 @@ async def GET_Groups(request):
 
     # get the groups collection list
     limit = None
-    if "Limit" in request.GET:
+    if "Limit" in params:
         try:
-            limit = int(request.GET["Limit"])
+            limit = int(params["Limit"])
         except ValueError:
             msg = "Bad Request: Expected int type for limit"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
     marker = None
-    if "Marker" in request.GET:
-        marker = request.GET["Marker"]
+    if "Marker" in params:
+        marker = params["Marker"]
 
     obj_ids = []
     if "root" in domain_json or domain_json["root"]:
@@ -917,6 +940,7 @@ async def GET_Datatypes(request):
     """HTTP method to return datatype collection for given domain"""
     log.request(request)
     app = request.app
+    params = request.rel_url.query
 
     (username, pswd) = getUserPasswordFromRequest(request)
     if username is None and app['allow_noauth']:
@@ -929,39 +953,43 @@ async def GET_Datatypes(request):
     except ValueError:
         msg = "Invalid domain"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     
     # use reload to get authoritative domain json
     try:
         domain_json = await getDomainJson(app, domain, reload=True)
-    except HttpProcessingError as hpe:
-        msg = "domain not found"
-        log.warn(msg)
-        raise HttpProcessingError(code=404, message=msg)
+    except ClientResponseError as ce:
+        if ce.code in (404, 410):
+            msg = "domain not found"
+            log.warn(msg)
+            raise HTTPNotFound()
+        else:
+            log.error(f"Unexpected Error: {ce.code})")
+            raise HTTPInternalServerError()
      
     if 'owner' not in domain_json:
-        log.warn("No owner key found in domain")
-        raise HttpProcessingError(code=500, message="Unexpected error")
+        log.error("No owner key found in domain")
+        raise HTTPInternalServerError()
 
     if 'acls' not in domain_json:
-        log.warn("No acls key found in domain")
-        raise HttpProcessingError(code=500, message="Unexpected error")
+        log.error("No acls key found in domain")
+        raise HTTPInternalServerError()
 
     log.debug("got domain_json: {}".format(domain_json))
     # validate that the requesting user has permission to read this domain
     aclCheck(domain_json, "read", username)  # throws exception if not authorized
 
     limit = None
-    if "Limit" in request.GET:
+    if "Limit" in params:
         try:
-            limit = int(request.GET["Limit"])
+            limit = int(params["Limit"])
         except ValueError:
             msg = "Bad Request: Expected int type for limit"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
     marker = None
-    if "Marker" in request.GET:
-        marker = request.GET["Marker"]
+    if "Marker" in params:
+        marker = params["Marker"]
 
     # get the datatype collection list
     obj_ids = []

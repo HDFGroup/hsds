@@ -14,7 +14,8 @@
 # 
 import time
 
-from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalServerError
+
  
 from util.idUtil import isValidUuid, validateUuid
 from util.httpUtil import jsonResponse
@@ -31,7 +32,7 @@ async def GET_Datatype(request):
     
     if not isValidUuid(ctype_id, obj_class="type"):
         log.error( "Unexpected type_id: {}".format(ctype_id))
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
     
     ctype_json = await get_metadata_obj(app, ctype_id)
 
@@ -56,41 +57,39 @@ async def POST_Datatype(request):
     if not request.has_body:
         msg = "POST_Datatype with no body"
         log.error(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     body = await request.json()
     
     ctype_id = get_obj_id(request, body=body)
     if not isValidUuid(ctype_id, obj_class="datatype"):
         log.error( "Unexpected type_id: {}".format(ctype_id))
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
 
-    try:
-        # verify the id doesn't already exist
-        await check_metadata_obj(app, ctype_id)
+    # verify the id doesn't already exist
+    obj_found = await check_metadata_obj(app, ctype_id)
+    if obj_found:
         log.error( "Post with existing type_id: {}".format(ctype_id))
-        raise HttpProcessingError(code=500, message="Unexpected Error")
-    except HttpProcessingError:
-        pass  # expected
+        raise HTTPInternalServerError()
 
     root_id = None
     
     if "root" not in body:
         msg = "POST_Datatype with no root"
         log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
     root_id = body["root"]
     try:
         validateUuid(root_id, "group")
     except ValueError:
         msg = "Invalid root_id: " + root_id
         log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
      
     if "type" not in body:
         msg = "POST_Datatype with no type"
         log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
     type_json = body["type"]
      
     # ok - all set, create committed type obj
@@ -120,18 +119,22 @@ async def DELETE_Datatype(request):
     """
     log.request(request)
     app = request.app
+    params = request.rel_url.query
     
     ctype_id = get_obj_id(request)
     log.info("DELETE ctype: {}".format(ctype_id))
 
     # verify the id  exist
-    await check_metadata_obj(app, ctype_id)
+    obj_found = await check_metadata_obj(app, ctype_id)
+    if not obj_found:
+        log.warn(f"Delete on non-existent obj: {ctype_id}")
+        raise HTTPNotFound
         
     log.info("deleting ctype: {}".format(ctype_id))
 
     notify=True
-    if "Notify" in request.GET and not request.GET["Notify"]:
-        log.info("notify value: {}".format(request.GET["Notify"]))
+    if "Notify" in params and not params["Notify"]:
+        log.info("notify value: {}".format(params["Notify"]))
         notify=False
     log.info("notify: {}".format(notify))
     

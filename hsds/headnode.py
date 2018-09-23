@@ -19,13 +19,14 @@ import time
 
 from aiohttp.web import Application, StreamResponse, run_app
 from aiohttp import  ClientSession, TCPConnector
-from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
+
 from asyncio import TimeoutError
 import aiobotocore
 
 import config
 from util.timeUtil import unixTimeToUTC, elapsedTime
-from util.httpUtil import http_get_json, jsonResponse, getUrl
+from util.httpUtil import http_get, jsonResponse, getUrl
 from util.s3Util import  getS3JSONObj, putS3JSONObj, isS3Obj, getInitialS3Stats, getS3ObjStats
 from util.idUtil import  createNodeId, getHeadNodeS3Key
 import hsds_logger as log
@@ -71,7 +72,7 @@ async def healthCheck(app):
                 log.info("write head_state to S3: {}".format(head_state))
                 try:
                     await putS3JSONObj(app, headnode_key, head_state)
-                except HttpProcessingError as hpe:
+                except HTTPInternalServerError as hpe:
                     # Might be bad AWS config, transient S3 error, or minio not initialized yet...
                     log.warn("HttpProcessingError writing head_state: {}: {}".format(headnode_key, str(hpe)))
             continue # start health check on next iteration
@@ -105,7 +106,7 @@ async def healthCheck(app):
                 continue
             url = getUrl(node["host"], node["port"]) + "/info"  
             try:
-                rsp_json = await http_get_json(app, url)
+                rsp_json = await http_get(app, url)
                 if "node" not in rsp_json:
                     log.error("Unexpected response from node")
                     fail_count += 1
@@ -145,8 +146,8 @@ async def healthCheck(app):
                     log.warn("node {}:{} not responding".format(node["host"], node["port"]))
                     fail_count += 1
                 
-            except HttpProcessingError as hpe:
-                log.warn("HttpProcessingError for req: {}: {}".format(url, str(hpe)))
+            except HTTPInternalServerError as hpe:
+                log.warn("HTTPInternalServerError for req: {}: {}".format(url, str(hpe)))
                 # node has gone away?
                 node["failcount"] += 1
                 if node["failcount"] >= HEALTH_CHECK_RETRY_COUNT:
@@ -205,21 +206,21 @@ async def register(request):
     if 'id' not in body:
         msg = "Missing 'id'"
         log.response(request, code=400, message=msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if 'port' not in body:
         msg = "missing key 'port'"
         log.response(request, code=400, message=msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if 'node_type' not in body:
-        raise HttpBadRequest(message="missing key 'node_type'")
+        raise HTTPBadRequest(reason="missing key 'node_type'")
     if body['node_type'] not in ('sn', 'dn', 'an'):
         msg="invalid node_type"
         log.response(request, code=400, message=msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     
     peername = request.transport.get_extra_info('peername')
     if peername is None:
-        raise HttpBadRequest(message="Can not determine caller IP")
+        raise HTTPBadRequest(reason="Can not determine caller IP")
     host, req_port = peername
     log.info("register host: {}, port: {}".format(host, req_port))
 
@@ -284,7 +285,7 @@ async def nodestate(request):
     if node_type not in ("sn", "dn", "*"):
         msg="invalid node_type"
         log.response(request, code=400, message=msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
         
     app = request.app
     resp = StreamResponse()
@@ -315,7 +316,7 @@ async def nodeinfo(request):
     stat_key = request.match_info.get('statkey', '*')
     if stat_key != '*':
         if stat_key not in node_stat_keys:
-             raise HttpBadRequest(message="invalid key: {}".format(stat_key))
+             raise HTTPBadRequest(reason="invalid key: {}".format(stat_key))
         node_stat_keys = (stat_key,)
     
     app = request.app

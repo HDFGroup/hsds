@@ -163,11 +163,12 @@ def getDomainForHost(host_value):
 def getDomainFromRequest(request, domain_path=False, validate=True):
     #domain = request.match_info.get()
     domain = None
-    if "domain" in request.GET:
-        domain = request.GET["domain"]
+    params = request.rel_url.query
+    if "domain" in params:
+        domain = params["domain"]
     else:
-        if 'host' in request.GET:
-            domain = request.GET['host']
+        if 'host' in params:
+            domain = params['host']
         elif "X-Hdf-domain" in request.headers:
             domain = request.headers['X-Hdf-domain']
         elif "X-Forwarded-Host" in request.headers:

@@ -13,17 +13,18 @@
 # linkdUtil:
 # link related functions
 # 
-from aiohttp.http_exceptions import HttpBadRequest
+from aiohttp.web_exceptions import HTTPBadRequest 
+
 import hsds_logger as log
 
 def validateLinkName(name):
     if not isinstance(name, str):
         msg = "Unexpected type for link name"
         log.error(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if name.find('/') >= 0:
         msg = "link name contains slash"
         log.error(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
  
  

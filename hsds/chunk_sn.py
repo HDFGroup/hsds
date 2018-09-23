@@ -18,7 +18,7 @@ from asyncio import CancelledError
 import json
 import base64 
 import numpy as np
-from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPRequestEntityTooLarge, HTTPInternalServerError
 from aiohttp.client_exceptions import ClientError
 from aiohttp.web import StreamResponse
 from util.httpUtil import  jsonResponse, getHref, getAcceptType, get_http_client  
@@ -50,11 +50,11 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level,
         log.info("deflate_level: {}".format(deflate_level))
     if "layout" not in dset_json:
         log.error("No layout found in dset_json: {}".format(dset_json))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        raise HTTPInternalServerError()
      
     if "type" not in dset_json:
         log.error("No type found in dset_json: {}".format(dset_json))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        raise HTTPInternalServerError()
     
     layout = getChunkLayout(dset_json)
 
@@ -80,16 +80,16 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level,
             log.debug("req: {} status: {}".format(req, rsp.status))
             if rsp.status != 201:
                 msg = "request error for {}: {}".format(req, str(rsp))
-                log.warn(msg)
-                raise HttpProcessingError(message=msg, code=rsp.status)
+                log.error(msg)
+                raise HTTPInternalServerError()
             else:
                 log.debug("http_put({}) <201> Updated".format(req))
     except ClientError as ce:
         log.error("Error for http_post({}): {} ".format(req, str(ce)))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        raise HTTPInternalServerError()
     except CancelledError as cle:
         log.error("CancelledError for http_post({}): {}".format(req, str(cle)))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        raise HTTPInternalServerError()
 
 
 """
@@ -111,7 +111,7 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr):
 
     if "type" not in dset_json:
         log.error("No type found in dset_json: {}".format(dset_json))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        raise HTTPInternalServerError()
     
     layout = getChunkLayout(dset_json)
     chunk_sel = getChunkCoverage(chunk_id, slices, layout)
@@ -139,7 +139,7 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr):
                 npoints_expected = getNumElements(chunk_shape)
                 if npoints_read != npoints_expected:
                     log.error("Expected {} points, but got: {}".format(npoints_expected, npoints_read))
-                    raise HttpProcessingError(message="Unexpected error", code=500)
+                    raise HTTPInternalServerError()
                 chunk_arr = chunk_arr.reshape(chunk_shape)
             elif rsp.status == 404:
                 # no data, return zero array
@@ -150,15 +150,15 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr):
                     chunk_arr = np.zeros(chunk_shape, dtype=dt, order='C')
             else:
                 msg = "request to {} failed with code: {}".format(req, rsp.status)
-                log.warn(msg)
-                raise HttpProcessingError(message=msg, code=rsp.status)
+                log.error(msg)
+                raise HTTPInternalServerError()
             
     except ClientError as ce:
         log.error("Error for http_get({}): {} ".format(req, str(ce)))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        raise HTTPInternalServerError()
     except CancelledError as cle:
         log.error("CancelledError for http_get({}): {}".format(req, str(cle)))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        raise HTTPInternalServerError()
     
     log.info("chunk_arr shape: {}".format(chunk_arr.shape))
     log.info("data_sel: {}".format(data_sel))
@@ -189,7 +189,7 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_a
 
     if "type" not in dset_json:
         log.error("No type found in dset_json: {}".format(dset_json))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        raise HTTPInternalServerError()
      
     num_points = len(point_list)
     np_arr_points = np.asarray(point_list, dtype=point_dt)
@@ -216,7 +216,7 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_a
                 if npoints_read != num_points:
                     msg = "Expected {} points, but got: {}".format(num_points, npoints_read)
                     log.error(msg)
-                    raise HttpProcessingError(message=msg, code=500)
+                    raise HTTPInternalServerError()
             elif rsp.status == 404:
                 # no data, return zero array
                 if fill_value:
@@ -226,15 +226,15 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_a
                     np_arr_rsp = np.zeros((num_points,), dtype=dt)
             else:
                 msg = "request to {} failed with code: {}".format(req, rsp.status)
-                log.warn(msg)
-                raise HttpProcessingError(message=msg, code=rsp.status)
+                log.error(msg)
+                raise HTTPInternalServerError()
             
     except ClientError as ce:
         log.error("Error for http_get({}): {} ".format(req, str(ce)))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        raise HTTPInternalServerError()
     except CancelledError as cle:
         log.error("CancelledError for http_get({}): {}".format(req, str(cle)))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        raise HTTPInternalServerError()
     
     log.info("got {} points response".format(num_points))
 
@@ -259,7 +259,7 @@ async def write_point_sel(app, chunk_id, dset_json, point_list, point_data):
     log.info(msg)
     if "type" not in dset_json:
         log.error("No type found in dset_json: {}".format(dset_json))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        raise HTTPInternalServerError()
 
     datashape = dset_json["shape"]
     dims = getShapeDims(datashape)
@@ -310,15 +310,15 @@ async def write_point_sel(app, chunk_id, dset_json, point_list, point_data):
                 log.info("req: {} OK".format(req))
             else:
                 msg = "request to {} failed with code: {}".format(req, rsp.status)
-                log.warn(msg)
-                raise HttpProcessingError(message=msg, code=rsp.status)
+                log.error(msg)
+                raise HTTPInternalServerError()
             
     except ClientError as ce:
         log.error("Error for http_get({}): {} ".format(req, str(ce)))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        raise HTTPInternalServerError()
     except CancelledError as cle:
         log.error("CancelledError for http_get({}): {}".format(req, str(cle)))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        raise HTTPInternalServerError()
 
 
 """
@@ -363,15 +363,15 @@ async def read_chunk_query(app, chunk_id, dset_json, slices, query, limit, rsp_d
                 dn_rsp = {"index": [], "value": []}
             else:
                 msg = "request to {} failed with code: {}".format(req, rsp.status)
-                log.warn(msg)
-                raise HttpProcessingError(message=msg, code=rsp.status)
+                log.error(msg)
+                raise HTTPInternalServerError()
             
     except ClientError as ce:
         log.error("Error for http_get({}): {} ".format(req, str(ce)))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        raise HTTPInternalServerError()
     except CancelledError as cle:
         log.error("CancelledError for http_get({}): {}".format(req, str(cle)))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        raise HTTPInternalServerError()
     
     rsp_dict[chunk_id] = dn_rsp
 
@@ -390,11 +390,11 @@ async def PUT_Value(request):
     if not dset_id:
         msg = "Missing dataset id"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if not isValidUuid(dset_id, "Dataset"):
         msg = "Invalid dataset id: {}".format(dset_id)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     username, pswd = getUserPasswordFromRequest(request)
     await validateUserPassword(app, username, pswd)
@@ -403,7 +403,7 @@ async def PUT_Value(request):
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     
     request_type = "json"
     if "Content-Type" in request.headers:
@@ -412,7 +412,7 @@ async def PUT_Value(request):
         if content_type not in ("application/json", "application/octet-stream"):
             msg = "Unknown content_type: {}".format(content_type)
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         if content_type == "application/octet-stream":
             log.debug("PUT value - request_type is binary")
             request_type = "binary"
@@ -422,7 +422,7 @@ async def PUT_Value(request):
     if not request.has_body:
         msg = "PUT Value with no body"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if request_type == "json":
         body = await request.json()
     
@@ -434,7 +434,7 @@ async def PUT_Value(request):
     if datashape["class"] == 'H5S_NULL':
         msg = "Null space datasets can not be used as target for PUT value"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     dims = getShapeDims(datashape)
     maxdims = getDsetMaxDims(dset_json)
     rank = len(dims)
@@ -455,7 +455,7 @@ async def PUT_Value(request):
     if item_size == 'H5T_VARIABLE' and request_type != "json":
         msg = "Only JSON is supported for variable length data types"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     dset_dtype = createDataType(type_json)  # np datatype
     
     await validateAction(app, domain, dset_id, username, "update")
@@ -492,7 +492,7 @@ async def PUT_Value(request):
         else:
             msg = "PUT value has no value or value_base64 key in body"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)  
+            raise HTTPBadRequest(reason=msg)  
 
         # body could also contain a point selection specifier 
         if "points" in body:
@@ -510,14 +510,14 @@ async def PUT_Value(request):
             except ValueError:
                 msg = "Bad Request: point list not valid for dataset shape"
                 log.warn(msg)
-                raise HttpBadRequest(message=msg)
+                raise HTTPBadRequest(reason=msg)
     else:
         # read binary data
         binary_data = await request.read()
         if len(binary_data) != request.content_length:
             msg = "Read {} bytes, expecting: {}".format(len(binary_data), request.content_length)
             log.error(msg)
-            raise HttpProcessingError(code=500, message="Unexpected Error")
+            raise HTTPInternalServerError()
        
     if points is None:
         # not point selection, get hyperslab selection shape
@@ -533,21 +533,21 @@ async def PUT_Value(request):
     if num_elements <= 0:
         msg = "Selection is empty"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     arr = None  # np array to hold request data
     if binary_data:
         if num_elements*item_size != len(binary_data):
             msg = "Expected: " + str(num_elements*item_size) + " bytes, but got: " + str(len(binary_data))
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         arr = np.fromstring(binary_data, dtype=dset_dtype)
         try:
             arr = arr.reshape(np_shape)  # conform to selection shape    
         except ValueError:
             msg = "Bad Request: binary input data doesn't match selection" 
             log.warn(msg)
-            raise HttpBadRequest(message=msg)      
+            raise HTTPBadRequest(reason=msg)      
     else:
         #
         # data is json
@@ -557,13 +557,13 @@ async def PUT_Value(request):
             arr = jsonToArray(np_shape, dset_dtype, json_data)
         except ValueError:
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         except TypeError:
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         except IndexError:
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         log.debug("got json arr: {}".format(arr.shape))
 
     if points is None:
@@ -589,7 +589,7 @@ async def PUT_Value(request):
             msg += "--data shape: " + str(arr.shape)
             msg += "--selection shape: " + str(np_shape)         
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
 
         #log.info("got np array: {}".format(arr))
         num_chunks = getNumChunks(slices, layout)
@@ -597,9 +597,13 @@ async def PUT_Value(request):
         if num_chunks > config.get("max_chunks_per_request"):
             msg = "PUT value request too large"
             log.warn(msg)
-            raise HttpProcessingError(code=413, message=msg)
-
-        chunk_ids = getChunkIds(dset_id, slices, layout)
+            raise HTTPRequestEntityTooLarge()
+         
+        try: 
+            chunk_ids = getChunkIds(dset_id, slices, layout)
+        except ValueError:
+            log.warn("getChunkIds failed")
+            raise HTTPInternalServerError()
         log.debug("chunk_ids: {}".format(chunk_ids))
 
         tasks = []
@@ -633,18 +637,18 @@ async def PUT_Value(request):
                     msg = "PUT Value point: {} is not within the bounds of the dataset"
                     msg = msg.format(point)
                     log.warn(msg)
-                    raise HttpBadRequest(message=msg) 
+                    raise HTTPBadRequest(reason=msg) 
             else:
                 if len(point) != rank:
                     msg = "PUT Value point value did not match dataset rank"
                     log.warn(msg)
-                    raise HttpBadRequest(message=msg) 
+                    raise HTTPBadRequest(reason=msg) 
                 for i in range(rank):
                     if point[i] < 0 or point[i] >= dims[i]:
                         msg = "PUT Value point: {} is not within the bounds of the dataset"
                         msg = msg.format(point)
                         log.warn(msg)
-                        raise HttpBadRequest(message=msg) 
+                        raise HTTPBadRequest(reason=msg) 
             chunk_id = getChunkId(dset_id, point, layout)
             # get the pt_indx element from the input data
             value = arr[pt_indx]
@@ -664,7 +668,7 @@ async def PUT_Value(request):
         if num_chunks > config.get("max_chunks_per_request"):
             msg = "PUT value request too large"
             log.warn(msg)
-            raise HttpProcessingError(code=413, message=msg)
+            raise HTTPRequestEntityTooLarge()
         tasks = []
         for chunk_id in chunk_dict.keys():
             item = chunk_dict[chunk_id]
@@ -699,16 +703,17 @@ def get_hrefs(request, dset_json):
 async def GET_Value(request):
     log.request(request)
     app = request.app 
+    params = request.rel_url.query
 
     dset_id = request.match_info.get('id')
     if not dset_id:
         msg = "Missing dataset id"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if not isValidUuid(dset_id, "Dataset"):
         msg = "Invalid dataset id: {}".format(dset_id)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     username, pswd = getUserPasswordFromRequest(request)
     if username is None and app['allow_noauth']:
@@ -720,7 +725,7 @@ async def GET_Value(request):
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)  
+        raise HTTPBadRequest(reason=msg)  
    
     # get state for dataset from DN.
     dset_json = await getObjectJson(app, dset_id)  
@@ -730,7 +735,7 @@ async def GET_Value(request):
     if datashape["class"] == 'H5S_NULL':
         msg = "Null space datasets can not be used as target for GET value"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     dims = getShapeDims(datashape)  # throws 400 for HS_NULL dsets
     maxdims = getDsetMaxDims(dset_json)
@@ -741,7 +746,7 @@ async def GET_Value(request):
 
     # refetch the dims if the dataset is extensible and requestor hasn't provided 
     # an explicit region
-    if isExtensible(dims, maxdims) and "select" not in request.GET:
+    if isExtensible(dims, maxdims) and "select" not in params:
         dset_json = await getObjectJson(app, dset_id, refresh=True)
         dims = getShapeDims(dset_json["shape"])  
 
@@ -754,7 +759,7 @@ async def GET_Value(request):
             for dim in range(rank):
                 dim_slice = getSliceQueryParam(request, dim, dims[dim])
                 slices.append(dim_slice)   
-        except HttpBadRequest:
+        except HTTPBadRequest:
             # exception might be due to us having stale version of dims, refresh
             dset_json = await getObjectJson(app, dset_id, refresh=True)
             dims = getShapeDims(dset_json["shape"]) 
@@ -780,17 +785,17 @@ async def GET_Value(request):
     if num_chunks > config.get("max_chunks_per_request"):
         msg = "PUT value request too large"
         log.warn(msg)
-        raise HttpProcessingError(code=413, message=msg)
+        raise HTTPRequestEntityTooLarge()
     chunk_ids = getChunkIds(dset_id, slices, layout)
 
     if request.method == "OPTIONS":
         # skip doing any big data load for options request
         resp = await jsonResponse(request, None)
-    elif "query" in request.GET:
+    elif "query" in params:
         if rank > 1:
             msg = "Query string is not supported for multidimensional arrays"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
 
         resp = await doQueryRead(request, chunk_ids, dset_json, slices)
     else:
@@ -800,25 +805,25 @@ async def GET_Value(request):
     return resp
 
 async def doQueryRead(request, chunk_ids, dset_json,  slices):
-    query = request.GET["query"]
-    log.info("Query request: {}".format(query))
-    
     app = request.app 
+    params = request.rel_url.query
+    query = params["query"]
+    log.info("Query request: {}".format(query))
     loop = app["loop"]
 
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
-    query = request.GET["query"]
+    
     log.debug("item size: {}".format(item_size))
     
     limit = 0
-    if "Limit" in request.GET:
+    if "Limit" in params:
         try:
-            limit = int(request.GET["Limit"])
+            limit = int(params["Limit"])
         except ValueError:
             msg = "Invalid Limit query param"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
 
     tasks = []
     node_count = app['node_count']
@@ -887,7 +892,7 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices):
     if request_size > int(config.get("max_request_size")):
         msg = "GET value request too large"
         log.warn(msg)
-        raise HttpProcessingError(code=413, message=msg)
+        raise HTTPRequestEntityTooLarge()
 
     arr = np.zeros(np_shape, dtype=dset_dtype, order='C')
     tasks = []
@@ -940,11 +945,11 @@ async def POST_Value(request):
     if not dset_id:
         msg = "Missing dataset id"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if not isValidUuid(dset_id, "Dataset"):
         msg = "Invalid dataset id: {}".format(dset_id)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     log.info("POST_VALUE, id: {}".format(dset_id))
 
@@ -958,7 +963,7 @@ async def POST_Value(request):
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
 
     accept_type = getAcceptType(request)
@@ -971,7 +976,7 @@ async def POST_Value(request):
         if content_type not in ("application/json", "application/octet-stream"):
             msg = "Unknown content_type: {}".format(content_type)
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         if content_type == "application/octet-stream":
             log.debug("POST value - request_type is binary")
             request_type = "binary"
@@ -981,7 +986,7 @@ async def POST_Value(request):
     if not request.has_body:
         msg = "POST Value with no body"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     
    
     # get  state for dataset from DN.
@@ -991,11 +996,11 @@ async def POST_Value(request):
     if datashape["class"] == 'H5S_NULL':
         msg = "POST value not supported for datasets with NULL shape"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if datashape["class"] == 'H5S_SCALAR':
         msg = "POST value not supported for datasets with SCALAR shape"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     dims = getShapeDims(datashape)
     rank = len(dims)
     
@@ -1018,12 +1023,12 @@ async def POST_Value(request):
         if "points" not in body:
             msg = "Expected points key in request body"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         points = body["points"]
         if not isinstance(points, list):
             msg = "POST Value expected list of points"
             log.warn(msg)
-            raise HttpBadRequest(message=msg) 
+            raise HTTPBadRequest(reason=msg) 
         num_points = len(points)
 
     else:
@@ -1032,11 +1037,11 @@ async def POST_Value(request):
         if len(binary_data) != request.content_length:
             msg = "Read {} bytes, expecting: {}".format(len(binary_data), request.content_length)
             log.error(msg)
-            raise HttpProcessingError(code=500, message="Unexpected Error")
+            raise HTTPInternalServerError()
         if request.content_length % point_dt.itemsize != 0:
             msg = "Content length: {} not divisible by element size: {}".format(request.content_length, item_size)
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         num_points = request.content_length // point_dt.itemsize
         log.debug("got {} num_points".format(num_points))
         arr_points = np.fromstring(binary_data, dtype=point_dt)
@@ -1044,7 +1049,7 @@ async def POST_Value(request):
             if num_points % rank != 0:
                 msg = "Number of points is not consistent with dataset rank"
                 log.warn(msg)
-                raise HttpBadRequest(message=msg)
+                raise HTTPBadRequest(reason=msg)
             num_points //= rank
             arr_points = arr_points.reshape((num_points, rank))  # conform to point index shape
         points = arr_points.tolist()  # convert to Python list
@@ -1058,18 +1063,18 @@ async def POST_Value(request):
                 msg = "POST Value point: {} is not within the bounds of the dataset"
                 msg = msg.format(point)
                 log.warn(msg)
-                raise HttpBadRequest(message=msg) 
+                raise HTTPBadRequest(reason=msg) 
         else:
             if len(point) != rank:
                 msg = "POST Value point value did not match dataset rank"
                 log.warn(msg)
-                raise HttpBadRequest(message=msg) 
+                raise HTTPBadRequest(reason=msg) 
             for i in range(rank):
                 if point[i] < 0 or point[i] >= dims[i]:
                     msg = "POST Value point: {} is not within the bounds of the dataset"
                     msg = msg.format(point)
                     log.warn(msg)
-                    raise HttpBadRequest(message=msg) 
+                    raise HTTPBadRequest(reason=msg) 
         chunk_id = getChunkId(dset_id, point, layout)
         if chunk_id not in chunk_dict:
             point_list = [point,]
@@ -1087,7 +1092,7 @@ async def POST_Value(request):
     if num_chunks > config.get("max_chunks_per_request"):
         msg = "POST value request too large"
         log.warn(msg)
-        raise HttpProcessingError(code=413, message=msg)
+        raise HTTPRequestEntityTooLarge()
 
     
     # create array to hold response data

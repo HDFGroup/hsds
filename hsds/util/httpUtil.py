@@ -17,7 +17,7 @@ import json
 from asyncio import CancelledError
 from aiohttp.web import StreamResponse
 from aiohttp import  ClientSession, TCPConnector
-from aiohttp.http_exceptions import HttpProcessingError
+from aiohttp.web_exceptions import HTTPNotFound, HTTPConflict, HTTPGone, HTTPInternalServerError
 from aiohttp.client_exceptions import ClientError
 
 
@@ -56,56 +56,42 @@ def get_http_client(app):
 """
 Helper function  - async HTTP GET
 """ 
-async def http_get(app, url, params=None):
+async def http_get(app, url, params=None, format="json"):
     log.info("http_get('{}')".format(url))
     client = get_http_client(app)
     data = None
+    status_code = None
     timeout = config.get("timeout")
     try:
         async with client.get(url, params=params, timeout=timeout) as rsp:
             log.info("http_get status: {}".format(rsp.status))
+            status_code = rsp.status
             if rsp.status != 200:
-                msg = "request to {} failed with code: {}".format(url, rsp.status)
-                log.warn(msg)
-                raise HttpProcessingError(message=msg, code=rsp.status)
-            #log.info("http_get({}) response: {}".format(url, rsp))  
-            data = await rsp.read()  # read response as bytes
+                log.warn(f"request to {url} failed with code: {status_code}")
+            else:
+                # 200, so read the response
+                if format == "json":
+                    data = await rsp.json()
+                else:
+                    data = await rsp.read()  # read response as bytes
     except ClientError as ce:
-        log.error("Error for http_get({}): {} ".format(url, str(ce)))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        log.debug(f"ClientError: {ce}")
+        status_code = ce.code
     except CancelledError as cle:
         log.error("CancelledError for http_get({}): {}".format(url, str(cle)))
-        raise HttpProcessingError(message="Unexpected error", code=500)
-    return data
+        raise HTTPInternalServerError()
+    
+    if status_code == 404:
+        log.warn(f"Object: {url} not found")
+        raise HTTPNotFound()
+    elif status_code == 410:
+        log.warn(f"Object: {url} removed")
+        raise HTTPGone()
+    elif status_code != 200:
+        log.error(f"Error for http_get_json({url}): {status_code}")
+        raise HTTPInternalServerError() 
 
-"""
-Helper function  - async HTTP GET, return response as JSON
-""" 
-async def http_get_json(app, url, params=None):
-    log.info("http_get('{}')".format(url))
-    client = get_http_client(app)
-    rsp_json = None
-    timeout = config.get("timeout")
-     
-    try:    
-        async with client.get(url, params=params, timeout=timeout) as rsp:
-            log.info("http_get_json status: {}".format(rsp.status))
-            if rsp.status != 200:
-                msg = "request to {} failed with code: {}".format(url, rsp.status)
-                log.warn(msg)
-                raise HttpProcessingError(message=msg, code=rsp.status)
-            rsp_json = await rsp.json()
-            #log.info("http_get({}) response: {}".format(url, rsp_json))  
-    except ClientError as ce:
-        log.error("Error for http_get_json({}): {} ".format(url, str(ce)))
-        raise HttpProcessingError(message="Unexpected error", code=500)
-    except CancelledError as cle:
-        log.error("CancelledError for http_get_json({}): {}".format(url, str(cle)))
-        raise HttpProcessingError(message="Unexpected error", code=500)
-    if isinstance(rsp_json, str):
-        log.warn("converting str to json")
-        rsp_json = json.loads(rsp_json)
-    return rsp_json
+    return data
 
 """
 Helper function  - async HTTP POST
@@ -119,18 +105,25 @@ async def http_post(app, url, data=None, params=None):
     try:
         async with client.post(url, data=json.dumps(data), params=params, timeout=timeout ) as rsp:
             log.info("http_post status: {}".format(rsp.status))
-            if rsp.status not in (200, 201):
-                msg = "POST request error for url: {} - status: {}".format(url, rsp.status)   
-                log.warn(msg)
-                raise HttpProcessingError(message=msg, code=rsp.status)
+            if rsp.status == 200:
+                pass  # ok
+            elif rsp.status == 201:
+                pass # also ok
+            elif rsp.status == 404:
+                log.info(f"POST  reqest HTTPNotFound error for url: {url}")
+            elif rsp.status == 410:
+                log.info(f"POST  reqest HTTPGone error for url: {url}")
+            else:
+                log.warn(f"POST request error for url: {url} - status: {rsp.status}")  
+                raise HTTPInternalServerError()
             rsp_json = await rsp.json()
             log.debug("http_post({}) response: {}".format(url, rsp_json))
     except ClientError as ce:
         log.error("Error for http_post({}): {} ".format(url, str(ce)))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        raise HTTPInternalServerError()
     except CancelledError as cle:
-        log.error("CancelledError for http_post({}): {}".format(url, str(cle)))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        log.error(f"CancelledError for http_post({url}): {cle}")
+        raise HTTPInternalServerError()
     return rsp_json
 
 """
@@ -145,19 +138,26 @@ async def http_put(app, url, data=None, params=None):
     try:
         async with client.put(url, data=json.dumps(data), params=params, timeout=timeout) as rsp:
             log.info("http_put status: {}".format(rsp.status))
-            if rsp.status != 201:
-                msg = "PUT request error for url: {} - status: {}".format(url, rsp.status)
-                log.warn(msg)
-                raise HttpProcessingError(message=msg, code=rsp.status)
+            if rsp.status == 201:
+                pass # expected
+            elif rsp.status == 404:
+                # can come up for replace ops
+                log.info(f"HTTPNotFound for: {url}")
+            elif rsp.status == 409:
+                log.info(f"HTTPConflict for: {url}")
+                raise HTTPConflict()
+            else:
+                log.error(f"PUT request error for url: {url} - status: {rsp.status}")
+                raise HTTPInternalServerError()
 
             rsp_json = await rsp.json()
             log.debug("http_put({}) response: {}".format(url, rsp_json))
     except ClientError as ce:
-        log.error("ClientError for http_put({}): {} ".format(url, str(ce)))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        log.error(f"ClientError for http_put({url}): {ce} ")
+        raise HTTPInternalServerError()
     except CancelledError as cle:
-        log.error("CancelledError for http_put({}): {}".format(url, str(cle)))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        log.error(f"CancelledError for http_put({url}): {cle}")
+        raise HTTPInternalServerError()
     return rsp_json
 
 """
@@ -172,47 +172,49 @@ async def http_put_binary(app, url, data=None, params=None):
     
     try:
         async with client.put(url, data=data, params=params, timeout=timeout) as rsp:
-            log.info("http_put_binary status: {}".format(rsp.status))
+            log.info(f"http_put_binary status: {rsp.status}")
             if rsp.status != 201:
-                msg = "PUT (binary) request error for {}: status {}".format(url, rsp.status)
-                log.error(msg)
-                raise HttpProcessingError(message=msg, code=rsp.status)
+                log.error(f"PUT (binary) request error for {url}: status {rsp.status}")
+                raise HTTPInternalServerError()
 
             rsp_json = await rsp.json()
-            log.debug("http_put_binary({}) response: {}".format(url, rsp_json))
+            log.debug(f"http_put_binary({url}) response: {rsp_json}")
     except ClientError as ce:
-        log.error("Error for http_put_binary({}): {} ".format(url, str(ce)))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        log.error(f"Error for http_put_binary({url}): {ce} ")
+        raise HTTPInternalServerError()
     except CancelledError as cle:
-        log.error("CancelledError for http_put_binary({}): {}".format(url, str(cle)))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        log.error(f"CancelledError for http_put_binary({url}): {cle}")
+        raise HTTPInternalServerError()
     return rsp_json
 
 """
 Helper function  - async HTTP DELETE
 """ 
 async def http_delete(app, url, data=None, params=None):
-    log.info("http_delete('{}')".format(url))
+    log.info(f"http_delete('{url}')")
     client = get_http_client(app)
     rsp_json = None
     timeout = config.get("timeout")
     
     try:
         async with client.delete(url, data=json.dumps(data), params=params, timeout=timeout) as rsp:
-            log.info("http_delete status: {}".format(rsp.status))
-            if rsp.status != 200:
-                msg = "DELETE request error for url: {} - status: {}".format(url, rsp.status)
-                log.warn(msg)
-                raise HttpProcessingError(message=msg, code=rsp.status)
+            log.info(f"http_delete status: {rsp.status}")
+            if rsp.status == 200:
+                pass  # expectred
+            elif rsp.status == 404:
+                log.info(f"NotFound response for DELETE for url: {url}")
+            else:
+                log.error(f"DELETE request error for url: {url} - status: {rsp.status}")
+                raise HTTPInternalServerError()
 
             rsp_json = await rsp.json()
-            log.debug("http_delete({}) response: {}".format(url, rsp_json))
+            log.debug(f"http_delete({url}) response: {rsp_json}")
     except ClientError as ce:
-        log.error("Error for http_delete({}): {} ".format(url, str(ce)))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        log.error(f"Error for http_delete({url}): {ce} ")
+        raise HTTPInternalServerError()
     except CancelledError as cle:
-        log.error("CancelledError for http_delete({}): {}".format(url, str(cle)))
-        raise HttpProcessingError(message="Unexpected error", code=500)
+        log.error(f"CancelledError for http_delete({url}): {cle}")
+        raise HTTPInternalServerError()
     return rsp_json
 
 """
@@ -232,7 +234,7 @@ async def jsonResponse(request, data, status=200):
         answer = answer.encode('utf8')
         resp.content_length = len(answer)
         await resp.prepare(request)
-        resp.write(answer)
+        await resp.write(answer)
     else:
         await resp.prepare(request)
     await resp.write_eof()
@@ -242,6 +244,7 @@ async def jsonResponse(request, data, status=200):
 Convience method to compute href links
 """
 def getHref(request, uri, query=None, domain=None):
+    params = request.rel_url.query
     href = config.get("hsds_endpoint")
     if not href:
         href = request.scheme + "://127.0.0.1"   
@@ -250,11 +253,11 @@ def getHref(request, uri, query=None, domain=None):
     if domain:
         href += "?domain=" + domain
         delimiter = '&'
-    elif "domain" in request.GET:
-        href += "?domain=" + request.GET["domain"]
+    elif "domain" in params:
+        href += "?domain=" + params["domain"]
         delimiter = '&'
-    elif "host" in request.GET:
-        href  += "?host=" + request.GET["host"]
+    elif "host" in params:
+        href  += "?host=" + params["host"]
         delimiter = '&'
             
     if query is not None:

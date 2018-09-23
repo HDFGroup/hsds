@@ -16,7 +16,8 @@ import time
 from copy import copy
 from bisect import bisect_left
 
-from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError 
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict, HTTPInternalServerError
+
  
 from util.idUtil import  isValidUuid
 from util.httpUtil import jsonResponse
@@ -37,24 +38,25 @@ async def GET_Links(request):
     """
     log.request(request)
     app = request.app
+    params = request.rel_url.query
     group_id = get_obj_id(request)  
     log.info("GET links: {}".format(group_id))
     if not isValidUuid(group_id, obj_class="group"):
         log.error( "Unexpected group_id: {}".format(group_id))
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
  
     limit = None
-    if "Limit" in request.GET:
+    if "Limit" in params:
         try:
-            limit = int(request.GET["Limit"])
+            limit = int(params["Limit"])
             log.info("GET_Links - using Limit: {}".format(limit))
         except ValueError:
             msg = "Bad Request: Expected int type for limit"
             log.error(msg)  # should be validated by SN
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
     marker = None
-    if "Marker" in request.GET:
-        marker = request.GET["Marker"]
+    if "Marker" in params:
+        marker = params["Marker"]
         log.info("GET_Links - using Marker: {}".format(marker))
      
     group_json = await get_metadata_obj(app, group_id)
@@ -62,7 +64,7 @@ async def GET_Links(request):
     log.info("for id: {} got group json: {}".format(group_id, str(group_json)))
     if "links" not in group_json:
         msg.error("unexpected group data for id: {}".format(group_id))
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
 
     # return a list of links based on sorted dictionary keys
     link_dict = group_json["links"]
@@ -77,7 +79,7 @@ async def GET_Links(request):
             # marker not found, return 404
             msg = "Link marker: {}, not found".format(marker)
             log.warn(msg)
-            raise HttpProcessingError(code=404, message=msg)
+            raise HTTPNotFound()
 
     end_index = len(titles) 
     if limit is not None and (end_index - start_index) > limit:
@@ -105,7 +107,7 @@ async def GET_Link(request):
 
     if not isValidUuid(group_id, obj_class="group"):
         log.error( "Unexpected group_id: {}".format(group_id))
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
 
     link_title = request.match_info.get('title')
 
@@ -115,12 +117,12 @@ async def GET_Link(request):
     log.info("for id: {} got group json: {}".format(group_id, str(group_json)))
     if "links" not in group_json:
         log.error("unexpected group data for id: {}".format(group_id))
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
 
     links = group_json["links"]
     if link_title not in links:
         log.warn("Link name {} not found in group: {}".format(link_title, group_id))
-        raise HttpProcessingError(code=404, message="Unexpected Error")
+        raise HTTPNotFound()
 
     link_json = links[link_title]
      
@@ -136,7 +138,7 @@ async def PUT_Link(request):
     log.info("PUT link: {}".format(group_id))
     if not isValidUuid(group_id, obj_class="group"):
         log.error( "Unexpected group_id: {}".format(group_id))
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
 
     link_title = request.match_info.get('title')
     validateLinkName(link_title)
@@ -145,14 +147,15 @@ async def PUT_Link(request):
 
     if not request.has_body:
         msg = "PUT Link with no body"
-        log.error(msg)
-        raise HttpBadRequest(message=msg)
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     body = await request.json()   
     
     if "class" not in body: 
-        log.error("Expected class in PUT Link")
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        msg = "PUT Link with no class key body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
     link_class = body["class"]
      
     link_json = {}
@@ -168,13 +171,13 @@ async def PUT_Link(request):
     group_json = await get_metadata_obj(app, group_id)
     if "links" not in group_json:
         log.error( "unexpected group data for id: {}".format(group_id))
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
 
     links = group_json["links"]
     if link_title in links:
         msg = "Link name {} already found in group: {}".format(link_title, group_id)
         log.warn(msg)
-        raise HttpProcessingError(code=409, message=msg)
+        raise HTTPConflict()
     
     now = time.time()
     link_json["created"] = now
@@ -204,8 +207,9 @@ async def DELETE_Link(request):
     log.info("DELETE link: {}".format(group_id))
 
     if not isValidUuid(group_id, obj_class="group"):
-        log.error( "Unexpected group_id: {}".format(group_id))
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        msg = f"Unexpected group_id: {group_id}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
  
     link_title = request.match_info.get('title')
     validateLinkName(link_title)
@@ -214,13 +218,13 @@ async def DELETE_Link(request):
     # TBD: Possible race condition
     if "links" not in group_json:
         log.error("unexpected group data for id: {}".format(group_id))
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
 
     links = group_json["links"]
     if link_title not in links:
         msg = "Link name {} not found in group: {}".format(link_title, group_id)
         log.warn(msg)
-        raise HttpProcessingError(code=404, message=msg)
+        raise HTTPNotFound()
 
     del links[link_title]  # remove the link from dictionary
 

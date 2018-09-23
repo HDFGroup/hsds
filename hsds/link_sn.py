@@ -13,9 +13,10 @@
 # service node of hsds cluster
 # 
  
-from aiohttp.http_exceptions import HttpBadRequest
+from aiohttp.web_exceptions import HTTPBadRequest
+
  
-from util.httpUtil import  http_get_json, http_put, http_delete, jsonResponse, getHref
+from util.httpUtil import  http_get, http_put, http_delete, jsonResponse, getHref
 from util.idUtil import   isValidUuid, getDataNodeUrl, getCollectionForId
 from util.authUtil import getUserPasswordFromRequest,   validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
@@ -28,27 +29,28 @@ async def GET_Links(request):
     """HTTP method to return JSON for link collection"""
     log.request(request)
     app = request.app 
+    params = request.rel_url.query
 
     group_id = request.match_info.get('id')
     if not group_id:
         msg = "Missing group id"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if not isValidUuid(group_id, obj_class="Group"):
         msg = "Invalid group id: {}".format(group_id)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     limit = None
-    if "Limit" in request.GET:
+    if "Limit" in params:
         try:
-            limit = int(request.GET["Limit"])
+            limit = int(params["Limit"])
         except ValueError:
             msg = "Bad Request: Expected int type for limit"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
     marker = None
-    if "Marker" in request.GET:
-        marker = request.GET["Marker"]
+    if "Marker" in params:
+        marker = params["Marker"]
     
     username, pswd = getUserPasswordFromRequest(request)
     if username is None and app['allow_noauth']:
@@ -60,7 +62,7 @@ async def GET_Links(request):
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     
     await validateAction(app, domain, group_id, username, "read")
 
@@ -74,7 +76,7 @@ async def GET_Links(request):
         req += query_sep + "Marker=" + marker
         
     log.debug("get LINKS: " + req)
-    links_json = await http_get_json(app, req)
+    links_json = await http_get(app, req)
     log.debug("got links json from dn for group_id: {}".format(group_id)) 
     links = links_json["links"]
 
@@ -110,11 +112,11 @@ async def GET_Link(request):
     if not group_id:
         msg = "Missing group id"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if not isValidUuid(group_id, obj_class="Group"):
         msg = "Invalid group id: {}".format(group_id)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     link_title = request.match_info.get('title')
     validateLinkName(link_title)
 
@@ -128,13 +130,13 @@ async def GET_Link(request):
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     await validateAction(app, domain, group_id, username, "read")
     
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id + "/links/" + link_title
     log.debug("get LINK: " + req)
-    link_json = await http_get_json(app, req)
+    link_json = await http_get(app, req)
     log.debug("got link_json: " + str(link_json)) 
     resp_link = {}
     resp_link["title"] = link_title
@@ -180,11 +182,11 @@ async def PUT_Link(request):
     if not group_id:
         msg = "Missing group id"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if not isValidUuid(group_id, obj_class="Group"):
         msg = "Invalid group id: {}".format(group_id)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     link_title = request.match_info.get('title')
     log.info("PUT Link_title: [{}]".format(link_title) )
     validateLinkName(link_title)
@@ -197,7 +199,7 @@ async def PUT_Link(request):
     if not request.has_body:
         msg = "PUT Link with no body"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     body = await request.json()   
 
@@ -206,7 +208,7 @@ async def PUT_Link(request):
         if not isValidUuid(body["id"]):
             msg = "PUT Link with invalid id in body"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         link_json["id"] = body["id"]
         link_json["class"] = "H5L_TYPE_HARD"
 
@@ -222,13 +224,13 @@ async def PUT_Link(request):
     else:
         msg = "PUT Link with no id or h5path keys"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     await validateAction(app, domain, group_id, username, "create")
     
 
@@ -240,7 +242,7 @@ async def PUT_Link(request):
         if ref_json["root"] != group_json["root"]:
             msg = "Hard link must reference an object in the same domain"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
 
     # ready to add link now
     req = getDataNodeUrl(app, group_id)
@@ -266,11 +268,11 @@ async def DELETE_Link(request):
     if not group_id:
         msg = "Missing group id"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if not isValidUuid(group_id, obj_class="Group"):
         msg = "Invalid group id: {}".format(group_id)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     link_title = request.match_info.get('title')
     validateLinkName(link_title)
 
@@ -281,7 +283,7 @@ async def DELETE_Link(request):
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     await validateAction(app, domain, group_id, username, "delete")
 

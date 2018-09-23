@@ -26,7 +26,7 @@ from aiobotocore import get_session
 
 import config
 #from util.timeUtil import unixTimeToUTC, elapsedTime
-from util.httpUtil import http_get_json, http_post, jsonResponse
+from util.httpUtil import http_get, http_post, jsonResponse
 from util.idUtil import createNodeId
 from util.s3Util import getS3JSONObj, getInitialS3Stats 
 from util.idUtil import getHeadNodeS3Key
@@ -120,7 +120,7 @@ async def healthCheck(app):
             req_node = "{}/nodestate".format(head_url)
             log.debug("health check req {}".format(req_node))
             try:
-                rsp_json = await http_get_json(app, req_node)
+                rsp_json = await http_get(app, req_node)
                 if rsp_json is None or not isinstance(rsp_json, dict):
                     log.warn("invalid health check response: type: {} text: {}".format(type(rsp_json), rsp_json))
                 else:

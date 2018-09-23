@@ -15,7 +15,8 @@
 # 
  
 import json
-from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPGone
+
  
 from util.httpUtil import http_post, http_put, http_delete, jsonResponse, getHref
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
@@ -30,41 +31,42 @@ async def GET_Datatype(request):
     """HTTP method to return JSON for committed datatype"""
     log.request(request)
     app = request.app 
+    params = request.rel_url.query
 
     h5path = None
     getAlias = False
     ctype_id = request.match_info.get('id')
-    if not ctype_id and "h5path" not in request.GET:
+    if not ctype_id and "h5path" not in params:
         msg = "Missing type id"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     if ctype_id:
         if not isValidUuid(ctype_id, "Type"):
             msg = "Invalid type id: {}".format(ctype_id)
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
-        if "getalias" in request.GET:
-            if request.GET["getalias"]:
+            raise HTTPBadRequest(reason=msg)
+        if "getalias" in params:
+            if params["getalias"]:
                 getAlias = True 
     else:
         group_id = None
-        if "grpid" in request.GET:
-            group_id = request.GET["grpid"]
+        if "grpid" in params:
+            group_id = params["grpid"]
             if not isValidUuid(group_id, "Group"):
                 msg = "Invalid parent group id: {}".format(group_id)
                 log.warn(msg)
-                raise HttpBadRequest(message=msg)
-        if "h5path" not in request.GET:
+                raise HTTPBadRequest(reason=msg)
+        if "h5path" not in params:
             msg = "Expecting either ctype id or h5path url param"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
 
-        h5path = request.GET["h5path"]
+        h5path = params["h5path"]
         if h5path[0] != '/' and group_id is None:
             msg = "h5paths must be absolute"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         log.info("GET_Datatype, h5path: {}".format(h5path))
 
     username, pswd = getUserPasswordFromRequest(request)
@@ -77,21 +79,21 @@ async def GET_Datatype(request):
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     if h5path:
         domain_json = await getDomainJson(app, domain)
         if "root" not in domain_json:
             msg = "Expected root key for domain: {}".format(domain)
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         if group_id is None:
             group_id = domain_json["root"]
         ctype_id = await getObjectIdByPath(app, group_id, h5path)  # throws 404 if not found
         if not isValidUuid(ctype_id, "Datatype"):
             msg = "No datatype exist with the path: {}".format(h5path)
             log.warn(msg)
-            raise HttpProcessingError(code=404, message=msg)
+            raise HTTPGone()
         log.info("got ctype_id: {} from h5path: {}".format(ctype_id, h5path))
 
     await validateAction(app, domain, ctype_id, username, "read")
@@ -134,13 +136,13 @@ async def POST_Datatype(request):
     if not request.has_body:
         msg = "POST Datatype with no body"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     body = await request.json()
     if "type" not in body:
         msg = "POST Datatype has no type key in body"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     datatype = body["type"]
     if isinstance(datatype, str):
         try:
@@ -151,14 +153,14 @@ async def POST_Datatype(request):
         except TypeError:
             msg = "POST Dataset with invalid predefined type"
             log.warn(msg)
-            raise HttpBadRequest(message=msg) 
+            raise HTTPBadRequest(reason=msg) 
     validateTypeItem(datatype)
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     
     domain_json = await getDomainJson(app, domain, reload=True)
 
@@ -167,7 +169,7 @@ async def POST_Datatype(request):
     if "root" not in domain_json:
         msg = "Expected root key for domain: {}".format(domain)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     link_id = None
     link_title = None
@@ -219,11 +221,11 @@ async def DELETE_Datatype(request):
     if not ctype_id:
         msg = "Missing committed type id"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if not isValidUuid(ctype_id, "Type"):
         msg = "Invalid committed type id: {}".format(ctype_id)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     username, pswd = getUserPasswordFromRequest(request)
     await validateUserPassword(app, username, pswd)
@@ -232,13 +234,13 @@ async def DELETE_Datatype(request):
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
     if "root" not in domain_json:
         log.error("Expected root key for domain: {}".format(domain))
-        raise HttpBadRequest(message="Unexpected Error")
+        raise HTTPBadRequest(reason="Unexpected Error")
 
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, ctype_id, username, "delete")

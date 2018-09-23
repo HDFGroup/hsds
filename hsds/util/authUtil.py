@@ -16,7 +16,7 @@ import binascii
 import subprocess
 import datetime
 from botocore.exceptions import ClientError
-from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPUnauthorized, HTTPForbidden, HTTPInternalServerError
 import hsds_logger as log
 import config
 
@@ -197,22 +197,22 @@ async def validateUserPasswordDynamoDB(app, username, password):
             )
         except ClientError as e:
             log.error("Unable to read dyanamodb table: {}".format(e.response['Error']['Message']))
-            raise HttpProcessingError(code=500, message="Unexpected Error")
+            raise HTTPInternalServerError()  # 500
         if "Item" not in response:
             log.info("user: {} not found".format(username))
-            raise HttpProcessingError(code=401, message="provide user and password")
+            raise HTTPUnauthorized()  # 401
         item = response['Item']
         if "password" not in item:
             log.error("Expected to find password key in DynamoDB table")
-            raise HttpProcessingError(code=500, message="Unexpected Error")
+            raise HTTPInternalServerError()  # 500
         password_item = item["password"]
         if 'S' not in password_item:
             log.error("Expected to find 'S' key for password item")
-            raise HttpProcessingError(code=500, message="Unexpected Error")
+            raise HTTPInternalServerError()  # 500
         log.debug("password: {}".format(password_item))
         if password_item['S'] != password:
             log.warn("user password is not valid for user: {}".format(username))
-            raise HttpProcessingError(code=401, message="provide user and password")
+            raise HTTPUnauthorized()  # 401
         # add user/password to user_db map
         # TODO - have the entry expire after x minutes
         log.info("Saving user/password to user_db for: {}".format(username))
@@ -227,7 +227,7 @@ def validatePasswordSHA512(app, username, password):
         hex_hash = hashlib.sha512(username.encode('utf-8') + salt.encode('utf-8')).hexdigest()
         if hex_hash[:32] != password:
             log.warn("user password is not valid (didn't equal sha512 hash) for user: {}".format(username))
-            raise HttpProcessingError(code=401, message="provide user and password")
+            raise HTTPUnauthorized()  # 401
         log.info("Saving user/password to user_db for: {}".format(username))
         user_data = {"pwd": password}
         user_db[username] = user_data
@@ -242,16 +242,16 @@ async def validateUserPassword(app, username, password):
     
     if not username:
         log.info('validateUserPassword - null user')
-        raise HttpBadRequest("provide user name and password")
+        raise HTTPBadRequest("provide user name and password")
     if not password:
         log.info('isPasswordValid - null password')
-        raise HttpBadRequest("provide  password")
+        raise HTTPBadRequest("provide  password")
 
     log.debug("looking up username: {}".format(username))
     if "user_db" not in app:
         msg = "user_db not intialized"
         log.error(msg)
-        raise HttpProcessingError(code=500, message=msg)
+        raise HTTPInternalServerError()  # 500
     user_db = app["user_db"]    
     if username not in user_db:
         if config.get("AWS_DYNAMODB_USERS_TABLE"):
@@ -261,7 +261,7 @@ async def validateUserPassword(app, username, password):
             validatePasswordSHA512(app, username, password)
         else:
             log.info("user not found")
-            raise HttpProcessingError(code=401, message="provide user and password")
+            raise HTTPUnauthorized() # 401   
 
     user_data = user_db[username] 
     
@@ -269,7 +269,7 @@ async def validateUserPassword(app, username, password):
         log.debug("user  password validated")
     else:
         log.info("user password is not valid for user: {}".format(username))
-        raise HttpProcessingError(code=401, message="provide user and password")
+        raise HTTPUnauthorized() # 401  
 
 
 def getUserPasswordFromRequest(request):
@@ -283,27 +283,27 @@ def getUserPasswordFromRequest(request):
     scheme, _, token =  request.headers.get('Authorization', '').partition(' ')
     if not scheme or not token:
         log.info("Invalid Authorization header")
-        raise HttpBadRequest("Invalid Authorization header")
+        raise HTTPBadRequest("Invalid Authorization header")
     if scheme.lower() != 'basic':
         msg = "Unsupported Authorization header scheme: {}".format(scheme)
         log.warn(msg)
-        raise HttpBadRequest(msg)
+        raise HTTPBadRequest(msg)
     try:
         token = token.encode('utf-8')  # convert to bytes
         token_decoded = base64.decodebytes(token)
     except binascii.Error:
         msg = "Malformed authorization header"
         log.warn(msg)
-        raise HttpBadRequest(msg)
+        raise HTTPBadRequest(msg)
     if token_decoded.index(b':') < 0:
         msg = "Malformed authorization header (No ':' character)"
         log.warn(msg)
-        raise HttpBadRequest(msg)
+        raise HTTPBadRequest(msg)
     user, _, pswd = token_decoded.partition(b':')
     if not user or not pswd:
         msg = "Malformed authorization header, user/password not found"
         log.warn(msg)
-        raise HttpBadRequest(msg)
+        raise HTTPBadRequest(msg)
    
     user = user.decode('utf-8')   # convert bytes to string
     pswd = pswd.decode('utf-8')   # convert bytes to string
@@ -316,10 +316,10 @@ def aclCheck(obj_json, req_action, req_user):
         return  # allow admin user to do anything
     if obj_json is None:
         log.error("no acls found")
-        raise HttpProcessingError(code=500, message="Unexpected error")
+        raise HTTPInternalServerError() # 500
     if "acls" not in obj_json:
         log.error("no acls found")
-        raise HttpProcessingError(code=500, message="Unexpected error")
+        raise HTTPInternalServerError() # 500
     acls = obj_json["acls"]
     if req_action not in ("create", "read", "update", "delete", "readACL", "updateACL"):
         log.error("unexpected req_action: {}".format(req_action))
@@ -332,7 +332,7 @@ def aclCheck(obj_json, req_action, req_user):
         acl = { }
     if req_action not in acl or not acl[req_action]:
         log.warn("Action: {} not permitted for user: {}".format(req_action, req_user))
-        raise HttpProcessingError(code=403, message="Forbidden")
+        raise HTTPForbidden()  # 403
     log.debug("action permitted")
 
 def validateAclJson(acl_json):
@@ -343,7 +343,7 @@ def validateAclJson(acl_json):
             if acl_key not in acl_keys:
                 msg = "Invalid ACL key: {}".format(acl_key)
                 log.warn(msg)
-                raise HttpBadRequest(msg)
+                raise HTTPBadRequest(msg)
             acl_value = acl[acl_key]
             if acl_value not in (True, False):
                 msg = "Invalid ACL value: {}".format(acl_value)   

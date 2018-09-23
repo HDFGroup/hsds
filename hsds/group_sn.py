@@ -15,7 +15,8 @@
  
 import json
 
-from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
+
  
 from util.httpUtil import http_post, http_put, http_delete, jsonResponse, getHref
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
@@ -29,31 +30,32 @@ async def GET_Group(request):
     """HTTP method to return JSON for group"""
     log.request(request)
     app = request.app 
+    params = request.rel_url.query
 
     h5path = None
     getAlias = False
     group_id = request.match_info.get('id')
-    if not group_id and "h5path" not in request.GET:
+    if not group_id and "h5path" not in params:
         # no id, or path provided, so bad request
         msg = "Missing group id"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if group_id:
         log.info("GET_Group, id: {}".format(group_id))
         # is the id a group id and not something else?
         if not isValidUuid(group_id, "Group"):
             msg = "Invalid group id: {}".format(group_id)
             log.warn(msg)
-            raise HttpBadRequest(message=msg) 
-        if "getalias" in request.GET:
-            if request.GET["getalias"]:
+            raise HTTPBadRequest(reason=msg) 
+        if "getalias" in params:
+            if params["getalias"]:
                 getAlias = True       
-    if "h5path" in request.GET:
-        h5path = request.GET["h5path"]
+    if "h5path" in params:
+        h5path = params["h5path"]
         if not group_id and h5path[0] != '/':
             msg = "h5paths must be absolute if no parent id is provided"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         log.info("GET_Group, h5path: {}".format(h5path))
     
     username, pswd = getUserPasswordFromRequest(request)
@@ -66,7 +68,7 @@ async def GET_Group(request):
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     
     if h5path and h5path[0] == '/':
         # ignore the request path id (if given) and start
@@ -76,7 +78,7 @@ async def GET_Group(request):
         if "root" not in domain_json:
             msg = "Expected root key for domain: {}".format(domain)
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
         group_id = domain_json["root"]
 
     if h5path:
@@ -84,7 +86,7 @@ async def GET_Group(request):
         if not isValidUuid(group_id, "Group"):
             msg = "No group exist with the path: {}".format(h5path)
             log.warn(msg)
-            raise HttpProcessingError(code=404, message=msg)
+            raise HTTPNotFound()
         log.info("get group_id: {} from h5path: {}".format(group_id, h5path))
 
     # verify authorization to read the group
@@ -134,7 +136,7 @@ async def POST_Group(request):
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     
     domain_json = await getDomainJson(app, domain, reload=True)
 
@@ -143,7 +145,7 @@ async def POST_Group(request):
     if "root" not in domain_json:
         msg = "Expected root key for domain: {}".format(domain)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
      
     link_id = None
@@ -204,11 +206,11 @@ async def DELETE_Group(request):
     if not group_id:
         msg = "Missing group id"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if not isValidUuid(group_id, "Group"):
         msg = "Invalid group id: {}".format(group_id)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     username, pswd = getUserPasswordFromRequest(request)
     await validateUserPassword(app, username, pswd)
@@ -217,13 +219,13 @@ async def DELETE_Group(request):
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
     if "root" not in domain_json:
         log.error("Expected root key for domain: {}".format(domain))
-        raise HttpBadRequest(message="Unexpected Error")
+        raise HTTPBadRequest(reason="Unexpected Error")
 
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, group_id, username, "delete")
@@ -231,7 +233,7 @@ async def DELETE_Group(request):
     if group_id == domain_json["root"]:
         msg = "Forbidden - deletion of root group is not allowed - delete domain first"
         log.warn(msg)
-        raise HttpProcessingError(code=403, message=msg)
+        raise HTTPForbidden()
 
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id

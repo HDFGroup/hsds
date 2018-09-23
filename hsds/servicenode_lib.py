@@ -13,11 +13,12 @@
 # service node of hsds cluster
 #  
 import os.path as op
-from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPInternalServerError
+
 
 from util.idUtil import getDataNodeUrl, getCollectionForId
 from util.authUtil import aclCheck
-from util.httpUtil import http_get_json
+from util.httpUtil import http_get
 
 import hsds_logger as log
 
@@ -33,10 +34,9 @@ async def getDomainJson(app, domain, reload=False):
     log.info("getDomainJson({})".format(domain))
     if app["node_type"] != "sn":
         log.error("wrong node_type")
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
 
     domain_cache = app["domain_cache"]
-    #domain = getDomainFromRequest(request)
 
     if domain in domain_cache:
         if reload:
@@ -45,21 +45,20 @@ async def getDomainJson(app, domain, reload=False):
             log.debug("returning domain_cache value")
             return domain_cache[domain]
 
-     
     req = getDataNodeUrl(app, domain)
     req += "/domains"
     params = { "domain": domain } 
     log.debug("sending dn req: {}".format(req))
     
-    domain_json = await http_get_json(app, req, params=params)
+    domain_json = await http_get(app, req, params=params)
     
     if 'owner' not in domain_json:
         log.warn("No owner key found in domain")
-        raise HttpProcessingError(code=500, message="Unexpected error")
+        raise HTTPInternalServerError()
 
     if 'acls' not in domain_json:
         log.warn("No acls key found in domain")
-        raise HttpProcessingError(code=500, message="Unexpected error")
+        raise HTTPInternalServerError()
 
     domain_cache[domain] = domain_json  # add to cache
     return domain_json
@@ -76,7 +75,7 @@ async def validateAction(app, domain, obj_id, username, action):
     if "root" not in domain_json:
         msg = "Expected root key for domain: {}".format(domain)
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     obj_json = None
     if obj_id in meta_cache:
@@ -86,7 +85,7 @@ async def validateAction(app, domain, obj_id, username, action):
         collection = getCollectionForId(obj_id)
         req = getDataNodeUrl(app, obj_id)
         req += '/' + collection + '/' + obj_id
-        obj_json = await http_get_json(app, req) 
+        obj_json = await http_get(app, req) 
         meta_cache[obj_id] = obj_json
 
     log.debug("obj_json[root]: {} domain_json[root]: {}".format(obj_json["root"], domain_json["root"]))
@@ -96,16 +95,16 @@ async def validateAction(app, domain, obj_id, username, action):
         if "root" not in domain_json or obj_json["root"] != domain_json["root"]:
             msg = "Object id is not a member of the given domain"
             log.warn(msg)
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
 
     if action not in ("create", "read", "update", "delete", "readACL", "updateACL"):
         log.error("unexpected action: {}".format(action))
-        raise HttpProcessingError(code=500, message="Unexpected error")
+        raise HTTPInternalServerError()
 
     reload = False
     try:
         aclCheck(domain_json, action, username)  # throws exception if not allowed
-    except HttpProcessingError as hpe:
+    except HTTPForbidden:
         log.info("got HttpProcessing error on validate action for domain: {}, reloading...".format(domain))
         # just in case the ACL was recently updated, refetch the domain
         reload = True
@@ -131,12 +130,12 @@ async def getObjectJson(app, obj_id, refresh=False):
         req = getDataNodeUrl(app, obj_id)
         collection =  getCollectionForId(obj_id) 
         req += '/' + collection + '/' + obj_id
-        obj_json = await http_get_json(app, req)  # throws 404 if doesn't exist'
+        obj_json = await http_get(app, req)  # throws 404 if doesn't exist
         meta_cache[obj_id] = obj_json
     if obj_json is None:
         msg = "Object: {} not found".format(obj_id)
         log.warn(msg)
-        raise HttpProcessingError(code=404, message=msg)
+        raise HTTPNotFound()
     return obj_json
 
 async def getObjectIdByPath(app, obj_id, h5path, refresh=False):
@@ -155,17 +154,17 @@ async def getObjectIdByPath(app, obj_id, h5path, refresh=False):
             # not a group, so won't have links
             msg = "h5path: {} not found".format(h5path)
             log.warn(msg)
-            raise HttpProcessingError(code=404, message=msg)
+            raise HTTPNotFound()
         req = getDataNodeUrl(app, obj_id)
         req += "/groups/" + obj_id + "/links/" + link
         log.debug("get LINK: " + req)
-        link_json = await http_get_json(app, req)
+        link_json = await http_get(app, req)
         log.debug("got link_json: " + str(link_json)) 
         if link_json["class"] != 'H5L_TYPE_HARD':
             # don't follow soft/external links
             msg = "h5path: {} not found".format(h5path)
             log.warn(msg)
-            raise HttpProcessingError(code=404, message=msg)
+            raise HTTPInternalServerError()
         obj_id = link_json["id"]
     # if we get here, we've traveresed the entire path and found the object
     return obj_id
@@ -179,12 +178,12 @@ async def getPathForObjectId(app, parent_id, idpath_map, tgt_id=None):
 
     if not parent_id:
         log.error("No parent_id passed to getPathForObjectId")
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
 
     if parent_id not in idpath_map:
         msg = "Obj {} expected to be found in idpath_map".format(parent_id)
         log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
     
     parent_path = idpath_map[parent_id]
     if parent_id == tgt_id:
@@ -194,7 +193,7 @@ async def getPathForObjectId(app, parent_id, idpath_map, tgt_id=None):
     req += "/groups/" + parent_id + "/links" 
         
     log.debug("getPathForObjectId LINKS: " + req)
-    links_json = await http_get_json(app, req)
+    links_json = await http_get(app, req)
     log.debug("getPathForObjectId got links json from dn for parent_id: {}".format(parent_id)) 
     links = links_json["links"]
 

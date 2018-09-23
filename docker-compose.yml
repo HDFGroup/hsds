@@ -23,7 +23,7 @@ services:
       - ${HEAD_PORT}:${HEAD_PORT}
     logging:
      options:
-        max-size: "5k"
+        max-size: "5m"
         max-file: "5"
   an:
     build: .
@@ -42,14 +42,14 @@ services:
       - LOG_LEVEL=${LOG_LEVEL}
       - ANONYMOUS_TTL=${ANONYMOUS_TTL}
     volumes:
-      - /data:/data
+      - ${DB_HOST_DIR}:/data
     depends_on:
       - head
     ports:
       - ${AN_PORT}:${AN_PORT}
     logging:
      options:
-        max-size: "5k"
+        max-size: "5m"
         max-file: "5"
   dn:
     build: .
@@ -74,7 +74,7 @@ services:
       - ${DN_PORT}
     logging:
      options:
-        max-size: "5k"
+        max-size: "5m"
         max-file: "5"
   sn:
     build: .
@@ -122,7 +122,7 @@ services:
       - "80:80"
     logging:
      options:
-        max-size: "5k"
+        max-size: "5m"
         max-file: "5"
   dockergen:
     image: jwilder/docker-gen

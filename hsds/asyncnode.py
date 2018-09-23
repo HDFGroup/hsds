@@ -17,7 +17,8 @@ from os.path import isfile, join
 import time
 
 from aiohttp.web import run_app
-from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict, HTTPInternalServerError, HTTPServiceUnavailable
+
 import sqlite3
 
 import config
@@ -53,9 +54,13 @@ async def objDelete(app, objid, rootid=None):
     try:
         await deleteS3Obj(app, s3_key)
         #TODO - keep track of deleted ids
-    except HttpProcessingError as hpe:
-        # this might happen if the DN hasn't synched to S3 yet
-        log.warn("got S3 error deleting obj_id: {} to S3: {}".format(objid, str(hpe)))
+    except HTTPNotFound:
+        log.warn(f"got S3 error deleting obj_id: {objid} to S3, object not found")
+
+    except HTTPInternalServerError as hpe:
+        # S3 failure?
+        log.warn(f"got S3 error deleting obj_id: {objid} to S3: {str(hpe)}")
+
 
     # get the rootentry from the root table
     if rootid:
@@ -129,10 +134,15 @@ async def processPendingQueue(app):
                 log.info("deleting s3_key: {}".format(s3_key))
                 try:
                     await deleteS3Obj(app, s3_key)
-                except HttpProcessingError as hpe:
-                    # this might happen if the DN hasn't synched to S3 yet
-                    log.warn("got S3 error deleting obj_id: {} to S3: {}".format(objid, str(hpe)))
+                except HTTPNotFound:
+                    log.warn(f"got S3 error deleting chunk: {objid} to S3, object not found")
                     continue
+
+                except HTTPInternalServerError as hpe:
+                    # S3 failure?
+                    log.warn(f"got S3 error deleting chunk: {objid} to S3: {str(hpe)}")
+                    continue
+
                 deleteRow(conn, chunk_id)
                 # TO DO - adjust dataset and domain totalSize
             if len(chunk_rows) == DB_LIMIT:
@@ -217,19 +227,19 @@ async def PUT_Objects(request):
     if not conn:
         msg = "db not initizalized"
         log.warn(msg)
-        raise HttpProcessingError(code=501, message=msg)
+        raise HTTPServiceUnavailable()
 
     if not request.has_body:
         msg = "PUT objects with no body"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     body = await request.json()
     log.debug("Got PUT Objects body: {}".format(body))
     if "objs" not in body:
         msg = "expected to find objs key in body"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     objs = body["objs"]
     for obj in objs:
         log.debug("PUT_Objects, obj: {}".format(obj))
@@ -379,13 +389,13 @@ async def DELETE_Objects(request):
     if not request.has_body:
         msg = "DELETE objects with no body"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     body = await request.json()
     if "objs" not in body:
         msg = "expected to find objs key in body"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     objs = body["objs"]
     for obj in objs:
         if "id" not in obj:
@@ -446,19 +456,20 @@ async def GET_Object(request):
     if not conn:
         msg = "db not initizalized"
         log.warn(msg)
-        raise HttpProcessingError(code=501, message=msg)
+        raise HTTPServiceUnavailable()
     
 
     objid = request.match_info.get('id')
-    if "Root" in request.GET:
-        rootid = request.GET["Root"]
+    params = request.rel_url.query
+    if "Root" in params:
+        rootid = params["Root"]
     else:
         rootid = ''
     resp_json = getRow(conn, objid, rootid=rootid)
     if not resp_json:
         msg = "objid: {} not found".format(objid)
         log.warn(msg)
-        raise HttpProcessingError(code=404, message=msg)
+        raise HTTPNotFound()
 
     log.info("GET_Object response: {}".format(resp_json))
     
@@ -471,38 +482,39 @@ async def GET_Domains(request):
     log.request(request)
     
     app = request.app
-    if "prefix" not in request.GET:
+    params = request.rel_url.query
+    if "prefix" not in params:
         msg = "No domain prefix provided"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
-    prefix = request.GET["prefix"]
+        raise HTTPBadRequest(reason=msg)
+    prefix = params["prefix"]
 
     verbose = False
-    if "verbose" in request.GET and request.GET["verbose"]:
-        log.debug("request.GET[verbose]: {}".format(request.GET["verbose"]))
-        if int(request.GET["verbose"]):
+    if "verbose" in params and params["verbose"]:
+        log.debug("params[verbose]: {}".format(params["verbose"]))
+        if int(params["verbose"]):
             verbose = True 
 
     log.info("GET_Domains: {} verbose={}".format(prefix, verbose))
 
     limit = None
-    if "Limit" in request.GET:
+    if "Limit" in params:
         try:
-            limit = int(request.GET["Limit"])
+            limit = int(params["Limit"])
             log.debug("GET_Domains - using Limit: {}".format(limit))
         except ValueError:
             msg = "Bad Request: Expected int type for limit"
             log.error(msg)  # should be validated by SN
-            raise HttpBadRequest(message=msg)
+            raise HTTPBadRequest(reason=msg)
     marker = None
-    if "Marker" in request.GET:
-        marker = request.GET["Marker"]
+    if "Marker" in params:
+        marker = params["Marker"]
         log.debug("got Marker request param: {}".format(marker))
 
     if not prefix.startswith("/"):
         msg = "Prefix expected to start with /"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     if not prefix.endswith("/"):
         msg = "Prefix expected to end with /"
@@ -511,7 +523,7 @@ async def GET_Domains(request):
     if not conn:
         msg = "db not initizalized"
         log.warn(msg)
-        raise HttpProcessingError(code=501, message=msg)
+        raise HTTPServiceUnavailable()
 
     domains = getDomains(conn, prefix, limit=limit, marker=marker)
 
@@ -555,41 +567,42 @@ async def PUT_Domain(request):
     log.request(request)
     
     app = request.app
-    if "domain" not in request.GET:
+    params = request.rel_url.query
+    if "domain" not in params:
         msg = "No domain provided"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
-    domain = request.GET["domain"]
+        raise HTTPBadRequest(reason=msg)
+    domain = params["domain"]
 
     if not domain.startswith("/"):
         msg = "Domain expected to start with /"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     if len(domain) < 2:
         msg = "Invalid domain"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     rootid=''
-    if "root" in request.GET:
-        rootid = request.GET["root"]
+    if "root" in params:
+        rootid = params["root"]
 
     owner=''
-    if "owner" in request.GET:
-        owner = request.GET["owner"]
+    if "owner" in params:
+        owner = params["owner"]
    
     conn = app["conn"]
     if not conn: 
         msg = "db not initizalized"
         log.warn(msg)
-        raise HttpProcessingError(code=501, message=msg)
+        raise HTTPServiceUnavailable()
 
     dbRow = getRow(conn, domain)
     if dbRow:
         msg = "domain: {} already found in db".format(domain)
         log.warn(msg)
-        raise HttpProcessingError(code=409, message=msg)
+        raise HTTPConflict()
 
     try:
         log.info("inserting domain: {} to DomainTable".format(domain))
@@ -597,7 +610,7 @@ async def PUT_Domain(request):
     except KeyError:
         msg = "got KeyError inserting object: {}".format(id)
         log.error(msg)
-        raise HttpProcessingError(code=500, message=msg)
+        raise HTTPInternalServerError()
 
     dbRow = getRow(conn, domain)
     if dbRow:
@@ -606,7 +619,7 @@ async def PUT_Domain(request):
     else:
         msg = "Unexpected no domain row for: {}".format(domain)
         log.error(msg)
-        raise HttpProcessingError(code=500, message=msg)
+        raise HTTPInternalServerError()
 
     resp_json = {}
     
@@ -618,33 +631,34 @@ async def DELETE_Domain(request):
     log.request(request)
 
     app = request.app
-    if "domain" not in request.GET:
+    params = request.rel_url.query
+    if "domain" not in params:
         msg = "No domain provided"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
-    domain = request.GET["domain"]
+        raise HTTPBadRequest(reason=msg)
+    domain = params["domain"]
 
     if not domain.startswith("/"):
         msg = "Domain expected to start with /"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     if len(domain) < 2:
         msg = "Invalid domain"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     conn = app["conn"]
     if not conn: 
         msg = "db not initizalized"
         log.warn(msg)
-        raise HttpProcessingError(code=501, message=msg)
+        raise HTTPServiceUnavailable()
   
     dbRow = getRow(conn, domain)
     if not dbRow:
         msg = "domain: {} not found in db".format(domain)
         log.warn(msg)
-        raise HttpProcessingError(code=404, message=msg)
+        raise HTTPNotFound()
     log.info("got domain row: {}".format(dbRow))
 
     try:
@@ -652,7 +666,7 @@ async def DELETE_Domain(request):
     except KeyError:
         msg = "got KeyError inserting domain: {}".format(domain)
         log.error(msg)
-        raise HttpProcessingError(code=500, message=msg)
+        raise HTTPInternalServerError()
 
     resp_json = {}
     
@@ -670,17 +684,19 @@ async def GET_Root(request):
 
     app = request.app
     conn = app["conn"]
+    params = request.rel_url.query
+
     if not conn:
         msg = "db not initizalized"
         log.warn(msg)
-        raise HttpProcessingError(code=501, message=msg)
+        raise HTTPServiceUnavailable()
     resp_json = getRow(conn, rootid, table="RootTable")
     if not resp_json:
         msg = "object not found"
         log.warn(msg)
-        raise HttpProcessingError(code=404, message=msg)
+        raise HTTPNotFound()
 
-    if "verbose" in request.GET and request.GET["verbose"]:
+    if "verbose" in params and params["verbose"]:
         resp_json["objects"] = listObjects(conn, rootid)
     log.info("GET_Root response: {}".format(resp_json))
 

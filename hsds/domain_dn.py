@@ -13,7 +13,7 @@
 # data node of hsds cluster
 # 
 import time
-from aiohttp.http_exceptions import  HttpProcessingError
+from aiohttp.web_exceptions import HTTPConflict, HTTPInternalServerError
 from util.authUtil import  getAclKeys
 from util.httpUtil import  jsonResponse
 from util.domainUtil import isValidDomain
@@ -24,30 +24,31 @@ import hsds_logger as log
 def get_domain(request, body=None):
     """ Extract domain and validate """
     app = request.app
+    params = request.rel_url.query
 
     domain = None
-    if "domain" in request.GET:
-        domain = request.GET["domain"]
+    log.debug(f"request.has_body: {request.has_body}")
+    if "domain" in params:
+        domain = params["domain"]
         log.debug("got domain param: {}".format(domain))
-    elif request.has_body:
-        if "domain" in body:
-            domain = body["domain"]
+    elif body and "domain" in body:
+        domain = body["domain"]
              
     if not domain: 
         msg = "No domain provided"  
         log.error(msg)
-        raise HttpProcessingError(code=500, message=msg) 
+        raise HTTPInternalServerError() 
 
     if not isValidDomain(domain):
         msg = "Expected valid domain for [{}]".format(domain)
         log.error(msg)
-        raise HttpProcessingError(code=500, message=msg) 
+        raise HTTPInternalServerError() 
     try:
         validateInPartition(app, domain)
     except KeyError as ke:
         msg = "Domain not in partition"
         log.error(msg)
-        raise HttpProcessingError(code=500, message=msg)
+        raise HTTPInternalServerError()
     return domain
 
 async def GET_Domain(request):
@@ -73,8 +74,10 @@ async def PUT_Domain(request):
     if not request.has_body:
         msg = "Expected body in put domain"
         log.error(msg)
-        raise HttpProcessingError(code=500, message=msg) 
+        raise HTTPInternalServerError() 
     body = await request.json() 
+    log.debug(f"got body: {body}")
+    log.debug(f"request_has_body: {request.has_body}")
 
     domain = get_domain(request, body=body)
  
@@ -84,30 +87,20 @@ async def PUT_Domain(request):
     if "owner" not in body_json:
         msg = "Expected Owner Key in Body"
         log.warn(msg)
-        raise HttpProcessingError(code=500, message=msg) 
+        raise HTTPInternalServerError() 
     if "acls" not in body_json:
         msg = "Expected Owner Key in Body"
         log.warn(msg)
-        raise HttpProcessingError(code=500, message=msg) 
+        raise HTTPInternalServerError() 
 
     # try getting the domain, should raise 404
-    domain_exists = False
-    try:
-        await check_metadata_obj(app, domain)
-        domain_exists = True
-    except HttpProcessingError as hpe:
-        if hpe.code in (404, 410):
-            pass # Expected
-        else:
-            msg = "Unexpected error"
-            log.error(msg)
-            raise HttpProcessingError(code=500, message=msg)
-
+    domain_exists = await check_metadata_obj(app, domain)
+      
     if domain_exists:
         # domain already exists
         msg = "Conflict: resource exists: " + domain
         log.info(msg)
-        raise HttpProcessingError(code=409, message=msg)
+        raise HTTPConflict()
 
           
     domain_json = { }
@@ -135,7 +128,7 @@ async def DELETE_Domain(request):
     if not request.has_body:
         msg = "Expected body in delete domain"
         log.error(msg)
-        raise HttpProcessingError(code=500, message=msg) 
+        raise HTTPInternalServerError() 
     body = await request.json() 
     domain = get_domain(request, body=body)
 
@@ -164,17 +157,10 @@ async def PUT_ACL(request):
     if not request.has_body:
         msg = "Expected body in delete domain"
         log.error(msg)
-        raise HttpProcessingError(code=500, message=msg) 
-    body = await request.json() 
+        raise HTTPInternalServerError() 
+    body_json = await request.json() 
 
-    domain = get_domain(request, body=body)
-
-    if not request.has_body:
-        msg = "Expected Body to be in request"
-        log.warn(msg)
-        raise HttpProcessingError(code=500, message=msg) 
-
-    body_json = await request.json()
+    domain = get_domain(request, body=body_json)
 
     log.info("put_acl - domain: {}, username:".format(domain, acl_username))
 
@@ -183,7 +169,7 @@ async def PUT_ACL(request):
 
     if "acls" not in domain_json:
         log.error( "unexpected domain data for domain: {}".format(domain))
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError() # 500 
 
     acl_keys = getAclKeys()
     acls = domain_json["acls"]

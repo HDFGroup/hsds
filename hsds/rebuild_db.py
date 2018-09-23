@@ -201,7 +201,12 @@ async def listKeys(app):
         row = getRow(conn, rootid, table="RootTable")
         log.info("Updated row: {}".format(row))
 
-    
+#
+# Shutodwn - release S3 client
+# 
+async def shutdown(app):
+    log.info("closing S3 connections")
+    await releaseClient(app)    
 
 #
 # Main
@@ -251,7 +256,7 @@ if __name__ == '__main__':
     session = get_session(loop=loop)
     app["session"] = session
     loop.run_until_complete(listKeys(app))
-    releaseClient(app)
+    loop.run_until_complete(shutdown(app))
     loop.close()
     conn.close()
 

@@ -1,4 +1,3 @@
-from aiohttp.http_exceptions import HttpBadRequest 
 import hsds_logger as log
 
 CHUNK_BASE =  16*1024   # Multiplier by which chunks are adjusted
@@ -277,7 +276,7 @@ def getChunkIds(dset_id, selection, layout, dim=0, prefix=None, chunk_ids=None):
         if not dset_id.startswith("d-"):
             msg = "Bad Request: invalid dset id: {}".format(dset_id)
             log.warning(msg)
-            raise HttpBadRequest(message=msg)
+            raise ValueError(msg)
         prefix = "c-" + dset_id[2:] + '_'
     rank = len(selection)
     if chunk_ids is None:

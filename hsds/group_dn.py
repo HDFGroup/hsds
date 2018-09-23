@@ -14,7 +14,8 @@
 # 
 import time
 
-from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalServerError
+
  
 from util.idUtil import isValidUuid 
 from util.httpUtil import jsonResponse
@@ -32,7 +33,7 @@ async def GET_Group(request):
     
     if not isValidUuid(group_id, obj_class="group"):
         log.error( "Unexpected group_id: {}".format(group_id))
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
     
     group_json = await get_metadata_obj(app, group_id)
 
@@ -56,7 +57,7 @@ async def POST_Group(request):
     if not request.has_body:
         msg = "POST_Group with no body"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     body = await request.json()
 
@@ -64,28 +65,26 @@ async def POST_Group(request):
     log.info("POST group: {}".format(group_id))
     if not isValidUuid(group_id, obj_class="group"):
         log.error( "Unexpected group_id: {}".format(group_id))
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
 
-    try:
-        # verify the id doesn't already exist
-        await check_metadata_obj(app, group_id)
+    # verify the id doesn't already exist
+    obj_found = await check_metadata_obj(app, group_id)
+    if obj_found:
         log.error( "Post with existing group_id: {}".format(group_id))
-        raise HttpProcessingError(code=500, message="Unexpected Error")
-    except HttpProcessingError:
-        pass  # expected
-    
+        raise HTTPInternalServerError()
+     
     root_id = None
     
     if "root" not in body:
         msg = "POST_Group with no root"
         log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
     root_id = body["root"]
     
     if not isValidUuid(root_id, obj_class="group"):
         msg = "Invalid root_id: " + root_id
         log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
 
     # ok - all set, create group obj
     now = time.time()
@@ -114,20 +113,24 @@ async def DELETE_Group(request):
     """
     log.request(request)
     app = request.app
+    params = request.rel_url.query
     group_id = get_obj_id(request)
     log.info("DELETE group: {}".format(group_id))
 
     if not isValidUuid(group_id, obj_class="group"):
         log.error( "Unexpected group_id: {}".format(group_id))
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
 
     # verify the id exist
-    await check_metadata_obj(app, group_id)
+    obj_found = await check_metadata_obj(app, group_id)
+    if not obj_found:
+        log.debug(f"delete called on non-exsistet obj: {group_id}")
+        raise HTTPNotFound()
         
     log.debug("deleting group: {}".format(group_id))
 
     notify=True
-    if "Notify" in request.GET and not request.GET["Notify"]:
+    if "Notify" in params and not params["Notify"]:
         notify=False
     await delete_metadata_obj(app, group_id, notify=notify)
 

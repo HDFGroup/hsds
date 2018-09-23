@@ -15,7 +15,8 @@
 import time
 from bisect import bisect_left
 
-from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPConflict, HTTPNotFound, HTTPInternalServerError
+
  
 from util.httpUtil import jsonResponse
 from util.attrUtil import validateAttributeName
@@ -35,26 +36,27 @@ async def GET_Attributes(request):
     """
     log.request(request)
     app = request.app
+    params = request.rel_url.query
 
     obj_id = get_obj_id(request)  
      
     include_data = False
-    if "IncludeData" in request.GET and request.GET["IncludeData"]:
+    if "IncludeData" in params and params["IncludeData"]:
         include_data = True
 
     limit = None
-    if "Limit" in request.GET:
+    if "Limit" in params:
         try:
-            limit = int(request.GET["Limit"])
+            limit = int(params["Limit"])
             log.info("GET_Links - using Limit: {}".format(limit))
         except ValueError:
             msg = "Bad Request: Expected int type for limit"
             log.error(msg)  # should be validated by SN
-            raise HttpProcessingError(code=500, message="Unexpected Error")
+            raise HTTPInternalServerError()
 
     marker = None
-    if "Marker" in request.GET:
-        marker = request.GET["Marker"]
+    if "Marker" in params:
+        marker = params["Marker"]
         log.info("GET_Links - using Marker: {}".format(marker))
      
     obj_json = await get_metadata_obj(app, obj_id)
@@ -63,7 +65,7 @@ async def GET_Attributes(request):
     if "attributes" not in obj_json:
         msg = "unexpected data for obj id: {}".format(obj_id)
         msg.error(msg)
-        raise HttpProcessingError(code=500, message=msg)
+        raise HTTPInternalServerError()
 
     # return a list of attributes based on sorted dictionary keys
     attr_dict = obj_json["attributes"]
@@ -78,7 +80,7 @@ async def GET_Attributes(request):
             # marker not found, return 404
             msg = "attribute marker: {}, not found".format(marker)
             log.warn(msg)
-            raise HttpProcessingError(code=404, message=msg)
+            raise HTTPNotFound()
 
     end_index = len(attr_names) 
     if limit is not None and (end_index - start_index) > limit:
@@ -118,13 +120,13 @@ async def GET_Attribute(request):
 
     if "attributes" not in obj_json:
         log.error("unexpected obj data for id: {}".format(obj_id))
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
 
     attributes = obj_json["attributes"]
     if attr_name not in attributes:
         msg = "Attribute  {} not with id: {}".format(attr_name, obj_id)
         log.warn(msg)
-        raise HttpProcessingError(code=404, message=msg)
+        raise HTTPInternalServerError()
 
     attr_json = attributes[attr_name]
      
@@ -137,6 +139,7 @@ async def PUT_Attribute(request):
     """
     log.request(request)
     app = request.app
+    params = request.rel_url.query
     obj_id = get_obj_id(request) 
 
     attr_name = request.match_info.get('name')
@@ -145,12 +148,12 @@ async def PUT_Attribute(request):
         
     if not request.has_body:
         log.error( "PUT_Attribute with no body")
-        raise HttpBadRequest(message="Unexpected error")
+        raise HTTPBadRequest(message="body expected")
 
     body = await request.json() 
     
     replace = False
-    if "replace" in request.GET and request.GET["replace"]:
+    if "replace" in params and params["replace"]:
         replace = True
         log.info("replace attribute")
     datatype = None
@@ -159,13 +162,13 @@ async def PUT_Attribute(request):
 
     if "type" not in body:
         log.error("PUT attribute with no type in body")
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
 
     datatype = body["type"]
 
     if "shape" not in body:
         log.error("PUT attribute with no shape in body")
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
     shape = body["shape"]
 
     if "value" in body:
@@ -176,18 +179,18 @@ async def PUT_Attribute(request):
 
     if "attributes" not in obj_json:
         log.error("unexpected obj data for id: {}".format(obj_id))
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
 
     attributes = obj_json["attributes"]
     if attr_name in attributes and not replace:
         # Attribute already exists, return a 409
         log.warn("Attempt to overwrite attribute: {} in obj_id:".format(attr_name, obj_id))
-        raise HttpProcessingError(code=409, message="Attribute with name: {} already exists".format(attr_name))
+        raise HTTPConflict()
     
     if replace and attr_name not in attributes:
         # Replace requires attribute exists
         log.warn("Attempt to update missing attribute: {} in obj_id:".format(attr_name, obj_id))
-        raise HttpProcessingError(code=404, message="Attribute with name: {} not found".format(attr_name))
+        raise HTTPNotFound()
 
     if replace:
         orig_attr = attributes[attr_name]
@@ -227,7 +230,7 @@ async def DELETE_Attribute(request):
     if "attributes" not in obj_json:
         msg = "unexpected data for obj id: {}".format(obj_id)
         msg.error(msg)
-        raise HttpProcessingError(code=500, message=msg)
+        raise HTTPInternalServerError()
 
     # return a list of attributes based on sorted dictionary keys
     attributes = obj_json["attributes"]
@@ -235,7 +238,7 @@ async def DELETE_Attribute(request):
     if attr_name not in attributes:
         msg = "Attribute  {} not found in id: {}".format(attr_name, obj_id)
         log.warn(msg)
-        raise HttpProcessingError(code=404, message=msg)
+        raise HTTPNotFound()
 
     del attributes[attr_name] 
 

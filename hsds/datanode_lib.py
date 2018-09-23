@@ -14,7 +14,8 @@
 # 
 import asyncio
 import time 
-from aiohttp.http_exceptions import HttpProcessingError   
+from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError
+
 from util.idUtil import validateInPartition, getS3Key, isValidUuid, isValidChunkId
 from util.s3Util import getS3JSONObj, putS3JSONObj, putS3Bytes, isS3Obj
 from util.domainUtil import isValidDomain
@@ -44,53 +45,54 @@ def get_obj_id(request, body=None):
     if not obj_id:
         msg = "Missing object id"
         log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
 
     if not isValidUuid(obj_id, obj_class=collection):
         msg = "Invalid obj id: {}".format(obj_id)
         log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
 
     try:
         validateInPartition(app, obj_id)
     except KeyError as ke:
         msg = "Domain not in partition"
         log.error(msg)
-        raise HttpProcessingError(code=500, message=msg) 
+        raise HTTPInternalServerError() 
 
     return obj_id   
 
 async def check_metadata_obj(app, obj_id):
-    """Raise Http 404 or 410 if not found (or recently removed)
+    """ Return False is obj does not exist
     """
     if not isValidDomain(obj_id) and not isValidUuid(obj_id):
         msg = "Invalid obj id: {}".format(obj_id)
         log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
 
     try:
         validateInPartition(app, obj_id)
     except KeyError as ke:
         msg = "Domain not in partition"
         log.error(msg)
-        raise HttpProcessingError(code=500, message=msg) 
+        raise HTTPInternalServerError() 
 
     deleted_ids = app['deleted_ids']
     if obj_id in deleted_ids:
         msg = "{} has been deleted".format(obj_id)
-        log.warn(msg)
-        raise HttpProcessingError(code=410, message="Object has been deleted") 
+        log.info(msg)
+        return False
     
     meta_cache = app['meta_cache'] 
     if obj_id in meta_cache:
-        log.debug("check_metadata_obj, {} found in meta cache".format(obj_id))
-    else:   
+        found = True
+    else:
+        # Not in chache, check s3 obj exists   
         s3_key = getS3Key(obj_id)
         log.debug("check_metadata_obj({})".format(s3_key))
         # does key exist?
         found = await isS3Obj(app, s3_key)
-        if not found:
-            raise HttpProcessingError(code=404, message="Object not found")
+    return found
+    
  
 
 async def get_metadata_obj(app, obj_id):
@@ -101,20 +103,20 @@ async def get_metadata_obj(app, obj_id):
     if not isValidDomain(obj_id) and not isValidUuid(obj_id):
         msg = "Invalid obj id: {}".format(obj_id)
         log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
 
     try:
         validateInPartition(app, obj_id)
     except KeyError as ke:
         msg = "Domain not in partition"
         log.error(msg)
-        raise HttpProcessingError(code=500, message=msg) 
+        raise HTTPInternalServerError() 
 
     deleted_ids = app['deleted_ids']
     if obj_id in deleted_ids:
         msg = "{} has been deleted".format(obj_id)
         log.warn(msg)
-        raise HttpProcessingError(code=410, message="Object has been deleted") 
+        raise HTTPGone() 
     
     meta_cache = app['meta_cache'] 
     obj_json = None 
@@ -138,17 +140,17 @@ async def save_metadata_obj(app, obj_id, obj_json, notify=False):
     if not obj_id.startswith('/') and not isValidUuid(obj_id):
         msg = "Invalid obj id: {}".format(obj_id)
         log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
     if not isinstance(obj_json, dict):
         log.error("Passed non-dict obj to save_metadata_obj")
-        raise HttpProcessingError(code=500, message="Unexpected Error") 
+        raise HTTPInternalServerError() 
 
     try:
         validateInPartition(app, obj_id)
     except KeyError as ke:
         msg = "Domain not in partition"
         log.error(msg)
-        raise HttpProcessingError(code=500, message=msg) 
+        raise HTTPInternalServerError() 
 
     deleted_ids = app['deleted_ids']
     if obj_id in deleted_ids:
@@ -156,7 +158,7 @@ async def save_metadata_obj(app, obj_id, obj_json, notify=False):
             # domain objects may be re-created, but shouldn't see repeats of 
             # deleted uuids
             log.warn("{} has been deleted".format(obj_id))
-            raise HttpProcessingError(code=500, message="Unexpected Error") 
+            raise HTTPInternalServerError() 
         elif obj_id in deleted_ids:
             deleted_ids.remove(obj_id)  # un-gone the domain id
     
@@ -188,7 +190,7 @@ async def save_metadata_obj(app, obj_id, obj_json, notify=False):
             try:
                 log.info("ASync PUT notify: {} params: {}".format(req, params))
                 await http_put(app, req, params=params)
-            except HttpProcessingError as hpe:
+            except HTTPInternalServerError as hpe:
                 msg = "got error notifying async node: {}".format(hpe.code)
                 log.error(msg)
 
@@ -205,7 +207,7 @@ async def save_metadata_obj(app, obj_id, obj_json, notify=False):
             try:
                 log.info("ASync PUT notify: {} body: {}".format(req, body))
                 await http_put(app, req, data=body)
-            except HttpProcessingError as hpe:
+            except HTTPInternalServerError as hpe:
                 msg = "got error notifying async node: {}".format(hpe.code)
                 log.error(msg)
         
@@ -219,14 +221,14 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None):
     if not isValidDomain(obj_id) and not isValidUuid(obj_id):
         msg = "Invalid obj id: {}".format(obj_id)
         log.error(msg)
-        raise HttpProcessingError(code=500, message="Unexpected Error")
+        raise HTTPInternalServerError()
         
     try:
         validateInPartition(app, obj_id)
     except KeyError as ke:
         msg = "obj: {} not in partition".format(obj_id)
         log.error(msg)
-        raise HttpProcessingError(code=500, message=msg) 
+        raise HTTPInternalServerError() 
 
     deleted_ids = app['deleted_ids']
     if obj_id in deleted_ids:
@@ -264,7 +266,7 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None):
             try:
                 log.info("ASync DELETE notify: {} params: {}".format(req, params))
                 await http_delete(app, req, params=params)
-            except HttpProcessingError as hpe:
+            except HTTPInternalServerError as hpe:
                 msg = "got error notifying async node: {}".format(hpe.code)
                 log.error(msg)
         else:
@@ -277,7 +279,7 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None):
             try:
                 log.info("ASync DELETE notify: {} body: {}".format(req, body))
                 await http_delete(app, req, data=body)
-            except HttpProcessingError as hpe:
+            except HTTPInternalServerError as hpe:
                 msg = "got error notifying async node: {}".format(hpe.code)
                 log.error(msg)
 
@@ -309,7 +311,6 @@ async def s3sync(app):
                 keys_to_update.append(obj_id)
 
         if len(keys_to_update) == 0:
-            log.info("s3sync task - nothing to update, sleeping")
             await asyncio.sleep(1)  # was sleep_secs
         else:
             # some objects need to be flushed to S3
@@ -364,7 +365,7 @@ async def s3sync(app):
                         notify_obj["root"] = root_id
 
                         notify_objs.append(notify_obj)
-                    except HttpProcessingError as hpe:
+                    except HTTPInternalServerError as hpe:
                         log.error("got S3 error writing obj_id: {} to S3: {}".format(obj_id, str(hpe)))
                         retry_keys.append(obj_id)
                         # re-add chunk to cache if it had gotten evicted
@@ -391,7 +392,7 @@ async def s3sync(app):
                         log.info("adding {} to success_keys".format(obj_id))
                         notify_objs.append(notify_obj)
 
-                    except HttpProcessingError as hpe:
+                    except HTTPInternalServerError as hpe:
                         log.error("got S3 error writing obj_id: {} to S3: {}".format(obj_id, str(hpe)))
                         retry_keys.append(obj_id)
                         # re-add chunk to cache if it had gotten evicted
@@ -417,7 +418,7 @@ async def s3sync(app):
                 try:
                     log.info("ASync PUT notify: {} body: {}".format(req, body))
                     await http_put(app, req, data=body)
-                except HttpProcessingError as hpe:
+                except HTTPInternalServerError as hpe:
                     msg = "got error notifying async node: {}".format(hpe.code)
                     log.error(msg)
      

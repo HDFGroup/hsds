@@ -13,7 +13,7 @@
 # attribute related utilities
 # 
  
-from aiohttp.http_exceptions import HttpBadRequest, HttpProcessingError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
  
 import hsds_logger as log
 
@@ -27,7 +27,7 @@ def getRequestCollectionName(request):
     if npos < 0:
         msg = "bad request uri"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     uri = uri[(npos+1):]
     npos = uri.find('/')  # second '/'
     col_name = uri[:npos]
@@ -38,7 +38,7 @@ def getRequestCollectionName(request):
         msg = "Error: collection name unexpected: {}".format(col_name)
         log.error(msg)
         # shouldn't get routed here in this case
-        raise HttpProcessingError("Unexpected error", code=500)  
+        raise HTTPInternalServerError()  
 
     return col_name
 
@@ -48,11 +48,11 @@ def validateAttributeName(name):
     if not isinstance(name, str):
         msg = "attribute name must be a string, but got: {}".format(type(name))
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     if name.find('/') > -1:
         msg = "attribute names cannot contain slashes"
         log.warn(msg)
-        raise HttpBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
     # TBD - add any other restrictions
     
  
