@@ -279,6 +279,8 @@ async def PUT_Objects(request):
             # root id is required for all non-chunk updates
             log.error("no rootid provided for obj: {}".format(objid))
             continue
+        if rootid:
+            log.debug(f"using rootid: {rootid}")
 
         domain_size_delta = 0 
         dbRow = getRow(conn, objid, rootid=rootid)
