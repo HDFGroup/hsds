@@ -18,7 +18,7 @@ import time
 import psutil
 from copy import copy
 
-from aiohttp.web import Application, StreamResponse
+from aiohttp.web import Application, StreamResponse, json_response
 from aiohttp.http_exceptions import HttpProcessingError 
 from aiohttp.client_exceptions import ClientError
 from aiobotocore import get_session
@@ -26,7 +26,7 @@ from aiobotocore import get_session
 
 import config
 #from util.timeUtil import unixTimeToUTC, elapsedTime
-from util.httpUtil import http_get, http_post, jsonResponse
+from util.httpUtil import http_get, http_post
 from util.idUtil import createNodeId
 from util.s3Util import getS3JSONObj, getInitialS3Stats 
 from util.idUtil import getHeadNodeS3Key
@@ -204,7 +204,7 @@ async def about(request):
     answer["name"] = config.get("server_name")
     answer["greeting"] = config.get("greeting")  
     answer["about"] = config.get("about") 
-    resp = await jsonResponse(request, answer) 
+    resp = json_response(answer) 
     log.response(request, resp=resp)
     return resp
 
@@ -299,7 +299,7 @@ async def info(request):
         dc_stats["mem_target"] = dc.memTarget
     answer["domain_cache_stats"] = dc_stats
         
-    resp = await jsonResponse(request, answer) 
+    resp = json_response(answer) 
     log.response(request, resp=resp)
     return resp
 

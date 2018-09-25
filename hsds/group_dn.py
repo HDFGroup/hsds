@@ -15,9 +15,9 @@
 import time
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalServerError
+from aiohttp.web import json_response
  
 from util.idUtil import isValidUuid 
-from util.httpUtil import jsonResponse
 from datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj, save_metadata_obj, delete_metadata_obj
 import hsds_logger as log
     
@@ -44,7 +44,7 @@ async def GET_Group(request):
     resp_json["linkCount"] = len(group_json["links"])
     resp_json["attributeCount"] = len(group_json["attributes"])
      
-    resp = await jsonResponse(request, resp_json)
+    resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
 
@@ -102,7 +102,7 @@ async def POST_Group(request):
     resp_json["linkCount"] = 0  
     resp_json["attributeCount"] = 0
 
-    resp = await jsonResponse(request, resp_json, status=201)
+    resp = json_response(resp_json, status=201)
     log.response(request, resp=resp)
     return resp
 
@@ -135,7 +135,7 @@ async def DELETE_Group(request):
 
     resp_json = {  } 
       
-    resp = await jsonResponse(request, resp_json)
+    resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
    

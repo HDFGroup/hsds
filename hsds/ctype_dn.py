@@ -15,10 +15,10 @@
 import time
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalServerError
+from aiohttp.web import json_response
 
  
 from util.idUtil import isValidUuid, validateUuid
-from util.httpUtil import jsonResponse
 from datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj, delete_metadata_obj, check_metadata_obj
 import hsds_logger as log
     
@@ -44,7 +44,7 @@ async def GET_Datatype(request):
     resp_json["type"] = ctype_json["type"]
     resp_json["attributeCount"] = len(ctype_json["attributes"])
      
-    resp = await jsonResponse(request, resp_json)
+    resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
 
@@ -108,8 +108,8 @@ async def POST_Datatype(request):
     resp_json["created"] = ctype_json["created"]
     resp_json["lastModified"] = ctype_json["lastModified"]
     resp_json["attributeCount"] = 0
+    resp = json_response(resp_json, status=201)
 
-    resp = await jsonResponse(request, resp_json, status=201)
     log.response(request, resp=resp)
     return resp
 
@@ -141,8 +141,7 @@ async def DELETE_Datatype(request):
     await delete_metadata_obj(app, ctype_id, notify=notify)
  
     resp_json = {  } 
-      
-    resp = await jsonResponse(request, resp_json)
+    resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
    

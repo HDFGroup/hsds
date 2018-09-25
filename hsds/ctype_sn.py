@@ -16,9 +16,10 @@
  
 import json
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPGone
+from aiohttp.web import json_response
 
  
-from util.httpUtil import http_post, http_put, http_delete, jsonResponse, getHref
+from util.httpUtil import http_post, http_put, http_delete, getHref
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
@@ -120,7 +121,7 @@ async def GET_Datatype(request):
     hrefs.append({'rel': 'attributes', 'href': getHref(request, ctype_uri+'/attributes')})
     type_json["hrefs"] = hrefs
 
-    resp = await jsonResponse(request, type_json)
+    resp = json_response(type_json)
     log.response(request, resp=resp)
     return resp
 
@@ -206,7 +207,7 @@ async def POST_Datatype(request):
         log.debug("PUT Link resp: {}".format(put_rsp))
 
     # datatype creation successful     
-    resp = await jsonResponse(request, type_json, status=201)
+    resp = json_response(type_json, status=201)
     log.response(request, resp=resp)
 
     return resp
@@ -247,12 +248,12 @@ async def DELETE_Datatype(request):
 
     req = getDataNodeUrl(app, ctype_id) + "/datatypes/" + ctype_id
  
-    rsp_json = await http_delete(app, req)
+    await http_delete(app, req)
 
     if ctype_id in meta_cache:
         del meta_cache[ctype_id]  # remove from cache
  
-    resp = await jsonResponse(request, rsp_json)
+    resp = json_response({})
     log.response(request, resp=resp)
     return resp
 

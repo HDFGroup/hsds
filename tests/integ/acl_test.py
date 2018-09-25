@@ -32,7 +32,7 @@ class AclTest(unittest.TestCase):
         req = helper.getEndpoint() + '/acls/test_user1'
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.headers['content-type'], 'application/json')
+        self.assertEqual(rsp.headers['content-type'], 'application/json; charset=utf-8')
         rsp_json = json.loads(rsp.text)
         self.assertTrue("acl" in rsp_json)
         self.assertTrue("hrefs" in rsp_json)
@@ -48,7 +48,7 @@ class AclTest(unittest.TestCase):
         rsp = requests.get(req, headers=headers)
         if config.get("default_public"): 
             self.assertEqual(rsp.status_code, 200)
-            self.assertEqual(rsp.headers['content-type'], 'application/json')
+            self.assertEqual(rsp.headers['content-type'], 'application/json; charset=utf-8')
             rsp_json = json.loads(rsp.text)
             self.assertTrue("acl" in rsp_json)
             self.assertTrue("hrefs" in rsp_json)
@@ -74,7 +74,7 @@ class AclTest(unittest.TestCase):
         req = helper.getEndpoint() + '/groups/' + root_uuid + "/acls/test_user1"
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.headers['content-type'], 'application/json')
+        self.assertEqual(rsp.headers['content-type'], 'application/json; charset=utf-8')
         rsp_json = json.loads(rsp.text)
         self.assertTrue("acl" in rsp_json)
         self.assertTrue("hrefs" in rsp_json)
@@ -109,7 +109,7 @@ class AclTest(unittest.TestCase):
         req = helper.getEndpoint() + '/acls'
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.headers['content-type'], 'application/json')
+        self.assertEqual(rsp.headers['content-type'], 'application/json; charset=utf-8')
         rsp_json = json.loads(rsp.text)
         self.assertTrue("acls" in rsp_json)
         self.assertTrue("hrefs" in rsp_json)
@@ -154,7 +154,7 @@ class AclTest(unittest.TestCase):
         req = helper.getEndpoint() + '/groups/' + root_uuid + "/acls"
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.headers['content-type'], 'application/json')
+        self.assertEqual(rsp.headers['content-type'], 'application/json; charset=utf-8')
         rsp_json = json.loads(rsp.text)
         self.assertTrue("acls" in rsp_json)
         self.assertTrue("hrefs" in rsp_json)
@@ -176,7 +176,7 @@ class AclTest(unittest.TestCase):
         req = helper.getEndpoint() + '/datasets/' + dset_uuid + "/acls"
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.headers['content-type'], 'application/json')
+        self.assertEqual(rsp.headers['content-type'], 'application/json; charset=utf-8')
         rsp_json = json.loads(rsp.text)
         self.assertTrue("acls" in rsp_json)
         self.assertTrue("hrefs" in rsp_json)
@@ -203,7 +203,7 @@ class AclTest(unittest.TestCase):
         req = helper.getEndpoint() + '/datatypes/' + dtype_uuid + "/acls"
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.headers['content-type'], 'application/json')
+        self.assertEqual(rsp.headers['content-type'], 'application/json; charset=utf-8')
         rsp_json = json.loads(rsp.text)
         self.assertTrue("acls" in rsp_json)
         self.assertTrue("hrefs" in rsp_json)
@@ -260,14 +260,7 @@ class AclTest(unittest.TestCase):
         # test_user2 shouldn't be able to read test_user1's ACL
         req = helper.getEndpoint() + '/acls/test_user1'
         rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 403) # Forbidden
-
-
-         
-
-        
-        
-         
+        self.assertEqual(rsp.status_code, 403) # Forbidden      
 
 
 if __name__ == '__main__':

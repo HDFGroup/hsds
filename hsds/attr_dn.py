@@ -16,9 +16,8 @@ import time
 from bisect import bisect_left
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPConflict, HTTPNotFound, HTTPInternalServerError
+from aiohttp.web import json_response
 
- 
-from util.httpUtil import jsonResponse
 from util.attrUtil import validateAttributeName
 from datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
 import hsds_logger as log
@@ -100,7 +99,7 @@ async def GET_Attributes(request):
         attr_list.append(des_attr)
 
     resp_json = {"attributes": attr_list} 
-    resp = await jsonResponse(request, resp_json)
+    resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp    
 
@@ -117,6 +116,7 @@ async def GET_Attribute(request):
         
     obj_json = await get_metadata_obj(app, obj_id)
     log.info("GET attribute obj_id: {} name: {}".format(obj_id, attr_name))
+    log.debug(f"got obj_json: {obj_json}")
 
     if "attributes" not in obj_json:
         log.error("unexpected obj data for id: {}".format(obj_id))
@@ -124,13 +124,13 @@ async def GET_Attribute(request):
 
     attributes = obj_json["attributes"]
     if attr_name not in attributes:
-        msg = "Attribute  {} not with id: {}".format(attr_name, obj_id)
+        msg = f"Attribute  '{attr_name}' not found for id: {obj_id}"
         log.warn(msg)
-        raise HTTPInternalServerError()
+        raise HTTPNotFound()
 
     attr_json = attributes[attr_name]
      
-    resp = await jsonResponse(request, attr_json)
+    resp = json_response(attr_json)
     log.response(request, resp=resp)
     return resp
 
@@ -207,7 +207,7 @@ async def PUT_Attribute(request):
  
     resp_json = { } 
 
-    resp = await jsonResponse(request, resp_json, status=201)
+    resp = json_response(resp_json, status=201)
     log.response(request, resp=resp)
     return resp
 
@@ -245,7 +245,7 @@ async def DELETE_Attribute(request):
     await save_metadata_obj(app, obj_id, obj_json)
 
     resp_json = { } 
-    resp = await jsonResponse(request, resp_json)
+    resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp    
 

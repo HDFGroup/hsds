@@ -26,7 +26,6 @@ from basenode import baseInit, healthCheck
 from util.s3Util import deleteS3Obj
 from util.chunkUtil import getDatasetId
 from util.idUtil import isValidChunkId, isValidUuid, getCollectionForId, getS3Key   
-#from util.httpUtil import jsonResponse, StreamResponse
 from util.dbutil import getRow, getDomains, insertRow, deleteRow, updateRowColumn, listObjects, getCountColumnName, getDatasetChunks
 import hsds_logger as log
 

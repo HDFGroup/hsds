@@ -17,9 +17,10 @@
 import json
 import numpy as np
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPGone, HTTPInternalServerError, HTTPNotImplemented
+from aiohttp.web import json_response
 
  
-from util.httpUtil import http_get, http_post, http_put, http_delete, jsonResponse, getHref
+from util.httpUtil import http_get, http_post, http_put, http_delete, getHref
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
 from util.dsetUtil import  getPreviewQuery
 from util.arrayUtil import getNumElements
@@ -283,7 +284,7 @@ async def GET_Dataset(request):
             if "totalSize" in dset_detail:
                 resp_json["allocated_size"] = dset_detail["totalSize"]
 
-    resp = await jsonResponse(request, resp_json)
+    resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
 
@@ -332,7 +333,7 @@ async def GET_DatasetType(request):
     resp_json["type"] = dset_json["type"]
     resp_json["hrefs"] = hrefs
 
-    resp = await jsonResponse(request, resp_json)
+    resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
 
@@ -383,7 +384,7 @@ async def GET_DatasetShape(request):
     resp_json["created"] = dset_json["created"]
     resp_json["lastModified"] = dset_json["lastModified"]
 
-    resp = await jsonResponse(request, resp_json)
+    resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
 
@@ -469,7 +470,7 @@ async def PUT_DatasetShape(request):
     
     # return resp 
     json_resp = { "hrefs": []}
-    resp = await jsonResponse(request, json_resp, status=201)
+    resp = json_response(json_resp, status=201)
     log.response(request, resp=resp)
     return resp
  
@@ -724,7 +725,7 @@ async def POST_Dataset(request):
         log.debug("PUT Link resp: {}".format(put_rsp))
 
     # dataset creation successful     
-    resp = await jsonResponse(request, post_json, status=201)
+    resp = json_response(post_json, status=201)
     log.response(request, resp=resp)
 
     return resp
@@ -765,12 +766,12 @@ async def DELETE_Dataset(request):
 
     req = getDataNodeUrl(app, dset_id) + "/datasets/" + dset_id
  
-    rsp_json = await http_delete(app, req)
+    await http_delete(app, req)
 
     if dset_id in meta_cache:
         del meta_cache[dset_id]  # remove from cache
  
-    resp = await jsonResponse(request, rsp_json)
+    resp = json_response({})
     log.response(request, resp=resp)
     return resp
 

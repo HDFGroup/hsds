@@ -16,9 +16,10 @@
 import json
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
+from aiohttp.web import json_response
 
  
-from util.httpUtil import http_post, http_put, http_delete, jsonResponse, getHref
+from util.httpUtil import http_post, http_put, http_delete, getHref
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
@@ -119,7 +120,7 @@ async def GET_Group(request):
     hrefs.append({'rel': 'attributes', 'href': getHref(request, group_uri+'/attributes')})
     group_json["hrefs"] = hrefs
 
-    resp = await jsonResponse(request, group_json)
+    resp = json_response(group_json)
     log.response(request, resp=resp)
     return resp
 
@@ -192,7 +193,7 @@ async def POST_Group(request):
         log.debug("PUT Link resp: {}".format(put_json_rsp))
     log.debug("returning resp")
     # group creation successful     
-    resp = await jsonResponse(request, group_json, status=201)
+    resp = json_response(group_json, status=201)
     log.response(request, resp=resp)
     return resp
 
@@ -238,12 +239,12 @@ async def DELETE_Group(request):
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id
  
-    rsp_json = await http_delete(app, req)
+    await http_delete(app, req)
 
     if group_id in meta_cache:
         del meta_cache[group_id]  # remove from cache
  
-    resp = await jsonResponse(request, rsp_json)
+    resp = json_response({})
     log.response(request, resp=resp)
     return resp
 

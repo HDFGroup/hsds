@@ -17,10 +17,10 @@ from copy import copy
 from bisect import bisect_left
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict, HTTPInternalServerError
+from aiohttp.web import json_response
 
  
 from util.idUtil import  isValidUuid
-from util.httpUtil import jsonResponse
 from util.linkUtil import validateLinkName
 from datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
 import hsds_logger as log
@@ -93,7 +93,7 @@ async def GET_Links(request):
         link_list.append(link)
 
     resp_json = {"links": link_list} 
-    resp = await jsonResponse(request, resp_json)
+    resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp    
 
@@ -126,7 +126,7 @@ async def GET_Link(request):
 
     link_json = links[link_title]
      
-    resp = await jsonResponse(request, link_json)
+    resp = json_response(link_json)
     log.response(request, resp=resp)
     return resp
 
@@ -193,7 +193,7 @@ async def PUT_Link(request):
     
     resp_json = { } 
      
-    resp = await jsonResponse(request, resp_json, status=201)
+    resp = json_response(resp_json, status=201)
     log.response(request, resp=resp)
     return resp
 
@@ -238,7 +238,7 @@ async def DELETE_Link(request):
     hrefs = []  # TBD
     resp_json = {"href":  hrefs} 
      
-    resp = await jsonResponse(request, resp_json)
+    resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
    

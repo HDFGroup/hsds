@@ -19,10 +19,11 @@ import json
 import time
 import numpy as np
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalServerError
+from aiohttp.web import json_response
+
 
 from aiohttp.web import StreamResponse
 from util.arrayUtil import bytesArrayToList, bytesToArray, arrayToBytes
-from util.httpUtil import  jsonResponse
 from util.idUtil import getS3Key, validateInPartition, isValidUuid
 from util.s3Util import  isS3Obj, getS3Bytes   
 from util.hdf5dtype import createDataType
@@ -197,7 +198,7 @@ async def PUT_Chunk(request):
     dirty_ids[chunk_id] = now
     
     # chunk update successful     
-    resp = await jsonResponse(request, {}, status=201)
+    resp = json_response({}, status=201)
     log.response(request, resp=resp)
     return resp
 
@@ -343,20 +344,24 @@ async def GET_Chunk(request):
         query_result["index"] = indices
         query_result["value"] = values
         log.info("query_result: {}".format(query_result))
-        resp = await jsonResponse(request, query_result)
+        resp = json_response(query_result)
     else:
         # get requested data
-        resp = StreamResponse(status=200)
-        resp.headers['Content-Type'] = "application/octet-stream" #binary response
         output_arr = chunk_arr[selection]
         output_data = arrayToBytes(output_arr)
-        resp = StreamResponse(status=200)
-     
-        # write response    
-        resp.content_length = len(output_data)
-        await resp.prepare(request)
-        resp.write(output_data)
-        await resp.write_eof()
+
+        # write response
+        try:
+            resp = StreamResponse()
+            resp.headers['Content-Type'] = "application/octet-stream"
+            resp.content_length = len(output_data)
+            await resp.prepare(request)
+            await resp.write(output_data)
+        except Exception as e:
+            log.error(f"Exception during binary data write: {e}")
+        finally:
+            await resp.write_eof()
+
     return resp
 
 """
@@ -540,16 +545,24 @@ async def POST_Chunk(request):
      
     if put_points:
         # write empty response
-        resp = await jsonResponse(request, {})
+        resp = json_response({})
     else:
-        # write response
-        resp = StreamResponse(status=200)
-        resp.headers['Content-Type'] = "application/octet-stream"
+        # get data
         output_data = output_arr.tobytes()
-        resp.content_length = len(output_data)
-        await resp.prepare(request)
-        resp.write(output_data)
-        await resp.write_eof()
+
+        # write response
+        try:
+            resp = StreamResponse()
+            resp.headers['Content-Type'] = "application/octet-stream"
+            resp.content_length = len(output_data)
+            await resp.prepare(request)
+            await resp.write(output_data)
+        except Exception as e:
+            log.error(f"Exception during binary data write: {e}")
+        finally:
+            await resp.write_eof()
+
+        
     return resp
 
 async def DELETE_Chunk(request):
@@ -589,7 +602,7 @@ async def DELETE_Chunk(request):
         del deflate_map[dset_id]
 
     resp_json = {  }   
-    resp = await jsonResponse(request, resp_json)
+    resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
  

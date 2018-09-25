@@ -15,9 +15,9 @@
 
 import numpy as np 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
+from aiohttp.web import json_response, StreamResponse
 
-from aiohttp.web import StreamResponse
-from util.httpUtil import  http_get, http_put, http_delete, jsonResponse, getHref, getAcceptType
+from util.httpUtil import  http_get, http_put, http_delete, getHref, getAcceptType
 from util.idUtil import   isValidUuid, getDataNodeUrl
 from util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
@@ -108,7 +108,7 @@ async def GET_Attributes(request):
     hrefs.append({'rel': 'owner', 'href': getHref(request, obj_uri)})
     resp_json["hrefs"] = hrefs
  
-    resp = await jsonResponse(request, resp_json)
+    resp = json_response(resp_json)    
     log.response(request, resp=resp)
     return resp
 
@@ -170,7 +170,7 @@ async def GET_Attribute(request):
     hrefs.append({'rel': 'owner', 'href': getHref(request, obj_uri)})
     resp_json["hrefs"] = hrefs
     
-    resp = await jsonResponse(request, resp_json)
+    resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
 
@@ -343,8 +343,8 @@ async def PUT_Attribute(request):
     
     hrefs = []  # TBD
     req_rsp = { "hrefs": hrefs }
-    # attribute creation successful     
-    resp = await jsonResponse(request, req_rsp, status=201)
+    # attribute creation successful   
+    resp = json_response(req_rsp, status=201)  
     log.response(request, resp=resp)
     return resp
 
@@ -394,8 +394,7 @@ async def DELETE_Attribute(request):
     
     hrefs = []  # TBD
     req_rsp = { "hrefs": hrefs }
-
-    resp = await jsonResponse(request, req_rsp)
+    resp = json_response(req_rsp)
     log.response(request, resp=resp)
     return resp
 
@@ -475,12 +474,18 @@ async def GET_AttributeValue(request):
         output_data = arr.tobytes()
         log.debug("GET AttributeValue - returning {} bytes binary data".format(len(output_data)))
         # write response
-        resp = StreamResponse(status=200)
-        resp.headers['Content-Type'] = "application/octet-stream"
-        resp.content_length = len(output_data)
-        await resp.prepare(request)
-        resp.write(output_data)
-        await resp.write_eof()
+        try: 
+            resp = StreamResponse()
+            resp.content_type = "application/octet-stream"
+            resp.content_length = len(output_data)
+            await resp.prepare(request)
+            await resp.write(output_data)     
+        except Exception as e:
+            log.error(f"Got exception: {e}")
+            raise HTTPInternalServerError()
+        finally:
+            await resp.write_eof()
+
     else:
         resp_json = {}
         if "value" in dn_json:
@@ -493,8 +498,7 @@ async def GET_AttributeValue(request):
         hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
         hrefs.append({'rel': 'owner', 'href': getHref(request, obj_uri)})
         resp_json["hrefs"] = hrefs
-    
-        resp = await jsonResponse(request, resp_json)
+        resp = json_response(resp_json)
         log.response(request, resp=resp)
     return resp
 
@@ -638,6 +642,6 @@ async def PUT_AttributeValue(request):
     hrefs = []  # TBD
     req_rsp = { "hrefs": hrefs }
     # attribute creation successful     
-    resp = await jsonResponse(request, req_rsp, status=200)
+    resp = json_response(req_rsp)
     log.response(request, resp=resp)
     return resp

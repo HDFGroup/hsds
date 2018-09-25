@@ -14,8 +14,9 @@
 # 
 import time
 from aiohttp.web_exceptions import HTTPConflict, HTTPInternalServerError
+from aiohttp.web import json_response
+
 from util.authUtil import  getAclKeys
-from util.httpUtil import  jsonResponse
 from util.domainUtil import isValidDomain
 from util.idUtil import validateInPartition
 from datanode_lib import get_metadata_obj, save_metadata_obj, delete_metadata_obj, check_metadata_obj
@@ -61,7 +62,7 @@ async def GET_Domain(request):
     log.debug("get domain: {}".format(domain))
     domain_json = await get_metadata_obj(app, domain)
 
-    resp = await jsonResponse(request, domain_json)
+    resp = json_response(domain_json)
     log.response(request, resp=resp)
     return resp
 
@@ -116,7 +117,7 @@ async def PUT_Domain(request):
 
     await save_metadata_obj(app, domain, domain_json, notify=True)
  
-    resp = await jsonResponse(request, domain_json, status=201)
+    resp = json_response(domain_json, status=201)
     log.response(request, resp=resp)
     return resp
 
@@ -142,9 +143,9 @@ async def DELETE_Domain(request):
     await delete_metadata_obj(app, domain, notify=True)
 
 
-    json_response = { "domain": domain }
+    json_rsp = { "domain": domain }
 
-    resp = await jsonResponse(request, json_response, status=200)
+    resp = json_response(json_rsp)
     log.response(request, resp=resp)
     return resp
 
@@ -197,7 +198,7 @@ async def PUT_ACL(request):
     
     resp_json = { } 
      
-    resp = await jsonResponse(request, resp_json, status=201)
+    resp = json_response(resp_json, status=201)
     log.response(request, resp=resp)
     return resp
 

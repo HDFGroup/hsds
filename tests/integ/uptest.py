@@ -26,7 +26,7 @@ class UpTest(unittest.TestCase):
         req = endpoint + "/about"
         rsp = requests.get(req)
         self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.headers['content-type'], 'application/json')
+        self.assertEqual(rsp.headers['content-type'], 'application/json; charset=utf-8')
         rspJson = json.loads(rsp.text)
         self.assertTrue("state") in rspJson
         self.assertEqual(rspJson["state"], "READY")
@@ -43,7 +43,7 @@ class UpTest(unittest.TestCase):
         req = helper.getEndpoint() + '/info'
         rsp = requests.get(req)
         self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.headers['content-type'], 'application/json')
+        self.assertEqual(rsp.headers['content-type'], 'application/json; charset=utf-8')
         rspJson = json.loads(rsp.text)
         self.assertTrue("node" in rspJson)
         node = rspJson["node"]

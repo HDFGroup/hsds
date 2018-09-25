@@ -21,7 +21,9 @@ import numpy as np
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPRequestEntityTooLarge, HTTPInternalServerError
 from aiohttp.client_exceptions import ClientError
 from aiohttp.web import StreamResponse
-from util.httpUtil import  jsonResponse, getHref, getAcceptType, get_http_client  
+from aiohttp.web import json_response
+
+from util.httpUtil import  getHref, getAcceptType, get_http_client  
 from util.idUtil import   isValidUuid, getDataNodeUrl
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.hdf5dtype import getItemSize, createDataType
@@ -361,9 +363,11 @@ async def read_chunk_query(app, chunk_id, dset_json, slices, query, limit, rsp_d
             elif rsp.status == 404:
                 # no data, don't return any results
                 dn_rsp = {"index": [], "value": []}
+            elif rsp.status == 400:
+                log.warn(f"request {req} failed withj code {rsp.status}")
+                raise HTTPBadRequest()
             else:
-                msg = "request to {} failed with code: {}".format(req, rsp.status)
-                log.error(msg)
+                log.error(f"request {req} failed with code: {rsp.status}")
                 raise HTTPInternalServerError()
             
     except ClientError as ce:
@@ -680,7 +684,7 @@ async def PUT_Value(request):
         await asyncio.gather(*tasks, loop=loop)
          
     resp_json = {}
-    resp = await jsonResponse(request, resp_json)
+    resp = json_response(resp_json)
     return resp
 
 """
@@ -790,7 +794,7 @@ async def GET_Value(request):
 
     if request.method == "OPTIONS":
         # skip doing any big data load for options request
-        resp = await jsonResponse(request, None)
+        resp = json_response(None)
     elif "query" in params:
         if rank > 1:
             msg = "Query string is not supported for multidimensional arrays"
@@ -859,7 +863,7 @@ async def doQueryRead(request, chunk_ids, dset_json,  slices):
             break  # don't need any more DN queries
     resp_json = { "index": resp_index, "value": resp_value}
     resp_json["hrefs"] = get_hrefs(request, dset_json)
-    resp = await jsonResponse(request, resp_json)
+    resp = json_response(resp_json)
     return resp
 
 async def doHyperSlabRead(request, chunk_ids, dset_json, slices):
@@ -908,12 +912,17 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices):
         log.debug("GET Value - returning {} bytes binary data".format(len(output_data)))
      
         # write response
-        resp = StreamResponse(status=200)
-        resp.headers['Content-Type'] = "application/octet-stream"
-        resp.content_length = len(output_data)
-        await resp.prepare(request)
-        resp.write(output_data)
-        await resp.write_eof()
+        try:
+            resp = StreamResponse()
+            resp.headers['Content-Type'] = "application/octet-stream"
+            resp.content_length = len(output_data)
+            await resp.prepare(request)
+            await resp.write(output_data)
+        except Exception as e:
+            log.error(f"Exception during binary data write: {e}")
+        finally:
+            await resp.write_eof()
+
     else:
         log.debug("GET Value - returning JSON data")
         resp_json = {}
@@ -926,8 +935,7 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices):
         else:
             resp_json["value"] = json_data  
         resp_json["hrefs"] = get_hrefs(request, dset_json)
- 
-        resp = await jsonResponse(request, resp_json)
+        resp = json_response(resp_json)
     return resp
 
 
@@ -1115,12 +1123,16 @@ async def POST_Value(request):
         log.debug("POST Value - returning {} bytes binary data".format(len(output_data)))
      
         # write response
-        resp = StreamResponse(status=200)
-        resp.headers['Content-Type'] = "application/octet-stream"
-        resp.content_length = len(output_data)
-        await resp.prepare(request)
-        resp.write(output_data)
-        await resp.write_eof()
+        try:
+            resp = StreamResponse()
+            resp.headers['Content-Type'] = "application/octet-stream"
+            resp.content_length = len(output_data)
+            await resp.prepare(request)
+            await resp.write(output_data)
+        except Exception as e:
+            log.error(f"Exception during binary data write: {e}")
+        finally:
+            await resp.write_eof()
     else:
         log.debug("POST Value - returning JSON data")
         rsp_json = {}
@@ -1128,7 +1140,7 @@ async def POST_Value(request):
         log.debug("got rsp data {} points".format(len(data)))
         json_data = bytesArrayToList(data)
         rsp_json["value"] = json_data  
-        resp = await jsonResponse(request, rsp_json)
+        resp = json_response(rsp_json)
     log.response(request, resp=resp)
     return resp
 

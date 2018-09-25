@@ -17,7 +17,7 @@ import sys
 import json
 import time
 
-from aiohttp.web import Application, StreamResponse, run_app
+from aiohttp.web import Application, StreamResponse, run_app, json_response
 from aiohttp import  ClientSession, TCPConnector
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 
@@ -26,7 +26,7 @@ import aiobotocore
 
 import config
 from util.timeUtil import unixTimeToUTC, elapsedTime
-from util.httpUtil import http_get, jsonResponse, getUrl
+from util.httpUtil import http_get, getUrl
 from util.s3Util import  getS3JSONObj, putS3JSONObj, isS3Obj, getInitialS3Stats, getS3ObjStats
 from util.idUtil import  createNodeId, getHeadNodeS3Key
 import hsds_logger as log
@@ -191,7 +191,7 @@ async def info(request):
     answer['target_dn_count'] = getTargetNodeCount(app, "dn") 
     answer['active_dn_count'] = getActiveNodeCount(app, "dn")
 
-    resp = await jsonResponse(request, answer)
+    resp = json_response(answer)
     log.response(request, resp=resp)
     return resp
 
@@ -269,7 +269,7 @@ async def register(request):
     else:
         answer["node_count"] = app["target_dn_count"]
         
-    resp = await jsonResponse(request, answer)
+    resp = json_response(answer)
     log.response(request, resp=resp)
     return resp
 
@@ -304,7 +304,7 @@ async def nodestate(request):
                 answer = node
                 break
     answer["cluster_state"] = app["cluster_state"]  
-    resp = await jsonResponse(request, answer)
+    resp = json_response(answer)
     log.response(request, resp=resp)
     return resp
 
@@ -356,7 +356,7 @@ async def nodeinfo(request):
                 stats[k][node_type][node_number] = stats_field[k]
         answer[stat_key] = stats
   
-    resp = await jsonResponse(request, answer)
+    resp = json_response(answer)
     log.response(request, resp=resp)
     return resp
 
