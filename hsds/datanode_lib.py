@@ -15,6 +15,10 @@
 import asyncio
 import time 
 from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError
+from aiohttp.client_exceptions import ClientError
+#from aiohttp.web import json_response
+
+
 
 from util.idUtil import validateInPartition, getS3Key, isValidUuid, isValidChunkId
 from util.s3Util import getS3JSONObj, putS3JSONObj, putS3Bytes, isS3Obj
@@ -191,7 +195,7 @@ async def save_metadata_obj(app, obj_id, obj_json, notify=False):
                 log.info("ASync PUT notify: {} params: {}".format(req, params))
                 await http_put(app, req, params=params)
             except HTTPInternalServerError as hpe:
-                msg = "got error notifying async node: {}".format(hpe.code)
+                log.error(f"got error notifying async node: {hpe}")
                 log.error(msg)
 
         else:
@@ -207,9 +211,8 @@ async def save_metadata_obj(app, obj_id, obj_json, notify=False):
             try:
                 log.info("ASync PUT notify: {} body: {}".format(req, body))
                 await http_put(app, req, data=body)
-            except HTTPInternalServerError as hpe:
-                msg = "got error notifying async node: {}".format(hpe.code)
-                log.error(msg)
+            except HTTPInternalServerError:
+                log.error(f"got error notifying async node")
         
 
 
@@ -244,7 +247,7 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None):
                 root_id = obj_json["root"]
         del meta_cache[obj_id]
     elif not root_id and notify:
-        # read from S3 to get rootid
+        # read from S3 to get rootid 
         s3_key = getS3Key(obj_id)
         log.debug("getS3JSONObj({})".format(s3_key))
         # read S3 object as JSON - will raise 404 if not found
@@ -266,9 +269,10 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None):
             try:
                 log.info("ASync DELETE notify: {} params: {}".format(req, params))
                 await http_delete(app, req, params=params)
-            except HTTPInternalServerError as hpe:
-                msg = "got error notifying async node: {}".format(hpe.code)
-                log.error(msg)
+            except ClientError as ce:
+                log.error(f"got error notifying async node: {ce}")
+            except HTTPInternalServerError as hse:
+                log.error(f"got HTTPInternalServerError: {hse}")
         else:
             now = int(time.time())
             notify_obj = {"id": obj_id, "lastModified": now}
@@ -279,9 +283,10 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None):
             try:
                 log.info("ASync DELETE notify: {} body: {}".format(req, body))
                 await http_delete(app, req, data=body)
-            except HTTPInternalServerError as hpe:
-                msg = "got error notifying async node: {}".format(hpe.code)
-                log.error(msg)
+            except ClientError as ce:
+                log.error(f"got ClientError notifying async node: {ce}")
+            except HTTPInternalServerError as ise:
+                log.error(f"got HTTPInternalServerError notifying async node: {ise}")
 
     
 
@@ -419,6 +424,6 @@ async def s3sync(app):
                     log.info("ASync PUT notify: {} body: {}".format(req, body))
                     await http_put(app, req, data=body)
                 except HTTPInternalServerError as hpe:
-                    msg = "got error notifying async node: {}".format(hpe.code)
+                    msg = "got error notifying async node: {}".format(hpe)
                     log.error(msg)
      

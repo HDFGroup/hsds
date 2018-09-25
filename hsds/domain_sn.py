@@ -16,6 +16,7 @@
 import json
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPGone, HTTPInternalServerError
 from aiohttp import ClientResponseError
+from aiohttp.web import json_response
 
 
 from util.httpUtil import  http_post, http_put, http_get, http_delete, jsonResponse, getHref
@@ -533,8 +534,7 @@ async def DELETE_Domain(request):
     
     rsp_json = await http_delete(app, req, data=body)
  
-    resp = await jsonResponse(request, rsp_json)
-
+    
     if "root" in domain_json:
         # delete the root group
         root_id = domain_json["root"]
@@ -561,7 +561,8 @@ async def DELETE_Domain(request):
             log.info("{} response: {}".format(req, sn_rsp))
         except ClientResponseError as ce:
             log.warn("got error for sn_delete: {}".format(ce))
-
+    
+    resp = json_response(rsp_json)
     log.response(request, resp=resp)
     return resp
 

@@ -317,7 +317,7 @@ def getElementCount(buffer, offset):
     count_bytes = bytes(buffer[offset:(offset+4)])
         
     try:
-        count = int(np.fromstring(count_bytes, dtype="<i4"))
+        count = int(np.frombuffer(count_bytes, dtype="<i4"))
     except TypeError as e:
         msg = "Unexpected error reading count value for variable length elemennt: {}".format(e)
         log.error(msg)
@@ -346,7 +346,7 @@ def readElement(buffer, offset, arr, index, dt):
         count = dt.itemsize
         e_buffer = buffer[offset:(offset+count)]
         offset += count
-        arr[index] = np.fromstring(bytes(e_buffer), dtype=dt)
+        arr[index] = np.frombuffer(bytes(e_buffer), dtype=dt)
     else:
         # variable length element
         vlen = dt.metadata["vlen"]
@@ -371,7 +371,7 @@ def readElement(buffer, offset, arr, index, dt):
                     s = e_buffer.decode("utf-8")
                     arr[index] = s
                 else:
-                    e = np.fromstring(bytes(e_buffer), dtype=vlen)
+                    e = np.frombuffer(bytes(e_buffer), dtype=vlen)
                     arr[index] = e
         
     return offset
@@ -402,7 +402,7 @@ def bytesToArray(data, dt, shape):
     nelements = getNumElements(shape)
     if not isVlen(dt):
         # regular numpy from string
-        arr = np.fromstring(data, dtype=dt)  
+        arr = np.frombuffer(data, dtype=dt)  
     else:
         arr = np.zeros((nelements,), dtype=dt)
         offset = 0

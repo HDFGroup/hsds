@@ -15,7 +15,6 @@
 import time
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalServerError
-
  
 from util.idUtil import isValidUuid 
 from util.httpUtil import jsonResponse

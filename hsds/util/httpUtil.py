@@ -103,7 +103,7 @@ async def http_post(app, url, data=None, params=None):
     timeout = config.get("timeout")
     
     try:
-        async with client.post(url, data=json.dumps(data), params=params, timeout=timeout ) as rsp:
+        async with client.post(url, json=data, params=params, timeout=timeout ) as rsp:
             log.info("http_post status: {}".format(rsp.status))
             if rsp.status == 200:
                 pass  # ok
@@ -136,7 +136,7 @@ async def http_put(app, url, data=None, params=None):
     timeout = config.get("timeout")
       
     try:
-        async with client.put(url, data=json.dumps(data), params=params, timeout=timeout) as rsp:
+        async with client.put(url, json=data, params=params, timeout=timeout) as rsp:
             log.info("http_put status: {}".format(rsp.status))
             if rsp.status == 201:
                 pass # expected
@@ -192,29 +192,35 @@ Helper function  - async HTTP DELETE
 """ 
 async def http_delete(app, url, data=None, params=None):
     log.info(f"http_delete('{url}')")
-    client = get_http_client(app)
+    #client = get_http_client(app)
     rsp_json = None
     timeout = config.get("timeout")
+    import aiohttp
     
     try:
-        async with client.delete(url, data=json.dumps(data), params=params, timeout=timeout) as rsp:
-            log.info(f"http_delete status: {rsp.status}")
-            if rsp.status == 200:
-                pass  # expectred
-            elif rsp.status == 404:
-                log.info(f"NotFound response for DELETE for url: {url}")
-            else:
-                log.error(f"DELETE request error for url: {url} - status: {rsp.status}")
-                raise HTTPInternalServerError()
+        async with aiohttp.ClientSession() as session:
+            async with session.delete(url, json=data, params=params, timeout=timeout) as rsp:
+                log.info(f"http_delete status: {rsp.status}")
+                if rsp.status == 200:
+                    pass  # expectred
+                elif rsp.status == 404:
+                    log.info(f"NotFound response for DELETE for url: {url}")
+                else:
+                    log.error(f"DELETE request error for url: {url} - status: {rsp.status}")
+                    raise HTTPInternalServerError()
 
-            rsp_json = await rsp.json()
-            log.debug(f"http_delete({url}) response: {rsp_json}")
+            #rsp_json = await rsp.json()
+            #log.debug(f"http_delete({url}) response: {rsp_json}")
     except ClientError as ce:
-        log.error(f"Error for http_delete({url}): {ce} ")
+        log.error(f"ClientError for http_delete({url}): {ce} ")
         raise HTTPInternalServerError()
     except CancelledError as cle:
         log.error(f"CancelledError for http_delete({url}): {cle}")
         raise HTTPInternalServerError()
+    except ConnectionResetError as cre:
+        log.error(f"ConnectionResetError for http_delete({url}): {cre}")
+        raise HTTPInternalServerError()
+
     return rsp_json
 
 """

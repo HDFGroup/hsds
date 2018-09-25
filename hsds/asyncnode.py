@@ -16,7 +16,7 @@ import asyncio
 from os.path import isfile, join
 import time
 
-from aiohttp.web import run_app
+from aiohttp.web import run_app, json_response
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict, HTTPInternalServerError, HTTPServiceUnavailable
 
 import sqlite3
@@ -26,7 +26,7 @@ from basenode import baseInit, healthCheck
 from util.s3Util import deleteS3Obj
 from util.chunkUtil import getDatasetId
 from util.idUtil import isValidChunkId, isValidUuid, getCollectionForId, getS3Key   
-from util.httpUtil import jsonResponse, StreamResponse
+#from util.httpUtil import jsonResponse, StreamResponse
 from util.dbutil import getRow, getDomains, insertRow, deleteRow, updateRowColumn, listObjects, getCountColumnName, getDatasetChunks
 import hsds_logger as log
 
@@ -39,13 +39,15 @@ import hsds_logger as log
 
 async def objDelete(app, objid, rootid=None):
     """ Delete object from it's table and then delete the s3obj """
-    log.info("objDelete: {}".format(objid))
+    log.info(f"objDelete: {objid}")
+    if rootid:
+        log.debug(f"rootid: {rootid}")
     conn = app["conn"]
     dbRow = getRow(conn, objid, rootid=rootid)
     if not dbRow:
-        log.warn("obj: {} not found for deleteRow")
+        log.warn(f"obj: {objid} not found for deleteRow")
     else:
-        log.info("deleting db row: {}".format(objid))
+        log.info("deleting db row: {objid}")
         deleteRow(conn, objid, rootid=rootid)
     
     # delete the s3 obj
@@ -71,6 +73,10 @@ async def objDelete(app, objid, rootid=None):
             objSize = dbRow["size"]
         try:
             rootEntry = getRow(conn, rootid, table="RootTable")
+            if not rootEntry:
+                msg = f"expected to find root: {rootid} in RootTable"
+                log.warn(msg)
+                raise KeyError(msg)
             log.debug("root row for {}: {}".format(rootid, rootEntry))
             domain_size = rootEntry["totalSize"]
             if domain_size and objSize:
@@ -208,13 +214,11 @@ def updateBucketStats(app):
 async def GET_AsyncInfo(request):
     """HTTP Method to retun async node state to caller"""
     log.request(request)
-    app = request.app
-    resp = StreamResponse()
-    resp.headers['Content-Type'] = 'application/json'
+    app = request.apps
     updateBucketStats(app)
     answer = {}
     answer["bucket_stats"] = app["bucket_stats"]
-    resp = await jsonResponse(request, answer) 
+    resp = json_response(answer)
     log.response(request, resp=resp)
     return resp
 
@@ -375,7 +379,7 @@ async def PUT_Objects(request):
          
 
     resp_json = {  } 
-    resp = await jsonResponse(request, resp_json, status=201)
+    resp = json_response(resp_json, status=201)
     log.response(request, resp=resp)
     return resp
 
@@ -420,6 +424,7 @@ async def DELETE_Objects(request):
             continue
 
         rootid = obj["root"]
+        log.debug(f"obj: {objid} root: {rootid}")
  
         dbRow = getRow(conn, objid, rootid=rootid)
         if not dbRow:
@@ -442,7 +447,7 @@ async def DELETE_Objects(request):
             pending_queue.append(objid)
   
     resp_json = {  } 
-    resp = await jsonResponse(request, resp_json)
+    resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
 
@@ -473,7 +478,7 @@ async def GET_Object(request):
 
     log.info("GET_Object response: {}".format(resp_json))
     
-    resp = await jsonResponse(request, resp_json, status=200)
+    resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
 
@@ -531,7 +536,7 @@ async def GET_Domains(request):
     # otherwise jsut return name, owner and root
     for domain in domains:
         log.debug("domain: {}".format(domain))
-        if "root" in domain and domain["root"]:
+        if "root" in domain and domain["root"] and domain["root"] != "None":
             log.info("domain: {} root: {}".format(domain, domain["root"]))
             domain["class"] = "domain"
         
@@ -557,8 +562,7 @@ async def GET_Domains(request):
         
     resp_json = {"domains": domains}
     log.info("GET_Domains response: {}".format(resp_json))
-    
-    resp = await jsonResponse(request, resp_json, status=200)
+    resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
 
@@ -622,8 +626,7 @@ async def PUT_Domain(request):
         raise HTTPInternalServerError()
 
     resp_json = {}
-    
-    resp = await jsonResponse(request, resp_json, status=201)
+    resp = json_response(resp_json, status=201)
     log.response(request, resp=resp)
     return resp
 
@@ -669,8 +672,7 @@ async def DELETE_Domain(request):
         raise HTTPInternalServerError()
 
     resp_json = {}
-    
-    resp = await jsonResponse(request, resp_json, status=200)
+    resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
 
@@ -700,8 +702,7 @@ async def GET_Root(request):
         resp_json["objects"] = listObjects(conn, rootid)
     log.info("GET_Root response: {}".format(resp_json))
 
-    
-    resp = await jsonResponse(request, resp_json, status=200)
+    resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
 

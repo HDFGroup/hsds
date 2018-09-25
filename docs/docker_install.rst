@@ -23,7 +23,7 @@ Export environment variables as shown in "Sample .bashrc" below.
 16. Run: `$ hsconfigure`.  Set hs endpoint with DNS name (e.g. http://hsds.hdf.test) and admin username/password.  Ignore API Key.
 17. Run: `$ hsinfo`.  Server state should be "`READY`".
 18. Create "/home" folder: `$ hstouch /home/`
-19. For each other username in the passwd file, create a top-level domain: `$ hstouch /home/<username>/`
+19. For each other username in the passwd file, create a top-level domain: `$ hstouch -o <username> /home/<username>/`
 20. Run the integration test: `$ python testall.py --skip_unit` 
 21. The test suite will emit some warnings due to test domains not being loaded.  To address see test_data_setup below.
  
@@ -91,7 +91,7 @@ Using the following procedure to import test files into hsds
 3. Download the following file: `$ wget https://s3.amazonaws.com/hdfgroup/data/hdf5test/tall.h5`
 4. In the following steps use the password that was setup for the test_user1 account in place of <passwd>
 5. Create a test folder on HSDS: `$ hstouch -u test_user1 -p <passwd> /home/test_user1/test/` 
-6. Import into hsds: `$ hsload -v -u test_user1 -p <passwd> tall.h5 /home/test_user1/test/tall.h5`
+6. Import into hsds: `$ hsload -v -u test_user1 -p <passwd> tall.h5 /home/test_user1/test/`
 7. Verify upload: `$ hsls -r -u test_user1 -p <passwd> /home/test_user1/test/tall.h5
 
 Installing Software Updates
