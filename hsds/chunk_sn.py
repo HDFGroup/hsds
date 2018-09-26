@@ -91,8 +91,7 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level,
         log.error("Error for http_post({}): {} ".format(req, str(ce)))
         raise HTTPInternalServerError()
     except CancelledError as cle:
-        log.error("CancelledError for http_post({}): {}".format(req, str(cle)))
-        raise HTTPInternalServerError()
+        log.warn("CancelledError for http_post({}): {}".format(req, str(cle)))
 
 
 """
@@ -160,8 +159,7 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr):
         log.error("Error for http_get({}): {} ".format(req, str(ce)))
         raise HTTPInternalServerError()
     except CancelledError as cle:
-        log.error("CancelledError for http_get({}): {}".format(req, str(cle)))
-        raise HTTPInternalServerError()
+        log.warn("CancelledError for http_get({}): {}".format(req, str(cle)))
     
     log.info("chunk_arr shape: {}".format(chunk_arr.shape))
     log.info("data_sel: {}".format(data_sel))
@@ -236,8 +234,7 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_a
         log.error("Error for http_get({}): {} ".format(req, str(ce)))
         raise HTTPInternalServerError()
     except CancelledError as cle:
-        log.error("CancelledError for http_get({}): {}".format(req, str(cle)))
-        raise HTTPInternalServerError()
+        log.warn("CancelledError for http_get({}): {}".format(req, str(cle)))
     
     log.info("got {} points response".format(num_points))
 
@@ -320,8 +317,7 @@ async def write_point_sel(app, chunk_id, dset_json, point_list, point_data):
         log.error("Error for http_get({}): {} ".format(req, str(ce)))
         raise HTTPInternalServerError()
     except CancelledError as cle:
-        log.error("CancelledError for http_get({}): {}".format(req, str(cle)))
-        raise HTTPInternalServerError()
+        log.warn("CancelledError for http_get({}): {}".format(req, str(cle)))
 
 
 """
@@ -375,8 +371,7 @@ async def read_chunk_query(app, chunk_id, dset_json, slices, query, limit, rsp_d
         log.error("Error for http_get({}): {} ".format(req, str(ce)))
         raise HTTPInternalServerError()
     except CancelledError as cle:
-        log.error("CancelledError for http_get({}): {}".format(req, str(cle)))
-        raise HTTPInternalServerError()
+        log.warn("CancelledError for http_get({}): {}".format(req, str(cle)))
     
     rsp_dict[chunk_id] = dn_rsp
 
@@ -814,11 +809,18 @@ async def GET_Value(request):
             msg = "Query string is not supported for multidimensional arrays"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-
-        resp = await doQueryRead(request, chunk_ids, dset_json, slices)
+        try:
+            resp = await doQueryRead(request, chunk_ids, dset_json, slices)
+        except CancelledError as ce:
+            log.warn("Cancelled error on query read: {ce}")
+            resp = json_response(None)  # TBD: what do return if client cancels
     else:
         log.debug("chunk_ids: {}".format(chunk_ids))
-        resp = await doHyperSlabRead(request, chunk_ids, dset_json, slices)
+        try:
+            resp = await doHyperSlabRead(request, chunk_ids, dset_json, slices)
+        except CancelledError as ce:
+            log.warn("Cancelled error on hyperslab read: {ce}")
+            resp = json_response(None)  # TBD: what do return if client cancels
     log.response(request, resp=resp)
     return resp
 
