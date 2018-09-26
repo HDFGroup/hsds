@@ -17,7 +17,7 @@ import json
 from asyncio import CancelledError
 from aiohttp.web import StreamResponse
 from aiohttp import  ClientSession, TCPConnector
-from aiohttp.web_exceptions import HTTPNotFound, HTTPConflict, HTTPGone, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPNotFound, HTTPConflict, HTTPGone, HTTPInternalServerError, HTTPRequestEntityTooLarge
 from aiohttp.client_exceptions import ClientError
 
 
@@ -52,6 +52,32 @@ def get_http_client(app):
     #create the app object
     app['client'] = client
     return client
+
+"""
+Replacement for aiohttp Request.read using our max request limit
+"""
+async def request_read(request) -> bytes:
+    """Read request body if present.
+
+    Returns bytes object with full request content.
+    """
+    log.debug("request_read")
+    if request._read_bytes is None:
+        body = bytearray()
+        max_request_size = int(config.get("max_request_size"))
+        while True:
+            chunk = await request._payload.readany()
+            body.extend(chunk)
+            body_size = len(body)
+            if body_size >= max_request_size:
+                raise HTTPRequestEntityTooLarge(
+                        max_size=max_request_size,
+                        actual_size=body_size
+                    )
+            if not chunk:
+                break
+        request._read_bytes = bytes(body)
+    return request._read_bytes
 
 """
 Helper function  - async HTTP GET

@@ -19,10 +19,9 @@ import json
 import time
 import numpy as np
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalServerError
-from aiohttp.web import json_response
+from aiohttp.web import json_response, StreamResponse
 
-
-from aiohttp.web import StreamResponse
+from util.httpUtil import  request_read
 from util.arrayUtil import bytesArrayToList, bytesToArray, arrayToBytes
 from util.idUtil import getS3Key, validateInPartition, isValidUuid
 from util.s3Util import  isS3Obj, getS3Bytes   
@@ -141,7 +140,7 @@ async def PUT_Chunk(request):
         await asyncio.sleep(0)
 
     # create a numpy array for incoming data
-    input_bytes = await request.read()  # TBD - will it cause problems when failures are raised before reading data?
+    input_bytes = await request_read(request)  # TBD - will it cause problems when failures are raised before reading data?
     if len(input_bytes) != request.content_length:
         msg = "Read {} bytes, expecting: {}".format(len(input_bytes), request.content_length)
         log.error(msg)
@@ -485,7 +484,7 @@ async def POST_Chunk(request):
             chunk_cache[chunk_id] = chunk_arr
 
     # create a numpy array for incoming points
-    input_bytes = await request.read()  # TBD - will it cause problems when failures are raised before reading data?
+    input_bytes = await request_read()  # TBD - will it cause problems when failures are raised before reading data?
     if len(input_bytes) != request.content_length:
         msg = "Read {} bytes, expecting: {}".format(len(input_bytes), request.content_length)
         log.error(msg)

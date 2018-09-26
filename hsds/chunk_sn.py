@@ -23,7 +23,7 @@ from aiohttp.client_exceptions import ClientError
 from aiohttp.web import StreamResponse
 from aiohttp.web import json_response
 
-from util.httpUtil import  getHref, getAcceptType, get_http_client  
+from util.httpUtil import  getHref, getAcceptType, get_http_client, request_read
 from util.idUtil import   isValidUuid, getDataNodeUrl
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.hdf5dtype import getItemSize, createDataType
@@ -36,6 +36,7 @@ from util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from servicenode_lib import getObjectJson, validateAction
 import config
 import hsds_logger as log
+
 
 
 """
@@ -518,12 +519,13 @@ async def PUT_Value(request):
     else:
         # read binary data
         log.info(f"request content_length: {request.content_length}")
-        if isinstance(request.content_length, int) and request.content_length >= request._client_max_size:
-            log.warn(f"Request size too large: {request.content_length} max: {request._client_max_size}")
-            raise HTTPRequestEntityTooLarge(request.content_length, request._client_max_size)
+        max_request_size = int(config.get("max_request_size"))
+        if isinstance(request.content_length, int) and request.content_length >= max_request_size:
+            log.warn(f"Request size too large: {request.content_length} max: {max_request_size}")
+            raise HTTPRequestEntityTooLarge(request.content_length, max_request_size)
 
         try :
-            binary_data = await request.read()
+            binary_data = await request_read(request)
         except HTTPRequestEntityTooLarge as tle:
             log.warn(f"Got HTTPRequestEntityTooLarge exception during binary read: {tle})")
             raise  # re-throw
@@ -608,7 +610,7 @@ async def PUT_Value(request):
         #log.info("got np array: {}".format(arr))
         num_chunks = getNumChunks(slices, layout)
         log.debug("num_chunks: {}".format(num_chunks))
-        max_chunks = int(config.get('maxchunks_per_request'))
+        max_chunks = int(config.get('max_chunks_per_request'))
         if num_chunks > max_chunks:
             log.warn(f"PUT value too many chunks: {num_chunks}, {max_chunks}")
             raise HTTPRequestEntityTooLarge(num_chunks, max_chunks)
@@ -1054,7 +1056,7 @@ async def POST_Value(request):
 
     else:
         # read binary data
-        binary_data = await request.read()
+        binary_data = await request_read(request)
         if len(binary_data) != request.content_length:
             msg = "Read {} bytes, expecting: {}".format(len(binary_data), request.content_length)
             log.error(msg)
