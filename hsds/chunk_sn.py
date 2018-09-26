@@ -519,7 +519,7 @@ async def PUT_Value(request):
         # read binary data
         log.info(f"request content_length: {request.content_length}")
         if isinstance(request.content_length, int) and request.content_length >= request._client_max_size:
-            log.warn("Request size too large: {request.content_length} max: {request._client_max_size}")
+            log.warn(f"Request size too large: {request.content_length} max: {request._client_max_size}")
             raise HTTPRequestEntityTooLarge(request.content_length, request._client_max_size)
 
         try :
@@ -608,10 +608,10 @@ async def PUT_Value(request):
         #log.info("got np array: {}".format(arr))
         num_chunks = getNumChunks(slices, layout)
         log.debug("num_chunks: {}".format(num_chunks))
-        if num_chunks > config.get("max_chunks_per_request"):
-            msg = "PUT value request too large"
-            log.warn(msg)
-            raise HTTPRequestEntityTooLarge(num_chunks, int(config.get("max_chunks_per_request")))
+        max_chunks = int(config.get('maxchunks_per_request'))
+        if num_chunks > max_chunks:
+            log.warn(f"PUT value too many chunks: {num_chunks}, {max_chunks}")
+            raise HTTPRequestEntityTooLarge(num_chunks, max_chunks)
          
         try: 
             chunk_ids = getChunkIds(dset_id, slices, layout)
@@ -679,10 +679,11 @@ async def PUT_Value(request):
 
         num_chunks = len(chunk_dict)
         log.debug("num_chunks: {}".format(num_chunks))
-        if num_chunks > config.get("max_chunks_per_request"):
+        max_chunks = int(config.get('maxchunks_per_request'))
+        if num_chunks > max_chunks:
             msg = "PUT value request too large"
             log.warn(msg)
-            raise HTTPRequestEntityTooLarge(num_chunks, int(config.get("max_chunks_per_request")))
+            raise HTTPRequestEntityTooLarge(num_chunks, max_chunks)
         tasks = []
         for chunk_id in chunk_dict.keys():
             item = chunk_dict[chunk_id]
@@ -796,10 +797,11 @@ async def GET_Value(request):
 
     num_chunks = getNumChunks(slices, layout)
     log.debug("num_chunks: {}".format(num_chunks))
-    if num_chunks > config.get("max_chunks_per_request"):
+    max_chunks = int(config.get('maxchunks_per_request'))
+    if num_chunks > max_chunks:
         msg = "PUT value request too large"
         log.warn(msg)
-        raise HTTPRequestEntityTooLarge(num_chunks, int(config.get("max_chunks_per_request")))
+        raise HTTPRequestEntityTooLarge(num_chunks, max_chunks)
     chunk_ids = getChunkIds(dset_id, slices, layout)
 
     if request.method == "OPTIONS":
@@ -903,10 +905,11 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices):
     else:
         request_size *= item_size
     log.debug("request_size: {}".format(request_size))
-    if request_size >= int(config.get("max_request_size")):
+    max_request_size = int(config.get("max_request_size"))
+    if request_size >= max_request_size:
         msg = "GET value request too large"
         log.warn(msg)
-        raise HTTPRequestEntityTooLarge(request_size, int(config.get("max_request_size")))
+        raise HTTPRequestEntityTooLarge(request_size, max_request_size)
 
     arr = np.zeros(np_shape, dtype=dset_dtype, order='C')
     tasks = []
@@ -1107,10 +1110,10 @@ async def POST_Value(request):
 
     num_chunks = len(chunk_dict)
     log.debug("num_chunks: {}".format(num_chunks))
-    if num_chunks > config.get("max_chunks_per_request"):
-        msg = "POST value request too large"
-        log.warn(msg)
-        raise HTTPRequestEntityTooLarge(num_chunks, int(config.get("max_chunks_per_request")))
+    max_chunks = config.get("max_chunks_per_request")
+    if num_chunks > max_chunks:
+        log.warn(f"POST value request too large, num_chunks: {num_chunks} max_chunks: {max_chunks}")
+        raise HTTPRequestEntityTooLarge(num_chunks, max_chunks)
 
     
     # create array to hold response data
