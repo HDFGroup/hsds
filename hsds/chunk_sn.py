@@ -160,6 +160,7 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr):
         raise HTTPInternalServerError()
     except CancelledError as cle:
         log.warn("CancelledError for http_get({}): {}".format(req, str(cle)))
+        return
     
     log.info("chunk_arr shape: {}".format(chunk_arr.shape))
     log.info("data_sel: {}".format(data_sel))
@@ -235,6 +236,7 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_a
         raise HTTPInternalServerError()
     except CancelledError as cle:
         log.warn("CancelledError for http_get({}): {}".format(req, str(cle)))
+        return
     
     log.info("got {} points response".format(num_points))
 
@@ -372,6 +374,7 @@ async def read_chunk_query(app, chunk_id, dset_json, slices, query, limit, rsp_d
         raise HTTPInternalServerError()
     except CancelledError as cle:
         log.warn("CancelledError for http_get({}): {}".format(req, str(cle)))
+        return
     
     rsp_dict[chunk_id] = dn_rsp
 
