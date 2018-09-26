@@ -320,7 +320,7 @@ async def s3sync(app):
                 await asyncio.sleep(1)  # was sleep_secs
             else:
                 # some objects need to be flushed to S3
-                log.info("{} objects to be synced to S3".format(len(keys_to_update)))
+                log.info("{} objects to be synched to S3".format(len(keys_to_update)))
 
                 # first clear the dirty bit (before we hit the first await) to
                 # avoid a race condition where the object gets marked as dirty again

@@ -681,7 +681,7 @@ async def PUT_Value(request):
 
         num_chunks = len(chunk_dict)
         log.debug("num_chunks: {}".format(num_chunks))
-        max_chunks = int(config.get('maxchunks_per_request'))
+        max_chunks = int(config.get('max_chunks_per_request'))
         if num_chunks > max_chunks:
             msg = "PUT value request too large"
             log.warn(msg)
@@ -799,7 +799,7 @@ async def GET_Value(request):
 
     num_chunks = getNumChunks(slices, layout)
     log.debug("num_chunks: {}".format(num_chunks))
-    max_chunks = int(config.get('maxchunks_per_request'))
+    max_chunks = int(config.get('max_chunks_per_request'))
     if num_chunks > max_chunks:
         msg = "PUT value request too large"
         log.warn(msg)

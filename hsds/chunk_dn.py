@@ -484,7 +484,7 @@ async def POST_Chunk(request):
             chunk_cache[chunk_id] = chunk_arr
 
     # create a numpy array for incoming points
-    input_bytes = await request_read()  # TBD - will it cause problems when failures are raised before reading data?
+    input_bytes = await request_read(request)  # TBD - will it cause problems when failures are raised before reading data?
     if len(input_bytes) != request.content_length:
         msg = "Read {} bytes, expecting: {}".format(len(input_bytes), request.content_length)
         log.error(msg)
