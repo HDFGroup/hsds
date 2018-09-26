@@ -137,7 +137,7 @@ async def PUT_Chunk(request):
     log.debug("PUT_Chunk cache utilization: {} dirty_count: {}".format(chunk_cache.cacheUtilizationPercent, chunk_cache.dirtyCount))
     while chunk_cache.cacheUtilizationPercent > 100 and chunk_cache.dirtyCount > 0:
         log.info("PUT_Chunk, cache utilization: {}, sleeping till items are flushed".format(chunk_cache.cacheUtilizationPercent))
-        await asyncio.sleep(0)
+        await asyncio.sleep(1)
 
     # create a numpy array for incoming data
     input_bytes = await request_read(request)  # TBD - will it cause problems when failures are raised before reading data?
