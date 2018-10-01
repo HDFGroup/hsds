@@ -59,5 +59,4 @@ For general questions/feedback, please use the list (hdf-forum@lists.hdfgroup.or
 License
 -------
 
-Currently the code in this repository is confidential and should not be shared with
-anyone who is not covered by an NDA with The HDF Group.
+This code is covered under an APACHE 2.0 license.  See LICENSE in this directory.
