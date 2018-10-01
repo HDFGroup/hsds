@@ -33,7 +33,7 @@ from util.idUtil import getHeadNodeS3Key
 from util.authUtil import getUserPasswordFromRequest, validateUserPassword
 import hsds_logger as log
 
-HSDS_VERSION = "0.1"
+HSDS_VERSION = "0.2"
 
 
 async def getHeadUrl(app):
