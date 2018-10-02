@@ -315,21 +315,25 @@ def aclCheck(obj_json, req_action, req_user):
     if req_user == "admin":
         return  # allow admin user to do anything
     if obj_json is None:
-        log.error("no acls found")
+        log.error("aclCheck: no obj json")
         raise HTTPInternalServerError() # 500
     if "acls" not in obj_json:
-        log.error("no acls found")
+        log.error("no acl key")
         raise HTTPInternalServerError() # 500
     acls = obj_json["acls"]
+    log.debug(f"acls: {acls}")
     if req_action not in ("create", "read", "update", "delete", "readACL", "updateACL"):
         log.error("unexpected req_action: {}".format(req_action))
     acl = None
     if req_user in acls:
         acl = acls[req_user]
+        log.debug(f"got acl: {acl} for user: {req_user}")
     elif "default" in acls:
         acl = acls["default"]
+        log.debug(f"got default acl: {acl}")
     else:
         acl = { }
+        log.debug(f"no acl found")
     if req_action not in acl or not acl[req_action]:
         log.warn("Action: {} not permitted for user: {}".format(req_action, req_user))
         raise HTTPForbidden()  # 403

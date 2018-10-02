@@ -243,7 +243,7 @@ async def GET_Domain(request):
 
     log.info("got domain: {}".format(domain))
    
-    domain_json = await getDomainJson(app, domain)
+    domain_json = await getDomainJson(app, domain, reload=True)
      
     if domain_json is None:
         log.warn("domain: {} not found".format(domain))
