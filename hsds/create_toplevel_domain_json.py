@@ -83,6 +83,12 @@ async def createDomain(app, domain, domain_json):
     except ClientOSError as coe:
         print("Got S3 error: {}".format(str(coe)))  
 
+#
+# Shutodwn - release S3 client
+# 
+async def shutdown(app):
+    log.info("closing S3 connections")
+    await releaseClient(app)  
                
 def main():
     default_public_perm =  {'create': False, 'read': True, 'update': False, 'delete': False, 'readACL': False, 'updateACL': False } 
@@ -140,9 +146,11 @@ def main():
     app["bucket_name"] = config.get("bucket_name")
 
     loop.run_until_complete(createDomains(app, usernames, default_perm, domain_name=domain))
-    releaseClient(app)
+    loop.run_until_complete(shutdown(app))
+
     
     loop.close()
+    
 
     print("done!")
 
