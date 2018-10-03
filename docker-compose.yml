@@ -100,6 +100,8 @@ services:
       - HSDS_ENDPOINT=${PUBLIC_DNS}
       - SN_HOST=${PUBLIC_DNS}
       - PASSWORD_SALT=${PASSWORD_SALT}
+      - GREETING=${GREETING}
+      - ABOUT=${ABOUT}
     depends_on:
       - an
     ports:

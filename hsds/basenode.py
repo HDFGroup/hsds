@@ -19,7 +19,8 @@ import psutil
 from copy import copy
 
 from aiohttp.web import Application, StreamResponse, json_response
-from aiohttp.http_exceptions import HttpProcessingError 
+from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
+
 from aiohttp.client_exceptions import ClientError
 from aiobotocore import get_session
  
@@ -54,8 +55,11 @@ async def getHeadUrl(app):
             except ClientError as ce:
                 log.warn("ClientError: {} for health check".format(str(ce)))
                 await asyncio.sleep(1)
-            except HttpProcessingError as he:
-                log.warn("HttpProcessingError <{}> for health check".format(he.code))
+            except HTTPInternalServerError as he:
+                log.warn("HTTPInternalServiceError <{}> for health check".format(he.code))
+                await asyncio.sleep(1)
+            except HTTPNotFound:
+                log.warn("headnode not found, sleeping")
                 await asyncio.sleep(1)
 
         if "head_url" not in head_state:
@@ -73,7 +77,7 @@ def getAsyncNodeUrl(app):
     if "an_url" not in app or not app["an_url"]:
         msg="Service not ready"
         log.warn(msg)
-        raise HttpProcessingError(message=msg, code=503)
+        raise HTTPInternalServerError()
 
     an_url = app["an_url"]
     log.debug("got an url: {}".format(an_url))
@@ -180,8 +184,8 @@ async def healthCheck(app):
                     log.info("health check ok") 
             except ClientError as ce:
                 log.warn("ClientError: {} for health check".format(str(ce)))
-            except HttpProcessingError as he:
-                log.warn("HttpProcessingError <{}> for health check".format(he.code))
+            except HTTPInternalServerError as he:
+                log.warn("HTTPInternalServiceError <{}> for health check".format(he.code))
 
         svmem = psutil.virtual_memory()
         log.debug("health check sleep: {}, vm: {}".format(sleep_secs, svmem.percent))

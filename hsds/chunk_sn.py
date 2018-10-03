@@ -447,14 +447,7 @@ async def PUT_Value(request):
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
     log.debug("item size: {}".format(item_size))
-
-    #if item_size == 'H5T_VARIABLE':
-    #    # keep this check until we have variable length supported
-    #    msg = "variable length data types not yet supported"
-    #    log.warn(msg)
-    #    raise HttpProcessingError(code=501, message="Variable length data not yet supported")
-      
-
+ 
     if item_size == 'H5T_VARIABLE' and request_type != "json":
         msg = "Only JSON is supported for variable length data types"
         log.warn(msg)

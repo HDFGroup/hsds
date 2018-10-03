@@ -74,7 +74,7 @@ async def healthCheck(app):
                     await putS3JSONObj(app, headnode_key, head_state)
                 except HTTPInternalServerError as hpe:
                     # Might be bad AWS config, transient S3 error, or minio not initialized yet...
-                    log.warn("HttpProcessingError writing head_state: {}: {}".format(headnode_key, str(hpe)))
+                    log.warn("HTTPInternalServerError writing head_state: {}: {}".format(headnode_key, str(hpe)))
             continue # start health check on next iteration
         
         head_state = await getS3JSONObj(app, headnode_key)
