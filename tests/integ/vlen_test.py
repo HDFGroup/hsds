@@ -136,7 +136,7 @@ class VlenTest(unittest.TestCase):
 
     def testPutVLenString(self):
         # Test PUT value for 1d attribute with variable length string types
-        print("testPutVLenInt", self.base_domain)
+        print("testPutVLenString", self.base_domain)
 
         headers = helper.getRequestHeaders(domain=self.base_domain)
         req = self.endpoint + '/'
@@ -186,7 +186,7 @@ class VlenTest(unittest.TestCase):
 
     def testPutVLenCompound(self):
         # Test PUT value for 1d attribute with variable length int types
-        print("testPutVLenInt", self.base_domain)
+        print("testPutVLenCompound", self.base_domain)
 
         headers = helper.getRequestHeaders(domain=self.base_domain)
         req = self.endpoint + '/'
