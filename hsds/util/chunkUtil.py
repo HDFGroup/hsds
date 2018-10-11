@@ -426,7 +426,7 @@ def getDataCoverage(chunk_id, slices, layout):
         step = 1
         sel.append(slice(start, stop, step))
             
-    return sel
+    return tuple(sel)
 
 def getChunkRelativePoint(chunkCoord, point):
     """
