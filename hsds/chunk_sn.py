@@ -792,7 +792,7 @@ async def GET_Value(request):
     log.debug("num_chunks: {}".format(num_chunks))
     max_chunks = int(config.get('max_chunks_per_request'))
     if num_chunks > max_chunks:
-        msg = "PUT value request too large"
+        msg = "GET value request too large"
         log.warn(msg)
         raise HTTPRequestEntityTooLarge(num_chunks, max_chunks)
     chunk_ids = getChunkIds(dset_id, slices, layout)
