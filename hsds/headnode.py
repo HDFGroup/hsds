@@ -264,10 +264,8 @@ async def register(request):
     else:
         # all nodes allocated, let caller know it's in the reserve pool
         answer["node_number"] = -1
-    if body["node_type"] == "sn":
-        answer["node_count"] = app["target_sn_count"]
-    else:
-        answer["node_count"] = app["target_dn_count"]
+    
+    answer["node_count"] = app["target_dn_count"]
         
     resp = json_response(answer)
     log.response(request, resp=resp)
