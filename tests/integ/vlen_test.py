@@ -73,6 +73,18 @@ class VlenTest(unittest.TestCase):
         for i in range(4):
             self.assertEqual(value[i], data[i])
 
+        # read back a selection
+        params = {"select": "[2:3]"}
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+        self.assertEqual(len(value), 1)
+        self.assertEqual(value[0], data[2])
+
+
     def testPutVLen2DInt(self):
         # Test PUT value for 1d attribute with variable length int types
         print("testPutVLen2DInt", self.base_domain)
@@ -133,6 +145,21 @@ class VlenTest(unittest.TestCase):
         for i in range(nrow):
             for j in range(ncol):
                 self.assertEqual(value[i][j], data[i][j])
+
+
+        # read values from dataset using selection
+        params = {"select": "[0:1,0:2]"}
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+        self.assertEqual(len(value), 1)
+        self.assertEqual(len(value[0]), 2)
+        self.assertEqual(value[0][0], [0])
+        self.assertEqual(value[0][1], [1,2])
+
 
     def testPutVLenString(self):
         # Test PUT value for 1d attribute with variable length string types

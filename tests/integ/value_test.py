@@ -1345,6 +1345,7 @@ class ValueTest(unittest.TestCase):
             for i in range(4):
                 self.assertEqual(row[i], i*j)
 
+
         # read 2x2 block from dataset with step of 2
         params = {"select": "[0:4:2, 0:4:2]"}
         rsp = requests.get(req, params=params, headers=headers)
