@@ -128,7 +128,7 @@ async def get_metadata_obj(app, obj_id):
         log.debug("{} found in meta cache".format(obj_id))
         obj_json = meta_cache[obj_id]
     else:   
-        # TBD: put a flag here that S3 read in progress so that we don'task
+        # TBD: put a flag here that S3 read in progress so that we don't
         # double transfer the same object
         s3_key = getS3Key(obj_id)
         log.debug("getS3JSONObj({})".format(s3_key))
@@ -430,5 +430,3 @@ async def s3sync(app):
         except Exception as e:
             # catch all exception to keep the loop going
             log.error(f"Got Exception: {e}")
-    
-     
