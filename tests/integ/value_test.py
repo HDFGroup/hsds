@@ -833,7 +833,7 @@ class ValueTest(unittest.TestCase):
         helper.validateId(root_uuid)
         
         fields = ({'name': 'temp', 'type': 'H5T_STD_I32LE'}, 
-                    {'name': 'pressure', 'type': 'H5T_IEEE_F32LE'}) 
+                    {'name': 'pressure', 'type': 'H5T_IEEE_F16LE'}) 
         datatype = {'class': 'H5T_COMPOUND', 'fields': fields }
         
         #
@@ -1503,4 +1503,3 @@ if __name__ == '__main__':
     #setup test files
     
     unittest.main()
-    

@@ -38,6 +38,12 @@ class Hdf5dtypeTest(unittest.TestCase):
         self.assertTrue("base" in type_json)
         self.assertEqual(type_json["base"], "H5T_IEEE_F64LE")
 
+        type_json = hdf5dtype.getBaseTypeJson("H5T_IEEE_F16LE")
+        self.assertTrue("class" in type_json)
+        self.assertEqual(type_json["class"], "H5T_FLOAT")
+        self.assertTrue("base" in type_json)
+        self.assertEqual(type_json["base"], "H5T_IEEE_F16LE")
+
         type_json = hdf5dtype.getBaseTypeJson("H5T_STD_I32LE")
         self.assertTrue("class" in type_json)
         self.assertEqual(type_json["class"], "H5T_INTEGER")
@@ -70,6 +76,15 @@ class Hdf5dtypeTest(unittest.TestCase):
         typeItem = hdf5dtype.getTypeResponse(typeItem) # non-verbose format
         self.assertEqual(typeItem['class'], 'H5T_FLOAT')
         self.assertEqual(typeItem['base'], 'H5T_IEEE_F64LE')
+
+    def testBaseFloat16TypeItem(self):
+        dt = np.dtype('<f2')
+        typeItem = hdf5dtype.getTypeItem(dt)
+        self.assertEqual(typeItem['class'], 'H5T_FLOAT')
+        self.assertEqual(typeItem['base'], 'H5T_IEEE_F16LE')
+        typeItem = hdf5dtype.getTypeResponse(typeItem) # non-verbose format
+        self.assertEqual(typeItem['class'], 'H5T_FLOAT')
+        self.assertEqual(typeItem['base'], 'H5T_IEEE_F16LE')
 
     def testBaseStringTypeItem(self):
         dt = np.dtype('S3')

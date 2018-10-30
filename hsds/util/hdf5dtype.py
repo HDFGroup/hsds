@@ -241,6 +241,7 @@ def getTypeItem(dt, metadata=None):
         'uint64':  'H5T_STD_U64'
     }
     predefined_float_types = {
+        'float16': 'H5T_IEEE_F16',
         'float32': 'H5T_IEEE_F32',
         'float64': 'H5T_IEEE_F64'
     }
@@ -528,6 +529,7 @@ def getNumpyTypename(hdf5TypeName, typeClass=None):
           'H5T_STD_U64': 'u8'
     }
     predefined_float_types = {
+          'H5T_IEEE_F16': 'f2',
           'H5T_IEEE_F32': 'f4',
           'H5T_IEEE_F64': 'f8'
     }
@@ -773,6 +775,7 @@ def getBaseTypeJson(type_name):
           'H5T_STD_U64'
     ) 
     predefined_float_types = (
+          'H5T_IEEE_F16',
           'H5T_IEEE_F32',
           'H5T_IEEE_F64'
     )
@@ -792,9 +795,3 @@ def getBaseTypeJson(type_name):
     else:
         raise TypeError("Invalid type name")
     return type_json
-
-
-
-
-
-

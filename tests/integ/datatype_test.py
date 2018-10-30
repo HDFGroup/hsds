@@ -125,7 +125,8 @@ class DatatypeTest(unittest.TestCase):
                       'H5T_STD_I16LE',  'H5T_STD_U16LE',    
                       'H5T_STD_I32LE',  'H5T_STD_U32LE',   
                       'H5T_STD_I64LE',  'H5T_STD_U64LE',  
-                      'H5T_IEEE_F32LE', 'H5T_IEEE_F64LE' )
+                      'H5T_IEEE_F32LE', 'H5T_IEEE_F64LE',
+                      'H5T_IEEE_F16LE' )
                      
         for datatype in datatypes:  
             data = {'type': datatype}
@@ -349,4 +350,3 @@ if __name__ == '__main__':
     #setup test files
     
     unittest.main()
-    
