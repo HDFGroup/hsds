@@ -214,7 +214,7 @@ async def about(request):
 
 async def info(request):
     """HTTP Method to retun node state to caller"""
-    log.request(request)
+    log.debug("info request")
     app = request.app
     resp = StreamResponse()
     resp.headers['Content-Type'] = 'application/json'
@@ -335,6 +335,7 @@ def baseInit(loop, node_type):
     counter["PUT"] = 0
     counter["POST"] = 0
     counter["DELETE"] = 0
+    counter["num_tasks"] = 0
     app["req_count"] = counter
     counter = {}
     counter["DEBUG"] = 0
@@ -355,4 +356,3 @@ def baseInit(loop, node_type):
     app.router.add_get('/about', about)
       
     return app
- 

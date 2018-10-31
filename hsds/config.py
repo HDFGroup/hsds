@@ -47,6 +47,7 @@ cfg = {
     'min_chunk_size': '1m',  # 1 MB
     'max_chunk_size': '4m',  # 4 MB
     'max_request_size': '100m',  # 100 MB
+    'max_task_count': 100,  # maximum number of concurrent tasks before server will return 503 error
     'metadata_mem_cache_size': '128m',
     'chunk_mem_cache_size': '128m',  # 128 MB
     'timeout': 30,  # http timeout - 30 sec
@@ -88,6 +89,3 @@ def get(x):
         else: # u == 'g'
             retval = n * 1024*1024*1024
     return retval
-
-  
-  

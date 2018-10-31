@@ -40,10 +40,7 @@ async def PUT_Chunk(request):
     log.request(request)
     app = request.app 
     params = request.rel_url.query
-
-    task_count = len(asyncio.Task.all_tasks())
-    log.debug("Task count: {}".format(task_count))
-     
+  
     chunk_id = request.match_info.get('id')
     if not chunk_id:
         msg = "Missing chunk id"
@@ -604,9 +601,3 @@ async def DELETE_Chunk(request):
     resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
- 
- 
-
-
-
-

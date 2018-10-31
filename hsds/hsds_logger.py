@@ -12,7 +12,9 @@
 #
 # Simple looger for hsds
 #
+import asyncio
 import config
+from aiohttp.web_exceptions import HTTPServiceUnavailable
 from util.domainUtil import getDomainFromRequest
 app = None # global app handle
 
@@ -60,6 +62,12 @@ def request(req):
 		counter = app["req_count"]
 		if req.method in ("GET", "POST", "PUT", "DELETE"):
 			counter[req.method] += 1
+		num_tasks = len(asyncio.Task.all_tasks())
+		counter["num_tasks"] = num_tasks
+		max_task_count = config.get("max_task_count")
+		if app["node_type"] == "sn" and max_task_count and num_tasks > max_task_count:
+			print(f"WARN: more than {max_task_count} tasks, returning 503")
+			raise HTTPServiceUnavailable()
 
  
 def response(req, resp=None, code=None, message=None):
@@ -78,4 +86,3 @@ def response(req, resp=None, code=None, message=None):
 	log_level = config.get("log_level")
 	if log_level in ("DEBUG", "INFO") or (log_level == "WARN" and level != "INFO") or (log_level == "ERROR" and level == "ERROR"):
 		print("{} RSP> <{}> ({}): {}".format(level, code, message, req.path))
-
