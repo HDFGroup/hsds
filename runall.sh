@@ -23,7 +23,7 @@ fi
 
 [ -z ${DB_HOST_DIR} ] && echo "Need to set DB_HOST_DIR" && exit 1
 
-if [ ${AWS_S3_GATEWAY} == "http://minio:9000" ] || [ -z $AWS_IAM_ROLE ] ; then
+if [ -z $AWS_IAM_ROLE ] ; then
   # if not using s3 or S3 without EC2 IAM roles, need to define AWS access keys
   [ -z ${AWS_ACCESS_KEY_ID} ] && echo "Need to set AWS_ACCESS_KEY_ID" && exit 1
   [ -z ${AWS_SECRET_ACCESS_KEY} ] && echo "Need to set AWS_SECRET_ACCESS_KEY" && exit 1
@@ -43,23 +43,11 @@ echo "SYS_BUCKET_NAME:" $SYS_BUCKET_NAME
 echo "CORES:" $CORES
 echo "HSDS_ENDPOINT:" $HSDS_ENDPOINT
 echo "PUBLIC_DNS:" $PUBLIC_DNS
-
-if [ ${AWS_S3_GATEWAY} == "http://minio:9000" ] ; then
-   echo "docker-compose.local"
-   docker-compose -f docker-compose.local.yml up -d --scale sn=${CORES} --scale dn=${CORES}
-elif [[ ${HSDS_ENDPOINT} == "https"* ]] ; then
+ 
+if [[ ${HSDS_ENDPOINT} == "https"* ]] ; then
    echo "docker-compose.secure"
    docker-compose -f docker-compose.secure.yml up -d --scale sn=${CORES} --scale dn=${CORES}
 else
    echo "docker-compose"
    docker-compose up -d --scale sn=${CORES} --scale dn=${CORES}
 fi
-
-
-   
- 
-
-
- 
-
- 

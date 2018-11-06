@@ -288,7 +288,12 @@ async def PUT_Objects(request):
             # get the dset row for this chunk
             dsetid = getDatasetId(objid)
             log.debug("dsetid for chunk: {}".format(dsetid))
-            dset_row = getRow(conn, dsetid, rootid=rootid)
+            try:
+                dset_row = getRow(conn, dsetid, rootid=rootid)
+            except ValueError as ve:
+                # TBD - logic looks broken here... how to get the root id
+                log.warn(f"no rootid for chunk: {objid}")
+                continue
             log.debug("for {} got dset_row: {}".format(dsetid, dset_row))
             allocated_size_delta = objSize
             if not dset_row:
