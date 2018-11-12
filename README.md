@@ -1,8 +1,6 @@
 HSDS (Highly Scalable Data Service) - REST-based service for HDF5 data using object storage
 ===========================================================================================
 
-*NOTICE*: The code in this repository is proprietary to The HDF Group. The code is confidential
-and cannot be shared with anyone without The HDF Group’s prior written permission
 
 Introduction
 ------------
@@ -41,6 +39,8 @@ different operations using Python.
 The related project: https://github.com/HDFGroup/h5pyd provides a (mostly) h5py-compatible 
 interface to the server for Python clients.
 
+For C/C++ clients, the HDF REST VOL is a HDF5 library plugin that enables the HDF5 API to read and write data 
+using HSDS.  See: https://bitbucket.hdfgroup.org/users/jhenderson/repos/rest-vol/browse. 
 
 Uninstalling
 ------------
@@ -52,7 +52,7 @@ source files, Docker images, and S3 bucket (or minio directory).
 Reporting bugs (and general feedback)
 -------------------------------------
 
-Create new issues at http://github.com/HDFGroup/h5serv/issues for any problems you find. 
+Create new issues at http://github.com/HDFGroup/hsds/issues for any problems you find. 
 
 For general questions/feedback, please use the list (hdf-forum@lists.hdfgroup.org).
 
@@ -60,3 +60,16 @@ License
 -------
 
 This code is covered under an APACHE 2.0 license.  See LICENSE in this directory.
+
+AWS Marketplace
+---------------
+
+The HDF Group provides an AWS Marketplace product, HDF Kita, that provides simple installation of HSDS
+and related resources resources.  HDF Kita offers these features:
+
+* Stores usernames and passwords in a secure DynamoDB Table
+* Creates a AWS CloudWatch dashboard for service monitoring
+* Aggregates container logs to AWS CloudWatch
+* Includes Support by The HDF Group
+
+HDF Kita for AWS Marketplace can be found here: https://aws.amazon.com/marketplace/pp/B07K2MWS1G. 
