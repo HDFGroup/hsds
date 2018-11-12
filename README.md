@@ -79,7 +79,7 @@ Sign up for Kita Lab here: https://www.hdfgroup.org/hdfkitalab/.
 AWS Marketplace
 ---------------
 
-The HDF Group provides an AWS Marketplace product, HDF Kita, that provides simple installation of HSDS
+The HDF Group provides an AWS Marketplace product, Kita&trade; Server, which provides simple installation of HSDS
 and related resources resources.  HDF Kita offers these features:
 
 * Stores usernames and passwords in a secure DynamoDB Table
@@ -87,4 +87,4 @@ and related resources resources.  HDF Kita offers these features:
 * Aggregates container logs to AWS CloudWatch
 * Includes Support by The HDF Group
 
-HDF Kita for AWS Marketplace can be found here: https://aws.amazon.com/marketplace/pp/B07K2MWS1G. 
+Kita&trade; Server for AWS Marketplace can be found here: https://aws.amazon.com/marketplace/pp/B07K2MWS1G. 
