@@ -80,7 +80,7 @@ AWS Marketplace
 ---------------
 
 The HDF Group provides an AWS Marketplace product, Kita&trade; Server, which provides simple installation of HSDS
-and related resources resources.  HDF Kita offers these features:
+and related AWS resources.  HDF Kita offers these features:
 
 * Stores usernames and passwords in a secure DynamoDB Table
 * Creates a AWS CloudWatch dashboard for service monitoring
