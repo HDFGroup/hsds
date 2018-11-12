@@ -22,6 +22,7 @@ Other useful resources
 * SciPy17 Presentation: http://s3.amazonaws.com/hdfgroup/docs/hdf_data_services_scipy2017.pdf 
 * HDF5 For the Web: https://hdfgroup.org/wp/2015/04/hdf5-for-the-web-hdf-server
 * HSDS Security: https://hdfgroup.org/wp/2015/12/serve-protect-web-security-hdf5 
+* HSDS with Jupyter: https://www.slideshare.net/HDFEOS/hdf-kita-lab-jupyterlab-hdf-service 
 
 
 Quick Install
@@ -54,12 +55,25 @@ Reporting bugs (and general feedback)
 
 Create new issues at http://github.com/HDFGroup/hsds/issues for any problems you find. 
 
-For general questions/feedback, please use the list (hdf-forum@lists.hdfgroup.org).
+For general questions/feedback, please use the Kita forum: https://forum.hdfgroup.org/c/kita.
 
 License
 -------
 
 This code is covered under an APACHE 2.0 license.  See LICENSE in this directory.
+
+Integration with JupyterHub
+---------------------------
+
+The HDF Group provides access to an HSDS instance that is integrated with JupyterLab: Kita Lab.  Kita Lab is a hosted Jupyter environment with these features:
+
+* Connection to a 16-node HSDS instance
+* Dedicated Xeon core per user
+* 10 GB Posix Disk
+* 100 GB S3 storage for HDF data
+* Sample programs and data files
+
+Sign up for Kita Lab here: https://www.hdfgroup.org/hdfkitalab/. 
 
 AWS Marketplace
 ---------------
