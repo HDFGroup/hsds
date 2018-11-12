@@ -66,7 +66,7 @@ This code is covered under an APACHE 2.0 license.  See LICENSE in this directory
 Integration with JupyterHub
 ---------------------------
 
-The HDF Group provides access to an HSDS instance that is integrated with JupyterLab: Kita Lab.  Kita Lab is a hosted Jupyter environment with these features:
+The HDF Group provides access to an HSDS instance that is integrated with JupyterLab: Kita&trade; Lab.  Kita&trade; Lab is a hosted Jupyter environment with these features:
 
 * Connection to a 16-node HSDS instance
 * Dedicated Xeon core per user
@@ -74,7 +74,7 @@ The HDF Group provides access to an HSDS instance that is integrated with Jupyte
 * 100 GB S3 storage for HDF data
 * Sample programs and data files
 
-Sign up for Kita Lab here: https://www.hdfgroup.org/hdfkitalab/. 
+Sign up for Kita&trade; Lab here: https://www.hdfgroup.org/hdfkitalab/. 
 
 AWS Marketplace
 ---------------
