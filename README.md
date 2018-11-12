@@ -4,8 +4,8 @@ HSDS (Highly Scalable Data Service) - REST-based service for HDF5 data using obj
 
 Introduction
 ------------
-HSDS is a web service that implements a REST-based web service for HDF5 data stores
-as described in the paper: http://hdfgroup.org/pubs/papers/RESTful_HDF5.pdf. 
+HSDS is a web service that implements a REST-based web service for HDF5 data stores.
+More info at: https://www.hdfgroup.org/solutions/hdf-kita/. 
 
 Websites
 --------
