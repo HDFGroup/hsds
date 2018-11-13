@@ -29,7 +29,7 @@ Other useful resources
 Quick Install
 -------------
 
-See: :doc:`docs/docker_install.rst`
+See: [docs/docker_install.rst](docs/docker_install.rst)
  
  
 Writing Client Applications
