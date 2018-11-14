@@ -115,7 +115,7 @@ async def POST_Dataset(request):
     if layout is not None:
         dset_json["layout"] = layout
 
-    await save_metadata_obj(app, dset_id, dset_json, notify=True)
+    await save_metadata_obj(app, dset_id, dset_json, notify=True, flush=True)
      
     resp_json = {} 
     resp_json["id"] = dset_id 
@@ -208,4 +208,3 @@ async def PUT_DatasetShape(request):
     resp = json_response(resp_json, status=201)
     log.response(request, resp=resp)
     return resp
-   

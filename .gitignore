@@ -3,4 +3,5 @@
 *.pdf
 *.DS_STORE
 *.log
+*.vscode
 passwd.txt

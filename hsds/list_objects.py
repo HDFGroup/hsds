@@ -38,6 +38,7 @@ def getS3KeysCallback(app, s3keys):
             obj_size = None
             lastModified = None
             item = s3keys[s3key]
+            print("item:", item)
             if "ETag" in item:
                 etag = item["ETag"]
             if "Size" in item:
@@ -47,8 +48,9 @@ def getS3KeysCallback(app, s3keys):
             print("{}: {} {} {}".format(s3key, etag, obj_size, lastModified))
 
 
-async def listObjects(app, prefix='', deliminator='', showstats=False):
-    await getS3Keys(app, prefix=prefix, deliminator=deliminator, include_stats=showstats, callback=getS3KeysCallback)
+async def listObjects(app, prefix='', deliminator='', suffix='', showstats=False):
+    await getS3Keys(app, prefix=prefix, deliminator=deliminator, suffix=suffix, include_stats=showstats, callback=getS3KeysCallback)
+    await releaseClient(app)
     
                
 def main():
@@ -59,6 +61,7 @@ def main():
 
     prefix = ''
     deliminator = '' 
+    suffix = ''
     showstats = False
 
     argn = 1
@@ -73,6 +76,9 @@ def main():
         elif arg == "--deliminator":
             deliminator = val
             argn += 2
+        elif arg == "--suffix":
+            suffix = val
+            argn +=2
         elif arg == "--showstats":
             showstats = True
             argn +=1
@@ -81,6 +87,7 @@ def main():
 
     print("prefix:", prefix)
     print("deliminator:", deliminator)
+    print("suffix:", suffix)
     print("showstats:", showstats)
     
     # we need to setup a asyncio loop to query s3
@@ -91,13 +98,10 @@ def main():
     app["loop"] = loop
     session = get_session(loop=loop)
     app["session"] = session
-    loop.run_until_complete(listObjects(app, prefix=prefix, deliminator=deliminator, showstats=showstats))
-    releaseClient(app)
+    loop.run_until_complete(listObjects(app, prefix=prefix, deliminator=deliminator, suffix=suffix, showstats=showstats))
+  
     loop.close()
 
     print("done!")
 
 main()
-
-    
-	

@@ -91,7 +91,7 @@ async def POST_Group(request):
     group_json = {"id": group_id, "root": root_id, "created": now, "lastModified": now,  
         "links": {}, "attributes": {} }
 
-    await save_metadata_obj(app, group_id, group_json, notify=True)
+    await save_metadata_obj(app, group_id, group_json, notify=True, flush=True)
      
     # formulate response 
     resp_json = {} 
@@ -138,4 +138,3 @@ async def DELETE_Group(request):
     resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
-   

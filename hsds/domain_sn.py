@@ -20,7 +20,7 @@ from aiohttp.web import json_response
 
 
 from util.httpUtil import  http_post, http_put, http_get, http_delete, getHref
-from util.idUtil import  getDataNodeUrl, createObjId
+from util.idUtil import  getDataNodeUrl, createObjId, getCollectionForId
 from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
 from util.domainUtil import getParentDomain, getDomainFromRequest
@@ -33,25 +33,20 @@ import config
 async def getRootInfo(app, root_id, verbose=False):
     """ Get extra information about the given domain """
     # Gather additional info on the domain
-    an_url = getAsyncNodeUrl(app)
-    req = an_url + "/root/" + root_id
-    log.info("ASync GET: {}".format(root_id))
+    req = getDataNodeUrl(app, root_id)
+    req += '/groups/' + root_id
+    log.info("GetRootInfo GET: {}".format(root_id))
     params = {}
     if verbose:
         params["verbose"] = 1
+    params["group_collection"] = 1
+    params["dataset_collection"] = 1
+    params["datathype_collection"] = 1
     try:
         root_info = await http_get(app, req, params=params)
     except ClientResponseError as ce:
-        if ce.code == 501:
-            log.warn("sqlite db not available")
-            return None
-        if ce.code == 404:
-            # sqlite db not sync'd?
-            log.warn("root id: {} not found in db".format(root_id))
-            return None
-        else:
-            log.error("Async error: {}".format(ce))
-            raise HTTPInternalServerError()
+        log.error("getRootInfo error: {}".format(ce))
+        raise HTTPInternalServerError()
     return root_info
 
 async def get_toplevel_domains(app):
@@ -81,58 +76,80 @@ async def get_toplevel_domains(app):
 
 
 
-async def get_collection(app, root_id, collection, marker=None, limit=None):
-    """ Return the object ids for given collection.
+async def get_collections(app, root_id):
+    """ Return the object ids for given root.
     """   
-    root_info = await getRootInfo(app, root_id, verbose=True)
-    if root_info is None:
-        return None
-    log.info("got root_info: {}".format(root_info))
-     
-    obj_map = root_info["objects"] 
-    if root_id not in obj_map:
-        msg = "Expected to get root_id: {} in collection map".formt(root_id)
-        log.error(msg)
-        raise HTTPInternalServerError()
 
-    root = obj_map[root_id]
-    if collection not in root:
-        msg = "Expected to find key: {} in obj_map".format(collection)
-        log.error(msg)
-        raise HTTPInternalServerError()
+    groups = {}
+    datasets = {}
+    datatypes = {}
+    lookup_ids = set()
+    lookup_ids.add(root_id)
+
+    while lookup_ids:
+        grp_id = lookup_ids.pop()
+        req = getDataNodeUrl(app, grp_id)
+        req += '/groups/' + grp_id + "/links"
+        log.debug("collection get LINKS: " + req)
+        try:
+            links_json = await http_get(app, req)  # throws 404 if doesn't exist
+        except HTTPNotFound:
+            log.warn(f"get_collection, group {grp_id} not found")
+            continue
+        
+        log.debug(f"got links json from dn for group_id: {grp_id}") 
+        links = links_json["links"]
+        log.debug(f"get_collection: got links: {links}")
+        for link in links:
+            if link["class"] != 'H5L_TYPE_HARD':
+                continue
+            link_id = link["id"]
+            obj_type = getCollectionForId(link_id)
+            if obj_type == "groups":
+                if link_id in groups:
+                    continue  # been here before
+                groups[link_id] = {}
+                lookup_ids.add(link_id)
+            elif obj_type == "datasets":
+                if link_id in datasets:
+                    continue
+                datasets[link_id] = {}
+            elif obj_type == "datatypes":
+                if link_id in datatypes:
+                    continue
+                datatypes[link_id] = {}
+            else:
+                log.error(f"get_collection: unexpected link object type: {obj_type}")
+                HTTPInternalServerError()
+
+    result = {}
+    result["groups"] = groups
+    result["datasets"] = datasets
+    result["datatypes"] = datatypes
+    return result
     
-    obj_col = root[collection]
+def getIdList(objs, marker=None, limit=None):
+    """ takes a map of ids to objs and returns ordered list
+        of ids, optionally reduced by marker and limit """
 
-    obj_ids = []
-    for obj_id in obj_col:
-        obj_ids.append(obj_id)
-    obj_ids.sort()  # sort keys 
-
-    rows = []
-    for obj_id in obj_ids:
-        object = obj_col[obj_id]
-        object["id"] = obj_id
-        # expected keys:
-        #   id - objectid
-        #   etag
-        #   size
-        #   lastModified
-           
+    ids = []
+    for k in objs:
+        ids.append(k)
+    ids.sort()
+    if not marker and not limit:
+        return ids  # just return ids
+    ret_ids = []
+    for id in ids:
         if marker:
-            if marker == obj_id:
-                # got to the marker, clear it so we will start 
-                # return ids on the next iteration
-                marker = None
-        else:
-            # return id, etag, lastModified, and size
-            if obj_id == root_id:
-                continue  # don't include root obj
-            rows.append(object)
-            if limit is not None and len(rows) == limit:
-                log.info("got to limit of: {}, breaking".format(limit))
-                break
-    log.debug("get_collection returning: {}".format(rows))
-    return rows
+            if id == marker:
+                marker = None  # clear so we will start adding items
+            continue
+        ret_ids.append(id)
+        if limit and len(ret_ids) == limit:
+            break
+    return ret_ids
+
+
  
         
 async def get_domains(request):
@@ -169,7 +186,6 @@ async def get_domains(request):
     if "Marker" in request.rel_url.query:
         params["Marker"] = request.rel_url.query["Marker"]
         log.debug("got Marker request param: {}".format(params["Marker"]))
-
 
     an_url = getAsyncNodeUrl(app)
     req = an_url + "/domains"
@@ -291,30 +307,15 @@ async def GET_Domain(request):
         rsp_json["lastModified"] = domain_json["lastModified"]
 
     if "verbose" in params and params["verbose"] and "root" in domain_json:
-        results = await getRootInfo(app, domain_json["root"])
-        if results:
-            obj_count = 0
-            if "lastModified" in results:
-                rsp_json["lastModified"] = results["lastModified"]
-            if "totalSize" in results:
-                rsp_json["allocated_bytes"] = results["totalSize"]
-            if "groupCount" in results:
-                # don't count the root group
-                if results["groupCount"] < 1:
-                    log.error("Should see at least one group for root: {}".format(domain_json["root"]))
-                    rsp_json["num_groups"] = 0
-                else:
-                    rsp_json["num_groups"] = results["groupCount"] - 1
-                obj_count += results["groupCount"]
-            if "typeCount" in results:
-                rsp_json["num_datatypes"] = results["typeCount"]
-                obj_count += results["typeCount"]
-            if "datasetCount" in results:
-                rsp_json["num_datasets"] = results["datasetCount"]
-                obj_count += results["datasetCount"]
-            if "chunkCount" in results:
-                obj_count += results["chunkCount"]
-            rsp_json["num_objects"] = obj_count   
+        collections = await get_collections(app, domain_json["root"])
+        rsp_json["num_groups"] = len(collections["groups"])
+        rsp_json["num_datasets"] = len(collections["datasets"])
+        rsp_json["num_datatypes"] = len(collections["datatypes"])
+        rsp_json["num_objects"] = 0 # TBD
+        rsp_json["totalSize"] = 0   # TBD
+        rsp_json["allocated_bytes"] = 0 # TBD
+        # TBD: add chjunk count to num_objects total
+        rsp_json["num_objects"] = len(collections["groups"]) + len(collections["datasets"]) + len(collections["datatypes"])
     
      
     hrefs = []
@@ -835,9 +836,10 @@ async def GET_Datasets(request):
     obj_ids = []
     if "root" in domain_json or domain_json["root"]:
         # get the dataset collection list
-        objects = await get_collection(app, domain_json["root"], "datasets", marker=marker, limit=limit)
-        for object in objects:
-            obj_ids.append(object["id"])
+        collections = await get_collections(app, domain_json["root"])  
+        objs = collections["datasets"]
+        obj_ids = getIdList(objs, marker=marker, limit=limit)
+        
     log.debug("returning obj_ids: {}".format(obj_ids))
      
     # create hrefs 
@@ -915,10 +917,10 @@ async def GET_Groups(request):
 
     obj_ids = []
     if "root" in domain_json or domain_json["root"]:
-        # get the dataset collection list
-        objects = await get_collection(app, domain_json["root"], "groups", marker=marker, limit=limit)
-        for object in objects:
-            obj_ids.append(object["id"])
+        # get the groups collection list
+        collections = await get_collections(app, domain_json["root"])  
+        objs = collections["groups"]
+        obj_ids = getIdList(objs, marker=marker, limit=limit)
  
     # create hrefs 
     hrefs = []
@@ -995,10 +997,10 @@ async def GET_Datatypes(request):
     # get the datatype collection list
     obj_ids = []
     if "root" in domain_json or domain_json["root"]:
-        # get the dataset collection list
-        objects = await get_collection(app, domain_json["root"], "datatypes", marker=marker, limit=limit)
-        for object in objects:
-            obj_ids.append(object["id"])
+        # get the groups collection list
+        collections = await get_collections(app, domain_json["root"])  
+        objs = collections["datatypes"]
+        obj_ids = getIdList(objs, marker=marker, limit=limit)
  
     # create hrefs 
     hrefs = []
@@ -1016,7 +1018,3 @@ async def GET_Datatypes(request):
     resp = json_response(rsp_json)
     log.response(request, resp=resp)
     return resp
-    
-
-
- 

@@ -26,10 +26,110 @@ def getIdHash(id):
     hexdigest = m.hexdigest()
     return hexdigest[:5]
 
+def isSchema2Id(id):
+    """ return true if this is a v2 id """
+    # v1 ids are in the standard UUID format: 8-4-4-4-12
+    # v2 ids are in the non-standard: 8-8-4-6-6
+    parts = id.split('-')
+    if len(parts) != 6:
+        raise ValueError(f"Unexpected id formation for uuid: {id}")
+    if len(parts[2]) == 8:
+        return True
+    else:
+        return False
+
+def getIdHexChars(id):
+    """ get the hex chars of the given id """
+    if id[0] == 'c':
+        # don't include chunk index
+        index = id.index('_')
+        parts = id[0:index].split('-')
+    else:
+        parts = id.split('-')
+    if len(parts) != 6:
+        raise ValueError(f"Unexpected id format for uuid: {id}")
+    return "".join(parts[1:]) 
+
+def hexRot(ch):
+    """ rotate hex character by 8 """
+    return format((int(ch, base=16) + 8) % 16, 'x')
+
+def isRootObjId(id):
+    """ returns true if this is a root id (only for v2 schema) """
+    if not isSchema2Id(id):
+        raise ValueError("isRootObjId can only be used with v2 ids")
+    validateUuid(id) # will throw ValueError exception if not a objid
+    if id[0] != 'g':
+        return False  # not a group
+    token = getIdHexChars(id)
+    # root ids will have last 16 chars rotated version of the first 16
+    is_root = True
+    for i in range(16):
+        if token[i] != hexRot(token[i+16]):
+            is_root = False
+            break
+    return is_root
+
+def getRootObjId(id):
+    """ returns root id for this objid if this is a root id (only for v2 schema) """
+    if isRootObjId(id):
+        return id  # this is the root id
+    token = list(getIdHexChars(id))
+    # root ids will have last 16 chars rotated version of the first 16
+    for i in range(16):
+        token[i+16] = hexRot(token[i])
+    token = "".join(token)
+    root_id = 'g-' + token[0:8] + '-' + token[8:16] + '-' + token[16:20] + '-' + token[20:26] + '-' + token[26:32]
+
+    return root_id
+
+def createObjId(obj_type, rootid=None):
+    if obj_type not in ('groups', 'datasets', 'datatypes', 'chunks', "roots"):
+        raise ValueError("unexpected obj_type")
+    
+    prefix = None
+    if obj_type == 'datatypes':
+        prefix = 't'  # don't collide with datasets
+    elif obj_type == "roots":
+        prefix = 'g'  # root obj is a group
+    else:
+        prefix = obj_type[0]
+    if not rootid and obj_type != "roots":
+        # v1 schema
+        objid = prefix + '-' + str(uuid.uuid1())
+    else:
+        # schema v2
+        salt = uuid.uuid4().hex
+        # take a hash to randomize the uuid
+        token = list(hashlib.sha256(salt.encode()).hexdigest())
+        
+        if rootid:
+            # replace first 16 chars of token with first 16 chars of rootid
+            root_hex = getIdHexChars(rootid)
+            token[0:16] = root_hex[0:16]
+        else:
+            # obj_type == "roots"
+            # use only 16 chars, but make it look a 32 char id
+            for i in range(16):
+                token[16+i] = hexRot(token[i])
+        # format as a string
+        token = "".join(token)        
+        objid = prefix + '-' + token[0:8] + '-' + token[8:16] + '-' + token[16:20] + '-' + token[20:26] + '-' + token[26:32]
+
+    return objid
+
+
 def getS3Key(id):
     """ Return s3 key for given id. 
-    For uuid id's, add a md5 prefix in front of the returned key to better 
-    distribute S3 objects.
+
+    For schema v1:
+        A md5 prefix is added to the front of the returned key to better 
+        distribute S3 objects.
+    For schema v2:
+        The id is converted to the pattern: "db/{rootid[0:16]}" for rootids and
+        "db/id[0:16]/{prefix}/id[16-32]" for other ids
+        Chunk ids have the chunk index added after the slash: "db/id[0:16]/d/id[16:32]/x_y_z
+        
     For domain id's return a key with the .domain suffix and no preceeding slash
     """
     if id[0] == '/':
@@ -41,18 +141,72 @@ def getS3Key(id):
                 key += '/'
             key += domain_suffix
     else:
-        idhash = getIdHash(id)
-        key = "{}-{}".format(idhash, id)
+        if isSchema2Id(id):
+            # schema v2 id
+            hexid = getIdHexChars(id)
+            prefix = id[0]  # one of g, d, t, c
+
+            if isRootObjId(id):
+                key = f"db/{hexid[0:8]}-{hexid[8:16]}"
+            else:
+                if prefix == 'c':
+                    s3col = 'd'  # so that chunks will show up under their dataset
+                else:
+                    s3col = prefix
+                key = f"db/{hexid[0:8]}-{hexid[8:16]}/{s3col}/{hexid[16:20]}-{hexid[20:26]}-{hexid[26:32]}"
+            if prefix == 'c':
+                # add the chunk coordinate
+                index = id.index('_')  # will raise ValueError if not found
+                coord = id[index+1:]
+                key += '/'
+                key += coord  
+        else:
+            # v1 id
+            # schema v1 id
+            idhash = getIdHash(id)
+            key = f"{idhash}-{id}"
+
     return key
 
 def getObjId(s3key):
     """ Return object id given valid s3key """
     if len(s3key) >= 44 and s3key[0:5].isalnum() and s3key[5] == '-' and s3key[6] in ('g', 'd', 'c', 't'):
+        # v1 obj keys
         objid = s3key[6:]
     elif s3key.endswith("/.domain.json"):
         objid = '/' + s3key[:-(len("/.domain.json"))]
+    elif s3key.startswith("db/"):
+        # schema v2 object key
+        parts = s3key.split('/')
+        chunk_coord = ""  # used only for chunk ids
+        token = []
+        for ch in parts[1]:
+            if ch != '-':
+                token.append(ch)
+        if len(parts) == 2:
+            # root id
+            # add 16 more chars using rotated version of first 16
+            for i in range(16):
+                token.append(hexRot(token[i]))
+            prefix = 'g'
+        else:  
+            # group, dataset, or datatype if len(parts) == 4
+            # chunk if len(parts) == 5
+            for ch in parts[3]:
+                if ch != '-':
+                    token.append(ch)
+            prefix = parts[2]
+            
+        if len(parts) == 5:
+            # chunk id
+            prefix = 'c'
+            chunk_coord = "_" + parts[4]
+        
+        token = "".join(token)
+        objid = prefix + '-' + token[0:8] + '-' + token[8:16] + '-' + token[16:20] + '-' + token[20:26] + '-' + token[26:32] + chunk_coord
     else:
-        raise KeyError("Unexpected s3key: {}".format(s3key))
+        raise ValueError(f"unexpected S3Key: {s3key}")
+
     return objid
 
 
@@ -64,6 +218,8 @@ def isS3ObjKey(s3key):
             valid = True
     except KeyError:
         pass # ignore
+    except ValueError:
+        pass # ignore
     return valid
 
 def createNodeId(prefix):
@@ -73,16 +229,7 @@ def createNodeId(prefix):
     key = prefix + "-" + idhash
     return key
 
-def createObjId(obj_type):
-    if obj_type not in ('groups', 'datasets', 'datatypes', 'chunks'):
-        raise ValueError("unexpected obj_type")
-    prefix = None
-    if obj_type == 'datatypes':
-        prefix = 't'
-    else:
-        prefix = obj_type[0]
-    id = prefix + '-' + str(uuid.uuid1())
-    return id
+
 
 def getCollectionForId(obj_id):
     """ return groups/datasets/datatypes based on id """
@@ -135,7 +282,7 @@ def validateUuid(id, obj_class=None):
             continue
         if ch == '-':
             continue
-        raise ValueError("Unexpected character in uuid: " + ch)
+        raise ValueError(f"Unexpected character in uuid: {ch}")
 
 def isValidUuid(id, obj_class=None):
     try:
@@ -150,6 +297,8 @@ def isValidChunkId(id):
     if id[0] != 'c':
         return False
     return True
+
+
 
 def getClassForObjId(id):
     """ return domains/chunks/groups/datasets/datatypes based on id """
@@ -184,7 +333,6 @@ def getObjPartition(id, count):
     hash_code = getIdHash(id)
     hash_value = int(hash_code, 16)
     number = hash_value % count
-    log.debug("getObjPartition for key: {} got: {}".format(id, number))
     return number
 
 def validateInPartition(app, obj_id):
@@ -209,14 +357,4 @@ def getDataNodeUrl(app, obj_id):
     dn_number = getObjPartition(obj_id, app['node_count'])
       
     url = dn_urls[dn_number]
-    log.debug("got dn url: {}".format(url))
     return url
-
-
-
-
-  
-
-
-
- 

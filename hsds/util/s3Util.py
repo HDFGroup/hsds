@@ -28,6 +28,7 @@ import config
 def getS3Client(app):
     """ Return s3client handle
     """
+
     if "session" not in app:
         # app startup should have set this
         raise KeyError("Session not initialized")
@@ -53,7 +54,6 @@ def getS3Client(app):
     aws_access_key_id = None 
     aws_session_token = None
     aws_iam_role = config.get("aws_iam_role")
-    log.info("using iam role: {}".format(aws_iam_role))
     aws_secret_access_key = config.get("aws_secret_access_key")
     aws_access_key_id = config.get("aws_access_key_id")
     if not aws_secret_access_key or aws_secret_access_key == 'xxx':
@@ -64,7 +64,8 @@ def getS3Client(app):
         aws_access_key_id = None
   
     if aws_iam_role and not aws_secret_access_key:
-        log.info("getted EC2 IAM role credentials")
+        log.info("using iam role: {}".format(aws_iam_role))
+        log.info("getting EC2 IAM role credentials")
         # Use EC2 IAM role to get credentials
         # See: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html?icmpid=docs_ec2_console
         curl_cmd = ["curl", "http://169.254.169.254/latest/meta-data/iam/security-credentials/{}".format(aws_iam_role)]
@@ -415,7 +416,7 @@ async def _fetch_all(app, pages, key_names, prefix='', deliminator='', suffix=''
                 response = await pages.next_page()
                 break  # success
             except AttributeError as ae:
-                # aiohttp if throwing an attribute error when there  is a problem
+                # aiobotocore if throwing an attribute error when there  is a problem
                 # with the S3 connection
                 # back off and try again
                 if retry_number == retry_limit - 1:
@@ -504,11 +505,13 @@ async def _fetch_all(app, pages, key_names, prefix='', deliminator='', suffix=''
                     key_names.append(key_name)
                     count += 1
         # done with all items in this response
-        if callback is not None and len(key_names) > 0:
-            await callback(app, key_names)
-            # reset key_names
-            log.debug("reset key_names")
-            key_names.clear()
+        if len(key_names) > 0:
+            if callback:
+                callback(app, key_names)
+                
+                # reset key_names
+                log.debug("reset key_names")
+                key_names.clear()
              
              
     # end while True

@@ -100,7 +100,7 @@ async def POST_Datatype(request):
     ctype_json = {"id": ctype_id, "root": root_id, "created": now, 
         "lastModified": now, "type": type_json, "attributes": {} }
      
-    await save_metadata_obj(app, ctype_id, ctype_json, notify=True)
+    await save_metadata_obj(app, ctype_id, ctype_json, notify=True, flush=True)
 
     resp_json = {} 
     resp_json["id"] = ctype_id 
@@ -144,4 +144,3 @@ async def DELETE_Datatype(request):
     resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
-   

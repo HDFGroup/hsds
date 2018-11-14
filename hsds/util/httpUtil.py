@@ -102,7 +102,7 @@ async def http_get(app, url, params=None, format="json"):
                     data = await rsp.read()  # read response as bytes
     except ClientError as ce:
         log.debug(f"ClientError: {ce}")
-        status_code = ce.code
+        status_code = 404
     except CancelledError as cle:
         log.error("CancelledError for http_get({}): {}".format(url, str(cle)))
         raise HTTPInternalServerError()
@@ -317,12 +317,3 @@ def getAcceptType(request):
         else:
             accept_type = "binary"
     return accept_type
-
-    
-     
-
-
-
-
-
- 

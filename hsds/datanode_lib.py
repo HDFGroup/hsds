@@ -14,7 +14,7 @@
 # 
 import asyncio
 import time 
-from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError, HTTPBadRequest
 from aiohttp.client_exceptions import ClientError
 #from aiohttp.web import json_response
 
@@ -138,7 +138,7 @@ async def get_metadata_obj(app, obj_id):
         meta_cache[obj_id] = obj_json  # add to cache
     return obj_json
 
-async def save_metadata_obj(app, obj_id, obj_json, notify=False):
+async def save_metadata_obj(app, obj_id, obj_json, notify=False, flush=False):
     """ Persist the given object """
     log.info("save_metadata_obj {} notify={}".format(obj_id, notify))
     if not obj_id.startswith('/') and not isValidUuid(obj_id):
@@ -171,11 +171,21 @@ async def save_metadata_obj(app, obj_id, obj_json, notify=False):
     log.debug("save: {} to cache".format(obj_id))
     meta_cache[obj_id] = obj_json
     meta_cache.setDirty(obj_id)
-    
-    # flag to write to S3
     now = int(time.time())
-    dirty_ids = app["dirty_ids"]
-    dirty_ids[obj_id] = now
+    
+    if flush:
+        # write to S3 immediately
+        if isValidChunkId(obj_id):
+            log.warn("flush not supported for save_metadata_obj with chunks")
+            raise HTTPBadRequest()
+        # write to S3, will raise HTTPInternalServerError if fails
+        s3_key = getS3Key(obj_id)
+        await putS3JSONObj(app, s3_key, obj_json) 
+                                             
+    else:
+        # flag to write to S3
+        dirty_ids = app["dirty_ids"]
+        dirty_ids[obj_id] = now
 
      
     # message AN immediately if notify flag is set

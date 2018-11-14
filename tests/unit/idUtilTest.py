@@ -15,7 +15,7 @@ import sys
 sys.path.append('../../hsds/util')
 sys.path.append('../../hsds')
 from idUtil import getObjPartition, isValidUuid, validateUuid, createObjId, getCollectionForId
-from idUtil import isObjId, isS3ObjKey, getS3Key, getObjId
+from idUtil import isObjId, isS3ObjKey, getS3Key, getObjId, isSchema2Id, isRootObjId, getRootObjId
  
 class IdUtilTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -52,13 +52,24 @@ class IdUtilTest(unittest.TestCase):
                    "1e76d862-7abe-11e6-8852-3c15c2da029e-g")
          
         self.assertTrue(isValidUuid(group_id))
+        self.assertFalse(isSchema2Id(group_id))
         self.assertTrue(isValidUuid(group_id, obj_class="Group"))
         self.assertTrue(isValidUuid(group_id, obj_class="group"))
         self.assertTrue(isValidUuid(group_id, obj_class="groups"))
         self.assertTrue(isValidUuid(dataset_id, obj_class="datasets"))
+        self.assertFalse(isSchema2Id(dataset_id))
         self.assertTrue(isValidUuid(ctype_id, obj_class="datatypes"))
+        self.assertFalse(isSchema2Id(ctype_id))
         self.assertTrue(isValidUuid(chunk_id, obj_class="chunks"))
+        self.assertFalse(isSchema2Id(chunk_id))
         validateUuid(group_id)
+        try:
+            isRootObjId(group_id)
+            self.assertTrue(False)
+        except ValueError:
+            # only works for v2 schema
+            pass # expected
+        
 
         for item in valid_ids:
             self.assertTrue(isObjId(item))
@@ -104,12 +115,46 @@ class IdUtilTest(unittest.TestCase):
             self.assertTrue(False)
         except ValueError:   
             pass  # expected
-         
 
+
+    def testSchema2Id(self):
+        root_id = createObjId("roots")     
+        group_id = createObjId("groups",rootid=root_id)
+        dataset_id = createObjId("datasets", rootid=root_id)
+        ctype_id = createObjId("datatypes", rootid=root_id)
+
+        self.assertEqual(getCollectionForId(root_id), "groups")
+        self.assertEqual(getCollectionForId(group_id), "groups")
+        self.assertEqual(getCollectionForId(dataset_id), "datasets")
+        self.assertEqual(getCollectionForId(ctype_id), "datatypes")
+        chunk_id = 'c' + dataset_id[1:] + "_1_2"
+
+        try:
+            getCollectionForId(chunk_id)
+            self.assertTrue(False)
+        except ValueError:
+            pass # expected
+        valid_ids = (group_id, dataset_id, ctype_id, chunk_id, root_id)
+        s3prefix = getS3Key(root_id)
+        for oid in valid_ids:
+            self.assertTrue(len(oid) >= 38)
+            parts = oid.split('-')
+            self.assertEqual(len(parts), 6)
+            self.assertTrue(oid[0] in ('g', 'd', 't', 'c'))
+            self.assertTrue(isSchema2Id(oid)) 
+            if oid == root_id:
+                self.assertTrue(isRootObjId(oid))
+            else:
+                self.assertFalse(isRootObjId(oid))
+            self.assertEqual(getRootObjId(oid), root_id)
     
+            s3key = getS3Key(oid)
+            self.assertTrue(s3key.startswith(s3prefix))
+            self.assertEqual(getObjId(s3key), oid)
+            self.assertTrue(isS3ObjKey(s3key))
+            
              
 if __name__ == '__main__':
     #setup test files
     
     unittest.main()
-    
