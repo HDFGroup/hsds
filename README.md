@@ -85,6 +85,5 @@ and related AWS resources.  Kita&trade; offers these features:
 * Stores usernames and passwords in a secure DynamoDB Table
 * Creates a AWS CloudWatch dashboard for service monitoring
 * Aggregates container logs to AWS CloudWatch
-* Includes limited support by The HDF Group
 
 Kita&trade; Server for AWS Marketplace can be found here: https://aws.amazon.com/marketplace/pp/B07K2MWS1G. 
