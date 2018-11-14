@@ -61,7 +61,7 @@ For general questions/feedback, please use the Kita&trade; forum: https://forum.
 License
 -------
 
-This code is covered under an APACHE 2.0 license.  See LICENSE in this directory.
+HSDS is licensed under an APACHE 2.0 license.  See LICENSE in this directory.
 
 Integration with JupyterHub
 ---------------------------
@@ -85,6 +85,6 @@ and related AWS resources.  Kita&trade; offers these features:
 * Stores usernames and passwords in a secure DynamoDB Table
 * Creates a AWS CloudWatch dashboard for service monitoring
 * Aggregates container logs to AWS CloudWatch
-* Includes Support by The HDF Group
+* Includes limited support by The HDF Group
 
 Kita&trade; Server for AWS Marketplace can be found here: https://aws.amazon.com/marketplace/pp/B07K2MWS1G. 
