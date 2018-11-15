@@ -94,7 +94,7 @@ def createObjId(obj_type, rootid=None):
         prefix = 'g'  # root obj is a group
     else:
         prefix = obj_type[0]
-    if not rootid and obj_type != "roots":
+    if (not rootid and obj_type != "roots") or (rootid and not isSchema2Id(rootid)):
         # v1 schema
         objid = prefix + '-' + str(uuid.uuid1())
     else:

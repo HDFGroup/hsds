@@ -24,6 +24,7 @@ from util.idUtil import  getDataNodeUrl, createObjId, getCollectionForId
 from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
 from util.domainUtil import getParentDomain, getDomainFromRequest
+from util.s3Util import getS3Keys
 from servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath
 from basenode import getAsyncNodeUrl
 import hsds_logger as log
@@ -149,55 +150,117 @@ def getIdList(objs, marker=None, limit=None):
             break
     return ret_ids
 
+async def get_domain_response(app, domain_json, verbose=False):
+    rsp_json = { }
+    if "root" in domain_json:
+        rsp_json["root"] = domain_json["root"]
+        rsp_json["class"] = "domain"
+    else:
+        rsp_json["class"] = "folder"
+    if "owner" in domain_json:
+        rsp_json["owner"] = domain_json["owner"]
+    if "created" in domain_json:
+        rsp_json["created"] = domain_json["created"]
+    if "lastModified" in domain_json:
+        rsp_json["lastModified"] = domain_json["lastModified"]
+
+    if verbose and "root" in domain_json:
+        collections = await get_collections(app, domain_json["root"])
+        rsp_json["num_groups"] = len(collections["groups"])
+        rsp_json["num_datasets"] = len(collections["datasets"])
+        rsp_json["num_datatypes"] = len(collections["datatypes"])
+        rsp_json["num_objects"] = 0 # TBD
+        rsp_json["totalSize"] = 0   # TBD
+        rsp_json["allocated_bytes"] = 0 # TBD
+        # TBD: add chunk count to num_objects total
+        rsp_json["num_objects"] = len(collections["groups"]) + len(collections["datasets"]) + len(collections["datatypes"])
+    
+    return rsp_json
 
  
         
 async def get_domains(request):
     """ This method is called by GET_Domains and GET_Domain """
     app = request.app
-    params = {}
     
     # if there is no domain passed in, get a list of top level domains
     if "domain" not in request.rel_url.query:
-        params["prefix"] = '/'
+        prefix = '/'
     else:
-        params["prefix"] = request.rel_url.query["domain"]
-    log.info(f"get_domains for: {params['prefix']}")
+        prefix = request.rel_url.query["domain"]
+    log.info(f"get_domains for: {prefix}")
 
-    if not params["prefix"].startswith('/'):
+    if not prefix.startswith('/'):
         msg = "Prefix must start with '/'"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)  
 
     # always use "verbose" to pull info from RootTable
     if "verbose" in request.rel_url.query and request.rel_url.query["verbose"]:
-        params["verbose"] = 1
+        verbose = True
     else:
-        params["verbose"] = 0   
+        verbose = False
 
+    limit = None
     if "Limit" in request.rel_url.query:
         try:
-            params["Limit"] = int(request.rel_url.query["Limit"])
-            log.debug("GET_Domains - using Limit: {}".format(params["Limit"]))
+            limit = int(request.rel_url.query["Limit"])
+            log.debug(f"GET_Domains - using Limit: {limit}")
         except ValueError:
             msg = "Bad Request: Expected int type for limit"
             log.warn(msg)   
             raise HTTPBadRequest(reason=msg)
-    if "Marker" in request.rel_url.query:
-        params["Marker"] = request.rel_url.query["Marker"]
-        log.debug("got Marker request param: {}".format(params["Marker"]))
 
-    an_url = getAsyncNodeUrl(app)
-    req = an_url + "/domains"
-    log.debug("get /domains: {}".format(params))
-    obj_json = await http_get(app, req, params=params)
-    if "domains" in obj_json:
-        domains = obj_json["domains"]
-        log.debug(f"domains returned: {domains}")
-    else:
-        log.error("Unexepected response from AN")
-        domains = None
+    marker = None        
+    if "Marker" in request.rel_url.query:
+        marker = request.rel_url.query["Marker"]
+        log.debug(f"got Marker request param: {marker}")
+
     
+    # list the S3 keys for this prefix
+    domainNames = []
+    if prefix == "/":
+        # search for domains from the top_level domains config
+        domainNames = config.get("top_level_domains")
+    else:
+        s3prefix = prefix[1:]
+        log.debug(f"listing S3 keys for {s3prefix}")
+        s3keys = await getS3Keys(app, include_stats=False, prefix=s3prefix, deliminator='/')  
+        log.debug(f"getS3Keys returned: {len(s3keys)} keys")
+        log.debug(f"s3keys {s3keys}")
+        
+        for s3key in s3keys:
+            if s3key[-1] != '/':
+                log.debug(f"ignoring key: {s3key}")
+                continue
+            log.debug(f"got s3key: {s3key}")
+            domain = "/" + s3key[:-1]
+            if marker:
+                if marker == domain:
+                    marker = None
+                    continue
+            
+            log.debug(f"adding domain: {domain} to domain list")
+            domainNames.append(domain)
+
+            if limit and len(domainNames) == limit:
+                # got to requested limit
+                break
+
+
+    # get domain info for each domain
+    domains = []
+    for domain in domainNames:
+        # query DN's for domain json
+        # TBD - multicast to DN nodes
+        log.debug(f"getDomainJson for {domain}")
+        domain_json = await getDomainJson(app, domain, reload=True)
+        if domain_json:
+            domain_rsp = await get_domain_response(app, domain_json, verbose=verbose)
+            # mixin domain anme
+            domain_rsp["name"] = domain
+            domains.append(domain_rsp)
+        
     return domains
 
 
@@ -240,6 +303,10 @@ async def GET_Domain(request):
         log.warn("Invalid domain")
         raise HTTPBadRequest(reason="Invalid domain name")
 
+    verbose = False
+    if "verbose" in params and params["verbose"]:
+        verbose = True
+
     if not domain: 
         log.info("no domain passed in, returning all top-level domains")
         # no domain passed in, return top-level domains for this request
@@ -250,12 +317,6 @@ async def GET_Domain(request):
         log.response(request, resp=resp)
         return resp
 
-    try:
-        domain = getDomainFromRequest(request)
-    except ValueError:
-        msg = "Invalid domain"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
 
     log.info("got domain: {}".format(domain))
    
@@ -293,30 +354,7 @@ async def GET_Domain(request):
         return resp
     
     # return just the keys as per the REST API
-    rsp_json = { }
-    if "root" in domain_json:
-        rsp_json["root"] = domain_json["root"]
-        rsp_json["class"] = "domain"
-    else:
-        rsp_json["class"] = "folder"
-    if "owner" in domain_json:
-        rsp_json["owner"] = domain_json["owner"]
-    if "created" in domain_json:
-        rsp_json["created"] = domain_json["created"]
-    if "lastModified" in domain_json:
-        rsp_json["lastModified"] = domain_json["lastModified"]
-
-    if "verbose" in params and params["verbose"] and "root" in domain_json:
-        collections = await get_collections(app, domain_json["root"])
-        rsp_json["num_groups"] = len(collections["groups"])
-        rsp_json["num_datasets"] = len(collections["datasets"])
-        rsp_json["num_datatypes"] = len(collections["datatypes"])
-        rsp_json["num_objects"] = 0 # TBD
-        rsp_json["totalSize"] = 0   # TBD
-        rsp_json["allocated_bytes"] = 0 # TBD
-        # TBD: add chjunk count to num_objects total
-        rsp_json["num_objects"] = len(collections["groups"]) + len(collections["datasets"]) + len(collections["datatypes"])
-    
+    rsp_json = await get_domain_response(app, domain_json, verbose=verbose)
      
     hrefs = []
     hrefs.append({'rel': 'self', 'href': getHref(request, '/')})
@@ -420,7 +458,7 @@ async def PUT_Domain(request):
     
     if not is_folder:
         # create a root group for the new domain
-        root_id = createObjId("groups") 
+        root_id = createObjId("roots") 
         log.debug("new root group id: {}".format(root_id))
         group_json = {"id": root_id, "root": root_id, "domain": domain }
         log.debug("create group for domain, body: " + json.dumps(group_json))

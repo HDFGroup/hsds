@@ -115,7 +115,8 @@ async def PUT_Domain(request):
     domain_json["created"] = now
     domain_json["lastModified"] = now
 
-    await save_metadata_obj(app, domain, domain_json, notify=True)
+    # write the domain json to S3 immediately so it will show up in a get_domains S3 scan
+    await save_metadata_obj(app, domain, domain_json, notify=True, flush=True)
  
     resp = json_response(domain_json, status=201)
     log.response(request, resp=resp)
@@ -201,6 +202,3 @@ async def PUT_ACL(request):
     resp = json_response(resp_json, status=201)
     log.response(request, resp=resp)
     return resp
-
-
-   

@@ -56,7 +56,7 @@ async def getHeadUrl(app):
                 log.warn("ClientError: {} for health check".format(str(ce)))
                 await asyncio.sleep(1)
             except HTTPInternalServerError as he:
-                log.warn("HTTPInternalServiceError <{}> for health check".format(he.code))
+                log.warn(f"HTTPInternalServiceError <{he}> for health check")
                 await asyncio.sleep(1)
             except HTTPNotFound:
                 log.warn("headnode not found, sleeping")

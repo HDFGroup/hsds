@@ -83,6 +83,7 @@ class GroupTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
          
         grp_uuid = root_uuid = rspJson["root"]
+        print(grp_uuid)
         self.assertTrue(grp_uuid.startswith("g-"))
 
         # get the group json
@@ -153,6 +154,7 @@ class GroupTest(unittest.TestCase):
         self.assertEqual(rspJson["attributeCount"], 0)   
         group_id = rspJson["id"]
         self.assertTrue(helper.validateId(group_id))
+        print(group_id)
 
         # verify we can do a get on the new group
         req = helper.getEndpoint() + '/groups/' + group_id
@@ -406,4 +408,3 @@ if __name__ == '__main__':
     #setup test files
     
     unittest.main()
-    

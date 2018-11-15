@@ -64,6 +64,7 @@ class DomainTest(unittest.TestCase):
             return  # abort rest of test
         self.assertEqual(rsp.headers['content-type'], 'application/json; charset=utf-8')
         rspJson = json.loads(rsp.text)
+
          
         for name in ("lastModified", "created", "hrefs", "root", "owner", "class"):
             self.assertTrue(name in rspJson)
@@ -476,7 +477,6 @@ class DomainTest(unittest.TestCase):
         self.assertTrue("datasets" in rspJson)
         datasets = rspJson["datasets"]
         for objid in datasets:
-            print("datasetid:", objid)
             helper.validateId(objid)
         self.assertEqual(len(datasets), 4)
 
@@ -504,7 +504,6 @@ class DomainTest(unittest.TestCase):
         self.assertTrue("datasets" in rspJson)
         batch = rspJson["datasets"]
         self.assertEqual(len(batch), 2)
-        print('datasets', batch)
         helper.validateId(batch[0])
         self.assertEqual(batch[0], datasets[2])
         helper.validateId(batch[1])
@@ -695,7 +694,7 @@ class DomainTest(unittest.TestCase):
             self.assertTrue("owner" in item)
             self.assertTrue("class" in item)
             self.assertEqual(item["class"], "domain")
-            self.assertFalse("lastModified" in item)
+            self.assertTrue("lastModified" in item)
             self.assertFalse("size" in item)
        
         # try getting the first 4 domains
@@ -763,8 +762,8 @@ class DomainTest(unittest.TestCase):
                 self.assertEqual(name[0], '/')
                 self.assertTrue(name[-1] != '/')
                 self.assertTrue("owner" in item)
-                self.assertFalse("created" in item)
-                self.assertFalse("lastModified" in item)
+                self.assertTrue("created" in item)
+                self.assertTrue("lastModified" in item)
                 self.assertFalse("size" in item)
                 self.assertTrue("class") in item
                 self.assertTrue(item["class"] in ("domain", "folder"))

@@ -173,7 +173,7 @@ async def POST_Group(request):
     domain_json = await getDomainJson(app, domain) # get again in case cache was invalidated
          
     root_id = domain_json["root"]
-    group_id = createObjId("groups") 
+    group_id = createObjId("groups", rootid=root_id) 
     log.info("new  group id: {}".format(group_id))
     group_json = {"id": group_id, "root": root_id }
     log.debug("create group, body: " + json.dumps(group_json))
@@ -247,7 +247,3 @@ async def DELETE_Group(request):
     resp = json_response({})
     log.response(request, resp=resp)
     return resp
-
- 
-
- 

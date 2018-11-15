@@ -58,7 +58,8 @@ cfg = {
     'db_file': 'bucket.db',  # SQLite db file used by AN node
     'db_dir': '/data', # Directory path to store db file
     'greeting': 'Welcome to HSDS!',
-    'about': 'HSDS is a webservice for HDF data'
+    'about': 'HSDS is a webservice for HDF data',
+    'top_level_domains': ["/home", "/shared"]  # list of possible top-level domains
 }
    
 def get(x): 
