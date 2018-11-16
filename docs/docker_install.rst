@@ -6,7 +6,7 @@ Installation with Docker
 Export environment variables as shown in "Sample .bashrc" below.
 
 1. Install Docker and docker-compose if necessary (see "Docker Setup" below) 
-2. Create a bucket for HSDS, using aws cli tools, aws management console, or minio webapp
+2. Create a bucket for HSDS, using aws cli tools or aws management console
 3. Get project source code: `$ git clone https://github.com/HDFGroup/hsds`
 4. Go to admin/config directory: `$ cd hsds/admin/config`
 5. Copy the file "passwd.default" to "passwd.txt".  Add any usernames/passwords you wish 
@@ -36,7 +36,7 @@ These environment variables will be passed to the Docker containers on start up.
     export AWS_SECRET_ACCESS_KEY=ABCDEFGHIJKL      # use your AWS account access secret key if using S3  (Not needed if running on EC2 and AWS_IAM_ROLE is defined)
     export BUCKET_NAME=hsds.test                   # set to the name of the bucket you will be usings
     export AWS_REGION=us-east-1                    # for boto compatibility - for S3 set to the region the bucket is in
-    export AWS_S3_GATEWAY="http://minio:9000"      # if running docker machine set to machine ip 
+    export AWS_S3_GATEWAY="http://http://s3.amazonaws.com  # Use AWS endpoint for region where bucket is 
     export HSDS_ENDPOINT="http://hsds.hdf.test"    # use https protocal if SSL is desired
     export DB_HOST_DIR=${HOME}/sqlite              # directory where sqlite db will be stored
     # For S3, set AWS_S3_GATEWAY to endpoint for the region the bucket is in.  E.g.: http://s3.amazonaws.com.
