@@ -187,7 +187,7 @@ async def POST_Datatype(request):
             await validateAction(app, domain, link_id, username, "create")
 
     root_id = domain_json["root"]
-    ctype_id = createObjId("datatypes", root_id=root_id) 
+    ctype_id = createObjId("datatypes", rootid=root_id) 
     log.debug("new  type id: {}".format(ctype_id))
     ctype_json = {"id": ctype_id, "root": root_id, "type": datatype }
     log.debug("create named type, body: " + json.dumps(ctype_json))

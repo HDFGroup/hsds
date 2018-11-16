@@ -102,8 +102,8 @@ class DatasetTest(unittest.TestCase):
         for name in ("id", "shape", "hrefs", "layout", "creationProperties", 
             "attributeCount", "created", "lastModified", "root", "domain"):
             self.assertTrue(name in rspJson)
-        self.assertTrue("num_chunks" in rspJson)
-        self.assertTrue("allocated_size" in rspJson)
+        #self.assertTrue("num_chunks" in rspJson)
+        #self.assertTrue("allocated_size" in rspJson)
          
         # try get with a different user (who has read permission)
         headers = helper.getRequestHeaders(domain=domain, username="test_user2")
@@ -1136,4 +1136,3 @@ if __name__ == '__main__':
     #setup test files
     
     unittest.main()
-    

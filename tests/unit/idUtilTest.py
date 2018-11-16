@@ -136,6 +136,8 @@ class IdUtilTest(unittest.TestCase):
             pass # expected
         valid_ids = (group_id, dataset_id, ctype_id, chunk_id, root_id)
         s3prefix = getS3Key(root_id)
+        self.assertTrue(s3prefix.endswith("/.group.json"))
+        s3prefix = s3prefix[:-(len(".group.json"))]  
         for oid in valid_ids:
             self.assertTrue(len(oid) >= 38)
             parts = oid.split('-')

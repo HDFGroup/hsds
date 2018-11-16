@@ -145,6 +145,8 @@ def getS3Key(id):
             # schema v2 id
             hexid = getIdHexChars(id)
             prefix = id[0]  # one of g, d, t, c
+            if prefix not in ('g', 'd', 't', 'c'):
+                raise ValueError(f"Unexpected id: {id}")
 
             if isRootObjId(id):
                 key = f"db/{hexid[0:8]}-{hexid[8:16]}"
@@ -160,6 +162,15 @@ def getS3Key(id):
                 coord = id[index+1:]
                 key += '/'
                 key += coord  
+            elif prefix == 'g':
+                # add key suffix for group
+                key += "/.group.json"
+            elif prefix == 'd':
+                # add key suffix for dataset
+                key += "/.dataset.json"
+            else:
+                # add key suffix for datatype
+                key += "/.datatype.json"
         else:
             # v1 id
             # schema v1 id
@@ -183,24 +194,37 @@ def getObjId(s3key):
         for ch in parts[1]:
             if ch != '-':
                 token.append(ch)
-        if len(parts) == 2:
+
+        if len(parts) == 3:
             # root id
+            # last part should be ".group.json"
+            if parts[2] != ".group.json":
+                raise ValueError(f"unexpected S3Key: {s3key}")
             # add 16 more chars using rotated version of first 16
             for i in range(16):
                 token.append(hexRot(token[i]))
             prefix = 'g'
-        else:  
-            # group, dataset, or datatype if len(parts) == 4
-            # chunk if len(parts) == 5
+        elif len(parts) == 5:
+            # group, dataset, or datatype or chunk
             for ch in parts[3]:
                 if ch != '-':
                     token.append(ch)
-            prefix = parts[2]
             
-        if len(parts) == 5:
-            # chunk id
-            prefix = 'c'
-            chunk_coord = "_" + parts[4]
+            if parts[2] == 'g' and parts[4] == ".group.json":
+                prefix = 'g'  # group json
+            elif parts[2] == 't' and parts[4] == ".datatype.json":
+                prefix = 't'  # datatype json
+            elif parts[2] == 'd':
+                if parts[4] == ".dataset.json":
+                    prefix = 'd'  # dataset json
+                else:
+                    # chunk object
+                    prefix = 'c'
+                    chunk_coord = "_" + parts[4]
+            else:
+                raise ValueError(f"unexpected S3Key: {s3key}")
+        else:
+            raise ValueError(f"unexpected S3Key: {s3key}")
         
         token = "".join(token)
         objid = prefix + '-' + token[0:8] + '-' + token[8:16] + '-' + token[16:20] + '-' + token[20:26] + '-' + token[26:32] + chunk_coord

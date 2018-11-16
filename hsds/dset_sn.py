@@ -680,7 +680,7 @@ async def POST_Dataset(request):
             # and that the requestor has permissions to create a link
             await validateAction(app, domain, link_id, username, "create")
 
-    dset_id = createObjId("datasets", root_id=root_id) 
+    dset_id = createObjId("datasets", rootid=root_id) 
     log.info("new  dataset id: {}".format(dset_id))
 
     dataset_json = {"id": dset_id, "root": root_id, "type": datatype, "shape": shape_json }
