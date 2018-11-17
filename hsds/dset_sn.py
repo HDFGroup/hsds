@@ -16,20 +16,19 @@
  
 import json
 import numpy as np
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPGone, HTTPInternalServerError, HTTPNotImplemented
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound
 from aiohttp.web import json_response
 
  
-from util.httpUtil import http_get, http_post, http_put, http_delete, getHref
-from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
+from util.httpUtil import http_post, http_put, http_delete, getHref
+from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId, isSchema2Id
 from util.dsetUtil import  getPreviewQuery
 from util.arrayUtil import getNumElements
 from util.chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson, getItemSize
-from servicenode_lib import getDomainJson, getObjectJson, validateAction, getObjectIdByPath, getPathForObjectId
-from basenode import getAsyncNodeUrl
+from servicenode_lib import getDomainJson, getObjectJson, validateAction, getObjectIdByPath, getPathForObjectId, getRootInfo
 import config
 import hsds_logger as log
 
@@ -115,29 +114,28 @@ def validateChunkLayout(shape_json, item_size, body):
 async def getDatasetDetails(app, dset_id, root_id):  
     """ Get extra information about the given dataset """
     # Gather additional info on the domain
-    an_url = getAsyncNodeUrl(app)
-    req = an_url + "/objects/" + dset_id
-    params = {"Root": root_id}
-    log.info("ASync GET: /objects/{}".format(root_id))
-    try:
-        obj_info = await http_get(app, req, params=params)
-    except HTTPGone:
-        # sqlite db not sync'd?
-        log.warn("dset id: {} removed from db".format(dset_id))
-        return None
-    except HTTPNotFound:
-        # sqlite db not sync'd?
-        log.warn("dset id: {} not found in db".format(dset_id))
-        return None
-    except HTTPNotImplemented:
-        log.warn("sqlite db not available")
-        return None
-    except HTTPInternalServerError:
-        log.error("Asuync error getting DatasetDetails")
+    log.debug(f"getDatasetDetails {dset_id}")
+    
+    if not isSchema2Id(root_id):
+        log.info(f"no dataset details not available for schema v1 id: {root_id} returning null results")
         return None
 
-    log.info("got details: {}".format(obj_info))
-    return obj_info
+    root_info = await getRootInfo(app, root_id)
+    if not root_info:
+        log.warn(f"info.json not found for root: {root_id}")
+        return None
+
+    if "datasets" not in root_info:
+        log.error("datasets key not found in root_info")
+        return None
+    datasets = root_info["datasets"]
+    if dset_id not in datasets:
+        log.warn(f"dataset id: {dset_id} not found in root_info")
+        return None
+
+    log.debug(f"returning datasetDetails: {datasets[dset_id]}")
+
+    return datasets[dset_id]
 
    
 
@@ -279,10 +277,12 @@ async def GET_Dataset(request):
         # get allocated size and num_chunks for the dataset if available
         dset_detail = await getDatasetDetails(app, dset_id, dset_json["root"])
         if dset_detail is not None:
-            if "chunkCount" in dset_detail:
-                resp_json["num_chunks"] = dset_detail["chunkCount"]
-            if "totalSize" in dset_detail:
-                resp_json["allocated_size"] = dset_detail["totalSize"]
+            if "num_chunks" in dset_detail:
+                resp_json["num_chunks"] = dset_detail["num_chunks"]
+            if "allocated_bytes" in dset_detail:
+                resp_json["allocated_size"] = dset_detail["allocated_bytes"]
+            if "lastModified" in dset_detail:
+                resp_json["lastModified"] = dset_detail["lastModified"]
 
     resp = json_response(resp_json)
     log.response(request, resp=resp)

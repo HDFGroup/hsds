@@ -16,7 +16,8 @@ import os.path as op
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPInternalServerError
 
 
-from util.idUtil import getDataNodeUrl, getCollectionForId
+from util.idUtil import getDataNodeUrl, getCollectionForId, isSchema2Id, getS3Key
+from util.s3Util import getS3JSONObj
 from util.authUtil import aclCheck
 from util.httpUtil import http_get
 
@@ -218,5 +219,30 @@ async def getPathForObjectId(app, parent_id, idpath_map, tgt_id=None):
     
     return h5path
 
+async def getRootInfo(app, root_id):  
+    """ Get extra information the root collection. """
+    # Gather additional info on the domain
+    log.debug(f"getRootInfo {root_id}")
     
+    if not isSchema2Id(root_id):
+        log.info(f"no dataset details not available for schema v1 id: {root_id} returning null results")
+        return None
 
+    s3_key = getS3Key(root_id)
+
+    parts = s3_key.split('/')
+    # dset_key is in the format  db/<root>/d/<dset>/.dataset.json
+    # get the key for the root info object as: db/<root>/.info.json
+    if len(parts) != 3:
+        log.error(f"Unexpected s3key format: {s3_key}")
+        return None
+
+    info_key = f"db/{parts[1]}/.info.json"
+
+    try:
+        info_json = await getS3JSONObj(app, info_key)
+    except HTTPNotFound:
+        log.warn(f"info.json not found for key: {info_key}")
+        return None
+
+    return info_json

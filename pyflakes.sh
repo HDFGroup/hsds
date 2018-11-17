@@ -30,8 +30,3 @@ done
 if [ $GETCOUNT -ge 1 ]; then
   echo $COUNT 
 fi
- 
-
- 
-
- 

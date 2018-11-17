@@ -20,12 +20,11 @@ from aiohttp.web import run_app, json_response
 from aiohttp.web_exceptions import HTTPBadRequest
 import config
 from basenode import baseInit, healthCheck
-from util.s3Util import getS3JSONObj, getS3Keys
 #from util.chunkUtil import getDatasetId
-from util.idUtil import isValidChunkId, isValidUuid, getCollectionForId, getS3Key, isSchema2Id, isS3ObjKey, getObjId
+from util.idUtil import isValidChunkId, isValidUuid, isS3ObjKey, getObjId
 from util.domainUtil import isValidDomain
 import hsds_logger as log
-
+#from async_lib import scanRoot
 
 #
 # pending queue handler
@@ -464,41 +463,7 @@ async def DELETE_Objects(request):
     return resp
 
 
-async def GET_Object(request):
-    """HTTP method to get object s3 state """
-    log.request(request)
-    #app = request.app
-    log.info("GET_Object")
-    """
-    conn = app["conn"]
-    if not conn:
-        msg = "db not initizalized"
-        log.warn(msg)
-        raise HTTPServiceUnavailable()
-    """
-    
 
-    objid = request.match_info.get('id')
-    params = request.rel_url.query
-    if "Root" in params:
-        rootid = params["Root"]
-    else:
-        rootid = ''
-    log.debug(f"objid: {objid} rootid: {rootid}")
-    """
-    resp_json = getRow(conn, objid, rootid=rootid)
-    if not resp_json:
-        msg = "objid: {} not found".format(objid)
-        log.warn(msg)
-        raise HTTPNotFound()
-    """
-    resp_json = {}
-
-    log.info("GET_Object response: {}".format(resp_json))
-    
-    resp = json_response(resp_json)
-    log.response(request, resp=resp)
-    return resp
 
 
 def gets3keys_callback(app, s3keys):
@@ -546,114 +511,7 @@ def gets3keys_callback(app, s3keys):
          
     log.debug("gets3keys_callback done")
 
-async def getDomains(app, prefix, marker=None, limit=None, verbose=False):
-    s3prefix = prefix[1:]
-    s3keys = await getS3Keys(app, include_stats=False, prefix=s3prefix, deliminator='/')  
-    log.debug(f"getS3Keys returned: {len(s3keys)}")
-    domains = []
-    for s3key in s3keys:
-        log.debug(f"got s3key: {s3key}")
-        domain = "/" + s3key
-        if marker:
-            if marker == domain:
-                marker = None
-                continue
-            
-        domains.append(domain)
-        if limit and len(domains) == limit:
-            break
-    return domains
-
-async def GET_Domains(request):
-    """HTTP method to get object s3 state """
-    log.request(request)
-    
-    #app = request.app
-    params = request.rel_url.query
-    if "prefix" not in params:
-        msg = "No domain prefix provided"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    prefix = params["prefix"]
-    if not prefix:
-        msg = "GET_Doamins - Empty prefix"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    if prefix[0] != '/':
-        msg = "GET_Domains - Invalid prefix"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-
-    verbose = False
-    if "verbose" in params and params["verbose"]:
-        log.debug("params[verbose]: {}".format(params["verbose"]))
-        if int(params["verbose"]):
-            verbose = True 
-
-    log.info("GET_Domains: {} verbose={}".format(prefix, verbose))
-
-    limit = None
-    if "Limit" in params:
-        try:
-            limit = int(params["Limit"])
-            log.debug("GET_Domains - using Limit: {}".format(limit))
-        except ValueError:
-            msg = "Bad Request: Expected int type for limit"
-            log.error(msg)  # should be validated by SN
-            raise HTTPBadRequest(reason=msg)
-    marker = None
-    if "Marker" in params:
-        marker = params["Marker"]
-        log.debug("got Marker request param: {}".format(marker))
-
-    if not prefix.startswith("/"):
-        msg = "Prefix expected to start with /"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-
-    if not prefix.endswith("/"):
-        msg = "Prefix expected to end with /"
-    
-
-    domains = await getDomains(app, prefix, limit=limit, marker=marker, verbose=verbose)
-
-    """
-    # for verbose copy in totalSize, num groups/datasets/datatypes, lastModified for each domain
-    # otherwise jsut return name, owner and root
-    for domain in domains:
-        log.debug("domain: {}".format(domain))
-        if "root" in domain and domain["root"] and domain["root"] != "None":
-            log.info("domain: {} root: {}".format(domain, domain["root"]))
-            domain["class"] = "domain"
-        
-            if verbose:
-                dbRow = getRow(conn, domain["root"], table="RootTable")
-                if not dbRow:
-                    log.warn("missing RootTable row for id: {}".format(domain["root"]))
-                    continue
-                domain["size"] = dbRow["totalSize"]
-                domain["lastModified"] = dbRow["lastModified"]
-                domain["chunkCount"] = dbRow["chunkCount"]
-                domain["groupCount"] = dbRow["groupCount"]
-                domain["datasetCount"] = dbRow["datasetCount"]
-                domain["typeCount"] = dbRow["typeCount"]
-        else:
-            domain["class"] = "folder"
-        
-        if not verbose:
-            if "lastModified" in domain:
-                del domain["lastModified"]
-            if "size" in domain:
-                del domain["size"]
-
-    domains = []
-    """
-        
-    resp_json = {"domains": domains}
-    log.info("GET_Domains response: {}".format(resp_json))
-    resp = json_response(resp_json)
-    log.response(request, resp=resp)
-    return resp
+ 
 
 async def PUT_Domain(request):
     """HTTP method to get object s3 state """
@@ -744,96 +602,21 @@ async def DELETE_Domain(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    """
 
-    conn = app["conn"]
-    if not conn: 
-        msg = "db not initizalized"
-        log.warn(msg)
-        raise HTTPServiceUnavailable()
-  
-    dbRow = getRow(conn, domain)
-    if not dbRow:
-        msg = "domain: {} not found in db".format(domain)
-        log.warn(msg)
-        raise HTTPNotFound()
-    log.info("got domain row: {}".format(dbRow))
-
-    try:
-        deleteRow(conn, domain)
-    except KeyError:
-        msg = "got KeyError inserting domain: {}".format(domain)
-        log.error(msg)
-        raise HTTPInternalServerError()
-    """
 
     resp_json = {}
     resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
 
-
-async def GET_Root(request):
-    """HTTP method to get root object state """
+async def DELETE_Object(request):
     log.request(request)
-    log.info("GET_Root")
-    
-    rootid = request.match_info.get('id')
-    log.debug(f"GET_Root rootid: {rootid}")
-    try:
-        if getCollectionForId(rootid) != "groups":
-            log.warn(f"unexpected id for GET_Root: {rootid} ")
-            raise HTTPBadRequest(reason="Invalid id")
-    except ValueError:
-        log.warn(f"unexpected id for GET_Root: {rootid} ")
-        raise HTTPBadRequest(reason="Invalid id")
 
-
-    app = request.app
-
-    if isSchema2Id(rootid):
-        # TBD
-        pass
-    else:
-        # v1 schema
-        s3_key = getS3Key(rootid)
-        log.debug("getS3JSONObj({})".format(s3_key))
-        root_json = await getS3JSONObj(app, s3_key)  # will throw 404 if not found
-        log.debug(f"root jsonobj: {root_json}")
-    """
-    c.execute("ALTER TABLE  RootTable ADD COLUMN lastModified INTEGER")
-    c.execute("ALTER TABLE  RootTable ADD COLUMN chunkCount INTEGER")
-    c.execute("ALTER TABLE  RootTable ADD COLUMN groupCount INTEGER")
-    c.execute("ALTER TABLE  RootTable ADD COLUMN datasetCount INTEGER")
-    c.execute("ALTER TABLE  RootTable ADD COLUMN typeCount INTEGER")
-    c.execute("ALTER TABLE  RootTable ADD COLUMN totalSize INTEGER")
-    """
-
-
-
-    """
-    conn = app["conn"]
-    params = request.rel_url.query
-
-    if not conn:
-        msg = "db not initizalized"
-        log.warn(msg)
-        raise HTTPServiceUnavailable()
-    resp_json = getRow(conn, rootid, table="RootTable")
-    if not resp_json:
-        msg = "object not found"
-        log.warn(msg)
-        raise HTTPNotFound()
-
-    if "verbose" in params and params["verbose"]:
-        resp_json["objects"] = listObjects(conn, rootid)
-    log.info("GET_Root response: {}".format(resp_json))
-    """
     resp_json = {}
-
     resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
+
 
 
 async def init(loop):
@@ -842,12 +625,9 @@ async def init(loop):
     app = baseInit(loop, 'an')
     app.router.add_route('GET', '/async_info', GET_AsyncInfo)
     app.router.add_route('PUT', '/objects', PUT_Objects)
-    app.router.add_route('DELETE', '/objects', DELETE_Objects)
-    app.router.add_route('GET', '/objects/{id}', GET_Object)
-    app.router.add_route('GET', '/domains', GET_Domains)
+    app.router.add_route('DELETE', '/objects/{id}', DELETE_Object)
     app.router.add_route('PUT', '/domain', PUT_Domain)
     app.router.add_route('DELETE', '/domain', DELETE_Domain)
-    app.router.add_route('GET', '/root/{id}', GET_Root)
     app["bucket_stats"] = {}
     # object and domain updates will be posted here to be worked on offline
     app["pending_queue"] = [] 

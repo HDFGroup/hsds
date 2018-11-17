@@ -25,30 +25,11 @@ from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
 from util.domainUtil import getParentDomain, getDomainFromRequest
 from util.s3Util import getS3Keys
-from servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath
+from servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath, getRootInfo
 from basenode import getAsyncNodeUrl
 import hsds_logger as log
 import config
 
-
-async def getRootInfo(app, root_id, verbose=False):
-    """ Get extra information about the given domain """
-    # Gather additional info on the domain
-    req = getDataNodeUrl(app, root_id)
-    req += '/groups/' + root_id
-    log.info("GetRootInfo GET: {}".format(root_id))
-    params = {}
-    if verbose:
-        params["verbose"] = 1
-    params["group_collection"] = 1
-    params["dataset_collection"] = 1
-    params["datathype_collection"] = 1
-    try:
-        root_info = await http_get(app, req, params=params)
-    except ClientResponseError as ce:
-        log.error("getRootInfo error: {}".format(ce))
-        raise HTTPInternalServerError()
-    return root_info
 
 async def get_toplevel_domains(app):
     """ Get list of top level domains """
@@ -161,20 +142,38 @@ async def get_domain_response(app, domain_json, verbose=False):
         rsp_json["owner"] = domain_json["owner"]
     if "created" in domain_json:
         rsp_json["created"] = domain_json["created"]
+
+    lastModified = 0
     if "lastModified" in domain_json:
-        rsp_json["lastModified"] = domain_json["lastModified"]
+        lastModified = domain_json["lastModified"]
+    totalSize = len(json.dumps(domain_json))
+    allocated_bytes = 0
 
     if verbose and "root" in domain_json:
         collections = await get_collections(app, domain_json["root"])
-        rsp_json["num_groups"] = len(collections["groups"])
-        rsp_json["num_datasets"] = len(collections["datasets"])
-        rsp_json["num_datatypes"] = len(collections["datatypes"])
-        rsp_json["num_objects"] = 0 # TBD
-        rsp_json["totalSize"] = 0   # TBD
-        rsp_json["allocated_bytes"] = 0 # TBD
+        num_groups = len(collections["groups"])
+        num_datasets = len(collections["datasets"])
+        num_datatypes = len(collections["datatypes"])
+        num_objects = num_groups + num_datasets + num_datatypes
+
+        root_info = await getRootInfo(app, domain_json["root"])
+        if root_info:
+            num_objects += root_info["num_chunks"]
+            allocated_bytes = root_info["allocated_bytes"]
+            totalSize += allocated_bytes
+            if root_info["lastModified"] > lastModified:
+                lastModified = root_info["lastModified"]
+
+        rsp_json["num_groups"] = num_groups
+        rsp_json["num_datasets"] = num_datasets
+        rsp_json["num_datatypes"] = num_datatypes
+        rsp_json["num_objects"] = num_objects
+        rsp_json["totalSize"] = totalSize
+        rsp_json["allocated_bytes"] = allocated_bytes
         # TBD: add chunk count to num_objects total
-        rsp_json["num_objects"] = len(collections["groups"]) + len(collections["datasets"]) + len(collections["datatypes"])
-    
+        rsp_json["num_objects"] =  num_objects
+
+    rsp_json["lastModified"] = lastModified
     return rsp_json
 
  

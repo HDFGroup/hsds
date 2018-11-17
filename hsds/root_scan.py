@@ -13,10 +13,9 @@ import asyncio
 import sys
 from datetime import datetime
 from aiobotocore import get_session
-from util.idUtil import isValidUuid,isSchema2Id, getS3Key, isS3ObjKey, getObjId, isValidChunkId, getCollectionForId
-from util.chunkUtil import getDatasetId
-from util.s3Util import getS3Keys, releaseClient
-import hsds_logger as log
+from util.idUtil import isValidUuid,isSchema2Id 
+from util.s3Util import releaseClient
+from async_lib import scanRoot
 import config
 
  
@@ -27,97 +26,15 @@ import config
 #
 # Print usage and exit
 #
-def printUsage():
-     
-    print("       python root_scan.py [rootid]")
+def printUsage():  
+    print("       python root_scan.py [rootid] [-update]")
     sys.exit(); 
-  
-def getS3KeysCallback(app, s3keys):
-    log.debug(f"getS3KeysCallback, {len(s3keys)} items")
-    if isinstance(s3keys, list):
-        log.error("got list result for s3keys callback")
-        raise ValueError("unexpected callback format")
-        
-    root_prefix = app["s3scan_prefix"] 
-    results = app["results"]
-    for s3key in s3keys.keys():
-        full_key = root_prefix + s3key
-
-        if not isS3ObjKey(full_key):
-            log.warn("not s3obj key, ignoring")
-            continue
-        objid = getObjId(full_key)
-        etag = None
-        obj_size = None
-        lastModified = None
-        item = s3keys[s3key]
-        if "ETag" in item:
-            etag = item["ETag"]
-        if "Size" in item:
-            obj_size = item["Size"]
-        if "LastModified" in item:
-            lastModified = item["LastModified"]
-        log.debug(f"{objid}: {etag} {obj_size} {lastModified}")
-
-        results["allocated_bytes"] += obj_size
-        if lastModified > results["lastModified"]:
-            results["lastModified"] = lastModified
-        is_chunk = False
-        if isValidChunkId(objid):
-            is_chunk = True
-            results["num_chunks"] += 1
-        
-  
-        if is_chunk or getCollectionForId(objid) == "datasets":
-            if is_chunk:
-                dsetid = getDatasetId(objid)
-            else:
-                dsetid = objid
-            datasets = results["datasets"]
-            if dsetid not in datasets:
-                dataset_info = {}
-                dataset_info["lastModified"] = 0
-                dataset_info["num_chunks"] = 0
-                dataset_info["allocated_bytes"] = 0
-                datasets[dsetid] = dataset_info
-            dataset_info = datasets[dsetid]
-            if lastModified > dataset_info["lastModified"]:
-                dataset_info["lastModified"] = lastModified
-                if is_chunk:
-                    dataset_info["num_chunks"] += 1
-                    dataset_info["allocated_bytes"] += obj_size
-        elif getCollectionForId(objid) == "groups":
-            results["num_groups"] += 1
-        elif getCollectionForId(objid) == "datatypes":
-            results["num_datatypes"] += 1
-        else:
-            log.error(f"Unexpected collection type for id: {objid}")
-       
-
-async def scanRoot(app, rootid):
-
-    log.info(f"scanRoot for rootid: {rootid}")
-    root_key = getS3Key(rootid)
-
-    if not root_key.endswith("/.group.json"):
-        raise ValueError("unexpected root key")
-    root_prefix = root_key[:-(len(".group.json"))]
-    
-    log.debug("using prefix: {root_prefix}")
-    app["s3scan_prefix"] = root_prefix
-
-    results = {}
-    results["lastModified"] = 0
-    results["num_groups"] = 0
-    results["num_datatypes"] = 0
-    results["datasets"] = {}  # since we need per dataset info
-    results["num_chunks"] = 0
-    results["allocated_bytes"] = 0
-
-    app["results"] = results
-     
-    await getS3Keys(app, prefix=root_prefix, include_stats=True, callback=getS3KeysCallback)
+ 
+ 
+async def run_scan(app, rootid, update=False):
+    results = await scanRoot(app, rootid, update=update)
     await releaseClient(app)
+    return results
     
                
 def main():
@@ -127,6 +44,11 @@ def main():
 
 
     rootid = sys.argv[1]
+
+    if len(sys.argv) > 2 and sys.argv[2] == "-update":
+        do_update = True
+    else:
+        do_update = False
 
     if not isValidUuid(rootid):
         print("Invalid root id!")
@@ -145,7 +67,7 @@ def main():
     app["loop"] = loop
     session = get_session(loop=loop)
     app["session"] = session
-    loop.run_until_complete(scanRoot(app, rootid=rootid))
+    loop.run_until_complete(run_scan(app, rootid=rootid, update=do_update))
   
     loop.close()
 
