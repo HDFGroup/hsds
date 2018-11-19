@@ -14,6 +14,7 @@
 # S3-related functions
 # 
 import asyncio
+from  inspect import iscoroutinefunction
 import json
 import time
 import zlib
@@ -379,7 +380,7 @@ async def isS3Obj(app, key):
     found = False
     client = getS3Client(app)
     bucket = app['bucket_name']
-    log.info("isS3Obj {}".format(key))
+    log.debug("isS3Obj {}".format(key))
     s3_stats_increment(app, "list_count")
     try:
         resp = await client.list_objects(Bucket=bucket, MaxKeys=1, Prefix=key)
@@ -390,7 +391,7 @@ async def isS3Obj(app, key):
         s3_stats_increment(app, "error_count")
         return False
     if 'Contents' not in resp:
-        log.info("isS3Obj {} not found (no Contents)".format(key))
+        log.debug("isS3Obj {} not found (no Contents)".format(key))
         return False
     contents = resp['Contents']
     if len(contents) > 0:
@@ -507,7 +508,10 @@ async def _fetch_all(app, pages, key_names, prefix='', deliminator='', suffix=''
         # done with all items in this response
         if len(key_names) > 0:
             if callback:
-                callback(app, key_names)
+                if iscoroutinefunction(callback):
+                    await callback(app, key_names)
+                else:
+                    callback(app, key_names)
                 
                 # reset key_names
                 log.debug("reset key_names")
@@ -534,7 +538,7 @@ async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=Fal
         key_names = []
      
     # TBD - for some reason passing in non-null deliminator doesn't work
-    pages = paginator.paginate(MaxKeys=1000, Bucket=bucket_name, Prefix=prefix, Delimiter=deliminator)
+    pages = paginator.paginate(MaxKeys=10, Bucket=bucket_name, Prefix=prefix, Delimiter=deliminator)
     # fetch all will fill in key_names unless callback is provided
     count = await _fetch_all(app, pages, key_names, prefix=prefix, deliminator=deliminator, suffix=suffix, include_stats=include_stats, callback=callback)
 
