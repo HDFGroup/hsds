@@ -174,7 +174,7 @@ class DomainTest(unittest.TestCase):
 
         # restore when sqlite changes are complete
         self.assertTrue("num_groups" in rspJson)
-        self.assertEqual(rspJson["num_groups"], 5)
+        self.assertEqual(rspJson["num_groups"], 6)
         self.assertTrue("num_datasets" in rspJson)
         self.assertEqual(rspJson["num_datasets"], 4)
         self.assertTrue("num_datatypes" in rspJson)

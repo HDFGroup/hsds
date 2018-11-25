@@ -150,15 +150,8 @@ async def get_domain_response(app, domain_json, verbose=False):
     allocated_bytes = 0
 
     if verbose and "root" in domain_json:
-        collections = await get_collections(app, domain_json["root"])
-        num_groups = len(collections["groups"])
-        num_datasets = len(collections["datasets"])
-        num_datatypes = len(collections["datatypes"])
-        num_objects = num_groups + num_datasets + num_datatypes
-
         root_info = await getRootInfo(app, domain_json["root"])
         if root_info:
-            num_objects += root_info["num_chunks"]
             allocated_bytes = root_info["allocated_bytes"]  
             totalSize += allocated_bytes
             if "metadata_bytes" in root_info:
@@ -166,14 +159,26 @@ async def get_domain_response(app, domain_json, verbose=False):
                 totalSize += root_info["metadata_bytes"]
             if root_info["lastModified"] > lastModified:
                 lastModified = root_info["lastModified"]
+            num_groups = root_info["num_groups"]
+            num_datatypes = root_info["num_datatypes"]
+            num_datasets = len(root_info["datasets"])
+            num_chunks = root_info["num_chunks"]
+        else:
+            # no info json (either v1 schema or not created yet)
+            # get collection sizes by interating over graph
+            collections = await get_collections(app, domain_json["root"])
+            num_groups = len(collections["groups"]) + 1  # add 1 for root group
+            num_datasets = len(collections["datasets"])
+            num_datatypes = len(collections["datatypes"])
+            num_chunks = 0
 
+        num_objects = num_groups + num_datasets + num_datatypes + num_chunks
         rsp_json["num_groups"] = num_groups
         rsp_json["num_datasets"] = num_datasets
         rsp_json["num_datatypes"] = num_datatypes
         rsp_json["num_objects"] = num_objects
         rsp_json["totalSize"] = totalSize
         rsp_json["allocated_bytes"] = allocated_bytes
-        # TBD: add chunk count to num_objects total
         rsp_json["num_objects"] =  num_objects
 
     rsp_json["lastModified"] = lastModified
