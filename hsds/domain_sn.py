@@ -159,8 +159,9 @@ async def get_domain_response(app, domain_json, verbose=False):
         root_info = await getRootInfo(app, domain_json["root"])
         if root_info:
             num_objects += root_info["num_chunks"]
-            allocated_bytes = root_info["allocated_bytes"]
+            allocated_bytes = root_info["allocated_bytes"]  
             totalSize += allocated_bytes
+            totalSize += root_info["metadata_bytes"]
             if root_info["lastModified"] > lastModified:
                 lastModified = root_info["lastModified"]
 

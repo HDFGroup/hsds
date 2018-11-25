@@ -84,7 +84,6 @@ def getAsyncNodeUrl(app):
     return an_url
 
 
-
 async def register(app):
     """ register node with headnode
     OK to call idempotently (e.g. if the headnode seems to have forgotten us)"""

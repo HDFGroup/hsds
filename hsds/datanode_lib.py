@@ -16,9 +16,6 @@ import asyncio
 import time 
 from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError, HTTPBadRequest
 from aiohttp.client_exceptions import ClientError
-#from aiohttp.web import json_response
-
-
 
 from util.idUtil import validateInPartition, getS3Key, isValidUuid, isValidChunkId
 from util.s3Util import getS3JSONObj, putS3JSONObj, putS3Bytes, isS3Obj
@@ -209,18 +206,10 @@ async def save_metadata_obj(app, obj_id, obj_json, notify=False, flush=False):
                 log.error(msg)
 
         else:
-            notify_objs = []
-            notify_obj = {"id": obj_id}
-            notify_obj["size"] = 0  # will be updated when persisted to S3
-            notify_obj["lastModified"] = now
-            if "root" in obj_json:
-                notify_obj["root"] = obj_json["root"]
-            notify_objs.append(notify_obj)
-            body = {"objs": notify_objs}
-            req = an_url + "/objects"
+            req = an_url + "/object/" + obj_id
             try:
-                log.info("ASync PUT notify: {} body: {}".format(req, body))
-                await http_put(app, req, data=body)
+                log.info("ASync PUT notify: {}".format(req))
+                await http_put(app, req)
             except HTTPInternalServerError:
                 log.error(f"got error notifying async node")
         
@@ -250,21 +239,8 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None):
         deleted_ids.add(obj_id)
      
     if obj_id in meta_cache:
-        if not root_id:
-            # retreive the root id before deleting
-            obj_json = meta_cache[obj_id]
-            if "root" in obj_json:
-                root_id = obj_json["root"]
+        log.debug(f"removing {obj_id} from meta_cache")
         del meta_cache[obj_id]
-    elif not root_id and notify:
-        # read from S3 to get rootid 
-        s3_key = getS3Key(obj_id)
-        log.debug("getS3JSONObj({})".format(s3_key))
-        # read S3 object as JSON - will raise 404 if not found
-        obj_json = await getS3JSONObj(app, s3_key)
-        if "root" in obj_json:
-            root_id = obj_json["root"]
-        
     
     if obj_id in dirty_ids:
         del dirty_ids[obj_id]
@@ -284,15 +260,10 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None):
             except HTTPInternalServerError as hse:
                 log.error(f"got HTTPInternalServerError: {hse}")
         else:
-            now = int(time.time())
-            notify_obj = {"id": obj_id, "lastModified": now}
-            notify_obj["root"] = root_id
-            notify_objs = [notify_obj,]
-            body = {"objs": notify_objs}
-            req = an_url + "/objects"
+            req = an_url + "/objects/" + obj_id
             try:
-                log.info("ASync DELETE notify: {} body: {}".format(req, body))
-                await http_delete(app, req, data=body)
+                log.info(f"ASync DELETE notify: {req}")
+                await http_delete(app, req)
             except ClientError as ce:
                 log.error(f"got ClientError notifying async node: {ce}")
             except HTTPInternalServerError as ise:
@@ -346,7 +317,6 @@ async def s3sync(app):
                     log.info("s3sync for obj_id: {}".format(obj_id))
                     s3_key = getS3Key(obj_id)  
                     log.debug("s3sync for s3_key: {}".format(s3_key))  
-                    notify_obj = {"id": obj_id}
                  
                     if isValidChunkId(obj_id):
                         # chunk update
@@ -373,14 +343,9 @@ async def s3sync(app):
                         log.info("writing chunk to S3: {}, num_bytes: {} root_id: {}".format(s3_key, len(chunk_bytes), root_id))
             
                         try:
-                            s3_rsp = await putS3Bytes(app, s3_key, chunk_bytes, deflate_level=deflate_level)
+                            await putS3Bytes(app, s3_key, chunk_bytes, deflate_level=deflate_level)
+                            notify_objs.append(obj_id) # add to list of ids we'll tell AN about
                             # s3_rsp should have keys: "etag", "lastModified", and "size", add in obj_id    
-                            notify_obj["etag"] = s3_rsp["etag"]
-                            notify_obj["size"] = s3_rsp["size"]
-                            notify_obj["lastModified"] = s3_rsp["lastModified"]
-                            notify_obj["root"] = root_id
-
-                            notify_objs.append(notify_obj)
                         except HTTPInternalServerError as hpe:
                             log.error("got S3 error writing obj_id: {} to S3: {}".format(obj_id, str(hpe)))
                             retry_keys.append(obj_id)
@@ -398,15 +363,10 @@ async def s3sync(app):
                         meta_cache.clearDirty(obj_id)
                         log.debug("writing s3_key: {}".format(s3_key))
                         try:
-                            s3_rsp = await putS3JSONObj(app, s3_key, obj_json) 
-                            # add id to s3_rsp
-                            notify_obj["etag"] = s3_rsp["etag"]
-                            notify_obj["size"] = s3_rsp["size"]
-                            notify_obj["lastModified"] = s3_rsp["lastModified"]
-                            if "root" in obj_json:
-                                notify_obj["root"] = obj_json["root"]
-                            log.info("adding {} to success_keys".format(obj_id))
-                            notify_objs.append(notify_obj)
+                            await putS3JSONObj(app, s3_key, obj_json) 
+                            if isValidUuid(obj_id) or isValidChunkId(obj_id):
+                                # notify AN for all non domain ids
+                                notify_objs.append(obj_id) # add to list of ids we'll tell AN about
 
                         except HTTPInternalServerError as hpe:
                             log.error("got S3 error writing obj_id: {} to S3: {}".format(obj_id, str(hpe)))

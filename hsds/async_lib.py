@@ -10,6 +10,7 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 
+import time
 from util.idUtil import isValidUuid, isSchema2Id, getS3Key, isS3ObjKey, getObjId, isValidChunkId, getCollectionForId
 from util.chunkUtil import getDatasetId
 from util.s3Util import getS3Keys, putS3JSONObj
@@ -29,9 +30,10 @@ def getS3KeysCallback(app, s3keys):
     results = app["results"]
     for s3key in s3keys.keys():
         full_key = root_prefix + s3key
+        log.debug(f"getS3KeysCallback: {full_key}")
 
         if not isS3ObjKey(full_key):
-            log.warn("not s3obj key, ignoring")
+            log.info(f"not s3obj key, ignoring: {full_key}")
             continue
         objid = getObjId(full_key)
         etag = None
@@ -46,13 +48,15 @@ def getS3KeysCallback(app, s3keys):
             lastModified = item["LastModified"]
         log.debug(f"{objid}: {etag} {obj_size} {lastModified}")
 
-        results["allocated_bytes"] += obj_size
         if lastModified > results["lastModified"]:
             results["lastModified"] = lastModified
         is_chunk = False
         if isValidChunkId(objid):
             is_chunk = True
             results["num_chunks"] += 1
+            results["allocated_bytes"] += obj_size
+        else:
+            results["metadata_bytes"] += obj_size
         
   
         if is_chunk or getCollectionForId(objid) == "datasets":
@@ -112,10 +116,15 @@ async def scanRoot(app, rootid, update=False):
     results["datasets"] = {}  # since we need per dataset info
     results["num_chunks"] = 0
     results["allocated_bytes"] = 0
+    results["metadata_bytes"] = 0
+    results["scan_start"] = time.time()
 
     app["results"] = results
      
     await getS3Keys(app, prefix=root_prefix, include_stats=True, callback=getS3KeysCallback)
+
+    log.info(f"scan complese for rootid: {rootid}")
+    results["scan_complete"] = time.time()
 
     if update:
         # write .info object back to S3

@@ -73,9 +73,10 @@ def main():
 
     results = app["results"]
     datasets = results["datasets"]
-    dt = datetime.fromtimestamp(results["lastModified"])
-    print(f"lastModified: {results['lastModified']} ({dt})")
-    print(f"size: {results['allocated_bytes']}")
+    lastModified = datetime.fromtimestamp(results["lastModified"])
+    total_size  = results["metadata_bytes"] + results["allocated_bytes"]
+    print(f"lastModified: {results['lastModified']}")
+    print(f"size: {total_size}")
     print(f"num chunks: {results['num_chunks']}")
     print(f"num_groups: {results['num_groups']}")
     print(f"num_datatypes: {results['num_datatypes']}")
@@ -84,6 +85,13 @@ def main():
         dataset_info = datasets[dsetid]
         print(f"   {dsetid}: {dataset_info['lastModified']}, {dataset_info['num_chunks']}, {dataset_info['allocated_bytes']}")
 
+    scan_start = datetime.fromtimestamp(results["scan_start"])
+    print(f"scan_start: {scan_start}")
+    scan_complete = datetime.fromtimestamp(results["scan_complete"])
+    print(f"scan_complete: {scan_complete}")
+
+
+    
     print("done!")
 
 main()

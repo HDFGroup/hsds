@@ -64,6 +64,7 @@ async def getS3RootKeysCallback(app, s3keys):
             results["datatype_count"] += info_obj["num_datatypes"]
             results["chunk_count"] += info_obj["num_chunks"]
             results["allocated_bytes"] += info_obj["allocated_bytes"]
+            results["metadata_bytes"] += info_obj["metadata_bytes"]
     
         
 
@@ -98,6 +99,7 @@ async def run_scan(app, update=False):
     scan_results["datatype_count"] = 0
     scan_results["chunk_count"] = 0
     scan_results["allocated_bytes"] = 0
+    scan_results["metadata_bytes"] = 0
     app["bucket_scan"] = scan_results
     results = await scanRootKeys(app, update=update)
     await releaseClient(app)
@@ -134,8 +136,9 @@ def main():
     print("group_count", results["group_count"])
     print("dataset_count:", results["dataset_count"])
     print("datatype_count", results["datatype_count"])
-    print("chunk_count:"), results["chunk_count"]
+    print("chunk_count:", results["chunk_count"])
     print('allocated_bytes:', results["allocated_bytes"])
+    print("metadata_bytes:", results["metadata_bytes"])
     print("updated_count:", results["updated_count"])
 
     print("done!")
