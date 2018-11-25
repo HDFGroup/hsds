@@ -177,7 +177,7 @@ async def get_domain_response(app, domain_json, verbose=False):
         rsp_json["num_datasets"] = num_datasets
         rsp_json["num_datatypes"] = num_datatypes
         rsp_json["num_objects"] = num_objects
-        rsp_json["totalSize"] = totalSize
+        rsp_json["total_size"] = totalSize
         rsp_json["allocated_bytes"] = allocated_bytes
         rsp_json["num_objects"] =  num_objects
 

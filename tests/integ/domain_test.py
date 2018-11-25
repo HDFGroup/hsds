@@ -157,6 +157,7 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers['content-type'], 'application/json; charset=utf-8')
         rspJson = json.loads(rsp.text)
+        print(rspJson)
          
         for name in ("lastModified", "created", "hrefs", "root", "owner", "class"):
             self.assertTrue(name in rspJson)
@@ -183,11 +184,13 @@ class DomainTest(unittest.TestCase):
         # test that allocated_bytes falls in a given range
 
         # TODO - fix in schema v2
-        #self.assertTrue(rspJson["allocated_bytes"] > 5000)  
-        #self.assertTrue(rspJson["allocated_bytes"] < 6000)  
+        self.assertEqual(rspJson["allocated_bytes"], 580)  
+        # total_size may change slightly based on specifics of JSON serialization
+        self.assertTrue(rspJson["total_size"] > 6000)  
+        self.assertTrue(rspJson["total_size"] < 7000)  
         # TODO - num_chunks should be present
-        #self.assertTrue("num_chunks" in rspJson)
-        #self.assertTrue(rspJson["num_chunks"], 4)
+        self.assertTrue("num_objects" in rspJson)
+        self.assertTrue(rspJson["num_objects"], 14)
 
 
     def testGetTopLevelDomain(self):
