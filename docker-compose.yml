@@ -41,8 +41,6 @@ services:
       - BUCKET_NAME=${BUCKET_NAME}
       - LOG_LEVEL=${LOG_LEVEL}
       - ANONYMOUS_TTL=${ANONYMOUS_TTL}
-    volumes:
-      - ${DB_HOST_DIR}:/data
     depends_on:
       - head
     ports:
