@@ -161,7 +161,9 @@ async def get_domain_response(app, domain_json, verbose=False):
             num_objects += root_info["num_chunks"]
             allocated_bytes = root_info["allocated_bytes"]  
             totalSize += allocated_bytes
-            totalSize += root_info["metadata_bytes"]
+            if "metadata_bytes" in root_info:
+                # this key was added for schema v2
+                totalSize += root_info["metadata_bytes"]
             if root_info["lastModified"] > lastModified:
                 lastModified = root_info["lastModified"]
 

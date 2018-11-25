@@ -75,7 +75,7 @@ def main():
     datasets = results["datasets"]
     lastModified = datetime.fromtimestamp(results["lastModified"])
     total_size  = results["metadata_bytes"] + results["allocated_bytes"]
-    print(f"lastModified: {results['lastModified']}")
+    print(f"lastModified: {lastModified}")
     print(f"size: {total_size}")
     print(f"num chunks: {results['num_chunks']}")
     print(f"num_groups: {results['num_groups']}")
