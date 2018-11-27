@@ -11,9 +11,9 @@ More info at: https://www.hdfgroup.org/solutions/hdf-kita/.
 Websites
 --------
 
-* Main website: https://www.hdfgroup.org/solutions/hdf-kita/ 
+* Main website: https://www.hdfgroup.org/kita
 * Source code: https://github.com/HDFGroup/hsds
-* Mailing list: hdf-forum@lists.hdfgroup.org <hdf-forum@lists.hdfgroup.org>
+* Mailing list: kita@forum.hdfgroup.org <kita@forum.hdfgroup.org>
 * Documentation: http://h5serv.readthedocs.org  (For REST API)
 
 Other useful resources
@@ -29,13 +29,13 @@ Other useful resources
 Quick Install
 -------------
 
-See: :doc:`docs/docker_install.rst`
+See: [docs/docker_install.rst](docs/docker_install.rst)
  
  
 Writing Client Applications
 ----------------------------
 As a REST service, clients be developed using almost any programming language.  The 
-test programs under: h5serv/test/integ illustrate some of the methods for peforming
+test programs under: h5serv/test/integ illustrate some of the methods for performing
 different operations using Python. 
 
 The related project: https://github.com/HDFGroup/h5pyd provides a (mostly) h5py-compatible 
@@ -56,12 +56,12 @@ Reporting bugs (and general feedback)
 
 Create new issues at http://github.com/HDFGroup/hsds/issues for any problems you find. 
 
-For general questions/feedback, please use the Kita forum: https://forum.hdfgroup.org/c/kita.
+For general questions/feedback, please use the Kita&trade; forum: https://forum.hdfgroup.org/c/kita.
 
 License
 -------
 
-This code is covered under an APACHE 2.0 license.  See LICENSE in this directory.
+HSDS is licensed under an APACHE 2.0 license.  See LICENSE in this directory.
 
 Integration with JupyterHub
 ---------------------------
@@ -80,11 +80,10 @@ AWS Marketplace
 ---------------
 
 The HDF Group provides an AWS Marketplace product, Kita&trade; Server, which provides simple installation of HSDS
-and related AWS resources.  HDF Kita offers these features:
+and related AWS resources.  Kita&trade; offers these features:
 
 * Stores usernames and passwords in a secure DynamoDB Table
 * Creates a AWS CloudWatch dashboard for service monitoring
 * Aggregates container logs to AWS CloudWatch
-* Includes Support by The HDF Group
 
 Kita&trade; Server for AWS Marketplace can be found here: https://aws.amazon.com/marketplace/pp/B07K2MWS1G. 
