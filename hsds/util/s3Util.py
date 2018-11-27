@@ -538,7 +538,7 @@ async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=Fal
         key_names = []
      
     # TBD - for some reason passing in non-null deliminator doesn't work
-    pages = paginator.paginate(MaxKeys=10, Bucket=bucket_name, Prefix=prefix, Delimiter=deliminator)
+    pages = paginator.paginate(MaxKeys=1000, Bucket=bucket_name, Prefix=prefix, Delimiter=deliminator)
     # fetch all will fill in key_names unless callback is provided
     count = await _fetch_all(app, pages, key_names, prefix=prefix, deliminator=deliminator, suffix=suffix, include_stats=include_stats, callback=callback)
 

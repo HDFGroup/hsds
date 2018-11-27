@@ -154,7 +154,6 @@ class GroupTest(unittest.TestCase):
         self.assertEqual(rspJson["attributeCount"], 0)   
         group_id = rspJson["id"]
         self.assertTrue(helper.validateId(group_id))
-        print(group_id)
 
         # verify we can do a get on the new group
         req = helper.getEndpoint() + '/groups/' + group_id

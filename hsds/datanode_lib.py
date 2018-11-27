@@ -18,7 +18,7 @@ from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError, HTTPBadReq
 from aiohttp.client_exceptions import ClientError
 
 from util.idUtil import validateInPartition, getS3Key, isValidUuid, isValidChunkId
-from util.s3Util import getS3JSONObj, putS3JSONObj, putS3Bytes, isS3Obj
+from util.s3Util import getS3JSONObj, putS3JSONObj, putS3Bytes, isS3Obj, deleteS3Obj
 from util.domainUtil import isValidDomain
 from util.attrUtil import getRequestCollectionName
 from util.httpUtil import http_put, http_delete
@@ -137,7 +137,7 @@ async def get_metadata_obj(app, obj_id):
 
 async def save_metadata_obj(app, obj_id, obj_json, notify=False, flush=False):
     """ Persist the given object """
-    log.info("save_metadata_obj {} notify={}".format(obj_id, notify))
+    log.info(f"save_metadata_obj {obj_id} notify={notify} flush={flush}")
     if not obj_id.startswith('/') and not isValidUuid(obj_id):
         msg = "Invalid obj id: {}".format(obj_id)
         log.error(msg)
@@ -177,6 +177,7 @@ async def save_metadata_obj(app, obj_id, obj_json, notify=False, flush=False):
             raise HTTPBadRequest()
         # write to S3, will raise HTTPInternalServerError if fails
         s3_key = getS3Key(obj_id)
+        log.debug(f"writing {s3_key} to S3")
         await putS3JSONObj(app, s3_key, obj_json) 
                                              
     else:
@@ -244,6 +245,15 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None):
     
     if obj_id in dirty_ids:
         del dirty_ids[obj_id]
+
+    # remove from S3 (if present)
+    s3key = getS3Key(obj_id)
+
+    if await isS3Obj(app, s3key):
+        await deleteS3Obj(app, s3key)
+    else:
+        log.info(f"delete_metadata_obj - key {s3key} not found (never written)?")
+
     
     if notify:
         an_url = getAsyncNodeUrl(app)
@@ -260,7 +270,7 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None):
             except HTTPInternalServerError as hse:
                 log.error(f"got HTTPInternalServerError: {hse}")
         else:
-            req = an_url + "/objects/" + obj_id
+            req = an_url + "/object/" + obj_id
             try:
                 log.info(f"ASync DELETE notify: {req}")
                 await http_delete(app, req)
@@ -268,6 +278,7 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None):
                 log.error(f"got ClientError notifying async node: {ce}")
             except HTTPInternalServerError as ise:
                 log.error(f"got HTTPInternalServerError notifying async node: {ise}")
+    log.debug(f"delete_metadata_obj for {obj_id} done")
 
     
 

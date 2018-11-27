@@ -11,26 +11,31 @@
 ##############################################################################
 
 import time
+from aiohttp.client_exceptions import ClientError
 from util.idUtil import isValidUuid, isSchema2Id, getS3Key, isS3ObjKey, getObjId, isValidChunkId, getCollectionForId
 from util.chunkUtil import getDatasetId
-from util.s3Util import getS3Keys, putS3JSONObj
+from util.s3Util import getS3Keys, putS3JSONObj, deleteS3Obj
 import hsds_logger as log
 
  
-# This is a utility to scan keys for a given domain and report totals.
+# List all keys under given root and optionally update info.json
 # Note: only works with schema v2 domains!  
   
-def getS3KeysCallback(app, s3keys):
-    log.debug(f"getS3KeysCallback, {len(s3keys)} items")
+def scanRootCallback(app, s3keys):
+    log.debug(f"scanRootCallback, {len(s3keys)} items")
     if isinstance(s3keys, list):
         log.error("got list result for s3keys callback")
         raise ValueError("unexpected callback format")
         
-    root_prefix = app["s3scan_prefix"] 
+    if "scanRoot_prefix" not in app or not app["scanRoot_prefix"]:
+        log.error("no root prefix set for scanRootCallback")
+        raise ValueError("unexpected callback")
+
+    root_prefix = app["scanRoot_prefix"] 
     results = app["results"]
     for s3key in s3keys.keys():
         full_key = root_prefix + s3key
-        log.debug(f"getS3KeysCallback: {full_key}")
+        log.debug(f"scanRootCallback: {full_key}")
 
         if not isS3ObjKey(full_key):
             log.info(f"not s3obj key, ignoring: {full_key}")
@@ -107,7 +112,7 @@ async def scanRoot(app, rootid, update=False):
     root_prefix = root_key[:-(len(".group.json"))]
     
     log.debug(f"using prefix: {root_prefix}")
-    app["s3scan_prefix"] = root_prefix
+    app["scanRoot_prefix"] = root_prefix
 
     results = {}
     results["lastModified"] = 0
@@ -121,16 +126,65 @@ async def scanRoot(app, rootid, update=False):
 
     app["results"] = results
      
-    await getS3Keys(app, prefix=root_prefix, include_stats=True, callback=getS3KeysCallback)
+    await getS3Keys(app, prefix=root_prefix, include_stats=True, callback=scanRootCallback)
 
-    log.info(f"scan complese for rootid: {rootid}")
+    log.info(f"scan complete for rootid: {rootid}")
     results["scan_complete"] = time.time()
+    # reset the prefix
+    app["scanRoot_prefix"] = None
 
     if update:
         # write .info object back to S3
         info_key = root_prefix + ".info.json"
         log.info(f"updating info key: {info_key}")
         await putS3JSONObj(app, info_key, results) 
-
-
     return results
+
+async def objDeleteCallback(app, s3keys):
+    log.info(f"objDeleteCallback, {len(s3keys)} items")
+    
+    if not isinstance(s3keys, list):
+        log.error("expected list result for objDeleteCallback")
+        raise ValueError("unexpected callback format")
+
+    
+    if "objDelete_prefix" not in app or not app["objDelete_prefix"]:
+        log.error("Unexpected objDeleteCallback")
+        raise ValueError("Invalid objDeleteCallback")
+
+    prefix = app["objDelete_prefix"]    
+    for s3key in s3keys:
+        full_key = prefix + s3key
+        log.info(f"objDeleteCallback got key: {full_key}")
+        await deleteS3Obj(app, full_key)
+        
+
+    log.info("objDeleteCallback complete")
+
+async def removeKeys(app, objid):
+    # iterate through all s3 keys under the given root or dataset id and delete them
+    #
+    # Note: not re-entrant!  Only one scanRoot an be run at a time per app.
+    log.debug(f"removeKeys: {objid}")
+    if not isSchema2Id(objid):
+        log.warn("ignoring non-schema2 id")
+        raise KeyError("Invalid key")
+    s3key = getS3Key(objid)
+    log.debug(f"got s3key: {s3key}")
+    expected_suffixes = (".dataset.json", ".group.json")
+    s3prefix = None
+    
+    for suffix in expected_suffixes:
+        if s3key.endswith(suffix):
+                s3prefix = s3key[:-len(suffix)]
+    if not s3prefix:
+        log.error("unexpected s3key for delete_set")
+        raise KeyError("unexpected key suffix")
+    log.info(f"delete for {objid} searching for s3prefix: {s3prefix}")
+    app["objDelete_prefix"] = s3prefix
+    try:
+        await getS3Keys(app, prefix=s3prefix, include_stats=False, callback=objDeleteCallback)
+    except ClientError as ce:
+        log.error(f"getS3Keys faiiled: {ce}")
+    # reset the prefix
+    app["objDelete_prefix"] = None

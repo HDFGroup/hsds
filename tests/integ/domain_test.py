@@ -389,11 +389,22 @@ class DomainTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         root_id = rspJson["root"]
 
+        # add a sub-group
+        req = helper.getEndpoint() + '/groups'  
+        rsp = requests.post(req, headers=headers)
+        self.assertEqual(rsp.status_code, 201) 
+        rspJson = json.loads(rsp.text)
+        group_id = rspJson["id"]
+        self.assertTrue(helper.validateId(group_id))
+        print("sub-group:", group_id)
+
         # do a get on the domain
+        req = helper.getEndpoint() + '/'
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertEqual(root_id, rspJson["root"])
+        print("root:", rspJson["root"])
         
         # try deleting the domain with a user who doesn't have permissions'
         headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")

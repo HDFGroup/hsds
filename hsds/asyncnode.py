@@ -23,9 +23,9 @@ from aiohttp.client_exceptions import ClientError
 import config
 from basenode import baseInit, healthCheck
 #from util.chunkUtil import getDatasetId
-from util.idUtil import isValidUuid, getObjId, isSchema2Id, getRootObjId
+from util.idUtil import isValidUuid, getObjId, isSchema2Id, getRootObjId, getCollectionForId, isRootObjId
 from util.s3Util import getS3Keys
-from async_lib import scanRoot
+from async_lib import scanRoot, removeKeys
 import hsds_logger as log
 #from async_lib import scanRoot
   
@@ -44,7 +44,7 @@ async def PUT_Objects(request):
     """HTTP method to notify creation/update of objid"""
     log.request(request)
     app = request.app
-    pending = app["pending"]
+    pending_set = app["pending"]
     log.info("PUT_Objects")
 
     if not request.has_body:
@@ -70,7 +70,7 @@ async def PUT_Objects(request):
             continue
         rootid = getRootObjId(objid)
         log.debug(f"adding root: {rootid} to pending queue for objid: {objid}")
-        pending.add(rootid) 
+        pending_set.add(rootid) 
 
     resp_json = {  } 
     resp = json_response(resp_json, status=201)
@@ -81,7 +81,7 @@ async def PUT_Object(request):
     """HTTP method to notify creation/update of objid"""
     log.request(request)
     app = request.app
-    pending = app["pending"]
+    pending_set = app["pending"]
     objid = request.match_info.get('id')
     if not objid:
         log.error("PUT_Object with no id")
@@ -96,7 +96,7 @@ async def PUT_Object(request):
     if isSchema2Id(objid):
         rootid = getRootObjId(objid)
         log.debug(f"adding root: {rootid} to pending queue for objid: {objid}")
-        pending.add(rootid) 
+        pending_set.add(rootid) 
 
     resp_json = {  } 
     resp = json_response(resp_json, status=201)
@@ -109,7 +109,7 @@ async def PUT_Domain(request):
     log.request(request)
     
     app = request.app
-    pending = app["pending"]
+    pending_set = app["pending"]
     params = request.rel_url.query
     if "domain" not in params:
         msg = "No domain provided"
@@ -137,7 +137,7 @@ async def PUT_Domain(request):
 
         if isSchema2Id(rootid):
             log.info(f"Adding root: {rootid} to pending for PUT domain: {domain}")
-            pending.add(rootid)
+            pending_set.add(rootid)
 
     resp_json = {}
     resp = json_response(resp_json, status=201)
@@ -185,7 +185,7 @@ async def DELETE_Object(request):
     log.request(request)
 
     app = request.app
-    pending = app["pending"]
+    delete_set = app["delete_set"]
 
     objid = request.match_info.get('id')
     if not isValidUuid(objid):
@@ -194,17 +194,28 @@ async def DELETE_Object(request):
 
     if isSchema2Id(objid):
         # get rootid for this id
-        rootid = getRootObjId(objid)
-        log.info(f"Adding root: {rootid} to pending for obj deletion of: {objid}")
-        pending.add(rootid)
-
+        collection = getCollectionForId(objid)
+        if collection == "datasets":
+            delete_set.add(objid)
+        elif collection == "groups":
+            # only need to do anything if this the root group
+            if isRootObjId(objid):
+                log.info(f"adding root group: {objid} to delete_set")
+                delete_set.add(objid)
+            else:
+                log.info(f"ignoring delete non-root group: {objid}")
+        elif collection == "datatypes":
+            log.info(f"ignoring delete for datatype object: {objid}")
+        else:
+            log.error(f"Unexpected collection type: {collection}")
+         
     resp_json = {}
     resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
 
 async def bucketScanCallback(app, s3keys):
-    log.info(f"getS3RootKeysCallback, {len(s3keys)} items")
+    log.info(f"bucketScanCallback, {len(s3keys)} items")
     if not isinstance(s3keys, list):
         log.error("expected list result for s3keys callback")
         raise ValueError("unexpected callback format")
@@ -214,37 +225,41 @@ async def bucketScanCallback(app, s3keys):
     for s3key in s3keys:
         log.info(f"got key: {s3key}")
         if not s3key.startswith("db/") or s3key[-1] != '/':
-            log.error(f"unexpected key for getS3RootKeysCallback: {s3key}")
+            log.error(f"unexpected key for bucketScanCallback: {s3key}")
             continue
         rootid = getObjId(s3key + ".group.json")
         log.info(f"root_id: {rootid}")
 
-        # if there are many items in the pending set, wait for it to drain a bit
-        while len(pending) > 100:
-            log.info(f"bucketScan: waiting for pending to drain: {len(pending)}")
+        # wait till the pending queue is empty before adding more items
+        while len(pending) > 0:
+            log.debug(f"bucketScan: waiting for pending to drain: {len(pending)}")
             await asyncio.sleep(1)
         log.debug(f"bucket scan - adding key {rootid} to pending")
         pending.add(rootid)
 
-    log.info("getS3RootKeysCallback complete")
+    log.info("bucketScanCallback complete")
+
+
 
  
 async def processPending(app):
     """ Process rootids in pending set """      
-    pending = app["pending"]
-    pending_count = len(pending)
+    pending_set = app["pending"]
+    delete_set = app["delete_set"]
+    pending_count = len(pending_set)
+    delete_count = len(delete_set)
     #conn = app["conn"]
-    if pending_count == 0:
-        return 0 # nothing to do
-    log.info("processPendingSet start - {} items".format(pending_count))    
+    if pending_count == 0 and delete_count == 0:
+        return  # nothing to do
+    log.info(f"processPendingSet start - {pending_count} items")    
      
     # TBD - this could starve other work if items are getting added to the pending
     # queue continually.  Copy items off pending queue synchronously and then process?
-    while len(pending) > 0:
-        log.debug("pending len: {}".format(len(pending)))
-        rootid = pending.pop()  # remove from the front
+    while len(pending_set) > 0:
+        log.debug(f"pending len: {len(pending_set)}")
+        rootid = pending_set.pop()  # remove from the front
 
-        log.debug("pop from pending set: obj: {}".format(rootid))
+        log.debug(f"pop from pending set: obj: {rootid}")
         if not isValidUuid(rootid):
             log.error(f"Invalid root id: {rootid}")
             continue
@@ -254,6 +269,17 @@ async def processPending(app):
             continue
 
         await scanRoot(app, rootid, update=True)
+
+    log.info("processPendingSet done")
+
+    while len(delete_set) > 0:
+        objid = delete_set.pop()
+        try:
+            await removeKeys(app, objid)
+        except KeyError as ke:
+            log.error(f"removeKeys faiiled: {ke}")
+        
+
 
       
 
@@ -276,13 +302,13 @@ async def pendingCheck(app):
         try:
             await processPending(app)
         except Exception as e:
-            log.warn("bucketCheck - got exception from processPendingQueue: {}".format(e))
+            log.warn("pendingCheck - got exception from processPendingQueue: {}".format(e))
 
         
         await asyncio.sleep(async_sleep_time)   
 
     # shouldn't ever get here     
-    log.error("bucketCheck terminating unexpectedly")
+    log.error("pendingCheck terminating unexpectedly")
 
 
 async def bucketScan(app):
@@ -313,10 +339,12 @@ async def bucketScan(app):
                 await getS3Keys(app, prefix="db/", deliminator='/', include_stats=False, callback=bucketScanCallback)
             except ClientError as ce:
                 log.error(f"getS3Keys faiiled: {ce}")
-            now = time.time*()
+            now = time.time()
             log.info(f"bucketScan complete {datetime.fromtimestamp(now)}")
-            app["last_bucket_scan"] = int(time.time())
+            last_scan = now
+            app["last_bucket_scan"] = int(now)
 
+           
         await asyncio.sleep(async_sleep_time)   
 
     # shouldn't ever get here     
@@ -336,6 +364,8 @@ async def init(loop):
     app.router.add_route('DELETE', '/domain', DELETE_Domain)
     # set of rootids to scans
     app["pending"] = set() 
+    # set of ids to be deleted
+    app["delete_set"] = set()
     app["bucket_stats"] = {}
     app["last_bucket_scan"] = 0
     app["anonymous_ttl"] = int(config.get("anonymous_ttl"))
