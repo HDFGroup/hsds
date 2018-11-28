@@ -73,10 +73,7 @@ The following constraints and assumptions are given as the basis of the schema d
 #. Object keys are limited to 1024 characters
 #. The use of many small objects would be prohibitive from a cost perspective (API Request Pricing)
 #. The use of very large objects (e.g. >100MB) would introduce excessive latency
-#. The first 3-4 characters of the keys should be randomly distributed (to avoid request rate limits due to a single storage system be targeted)
-#. Listing keys is generally inefficient (and would not work well with randomly distributed keys)
 #. The storage system is not read-write consistent
-#. The storage system supports object metadata of at least 1024 bytes per object
 #. The aggregate throughput of the storage system would not be expected to limit hsds scalability 
 #. All objects managed by hsds will exist in one "bucket", the hsds service will have read-write authority for the given bucket
 #. All updates to the objects will be through the hsds service
@@ -238,7 +235,7 @@ Notes:
 * The service layer may impose a policy where domains can only be created if there is an existing domain with the requisite permission ACLs for the requesting user.  One or more "top-level" domains (e.g. "/home") would be created outside the service API (e.g. by an administrator with permissions to create objects in the bucket directly).
 * The owner and root keys can be assumed to be immutable (i.e. these values can be cached)
 * Metadata about the owner (and other usernames referenced in this schema) are assumed to be stored in another system (such as NASA URS)
-* The "root" key is optional.  If not present, the domain doesn't have an associated root group (but can server as a place-holder for sub-domains)
+* The "root" key is optional.  If not present, the domain doesn't have an associated root group (but can serve as a place-holder for sub-domains)
 
 Domain object example
 ---------------------
@@ -432,7 +429,6 @@ The Committed type storage schema consists of JSON with the following keys:
 
 Notes:
 
-* "acls" is an optional key.  If the key is not present (or is present, but the requesting user sub-key is not), the domain ACL will be used (see "Domain ACLs")
 * See "Attributes" for a description of the object schema for attributes
 * See "Links" for a description of the object schema for links
 * See "Types" for a description of the object schema for type
@@ -511,7 +507,6 @@ Notes:
 
 * See: http://hdf5-json.readthedocs.io/en/latest/bnf/dataset.html#grammar-token-dcpl for a specification of the "creationProperties" object
 * "creationProperties" may optionaly provide a chunk layout, but "layout" object of dataset may differ from what is provided in "creationProperties"  (for optimization purposes the hsds service may use different layout values)
-* "acls" is an optional key.  If the key is not present (or is present, but the requesting user sub-key is not), the domain ACL will be used (see "Domain ACLs")
 * See "Attributes" for a description of the object schema for attributes
 * See "Types" for a description of the object schema for type
 * The "id", "root", "domain", "creationProperties", "layout", and "type" keys can be assumed to be immutable
@@ -604,6 +599,74 @@ Consider a dataset with a dataspace of [100,100] and a chunk layout of [10,10]. 
 The chunk object would contain binary data of the data values in the chunk.
 
 If the chunk is not compressed, the size of the object would be 10 \* 10 \* <item_size>.  If compressed, the object size would (presumably!) be less.
+
+Summary Data
+**************
+
+While it is useful to have information about a domain as a whole, e.g. the amount of storage used, for large collections it can be 
+inefficient to iterate through all the keys in a domain (i.e. the keys under the domain's root group key).  To provide a convenient source
+for aggregate charateristics, a ".info.json" object may be created under each root group.  In hsds this object is created by the ASYNC node,
+and therefore the contents of the object may not accurately reflect the real time state of the domain.
+
+
+Summary key
+------------
+
+The summary key is of the form::
+
+   db/<uuid1>/.info.json
+
+Where:
+
+* <uuid1> is the first 16 hex characters of the root id for the domain
+
+Note: For recently created domains, the object may not be present.
+
+Summary Specification
+---------------------
+
+The summary  schema consists of JSON with the following keys:
+
+* "lastModified": The most recent modification time for any object in the domain
+* "num_groups": The number of groups in the domain (including the root group)
+* "num_datatypes": The number of datatypes in the domain
+* "datasets": A map of datasets belonging to the domain.  Each item has keys for "lastModified", "num_chunks", and "allocated_bytes"
+* "num_chunks": The number of chunks present in the domain (across all datasets)
+* "allocated_bytes": Amount of storage used by chunks in the domain
+* "metadata_bytes": Amount of storage used by metadata objects (objects with a .json suffix) in the domain 
+* "scan_start": Timestamp for when the domain scan process started
+* "scan_complete": Timestamp for when the domain scan process comnpleted
+
+
+Summary example
+--------------------
+ 
+Key::
+
+    db/7c84a4f8-7f61cd74/.info.json
+
+Object:
+
+.. code-block:: json
+
+
+    {
+        "lastModified": 1543365852, 
+        "num_groups": 1, 
+        "num_datatypes": 0, 
+        "datasets": {
+            "d-7c84a4f8-7f61cd74-c999-bcdfad-2602e8": {
+                "lastModified": 1543365852, 
+                "num_chunks": 153, 
+                "allocated_bytes": 160432128
+            }
+        }, 
+        "num_chunks": 5725, 
+        "allocated_bytes": 6003097600, 
+        "metadata_bytes": 2494, 
+        "scan_start": 1543365850.919641, 
+        "scan_complete": 1543365852.811196
+    }
 
 
 Sub-object schema description
