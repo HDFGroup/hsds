@@ -71,7 +71,7 @@ def main():
   
     loop.close()
 
-    results = app["results"]
+    results = app["scanRoot_results"]
     datasets = results["datasets"]
     lastModified = datetime.fromtimestamp(results["lastModified"])
     total_size  = results["metadata_bytes"] + results["allocated_bytes"]

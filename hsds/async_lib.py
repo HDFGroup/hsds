@@ -27,20 +27,13 @@ def scanRootCallback(app, s3keys):
         log.error("got list result for s3keys callback")
         raise ValueError("unexpected callback format")
         
-    if "scanRoot_prefix" not in app or not app["scanRoot_prefix"]:
-        log.error("no root prefix set for scanRootCallback")
-        raise ValueError("unexpected callback")
-
-    root_prefix = app["scanRoot_prefix"] 
-    results = app["results"]
+    results = app["scanRoot_results"]
     for s3key in s3keys.keys():
-        full_key = root_prefix + s3key
-        log.debug(f"scanRootCallback: {full_key}")
 
-        if not isS3ObjKey(full_key):
-            log.info(f"not s3obj key, ignoring: {full_key}")
+        if not isS3ObjKey(s3key):
+            log.info(f"not s3obj key, ignoring: {s3key}")
             continue
-        objid = getObjId(full_key)
+        objid = getObjId(s3key)
         etag = None
         obj_size = None
         lastModified = None
@@ -112,7 +105,6 @@ async def scanRoot(app, rootid, update=False):
     root_prefix = root_key[:-(len(".group.json"))]
     
     log.debug(f"using prefix: {root_prefix}")
-    app["scanRoot_prefix"] = root_prefix
 
     results = {}
     results["lastModified"] = 0
@@ -124,14 +116,12 @@ async def scanRoot(app, rootid, update=False):
     results["metadata_bytes"] = 0
     results["scan_start"] = time.time()
 
-    app["results"] = results
+    app["scanRoot_results"] = results
      
     await getS3Keys(app, prefix=root_prefix, include_stats=True, callback=scanRootCallback)
 
     log.info(f"scan complete for rootid: {rootid}")
     results["scan_complete"] = time.time()
-    # reset the prefix
-    app["scanRoot_prefix"] = None
 
     if update:
         # write .info object back to S3

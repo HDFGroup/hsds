@@ -403,132 +403,51 @@ async def isS3Obj(app, key):
     log.debug("isS3Obj {} returning {}".format(key, found))
     return found
 
-        
+ 
+def getPageItems(response, items, include_stats=False):  
      
-"""
-Helper function for getS3Keys
-"""
-async def _fetch_all(app, pages, key_names, prefix='', deliminator='', suffix='', include_stats=False, callback=None):
-    count = 0
-    retry_limit = 3
-    while True:
-        for retry_number in range(retry_limit):
-            try: 
-                response = await pages.next_page()
-                break  # success
-            except AttributeError as ae:
-                # aiobotocore if throwing an attribute error when there  is a problem
-                # with the S3 connection
-                # back off and try again
-                if retry_number == retry_limit - 1:
-                    log.error("Error retreiving s3 keys")
-                    raise HTTPInternalServerError()
-                log.warn("Error retrieving S3 keys, retrying")
-                sleep_seconds = (retry_number+1)**2  # sleep, 1,4,9, etc. seconds
-                await asyncio.sleep(sleep_seconds)
-        if response is None:
-            break
-        last_key = None
-        if 'CommonPrefixes' in response:
-            log.debug("got CommonPrefixes in s3 response")
-            common = response["CommonPrefixes"]
-            for item in common:
-                if 'Prefix' in item:
-                    log.debug("got s3 prefix: {}".format(item['Prefix']))
-                    if include_stats:
-                        # TBD: not sure what makes sense to include for stats here
-                        key_names[item['Prefix']] = {}
-                    else:
-                        key_names.append(item['Prefix'])
-                    count += 1
-
-        elif 'Contents' in response:
-            log.debug("got Contents in s3 response")
-            contents = response['Contents']
-            for item in contents:
-                key_name = item['Key']
-                log.debug("got s3key: {}".format(key_name))
-                if suffix and not key_name.endswith(suffix):
-                    log.info("got s3key without suffix")
-                    continue
-                
-                if prefix:
-                    key_name = key_name[len(prefix):]  # just include after prefix
-                if suffix:
-                    n = len(suffix)
-                    key_name = key_name[:-n]
-                if deliminator:
-                    if key_name.endswith(deliminator):
-                        key_name = key_name[:-1]  # don't show ending deliminator
-                    if key_name.startswith(deliminator):
-                        key_name = key_name[1:]
-                    index = key_name.find(deliminator)
-                    if index > 0:
-                        # include just to the deliminator
-                        key_name = key_name[:index]
-                    if not key_name:
-                        continue  # trimed away to non-existence
-                    if last_key and key_name == last_key:
-                        continue  # not unique
-                    last_key = key_name
-                if include_stats:
-                    #
-                    # key + stats format:
-                    #
-                    # key   38 + chunk_index                       | chunk|etag - 32 hex -> 16 bytes               | lm - 4 bytes  | size - 4 bytes
-                    # c-287d0b70-29e0-11e7-ab6f-0242ac110007_17_2_4 860e189d78013404a3940900b956892c1493142971 1233936
-                    # 
-                    # ~ 146 bytes in Python
-                    # ~ 45 bytes in C
-                    
-                    stats = {}
-                    if item["ETag"]:
-                        stats["ETag"] = item["ETag"]
-                    else:
-                        if "Owner" in item and "ID" in item["Owner"] and item["Owner"]["ID"] == "minio":
-                            pass # minio is not creating ETags...
-                        else:
-                            log.warn("No ETag for key: {}".format(key_name))
-                        # If no ETAG put in a fake one
-                        stats["ETag"] = "9999"
-                    if "Size" in item:
-                        stats["Size"] = item["Size"]
-                    else:
-                        log.warn("No Size for key: {}".format(key_name))
-                    if "LastModified" in item:
-                        stats["LastModified"] = int(item["LastModified"].timestamp())
-                    else:
-                        log.warn("No LastModified for key: {}".format(key_name))
-                    log.debug("key: {} stats: {}".format(key_name, stats))
-                    key_names[key_name] = stats
-                    count += 1
+    log.info("getPageItems")
+    
+    if 'CommonPrefixes' in response:
+        log.debug("got CommonPrefixes in s3 response")
+        common = response["CommonPrefixes"]
+        for item in common:
+            if 'Prefix' in item:
+                log.debug("got s3 prefix: {}".format(item['Prefix']))
+                items.append(item["Prefix"])
+                 
+    elif 'Contents' in response:
+        log.debug("got Contents in s3 response")
+        contents = response['Contents']
+        for item in contents:
+            key_name = item['Key']
+            if include_stats:
+                stats = {}
+                if item["ETag"]:
+                    stats["ETag"] = item["ETag"]
                 else:
-                    key_names.append(key_name)
-                    count += 1
-        # done with all items in this response
-        if len(key_names) > 0:
-            if callback:
-                if iscoroutinefunction(callback):
-                    await callback(app, key_names)
+                    log.warn("No ETag for key: {}".format(key_name))
+                if "Size" in item:
+                    stats["Size"] = item["Size"]
                 else:
-                    callback(app, key_names)
-                
-                # reset key_names
-                log.debug("reset key_names")
-                key_names.clear()
-             
-             
-    # end while True
-    return count
-# end _fetch_all
-        
+                    log.warn("No Size for key: {}".format(key_name))
+                if "LastModified" in item:
+                    stats["LastModified"] = int(item["LastModified"].timestamp())
+                else:
+                    log.warn("No LastModified for key: {}".format(key_name))
+                log.debug("key: {} stats: {}".format(key_name, stats))
+                items[key_name] = stats
+            else:
+                items.append(key_name)
+               
+# end getPageItems
     
 
 async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=False, callback=None):
     # return keys matching the arguments
     s3_client = getS3Client(app)
     bucket_name = app['bucket_name']
-    log.info("getS3Keys('{}','{}','{}')".format(prefix, deliminator, suffix))
+    log.info(f"getS3Keys('{prefix}','{deliminator}','{suffix}', include_stats={include_stats}")
     paginator = s3_client.get_paginator('list_objects')
     if include_stats:
         # use a dictionary to hold return values
@@ -536,13 +455,24 @@ async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=Fal
     else:
         # just use a list
         key_names = []
-     
-    # TBD - for some reason passing in non-null deliminator doesn't work
-    pages = paginator.paginate(MaxKeys=1000, Bucket=bucket_name, Prefix=prefix, Delimiter=deliminator)
-    # fetch all will fill in key_names unless callback is provided
-    count = await _fetch_all(app, pages, key_names, prefix=prefix, deliminator=deliminator, suffix=suffix, include_stats=include_stats, callback=callback)
 
-    log.info("getS3Keys done, got {} keys".format(count))
+    async for page in paginator.paginate(
+        PaginationConfig={'PageSize': 1000}, Bucket=bucket_name,  Prefix=prefix, Delimiter=deliminator):
+        assert not asyncio.iscoroutine(page)
+        #log.info(f"got page: {page}")
+        getPageItems(page, key_names, include_stats=include_stats)
+        if callback:
+            if iscoroutinefunction(callback):
+                await callback(app, key_names)
+            else:
+                callback(app, key_names)
+            if include_stats:
+                key_names = {}
+            else:
+                key_names = []
+
+ 
+    log.info(f"getS3Keys done, got {len(key_names)} keys")
                
     return key_names
 

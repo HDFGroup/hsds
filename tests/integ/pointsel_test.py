@@ -215,7 +215,7 @@ class PointSelTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rsp_data = rsp.content
         self.assertEqual(len(rsp_data), num_points*4)
-        arr_rsp = np.fromstring(rsp_data, dtype='i4')
+        arr_rsp = np.frombuffer(rsp_data, dtype='i4')
         rsp_values = arr_rsp.tolist()
         expected_result = [97, 96, 94, 92, 88, 86, 82, 80, 76, 70, 68, 62, 58, 56, 52, 46, 40, 38, 32, 28, 26, 20, 16, 2, 1]
         self.assertEqual(rsp_values, expected_result)
@@ -286,7 +286,7 @@ class PointSelTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rsp_data = rsp.content
         self.assertEqual(len(rsp_data), num_points*4)
-        arr_rsp = np.fromstring(rsp_data, dtype='i4')
+        arr_rsp = np.frombuffer(rsp_data, dtype='i4')
         values = arr_rsp.tolist()
          
         expected_result = [50005, 50010, 50015, 50020, 50025, 100005, 100010, 
@@ -584,4 +584,3 @@ if __name__ == '__main__':
     #setup test files
     
     unittest.main()
-    

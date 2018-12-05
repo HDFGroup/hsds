@@ -409,6 +409,8 @@ async def PUT_Domain(request):
     body = None
     is_folder = False
     owner = username
+    linked_domain = None
+    root_id = None
     if request.has_body:
         body = await request.json()   
         log.debug("PUT domain with body: {}".format(body))
@@ -417,6 +419,13 @@ async def PUT_Domain(request):
                 is_folder = True
         if body and "owner" in body:
             owner = body["owner"]
+        if body and "linked_domain" in body:
+            if is_folder:
+                msg = "Folder domains can not be used for links"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            linked_domain = body["linked_domain"]
+            log.info(f"linking to domain: {linked_domain}")
 
     if owner != username and username != "admin":
         log.warn("Only admin users are allowed to set owner for new domains");   
@@ -462,8 +471,22 @@ async def PUT_Domain(request):
 
     if parent_json:
         aclCheck(parent_json, "create", username)  # throws exception if not allowed
+
+    if linked_domain:
+        linked_json = await getDomainJson(app, linked_domain, reload=True)
+        log.debug(f"got linked json: {linked_json}")
+        if "root" not in linked_json:
+            msg = "Folder domains cannot ber used as link target"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        root_id = linked_json["root"]
+        aclCheck(linked_json, "read", username)
+        aclCheck(linked_json, "delete", username)
+    else:
+        linked_json = None
+
     
-    if not is_folder:
+    if not is_folder and not linked_json:
         # create a root group for the new domain
         root_id = createObjId("roots") 
         log.debug("new root group id: {}".format(root_id))
@@ -497,7 +520,7 @@ async def PUT_Domain(request):
     body = { "owner": owner, "domain": domain }
     body["acls"] = domain_acls
 
-    if not is_folder:
+    if root_id:
         body["root"] = root_id
 
     log.debug("creating domain: {} with body: {}".format(domain, body))
@@ -517,9 +540,11 @@ async def DELETE_Domain(request):
     """HTTP method to delete a domain resource"""
     log.request(request)
     app = request.app 
+    params = request.rel_url.query
 
     domain = None
     meta_only = False  # if True, just delete the meta cache value
+    keep_root = False
     if request.has_body:
         body = await request.json() 
         if "domain" in body:
@@ -531,6 +556,9 @@ async def DELETE_Domain(request):
 
         if "meta_only" in body:
             meta_only = body["meta_only"]
+        if "keep_root" in body:
+            keep_root = body["keep_root"]
+
     else:
         # get domain from request uri
         try:
@@ -539,6 +567,8 @@ async def DELETE_Domain(request):
             msg = "Invalid domain"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
+        if "keep_root" in params:
+            keep_root = params["keep_root"]
 
     log.info("meta_only domain delete: {}".format(meta_only))
     if meta_only:
@@ -580,8 +610,7 @@ async def DELETE_Domain(request):
     
     rsp_json = await http_delete(app, req, data=body)
  
-    
-    if "root" in domain_json:
+    if "root" in domain_json and not keep_root:
         # delete the root group
         root_id = domain_json["root"]
         req = getDataNodeUrl(app, root_id)

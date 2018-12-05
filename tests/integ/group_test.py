@@ -83,7 +83,6 @@ class GroupTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
          
         grp_uuid = root_uuid = rspJson["root"]
-        print(grp_uuid)
         self.assertTrue(grp_uuid.startswith("g-"))
 
         # get the group json
