@@ -1411,6 +1411,17 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
 
+        # read values from the extended region
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        params = {"select": "[{}:{}]".format(0, num_elements)}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        data = rspJson["value"]
+        self.assertEqual(data[0:orig_extent], list(range(orig_extent)))
+
         # write to the extended region 
         payload = {'value': value, 'start': 10, 'stop': 20}
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
