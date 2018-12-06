@@ -28,6 +28,7 @@ def scanRootCallback(app, s3keys):
         raise ValueError("unexpected callback format")
         
     results = app["scanRoot_results"]
+    log.debug(f"previous scanRoot_results:".format(results))
     for s3key in s3keys.keys():
 
         if not isS3ObjKey(s3key):
@@ -47,6 +48,7 @@ def scanRootCallback(app, s3keys):
         log.debug(f"{objid}: {etag} {obj_size} {lastModified}")
 
         if lastModified > results["lastModified"]:
+            log.debug(f"changing lastModified from: {results['lastModified']} to {lastModified}")
             results["lastModified"] = lastModified
         is_chunk = False
         if isValidChunkId(objid):
