@@ -59,8 +59,9 @@ async def GET_Domain(request):
     app = request.app
 
     domain = get_domain(request)
-    log.debug("get domain: {}".format(domain))
+    log.debug(f"get domain: {domain}")
     domain_json = await get_metadata_obj(app, domain)
+    log.debug(f"returning domain_json: {domain_json}")
 
     resp = json_response(domain_json)
     log.response(request, resp=resp)

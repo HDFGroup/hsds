@@ -32,7 +32,7 @@ async def getDomainJson(app, domain, reload=False):
     # cached values being picked up (test case deletes/re-creates domain)
     # It would be desirable to use default of False to avoid extra
     # round-trips to DN node
-    log.info("getDomainJson({})".format(domain))
+    log.info(f"getDomainJson({domain}, reload={reload})")
     if app["node_type"] != "sn":
         log.error("wrong node_type")
         raise HTTPInternalServerError()
