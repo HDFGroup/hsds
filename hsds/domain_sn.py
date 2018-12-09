@@ -12,15 +12,18 @@
 #
 # service node of hsds cluster
 # 
-#import asyncio 
+from asyncio import CancelledError
+import asyncio
 import json
+
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPGone, HTTPInternalServerError
 from aiohttp import ClientResponseError
 from aiohttp.web import json_response
+from aiohttp.client_exceptions import ClientError
 
 
-from util.httpUtil import  http_post, http_put, http_get, http_delete, getHref
-from util.idUtil import  getDataNodeUrl, createObjId, getCollectionForId
+from util.httpUtil import  http_post, http_put, http_get, http_delete, getHref, get_http_client
+from util.idUtil import  getDataNodeUrl, createObjId, getCollectionForId, getDataNodeUrls
 from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
 from util.domainUtil import getParentDomain, getDomainFromRequest
@@ -385,11 +388,39 @@ async def GET_Domain(request):
     log.response(request, resp=resp)
     return resp
 
+async def doFlush(app, root_id):
+    """ return wnen all DN nodes have wrote any pending changes to S3"""
+    log.info(f"doFlush {root_id}")
+    loop = app["loop"]
+    params = {"flush": 1}
+    client = get_http_client(app)
+    dn_urls = getDataNodeUrls(app)
+    log.debug(f"dn_urls: {dn_urls}")
+
+    try: 
+        tasks = []
+        for dn_url in dn_urls:
+            req = dn_url + "/groups/" + root_id 
+            task = asyncio.ensure_future(client.put(req, params=params))
+            tasks.append(task)  
+        await asyncio.gather(*tasks, loop=loop)
+    except ClientError as ce:
+        log.error(f"Error for http_put('/groups/{root_id}')")   
+        raise HTTPInternalServerError()
+    except CancelledError as cle:
+        log.warn("CancelledError '/groups/{root_id}'): {str(cle)}")
+        raise HTTPInternalServerError()
+
+      
+
+
+
 async def PUT_Domain(request):
     """HTTP method to create a new domain"""
     log.request(request)
     app = request.app
-    # yet exist
+    params = request.rel_url.query
+    # verify username, password
     username, pswd = getUserPasswordFromRequest(request) # throws exception if user/password is not valid
     await validateUserPassword(app, username, pswd)
 
@@ -405,6 +436,32 @@ async def PUT_Domain(request):
         raise HTTPBadRequest(reason=msg)
  
     log.info("PUT domain: {}, username: {}".format(domain, username))
+
+    if "flush" in params and params["flush"]:
+        # flush domain - update existing domain rather than create a new resource
+        domain_json = await getDomainJson(app, domain, reload=True)
+        log.debug("got domain_json: {}".format(domain_json))
+    
+        if domain_json is None:
+            log.warn("domain: {} not found".format(domain))
+            raise HTTPNotFound()
+     
+        if 'owner' not in domain_json:
+            log.error("No owner key found in domain")
+            raise HTTPInternalServerError()
+
+        if 'acls' not in domain_json:
+            log.error("No acls key found in domain")
+            raise HTTPInternalServerError()
+
+        aclCheck(domain_json, "update", username)  # throws exception if not allowed
+        if "root" in domain_json:
+            # nothing to do for folder objects
+            await doFlush(app, domain_json["root"])
+        # flush  successful     
+        resp = json_response(None, status=204)
+        log.response(request, resp=resp)
+        return resp
 
     body = None
     is_folder = False

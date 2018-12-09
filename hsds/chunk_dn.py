@@ -154,10 +154,6 @@ async def PUT_Chunk(request):
             deflate_map[dset_id] = deflate_level
             log.info("update deflate_map: {}: {}".format(dset_id, deflate_level))
     
-    dset_root_map = app["dset_root_map"]
-    if dset_id not in dset_root_map:
-        dset_root_map[dset_id] = dset_json["root"]
-    
     s3_key = getS3Key(chunk_id)
     log.debug("PUT_Chunks s3_key: {}".format(s3_key))
     if chunk_id in chunk_cache:
@@ -282,13 +278,34 @@ async def GET_Chunk(request):
             msg = "Chunk {} does not exist".format(chunk_id)
             log.info(msg)
             raise HTTPNotFound()
-        log.debug("Reading chunk {} from S3".format(s3_key))
-        chunk_bytes = await getS3Bytes(app, s3_key, deflate_level=deflate_level)
-        #chunk_arr = np.fromstring(chunk_bytes, dtype=dt)
-        chunk_arr = bytesToArray(chunk_bytes, dt, dims)
-        log.debug("chunk size: {}".format(chunk_arr.size))
-        #chunk_arr = chunk_arr.reshape(dims)
-        chunk_cache[chunk_id] = chunk_arr  # store in cache
+        pending_s3_read = app["pending_s3_read"]
+        if s3_key in pending_s3_read:
+            # already a read in progress, wait for it to complete
+            read_start_time = pending_s3_read[s3_key]
+            log.info(f"s3 read request for {s3_key} was requested at: {read_start_time}")
+            while time.time() - read_start_time < 2.0:
+                log.debug("waiting for pending s3 read, sleeping")
+                await asyncio.sleep(1)  # sleep for sub-second?
+                if chunk_id in chunk_cache:
+                    log.info(f"Chunk {chunk_id} has arrived!")
+                    chunk_arr = chunk_cache[chunk_id]
+                    break
+            if not chunk_arr:
+                log.warn(f"s3 read for chunk {chunk_id} timed-out, initiaiting a new read")
+
+        if not chunk_arr:
+            if s3_key not in pending_s3_read:
+                pending_s3_read[s3_key] = time.time()
+            log.debug("Reading chunk {} from S3".format(s3_key))
+            chunk_bytes = await getS3Bytes(app, s3_key, deflate_level=deflate_level)
+            if s3_key in pending_s3_read:
+                # read complete - remove from pending map
+                elapsed_time = time.time() - pending_s3_read[s3_key]
+                log.info(f"s3 read for {s3_key} took {elapsed_time}")
+                del pending_s3_read[s3_key] 
+            chunk_arr = bytesToArray(chunk_bytes, dt, dims)
+            log.debug("chunk size: {}".format(chunk_arr.size))
+            chunk_cache[chunk_id] = chunk_arr  # store in cache
      
     resp = None
     

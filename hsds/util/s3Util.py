@@ -155,7 +155,15 @@ async def getS3JSONObj(app, key):
         # key does not exist?
         # check for not found status
         # Note: Error.Code should always exist - cf https://github.com/boto/botocore/issues/885
+        log.info("ClientError on getS3JSONObj")
         response_code = ce.response['Error']['Code']
+
+        # remove key from pending map if present
+        if "pending_s3_read" in app:  
+            pending_s3_read = app["pending_s3_read"]
+            if key in pending_s3_read:
+                log.debug(f"remove {key} from pending_s3_read")
+                del pending_s3_read[key]
          
         if response_code == "NoSuchKey":
             msg = "s3_key: {} not found ".format(key,)

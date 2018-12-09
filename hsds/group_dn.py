@@ -17,8 +17,8 @@ import time
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalServerError
 from aiohttp.web import json_response
  
-from util.idUtil import isValidUuid 
-from datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj, save_metadata_obj, delete_metadata_obj
+from util.idUtil import isValidUuid, isSchema2Id, isRootObjId
+from datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj, save_metadata_obj, delete_metadata_obj, s3sync
 import hsds_logger as log
     
 
@@ -103,6 +103,31 @@ async def POST_Group(request):
     resp_json["attributeCount"] = 0
 
     resp = json_response(resp_json, status=201)
+    log.response(request, resp=resp)
+    return resp
+
+async def PUT_Group(request):
+    """ Handler for PUT /groups"""
+    """ Used to flush all objects under a root group to S3 """
+    log.request(request)
+    app = request.app
+
+    group_id = get_obj_id(request)
+    log.info("PUT group: {}".format(group_id))
+
+    if not isValidUuid(group_id, obj_class="group"):
+        log.error( f"Unexpected group_id: {group_id}")
+        raise HTTPInternalServerError()
+
+    if isSchema2Id(group_id):
+        # flush only works with v2 ids
+        if not isRootObjId(group_id):
+            log.error(f"Expected root id for flush but got: {group_id}")
+            raise HTTPInternalServerError()
+        now = time.time()
+        await s3sync(app, now, group_id)
+        
+    resp = json_response(None, status=204)  # NO Content response
     log.response(request, resp=resp)
     return resp
 

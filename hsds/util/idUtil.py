@@ -382,3 +382,11 @@ def getDataNodeUrl(app, obj_id):
       
     url = dn_urls[dn_number]
     return url
+
+def getDataNodeUrls(app):
+    """ Return list of all urls to the set of datanodes """
+    dn_url_map = app["dn_urls"]
+    dn_urls = []
+    for id in dn_url_map:
+        dn_urls.append(dn_url_map[id])
+    return dn_urls

@@ -20,13 +20,13 @@ from util.lruCache import LruCache
 from basenode import healthCheck, baseInit
 import hsds_logger as log
 from domain_dn import GET_Domain, PUT_Domain, DELETE_Domain, PUT_ACL
-from group_dn import GET_Group, POST_Group, DELETE_Group
+from group_dn import GET_Group, POST_Group, DELETE_Group, PUT_Group
 from link_dn import GET_Links, GET_Link, PUT_Link, DELETE_Link
 from attr_dn import GET_Attributes, GET_Attribute, PUT_Attribute, DELETE_Attribute
 from ctype_dn import GET_Datatype, POST_Datatype, DELETE_Datatype
 from dset_dn import GET_Dataset, POST_Dataset, DELETE_Dataset, PUT_DatasetShape
 from chunk_dn import PUT_Chunk, GET_Chunk, POST_Chunk, DELETE_Chunk
-from datanode_lib import s3sync 
+from datanode_lib import s3syncCheck 
 
                
 
@@ -43,6 +43,7 @@ async def init(loop):
     app.router.add_route('PUT', '/acls/{username}', PUT_ACL)
     app.router.add_route('GET', '/groups/{id}', GET_Group)
     app.router.add_route('DELETE', '/groups/{id}', DELETE_Group)
+    app.router.add_route('PUT', '/groups/{id}', PUT_Group)
     app.router.add_route('POST', '/groups', POST_Group)
     app.router.add_route('GET', '/groups/{id}/links', GET_Links)
     app.router.add_route('GET', '/groups/{id}/links/{title}', GET_Link)
@@ -95,18 +96,18 @@ if __name__ == '__main__':
     app['deleted_ids'] = set()
     app['dirty_ids'] = {}
     app['deflate_map'] = {} # map of dataset ids to deflate levels (if compressed)
-    app["dset_root_map"] = {} # map of datase ids to root ids (used for chunk update req to async node)
+    app["pending_s3_read"] = {} # map of s3key to timestamp for in-flight read requests
+    app["pending_s3_write"] = {} # map of s3key to timestamp for in-flight write requests
     # TODO - there's nothing to prevent the deflate_map from getting ever larger 
     # (though it is only one int per dataset id)
     # add a timestamp and remove at a certain time?
     # delete entire map whenver the synch queue is empty?
-    # TODO - Same issue with dset_root_map
     
     # run background tasks
     asyncio.ensure_future(healthCheck(app), loop=loop)
 
     # run data sync tasks
-    asyncio.ensure_future(s3sync(app), loop=loop)
+    asyncio.ensure_future(s3syncCheck(app), loop=loop)
    
     # run the app
     port = int(config.get("dn_port"))
