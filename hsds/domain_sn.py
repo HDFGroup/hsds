@@ -391,7 +391,7 @@ async def GET_Domain(request):
 async def doFlush(app, root_id):
     """ return wnen all DN nodes have wrote any pending changes to S3"""
     log.info(f"doFlush {root_id}")
-    loop = app["loop"]
+    #loop = app["loop"]
     params = {"flush": 1}
     client = get_http_client(app)
     dn_urls = getDataNodeUrls(app)
@@ -403,13 +403,28 @@ async def doFlush(app, root_id):
             req = dn_url + "/groups/" + root_id 
             task = asyncio.ensure_future(client.put(req, params=params))
             tasks.append(task)  
-        await asyncio.gather(*tasks, loop=loop)
+        done, pending = await asyncio.wait(tasks)
+        if pending:
+            # should be empty since we didn't use return_when parameter
+            log.error("Got pending tasks")
+            raise HTTPInternalServerError()
+        for task in done:
+            log.info(f"task: {task}")
+            if task.exception():
+                log.warn(f"task had exception: {type(task.exception())}")
+                raise HTTPInternalServerError()
+            clientResponse = task.result()
+            if clientResponse.status != 204:
+                log.warn(f"expected 204 but got: {clientResponse.status}")
+                raise HTTPInternalServerError()
     except ClientError as ce:
         log.error(f"Error for http_put('/groups/{root_id}')")   
         raise HTTPInternalServerError()
     except CancelledError as cle:
         log.warn("CancelledError '/groups/{root_id}'): {str(cle)}")
         raise HTTPInternalServerError()
+
+    
 
       
 

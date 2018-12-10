@@ -112,7 +112,7 @@ async def PUT_Group(request):
     log.request(request)
     app = request.app
 
-    group_id = get_obj_id(request)
+    group_id = request.match_info.get('id')
     log.info("PUT group: {}".format(group_id))
 
     if not isValidUuid(group_id, obj_class="group"):

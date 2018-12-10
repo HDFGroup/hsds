@@ -266,18 +266,8 @@ class VlenTest(unittest.TestCase):
         self.assertTrue("value" in rspJson)
         value = rspJson["value"]
         self.assertEqual(len(value), 4)
-        
-        
-
-    
-
-
-
-         
- 
              
 if __name__ == '__main__':
     #setup test files
     
     unittest.main()
-    
