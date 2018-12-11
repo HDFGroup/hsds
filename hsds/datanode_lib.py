@@ -421,6 +421,11 @@ async def s3sync(app, age, rootid=None):
         
     keys_to_update = []
     for obj_id in dirty_ids:
+        if obj_id.startswith("/"):
+            continue  # ignore domain ids
+        if not isValidUuid(obj_id):
+            log.warn(f"Unexpected objid in dirty_ids: {obj_id}")
+            continue
         if dirty_ids[obj_id] > age:
             continue   # update was too recent, ignore for now
         if rootid and not isSchema2Id(obj_id):

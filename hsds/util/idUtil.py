@@ -323,7 +323,6 @@ def isValidChunkId(id):
     return True
 
 
-
 def getClassForObjId(id):
     """ return domains/chunks/groups/datasets/datatypes based on id """
     if not isinstance(id, str):
