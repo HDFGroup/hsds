@@ -391,7 +391,6 @@ async def GET_Domain(request):
 async def doFlush(app, root_id):
     """ return wnen all DN nodes have wrote any pending changes to S3"""
     log.info(f"doFlush {root_id}")
-    #loop = app["loop"]
     params = {"flush": 1}
     client = get_http_client(app)
     dn_urls = getDataNodeUrls(app)
@@ -424,11 +423,6 @@ async def doFlush(app, root_id):
         log.warn("CancelledError '/groups/{root_id}'): {str(cle)}")
         raise HTTPInternalServerError()
 
-    
-
-      
-
-
 
 async def PUT_Domain(request):
     """HTTP method to create a new domain"""
@@ -452,7 +446,12 @@ async def PUT_Domain(request):
  
     log.info("PUT domain: {}, username: {}".format(domain, username))
 
-    if "flush" in params and params["flush"]:
+    body = None
+    if request.has_body:
+        body = await request.json()   
+        log.debug("PUT domain with body: {}".format(body))
+
+    if ("flush" in params and params["flush"]) or (body and "flush" in body and body["flush"]):
         # flush domain - update existing domain rather than create a new resource
         domain_json = await getDomainJson(app, domain, reload=True)
         log.debug("got domain_json: {}".format(domain_json))
@@ -478,26 +477,23 @@ async def PUT_Domain(request):
         log.response(request, resp=resp)
         return resp
 
-    body = None
     is_folder = False
     owner = username
     linked_domain = None
     root_id = None
-    if request.has_body:
-        body = await request.json()   
-        log.debug("PUT domain with body: {}".format(body))
-        if body and "folder" in body:
-            if body["folder"]:
-                is_folder = True
-        if body and "owner" in body:
-            owner = body["owner"]
-        if body and "linked_domain" in body:
-            if is_folder:
-                msg = "Folder domains can not be used for links"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-            linked_domain = body["linked_domain"]
-            log.info(f"linking to domain: {linked_domain}")
+    
+    if body and "folder" in body:
+        if body["folder"]:
+            is_folder = True
+    if body and "owner" in body:
+        owner = body["owner"]
+    if body and "linked_domain" in body:
+        if is_folder:
+            msg = "Folder domains can not be used for links"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        linked_domain = body["linked_domain"]
+        log.info(f"linking to domain: {linked_domain}")
 
     if owner != username and username != "admin":
         log.warn("Only admin users are allowed to set owner for new domains");   

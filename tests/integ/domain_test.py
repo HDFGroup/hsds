@@ -266,6 +266,13 @@ class DomainTest(unittest.TestCase):
         # should get a NO_CONTENT code, c.f. https://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html#sec9.6
         self.assertEqual(rsp.status_code, 204)  
 
+        # same thing using the body
+        req = helper.getEndpoint() + '/'
+        body = {"flush": 1}
+        rsp = requests.put(req, data=json.dumps(body), headers=headers)
+        # should get a NO_CONTENT code, c.f. https://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html#sec9.6
+        self.assertEqual(rsp.status_code, 204)  
+
 
         # try doing a un-authenticated request
         if config.get("test_noauth") and config.get("default_public"):
