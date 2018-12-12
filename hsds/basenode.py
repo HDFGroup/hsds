@@ -23,10 +23,9 @@ from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 
 from aiohttp.client_exceptions import ClientError
 from aiobotocore import get_session
- 
+
 
 import config
-#from util.timeUtil import unixTimeToUTC, elapsedTime
 from util.httpUtil import http_get, http_post
 from util.idUtil import createNodeId
 from util.s3Util import getS3JSONObj, getInitialS3Stats 

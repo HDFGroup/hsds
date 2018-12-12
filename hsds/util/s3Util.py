@@ -22,6 +22,8 @@ import subprocess
 import datetime
 from botocore.exceptions import ClientError
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
+from aiobotocore.config import AioConfig
+ 
 
 import hsds_logger as log
 import config
@@ -102,12 +104,15 @@ def getS3Client(app):
     use_ssl = False
     if s3_gateway.startswith("https"):
         use_ssl = True
+    max_pool_connections = config.get('aio_max_pool_connections')
+    aio_config = AioConfig(max_pool_connections=max_pool_connections)
     s3 = session.create_client('s3', region_name=aws_region,
                                    aws_secret_access_key=aws_secret_access_key,
                                    aws_access_key_id=aws_access_key_id,
                                    aws_session_token=aws_session_token,
                                    endpoint_url=s3_gateway,
-                                   use_ssl=use_ssl)
+                                   use_ssl=use_ssl,
+                                   config=aio_config)
 
     app['s3'] = s3  # save so same client can be returned in subsiquent calls
 

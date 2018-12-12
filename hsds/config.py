@@ -48,6 +48,7 @@ cfg = {
     'max_chunk_size': '4m',  # 4 MB
     'max_request_size': '100m',  # 100 MB
     'max_task_count': 100,  # maximum number of concurrent tasks before server will return 503 error
+    'aio_max_pool_connections': 64,  # number of connections to keep in conection pool for aiobotocore requests
     'metadata_mem_cache_size': '128m',
     'chunk_mem_cache_size': '128m',  # 128 MB
     'timeout': 30,  # http timeout - 30 sec
