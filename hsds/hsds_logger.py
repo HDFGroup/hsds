@@ -57,13 +57,15 @@ def request(req):
 	if domain is None:
 		print("REQ> {}: {}".format(req.method, req.path))
 	else:
-		print("REQ> {}: {} [{}]".format(req.method, req.path, domain))
+		print("REQ> {}j: {} [{}]".format(req.method, req.path, domain))
 	if app:
 		counter = app["req_count"]
 		if req.method in ("GET", "POST", "PUT", "DELETE"):
 			counter[req.method] += 1
 		num_tasks = len(asyncio.Task.all_tasks())
 		counter["num_tasks"] = num_tasks
+		if config.get("log_level") == "DEBUG":
+			print("DEBUG> num_tasks:", num_tasks)
 		max_task_count = config.get("max_task_count")
 		if app["node_type"] == "sn" and max_task_count and num_tasks > max_task_count:
 			print(f"WARN: more than {max_task_count} tasks, returning 503")
