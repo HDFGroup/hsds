@@ -290,10 +290,10 @@ async def GET_Chunk(request):
                     log.info(f"Chunk {chunk_id} has arrived!")
                     chunk_arr = chunk_cache[chunk_id]
                     break
-            if not chunk_arr:
+            if chunk_arr is None:
                 log.warn(f"s3 read for chunk {chunk_id} timed-out, initiaiting a new read")
 
-        if not chunk_arr:
+        if chunk_arr is None:
             if s3_key not in pending_s3_read:
                 pending_s3_read[s3_key] = time.time()
             log.debug("Reading chunk {} from S3".format(s3_key))
