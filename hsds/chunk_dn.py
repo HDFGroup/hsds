@@ -372,6 +372,8 @@ async def GET_Chunk(request):
             await resp.write(output_data)
         except Exception as e:
             log.error(f"Exception during binary data write: {e}")
+            raise HTTPInternalServerError()
+
         finally:
             await resp.write_eof()
 
@@ -572,6 +574,7 @@ async def POST_Chunk(request):
             await resp.write(output_data)
         except Exception as e:
             log.error(f"Exception during binary data write: {e}")
+            raise HTTPInternalServerError()
         finally:
             await resp.write_eof()
 
