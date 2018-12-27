@@ -1,6 +1,7 @@
 import sys
 import requests
 import json
+import numpy as np
 import random
 import base64
 import time
@@ -58,18 +59,17 @@ def json_req(req, session=None, headers=None, retries=0):
     return rsp_json
 
 
-def write_value(indx, value, session=None, endpoint=None, headers=None, dset_id=None, retries=0):
+def write_slice(indx, arr, session=None, endpoint=None, headers=None, dset_id=None, retries=0):
     # Get all the values for a given geographic point
-    req = endpoint + "/datasets/" + dset_id + "/value"
-
-    payload = { 'start': indx, 'stop': indx+1,  'value': value }
-
+    req = endpoint + "/datasets/" + dset_id + "/value" 
+    sel_param = "[{}:{},0:{},0:{}]".format(indx, indx+1, arr.shape[0], arr.shape[1])
+    params = {"select": sel_param}
     # request binary response
     success = False
     backoff = 0.1
     
     for retry in range(retries+1):
-        rsp = session.put(req, data=json.dumps(payload), headers=headers)
+        rsp = session.put(req, params=params, data=arr.tobytes(), headers=headers)
         if rsp.status_code == 503:
             print("WARN:> 503 ServiceUnavailable, sleeping for {}".format(backoff)) 
             time.sleep(backoff)
@@ -134,24 +134,17 @@ req = endpoint + "/datasets/" + dset_id
 rsp_json = json_req(req, session=session, headers=headers, retries=retries)
 shape = rsp_json["shape"]
 dims = shape["dims"]
-extent = dims[0]
-print("extent:", extent)
-
-
-indx = random.randint(0, extent-1)
+print("dims:", dims)
 
 req = endpoint + "/datasets/" + dset_id + "/value" 
-
-payload = { 'start': indx, 'stop': indx+1,  'value': 42 }
-print("writring to: {}".format(indx))
-rsp = session.put(req, data=json.dumps(payload), headers=headers)
-print(rsp.status_code)
+headers["Content-Type"] = "application/octet-stream"  # use binary for data writes
 
 for i in range(runs):
-    indx = random.randint(0, extent-1)
+    indx = random.randint(0, dims[0]-1)
+    arr = np.random.rand(160,297)  # 1.5MB array
     time_start = time.time()
-    write_value(indx, 42, session=session, endpoint=endpoint, headers=headers, dset_id=dset_id, retries=retries)
+    write_slice(indx, arr, session=session, endpoint=endpoint, headers=headers, dset_id=dset_id, retries=retries)
     run_time = time.time() - time_start
-    print("{0:05d}: {1:12d} {2:6.2f}s".format(i, indx, run_time))
+    print("{0:05d}: {1:5d} {2:6.2f}s".format(i, indx, run_time))
 
 session.close()

@@ -47,13 +47,6 @@ else:
     sys.exit("no domain specified")
 print("domain:", domain)
 
-if len(sys.argv) > 2:
-    extent = int(sys.argv[2])
-elif config["extent"]:
-    extent = int(config["extent"])
-else:
-    extent = 1000
-print("extent:", extent)
 
 endpoint = config["hs_endpoint"]
 if not endpoint:
@@ -75,8 +68,10 @@ rsp_json = json.loads(rsp.text)
 root_id = rsp_json["root"]
 print("root_id:", root_id)
 
+extent = [792,1602,2976]
+
 # create dataset 
-payload = {'type': 'H5T_STD_I8LE', 'shape': extent}
+payload = {'type': 'H5T_IEEE_F64LE', 'shape': extent}
 req = endpoint + "/datasets"
 rsp = session.post(req, data=json.dumps(payload), headers=headers)
 if rsp.status_code != 201:

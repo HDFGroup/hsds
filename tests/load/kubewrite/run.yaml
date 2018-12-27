@@ -5,8 +5,8 @@ metadata:
 spec:
   backoffLimit: 0 # number of retries before throwing error
   activeDeadlineSeconds: 360 # time to allow job to run
-  completions: 10  # target for number of runs
-  parallelism: 10  # run this many containers in parallel
+  completions: 100  # target for number of runs
+  parallelism: 100  # run this many containers in parallel
   template:
     metadata:
       labels:
