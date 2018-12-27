@@ -40,8 +40,8 @@ def json_req(req, session=None, headers=None, retries=0):
     backoff = 0.1
     for retry in range(retries+1):
         rsp = session.get(req, headers=headers)
-        if rsp.status_code == 503:
-            print("WARN:> 503 ServiceUnavailable for req: {} sleeping for: {}".format(req, backoff)) 
+        if rsp.status_code in (502,503,504):
+            print("WARN:> Error {} for req: {} sleeping for: {}".format(rsp.status_code, req, backoff)) 
             time.sleep(backoff)
             backoff *= 2.0
             if backoff > 1.0:
