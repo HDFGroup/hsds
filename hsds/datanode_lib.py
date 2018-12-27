@@ -214,7 +214,9 @@ async def write_s3_obj(app, obj_id):
                 chunk_cache[obj_id] = chunk_arr
             chunk_cache.setDirty(obj_id)  # pin to cache  
             del pending_s3_write[s3_key] 
-            raise # re-throw the execption     
+            raise # re-throw the execption  
+        log.debug("putS3Bytes Chunk cache utilization: {} per, dirty_count: {}".format(chunk_cache.cacheUtilizationPercent, chunk_cache.dirtyCount))
+      
     else:
         # meta data update     
         obj_json = meta_cache[obj_id]

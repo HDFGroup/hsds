@@ -16,7 +16,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: job
-          image:  431396205827.dkr.ecr.us-west-2.amazonaws.com/hsclient:load-kubewrite_v1
+          image:  431396205827.dkr.ecr.us-west-2.amazonaws.com/hsclient:load-kubewrite_v2
           # environment variables for the Pod
           env:
           - name: KitaLabProject

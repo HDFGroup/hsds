@@ -131,7 +131,7 @@ async def PUT_Chunk(request):
 
     # if the chunk cache has too many dirty items, wait till items get flushed to S3
     chunk_cache = app['chunk_cache']
-    log.debug("PUT_Chunk cache utilization: {} dirty_count: {}".format(chunk_cache.cacheUtilizationPercent, chunk_cache.dirtyCount))
+    log.debug("PUT_Chunk cache utilization: {} per, dirty_count: {}".format(chunk_cache.cacheUtilizationPercent, chunk_cache.dirtyCount))
     while chunk_cache.cacheUtilizationPercent > 100 and chunk_cache.dirtyCount > 0:
         log.info("PUT_Chunk, cache utilization: {}, sleeping till items are flushed".format(chunk_cache.cacheUtilizationPercent))
         await asyncio.sleep(1)
