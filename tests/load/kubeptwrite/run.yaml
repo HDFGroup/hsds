@@ -1,22 +1,22 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: load-kubewrite
+  name: load-kubeptwrite
 spec:
   backoffLimit: 0 # number of retries before throwing error
   activeDeadlineSeconds: 360 # time to allow job to run
-  completions: 50  # target for number of runs
-  parallelism: 50  # run this many containers in parallel
+  completions: 100  # target for number of runs
+  parallelism: 100  # run this many containers in parallel
   template:
     metadata:
       labels:
-        app: load-kubewrite
+        app: load-kubeptwrite
         tier: job
     spec:
       restartPolicy: Never
       containers:
         - name: job
-          image:  431396205827.dkr.ecr.us-west-2.amazonaws.com/hsclient:load-kubewrite_v3
+          image:  431396205827.dkr.ecr.us-west-2.amazonaws.com/hsclient:load-kubeptwrite_v1
           # environment variables for the Pod
           env:
           - name: KitaLabProject
@@ -28,7 +28,7 @@ spec:
           - name: HS_ENDPOINT
             value: http://hsdsamce.hdfgroup.org
           - name: DOMAIN
-            value: /home/john/cube.h5
+            value: /home/john/kubeptwrite.h5
           - name: HS_USERNAME
             value: john
           - name: HS_PASSWORD
@@ -37,8 +37,8 @@ spec:
                 name: john-amce-password
                 key: password
           - name: RUN_COUNT
-            value: "100"
+            value: "1000"
           - name: RETRIES
-            value: "3"
+            value: "30"
           ports:
           - containerPort: 80
