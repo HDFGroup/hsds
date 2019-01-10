@@ -60,6 +60,6 @@ Adjust parameters in run.yaml as desired.  THe keys completions and parallism ar
 
 Use ``viewjob.sh`` and ``getpods.sh`` to track progress of the job.  ``kubectl logs load-kubeptwrite-abcde`` to view the container log (where abcde is the last container name suffix as displayed in getpods.sh)
 
-## Clening up
+## Cleaning up
 
 Run ``./killjob.sh`` to remove the job. ``hsrm [domain]`` can be used to remove the domain.
