@@ -35,6 +35,8 @@ import hsds_logger as log
 
 HSDS_VERSION = "0.3"
 
+def getVersion():
+    return HSDS_VERSION
 
 async def getHeadUrl(app):
     head_url = None
@@ -202,7 +204,7 @@ async def about(request):
     answer = {}
     answer['start_time'] =  app["start_time"] 
     answer['state'] = app['node_state'] 
-    answer["hsds_version"] = HSDS_VERSION
+    answer["hsds_version"] = getVersion()
     answer["name"] = config.get("server_name")
     answer["greeting"] = config.get("greeting")  
     answer["about"] = config.get("about") 

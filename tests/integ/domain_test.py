@@ -223,7 +223,7 @@ class DomainTest(unittest.TestCase):
         rsp = requests.put(req, headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
-        for k in ("root", "owner", "acls", "created", "lastModified"):
+        for k in ("root", "owner", "acls", "created", "lastModified", "version", "limits"):
              self.assertTrue(k in rspJson)
 
         root_id = rspJson["root"]
@@ -232,14 +232,29 @@ class DomainTest(unittest.TestCase):
         rsp = requests.put(req, headers=headers)
         self.assertEqual(rsp.status_code, 409)
 
+        limit_keys = ("min_chunk_size", "max_chunk_size", "max_request_size", "max_chunks_per_request")
+        limits = rspJson["limits"]
+        for k in limit_keys:
+            self.assertTrue(k in limits)
+            limit = limits[k]
+            self.assertTrue(isinstance(limit, int))
+            self.assertTrue(limit > 0)
+
         # do a get on the new domain
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        for k in ("root", "owner"):
+        for k in ("root", "owner", "class", "created", "lastModified", "limits", "version"):
              self.assertTrue(k in rspJson)
         # we should get the same value for root id
         self.assertEqual(root_id, rspJson["root"])
+        # should get limits here too
+        limits = rspJson["limits"]
+        for k in limit_keys:
+            self.assertTrue(k in limits)
+            limit = limits[k]
+            self.assertTrue(isinstance(limit, int))
+            self.assertTrue(limit > 0)
 
         # try doing a GET with a host query args
         headers = helper.getRequestHeaders()

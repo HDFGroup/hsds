@@ -356,7 +356,8 @@ async def GET_Chunk(request):
         query_result = {}
         query_result["index"] = indices
         query_result["value"] = values
-        log.info("query_result: {}".format(query_result))
+        log.info(f"query_result retiurning: {len(indices)} rows")
+        log.debug(f"query_result: {query_result}")
         resp = json_response(query_result)
     else:
         # get requested data

@@ -29,7 +29,7 @@ from util.authUtil import validateUserPassword, getAclKeys
 from util.domainUtil import getParentDomain, getDomainFromRequest
 from util.s3Util import getS3Keys
 from servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath, getRootInfo
-from basenode import getAsyncNodeUrl
+from basenode import getAsyncNodeUrl, getVersion
 import hsds_logger as log
 import config
 
@@ -134,6 +134,15 @@ def getIdList(objs, marker=None, limit=None):
             break
     return ret_ids
 
+def getLimits():
+    """ return limits the client may need """
+    limits = {}
+    limits["min_chunk_size"] = int(config.get("min_chunk_size"))
+    limits["max_chunk_size"] = int(config.get("max_chunk_size"))
+    limits["max_request_size"] = int(config.get("max_request_size"))
+    limits["max_chunks_per_request"] = int(config.get("max_chunks_per_request"))
+    return limits
+
 async def get_domain_response(app, domain_json, verbose=False):
     rsp_json = { }
     if "root" in domain_json:
@@ -183,6 +192,11 @@ async def get_domain_response(app, domain_json, verbose=False):
         rsp_json["total_size"] = totalSize
         rsp_json["allocated_bytes"] = allocated_bytes
         rsp_json["num_objects"] =  num_objects
+
+    # pass back config parameters the client may care about
+    
+    rsp_json["limits"] = getLimits()
+    rsp_json["version"] = getVersion()
 
     rsp_json["lastModified"] = lastModified
     return rsp_json
@@ -600,6 +614,9 @@ async def PUT_Domain(request):
         raise HTTPInternalServerError()
 
     # domain creation successful     
+    # maxin limits
+    domain_json["limits"] = getLimits()
+    domain_json["version"] = getVersion()
     resp = json_response(domain_json, status=201)
     log.response(request, resp=resp)
     return resp
