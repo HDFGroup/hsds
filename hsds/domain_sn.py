@@ -16,7 +16,7 @@ from asyncio import CancelledError
 import asyncio
 import json
 
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPGone, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPGone, HTTPInternalServerError, HTTPConflict
 from aiohttp import ClientResponseError
 from aiohttp.web import json_response
 from aiohttp.client_exceptions import ClientError
@@ -219,7 +219,7 @@ async def get_domains(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)  
 
-    # always use "verbose" to pull info from RootTable
+    # always use "verbose" to pull extra info 
     if "verbose" in request.rel_url.query and request.rel_url.query["verbose"]:
         verbose = True
     else:
@@ -688,6 +688,17 @@ async def DELETE_Domain(request):
             raise HTTPInternalServerError()
 
     aclCheck(domain_json, "delete", username)  # throws exception if not allowed
+
+    # check for sub-objects if this is a folder
+    if "root" not in domain_json:
+        s3prefix = domain[1:] + '/'
+        log.info(f"checking kets with prefix: {s3prefix} ")
+        s3keys = await getS3Keys(app, include_stats=False, prefix=s3prefix, deliminator='/') 
+        if s3keys:
+            log.warn(f"attempt to delete folder {domain} with sub-items")
+            log.debug(f"got prefix: {s3keys[0]}")
+            raise HTTPConflict(reason="folder has sub-items")  
+            
 
     req = getDataNodeUrl(app, domain)
     req += "/domains" 

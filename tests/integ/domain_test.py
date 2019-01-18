@@ -389,6 +389,65 @@ class DomainTest(unittest.TestCase):
                 self.assertTrue(k in rspJson)
             self.assertFalse("root" in rspJson)   
 
+    def testDeleteFolder(self):
+
+        folder_name = "testDeleteFolder"
+        domain_name = "myfile"
+        domain = self.base_domain + "/" + folder_name
+        print("testCreateFolder", domain)        
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + '/'
+        body = {"folder": True}
+        rsp = requests.put(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        for k in ("owner", "acls", "created", "lastModified"):
+             self.assertTrue(k in rspJson)
+        self.assertFalse("root" in rspJson)  # no root -> folder
+ 
+        # verify that putting the same domain again fails with a 409 error
+        rsp = requests.put(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 409)
+
+        # do a get on the new folder
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+         
+        self.assertTrue("owner" in rspJson)
+        self.assertTrue("class" in rspJson)
+        self.assertEqual(rspJson["class"], "folder")
+
+        # create a child domain
+        domain = self.base_domain + "/" + folder_name + "/" + domain_name
+        headers = helper.getRequestHeaders(domain=domain)
+        rsp = requests.put(req, headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # try delete the folder
+        domain = self.base_domain + "/" + folder_name
+        print("testCreateFolder", domain)        
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + '/'
+        body = {"folder": True}
+        rsp = requests.delete(req, headers=headers)
+        self.assertEqual(rsp.status_code, 409)
+
+        # delete the child domain
+        domain = self.base_domain + "/" + folder_name + "/" + domain_name
+        headers = helper.getRequestHeaders(domain=domain)
+        rsp = requests.delete(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # try delete the folder
+        domain = self.base_domain + "/" + folder_name
+        print("testCreateFolder", domain)        
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + '/'
+        body = {"folder": True}
+        rsp = requests.delete(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
 
     def testInvalidChildDomain(self):
         domain = self.base_domain + "/notafolder/newdomain.h5"
@@ -536,8 +595,6 @@ class DomainTest(unittest.TestCase):
 
 
         # TBD - try deleting a top-level domain
-
-        # TBD - try deleting a domain that has child-domains
 
     def testDomainCollections(self):
         domain = helper.getTestDomain("tall.h5")

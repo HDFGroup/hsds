@@ -57,7 +57,7 @@ def request(req):
 	if domain is None:
 		print("REQ> {}: {}".format(req.method, req.path))
 	else:
-		print("REQ> {}j: {} [{}]".format(req.method, req.path, domain))
+		print("REQ> {}: {} [{}]".format(req.method, req.path, domain))
 	if app:
 		counter = app["req_count"]
 		if req.method in ("GET", "POST", "PUT", "DELETE"):
