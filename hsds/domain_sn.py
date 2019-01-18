@@ -694,10 +694,11 @@ async def DELETE_Domain(request):
         s3prefix = domain[1:] + '/'
         log.info(f"checking kets with prefix: {s3prefix} ")
         s3keys = await getS3Keys(app, include_stats=False, prefix=s3prefix, deliminator='/') 
-        if s3keys:
-            log.warn(f"attempt to delete folder {domain} with sub-items")
-            log.debug(f"got prefix: {s3keys[0]}")
-            raise HTTPConflict(reason="folder has sub-items")  
+        for s3key in s3keys:
+            if s3key.endswith("/"):
+                log.warn(f"attempt to delete folder {domain} with sub-items")
+                log.debug(f"got prefix: {s3keys[0]}")
+                raise HTTPConflict(reason="folder has sub-items")  
             
 
     req = getDataNodeUrl(app, domain)
