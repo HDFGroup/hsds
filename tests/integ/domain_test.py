@@ -389,7 +389,7 @@ class DomainTest(unittest.TestCase):
                 self.assertTrue(k in rspJson)
             self.assertFalse("root" in rspJson)   
 
-    def testDeleteFolder(self):
+    def testDeleteFolderWithChildren(self):
 
         folder_name = "testDeleteFolder"
         domain_name = "myfile"
@@ -431,6 +431,7 @@ class DomainTest(unittest.TestCase):
         req = helper.getEndpoint() + '/'
         body = {"folder": True}
         rsp = requests.delete(req, headers=headers)
+        # should get a09
         self.assertEqual(rsp.status_code, 409)
 
         # delete the child domain
@@ -441,7 +442,7 @@ class DomainTest(unittest.TestCase):
 
         # try delete the folder
         domain = self.base_domain + "/" + folder_name
-        print("testCreateFolder", domain)        
+        print("delete child domain", domain)        
         headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/'
         body = {"folder": True}

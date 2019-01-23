@@ -388,6 +388,14 @@ async def PUT_Value(request):
     loop = app["loop"]
     body = None
     json_data = None
+    params = request.rel_url.query
+    is_packet = False  # this is a packet update or not
+    if "packets" in params and params["packets"]:
+        is_packet = True
+        if "select" in params:
+            msg = "select query parameter can not be used with packet updates"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
 
     dset_id = request.match_info.get('id')
     if not dset_id:
@@ -441,6 +449,12 @@ async def PUT_Value(request):
     dims = getShapeDims(datashape)
     maxdims = getDsetMaxDims(dset_json)
     rank = len(dims)
+
+    if is_packet and rank != 1:
+        msg = "packet updates can only be used with datasets of rank 1"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
     layout = getChunkLayout(dset_json)
     deflate_level = getDeflateLevel(dset_json)
      
@@ -459,24 +473,24 @@ async def PUT_Value(request):
     binary_data = None
     np_shape = None  # expected shape of input data
     points = None # used for point selection writes
-    # refetch the dims if the dataset is extensible 
-    if isExtensible(dims, maxdims):
-        dset_json = await getObjectJson(app, dset_id, refresh=True)
-        dims = getShapeDims(dset_json["shape"]) 
+    
+    if is_packet:
+        # shape must be extensible
+        if not isExtensible(dims, maxdims):
+            msg = "Dataset shape ust be extensible for packet updates"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    else:
+        # refetch the dims if the dataset is extensible 
+        if isExtensible(dims, maxdims):
+            dset_json = await getObjectJson(app, dset_id, refresh=True)
+            dims = getShapeDims(dset_json["shape"]) 
 
     if request_type == "json":
         body_json = body
     else:
         body_json = None
 
-    slices = []  # selection for write 
-    for dim in range(rank):    
-        # if the selection region is invalid here, it's really invalid
-        dim_slice = getSliceQueryParam(request, dim, dims[dim], body=body_json)
-        slices.append(dim_slice)   
-    slices = tuple(slices)  
-    # The selection parameters will determine expected put value shape
-    log.debug("PUT Value selection: {}".format(slices)) 
     
     if request_type == "json":
         if "value" in body:
@@ -492,6 +506,11 @@ async def PUT_Value(request):
 
         # body could also contain a point selection specifier 
         if "points" in body:
+            if is_packet:
+                msg = "points not valid with packet update"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+
             json_points = body["points"]
             num_points = len(json_points)
             if rank == 1:
@@ -525,8 +544,19 @@ async def PUT_Value(request):
             msg = "Read {} bytes, expecting: {}".format(len(binary_data), request.content_length)
             log.error(msg)
             raise HTTPBadRequest(reason=msg)
-       
-    if points is None:
+
+    if is_packet:
+        num_elements = int(params["packets"])  # tbd catch bad conversion
+        np_shape = (num_elements,)
+    elif points is None:
+        slices = []  # selection for write 
+        for dim in range(rank):    
+            # if the selection region is invalid here, it's really invalid
+            dim_slice = getSliceQueryParam(request, dim, dims[dim], body=body_json)
+            slices.append(dim_slice)   
+        slices = tuple(slices)  
+        # The selection parameters will determine expected put value shape
+        log.debug("PUT Value selection: {}".format(slices)) 
         # not point selection, get hyperslab selection shape
         np_shape = getSelectionShape(slices)  
         num_elements = getNumElements(np_shape)
@@ -573,7 +603,10 @@ async def PUT_Value(request):
             raise HTTPBadRequest(reason=msg)
         log.debug("got json arr: {}".format(arr.shape))
 
-    if points is None:
+    if is_packet:
+        pass
+        # extend the shape of the dataset 
+    elif points is None:
         # for hyperslab selection, verify the input shape matches the
         # selection
         np_index = 0
@@ -1156,7 +1189,3 @@ async def POST_Value(request):
         resp = json_response(rsp_json)
     log.response(request, resp=resp)
     return resp
-
-
-
-

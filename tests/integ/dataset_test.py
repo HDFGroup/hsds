@@ -516,7 +516,7 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(type_json['base'], 'H5T_IEEE_F32LE')
 
     def testResizableDataset(self):
-        # test Dataset with null dataspace type
+        # test Dataset with resizable dimension dataspace type
         domain = self.base_domain + "/testResizableDataset.h5"
         helper.setupDomain(domain)
         print("testResizableDataset", domain)
@@ -597,6 +597,13 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(shape['dims'][0], 15)  # increased to 15  
         self.assertTrue('maxdims' in shape)
         self.assertEqual(shape['maxdims'][0], 20)
+
+        # resize the dataset to 25 elements (should fail)
+        payload = {"shape": 25}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 409)
+
+
 
     def testResizableUnlimitedDataset(self):
         # test Dataset with unlimited dimension
@@ -686,6 +693,193 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(len(shape['maxdims']), 2)
         self.assertEqual(shape['maxdims'][0], 30)
         self.assertEqual(shape['maxdims'][1], 0)
+
+    def testExtendDataset(self):
+        # test extending dataset
+        domain = self.base_domain + "/testExtendDataset.h5"
+        helper.setupDomain(domain)
+        print("testExtendDataset", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+
+        # get domain
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # create the dataset 
+        req = self.endpoint + "/datasets"
+        payload = {'type': 'H5T_STD_I32LE', 'shape': 10, 'maxdims': 20}
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dset_uuid))
+         
+        # link new dataset as 'extendable'
+        name = 'extendable'
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {"id": dset_uuid}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        
+        # verify type and shape
+        req = helper.getEndpoint() + "/datasets/" + dset_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        type_json = rspJson['type']
+        self.assertEqual(type_json['class'], 'H5T_INTEGER')
+        self.assertEqual(type_json['base'], 'H5T_STD_I32LE')
+        shape = rspJson['shape']
+        self.assertEqual(shape['class'], 'H5S_SIMPLE')
+        
+        self.assertEqual(len(shape['dims']), 1)
+        self.assertEqual(shape['dims'][0], 10)  
+        self.assertTrue('maxdims' in shape)
+        self.assertEqual(shape['maxdims'][0], 20)
+
+        # verify shape using the GET shape request
+        req = req + "/shape"
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("type" not in rspJson)
+        self.assertTrue("shape" in rspJson)
+        shape = rspJson['shape']
+        self.assertEqual(shape['class'], 'H5S_SIMPLE') 
+        self.assertEqual(len(shape['dims']), 1)
+        self.assertEqual(shape['dims'][0], 10)  
+        self.assertTrue('maxdims' in shape)
+        self.assertEqual(shape['maxdims'][0], 20)
+
+        # extend the dataset by 5 elements
+        payload = {"extend": 5}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("selection" in rspJson)
+        self.assertEqual(rspJson["selection"], "[10:15]")
+
+        # verify updated-shape using the GET shape request
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("shape" in rspJson)
+        shape = rspJson['shape']
+        self.assertEqual(shape['class'], 'H5S_SIMPLE') 
+        self.assertEqual(len(shape['dims']), 1)
+        self.assertEqual(shape['dims'][0], 15)  # increased to 15  
+        self.assertTrue('maxdims' in shape)
+        self.assertEqual(shape['maxdims'][0], 20)
+
+        # try extending by 10 elements (should fail)
+        payload = {"extend": 10}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 409)
+
+    def testExtend2DDataset(self):
+        # test extending dataset with two dimension
+        domain = self.base_domain + "/testExtend2DDataset.h5"
+        helper.setupDomain(domain)
+        print("testExtend2DDataset", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+
+        # get domain
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # create the dataset 
+        req = self.endpoint + "/datasets"
+        payload = {'type': 'H5T_STD_I32LE', 'shape': [10,20], 'maxdims':[0,0]}
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dset_uuid))
+         
+        # link new dataset as 'extendable'
+        name = 'extendable'
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {"id": dset_uuid}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        
+        # verify type and shape
+        req = helper.getEndpoint() + "/datasets/" + dset_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        type_json = rspJson['type']
+        self.assertEqual(type_json['class'], 'H5T_INTEGER')
+        self.assertEqual(type_json['base'], 'H5T_STD_I32LE')
+        shape = rspJson['shape']
+        self.assertEqual(shape['class'], 'H5S_SIMPLE')
+        
+        self.assertEqual(len(shape['dims']), 2)
+        self.assertEqual(shape['dims'][0], 10)  
+        self.assertEqual(shape['dims'][1], 20) 
+        self.assertTrue('maxdims' in shape)
+        self.assertEqual(shape['maxdims'][0], 0)
+
+        # verify shape using the GET shape request
+        req = req + "/shape"
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("type" not in rspJson)
+        self.assertTrue("shape" in rspJson)
+        shape = rspJson['shape']
+        self.assertEqual(shape['class'], 'H5S_SIMPLE') 
+        self.assertEqual(len(shape['dims']), 2)
+        self.assertEqual(shape['dims'][0], 10)  
+        self.assertTrue('maxdims' in shape)
+        self.assertEqual(shape['maxdims'][0], 00)
+
+        # extend the dataset by 5 elements in first dimension
+        payload = {"extend": 5, "extend_dim": 0}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("selection" in rspJson)
+        self.assertEqual(rspJson["selection"], "[10:15,:]")
+
+        # verify updated-shape using the GET shape request
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("shape" in rspJson)
+        shape = rspJson['shape']
+        self.assertEqual(shape['class'], 'H5S_SIMPLE') 
+        self.assertEqual(len(shape['dims']), 2)
+        self.assertEqual(shape['dims'][0], 15)  # increased to 15  
+        self.assertEqual(shape['dims'][1], 20)  # still 20
+
+        # extend the dataset by 10 elements in second dimension
+        payload = {"extend": 10, "extend_dim": 1}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("selection" in rspJson)
+        self.assertEqual(rspJson["selection"], "[:,20:30]")
+
+        # verify updated-shape using the GET shape request
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("shape" in rspJson)
+        shape = rspJson['shape']
+        self.assertEqual(shape['class'], 'H5S_SIMPLE') 
+        self.assertEqual(len(shape['dims']), 2)
+        self.assertEqual(shape['dims'][0], 15)  # increased to 15  
+        self.assertEqual(shape['dims'][1], 30)  # increased to 30 
+
 
     def testCreationPropertiesLayoutDataset(self):
         # test Dataset with creation property list
