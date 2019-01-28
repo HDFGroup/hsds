@@ -16,7 +16,7 @@
  
 import json
 import numpy as np
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict
 from aiohttp.web import json_response
 
  
@@ -392,6 +392,9 @@ async def PUT_DatasetShape(request):
     """HTTP method to update dataset's shape"""
     log.request(request)
     app = request.app 
+    shape_update = None
+    extend = 0  
+    extend_dim = 0
 
     dset_id = request.match_info.get('id')
     if not dset_id:
@@ -413,21 +416,50 @@ async def PUT_DatasetShape(request):
         raise HTTPBadRequest(reason=msg)
 
     data = await request.json()
-    if "shape" not in data:
-        msg = "PUT shape has no shape key in body"
+    if "shape" not in data and "extend" not in data:
+        msg = "PUT shape has no shape or extend key in body"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)   
-    shape_update = data["shape"]
-    if isinstance(shape_update, int):
-        # convert to a list
-        shape_update = [shape_update,]
-    log.debug("shape_update: {}".format(shape_update))
+
+    if "shape" in data:
+        shape_update = data["shape"]
+        if isinstance(shape_update, int):
+            # convert to a list
+            shape_update = [shape_update,]
+        log.debug("shape_update: {}".format(shape_update))
+
+    if "extend" in data:
+        try:
+            extend = int(data["extend"])  
+        except ValueError:
+            msg = "extend value must be integer"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)   
+        if extend <= 0:
+            msg = "extend value must be positive"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)   
+        if "extend_dim" in data:
+            try:
+                extend_dim = int(data["extend_dim"])  
+            except ValueError:
+                msg = "extend_dim value must be integer"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)   
+            if extend_dim < 0:
+                msg = "extend_dim value must be non-negative"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)   
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
         msg = "Invalid host value: {}".format(domain)
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+
+    
+    # verify the user has permission to update shape
+    await validateAction(app, domain, dset_id, username, "update")
     
     # get authoritative state for dataset from DN (even if it's in the meta_cache).
     dset_json = await getObjectJson(app, dset_id, refresh=True)  
@@ -444,32 +476,45 @@ async def PUT_DatasetShape(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     dims = shape_orig["dims"]
+    rank = len(dims)
     maxdims = shape_orig["maxdims"]
-    if len(shape_update) != len(maxdims):
+    if shape_update and len(shape_update) != rank:
         msg = "Extent of update shape request does not match dataset sahpe"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    for i in range(len(dims)):
-        if shape_update[i] < dims[i]:
+    for i in range(rank):
+        if shape_update and shape_update[i] < dims[i]:
             msg = "Dataspace can not be made smaller"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        if maxdims[i] != 0 and shape_update[i] > maxdims[i]:
+        if shape_update and maxdims[i] != 0 and shape_update[i] > maxdims[i]:
             msg = "Database can not be extended past max extent"
             log.warn(msg)
-            raise HTTPBadRequest(reason=msg)  
-    
-    # verify the user has permission to update shape
-    await validateAction(app, domain, dset_id, username, "update")
+            raise HTTPConflict()  
+    if extend_dim < 0 or extend_dim >= rank:
+        msg = "Extension dimension must be less than rank and non-negative"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg) 
 
     # send request onto DN
     req = getDataNodeUrl(app, dset_id) + "/datasets/" + dset_id + "/shape"
     
-    data = {"shape": shape_update}
-    await http_put(app, req, data=data)
-    
-    # return resp 
     json_resp = { "hrefs": []}
+
+    if extend:
+        data = {"extend": extend, "extend_dim": extend_dim}
+    else:
+        data = {"shape": shape_update}
+    try:
+        put_rsp = await http_put(app, req, data=data)
+        log.info(f"got shape put rsp: {put_rsp}")
+        if "selection" in put_rsp:
+            json_resp["selection"] = put_rsp["selection"]
+
+    except HTTPConflict:
+        log.warn("got 409 extending dataspace")
+        raise
+
     resp = json_response(json_resp, status=201)
     log.response(request, resp=resp)
     return resp

@@ -1453,6 +1453,326 @@ class ValueTest(unittest.TestCase):
         # the extended area should be all zeros
         self.assertEqual(data[orig_extent:num_elements], list(range(orig_extent)))
 
+    def testAppend1DJson(self):
+        # test appending to resizable dataset
+        print("testAppend1DJson", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+
+        # get domain
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # create the dataset with a 0-sized shape
+        req = self.endpoint + "/datasets"
+        payload = {'type': 'H5T_STD_I32LE', 'shape': [0,], 'maxdims': [0,]}
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dset_uuid))
+         
+        # link new dataset as 'dset'
+        name = 'dset'
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {"id": dset_uuid}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # append values [0,10]
+        num_elements = 10
+        value = list(range(num_elements))
+        payload = {'value': value, 'append': num_elements}
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # write value
+
+        # verify the shape in now (10,)
+        req = self.endpoint + "/datasets/" + dset_uuid + "/shape"
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("shape" in rspJson)
+        shape = rspJson["shape"]
+        self.assertTrue("dims" in shape)
+        self.assertEqual(shape["dims"], [num_elements,])
+
+        # read values from the extended region
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        params = {"select": "[{}:{}]".format(0, num_elements)}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        data = rspJson["value"]
+        self.assertEqual(data, value)
+
+        # append values [10,20]
+        num_elements = 10
+        value = list(range(num_elements, num_elements*2))
+        payload = {'value': value, 'append': num_elements}
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # write value
+
+         # verify the shape in now (20,)
+        req = self.endpoint + "/datasets/" + dset_uuid + "/shape"
+        rsp = requests.get(req,  headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("shape" in rspJson)
+        shape = rspJson["shape"]
+        self.assertTrue("dims" in shape)
+        self.assertEqual(shape["dims"], [num_elements*2,])
+
+        # read values from the extended region
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        params = {"select": "[{}:{}]".format(0, num_elements*2)}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        data = rspJson["value"]
+        self.assertEqual(data, list(range(num_elements*2)))
+
+        # test mis-match of append value and data
+        value = list(range(num_elements, num_elements*2))
+        payload = {'value': value, 'append': num_elements+1}
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 400)  # write value
+
+    def testAppend1DBinary(self):
+        # test appending to resizable dataset using binary request
+        print("testAppend1DBinary", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        headers_bin_req = helper.getRequestHeaders(domain=self.base_domain)
+        headers_bin_req["Content-Type"] = "application/octet-stream"
+
+        # get domain
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # create the dataset with a 0-sized shape
+        req = self.endpoint + "/datasets"
+        payload = {'type': 'H5T_STD_I32LE', 'shape': [0,], 'maxdims': [0,]}
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dset_uuid))
+         
+        # link new dataset as 'dset'
+        name = 'dset'
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {"id": dset_uuid}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # append values [0,10]
+        # write 0-9 as four-byte little-endian integers
+        num_elements = 10
+        data = bytearray(4*num_elements)
+        for i in range(num_elements):
+            data[i*4] = i%256
+        params = {"append": num_elements}
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = requests.put(req, data=data, params=params, headers=headers_bin_req)
+        self.assertEqual(rsp.status_code, 200)
+
+        # verify the shape in now (10,)
+        req = self.endpoint + "/datasets/" + dset_uuid + "/shape"
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("shape" in rspJson)
+        shape = rspJson["shape"]
+        self.assertTrue("dims" in shape)
+        self.assertEqual(shape["dims"], [num_elements,])
+
+        # read values from the extended region
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        params = {"select": "[{}:{}]".format(0, num_elements)}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        read_values = rspJson["value"]
+        self.assertEqual(read_values, list(range(num_elements)))
+
+        # append values [10,20]
+        num_elements = 10
+        data = bytearray(4*num_elements)
+        for i in range(num_elements):
+            data[i*4] = (i+num_elements)%256
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        params = {"append": num_elements}
+        rsp = requests.put(req, data=data, params=params, headers=headers_bin_req)
+        self.assertEqual(rsp.status_code, 200)  # write value
+
+        # verify the shape in now (20,)
+        req = self.endpoint + "/datasets/" + dset_uuid + "/shape"
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("shape" in rspJson)
+        shape = rspJson["shape"]
+        self.assertTrue("dims" in shape)
+        self.assertEqual(shape["dims"], [num_elements*2,])
+
+        # read values from the extended region
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        params = {"select": "[{}:{}]".format(0, num_elements*2)}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        read_values = rspJson["value"]
+        self.assertEqual(read_values, list(range(num_elements*2)))
+
+        # test mis-match of append value and data
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        params = {"append": num_elements+1}
+        rsp = requests.put(req, data=data, params=params, headers=headers_bin_req)
+        self.assertEqual(rsp.status_code, 400)  # write value
+
+    def testAppend2DJson(self):
+        # test appending to resizable dataset
+        print("testAppend2DJson", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+
+        # get domain
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # create the dataset with a 0-sized shape
+        req = self.endpoint + "/datasets"
+        payload = {'type': 'H5T_STD_I32LE', 'shape': [0,0], 'maxdims': [0,0]}
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dset_uuid))
+         
+        # link new dataset as 'dset'
+        name = 'dset'
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {"id": dset_uuid}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # append values [0,10]
+        num_elements = 10
+        value = list(range(num_elements))
+        payload = {'value': value, 'append': num_elements, 'append_dim': 1}
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # write value
+
+        # verify the shape in now (1, 10)
+        req = self.endpoint + "/datasets/" + dset_uuid + "/shape"
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("shape" in rspJson)
+        shape = rspJson["shape"]
+        self.assertTrue("dims" in shape)
+        self.assertEqual(shape["dims"], [1, num_elements])
+
+        # read values from the extended region
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        params = {"select": "[0:1,{}:{}]".format(0, num_elements)}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        data = rspJson["value"]
+        self.assertEqual(data, [value,])
+
+        # append values [10,20]
+        num_elements = 10
+        value = list(range(num_elements, num_elements*2))
+        payload = {'value': value, 'append': num_elements, 'append_dim': 1}
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # write value
+
+         # verify the shape in now (1, 20)
+        req = self.endpoint + "/datasets/" + dset_uuid + "/shape"
+        rsp = requests.get(req,  headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("shape" in rspJson)
+        shape = rspJson["shape"]
+        self.assertTrue("dims" in shape)
+        self.assertEqual(shape["dims"], [1, num_elements*2])
+
+        # read values from the extended region
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        params = {"select": "[0:1,{}:{}]".format(0, num_elements*2)}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        data = rspJson["value"]
+        self.assertEqual(data, [list(range(num_elements*2)),])
+
+        # append one row (20 elements) in the other dimension
+        num_elements = 20
+        value = list(range(num_elements))
+        payload = {'value': value, 'append': 1, 'append_dim': 0}
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # write value
+        
+         # verify the shape in now (2, 20,)
+        req = self.endpoint + "/datasets/" + dset_uuid + "/shape"
+        rsp = requests.get(req,  headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("shape" in rspJson)
+        shape = rspJson["shape"]
+        self.assertTrue("dims" in shape)
+        self.assertEqual(shape["dims"], [2, num_elements])
+
+        # read all values from the dataset 
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)        
+        data = rspJson["value"]
+        self.assertEqual(len(data), 2)
+        self.assertEqual(data[0], list(range(num_elements)))
+        self.assertEqual(data[1], list(range(num_elements)))
+
+
+        # test mis-match of append value and data
+        value = list(range(num_elements, num_elements*2))
+        payload = {'value': value, 'append': num_elements+1}
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 400)  # write value
+      
+
     def testDeflateCompression(self):
         # test Dataset with creation property list
         print("testDefalteCompression", self.base_domain)

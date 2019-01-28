@@ -14,7 +14,7 @@
 # 
 import time
 
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict, HTTPInternalServerError
 from aiohttp.web import json_response
 
  
@@ -176,35 +176,77 @@ async def PUT_DatasetShape(request):
 
     log.info("PUT datasetshape: {}, body: {}".format(dset_id, body))
 
-    dset_json = await get_metadata_obj(app, dset_id)
+    if "shape" not in body and "extend" not in body:
+        log.error("Expected shape or extend keys")
+        raise HTTPInternalServerError()
 
-    shape_update = body["shape"]
-     
-    log.debug("shape_update: {}".format(shape_update))
+    dset_json = await get_metadata_obj(app, dset_id)
 
     shape_orig = dset_json["shape"]
     log.debug("shape_orig: {}".format(shape_orig))
 
-    # verify that the extend request is still valid
-    # e.g. another client has already extended the shape since the SN
-    # verified it
-    dims = shape_orig["dims"]
-      
-    for i in range(len(dims)):
-        if shape_update[i] < dims[i]:
-            msg = "Dataspace can not be made smaller"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+    if "maxdims" not in shape_orig:
+        log.error("expected maxdims in dataset json")
+        raise HTTPInternalServerError()
 
-    # Update the shape!
-    for i in range(len(dims)):    
-        dims[i] = shape_update[i]
-         
-    # write back to S3, save to metadata cache
-    await save_metadata_obj(app, dset_id, dset_json)
- 
+
+    dims = shape_orig["dims"]
+    maxdims = shape_orig["maxdims"]
+
     resp_json = { } 
 
+    if "extend" in body:
+        # extend the shape by the give value and return the
+        # newly extended area
+        extension = body["extend"]
+        extend_dim = 0
+
+        if "extend_dim" in body:
+            extend_dim = body["extend_dim"]
+        log.info(f"datashape extend: {extension} dim: {extend_dim}")
+
+        selection = "["
+        for i in range(len(dims)):
+            if i == extend_dim:
+                lb = dims[i]
+                ub = lb + extension
+                if maxdims[extend_dim] != 0 and ub > maxdims[extend_dim]:
+                    msg = "maximum extent exceeded"
+                    log.warn(msg)
+                    raise HTTPConflict()
+
+                selection += f"{lb}:{ub}"
+                dims[i] = ub
+            else:
+                if dims[i] == 0:
+                    dims[i] = 1  # each dimension must be non-zero
+                selection += ":"
+            if i < len(dims) - 1:
+                selection += ","
+        selection += "]"
+        resp_json["selection"] = selection
+        
+    else: 
+        # verify that the extend request is still valid
+        # e.g. another client has already extended the shape since the SN
+        # verified it
+        shape_update = body["shape"]
+        log.debug("shape_update: {}".format(shape_update))
+      
+        for i in range(len(dims)):
+            if shape_update[i] < dims[i]:
+                msg = "Dataspace can not be made smaller"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+
+        # Update the shape!
+        for i in range(len(dims)):    
+            dims[i] = shape_update[i]
+         
+    # write back to S3, save to metadata cache
+    log.info(f"Updated dimensions: {dims}")
+    await save_metadata_obj(app, dset_id, dset_json)
+ 
     resp = json_response(resp_json, status=201)
     log.response(request, resp=resp)
     return resp

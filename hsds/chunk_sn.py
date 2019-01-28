@@ -18,12 +18,12 @@ from asyncio import CancelledError
 import json
 import base64 
 import numpy as np
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPRequestEntityTooLarge, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPRequestEntityTooLarge, HTTPConflict, HTTPInternalServerError
 from aiohttp.client_exceptions import ClientError
 from aiohttp.web import StreamResponse
 from aiohttp.web import json_response
 
-from util.httpUtil import  getHref, getAcceptType, get_http_client, request_read
+from util.httpUtil import  getHref, getAcceptType, get_http_client, http_put, request_read
 from util.idUtil import   isValidUuid, getDataNodeUrl
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.hdf5dtype import getItemSize, createDataType
@@ -388,6 +388,29 @@ async def PUT_Value(request):
     loop = app["loop"]
     body = None
     json_data = None
+    params = request.rel_url.query
+    append_rows = None # this is a append update or not
+    append_dim = 0
+    if "append" in params and params["append"]:
+        try:
+            append_rows = int(params["append"])
+        except ValueError:
+            msg = "invalid append query param"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        log.info(f"append_rows: {append_rows}")
+        if "select" in params:
+            msg = "select query parameter can not be used with packet updates"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    if "append_dim" in params and params["append_dim"]:
+        try:
+            append_dim = int(params["append_dim"])
+        except ValueError:
+            msg = "invalid append_dim"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        log.info(f"append_dim: {append_dim}")
 
     dset_id = request.match_info.get('id')
     if not dset_id:
@@ -428,6 +451,29 @@ async def PUT_Value(request):
         raise HTTPBadRequest(reason=msg)
     if request_type == "json":
         body = await request.json()
+        if "append" in body and body["append"]:
+            try:
+                append_rows = int(body["append"])
+            except ValueError:
+                msg = "invalid append value in body"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            log.info(f"append_rows: {append_rows}")
+        if append_rows:
+            for key in ("start", "stop", "step"):
+                if key in body:
+                    msg = f"body key {key} can not be used with append"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
+
+        if "append_dim" in body and body["append_dim"]:
+            try:
+                append_dim = int(body["append_dim"])
+            except ValueError:
+                msg = "invalid append_dim"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            log.info(f"append_dim: {append_dim}")
     
     # get  state for dataset from DN.
     dset_json = await getObjectJson(app, dset_id, refresh=False)  
@@ -438,9 +484,11 @@ async def PUT_Value(request):
         msg = "Null space datasets can not be used as target for PUT value"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+        
     dims = getShapeDims(datashape)
     maxdims = getDsetMaxDims(dset_json)
     rank = len(dims)
+
     layout = getChunkLayout(dset_json)
     deflate_level = getDeflateLevel(dset_json)
      
@@ -459,6 +507,24 @@ async def PUT_Value(request):
     binary_data = None
     np_shape = None  # expected shape of input data
     points = None # used for point selection writes
+    np_shape = [] # shape of incoming data
+    slices = []   # selection area to write to
+    
+    if append_rows:
+        # shape must be extensible
+        if not isExtensible(dims, maxdims):
+            msg = "Dataset shape must be extensible for packet updates"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)        
+        if append_dim < 0 or append_dim > rank-1:
+            msg = "invalid append_dim"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        maxdims = getDsetMaxDims(dset_json)
+        if maxdims[append_dim] != 0 and dims[append_dim] + append_rows > maxdims[append_dim]:
+            log.warn("unable to append to dataspace")
+            raise HTTPConflict()
+    
     # refetch the dims if the dataset is extensible 
     if isExtensible(dims, maxdims):
         dset_json = await getObjectJson(app, dset_id, refresh=True)
@@ -469,14 +535,6 @@ async def PUT_Value(request):
     else:
         body_json = None
 
-    slices = []  # selection for write 
-    for dim in range(rank):    
-        # if the selection region is invalid here, it's really invalid
-        dim_slice = getSliceQueryParam(request, dim, dims[dim], body=body_json)
-        slices.append(dim_slice)   
-    slices = tuple(slices)  
-    # The selection parameters will determine expected put value shape
-    log.debug("PUT Value selection: {}".format(slices)) 
     
     if request_type == "json":
         if "value" in body:
@@ -492,6 +550,11 @@ async def PUT_Value(request):
 
         # body could also contain a point selection specifier 
         if "points" in body:
+            if append_rows:
+                msg = "points not valid with packet update"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+
             json_points = body["points"]
             num_points = len(json_points)
             if rank == 1:
@@ -525,18 +588,38 @@ async def PUT_Value(request):
             msg = "Read {} bytes, expecting: {}".format(len(binary_data), request.content_length)
             log.error(msg)
             raise HTTPBadRequest(reason=msg)
-       
-    if points is None:
+
+    if append_rows:
+        for i in range(rank):
+            if i == append_dim:
+                np_shape.append(append_rows)
+                # this will be adjusted once the dataspace is extended
+                slices.append(slice(0, append_rows, 1))  
+            else:
+                if dims[i] == 0:
+                    dims[i] = 1  # need a non-zero extent for all dimensionas
+                np_shape.append(dims[i])
+                slices.append(slice(0, dims[i], 1))
+        np_shape = tuple(np_shape)
+                
+    elif points is None:
+        for dim in range(rank):    
+            # if the selection region is invalid here, it's really invalid
+            dim_slice = getSliceQueryParam(request, dim, dims[dim], body=body_json)
+            slices.append(dim_slice)   
+        # The selection parameters will determine expected put value shape
+        log.debug(f"PUT Value selection: {slices}") 
         # not point selection, get hyperslab selection shape
         np_shape = getSelectionShape(slices)  
         num_elements = getNumElements(np_shape)
     else:
+        # point update
         np_shape = (num_points,)     
         num_elements = num_points
-    log.debug("selection shape: {}".format(np_shape))
+    log.debug(f"selection shape: {np_shape}")
 
     num_elements = getNumElements(np_shape)
-    log.debug("selection num elements: {}".format(num_elements))
+    log.debug(f"selection num elements: {num_elements}")
     if num_elements <= 0:
         msg = "Selection is empty"
         log.warn(msg)
@@ -572,6 +655,49 @@ async def PUT_Value(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         log.debug("got json arr: {}".format(arr.shape))
+
+    if append_rows:
+        # extend the shape of the dataset 
+        req = getDataNodeUrl(app, dset_id) + "/datasets/" + dset_id + "/shape"
+        body = {"extend": append_rows, "extend_dim": append_dim}
+        selection = None
+        try:
+            shape_rsp = await http_put(app, req, data=body)
+            log.info(f"got shape put rsp: {shape_rsp}")
+            if "selection" in shape_rsp:
+                selection = shape_rsp["selection"]
+        except HTTPConflict:
+            log.warn("got 409 extending dataspace for PUT value")
+            raise
+        if not selection:
+            log.error("expected to get selection in PUT shape response")
+            raise HTTPInternalServerError()
+        # selection should be in the format [:,n:m,:].  
+        # extract n and m and use it to update the slice for the appending dimension
+        if not selection.startswith("[") or not selection.endswith("]"):
+            log.error("Unexpected selection in PUT shape response")
+            raise HTTPInternalServerError()
+        selection = selection[1:-1]  # strip off brackets
+        parts = selection.split(',')
+        for part in parts:
+            if part == ":":
+                continue
+            bounds = part.split(':')
+            if len(bounds) != 2:
+                log.error("Unexpected selection in PUT shape response")
+                raise HTTPInternalServerError()
+            lb = ub = 0
+            try:
+                lb = int(bounds[0])
+                ub = int(bounds[1])
+            except ValueError:
+                log.error("Unexpected selection in PUT shape response")
+                raise HTTPInternalServerError()
+            log.info(f"lb: {lb} ub: {ub}")
+            # update the slices to indicate where to place the data
+            slices[append_dim] = slice(lb, ub, 1)
+
+    slices = tuple(slices)  # no more edits to slices
 
     if points is None:
         # for hyperslab selection, verify the input shape matches the
@@ -1156,7 +1282,3 @@ async def POST_Value(request):
         resp = json_response(rsp_json)
     log.response(request, resp=resp)
     return resp
-
-
-
-
