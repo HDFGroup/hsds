@@ -114,7 +114,7 @@ def getS3Client(app):
                                    use_ssl=use_ssl,
                                    config=aio_config)
 
-    app['s3'] = s3  # save so same client can be returned in subsiquent calls
+    app['s3'] = s3  # save so same client can be returned in subsequent calls
 
     return s3
 

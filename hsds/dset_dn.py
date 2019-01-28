@@ -218,6 +218,8 @@ async def PUT_DatasetShape(request):
                 selection += f"{lb}:{ub}"
                 dims[i] = ub
             else:
+                if dims[i] == 0:
+                    dims[i] = 1  # each dimension must be non-zero
                 selection += ":"
             if i < len(dims) - 1:
                 selection += ","

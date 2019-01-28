@@ -221,7 +221,7 @@ def getSliceQueryParam(request, dim, extent, body=None):
         query = query[1:-1]
 
         query_array = query.split(',')
-        if dim > len(query_array):
+        if dim >= len(query_array):
             msg = "Not enough dimensions supplied to query argument"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
@@ -576,9 +576,3 @@ class ItemIterator:
         if self._rank == 1:
             index = index[0]  # return int, not list
         return index
-
-
-
-
-
-        
