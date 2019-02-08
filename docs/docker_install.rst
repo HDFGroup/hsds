@@ -20,10 +20,10 @@ Export environment variables as shown in "Sample .bashrc" below.
 13. Install h5pyd: `$ pip install h5pyd`
 14. Run: `$ hsconfigure`.  Set hs endpoint with DNS name (e.g. http://hsds.hdf.test) and admin username/password.  Ignore API Key.
 15. Run: `$ hsinfo`.  Server state should be "`READY`".  Ignore the "Not Found" error for the admin home folder
-17. Create "/home" folder: `$ hstouch /home/`.  Note: trailing slash is important!
-18. For each other username in the passwd file, create a top-level domain: `$ hstouch -o <username> /home/<username>/`
-19. Run the integration test: `$ python testall.py --skip_unit` 
-20. The test suite will emit some warnings due to test domains not being loaded.  To address see test_data_setup below.
+16. Create "/home" folder: `$ hstouch /home/`.  Note: trailing slash is important!
+17. For each other username in the passwd file, create a top-level domain: `$ hstouch -o <username> /home/<username>/`
+18. Run the integration test: `$ python testall.py --skip_unit` 
+19. The test suite will emit some warnings due to test domains not being loaded.  To address see test_data_setup below.
  
 Sample .bashrc
 --------------
