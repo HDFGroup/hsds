@@ -15,13 +15,12 @@ Export environment variables as shown in "Sample .bashrc" below.
 8. From hsds directory, build docker image:  `$ docker-compose build` 
 9. Start the service `$./runall.sh <n>` where n is the number of containers desired (defaults to 1) 
 10. Run `$ docker ps` and verify that the containers are running: hsds_head, hsds_async, hsds_sn_[1-n], hsds_dn_[1-n]
-11. Get the external IP for the docker containers (just 127.0.0.1 if running directly on host, otherwise run: `$docker-machine ip`
-12. Go to http://hsds.hdf.test/about and verify that "cluster_state" is "READY" (might need to give it a minute or two)
-13. Install Anaconda: https://conda.io/docs/user-guide/install/linux.html  (install for python 3.6)
-14. Install h5pyd: `$ pip install h5pyd`
-15. Run: `$ hsconfigure`.  Set hs endpoint with DNS name (e.g. http://hsds.hdf.test) and admin username/password.  Ignore API Key.
-16. Run: `$ hsinfo`.  Server state should be "`READY`".
-17. Create "/home" folder: `$ hstouch /home/`
+11. Go to http://hsds.hdf.test/about and verify that "cluster_state" is "READY" (might need to give it a minute or two)
+12. Install Anaconda: https://conda.io/docs/user-guide/install/linux.html  (install for python 3.6)
+13. Install h5pyd: `$ pip install h5pyd`
+14. Run: `$ hsconfigure`.  Set hs endpoint with DNS name (e.g. http://hsds.hdf.test) and admin username/password.  Ignore API Key.
+15. Run: `$ hsinfo`.  Server state should be "`READY`".  Ignore the "Not Found" error for the admin home folder
+17. Create "/home" folder: `$ hstouch /home/`.  Note: trailing slash is important!
 18. For each other username in the passwd file, create a top-level domain: `$ hstouch -o <username> /home/<username>/`
 19. Run the integration test: `$ python testall.py --skip_unit` 
 20. The test suite will emit some warnings due to test domains not being loaded.  To address see test_data_setup below.

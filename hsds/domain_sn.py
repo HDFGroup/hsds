@@ -275,16 +275,20 @@ async def get_domains(request):
     # get domain info for each domain
     domains = []
     for domain in domainNames:
-        # query DN's for domain json
-        # TBD - multicast to DN nodes
-        log.debug(f"getDomainJson for {domain}")
-        domain_json = await getDomainJson(app, domain, reload=True)
-        if domain_json:
-            domain_rsp = await get_domain_response(app, domain_json, verbose=verbose)
-            # mixin domain anme
-            domain_rsp["name"] = domain
-            domains.append(domain_rsp)
-        
+        try:
+            # query DN's for domain json
+            # TBD - multicast to DN nodes
+            log.debug(f"getDomainJson for {domain}")
+            domain_json = await getDomainJson(app, domain, reload=True)
+            if domain_json:
+                domain_rsp = await get_domain_response(app, domain_json, verbose=verbose)
+                # mixin domain anme
+                domain_rsp["name"] = domain
+                domains.append(domain_rsp)
+        except HTTPNotFound:
+            # One of the dmains not found, but continue through the list
+            log.debug(f"not found error for: {domain}")
+
     return domains
 
 
@@ -591,7 +595,7 @@ async def PUT_Domain(request):
     domain_acls = {}
     # owner gets full control
     domain_acls[owner] = owner_perm
-    if config.get("default_public"):
+    if config.get("default_public") or is_folder:
         # this will make the domain public readable
         log.debug("adding default perm for domain: {}".format(domain))
         domain_acls["default"] =  default_perm
