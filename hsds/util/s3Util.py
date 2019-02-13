@@ -108,7 +108,9 @@ def getS3Client(app):
             s3_gateway.append(item.strip())
     if isinstance(s3_gateway, list):
         # use the node number to select an item from the list
-        node_number = app["node_number"]
+        node_number = 0
+        if "node_number" in app:
+            node_number = app["node_number"]
         item = s3_gateway[node_number % len(s3_gateway)]
         log.debug(f"selecting: {item} from s3_gateway list: {s3_gateway}")
         s3_gateway = item
