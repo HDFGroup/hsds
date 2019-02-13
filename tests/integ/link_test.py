@@ -435,7 +435,7 @@ class LinkTest(unittest.TestCase):
                 g1_2_1_uuid = link["id"]
                 self.assertTrue(g1_2_1_uuid.startswith("g-"))
                 self.assertEqual(link["title"], "g1.2.1")
-                self.assertTrue(link["created"] < now - 60 * 5)
+                self.assertTrue(link["created"] < now - 10)
             else:
                 self.assertEqual(link_class, 'H5L_TYPE_EXTERNAL')
                 for name in ("created", "class", "h5domain", "h5path", 
@@ -445,7 +445,7 @@ class LinkTest(unittest.TestCase):
                 extlink_file = link["h5domain"]
                 self.assertEqual(extlink_file, "somefile")
                 self.assertEqual(link["h5path"], "somepath")
-                self.assertTrue(link["created"] < now - 60 * 5)
+                self.assertTrue(link["created"] < now - 10)
          
         self.assertTrue(g1_2_1_uuid is not None)
         self.assertTrue(extlink_file is not None)
@@ -460,7 +460,7 @@ class LinkTest(unittest.TestCase):
             self.assertTrue(name in rspJson)
         # created should be same as lastModified for links 
         self.assertEqual(rspJson["created"], rspJson["lastModified"])
-        self.assertTrue(rspJson["created"] < now - 60 * 5)
+        self.assertTrue(rspJson["created"] < now - 10)
         hrefs = rspJson["hrefs"]
         self.assertEqual(len(hrefs), 3)
 
@@ -478,4 +478,3 @@ if __name__ == '__main__':
     #setup test files
     
     unittest.main()
-    

@@ -69,8 +69,8 @@ class DomainTest(unittest.TestCase):
         for name in ("lastModified", "created", "hrefs", "root", "owner", "class"):
             self.assertTrue(name in rspJson)
         now = time.time()
-        self.assertTrue(rspJson["created"] < now - 60 * 5)
-        self.assertTrue(rspJson["lastModified"] < now - 60 * 5)
+        self.assertTrue(rspJson["created"] < now - 10)
+        self.assertTrue(rspJson["lastModified"] < now - 10)
         self.assertEqual(len(rspJson["hrefs"]), 7)
         self.assertTrue(rspJson["root"].startswith("g-"))
         self.assertTrue(rspJson["owner"])
@@ -161,8 +161,8 @@ class DomainTest(unittest.TestCase):
         for name in ("lastModified", "created", "hrefs", "root", "owner", "class"):
             self.assertTrue(name in rspJson)
         now = time.time()
-        self.assertTrue(rspJson["created"] < now - 60 * 5)
-        self.assertTrue(rspJson["lastModified"] < now - 60 * 5)
+        self.assertTrue(rspJson["created"] < now - 10)
+        self.assertTrue(rspJson["lastModified"] < now - 10)
         self.assertEqual(len(rspJson["hrefs"]), 7)
         self.assertTrue(rspJson["root"].startswith("g-"))
         self.assertTrue(rspJson["owner"])
