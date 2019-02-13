@@ -253,8 +253,8 @@ class DatasetTest(unittest.TestCase):
 
         now = time.time()
         # the object shouldn't have been just created or updated
-        self.assertTrue(rspJson["created"] < now - 60 * 5)
-        self.assertTrue(rspJson["lastModified"] < now - 60 * 5)
+        self.assertTrue(rspJson["created"] < now - 10)
+        self.assertTrue(rspJson["lastModified"] < now - 10)
 
         # request the dataset path
         req = helper.getEndpoint() + '/datasets/' + dset_uuid
