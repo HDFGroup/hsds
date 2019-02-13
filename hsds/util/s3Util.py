@@ -100,6 +100,18 @@ def getS3Client(app):
         msg="Invalid aws s3 gateway"
         log.error(msg)
         raise ValueError(msg)
+    if s3_gateway[0] == '[' and s3_gateway[-1] == ']':
+        # convert string to a comma separated list
+        items = s3_gateway[1:-1].split(',')
+        s3_gateway = []
+        for item in items:
+            s3_gateway.append(item.strip())
+    if isinstance(s3_gateway, list):
+        # use the node number to select an item from the list
+        node_number = app["node_number"]
+        item = s3_gateway[node_number % len(s3_gateway)]
+        log.debug(f"selecting: {item} from s3_gateway list: {s3_gateway}")
+        s3_gateway = item
     log.info(f"Using S3Gateway: {s3_gateway}")
     use_ssl = False
     if s3_gateway.startswith("https"):
