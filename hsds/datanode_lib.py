@@ -417,14 +417,17 @@ async def s3syncCheck(app):
 
 async def s3sync(app, age, rootid=None):
     """ Periodic method that writes dirty objects in the metadata cache to S3"""
-    log.info(f"s3sync( age={age}, rootid={rootid}")
     dirty_ids = app["dirty_ids"]
+    log.info(f"s3sync( age={age}, rootid={rootid}, dirtyid count: {len(dirty_ids)}")
+    
     update_count = None
         
     keys_to_update = []
     for obj_id in dirty_ids:
+        #log.debug(f"dirty id: {obj_id}")
         if obj_id.startswith("/"):
-            continue  # ignore domain ids
+            keys_to_update.append(obj_id)
+            continue  # deal with uuids below
         if not isValidUuid(obj_id):
             log.warn(f"Unexpected objid in dirty_ids: {obj_id}")
             continue

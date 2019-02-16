@@ -49,8 +49,8 @@ def validateChunkLayout(shape_json, item_size, body):
     if not layout:
         return None
 
-    if item_size == 'H5T_VARIABLE':
-        item_size = 128  # just take a guess at the item size (used for chunk validation)
+    #if item_size == 'H5T_VARIABLE':
+    #    item_size = 128  # just take a guess at the item size (used for chunk validation)
     #
     # validate provided layout
     #
@@ -58,10 +58,20 @@ def validateChunkLayout(shape_json, item_size, body):
         msg = "class key not found in layout for creation property list"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if layout["class"] not in ('H5D_CHUNKED', 'H5D_CONTIGUOUS', 'H5D_COMPACT'):
+    if layout["class"] not in ('H5D_CHUNKED', 'H5D_CONTIGUOUS', 'H5D_COMPACT', 'H5D_CONTIGUOUS_REF'):
         msg = "Unknown dataset layout class: {}".format(layout["class"])
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+
+    if layout["class"] == 'H5D_CONTIGUOUS_REF':
+        # reference to a traditional HDF5 files with contigious storage
+        if item_size == 'H5T_VARIABLE':
+            # can't be used with variable types..
+            msg = "Datsets with variable types cannot be used with reference layouts"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        
+
     if layout["class"] != 'H5D_CHUNKED':
         return None # nothing else to validate
 
