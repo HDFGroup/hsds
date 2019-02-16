@@ -28,7 +28,6 @@ def get_domain(request, body=None):
     params = request.rel_url.query
 
     domain = None
-    log.debug(f"request.has_body: {request.has_body}")
     if "domain" in params:
         domain = params["domain"]
         log.debug("got domain param: {}".format(domain))
@@ -79,7 +78,6 @@ async def PUT_Domain(request):
         raise HTTPInternalServerError() 
     body = await request.json() 
     log.debug(f"got body: {body}")
-    log.debug(f"request_has_body: {request.has_body}")
 
     domain = get_domain(request, body=body)
  
