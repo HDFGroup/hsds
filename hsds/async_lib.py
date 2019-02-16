@@ -144,9 +144,13 @@ async def objDeleteCallback(app, s3keys):
         log.error("Unexpected objDeleteCallback")
         raise ValueError("Invalid objDeleteCallback")
 
-    prefix = app["objDelete_prefix"]    
+    prefix = app["objDelete_prefix"]  
+    prefix_len = len(prefix)  
     for s3key in s3keys:
-        full_key = prefix + s3key
+        if not s3key.startswith(prefix):
+            log.error(f"Unexpected key {s3key} for prefix: {prefix}")
+            raise ValueError("invalid s3key for objDeleteCallback")
+        full_key = prefix + s3key[prefix_len:]
         log.info(f"objDeleteCallback got key: {full_key}")
         await deleteS3Obj(app, full_key)
         

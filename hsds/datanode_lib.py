@@ -453,6 +453,7 @@ async def s3sync(app, age, rootid=None):
     retry_keys = []  # add any write failures back here
     notify_objs = []  # notifications to send to AN, also flags success write to S3
     for obj_id in keys_to_update:
+        log.debug(f"s3sync - {len(keys_to_update)} keys to update")
         try:
             await write_s3_obj(app, obj_id)
             notify_objs.append(obj_id)
