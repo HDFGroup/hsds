@@ -18,7 +18,7 @@ import asyncio
 import json
 import time
 import numpy as np
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalServerError, HTTPServiceUnavailable
 from aiohttp.web import json_response, StreamResponse
 
 from util.httpUtil import  request_read
@@ -176,7 +176,18 @@ async def PUT_Chunk(request):
                 chunk_arr[...] = fill_value
             else:
                 chunk_arr = np.zeros(dims, dtype=dt, order='C')
-        chunk_cache[chunk_id] = chunk_arr
+        if chunk_cache.memTarget - chunk_cache.memUsed < chunk_arr.size:
+            MAX_WAIT_TIME = 10.0  # TBD - make this a config
+            # no room in the cache, wait till space is freed by the s3sync task
+            wait_start = time.time()
+            while chunk_cache.memTarget - chunk_cache.memUsed < chunk_arr.size:
+                log.warn(f"cache utililization is: {chunk_cache.cacheUtilizationPercent} unable to save chunk to chunk cache")
+                if time.time() - wait_start > MAX_WAIT_TIME:
+                    log.error(f"unable to save updated chunk {chunk_id} returning 503 error")
+                    raise HTTPServiceUnavailable()
+                await asyncio.sleep(0.1)
+       
+        chunk_cache[chunk_id] = chunk_arr  # store in cache
         
 
     log.info("PUT_Chunk dirty cache count: {}".format(chunk_cache.dirtyCount))
@@ -272,6 +283,7 @@ async def GET_Chunk(request):
         log.debug("GET_Chunks s3_key: {}".format(s3_key))
         # check to see if there's a chunk object
         # TBD - potential race condition?
+        # TBD - faster to just do a get and handle exception if not found?
         obj_exists = await isS3Obj(app, s3_key)
         if not obj_exists:
             # return a 404
@@ -305,7 +317,12 @@ async def GET_Chunk(request):
                 del pending_s3_read[s3_key] 
             chunk_arr = bytesToArray(chunk_bytes, dt, dims)
             log.debug("chunk size: {}".format(chunk_arr.size))
-            chunk_cache[chunk_id] = chunk_arr  # store in cache
+            if chunk_cache.memTarget - chunk_cache.memUsed < chunk_arr.size:
+                # no room in the cache, we will need to re-read from S3 next time it's accessed
+                log.warn(f"cache utililization is: {chunk_cache.cacheUtilizationPercent} unable to save chunk to chunk cache")
+            else:
+                # we can add to the chunk cache
+                chunk_cache[chunk_id] = chunk_arr  # store in cache
      
     resp = None
     
@@ -487,7 +504,6 @@ async def POST_Chunk(request):
             chunk_bytes = await getS3Bytes(app, s3_key, deflate_level=deflate_level)
             chunk_arr = np.fromstring(chunk_bytes, dtype=dset_dtype)
             chunk_arr = chunk_arr.reshape(dims)
-            chunk_cache[chunk_id] = chunk_arr  # store in cache
         else:
             log.debug("Initializing chunk")
             if fill_value:
@@ -498,7 +514,12 @@ async def POST_Chunk(request):
                 chunk_arr[...] = fill_value
             else:
                 chunk_arr = np.zeros(dims, dtype=dset_dtype, order='C')
-            chunk_cache[chunk_id] = chunk_arr
+        if chunk_cache.memTarget - chunk_cache.memUsed < chunk_arr.size:
+            # no room in the cache, we will need to re-read from S3 next time it's accessed
+            log.warn(f"cache utililization is: {chunk_cache.cacheUtilizationPercent} unable to save chunk to chunk cache")
+        else:
+            # we can add to the chunk cache
+            chunk_cache[chunk_id] = chunk_arr  # store in cache
 
     # create a numpy array for incoming points
     input_bytes = await request_read(request)  # TBD - will it cause problems when failures are raised before reading data?

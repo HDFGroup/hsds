@@ -19,7 +19,7 @@ import psutil
 from copy import copy
 
 from aiohttp.web import Application, StreamResponse, json_response
-from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPNotFound, HTTPGone, HTTPInternalServerError
 
 from aiohttp.client_exceptions import ClientError
 from aiobotocore import get_session
@@ -183,12 +183,16 @@ async def healthCheck(app):
                         app["node_state"]  = "READY"
                     log.info("health check ok") 
             except ClientError as ce:
-                log.warn("ClientError: {} for health check".format(str(ce)))
+                log.warn(f"ClientError: {ce} for health check")
             except HTTPInternalServerError as he:
-                log.warn("HTTPInternalServiceError <{}> for health check".format(he.code))
+                log.warn(f"HTTPInternalServiceError <{he.code}> for health check")
+            except HTTPNotFound as hnf:
+                log.warn(f"HTTPNotFound <{hnf.code}> for health check")
+            except HTTPGone as hg:
+                log.warn(f"HTTPGone <{hg.code}> for health heck")
 
         svmem = psutil.virtual_memory()
-        log.debug("health check sleep: {}, vm: {}".format(sleep_secs, svmem.percent))
+        log.debug(f"health check sleep: {sleep_secs}, vm: {svmem.percent}") 
         await asyncio.sleep(sleep_secs)
 
 async def about(request):

@@ -195,7 +195,7 @@ class LruCache(object):
                     log.debug("LRU {} mem_sized reduced below target".format(self._name))
                     break
             else:
-                log.debug("LRU {} node: {} is dirty".format(self._name, node._id))
+                # log.debug("LRU {} node: {} is dirty".format(self._name, node._id))
                 pass # can't remove dirty nodes
             node = next
         if self._mem_size > self._mem_target:
