@@ -130,11 +130,9 @@ async def PUT_Chunk(request):
         raise HTTPBadRequest(reason=msg)
 
     # if the chunk cache has too many dirty items, wait till items get flushed to S3
+    MAX_WAIT_TIME = 10.0  # TBD - make this a config
     chunk_cache = app['chunk_cache']
-    log.debug("PUT_Chunk cache utilization: {} per, dirty_count: {}".format(chunk_cache.cacheUtilizationPercent, chunk_cache.dirtyCount))
-    while chunk_cache.cacheUtilizationPercent > 100 and chunk_cache.dirtyCount > 0:
-        log.info("PUT_Chunk, cache utilization: {}, sleeping till items are flushed".format(chunk_cache.cacheUtilizationPercent))
-        await asyncio.sleep(1)
+    log.debug(f"PUT_Chunk cache utilization: {chunk_cache.cacheUtilizationPercent} per, dirty_count: {chunk_cache.dirtyCount}, mem_dirty: {chunk_cache.memDirty}")
 
     # create a numpy array for incoming data
     input_bytes = await request_read(request)  # TBD - will it cause problems when failures are raised before reading data?
@@ -176,17 +174,18 @@ async def PUT_Chunk(request):
                 chunk_arr[...] = fill_value
             else:
                 chunk_arr = np.zeros(dims, dtype=dt, order='C')
-        if chunk_cache.memTarget - chunk_cache.memUsed < chunk_arr.size:
-            MAX_WAIT_TIME = 10.0  # TBD - make this a config
+
+        # check that there's room in the cache before adding it
+        if chunk_cache.memTarget - chunk_cache.memDirty < chunk_arr.size:
             # no room in the cache, wait till space is freed by the s3sync task
             wait_start = time.time()
-            while chunk_cache.memTarget - chunk_cache.memUsed < chunk_arr.size:
-                log.warn(f"cache utililization is: {chunk_cache.cacheUtilizationPercent} unable to save chunk to chunk cache")
+            while chunk_cache.memTarget - chunk_cache.memDirty < chunk_arr.size:
+                log.info(f"PUT_Chunk, cache utilization: {chunk_cache.cacheUtilizationPercent}, sleeping till items are flushed")
                 if time.time() - wait_start > MAX_WAIT_TIME:
                     log.error(f"unable to save updated chunk {chunk_id} returning 503 error")
                     raise HTTPServiceUnavailable()
-                await asyncio.sleep(0.1)
-       
+                await asyncio.sleep(1)
+                 
         chunk_cache[chunk_id] = chunk_arr  # store in cache
         
 

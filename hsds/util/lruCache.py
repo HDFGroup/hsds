@@ -38,6 +38,7 @@ class LruCache(object):
         self._lru_head = None
         self._lru_tail = None
         self._mem_size = 0
+        self._dirty_size = 0
         self._mem_target = mem_target
         self._chunk_cache = chunk_cache
         if chunk_cache:
@@ -106,6 +107,7 @@ class LruCache(object):
         if key in self._dirty_set:
             log.warning("LRU {} removing dirty node: {}".format(self._name, key))
             self._dirty_set.remove(key)
+            self._dirty_size -= node._mem_size
 
     def __len__(self):
         """ Number of nodes in the cache """
@@ -157,6 +159,8 @@ class LruCache(object):
             node._data = data
             node._mem_size = mem_size
             self._moveToFront(key)
+            if node._isdirty:
+                self._dirty_size += mem_delta
             log.debug("LRU {} updated node: {} [was {} bytes now {} bytes]".format(self._name, key, old_size, node._mem_size))
         else:
             node = Node(key, data, mem_size=mem_size)
@@ -172,13 +176,16 @@ class LruCache(object):
                 self._lru_head = node
             self._hash[key] = node
             self._mem_size += node._mem_size
+            if node._isdirty:
+                self._dirty_size += node._mem_size
             log.debug("LRU {} added new node: {} [{} bytes]".format(self._name, key, node._mem_size))
         
         if self._mem_size > self._mem_target:
             # set dirty temporarily so we can't remove this node in reduceCache 
+            isdirty = node._isdirty
             node._isdirty = True 
             self._reduceCache()
-            node._isdirty = False
+            node._isdirty = isdirty
              
     def _reduceCache(self):
         # remove nodes from cache (if not dirty) until we are under memory mem_target
@@ -207,6 +214,7 @@ class LruCache(object):
         id_list = []
         dirty_count = 0
         mem_usage = 0
+        dirty_usage = 0
         # walk the LRU list
         node = self._lru_head
         while node is not None:
@@ -217,6 +225,7 @@ class LruCache(object):
                 dirty_count += 1
                 if node._id not in self._dirty_set:
                     raise ValueError("expected to find id: {} in dirty set".format(node._id))
+                dirty_usage += node._mem_size
             mem_usage += node._mem_size
             if self._chunk_cache and not isinstance(node._data, numpy.ndarray):
                 raise TypeError("Unexpected datatype")
@@ -228,6 +237,8 @@ class LruCache(object):
             raise ValueError("unexpected number of dirty nodes")
         if mem_usage != self._mem_size:
             raise ValueError("unexpected memory size")
+        if dirty_usage != self._dirty_size:
+            raise ValueError("unexpected dirty size")
         # go back through list
         node = self._lru_tail
         pos = len(id_list)
@@ -251,6 +262,8 @@ class LruCache(object):
         log.debug("LRU {} set dirty node id: {}".format(self._name, key))
                    
         node = self._moveToFront(key)
+        if not node._isdirty:
+            self._dirty_size += node._mem_size
         node._isdirty = True
         
         self._dirty_set.add(key)
@@ -262,7 +275,10 @@ class LruCache(object):
         # also, may trigger a memory cleanup
         log.debug("LRU {} clear dirty node: {}".format(self._name, key))
         node = self._moveToFront(key)
+        if node._isdirty:
+            self._dirty_size -= node._mem_size
         node._isdirty = False
+
         if key in self._dirty_set:
             self._dirty_set.remove(key)
             if self._mem_size > self._mem_target:
@@ -309,3 +325,7 @@ class LruCache(object):
     @property
     def memTarget(self):
         return self._mem_target
+
+    @property
+    def memDirty(self):
+        return self._dirty_size

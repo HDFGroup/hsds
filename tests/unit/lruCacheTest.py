@@ -59,6 +59,8 @@ class LruCacheTest(unittest.TestCase):
         self.assertEqual(mem_tgt, 1000*1000*10)
         mem_used = cc.memUsed
         self.assertEqual(mem_used, 500*500*8)
+        mem_dirty = cc.memDirty
+        self.assertEqual(mem_dirty, 0)
         mem_per = cc.cacheUtilizationPercent
         self.assertEqual(mem_per, 20)   # have used 20% of target memory
 
@@ -76,6 +78,7 @@ class LruCacheTest(unittest.TestCase):
         self.assertTrue(cc.isDirty(rand_id))
         self.assertEqual(cc.dirtyCount, 1)
         self.assertEqual(cc.dump_lru(), lru_str)
+        cc.consistencyCheck()
         cc.clearDirty(rand_id)
         cc.consistencyCheck()
         self.assertFalse(cc.isDirty(rand_id))
@@ -93,6 +96,8 @@ class LruCacheTest(unittest.TestCase):
         self.assertEqual(mem_tgt, 1000*1000*10)
         mem_used = cc.memUsed
         self.assertEqual(mem_used, 0)
+        mem_dirty = cc.memDirty
+        self.assertEqual(mem_dirty, 0)
         mem_per = cc.cacheUtilizationPercent
         self.assertEqual(mem_per, 0)   # no memory used
 
@@ -174,6 +179,8 @@ class LruCacheTest(unittest.TestCase):
         self.assertTrue(len(cc) < 10) # given mem-target, some items should have been removed
         mem_per = cc.cacheUtilizationPercent
         self.assertTrue(mem_per < 100)
+        mem_dirty = cc.memDirty
+        self.assertEqual(mem_dirty, 0)
         
         # add 10 more chunks, but set dirty to true each time
         for i in range(10):
@@ -185,6 +192,8 @@ class LruCacheTest(unittest.TestCase):
             self.assertTrue(id in cc)
             cc.setDirty(id)  
             cc.consistencyCheck()
+            mem_dirty = cc.memDirty
+            self.assertEqual(mem_dirty, 1024 * (i+1))
              
              
         mem_per = cc.cacheUtilizationPercent
@@ -204,8 +213,10 @@ class LruCacheTest(unittest.TestCase):
         
         for id in id_list:
             self.assertTrue(id in ids)
+            mem_dirty = cc.memDirty
             if cc.isDirty(id):
                 cc.clearDirty(id)
+                self.assertTrue(cc.memDirty < mem_dirty)
         mem_per = cc.cacheUtilizationPercent
         # mem percent should be less than 100 now
 
@@ -281,4 +292,3 @@ if __name__ == '__main__':
     #setup test files
     
     unittest.main()
-    

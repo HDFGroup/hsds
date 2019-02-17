@@ -18,7 +18,7 @@ from asyncio import CancelledError
 import json
 import base64 
 import numpy as np
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPRequestEntityTooLarge, HTTPConflict, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPRequestEntityTooLarge, HTTPConflict, HTTPInternalServerError, HTTPServiceUnavailable
 from aiohttp.client_exceptions import ClientError
 from aiohttp.web import StreamResponse
 from aiohttp.web import json_response
@@ -80,13 +80,16 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level,
 
     try:
         async with client.put(req, data=data, params=params) as rsp:
-            log.debug("req: {} status: {}".format(req, rsp.status))
-            if rsp.status != 201:
-                msg = "request error for {}: {}".format(req, str(rsp))
-                log.error(msg)
-                raise HTTPInternalServerError()
+            log.debug(f"req: {req} status: {rsp.status}")
+            if rsp.status == 201:
+                log.debug(f"http_put({req}) <201> Updated")
+            elif rsp.status == 503:
+                log.warn(f"DN node too busy to handle request: {req}")
+                raise HTTPServiceUnavailable()
             else:
-                log.debug("http_put({}) <201> Updated".format(req))
+                log.error(f"request error status: {rsp.status} for {req}: {str(rsp)}")
+                raise HTTPInternalServerError()
+                
     except ClientError as ce:
         log.error("Error for http_post({}): {} ".format(req, str(ce)))
         raise HTTPInternalServerError()
