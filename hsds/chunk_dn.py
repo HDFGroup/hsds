@@ -468,17 +468,20 @@ async def POST_Chunk(request):
         log.error(msg)
         raise HTTPBadRequest(reason=msg)
 
+    # create a numpy array for incoming points
+    input_bytes = await request_read(request) 
+    if len(input_bytes) != request.content_length:
+        msg = "Read {} bytes, expecting: {}".format(len(input_bytes), request.content_length)
+        log.error(msg)
+        raise HTTPInternalServerError()
+
     # get chunk from cache/s3.  If not found init a new chunk if this is a write request
     chunk_arr = await getChunk(app, chunk_id, dset_json, chunk_init=put_points) 
 
+   
     if put_points:
         # writing point data
-        # create a numpy array for incoming points
-        input_bytes = await request_read(request) 
-        if len(input_bytes) != request.content_length:
-            msg = "Read {} bytes, expecting: {}".format(len(input_bytes), request.content_length)
-            log.error(msg)
-            raise HTTPInternalServerError()
+        
 
         # create a numpy array with the following type:
         #       (coord1, coord2, ...) | dset_dtype
