@@ -193,7 +193,7 @@ class LruCache(object):
         
         node = self._lru_tail  # start from the back
         while node is not None:
-            log.debug("LRU check node: {}".format(self._name, node._id))
+            # log.debug("LRU check node: {}".format(self._name, node._id))
             next = node._prev
             if not node._isdirty:
                 log.debug("LRU {} removing node: {}".format(self._name, node._id))
