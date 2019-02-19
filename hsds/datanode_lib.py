@@ -165,6 +165,7 @@ async def write_s3_obj(app, obj_id):
     meta_cache = app['meta_cache']
     deflate_map = app['deflate_map']
 
+
     if isValidChunkId(obj_id):
         # chunk update
         if obj_id not in chunk_cache:
@@ -239,7 +240,9 @@ async def write_s3_obj(app, obj_id):
         elapsed_time = time.time() - write_start_time
         log.info(f"s3 write for {s3_key} took {elapsed_time}")
         # clear pending write 
-        del pending_s3_write[s3_key]        
+        del pending_s3_write[s3_key]    
+
+    return obj_id  
             
    
 
@@ -403,17 +406,13 @@ async def s3syncCheck(app):
             continue
         # write all objects that have been updated more than s3_sync_interval ago
         age = time.time() - s3_sync_interval
-        try:
-            update_count = await s3sync(app, age)
-            if update_count:
-                log.info(f"s3syncCheck {update_count} objects updated")
-            else:
-                log.info("s3syncCheck no objects to write, sleeping")
-                await asyncio.sleep(sleep_secs)
-
-        except Exception as e:
-            # catch all exception to keep the loop going
-            log.error(f"Got Exception running s3sync: {e}")
+       
+        update_count = await s3sync(app, age)
+        if update_count:
+            log.info(f"s3syncCheck {update_count} objects updated")
+        else:
+            log.info("s3syncCheck no objects to write, sleeping")
+            await asyncio.sleep(sleep_secs)
 
 async def s3sync(app, age, rootid=None):
     """ Periodic method that writes dirty objects in the metadata cache to S3"""
@@ -422,11 +421,11 @@ async def s3sync(app, age, rootid=None):
     
     update_count = None
         
-    keys_to_update = []
+    keys_to_update = set()
     for obj_id in dirty_ids:
         #log.debug(f"dirty id: {obj_id}")
         if obj_id.startswith("/"):
-            keys_to_update.append(obj_id)
+            keys_to_update.add(obj_id)
             continue  # deal with uuids below
         if not isValidUuid(obj_id):
             log.warn(f"Unexpected objid in dirty_ids: {obj_id}")
@@ -437,7 +436,7 @@ async def s3sync(app, age, rootid=None):
             continue  # root collectino flush only works with v2 ids
         if rootid and getRootObjId(obj_id) != rootid:
             continue  # not in the collection we want to update
-        keys_to_update.append(obj_id)
+        keys_to_update.add(obj_id)
     
     if len(keys_to_update) == 0:
         return 0
@@ -453,33 +452,43 @@ async def s3sync(app, age, rootid=None):
     for obj_id in keys_to_update:
         del dirty_ids[obj_id]
             
-    retry_keys = []  # add any write failures back here
-    notify_objs = []  # notifications to send to AN, also flags success write to S3
-    for obj_id in keys_to_update:
-        log.debug(f"s3sync - {len(keys_to_update)} keys to update")
+    notify_objs = set()  # notifications to send to AN, also flags success write to S3
+
+    def callback(future):
         try:
-            await write_s3_obj(app, obj_id)
-            notify_objs.append(obj_id)
-        except KeyError as ke:
-            log.error(f"s3 sync got key error: {ke}")
-            retry_keys.append(obj_id)
-        except HTTPInternalServerError as hpe:
-            log.warn(f"s3 sync - failed to write {obj_id} adding to retry list")
-            retry_keys.append(obj_id)
+            result = future.result()
+            log.info(f"write_s3_obj callback result: {result}")
+            keys_to_update.remove(result)
+            notify_objs.add(result)
+
+        except HTTPInternalServerError as hse:
+            log.error(f"write_s3_obj callback got 500: {hse}")
+        except Exception as e:
+            log.error(f"write_s3_obj callback unexpected exception: {e}")
+
+
+    tasks = []
+    loop = app["loop"]
+    for obj_id in keys_to_update:
+        task = asyncio.ensure_future(write_s3_obj(app, obj_id))
+        task.add_done_callback(callback)
+        tasks.append(task)
+    # run all the tasks.  Objids for any failed writes will go back to the pending list.
+    await asyncio.gather(*tasks, loop=loop)
             
     # add any failed writes back to the dirty queue
-    if len(retry_keys) > 0:
-        log.warn("{} failed S3 writes, re-adding to dirty set".format(len(retry_keys)))
+    if len(keys_to_update) > 0:
+        log.warn("{} failed S3 writes, re-adding to dirty set".format(len(keys_to_update)))
         # we'll put the timestamp down as now, so the rewrites won't be triggered immediately
         now = int(time.time())
-        for obj_id in retry_keys:
+        for obj_id in keys_to_update:
             dirty_ids[obj_id] = now
 
     # notify AN of key updates 
     an_url = getAsyncNodeUrl(app)
     log.info("Notifying AN for S3 Updates")
     if len(notify_objs) > 0:           
-        body = { "objs": notify_objs }
+        body = { "objs": list(notify_objs) }
         req = an_url + "/objects"
         try:
             log.info("ASync PUT notify: {} body: {}".format(req, body))
