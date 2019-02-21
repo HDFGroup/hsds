@@ -324,12 +324,21 @@ async def write_s3_obj(app, obj_id):
     meta_cache = app['meta_cache']
     deflate_map = app['deflate_map']
     notify_objs = app["an_notify_objs"]
+    deleted_ids = app['deleted_ids']
 
 
     if s3key in pending_s3_write:
         msg = f"write_s3_key - not expected for key {s3key} to be in pending_s3_write map"
         log.error(msg)
         raise KeyError(msg)
+
+    if obj_id in deleted_ids and isValidUuid(obj_id):
+        log.warn(f"Canceling wrfite for {obj_id} since it has been deleted")
+        if obj_id in pending_s3_write_tasks:
+            log.info(f"removing pending s3 write task for {obj_id}")
+            task = pending_s3_write_tasks[obj_id]
+            task.cancel()
+            del pending_s3_write_tasks[obj_id]
     
     now = time.time()
 
@@ -438,6 +447,7 @@ async def s3sync(app, age):
 
     log.info(f"s3sync update( age={age}, dirtyid count: {dirty_count}, active write tasks: {len(pending_s3_write_tasks)}")
     log.debug(f"s3sync dirty_ids: {dirty_ids}")
+    log.debug(f"sesync pending write s3keys: {pending_s3_write.keys()}")
     log.debug(f"s3sync write tasks: {pending_s3_write_tasks.keys()}")
 
     def callback(future):
@@ -455,6 +465,7 @@ async def s3sync(app, age):
     for obj_id in dirty_ids:
         s3key = getS3Key(obj_id)
         log.debug(f"s3sync dirty id: {obj_id}, s3key: {s3key}")
+        create_task = True
         if s3key in pending_s3_write:
             log.debug(f"key {s3key} has been pending for {s3sync_start - pending_s3_write[s3key]}")
             if s3sync_start - pending_s3_write[s3key] > s3_sync_interval * 2:
@@ -468,8 +479,10 @@ async def s3sync(app, age):
                     del pending_s3_write_tasks[obj_id]
             else:
                 log.debug(f"key {s3key} has a pending write task")
-        else:
-        
+                create_task = False
+                if obj_id not in pending_s3_write_tasks:
+                    log.error(f"expected to find {obj_id} in pending_s3_write_tasks")
+        if create_task:
             # create a task to write this object
             log.debug(f"s3sync - ensure future for {obj_id}")
             task = asyncio.ensure_future(write_s3_obj(app, obj_id))
