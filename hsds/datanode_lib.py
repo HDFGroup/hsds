@@ -198,8 +198,6 @@ async def save_metadata_obj(app, obj_id, obj_json, notify=False, flush=False):
     meta_cache.setDirty(obj_id)
     now = int(time.time())
 
-     # flag to write to S3
-    dirty_ids[obj_id] = now
 
     if flush:
         # write to S3 immediately
@@ -216,7 +214,10 @@ async def save_metadata_obj(app, obj_id, obj_json, notify=False, flush=False):
             raise  # re-throw  
         if obj_id in dirty_ids:
             log.warn(f"save_metadata_obj flush - object {obj_id} is still dirty")
-       
+    else:
+        # flag to write to S3
+        dirty_ids[obj_id] = now
+  
      
     # message AN immediately if notify flag is set
     # otherwise AN will be notified at next S3 sync
@@ -325,28 +326,33 @@ async def write_s3_obj(app, obj_id):
     deflate_map = app['deflate_map']
     notify_objs = app["an_notify_objs"]
     deleted_ids = app['deleted_ids']
-
+    success = False
 
     if s3key in pending_s3_write:
         msg = f"write_s3_key - not expected for key {s3key} to be in pending_s3_write map"
         log.error(msg)
         raise KeyError(msg)
 
+    if obj_id not in pending_s3_write_tasks:
+        # don't allow reentrant write
+        log.debug(f"write_s3_obj for {obj_id} not s3sync task")
+
     if obj_id in deleted_ids and isValidUuid(obj_id):
+        # if this objid has been deleted (and its unique since this is not a domain id)
+        # cancel any pending task and return
         log.warn(f"Canceling wrfite for {obj_id} since it has been deleted")
         if obj_id in pending_s3_write_tasks:
             log.info(f"removing pending s3 write task for {obj_id}")
             task = pending_s3_write_tasks[obj_id]
             task.cancel()
             del pending_s3_write_tasks[obj_id]
+        return None
     
     now = time.time()
 
-    if obj_id not in dirty_ids:
-        log.info(f"adding {obj_id} to dirty_ids")
-        dirty_ids[obj_id] = now
-
-    last_update_time = dirty_ids[obj_id]
+    last_update_time = now
+    if obj_id in dirty_ids:
+        last_update_time = dirty_ids[obj_id]
     if last_update_time > now:
         msg = f"last_update time {last_update_time} is in the future for obj_id: {obj_id}"
         log.error(msg)
@@ -372,17 +378,17 @@ async def write_s3_obj(app, obj_id):
                 log.debug("got deflate_level: {} for dset: {}".format(deflate_level, dset_id))
      
             await putS3Bytes(app, s3key, chunk_bytes, deflate_level=deflate_level)
+            success = True
         
             # if chunk has been evicted from cache something has gone wrong
             if obj_id not in chunk_cache:
                 msg = f"expected to find {obj_id} in chunk_cache"
                 log.error(msg)
-            elif dirty_ids[obj_id] > last_update_time:
+            elif obj_id in dirty_ids and dirty_ids[obj_id] > last_update_time:
                 log.info(f"write_s3_obj {obj_id} got updated while s3 write was in progress")
             else:
                 # no new write, can clear dirty
                 chunk_cache.clearDirty(obj_id)  # allow eviction from cache  
-                del dirty_ids[obj_id]
                 log.debug("putS3Bytes Chunk cache utilization: {} per, dirty_count: {}".format(chunk_cache.cacheUtilizationPercent, chunk_cache.dirtyCount))
         else:
             # meta data update     
@@ -394,23 +400,20 @@ async def write_s3_obj(app, obj_id):
                 log.error(f"expected meta cache obj {obj_id} to be dirty")
                 raise ValueError("bad dirty state for obj")
             obj_json = meta_cache[obj_id]
-            try:
-                await putS3JSONObj(app, s3key, obj_json)                     
-            except HTTPInternalServerError as hpe:
-                log.error("got S3 error writing obj_id: {} to S3: {}".format(obj_id, str(hpe)))
-                raise # re-throw exception   
+            
+            await putS3JSONObj(app, s3key, obj_json)                     
+            success = True 
             # should still be in meta_cache...
             if obj_id not in meta_cache:
                 msg = f"expected to find {obj_id} in meta_cache"
                 log.error(msg)
-            elif dirty_ids[obj_id] > last_update_time:
+            elif obj_id in dirty_ids and dirty_ids[obj_id] > last_update_time:
                 log.info(f"write_s3_obj {obj_id} got updated while s3 write was in progress")
             else:
                 meta_cache.clearDirty(obj_id)  # allow eviction from cache 
-                del dirty_ids[obj_id]
     finally:
         # clear pending_s3_write item
-        log.debug("write_s3_obj finally block")
+        log.debug(f"write_s3_obj finally block, success={success}")
         if s3key not in pending_s3_write:
             msg = f"write s3 obj: Expected to find {s3key} in pending_s3_write map"
             log.error(msg)
@@ -425,13 +428,17 @@ async def write_s3_obj(app, obj_id):
         else:
             log.debug(f"removing pending s3 write task for {obj_id}")
             del pending_s3_write_tasks[obj_id]
+        # clear dirty flag
+        if obj_id in dirty_ids and dirty_ids[obj_id] == last_update_time:
+            log.debug(f"clearing dirty flag for {obj_id}")
+            del dirty_ids[obj_id]
         
     # add to set so that AN can be notified about changed objects
     notify_objs.add(obj_id)
 
     # calculate time to do the write
     elapsed_time = time.time() - now
-    log.info(f"s3 write for {s3key} took {elapsed_time}") 
+    log.info(f"s3 write for {s3key} took {elapsed_time:.3f}s") 
     return obj_id
 
 async def s3sync(app, age):
@@ -447,8 +454,8 @@ async def s3sync(app, age):
 
     log.info(f"s3sync update( age={age}, dirtyid count: {dirty_count}, active write tasks: {len(pending_s3_write_tasks)}")
     log.debug(f"s3sync dirty_ids: {dirty_ids}")
-    log.debug(f"sesync pending write s3keys: {pending_s3_write.keys()}")
-    log.debug(f"s3sync write tasks: {pending_s3_write_tasks.keys()}")
+    log.debug(f"sesync pending write s3keys: {list(pending_s3_write.keys())}")
+    log.debug(f"s3sync write tasks: {list(pending_s3_write_tasks.keys())}")
 
     def callback(future):
         try:
