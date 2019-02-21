@@ -441,8 +441,9 @@ async def write_s3_obj(app, obj_id):
     log.info(f"s3 write for {s3key} took {elapsed_time:.3f}s") 
     return obj_id
 
-async def s3sync(app, age):
+async def s3sync(app):
     """ Periodic method that writes dirty objects in the metadata cache to S3"""
+    MAX_PENDING_WRITE_REQUESTS=20
     dirty_ids = app["dirty_ids"]
     pending_s3_write = app["pending_s3_write"]
     pending_s3_write_tasks = app["pending_s3_write_tasks"]
@@ -452,7 +453,7 @@ async def s3sync(app, age):
         log.info("s3sync nothing to update")
         return 0
 
-    log.info(f"s3sync update( age={age}, dirtyid count: {dirty_count}, active write tasks: {len(pending_s3_write_tasks)}")
+    log.info(f"s3sync update - dirtyid count: {dirty_count}, active write tasks: {len(pending_s3_write_tasks)}/{MAX_PENDING_WRITE_REQUESTS}")
     log.debug(f"s3sync dirty_ids: {dirty_ids}")
     log.debug(f"sesync pending write s3keys: {list(pending_s3_write.keys())}")
     log.debug(f"s3sync write tasks: {list(pending_s3_write_tasks.keys())}")
@@ -489,7 +490,7 @@ async def s3sync(app, age):
                 create_task = False
                 if obj_id not in pending_s3_write_tasks:
                     log.error(f"expected to find {obj_id} in pending_s3_write_tasks")
-        if create_task:
+        if create_task and len(pending_s3_write_tasks) < MAX_PENDING_WRITE_REQUESTS:
             # create a task to write this object
             log.debug(f"s3sync - ensure future for {obj_id}")
             task = asyncio.ensure_future(write_s3_obj(app, obj_id))
@@ -521,20 +522,27 @@ async def s3sync(app, age):
 
 
 async def s3syncCheck(app):
-    sleep_secs = config.get("node_sleep_time")
     s3_sync_interval = config.get("s3_sync_interval")
+    long_sleep = config.get("node_sleep_time")
+    short_sleep = long_sleep/100.0
+    last_write_time = 0
 
     while True:
         if app["node_state"] != "READY":
             log.info("s3sync - clusterstate is not ready, sleeping")
-            await asyncio.sleep(sleep_secs)
+            await asyncio.sleep(long_sleep)
             continue
-        # write all objects that have been updated more than s3_sync_interval ago
-        age = time.time() - s3_sync_interval
        
-        update_count = await s3sync(app, age)
+        update_count = await s3sync(app)
+        now = time.time()
         if update_count:
             log.info(f"s3syncCheck {update_count} objects updated")
+            last_write_time = time.time()
+
+        if now - last_write_time < s3_sync_interval:
+            log.debug(f"s3syncCheck sleeping for {short_sleep}")
+            # this will sleep for ~0.1s by default
+            await asyncio.sleep(short_sleep)
         else:
-            log.info("s3syncCheck no objects to write, sleeping")
-            await asyncio.sleep(sleep_secs)
+            log.info(f"s3syncCheck no objects to write, sleeping for {long_sleep}")
+            await asyncio.sleep(long_sleep)
