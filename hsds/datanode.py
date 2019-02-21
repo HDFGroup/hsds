@@ -94,10 +94,12 @@ if __name__ == '__main__':
     app['meta_cache'] = LruCache(mem_target=metadata_mem_cache_size, chunk_cache=False)
     app['chunk_cache'] = LruCache(mem_target=chunk_mem_cache_size, chunk_cache=True)
     app['deleted_ids'] = set()
-    app['dirty_ids'] = {}
+    app['dirty_ids'] = {}  # map of objids to timestamp of which they were last updated
     app['deflate_map'] = {} # map of dataset ids to deflate levels (if compressed)
     app["pending_s3_read"] = {} # map of s3key to timestamp for in-flight read requests
     app["pending_s3_write"] = {} # map of s3key to timestamp for in-flight write requests
+    app["pending_s3_write_tasks"] = {} # map of objid to asyncio Task objects for writes
+    app["an_notify_objs"] = set()   # set of objids to tell the AN about
     # TODO - there's nothing to prevent the deflate_map from getting ever larger 
     # (though it is only one int per dataset id)
     # add a timestamp and remove at a certain time?

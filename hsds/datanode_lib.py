@@ -17,7 +17,7 @@ import time
 from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError, HTTPBadRequest
 from aiohttp.client_exceptions import ClientError
 
-from util.idUtil import validateInPartition, getS3Key, isValidUuid, isValidChunkId, isSchema2Id, getRootObjId
+from util.idUtil import validateInPartition, getS3Key, isValidUuid, isValidChunkId
 from util.s3Util import getS3JSONObj, putS3JSONObj, putS3Bytes, isS3Obj, deleteS3Obj
 from util.domainUtil import isValidDomain
 from util.attrUtil import getRequestCollectionName
@@ -156,99 +156,14 @@ async def get_metadata_obj(app, obj_id):
             meta_cache[obj_id] = obj_json  # add to cache
     return obj_json
 
-async def write_s3_obj(app, obj_id):
-    """ writes the given object to s3 """
-    s3_key = getS3Key(obj_id)  
-    log.info(f"s3sync for obj_id: {obj_id} / s3_key: {s3_key}")
-    pending_s3_write = app["pending_s3_write"]
-    chunk_cache = app['chunk_cache']
-    meta_cache = app['meta_cache']
-    deflate_map = app['deflate_map']
-
-
-    if isValidChunkId(obj_id):
-        # chunk update
-        if obj_id not in chunk_cache:
-            log.error("expected to find obj_id: {} in chunk cache".format(obj_id))
-            raise KeyError(f"{obj_id} not found in chunk cache")
-    else:
-        # check for object in meta cache
-        if obj_id not in meta_cache:
-            log.error("expected to find obj_id: {} in meta cache".format(obj_id))
-            raise KeyError(f"{obj_id} not found in chunk cache")
-
-    if s3_key in pending_s3_write:
-        # already a write in progress, wait for it to complete
-        # to avoid any out of order issues
-        log.warn(f"write_s3_obj({s3_key}) already in progress")
-        write_start_time = pending_s3_write[s3_key]
-        log.info(f"s3 write request for {obj_id} was requested at: {write_start_time}")
-        while time.time() - write_start_time < 2.0:
-            log.debug("waiting for pending s3 write, sleeping")
-            await asyncio.sleep(1)  # sleep for sub-second?
-            if s3_key not in pending_s3_write:
-                log.info(f"object {obj_id} has been written!")
-                pending_s3_write[s3_key] = time.time()
-                break
-    else:
-        # add key to pending map
-        log.debug(f"adding {s3_key} to pending_s3_write")
-        write_start_time = time.time()
-        pending_s3_write[s3_key] = write_start_time
-
-    if isValidChunkId(obj_id):
-        chunk_arr = chunk_cache[obj_id]
-        chunk_cache.clearDirty(obj_id)  # chunk may get evicted from cache now
-        chunk_bytes = arrayToBytes(chunk_arr)
-        dset_id = getDatasetId(obj_id)
-        deflate_level = None
-        if dset_id in deflate_map:
-            deflate_level = deflate_map[dset_id]
-            log.debug("got deflate_level: {} for dset: {}".format(deflate_level, dset_id))
-                    
-        try:
-            await putS3Bytes(app, s3_key, chunk_bytes, deflate_level=deflate_level)
-        except HTTPInternalServerError as hpe:
-            log.error("got S3 error writing obj_id: {} to S3: {}".format(obj_id, str(hpe)))
-            # re-add chunk to cache if it had gotten evicted
-            if obj_id not in chunk_cache:
-                chunk_cache[obj_id] = chunk_arr
-            chunk_cache.setDirty(obj_id)  # pin to cache  
-            del pending_s3_write[s3_key] 
-            raise # re-throw the execption  
-        log.debug("putS3Bytes Chunk cache utilization: {} per, dirty_count: {}".format(chunk_cache.cacheUtilizationPercent, chunk_cache.dirtyCount))
-      
-    else:
-        # meta data update     
-        obj_json = meta_cache[obj_id]
-        meta_cache.clearDirty(obj_id)
-        try:
-            await putS3JSONObj(app, s3_key, obj_json)                     
-        except HTTPInternalServerError as hpe:
-            log.error("got S3 error writing obj_id: {} to S3: {}".format(obj_id, str(hpe)))
-            # re-add chunk to cache if it had gotten evicted
-            if obj_id not in meta_cache:
-                meta_cache[obj_id] = obj_json
-            meta_cache.setDirty(obj_id)  # pin to cache 
-            del pending_s3_write[s3_key] 
-            raise # re-throw exception   
-
-    if s3_key not in pending_s3_write:
-        log.warn(f"expected to find {s3_key} in pending_s3_write map")
-    else:
-        # wite complete - record time and remove from pending map
-        elapsed_time = time.time() - write_start_time
-        log.info(f"s3 write for {s3_key} took {elapsed_time}")
-        # clear pending write 
-        del pending_s3_write[s3_key]    
-
-    return obj_id  
-            
-   
 
 async def save_metadata_obj(app, obj_id, obj_json, notify=False, flush=False):
     """ Persist the given object """
     log.info(f"save_metadata_obj {obj_id} notify={notify} flush={flush}")
+    if notify and not flush:
+        log.error("notify not valid when flush is false")
+        raise HTTPInternalServerError()
+
     if not obj_id.startswith('/') and not isValidUuid(obj_id):
         msg = "Invalid obj id: {}".format(obj_id)
         log.error(msg)
@@ -264,6 +179,7 @@ async def save_metadata_obj(app, obj_id, obj_json, notify=False, flush=False):
         log.error(msg)
         raise HTTPInternalServerError() 
 
+    dirty_ids = app["dirty_ids"]
     deleted_ids = app['deleted_ids']
     if obj_id in deleted_ids:
         if isValidUuid(obj_id):
@@ -278,9 +194,13 @@ async def save_metadata_obj(app, obj_id, obj_json, notify=False, flush=False):
     meta_cache = app['meta_cache'] 
     log.debug("save: {} to cache".format(obj_id))
     meta_cache[obj_id] = obj_json
+
     meta_cache.setDirty(obj_id)
     now = int(time.time())
-    
+
+     # flag to write to S3
+    dirty_ids[obj_id] = now
+
     if flush:
         # write to S3 immediately
         if isValidChunkId(obj_id):
@@ -293,12 +213,10 @@ async def save_metadata_obj(app, obj_id, obj_json, notify=False, flush=False):
             raise HTTPInternalServerError()
         except HTTPInternalServerError as hpe:
             log.warn(f" failed to write {obj_id}")
-            raise  # re-throw                
-    else:
-        # flag to write to S3
-        dirty_ids = app["dirty_ids"]
-        dirty_ids[obj_id] = now
-
+            raise  # re-throw  
+        if obj_id in dirty_ids:
+            log.warn(f"save_metadata_obj flush - object {obj_id} is still dirty")
+       
      
     # message AN immediately if notify flag is set
     # otherwise AN will be notified at next S3 sync
@@ -393,7 +311,194 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None):
                 log.error(f"got HTTPInternalServerError notifying async node: {ise}")
     log.debug(f"delete_metadata_obj for {obj_id} done")
 
+
+
+async def write_s3_obj(app, obj_id):
+    """ writes the given object to s3 """
+    s3key = getS3Key(obj_id)  
+    log.info(f"write_s3_obj for obj_id: {obj_id} / s3_key: {s3key}")
+    pending_s3_write = app["pending_s3_write"]
+    pending_s3_write_tasks = app["pending_s3_write_tasks"]
+    dirty_ids = app["dirty_ids"]
+    chunk_cache = app['chunk_cache']
+    meta_cache = app['meta_cache']
+    deflate_map = app['deflate_map']
+    notify_objs = app["an_notify_objs"]
+
+
+    if s3key in pending_s3_write:
+        msg = f"write_s3_key - not expected for key {s3key} to be in pending_s3_write map"
+        log.error(msg)
+        raise KeyError(msg)
     
+    now = time.time()
+
+    if obj_id not in dirty_ids:
+        log.info(f"adding {obj_id} to dirty_ids")
+        dirty_ids[obj_id] = now
+
+    last_update_time = dirty_ids[obj_id]
+    if last_update_time > now:
+        msg = f"last_update time {last_update_time} is in the future for obj_id: {obj_id}"
+        log.error(msg)
+        raise ValueError(msg)
+    
+    pending_s3_write[s3key] = now 
+    # do the following in the try block so we can always remove the pending_s3_write at the end
+    
+    try:
+        if isValidChunkId(obj_id):
+            if obj_id not in chunk_cache:
+                log.error("expected to find obj_id: {} in chunk cache".format(obj_id))
+                raise KeyError(f"{obj_id} not found in chunk cache")
+            if not chunk_cache.isDirty(obj_id):
+                log.error(f"expected chunk cache obj {obj_id} to be dirty")
+                raise ValueError("bad dirty state for obj")
+            chunk_arr = chunk_cache[obj_id]
+            chunk_bytes = arrayToBytes(chunk_arr)
+            dset_id = getDatasetId(obj_id)
+            deflate_level = None
+            if dset_id in deflate_map:
+                deflate_level = deflate_map[dset_id]
+                log.debug("got deflate_level: {} for dset: {}".format(deflate_level, dset_id))
+     
+            await putS3Bytes(app, s3key, chunk_bytes, deflate_level=deflate_level)
+        
+            # if chunk has been evicted from cache something has gone wrong
+            if obj_id not in chunk_cache:
+                msg = f"expected to find {obj_id} in chunk_cache"
+                log.error(msg)
+            elif dirty_ids[obj_id] > last_update_time:
+                log.info(f"write_s3_obj {obj_id} got updated while s3 write was in progress")
+            else:
+                # no new write, can clear dirty
+                chunk_cache.clearDirty(obj_id)  # allow eviction from cache  
+                del dirty_ids[obj_id]
+                log.debug("putS3Bytes Chunk cache utilization: {} per, dirty_count: {}".format(chunk_cache.cacheUtilizationPercent, chunk_cache.dirtyCount))
+        else:
+            # meta data update     
+            # check for object in meta cache
+            if obj_id not in meta_cache:
+                log.error("expected to find obj_id: {} in meta cache".format(obj_id))
+                raise KeyError(f"{obj_id} not found in chunk cache")
+            if not meta_cache.isDirty(obj_id):
+                log.error(f"expected meta cache obj {obj_id} to be dirty")
+                raise ValueError("bad dirty state for obj")
+            obj_json = meta_cache[obj_id]
+            try:
+                await putS3JSONObj(app, s3key, obj_json)                     
+            except HTTPInternalServerError as hpe:
+                log.error("got S3 error writing obj_id: {} to S3: {}".format(obj_id, str(hpe)))
+                raise # re-throw exception   
+            # should still be in meta_cache...
+            if obj_id not in meta_cache:
+                msg = f"expected to find {obj_id} in meta_cache"
+                log.error(msg)
+            elif dirty_ids[obj_id] > last_update_time:
+                log.info(f"write_s3_obj {obj_id} got updated while s3 write was in progress")
+            else:
+                meta_cache.clearDirty(obj_id)  # allow eviction from cache 
+                del dirty_ids[obj_id]
+    finally:
+        # clear pending_s3_write item
+        log.debug("write_s3_obj finally block")
+        if s3key not in pending_s3_write:
+            msg = f"write s3 obj: Expected to find {s3key} in pending_s3_write map"
+            log.error(msg)
+        else:
+            if pending_s3_write[s3key] != now:
+                msg = f"pending_s3_write timestamp got updated unexpectedly for {s3key}"
+                log.error(msg)
+            del pending_s3_write[s3key]
+        # clear task
+        if obj_id not in pending_s3_write_tasks:
+            log.debug(f"no pending s3 write task for {obj_id}")
+        else:
+            log.debug(f"removing pending s3 write task for {obj_id}")
+            del pending_s3_write_tasks[obj_id]
+        
+    # add to set so that AN can be notified about changed objects
+    notify_objs.add(obj_id)
+
+    # calculate time to do the write
+    elapsed_time = time.time() - now
+    log.info(f"s3 write for {s3key} took {elapsed_time}") 
+    return obj_id
+
+async def s3sync(app, age):
+    """ Periodic method that writes dirty objects in the metadata cache to S3"""
+    dirty_ids = app["dirty_ids"]
+    pending_s3_write = app["pending_s3_write"]
+    pending_s3_write_tasks = app["pending_s3_write_tasks"]
+    s3_sync_interval = config.get("s3_sync_interval")
+    dirty_count = len(dirty_ids)
+    if not dirty_count:
+        log.info("s3sync nothing to update")
+        return 0
+
+    log.info(f"s3sync update( age={age}, dirtyid count: {dirty_count}, active write tasks: {len(pending_s3_write_tasks)}")
+    log.debug(f"s3sync dirty_ids: {dirty_ids}")
+    log.debug(f"s3sync write tasks: {pending_s3_write_tasks.keys()}")
+
+    def callback(future):
+        try:
+            obj_id = future.result()  # returns a objid
+            log.info(f"write_s3_obj callback result: {obj_id}")
+        except HTTPInternalServerError as hse:
+            log.error(f"write_s3_obj callback got 500: {hse}")
+        except Exception as e:
+            log.error(f"write_s3_obj callback unexpected exception: {e}")
+    
+    update_count = 0
+    s3sync_start = time.time()
+        
+    for obj_id in dirty_ids:
+        s3key = getS3Key(obj_id)
+        log.debug(f"s3sync dirty id: {obj_id}, s3key: {s3key}")
+        if s3key in pending_s3_write:
+            log.debug(f"key {s3key} has been pending for {s3sync_start - pending_s3_write[s3key]}")
+            if s3sync_start - pending_s3_write[s3key] > s3_sync_interval * 2:
+                log.warn(f"obj {obj_id} has been in pending_s3_write for {s3sync_start - pending_s3_write[s3key]} seconds, restarting")
+                del pending_s3_write[s3key]
+                if obj_id not in pending_s3_write_tasks:
+                    log.error(f"Expected to find write task for {obj_id}")
+                else:
+                    task = pending_s3_write_tasks[obj_id]
+                    task.cancel()
+                    del pending_s3_write_tasks[obj_id]
+            else:
+                log.debug(f"key {s3key} has a pending write task")
+        else:
+        
+            # create a task to write this object
+            log.debug(f"s3sync - ensure future for {obj_id}")
+            task = asyncio.ensure_future(write_s3_obj(app, obj_id))
+            task.add_done_callback(callback)
+            pending_s3_write_tasks[obj_id] = task
+            update_count += 1
+
+
+    # notify AN of key updates 
+    an_url = getAsyncNodeUrl(app)
+    
+    notify_objs = app["an_notify_objs"]
+    if len(notify_objs) > 0:           
+        log.info(f"Notifying AN for {len(notify_objs)} S3 Updates")
+        body = { "objs": list(notify_objs) }
+        notify_objs.clear()
+
+        req = an_url + "/objects"
+        try:
+            log.info("ASync PUT notify: {} body: {}".format(req, body))
+            await http_put(app, req, data=body)
+        except HTTPInternalServerError as hpe:
+            msg = "got error notifying async node: {}".format(hpe)
+            log.error(msg)
+
+    # return number of objects written
+    return update_count
+
+
 
 async def s3syncCheck(app):
     sleep_secs = config.get("node_sleep_time")
@@ -413,89 +518,3 @@ async def s3syncCheck(app):
         else:
             log.info("s3syncCheck no objects to write, sleeping")
             await asyncio.sleep(sleep_secs)
-
-async def s3sync(app, age, rootid=None):
-    """ Periodic method that writes dirty objects in the metadata cache to S3"""
-    dirty_ids = app["dirty_ids"]
-    log.info(f"s3sync( age={age}, rootid={rootid}, dirtyid count: {len(dirty_ids)}")
-    
-    update_count = None
-        
-    keys_to_update = set()
-    for obj_id in dirty_ids:
-        #log.debug(f"dirty id: {obj_id}")
-        if obj_id.startswith("/"):
-            keys_to_update.add(obj_id)
-            continue  # deal with uuids below
-        if not isValidUuid(obj_id):
-            log.warn(f"Unexpected objid in dirty_ids: {obj_id}")
-            continue
-        if dirty_ids[obj_id] > age:
-            continue   # update was too recent, ignore for now
-        if rootid and not isSchema2Id(obj_id):
-            continue  # root collectino flush only works with v2 ids
-        if rootid and getRootObjId(obj_id) != rootid:
-            continue  # not in the collection we want to update
-        keys_to_update.add(obj_id)
-    
-    if len(keys_to_update) == 0:
-        return 0
-
-    update_count = len(keys_to_update)
-        
-    # some objects need to be flushed to S3
-    log.info(f"{update_count} objects to be synched to S3")
-
-    # first clear the dirty id (before we hit the first await) to
-    # avoid a race condition where the object gets marked as dirty again
-    # (causing us to miss an update)
-    for obj_id in keys_to_update:
-        del dirty_ids[obj_id]
-            
-    notify_objs = set()  # notifications to send to AN, also flags success write to S3
-
-    def callback(future):
-        try:
-            result = future.result()
-            log.info(f"write_s3_obj callback result: {result}")
-            keys_to_update.remove(result)
-            notify_objs.add(result)
-
-        except HTTPInternalServerError as hse:
-            log.error(f"write_s3_obj callback got 500: {hse}")
-        except Exception as e:
-            log.error(f"write_s3_obj callback unexpected exception: {e}")
-
-
-    tasks = []
-    loop = app["loop"]
-    for obj_id in keys_to_update:
-        task = asyncio.ensure_future(write_s3_obj(app, obj_id))
-        task.add_done_callback(callback)
-        tasks.append(task)
-    # run all the tasks.  Objids for any failed writes will go back to the pending list.
-    await asyncio.gather(*tasks, loop=loop)
-            
-    # add any failed writes back to the dirty queue
-    if len(keys_to_update) > 0:
-        log.warn("{} failed S3 writes, re-adding to dirty set".format(len(keys_to_update)))
-        # we'll put the timestamp down as now, so the rewrites won't be triggered immediately
-        now = int(time.time())
-        for obj_id in keys_to_update:
-            dirty_ids[obj_id] = now
-
-    # notify AN of key updates 
-    an_url = getAsyncNodeUrl(app)
-    log.info("Notifying AN for S3 Updates")
-    if len(notify_objs) > 0:           
-        body = { "objs": list(notify_objs) }
-        req = an_url + "/objects"
-        try:
-            log.info("ASync PUT notify: {} body: {}".format(req, body))
-            await http_put(app, req, data=body)
-        except HTTPInternalServerError as hpe:
-            msg = "got error notifying async node: {}".format(hpe)
-            log.error(msg)
-
-    # return number of objects written
-    return update_count

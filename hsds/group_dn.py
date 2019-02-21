@@ -13,12 +13,13 @@
 # data node of hsds cluster
 # 
 import time
+import asyncio
 
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalServerError, HTTPServiceUnavailable
 from aiohttp.web import json_response
  
-from util.idUtil import isValidUuid, isSchema2Id, isRootObjId
-from datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj, save_metadata_obj, delete_metadata_obj, s3sync
+from util.idUtil import isValidUuid, isSchema2Id, isRootObjId, getRootObjId
+from datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj, save_metadata_obj, delete_metadata_obj
 import hsds_logger as log
     
 
@@ -109,24 +110,62 @@ async def POST_Group(request):
 async def PUT_Group(request):
     """ Handler for PUT /groups"""
     """ Used to flush all objects under a root group to S3 """
+
+    FLUSH_TIME_OUT = 10.0  # TBD make config
+    FLUSH_SLEEP_INTERVAL = 0.1  # TBD make config
     log.request(request)
     app = request.app
 
-    group_id = request.match_info.get('id')
-    log.info("PUT group: {}".format(group_id))
+    root_id = request.match_info.get('id')
+    log.info("PUT group: {}  (flush)".format(root_id))
 
-    if not isValidUuid(group_id, obj_class="group"):
-        log.error( f"Unexpected group_id: {group_id}")
+    if not isValidUuid(root_id, obj_class="group"):
+        log.error( f"Unexpected group_id: {root_id}")
         raise HTTPInternalServerError()
 
-    if isSchema2Id(group_id):
-        # flush only works with v2 ids
-        if not isRootObjId(group_id):
-            log.error(f"Expected root id for flush but got: {group_id}")
-            raise HTTPInternalServerError()
-        now = time.time()
-        await s3sync(app, now, group_id)
+    schema2 = isSchema2Id(root_id)
+
+    if schema2 and not isRootObjId(root_id):
+        log.error(f"Expected root id for flush but got: {root_id}")
+        raise HTTPInternalServerError()
+
+    flush_start = time.time()
+    flush_set = set()
+    dirty_ids = app["dirty_ids"]
+
+    for obj_id in dirty_ids:
+        if schema2:
+            if isValidUuid(obj_id) and getRootObjId(obj_id) == root_id:
+                flush_set.add(obj_id)
+        else:
+            # for schema1 not easy to determine if a given id is in a domain, 
+            # so just wait on all of them
+            flush_set.add(obj_id)
+
+    log.debug(f"flushop - waiting on {len(flush_set)} items")
+    while time.time() - flush_start < FLUSH_TIME_OUT:
+        # check to see if the items in our flush set are still there
         
+        remaining_set = set()
+        for obj_id in flush_set:
+            if not obj_id in dirty_ids:
+                log.debug(f"flush - {obj_id} has been written")
+            elif dirty_ids[obj_id] > flush_start:
+                log.debug(f"flush - {obj_id} has been updated after flush start")
+            else:
+                log.debug(f"flush - {obj_id} still pending")
+                remaining_set.add(obj_id)
+        flush_set = remaining_set
+        if len(flush_set) == 0:
+            log.debug("flush op - all objects have been written")
+            break
+        log.debug(f"flushop - {len(flush_set)} item remaining, sleeping for {FLUSH_SLEEP_INTERVAL}")
+        await asyncio.sleep(FLUSH_SLEEP_INTERVAL)
+
+    if len(flush_set) > 0:
+        log.warn(f"flushop - {len(flush_set)} items not updated after {FLUSH_TIME_OUT}")
+        raise HTTPServiceUnavailable()
+    
     resp = json_response(None, status=204)  # NO Content response
     log.response(request, resp=resp)
     return resp

@@ -182,10 +182,9 @@ class DomainTest(unittest.TestCase):
         self.assertTrue("allocated_bytes" in rspJson)
         # test that allocated_bytes falls in a given range
 
-        # TODO - fix in schema v2
         self.assertEqual(rspJson["allocated_bytes"], 580)  
         # total_size may change slightly based on specifics of JSON serialization
-        self.assertTrue(rspJson["total_size"] > 6000)  
+        self.assertTrue(rspJson["total_size"] > 5000)  
         self.assertTrue(rspJson["total_size"] < 7000)  
         # TODO - num_chunks should be present
         self.assertTrue("num_objects" in rspJson)

@@ -81,7 +81,7 @@ def getAsyncNodeUrl(app):
         raise HTTPInternalServerError()
 
     an_url = app["an_url"]
-    log.debug("got an url: {}".format(an_url))
+    #log.debug("got an url: {}".format(an_url))
     return an_url
 
 
