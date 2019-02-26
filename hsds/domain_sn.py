@@ -435,10 +435,10 @@ async def doFlush(app, root_id):
                 log.warn(f"expected 204 but got: {clientResponse.status}")
                 raise HTTPInternalServerError()
     except ClientError as ce:
-        log.error(f"Error for http_put('/groups/{root_id}')")   
+        log.error(f"Error for http_put('/groups/{root_id}'): {str(ce)}")   
         raise HTTPInternalServerError()
     except CancelledError as cle:
-        log.warn("CancelledError '/groups/{root_id}'): {str(cle)}")
+        log.warn(f"CancelledError '/groups/{root_id}'): {str(cle)}")
         raise HTTPInternalServerError()
 
 
@@ -844,8 +844,8 @@ async def GET_ACLs(request):
     # use reload to get authoritative domain json
     try:
         domain_json = await getDomainJson(app, domain, reload=True)
-    except ClientResponseError as ce:
-        msg = "domain not found"
+    except ClientResponseError:
+        log.warn("domain not found")
         log.warn(msg)
         raise HTTPNotFound()
      

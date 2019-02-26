@@ -55,9 +55,8 @@ def get_obj_id(request, body=None):
 
     try:
         validateInPartition(app, obj_id)
-    except KeyError as ke:
-        msg = "Domain not in partition"
-        log.error(msg)
+    except KeyError:
+        log.error("Domain not in partition")
         raise HTTPInternalServerError() 
 
     return obj_id   
@@ -72,9 +71,8 @@ async def check_metadata_obj(app, obj_id):
 
     try:
         validateInPartition(app, obj_id)
-    except KeyError as ke:
-        msg = "Domain not in partition"
-        log.error(msg)
+    except KeyError:
+        log.error("Domain not in partition")
         raise HTTPInternalServerError() 
 
     deleted_ids = app['deleted_ids']
@@ -108,9 +106,8 @@ async def get_metadata_obj(app, obj_id):
 
     try:
         validateInPartition(app, obj_id)
-    except KeyError as ke:
-        msg = "Domain not in partition"
-        log.error(msg)
+    except KeyError:
+        log.error("Domain not in partition")
         raise HTTPInternalServerError() 
 
     deleted_ids = app['deleted_ids']
@@ -174,9 +171,8 @@ async def save_metadata_obj(app, obj_id, obj_json, notify=False, flush=False):
 
     try:
         validateInPartition(app, obj_id)
-    except KeyError as ke:
-        msg = "Domain not in partition"
-        log.error(msg)
+    except KeyError:
+        log.error("Domain not in partition")
         raise HTTPInternalServerError() 
 
     dirty_ids = app["dirty_ids"]
@@ -209,7 +205,7 @@ async def save_metadata_obj(app, obj_id, obj_json, notify=False, flush=False):
         except KeyError as ke:
             log.error(f"s3 sync got key error: {ke}")
             raise HTTPInternalServerError()
-        except HTTPInternalServerError as hpe:
+        except HTTPInternalServerError:
             log.warn(f" failed to write {obj_id}")
             raise  # re-throw  
         if obj_id in dirty_ids:
@@ -261,9 +257,8 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None):
         
     try:
         validateInPartition(app, obj_id)
-    except KeyError as ke:
-        msg = "obj: {} not in partition".format(obj_id)
-        log.error(msg)
+    except KeyError:
+        log.error(f"obj: {obj_id} not in partition")
         raise HTTPInternalServerError() 
 
     deleted_ids = app['deleted_ids']

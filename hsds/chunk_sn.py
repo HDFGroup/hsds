@@ -937,14 +937,14 @@ async def GET_Value(request):
         try:
             resp = await doQueryRead(request, chunk_ids, dset_json, slices)
         except CancelledError as ce:
-            log.warn("Cancelled error on query read: {ce}")
+            log.warn(f"Cancelled error on query read: {ce}")
             resp = json_response(None)  # TBD: what do return if client cancels
     else:
         log.debug("chunk_ids: {}".format(chunk_ids))
         try:
             resp = await doHyperSlabRead(request, chunk_ids, dset_json, slices)
         except CancelledError as ce:
-            log.warn("Cancelled error on hyperslab read: {ce}")
+            log.warn(f"Cancelled error on hyperslab read: {ce}")
             resp = json_response(None)  # TBD: what do return if client cancels
     log.response(request, resp=resp)
     return resp

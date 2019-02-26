@@ -276,7 +276,7 @@ async def nodestate(request):
     log.request(request) 
     node_type = request.match_info.get('nodetype', '*')
     node_number = '*'
-    if node_type is not '*':
+    if node_type != '*':
         node_number = request.match_info.get('nodenumber', '*')
         
     log.info("nodestate/{}/{}".format(node_type, node_number))

@@ -751,7 +751,7 @@ async def POST_Dataset(request):
                 fill_value = tuple(fill_value)
             try:
                 np.asarray(fill_value, dtype=dt)
-            except (TypeError, ValueError) as e:
+            except (TypeError, ValueError):
                 msg = "Fill value {} not compatible with dataset type: {}".format(fill_value, datatype)
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)

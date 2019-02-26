@@ -45,9 +45,8 @@ def get_domain(request, body=None):
         raise HTTPInternalServerError() 
     try:
         validateInPartition(app, domain)
-    except KeyError as ke:
-        msg = "Domain not in partition"
-        log.error(msg)
+    except KeyError:
+        log.error("Domain not in partition")
         raise HTTPInternalServerError()
     return domain
 
