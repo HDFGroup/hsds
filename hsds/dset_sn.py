@@ -17,10 +17,8 @@
 import json
 import numpy as np
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict
-from aiohttp.web import json_response
-
  
-from util.httpUtil import http_post, http_put, http_delete, getHref
+from util.httpUtil import http_post, http_put, http_delete, getHref, jsonResponse
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId, isSchema2Id
 from util.dsetUtil import  getPreviewQuery
 from util.arrayUtil import getNumElements
@@ -294,7 +292,7 @@ async def GET_Dataset(request):
             if "lastModified" in dset_detail:
                 resp_json["lastModified"] = dset_detail["lastModified"]
 
-    resp = json_response(resp_json)
+    resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
     return resp
 
@@ -343,7 +341,7 @@ async def GET_DatasetType(request):
     resp_json["type"] = dset_json["type"]
     resp_json["hrefs"] = hrefs
 
-    resp = json_response(resp_json)
+    resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
     return resp
 
@@ -394,7 +392,7 @@ async def GET_DatasetShape(request):
     resp_json["created"] = dset_json["created"]
     resp_json["lastModified"] = dset_json["lastModified"]
 
-    resp = json_response(resp_json)
+    resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
     return resp
 
@@ -525,7 +523,7 @@ async def PUT_DatasetShape(request):
         log.warn("got 409 extending dataspace")
         raise
 
-    resp = json_response(json_resp, status=201)
+    resp = await jsonResponse(request, json_resp, status=201)
     log.response(request, resp=resp)
     return resp
  
@@ -780,7 +778,7 @@ async def POST_Dataset(request):
         log.debug("PUT Link resp: {}".format(put_rsp))
 
     # dataset creation successful     
-    resp = json_response(post_json, status=201)
+    resp = await jsonResponse(request, post_json, status=201)
     log.response(request, resp=resp)
 
     return resp
@@ -826,6 +824,6 @@ async def DELETE_Dataset(request):
     if dset_id in meta_cache:
         del meta_cache[dset_id]  # remove from cache
  
-    resp = json_response({})
+    resp = await jsonResponse(request, {})
     log.response(request, resp=resp)
     return resp

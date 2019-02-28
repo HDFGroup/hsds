@@ -18,11 +18,9 @@ import json
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPGone, HTTPInternalServerError, HTTPConflict
 from aiohttp import ClientResponseError
-from aiohttp.web import json_response
 from aiohttp.client_exceptions import ClientError
 
-
-from util.httpUtil import  http_post, http_put, http_get, http_delete, getHref, get_http_client
+from util.httpUtil import  http_post, http_put, http_get, http_delete, getHref, get_http_client, jsonResponse
 from util.idUtil import  getDataNodeUrl, createObjId, getCollectionForId, getDataNodeUrls
 from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
@@ -307,7 +305,7 @@ async def GET_Domains(request):
 
     rsp_json = {"domains": domains}
     rsp_json["hrefs"] = []
-    resp = json_response(rsp_json)
+    resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp
 
@@ -341,7 +339,7 @@ async def GET_Domain(request):
         domains = await get_domains(request)
         rsp_json = {"domains": domains}
         rsp_json["hrefs"] = []
-        resp = json_response(rsp_json)
+        resp = await jsonResponse(request, rsp_json)
         log.response(request, resp=resp)
         return resp
 
@@ -377,7 +375,7 @@ async def GET_Domain(request):
         obj_json = await getObjectJson(app, obj_id, refresh=True)
         obj_json["domain"] = domain
         # Not bothering with hrefs for h5path lookups...
-        resp = json_response(obj_json)
+        resp = await jsonResponse(request, obj_json)
         log.response(request, resp=resp)
         return resp
     
@@ -402,7 +400,7 @@ async def GET_Domain(request):
     
          
     rsp_json["hrefs"] = hrefs
-    resp = json_response(rsp_json)
+    resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp
 
@@ -491,7 +489,7 @@ async def PUT_Domain(request):
             # nothing to do for folder objects
             await doFlush(app, domain_json["root"])
         # flush  successful     
-        resp = json_response(None, status=204)
+        resp = await jsonResponse(request, None, status=204)
         log.response(request, resp=resp)
         return resp
 
@@ -621,7 +619,7 @@ async def PUT_Domain(request):
     # maxin limits
     domain_json["limits"] = getLimits()
     domain_json["version"] = getVersion()
-    resp = json_response(domain_json, status=201)
+    resp = await jsonResponse(request, domain_json, status=201)
     log.response(request, resp=resp)
     return resp
 
@@ -666,7 +664,7 @@ async def DELETE_Domain(request):
         if domain in domain_cache:
             log.info("deleting {} from domain_cache".format(domain))
             del domain_cache[domain]
-        resp = json_response({})
+        resp = await jsonResponse(request, {})
         return resp
 
     username, pswd = getUserPasswordFromRequest(request)
@@ -738,7 +736,7 @@ async def DELETE_Domain(request):
         except ClientResponseError as ce:
             log.warn("got error for sn_delete: {}".format(ce))
     
-    resp = json_response(rsp_json)
+    resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp
 
@@ -819,7 +817,7 @@ async def GET_ACL(request):
     hrefs.append({'rel': 'owner', 'href': getHref(request, '/')})
     rsp_json["hrefs"] = hrefs
 
-    resp = json_response(rsp_json)
+    resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp
 
@@ -885,7 +883,7 @@ async def GET_ACLs(request):
     hrefs.append({'rel': 'owner', 'href': getHref(request, '/')})
     rsp_json["hrefs"] = hrefs
 
-    resp = json_response(rsp_json)
+    resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp    
 
@@ -941,7 +939,7 @@ async def PUT_ACL(request):
     log.info("PUT ACL resp: " + str(put_rsp))
     
     # ACL update successful     
-    resp = json_response(put_rsp, status=201)
+    resp = await jsonResponse(request, put_rsp, status=201)
     log.response(request, resp=resp)
     return resp
 
@@ -1030,7 +1028,7 @@ async def GET_Datasets(request):
     rsp_json["datasets"] = obj_ids
     rsp_json["hrefs"] = hrefs
      
-    resp = json_response(rsp_json)
+    resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp
 
@@ -1110,7 +1108,7 @@ async def GET_Groups(request):
     rsp_json["groups"] = obj_ids
     rsp_json["hrefs"] = hrefs
      
-    resp = json_response(rsp_json)
+    resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp
 
@@ -1190,6 +1188,6 @@ async def GET_Datatypes(request):
     rsp_json["datatypes"] = obj_ids
     rsp_json["hrefs"] = hrefs
      
-    resp = json_response(rsp_json)
+    resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp

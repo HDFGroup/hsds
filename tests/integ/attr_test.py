@@ -64,6 +64,10 @@ class AttributeTest(unittest.TestCase):
         req = self.endpoint + "/groups/" + root_uuid + "/attributes"
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)  
+        # cross origin allowed by default
+        self.assertEqual(rsp.headers['Content-Type'], 'application/json; charset=utf-8')
+        self.assertEqual(rsp.headers['Access-Control-Allow-Origin'], '*')
+        self.assertEqual(rsp.headers['Access-Control-Allow-Methods'], 'GET, POST, DELETE, PUT, OPTIONS')
         rspJson = json.loads(rsp.text)
        
         self.assertTrue("hrefs" in rspJson)

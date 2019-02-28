@@ -26,7 +26,11 @@ class UpTest(unittest.TestCase):
         req = endpoint + "/about"
         rsp = requests.get(req)
         self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.headers['content-type'], 'application/json; charset=utf-8')
+        # cross origin allowed by default
+        self.assertEqual(rsp.headers['Content-Type'], 'application/json; charset=utf-8')
+        self.assertEqual(rsp.headers['Access-Control-Allow-Origin'], '*')
+        self.assertEqual(rsp.headers['Access-Control-Allow-Methods'], 'GET, POST, DELETE, PUT, OPTIONS')
+
         rspJson = json.loads(rsp.text)
         self.assertTrue("state") in rspJson
         self.assertEqual(rspJson["state"], "READY")
@@ -38,12 +42,16 @@ class UpTest(unittest.TestCase):
         start_time = rspJson["start_time"]
         now = int(time.time())
         self.assertTrue(now > start_time)
+      
 
     def testGetInfo(self):
         req = helper.getEndpoint() + '/info'
         rsp = requests.get(req)
         self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.headers['content-type'], 'application/json; charset=utf-8')
+         # cross origin allowed by default
+        self.assertEqual(rsp.headers['Content-Type'], 'application/json; charset=utf-8')
+        self.assertEqual(rsp.headers['Access-Control-Allow-Origin'], '*')
+        self.assertEqual(rsp.headers['Access-Control-Allow-Methods'], 'GET, POST, DELETE, PUT, OPTIONS')
         rspJson = json.loads(rsp.text)
         self.assertTrue("node" in rspJson)
         node = rspJson["node"]
@@ -64,4 +72,3 @@ if __name__ == '__main__':
     #setup test files
     
     unittest.main()
-    

@@ -18,7 +18,7 @@ import time
 import psutil
 from copy import copy
 
-from aiohttp.web import Application, StreamResponse, json_response
+from aiohttp.web import Application
 from aiohttp.web_exceptions import HTTPNotFound, HTTPGone, HTTPInternalServerError
 
 from aiohttp.client_exceptions import ClientError
@@ -26,7 +26,7 @@ from aiobotocore import get_session
 
 
 import config
-from util.httpUtil import http_get, http_post
+from util.httpUtil import http_get, http_post, jsonResponse
 from util.idUtil import createNodeId
 from util.s3Util import getS3JSONObj, getInitialS3Stats 
 from util.idUtil import getHeadNodeS3Key
@@ -203,8 +203,6 @@ async def about(request):
     (username, pswd) = getUserPasswordFromRequest(request)
     if username:
         await validateUserPassword(app, username, pswd)
-    resp = StreamResponse()
-    resp.headers['Content-Type'] = 'application/json'
     answer = {}
     answer['start_time'] =  app["start_time"] 
     answer['state'] = app['node_state'] 
@@ -212,7 +210,8 @@ async def about(request):
     answer["name"] = config.get("server_name")
     answer["greeting"] = config.get("greeting")  
     answer["about"] = config.get("about") 
-    resp = json_response(answer) 
+    
+    resp = await jsonResponse(request, answer) 
     log.response(request, resp=resp)
     return resp
 
@@ -220,8 +219,6 @@ async def info(request):
     """HTTP Method to retun node state to caller"""
     log.debug("info request")
     app = request.app
-    resp = StreamResponse()
-    resp.headers['Content-Type'] = 'application/json'
     answer = {}
     # copy relevant entries from state dictionary to response
     node = {}
@@ -307,7 +304,7 @@ async def info(request):
         dc_stats["mem_target"] = dc.memTarget
     answer["domain_cache_stats"] = dc_stats
         
-    resp = json_response(answer) 
+    resp = await jsonResponse(request, answer) 
     log.response(request, resp=resp)
     return resp
 

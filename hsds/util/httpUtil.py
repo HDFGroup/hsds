@@ -13,9 +13,8 @@
 # httpUtil:
 # http-related helper functions
 # 
-import json
 from asyncio import CancelledError
-from aiohttp.web import StreamResponse
+from aiohttp.web import json_response
 from aiohttp import  ClientSession, TCPConnector
 from aiohttp.web_exceptions import HTTPNotFound, HTTPConflict, HTTPGone, HTTPInternalServerError, HTTPRequestEntityTooLarge
 from aiohttp.client_exceptions import ClientError
@@ -254,22 +253,14 @@ Helper funciton, create a response object using the provided
 JSON data
 """
 async def jsonResponse(request, data, status=200):
-    resp = StreamResponse(status=status)
-    resp.headers['Content-Type'] = 'application/json'
+    headers = {}
+    #headers['Content-Type'] = 'application/json'
     if CORS_DOMAIN:
-        resp.headers['Access-Control-Allow-Origin'] = CORS_DOMAIN
-        resp.headers['Access-Control-Allow-Methods'] = "GET, POST, DELETE, PUT, OPTIONS"
-        resp.headers['Access-Control-Allow-Headers'] = "Content-Type, api_key, Authorization"
+        headers['Access-Control-Allow-Origin'] = CORS_DOMAIN
+        headers['Access-Control-Allow-Methods'] = "GET, POST, DELETE, PUT, OPTIONS"
+        headers['Access-Control-Allow-Headers'] = "Content-Type, api_key, Authorization"
+    resp = json_response(data, headers=headers, status=status) 
 
-    if request.method != "OPTIONS":
-        answer = json.dumps(data)
-        answer = answer.encode('utf8')
-        resp.content_length = len(answer)
-        await resp.prepare(request)
-        await resp.write(answer)
-    else:
-        await resp.prepare(request)
-    await resp.write_eof()
     return resp
 
 """

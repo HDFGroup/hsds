@@ -21,9 +21,8 @@ import numpy as np
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPRequestEntityTooLarge, HTTPConflict, HTTPInternalServerError, HTTPServiceUnavailable
 from aiohttp.client_exceptions import ClientError
 from aiohttp.web import StreamResponse
-from aiohttp.web import json_response
 
-from util.httpUtil import  getHref, getAcceptType, get_http_client, http_put, request_read
+from util.httpUtil import  getHref, getAcceptType, get_http_client, http_put, request_read, jsonResponse
 from util.idUtil import   isValidUuid, getDataNodeUrl
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.hdf5dtype import getItemSize, createDataType
@@ -817,7 +816,7 @@ async def PUT_Value(request):
         await asyncio.gather(*tasks, loop=loop)
          
     resp_json = {}
-    resp = json_response(resp_json)
+    resp = await jsonResponse(request, resp_json)
     return resp
 
 """
@@ -928,7 +927,7 @@ async def GET_Value(request):
 
     if request.method == "OPTIONS":
         # skip doing any big data load for options request
-        resp = json_response(None)
+        resp = await jsonResponse(request,  None)
     elif "query" in params:
         if rank > 1:
             msg = "Query string is not supported for multidimensional arrays"
@@ -938,14 +937,14 @@ async def GET_Value(request):
             resp = await doQueryRead(request, chunk_ids, dset_json, slices)
         except CancelledError as ce:
             log.warn(f"Cancelled error on query read: {ce}")
-            resp = json_response(None)  # TBD: what do return if client cancels
+            resp = await jsonResponse(request, None)  # TBD: what do return if client cancels
     else:
         log.debug("chunk_ids: {}".format(chunk_ids))
         try:
             resp = await doHyperSlabRead(request, chunk_ids, dset_json, slices)
         except CancelledError as ce:
             log.warn(f"Cancelled error on hyperslab read: {ce}")
-            resp = json_response(None)  # TBD: what do return if client cancels
+            resp = await jsonResponse(request, None)  # TBD: what do return if client cancels
     log.response(request, resp=resp)
     return resp
 
@@ -1004,7 +1003,7 @@ async def doQueryRead(request, chunk_ids, dset_json,  slices):
             break  # don't need any more DN queries
     resp_json = { "index": resp_index, "value": resp_value}
     resp_json["hrefs"] = get_hrefs(request, dset_json)
-    resp = json_response(resp_json)
+    resp = await jsonResponse(request, resp_json)
     return resp
 
 async def doHyperSlabRead(request, chunk_ids, dset_json, slices):
@@ -1077,7 +1076,7 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices):
         else:
             resp_json["value"] = json_data  
         resp_json["hrefs"] = get_hrefs(request, dset_json)
-        resp = json_response(resp_json)
+        resp = await jsonResponse(request, resp_json)
     return resp
 
 
@@ -1282,6 +1281,6 @@ async def POST_Value(request):
         log.debug("got rsp data {} points".format(len(data)))
         json_data = bytesArrayToList(data)
         rsp_json["value"] = json_data  
-        resp = json_response(rsp_json)
+        resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp

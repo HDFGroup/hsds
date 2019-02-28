@@ -15,9 +15,9 @@
 
 import numpy as np 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
-from aiohttp.web import json_response, StreamResponse
+from aiohttp.web import StreamResponse
 
-from util.httpUtil import  http_get, http_put, http_delete, getHref, getAcceptType
+from util.httpUtil import  http_get, http_put, http_delete, getHref, getAcceptType, jsonResponse
 from util.idUtil import   isValidUuid, getDataNodeUrl
 from util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
@@ -108,7 +108,7 @@ async def GET_Attributes(request):
     hrefs.append({'rel': 'owner', 'href': getHref(request, obj_uri)})
     resp_json["hrefs"] = hrefs
  
-    resp = json_response(resp_json)    
+    resp = await jsonResponse(request, resp_json)    
     log.response(request, resp=resp)
     return resp
 
@@ -170,7 +170,7 @@ async def GET_Attribute(request):
     hrefs.append({'rel': 'owner', 'href': getHref(request, obj_uri)})
     resp_json["hrefs"] = hrefs
     
-    resp = json_response(resp_json)
+    resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
     return resp
 
@@ -344,7 +344,7 @@ async def PUT_Attribute(request):
     hrefs = []  # TBD
     req_rsp = { "hrefs": hrefs }
     # attribute creation successful   
-    resp = json_response(req_rsp, status=201)  
+    resp = await jsonResponse(request, req_rsp, status=201)  
     log.response(request, resp=resp)
     return resp
 
@@ -394,7 +394,7 @@ async def DELETE_Attribute(request):
     
     hrefs = []  # TBD
     req_rsp = { "hrefs": hrefs }
-    resp = json_response(req_rsp)
+    resp = await jsonResponse(request, req_rsp)
     log.response(request, resp=resp)
     return resp
 
@@ -498,7 +498,7 @@ async def GET_AttributeValue(request):
         hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
         hrefs.append({'rel': 'owner', 'href': getHref(request, obj_uri)})
         resp_json["hrefs"] = hrefs
-        resp = json_response(resp_json)
+        resp = await jsonResponse(request, resp_json)
         log.response(request, resp=resp)
     return resp
 
@@ -642,6 +642,6 @@ async def PUT_AttributeValue(request):
     hrefs = []  # TBD
     req_rsp = { "hrefs": hrefs }
     # attribute creation successful     
-    resp = json_response(req_rsp)
+    resp = await jsonResponse(request, req_rsp)
     log.response(request, resp=resp)
     return resp

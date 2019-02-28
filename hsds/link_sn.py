@@ -14,10 +14,8 @@
 # 
  
 from aiohttp.web_exceptions import HTTPBadRequest
-from aiohttp.web import json_response
-
  
-from util.httpUtil import  http_get, http_put, http_delete, getHref
+from util.httpUtil import  http_get, http_put, http_delete, getHref, jsonResponse
 from util.idUtil import   isValidUuid, getDataNodeUrl, getCollectionForId
 from util.authUtil import getUserPasswordFromRequest,   validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
@@ -100,7 +98,7 @@ async def GET_Links(request):
     hrefs.append({'rel': 'owner', 'href': getHref(request, group_uri)})     
     resp_json["hrefs"] = hrefs
  
-    resp = json_response(resp_json)
+    resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
     return resp
 
@@ -169,7 +167,7 @@ async def GET_Link(request):
      
     resp_json["hrefs"] = hrefs
     
-    resp = json_response(resp_json)
+    resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
     return resp
 
@@ -255,7 +253,7 @@ async def PUT_Link(request):
     hrefs = []  # TBD
     req_rsp = { "hrefs": hrefs }
     # link creation successful     
-    resp = json_response(req_rsp, status=201)
+    resp = await jsonResponse(request, req_rsp, status=201)
     log.response(request, resp=resp)
     return resp
 
@@ -291,8 +289,6 @@ async def DELETE_Link(request):
     req += "/groups/" + group_id + "/links/" + link_title
     rsp_json = await http_delete(app, req)
     
-    resp = json_response(rsp_json)
+    resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp
-
- 
