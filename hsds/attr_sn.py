@@ -478,6 +478,10 @@ async def GET_AttributeValue(request):
             resp = StreamResponse()
             resp.content_type = "application/octet-stream"
             resp.content_length = len(output_data)
+            # allow CORS
+            resp.headers['Access-Control-Allow-Origin'] = '*'
+            resp.headers['Access-Control-Allow-Methods'] = "GET, POST, DELETE, PUT, OPTIONS"
+            resp.headers['Access-Control-Allow-Headers'] = "Content-Type, api_key, Authorization"
             await resp.prepare(request)
             await resp.write(output_data)     
         except Exception as e:

@@ -1056,6 +1056,10 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices):
         try:
             resp = StreamResponse()
             resp.headers['Content-Type'] = "application/octet-stream"
+            # allow CORS
+            resp.headers['Access-Control-Allow-Origin'] = '*'
+            resp.headers['Access-Control-Allow-Methods'] = "GET, POST, DELETE, PUT, OPTIONS"
+            resp.headers['Access-Control-Allow-Headers'] = "Content-Type, api_key, Authorization"
             resp.content_length = len(output_data)
             await resp.prepare(request)
             await resp.write(output_data)
