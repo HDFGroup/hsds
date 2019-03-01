@@ -13,13 +13,16 @@ fi
 [ -z ${SYS_BUCKET_NAME} ] && export SYS_BUCKET_NAME=${BUCKET_NAME}
 
 [ -z ${HSDS_ENDPOINT} ] && echo "Need to set HSDS_ENDPOINT" && exit 1
-if [[ ${HSDS_ENDPOINT} == "https://"* ]] ; then
-   export PUBLIC_DNS=${HSDS_ENDPOINT:8}
-elif [[ ${HSDS_ENDPOINT} == "http://"* ]] ; then
-   export PUBLIC_DNS=${HSDS_ENDPOINT:7}
-else
-   echo "Invalid HSDS_ENDPOINT: ${HSDS_ENDPOINT}"  && exit 1 
-fi 
+
+if [[ -z ${PUBLIC_DNS} ]] ; then
+  if [[ ${HSDS_ENDPOINT} == "https://"* ]] ; then
+     export PUBLIC_DNS=${HSDS_ENDPOINT:8}
+  elif [[ ${HSDS_ENDPOINT} == "http://"* ]] ; then
+     export PUBLIC_DNS=${HSDS_ENDPOINT:7}
+  else
+    echo "Invalid HSDS_ENDPOINT: ${HSDS_ENDPOINT}"  && exit 1 
+  fi 
+fi
 
 if [ -z $AWS_IAM_ROLE ] ; then
   # if not using s3 or S3 without EC2 IAM roles, need to define AWS access keys
