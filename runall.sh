@@ -45,7 +45,7 @@ echo "CORES:" $CORES
 echo "HSDS_ENDPOINT:" $HSDS_ENDPOINT
 echo "PUBLIC_DNS:" $PUBLIC_DNS
  
-if [[ ${HSDS_ENDPOINT} == "https"* ]] ; then
+if [[ ${HSDS_USE_HTTPS} ]] ; then
    echo "docker-compose.secure"
    docker-compose -f docker-compose.secure.yml up -d --scale sn=${CORES} --scale dn=${CORES}
 else
