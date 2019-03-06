@@ -22,7 +22,7 @@ from util.httpUtil import http_post, http_put, http_delete, getHref, jsonRespons
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId, isSchema2Id
 from util.dsetUtil import  getPreviewQuery
 from util.arrayUtil import getNumElements
-from util.chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk
+from util.chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk, getContiguousLayout
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson, getItemSize
@@ -34,18 +34,53 @@ import hsds_logger as log
 Use chunk layout given in the creationPropertiesList (if defined and layout is valid).
 Return chunk_layout_json
 """
-def validateChunkLayout(shape_json, item_size, body):
-    layout = None
-    if "creationProperties" in body:
-        creationProps = body["creationProperties"]
-        if "layout" in creationProps:
-            layout = creationProps["layout"]
+def validateChunkLayout(shape_json, item_size, layout):
+
+    rank = 0
+    space_dims = None
+    chunk_dims = None
+    max_dims = None
+
+    if "dims" in shape_json:
+        space_dims = shape_json["dims"]
+        rank = len(space_dims)
     
-    #
-    # if layout is not provided, return None
-    #
-    if not layout:
-        return None
+    if "maxdims" in shape_json:
+        max_dims = shape_json["maxdims"]
+    if "dims" in layout:
+        chunk_dims = layout["dims"]
+
+    if chunk_dims:
+        # validate that the chunk_dims are valid and correlates with the dataset shape
+        if isinstance(chunk_dims, int):
+            chunk_dims = [chunk_dims,] # promote to array
+        if len(chunk_dims) != rank:
+            msg = "Layout rank does not match shape rank"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        for i in range(rank):
+            dim_extent = space_dims[i]
+            chunk_extent = chunk_dims[i]
+            if not isinstance(chunk_extent, int):
+                msg = "Layout dims must be integer or integer array"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            if chunk_extent <= 0:
+                msg = "Invalid layout value"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            if max_dims is None:
+                if chunk_extent > dim_extent:
+                    msg = "Invalid layout value"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
+            elif max_dims[i] != 0:
+                if chunk_extent > max_dims[i]:
+                    msg = "Invalid layout value for extensible dimension"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
+            else:
+                pass # allow any positive value for unlimited dimensions
 
     #if item_size == 'H5T_VARIABLE':
     #    item_size = 128  # just take a guess at the item size (used for chunk validation)
@@ -56,10 +91,13 @@ def validateChunkLayout(shape_json, item_size, body):
         msg = "class key not found in layout for creation property list"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+
+    """
     if layout["class"] not in ('H5D_CHUNKED', 'H5D_CONTIGUOUS', 'H5D_COMPACT', 'H5D_CONTIGUOUS_REF'):
         msg = "Unknown dataset layout class: {}".format(layout["class"])
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    """
 
     if layout["class"] == 'H5D_CONTIGUOUS_REF':
         # reference to a traditional HDF5 files with contigious storage
@@ -68,56 +106,40 @@ def validateChunkLayout(shape_json, item_size, body):
             msg = "Datsets with variable types cannot be used with reference layouts"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
+        if "file_uri" not in layout:
+            # needed for H5D_CONTIGUOUS_REF
+            msg = "'file_uri' key must be provided for H5D_CONTIGUOUS_REF layout"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        if "offset" not in layout:
+            # needed for H5D_CONTIGUOUS_REF
+            msg = "'offset' key must be provided for H5D_CONTIGUOUS_REF layout"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        if "size" not in layout:
+            # needed for H5D_CONTIGUOUS_REF
+            msg = "'size' key must be provided for H5D_CONTIGUOUS_REF layout"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        if "dims" in layout:
+            # used defined chunk layout not allowed for H5D_CONTIGUOUS_REF
+            msg = "'dimns' key can not be provided for H5D_CONTIGUOUS_REF layout"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+       
         
-
-    if layout["class"] != 'H5D_CHUNKED':
-        return None # nothing else to validate
-
-    if "dims" not in layout:
-        msg = "dims key not found in layout for creation property list"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    if shape_json["class"] != 'H5S_SIMPLE':
-        msg = "Bad Request: chunked layout not valid with shape class: {}".format(shape_json["class"])
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    space_dims = shape_json["dims"]
-    chunk_dims = layout["dims"]
-    max_dims = None
-    if "maxdims" in shape_json:
-        max_dims = shape_json["maxdims"]
-    if isinstance(chunk_dims, int):
-        chunk_dims = [chunk_dims,] # promote to array
-    if len(chunk_dims) != len(space_dims):
-        msg = "Layout rank does not match shape rank"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    for i in range(len(chunk_dims)):
-        dim_extent = space_dims[i]
-        chunk_extent = chunk_dims[i]
-        if not isinstance(chunk_extent, int):
-            msg = "Layout dims must be integer or integer array"
+    elif layout["class"] == 'H5D_CHUNKED':
+        if "dims" not in layout:
+            msg = "dims key not found in layout for creation property list"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        if chunk_extent <= 0:
-            msg = "Invalid layout value"
+        if shape_json["class"] != 'H5S_SIMPLE':
+            msg = f"Bad Request: chunked layout not valid with shape class: {shape_json['class']}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        if max_dims is None:
-            if chunk_extent > dim_extent:
-                msg = "Invalid layout value"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-        elif max_dims[i] != 0:
-            if chunk_extent > max_dims[i]:
-                msg = "Invalid layout value for extensible dimension"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-        else:
-            pass # allow any positive value for unlimited dimensions
-     
-     
-    return chunk_dims
+    else:
+        msg = f"Unexpected layout: {layout['class']}"
+
 
 async def getDatasetDetails(app, dset_id, root_id):  
     """ Get extra information about the given dataset """
@@ -696,28 +718,47 @@ async def POST_Dataset(request):
             else:
                 shape_json["maxdims"].append(maxextent) 
 
-    # get the chunk layout and create/adjust if needed
-    layout = validateChunkLayout(shape_json, item_size, body) 
-    if layout is not None:
-        log.debug("client layout: {}".format(layout))
-    else:
-        layout = guessChunk(shape_json, item_size) 
-        log.debug("initial autochunk layout: {}".format(layout))
+    layout = None
+    min_chunk_size = int(config.get("min_chunk_size"))
+    max_chunk_size = int(config.get("max_chunk_size"))
+    if 'creationProperties' in body:
+        creationProperties = body["creationProperties"]
+        if 'layout' in creationProperties:
+            layout = creationProperties["layout"]
+
+            validateChunkLayout(shape_json, item_size, layout)
+
+    if layout is None and shape_json["class"] != "H5S_NULL":
+        # default to chunked layout
+        layout = {"class": "H5D_CHUNKED"}
+
+    if layout and layout["class"] == 'H5D_CONTIGUOUS_REF':
+        chunk_dims = getContiguousLayout(shape_json, item_size, chunk_min=min_chunk_size, chunk_max=max_chunk_size)
+        layout["dims"] = chunk_dims
+        log.debug(f"autoContiguous layout: {layout}")
     
-    if layout is not None:
-        chunk_size = getChunkSize(layout, item_size)
-        min_chunk_size = int(config.get("min_chunk_size"))
-        max_chunk_size = int(config.get("max_chunk_size"))
+    if layout and layout["class"] == 'H5D_CHUNKED' and "dims" not in layout:
+        # do autochunking
+        chunk_dims = guessChunk(shape_json, item_size) 
+        layout["dims"] = chunk_dims
+        log.debug(f"initial autochunk layout: {layout}")
+
+    if layout and layout["class"] == 'H5D_CHUNKED':
+        chunk_dims = layout["dims"]
+        chunk_size = getChunkSize(chunk_dims, item_size)
+       
         log.debug("chunk_size: {}, min: {}, max: {}".format(chunk_size, min_chunk_size, max_chunk_size))
-        # adjust the layout if chunk size is too small or too big
-        if chunk_size <= min_chunk_size:
+        # adjust the chunk shape if chunk size is too small or too big
+        adjusted_chunk_dims = None
+        if chunk_size < min_chunk_size:
             log.debug("chunk size: {} less than min size: {}, expanding".format(chunk_size, min_chunk_size))
-            layout = expandChunk(layout, item_size, shape_json, chunk_min=min_chunk_size)
-        elif chunk_size >= max_chunk_size:
-            log.debug("chunk size: {} greater than max size: {}, expanding".format(chunk_size, max_chunk_size))
-            layout = shrinkChunk(layout, item_size, chunk_max=max_chunk_size)
-        if layout is not None:
-            log.debug("chunk_layout: {}".format(layout))
+            adjusted_chunk_dims = expandChunk(chunk_dims, item_size, shape_json, chunk_min=min_chunk_size, layout_class=layout["class"])
+        elif chunk_size > max_chunk_size:
+            log.debug("chunk size: {} greater than max size: {}, expanding".format(chunk_size, max_chunk_size, layout_class=layout["class"]))
+            adjusted_chunk_dims = shrinkChunk(chunk_dims, item_size, chunk_max=max_chunk_size)
+        if adjusted_chunk_dims:
+            log.debug(f"requested chunk_dimensions: {chunk_dims} modified dimensions: {adjusted_chunk_dims}")
+            layout["dims"] = adjusted_chunk_dims
         
     link_id = None
     link_title = None
@@ -757,9 +798,7 @@ async def POST_Dataset(request):
         dataset_json["creationProperties"] = creationProperties
 
     if layout is not None:
-        layout_json = {"class": 'H5D_CHUNKED'}
-        layout_json["dims"] = layout
-        dataset_json["layout"] = layout_json
+        dataset_json["layout"] = layout
     
     log.debug("create dataset: " + json.dumps(dataset_json))
     req = getDataNodeUrl(app, dset_id) + "/datasets"

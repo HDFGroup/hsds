@@ -13,7 +13,7 @@ import unittest
 import requests
 import json
 import helper
- 
+import config
 
 class ValueTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -1827,6 +1827,146 @@ class ValueTest(unittest.TestCase):
         row = value[0]
         self.assertEqual(len(row), 1)
         self.assertEqual(row[0], 22) 
+
+    def testContiguousRefDataset(self):
+        print("testConfiguousRefDataset", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+
+        try:
+            hdf5_sample_bucket = config.get("hdf5_sample_bucket")
+        except NameError:
+            print("hdf5_sample_bucket config not set, skipping testContiguousRefDataset")
+            return
+
+        hdf5_sample_bucket = "hdfgroup"
+
+        tall_json = helper.getHDF5JSON("tall.json")
+        if not tall_json:
+            print("tall.json file not found, skipping testContiguousRefDataset")
+            return
+
+        if "tall.h5" not in tall_json:
+            self.assertTrue(False)
+        
+        chunk_info = tall_json["tall.h5"]
+        if "/g1/g1.1/dset1.1.2" not in chunk_info:
+            self.assertTrue(False)
+        
+        dset112_info = chunk_info["/g1/g1.1/dset1.1.2"]
+        if "byteStreams" not in dset112_info:
+            self.assertTrue(False)
+        byteStreams = dset112_info["byteStreams"]
+
+        # should be just one element for this contiguous dataset
+        self.assertTrue(len(byteStreams), 1)
+        byteStream = byteStreams[0]
+        dset112_offset = byteStream["file_offset"]
+        dset112_size = byteStream["size"]
+        self.assertEqual(dset112_size, 80)
+
+        if "/g2/dset2.2" not in chunk_info:
+            self.assertTrue(False)
+        dset22_info = chunk_info["/g2/dset2.2"]
+        if "byteStreams" not in dset22_info:
+            self.assertTrue(False)
+        byteStreams = dset22_info["byteStreams"]
+        self.assertTrue(len(byteStreams), 1)
+        byteStream = byteStreams[0]
+        dset22_offset = byteStream["file_offset"]
+        dset22_size = byteStream["size"]
+        self.assertEqual(dset22_size, 60)
+
+
+        # get domain
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # create dataset fodr /g1/g1.1/dset1.1.2
+        s3path = "s3://" + hdf5_sample_bucket + "/data/hdf5test" + "/tall.h5"
+        print(s3path)
+        data = { "type": 'H5T_STD_I32BE', "shape": 20 }
+        layout = {"class": 'H5D_CONTIGUOUS_REF', "file_uri": s3path, "offset": dset112_offset, "size": dset112_size }
+        data['creationProperties'] = {'layout': layout}
+
+        
+        req = self.endpoint + '/datasets' 
+        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        dset112_id = rspJson["id"]
+        self.assertTrue(helper.validateId(dset112_id))
+
+        # link new dataset as 'dset112'
+        name = "dset112"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {"id": dset112_id}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        
+        # read values from dset (should be the sequence 0 through 19)
+        req = self.endpoint + "/datasets/" + dset112_id + "/value" 
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+        self.assertEqual(len(value), 20)
+        for i in range(20):
+            self.assertEqual(value[i], i)
+
+        # create dataset fodr /g2/dset2.2
+        data = { "type": 'H5T_IEEE_F32BE', "shape": [3, 5] }
+        layout = {"class": 'H5D_CONTIGUOUS_REF', "file_uri": s3path, "offset": dset22_offset, "size": dset22_size }
+        data['creationProperties'] = {'layout': layout}
+
+        
+        req = self.endpoint + '/datasets' 
+        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        dset22_id = rspJson["id"]
+        self.assertTrue(helper.validateId(dset22_id))
+
+        # link new dataset as 'dset22'
+        name = "dset22"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {"id": dset22_id}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        
+        # read values from dset112 (should be the sequence 0 through 19)
+        req = self.endpoint + "/datasets/" + dset112_id + "/value" 
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+        self.assertEqual(len(value), 20)
+        for i in range(20):
+            self.assertEqual(value[i], i)
+
+        # read values from dset22 (should be 3x5 array)
+        req = self.endpoint + "/datasets/" + dset22_id + "/value" 
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+        self.assertEqual(len(value), 3)
+        for i in range(3):
+            self.assertEqual(len(value[i]), 5)
+
+        
+            
+
             
  
              

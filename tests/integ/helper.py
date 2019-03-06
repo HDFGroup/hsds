@@ -204,12 +204,13 @@ def getUUIDByPath(domain, path, username=None, password=None):
             raise KeyError("non-hard link")
     return tgt_uuid
 
-       
-
-     
-
-    
-
-
-
-        
+"""
+Helper function = get HDF5 JSON dump for chunbk locations
+"""
+def getHDF5JSON(filename):
+    if not op.isfile(filename):
+        return None
+    hdf5_json = None
+    with open(filename) as f:
+        hdf5_json = json.load(f)
+    return hdf5_json

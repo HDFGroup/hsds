@@ -41,7 +41,7 @@ def get_dset_size(shape_json, typesize):
         dset_size *= shape[n]
     return dset_size
 
-def expandChunk(layout, typesize, shape_json, chunk_min=CHUNK_MIN):
+def expandChunk(layout, typesize, shape_json, chunk_min=CHUNK_MIN, layout_class='H5D_CHUNKED'):
     """ Extend the chunk shape until it is above the MIN target.
     """
     if shape_json is None or shape_json["class"] == 'H5S_NULL':
@@ -116,7 +116,7 @@ def expandChunk(layout, typesize, shape_json, chunk_min=CHUNK_MIN):
             pass  # do another round
     return tuple(layout)
 
-def shrinkChunk(layout, typesize, chunk_max=CHUNK_MAX):
+def shrinkChunk(layout, typesize, chunk_max=CHUNK_MAX, layout_class='H5D_CHUNKED'):
     """ Shrink the chunk shape until it is less than the MAX target.
     """  
     layout = list(layout)
@@ -172,6 +172,42 @@ def guessChunk(shape_json, typesize):
     shape = tuple((x if x!=0 else 1024) for i, x in enumerate(shape))
 
     return shape
+
+def getContiguousLayout(shape_json, item_size, chunk_min=1000*1000, chunk_max=4*1000*1000):
+    """
+    create a chunklayout for datasets use continguous storage.
+    """
+    if not isinstance(item_size, int):
+        raise ValueError("ContiguousLayout can only be used with fixed-length types")
+    if chunk_max < chunk_min:
+        raise ValueError("chunk_max cannot be less than chunk_min")
+    if shape_json is None or shape_json["class"] == 'H5S_NULL':
+        return None
+    if shape_json["class"] == 'H5S_SCALAR':
+        return (1,)  # just enough to store one item
+    dims = shape_json["dims"]
+    rank = len(dims)
+    layout = [0,] * rank
+    nsize = item_size
+    unit_chunk = False
+    for i in range(rank):
+        dim = rank -i - 1
+        extent = dims[dim]
+        nsize *= extent
+        if unit_chunk:
+            layout[dim] = 1
+        elif nsize <= chunk_min:
+            layout[dim] = extent
+        elif nsize <= chunk_max:
+            layout[dim] = (chunk_min * extent) // nsize 
+            unit_chunk = True
+        else:
+            layout[dim] = (chunk_max * extent) // nsize 
+            unit_chunk = True
+    return layout
+
+
+
 
 def frac(x, d):
     """
@@ -487,8 +523,3 @@ class ChunkIterator:
                 self._chunk_index[dim] = s.start // c 
             dim -= 1
         return chunk_id
-        
-         
-
- 
-

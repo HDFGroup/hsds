@@ -17,7 +17,7 @@ sys.path.append('../../hsds')
 from dsetUtil import getHyperslabSelection
 from chunkUtil import guessChunk, getNumChunks, getChunkIds, getChunkId
 from chunkUtil import getChunkIndex, getChunkSelection, getChunkCoverage, getDataCoverage, ChunkIterator
-from chunkUtil import getChunkSize, shrinkChunk, expandChunk, getDatasetId
+from chunkUtil import getChunkSize, shrinkChunk, expandChunk, getDatasetId, getContiguousLayout
 
 
 class ChunkUtilTest(unittest.TestCase):
@@ -161,6 +161,73 @@ class ChunkUtilTest(unittest.TestCase):
         num_bytes = getChunkSize(expanded, typesize)
         self.assertTrue(num_bytes > CHUNK_MIN)
         self.assertTrue(num_bytes < CHUNK_MAX)
+
+    
+    def testGetContiguiousLayout(self):      
+        
+        typesize = 4
+        chunk_min=400
+        chunk_max=800
+
+        try:
+            shape = {"class": 'H5S_SIMPLE', "dims": [100, 100]}
+            layout = getContiguousLayout(shape, 'H5T_VARIABLE')
+            self.assertTrue(False)
+        except ValueError:
+            pass # expected
+
+        shape = {"class": 'H5S_NULL' }
+        layout = getContiguousLayout(shape, typesize)
+        self.assertTrue(layout is None)
+
+        shape = {"class": 'H5S_SCALAR' }
+        layout = getContiguousLayout(shape, typesize)
+        self.assertEqual(layout, (1,))
+
+        for extent in (1, 100, 10000):
+            dims = [extent,]
+            shape = {"class": 'H5S_SIMPLE', "dims": dims}
+            layout = getContiguousLayout(shape, typesize, chunk_min=chunk_min, chunk_max=chunk_max)
+            self.assertTrue(len(layout), 1)
+            chunk_bytes = layout[0]*typesize
+            space_bytes = extent*typesize
+            if space_bytes > chunk_min:
+                self.assertTrue(chunk_bytes >= chunk_min)
+            self.assertTrue(chunk_bytes <= chunk_max)
+
+        for extent in (1, 10, 100):
+            dims = [extent, extent]
+            shape = {"class": 'H5S_SIMPLE', "dims": dims}
+            layout = getContiguousLayout(shape, typesize, chunk_min=chunk_min, chunk_max=chunk_max)
+            self.assertTrue(len(layout), 2)
+            for i in range(2):
+                self.assertTrue(layout[i] >= 1)
+                self.assertTrue(layout[i] <= extent)
+            self.assertEqual(layout[1], extent)
+
+            chunk_bytes = layout[0]*layout[1]*typesize
+            space_bytes = extent*extent*typesize
+            if space_bytes > chunk_min:
+                self.assertTrue(chunk_bytes >= chunk_min)
+            self.assertTrue(chunk_bytes <= chunk_max)
+
+        for extent in (1, 10, 100):
+            dims = [extent, extent, 50]
+            shape = {"class": 'H5S_SIMPLE', "dims": dims}
+            layout = getContiguousLayout(shape, typesize, chunk_min=chunk_min, chunk_max=chunk_max)
+            self.assertTrue(len(layout), 3)
+            for i in range(3):
+                self.assertTrue(layout[i] >= 1)
+                self.assertTrue(layout[i] <= dims[i])
+
+            chunk_bytes = layout[0]*layout[1]*layout[2]*typesize
+            space_bytes = dims[0]*dims[1]*dims[2]*typesize
+            if space_bytes > chunk_min:
+                self.assertTrue(chunk_bytes >= chunk_min)
+                self.assertEqual(layout[0], 1)
+            self.assertTrue(chunk_bytes <= chunk_max)
+
+   
  
 
     def testGetNumChunks(self):
@@ -1009,4 +1076,3 @@ if __name__ == '__main__':
     #setup test files
     
     unittest.main()
-    

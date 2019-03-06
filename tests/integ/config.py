@@ -17,7 +17,8 @@ cfg = {
     'user_name': 'test_user1',
     'user_password': 'test',
     'test_noauth': True,
-    'default_public': False  # set to true if the server makes new domains publically readable
+    'default_public': False,  # set to true if the server makes new domains publically readable
+    'hdf5_sample_bucket': 'hdf5.sample'  # S3 bucket for storing traditional HDF5 files
 }
    
 def get(x):     
@@ -26,6 +27,3 @@ def get(x):
         return os.environ[x.upper()]
     # no command line override, just return the cfg value        
     return cfg[x]
-
-  
-  

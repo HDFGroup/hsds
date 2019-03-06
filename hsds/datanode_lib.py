@@ -124,9 +124,9 @@ async def get_metadata_obj(app, obj_id):
     else:   
         s3_key = getS3Key(obj_id)
         pending_s3_read = app["pending_s3_read"]
-        if s3_key in pending_s3_read:
+        if obj_id in pending_s3_read:
             # already a read in progress, wait for it to complete
-            read_start_time = pending_s3_read[s3_key]
+            read_start_time = pending_s3_read[obj_id]
             log.info(f"s3 read request for {s3_key} was requested at: {read_start_time}")
             while time.time() - read_start_time < 2.0:
                 log.debug("waiting for pending s3 read, sleeping")
@@ -141,15 +141,15 @@ async def get_metadata_obj(app, obj_id):
         # invoke S3 read unless the object has just come in from pending read
         if not obj_json:
             log.debug("getS3JSONObj({})".format(s3_key))
-            if s3_key not in pending_s3_read:
-                pending_s3_read[s3_key] = time.time()
+            if obj_id not in pending_s3_read:
+                pending_s3_read[obj_id] = time.time()
             # read S3 object as JSON
             obj_json = await getS3JSONObj(app, s3_key)
-            if s3_key in pending_s3_read:
+            if obj_id in pending_s3_read:
                 # read complete - remove from pending map
-                elapsed_time = time.time() - pending_s3_read[s3_key]
+                elapsed_time = time.time() - pending_s3_read[obj_id]
                 log.info(f"s3 read for {s3_key} took {elapsed_time}")
-                del pending_s3_read[s3_key] 
+                del pending_s3_read[obj_id] 
             meta_cache[obj_id] = obj_json  # add to cache
     return obj_json
 

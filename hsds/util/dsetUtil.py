@@ -361,7 +361,7 @@ def getChunkLayout(dset_json):
         log.error("No layout found in dset_json: {}".format(dset_json))
         raise HTTPInternalServerError()
     layout_json = dset_json["layout"]
-    if layout_json["class"] != 'H5D_CHUNKED':
+    if layout_json["class"] not in ('H5D_CHUNKED', 'H5D_CONTIGUOUS_REF'):
         log.error("Unexpected shape layout: {}".format(layout_json["class"]))
         raise HTTPInternalServerError()
     layout = layout_json["dims"]

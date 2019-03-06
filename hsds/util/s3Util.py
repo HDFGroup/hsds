@@ -207,18 +207,25 @@ async def getS3JSONObj(app, key):
     log.debug("s3 returned: {}".format(json_dict))
     return json_dict
 
-async def getS3Bytes(app, key, deflate_level=None):
+async def getS3Bytes(app, key, deflate_level=None, s3_offset=0, s3_size=None, bucket=None):
     """ Get S3 object identified by key and read as bytes
     """
     
     client = getS3Client(app)
-    bucket = app['bucket_name']
+    if not bucket:
+        bucket = app['bucket_name']
     if key[0] == '/':
         key = key[1:]  # no leading slash
     log.info("getS3Bytes({})".format(key))
     s3_stats_increment(app, "get_count")
+    range=""
+    if s3_size:
+        range = f"bytes={s3_offset}-{s3_offset+s3_size-1}"
+        log.info(f"s3 range request: {range}")
+
     try:
-        resp = await client.get_object(Bucket=bucket, Key=key)
+
+        resp = await client.get_object(Bucket=bucket, Key=key, Range=range)
         data = await resp['Body'].read()
         resp['Body'].close()
     except ClientError as ce:
@@ -401,13 +408,16 @@ async def getS3ObjStats(app, key):
 
     return stats
     
-async def isS3Obj(app, key):
+async def isS3Obj(app, key, bucket=None):
     """ Test if the given key maps to S3 object
     """
     found = False
     client = getS3Client(app)
-    bucket = app['bucket_name']
-    log.debug("isS3Obj {}".format(key))
+    if not bucket:
+        bucket = app['bucket_name']
+    else:
+        log.debug(f"using bucket: [{bucket}]")
+    log.debug(f"isS3Obj s3://{bucket}/{key}") 
     s3_stats_increment(app, "list_count")
     try:
         resp = await client.list_objects(Bucket=bucket, MaxKeys=1, Prefix=key)

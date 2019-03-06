@@ -61,21 +61,47 @@ async def getChunk(app, chunk_id, dset_json, chunk_init=False):
     dset_id = getDatasetId(chunk_id)
     dims = getChunkLayout(dset_json)
     type_json = dset_json["type"]
+    layout = dset_json["layout"]
     dt = createDataType(type_json)
+
+    bucket = None
+    s3_offset = 0
+    s3_size = None
+
+    log.debug(f"getChunk dset_layout: {layout}")
     
-    s3_key = getS3Key(chunk_id)
+    if layout["class"] == 'H5D_CONTIGUOUS_REF':
+        if chunk_init:
+            log.error(f"unable to initiale chunk {chunk_id} for H5D_CONTIGUOUS_REF layout ")
+            raise  HTTPInternalServerError()
+        if not layout["file_uri"].startswith("s3://"):
+            log.error(f"layout file_uri is invalid: {layout['file_uri']}")
+            raise HTTPInternalServerError()
+        s3path = layout["file_uri"][5:]  # strip off the s3:// part
+        index = s3path.find('/')   # split bucket and key
+        if index < 1:
+            log.error(f"s3path is invalid: {s3path}")
+            raise HTTPInternalServerError()
+        bucket = s3path[:index]
+        s3_key = s3path[(index+1):]
+
+        s3_offset = layout["offset"]
+        s3_size = layout["size"]
+        log.debug(f"getChunk range get - s3://{bucket}/{s3_key}  offset: {s3_offset} size: {s3_size} ")
+    else:
+        s3_key = getS3Key(chunk_id)
     log.debug("getChunk s3_key: {}".format(s3_key))
     if chunk_id in chunk_cache:
         chunk_arr = chunk_cache[chunk_id]
     else:
-        obj_exists = await isS3Obj(app, s3_key)
+        obj_exists = await isS3Obj(app, s3_key, bucket=bucket)
         # TBD - potential race condition?
         if obj_exists:
             pending_s3_read = app["pending_s3_read"]
-            if s3_key in pending_s3_read:
+            if chunk_id in pending_s3_read:
                 # already a read in progress, wait for it to complete
-                read_start_time = pending_s3_read[s3_key]
-                log.info(f"s3 read request for {s3_key} was requested at: {read_start_time}")
+                read_start_time = pending_s3_read[chunk_id]
+                log.info(f"s3 read request for {chunk_id} was requested at: {read_start_time}")
                 while time.time() - read_start_time < 2.0:
                     log.debug("waiting for pending s3 read, sleeping")
                     await asyncio.sleep(1)  # sleep for sub-second?
@@ -87,18 +113,18 @@ async def getChunk(app, chunk_id, dset_json, chunk_init=False):
                     log.warn(f"s3 read for chunk {chunk_id} timed-out, initiaiting a new read")
             
             if chunk_arr is None:
-                if s3_key not in pending_s3_read:
-                    pending_s3_read[s3_key] = time.time()
+                if chunk_id not in pending_s3_read:
+                    pending_s3_read[chunk_id] = time.time()
                 log.debug("Reading chunk {} from S3".format(s3_key))
                 deflate_level = getDeflate(app, dset_id, dset_json)
-                chunk_bytes = await getS3Bytes(app, s3_key, deflate_level=deflate_level)
-                if s3_key in pending_s3_read:
+                chunk_bytes = await getS3Bytes(app, s3_key, deflate_level=deflate_level, s3_offset=s3_offset, s3_size=s3_size, bucket=bucket)
+                if chunk_id in pending_s3_read:
                     # read complete - remove from pending map
-                    elapsed_time = time.time() - pending_s3_read[s3_key]
+                    elapsed_time = time.time() - pending_s3_read[chunk_id]
                     log.info(f"s3 read for {s3_key} took {elapsed_time}")
-                    del pending_s3_read[s3_key] 
+                    del pending_s3_read[chunk_id] 
                 else:
-                    log.warn(f"expected to find {s3_key} in pending_s3_read map")
+                    log.warn(f"expected to find {chunk_id} in pending_s3_read map")
 
             
             chunk_arr = np.fromstring(chunk_bytes, dtype=dt)

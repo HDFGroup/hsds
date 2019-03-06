@@ -40,14 +40,11 @@ For HDF5 as a single object support two addional layouts will be defined: H5D_CO
 When the layout class is H5D_CONTIGUOUS_REF the dataset will support contiguous datasets stored in an external file.   The following keys will be defined for this class type:
 
 - "class": The string "H5D_CONTIGUOUS_REF"
-- "dims": List giving the chunk layout of the dataset
 - "file_uri": A string giving the s3 URI to the file 
 - "offset": Integer giving the offset to the start of the data
 - "size": Length of the data
 
 
-
-Note: dims must be a chunk layout consistent with the contiguous storage of the array.  I.e. non-leading dimensions equal to the dataset dimensions.
 
 Note: h5path should be a complete S3 URI to the object.  E.g. s3://mybucketname/dir1/myfile.h5
 
@@ -56,7 +53,6 @@ Example:
 ```
 "layout": {
         "class": "H5D_CONTIGUOUS_REF", 
-        "dims": [40, 80],
         "file_uri": "s3://mybucket/mylocation/myfile.h5",
         "offset": 12345,
         "size": 12800
