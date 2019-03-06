@@ -191,7 +191,7 @@ def getContiguousLayout(shape_json, item_size, chunk_min=1000*1000, chunk_max=4*
     nsize = item_size
     unit_chunk = False
     for i in range(rank):
-        dim = rank -i - 1
+        dim = rank - i - 1
         extent = dims[dim]
         nsize *= extent
         if unit_chunk:
@@ -356,7 +356,17 @@ def getChunkIds(dset_id, selection, layout, dim=0, prefix=None, chunk_ids=None):
     # got the complete list, return it!
     return chunk_ids
 
-    
+def getChunkSuffix(chunk_id):
+    """ given a chunk_id (e.g.: c-12345678-1234-1234-1234-1234567890ab_6_4) 
+    return the coordinates as a string. In this case 6_4
+    """  
+    # go to the first underscore
+    n = chunk_id.find('_')  + 1
+    if n == 0:
+        raise ValueError("Invalid chunk_id: {}".format(chunk_id))
+    suffix = chunk_id[n:]   
+    return suffix
+
 def getChunkIndex(chunk_id):
     """ given a chunk_id (e.g.: c-12345678-1234-1234-1234-1234567890ab_6_4) 
     return the coordinates of the chunk. In this case (6,4)

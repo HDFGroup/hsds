@@ -28,7 +28,7 @@ from util.s3Util import  isS3Obj, getS3Bytes
 from util.hdf5dtype import createDataType
 from util.dsetUtil import  getSelectionShape, getSliceQueryParam
 from util.dsetUtil import getFillValue, getChunkLayout, getEvalStr, getDeflateLevel
-from util.chunkUtil import getChunkIndex, getChunkCoordinate, getChunkRelativePoint, getDatasetId
+from util.chunkUtil import getChunkIndex, getChunkCoordinate, getChunkRelativePoint, getDatasetId, getChunkSuffix
 
 
 import hsds_logger as log
@@ -67,10 +67,11 @@ async def getChunk(app, chunk_id, dset_json, chunk_init=False):
     bucket = None
     s3_offset = 0
     s3_size = None
+    s3_key = None
 
     log.debug(f"getChunk dset_layout: {layout}")
     
-    if layout["class"] == 'H5D_CONTIGUOUS_REF':
+    if layout["class"] in ('H5D_CONTIGUOUS_REF', 'H5D_CHUNKED_REF'):
         if chunk_init:
             log.error(f"unable to initiale chunk {chunk_id} for H5D_CONTIGUOUS_REF layout ")
             raise  HTTPInternalServerError()
@@ -84,17 +85,32 @@ async def getChunk(app, chunk_id, dset_json, chunk_init=False):
             raise HTTPInternalServerError()
         bucket = s3path[:index]
         s3_key = s3path[(index+1):]
+        if layout["class"] == 'H5D_CONTIGUOUS_REF':
+            s3_offset = layout["offset"]
+            s3_size = layout["size"]
+        else:
+            # H5D_CHUNKED_REF
+            chunks = layout["chunks"]
+            chunk_key = getChunkSuffix(chunk_id)
+            if chunk_key in chunks:
+                item = chunks[chunk_key]
+                s3_offset = item[0]
+                s3_size = item[1]
+            else:
+                s3_offset = None  # signal that chunk doesn't exist
 
-        s3_offset = layout["offset"]
-        s3_size = layout["size"]
         log.debug(f"getChunk range get - s3://{bucket}/{s3_key}  offset: {s3_offset} size: {s3_size} ")
     else:
         s3_key = getS3Key(chunk_id)
+
     log.debug("getChunk s3_key: {}".format(s3_key))
     if chunk_id in chunk_cache:
         chunk_arr = chunk_cache[chunk_id]
     else:
-        obj_exists = await isS3Obj(app, s3_key, bucket=bucket)
+        if s3_offset is None:
+            obj_exists = False
+        else:
+            obj_exists = await isS3Obj(app, s3_key, bucket=bucket)
         # TBD - potential race condition?
         if obj_exists:
             pending_s3_read = app["pending_s3_read"]

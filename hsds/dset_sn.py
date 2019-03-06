@@ -82,25 +82,13 @@ def validateChunkLayout(shape_json, item_size, layout):
             else:
                 pass # allow any positive value for unlimited dimensions
 
-    #if item_size == 'H5T_VARIABLE':
-    #    item_size = 128  # just take a guess at the item size (used for chunk validation)
-    #
-    # validate provided layout
-    #
     if "class" not in layout:
         msg = "class key not found in layout for creation property list"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    """
-    if layout["class"] not in ('H5D_CHUNKED', 'H5D_CONTIGUOUS', 'H5D_COMPACT', 'H5D_CONTIGUOUS_REF'):
-        msg = "Unknown dataset layout class: {}".format(layout["class"])
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    """
-
     if layout["class"] == 'H5D_CONTIGUOUS_REF':
-        # reference to a traditional HDF5 files with contigious storage
+        # reference to a dataset in a traditional HDF5 files with contigious storage
         if item_size == 'H5T_VARIABLE':
             # can't be used with variable types..
             msg = "Datsets with variable types cannot be used with reference layouts"
@@ -126,8 +114,27 @@ def validateChunkLayout(shape_json, item_size, layout):
             msg = "'dimns' key can not be provided for H5D_CONTIGUOUS_REF layout"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-       
-        
+    elif layout["class"] == 'H5D_CHUNKED_REF':
+        # reference to a dataset in a traditional HDF5 files with chunked storage
+        if item_size == 'H5T_VARIABLE':
+            # can't be used with variable types..
+            msg = "Datsets with variable types cannot be used with reference layouts"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        if "file_uri" not in layout:
+            # needed for H5D_CHUNKED_REF
+            msg = "'file_uri' key must be provided for H5D_CHUNKED_REF layout"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        if "dims" not in layout:
+            # needed for H5D_CHUNKED_REF
+            msg = "'dimns' key must be provided for H5D_CHUNKED_REF layout"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)   
+        if "chunks" not in layout:
+            msg = "'chunks' key must be provided for H5D_CHUNKED_REF layout"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg) 
     elif layout["class"] == 'H5D_CHUNKED':
         if "dims" not in layout:
             msg = "dims key not found in layout for creation property list"
@@ -759,6 +766,18 @@ async def POST_Dataset(request):
         if adjusted_chunk_dims:
             log.debug(f"requested chunk_dimensions: {chunk_dims} modified dimensions: {adjusted_chunk_dims}")
             layout["dims"] = adjusted_chunk_dims
+
+    if layout and layout["class"] == 'H5D_CHUNKED_REF':
+        chunk_dims = layout["dims"]
+        chunk_size = getChunkSize(chunk_dims, item_size)
+       
+        log.debug("chunk_size: {}, min: {}, max: {}".format(chunk_size, min_chunk_size, max_chunk_size))
+        # adjust the chunk shape if chunk size is too small or too big
+        if chunk_size < min_chunk_size:
+            log.warn("chunk size: {} less than min size: {} for H5D_CHUNKED_REF dataset".format(chunk_size, min_chunk_size))
+        elif chunk_size > max_chunk_size:
+            log.warn("chunk size: {} greater than max size: {}, for H5D_CHUNKED_REF dataset".format(chunk_size, max_chunk_size, layout_class=layout["class"]))
+        
         
     link_id = None
     link_title = None
