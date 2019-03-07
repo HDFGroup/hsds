@@ -106,7 +106,7 @@ The following keys will be defined for this class type:
 
 The chunk_table is a dataset with the same number of dimensions as the target dataset.  The dimensions of the dataset should be sufficient store locations for each chunk of the target dataset.  E.g. if the target dataset has extent: [1000, 1000] and the chunk layout is [100,100], the chunk_table should have dimensions [10,10].
 
-If "file_uri" is defined in the layout, then the type of the chunk_table should be a compound type composed of the fields: "offset" and "length" where offset is an 64bit integer and length is a 32bit integer.  Thus each element of the dataset will provide the location of the chunk data within the file refere3nced by "file_uri".
+If "file_uri" is defined in the layout, then the type of the chunk_table should be a compound type composed of the fields: "offset" and "length" where offset is an 64bit integer and length is a 32bit integer.  Thus each element of the dataset will provide the location of the chunk data within the file refererenced by "file_uri".
 
 Alternatively, if "file_uri" is not defined in the layout, the type of the chunk_table will have an additional field: "file_uri" which gives the uri for the refernced file.  This enables HSDS dataset to aggregate data from multiple external files.
 

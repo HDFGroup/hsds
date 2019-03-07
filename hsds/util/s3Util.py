@@ -207,7 +207,7 @@ async def getS3JSONObj(app, key):
     log.debug("s3 returned: {}".format(json_dict))
     return json_dict
 
-async def getS3Bytes(app, key, deflate_level=None, s3_offset=0, s3_size=None, bucket=None):
+async def getS3Bytes(app, key, deflate_level=None, s3offset=0, s3size=None, bucket=None):
     """ Get S3 object identified by key and read as bytes
     """
     
@@ -219,8 +219,8 @@ async def getS3Bytes(app, key, deflate_level=None, s3_offset=0, s3_size=None, bu
     log.info("getS3Bytes({})".format(key))
     s3_stats_increment(app, "get_count")
     range=""
-    if s3_size:
-        range = f"bytes={s3_offset}-{s3_offset+s3_size-1}"
+    if s3size:
+        range = f"bytes={s3offset}-{s3offset+s3size-1}"
         log.info(f"s3 range request: {range}")
 
     try:

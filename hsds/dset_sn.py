@@ -135,6 +135,22 @@ def validateChunkLayout(shape_json, item_size, layout):
             msg = "'chunks' key must be provided for H5D_CHUNKED_REF layout"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg) 
+    elif layout["class"] == 'H5D_CHUNKED_REF_INDIRECT':
+        # reference to a dataset in a traditional HDF5 files with chunked storage using an auxillary dataset
+        if item_size == 'H5T_VARIABLE':
+            # can't be used with variable types..
+            msg = "Datsets with variable types cannot be used with reference layouts"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        if "dims" not in layout:
+            # needed for H5D_CHUNKED_REF_INDIRECT
+            msg = "'dimns' key must be provided for H5D_CHUNKED_REF_INDIRECT layout"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)   
+        if "chunk_table" not in layout:
+            msg = "'chunk_table' key must be provided for H5D_CHUNKED_REF layout"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg) 
     elif layout["class"] == 'H5D_CHUNKED':
         if "dims" not in layout:
             msg = "dims key not found in layout for creation property list"
@@ -767,7 +783,7 @@ async def POST_Dataset(request):
             log.debug(f"requested chunk_dimensions: {chunk_dims} modified dimensions: {adjusted_chunk_dims}")
             layout["dims"] = adjusted_chunk_dims
 
-    if layout and layout["class"] == 'H5D_CHUNKED_REF':
+    if layout and layout["class"] in ('H5D_CHUNKED_REF', 'H5D_CHUNKED_REF_INDIRECT'):
         chunk_dims = layout["dims"]
         chunk_size = getChunkSize(chunk_dims, item_size)
        

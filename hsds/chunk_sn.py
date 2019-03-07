@@ -28,7 +28,7 @@ from util.domainUtil import  getDomainFromRequest, isValidDomain
 from util.hdf5dtype import getItemSize, createDataType
 from util.dsetUtil import getSliceQueryParam, setSliceQueryParam, getFillValue, isExtensible 
 from util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout, getDeflateLevel
-from util.chunkUtil import getNumChunks, getChunkIds, getChunkId
+from util.chunkUtil import getNumChunks, getChunkIds, getChunkId, getChunkIndex, getChunkSuffix
 from util.chunkUtil import getChunkCoverage, getDataCoverage
 from util.arrayUtil import bytesArrayToList, jsonToArray, getShapeDims, getNumElements, arrayToBytes, bytesToArray
 from util.authUtil import getUserPasswordFromRequest, validateUserPassword
@@ -99,14 +99,18 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level,
 """
 Read data from given chunk_id.  Pass in type, dims, and selection area.
 """ 
-async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr):
+async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_map=None):
     """ read the chunk selection from the DN
     chunk_id: id of chunk to write to
     chunk_sel: chunk-relative selection to read from
     np_arr: numpy array to store read bytes
+    chunk_offset: location of chunk with the s3 object
+    chunk_offset: size of chunk within the s3 object (or 0 if the entire object)
     """
     msg = "read_chunk_hyperslab, chunk_id:{}, slices: {}".format(chunk_id, slices)
     log.info(msg)
+    if chunk_map and chunk_id not in chunk_map:
+        log.warn(f"expected to find {chunk_id} in chunk_map")
 
     req = getDataNodeUrl(app, chunk_id)
     req += "/chunks/" + chunk_id 
@@ -130,6 +134,11 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr):
     chunk_shape = getSelectionShape(chunk_sel)
     log.debug("chunk_shape: {}".format(chunk_shape))
     setSliceQueryParam(params, chunk_sel)  
+    if chunk_map and chunk_id in chunk_map:
+        chunk_info = chunk_map[chunk_id]
+        params["s3path"] = chunk_info["s3path"]
+        params["s3offset"] = chunk_info["s3offset"]
+        params["s3size"] = chunk_info["s3size"]
     dt = np_arr.dtype
  
     chunk_arr = None
@@ -379,6 +388,172 @@ async def read_chunk_query(app, chunk_id, dset_json, slices, query, limit, rsp_d
         return
     
     rsp_dict[chunk_id] = dn_rsp
+
+"""
+Return list of elements from a dataset
+"""
+async def getPointData(app, dset_id, dset_json, points):
+    loop = app["loop"]
+    num_points = len(points)
+    log.info(f"getPointData for {num_points} points")
+    log.debug(f"dset_json: {dset_json}")
+    log.debug(f"points: {points}")
+    chunk_dict = {}  # chunk ids to list of points in chunk
+    datashape = dset_json["shape"]
+    if datashape["class"] == 'H5S_NULL':
+        log.error("H5S_NULL shape class used with point selection")
+        raise HTTPInternalServerError()    
+    dims = getShapeDims(datashape)
+    rank = len(dims)
+    type_json = dset_json["type"]
+    dset_dtype = createDataType(type_json)  # np datatype
+    layout = dset_json["layout"]
+    chunk_dims = layout["dims"]  # TBD: What if this is not defined?
+    log.debug(f"chunk_dims: {chunk_dims}")
+
+    for pt_indx in range(num_points):
+        point = points[pt_indx]
+        log.debug(f"point: {point}")
+        if rank == 1:
+            if point < 0 or point >= dims[0]:
+                msg = "POST Value point: {} is not within the bounds of the dataset"
+                msg = msg.format(point)
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg) 
+        else:
+            if len(point) != rank:
+                msg = "POST Value point value did not match dataset rank"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg) 
+            for i in range(rank):
+                if point[i] < 0 or point[i] >= dims[i]:
+                    msg = "POST Value point: {} is not within the bounds of the dataset"
+                    msg = msg.format(point)
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg) 
+
+        chunk_id = getChunkId(dset_id, point, chunk_dims)
+        log.debug(f"got chunk_id: {chunk_id}")
+        if chunk_id not in chunk_dict:
+            point_list = [point,]
+            point_index =[pt_indx]
+            chunk_dict[chunk_id] = {"points": point_list, "indices": point_index}
+        else:
+            item = chunk_dict[chunk_id]
+            point_list = item["points"]
+            point_list.append(point)
+            point_index = item["indices"]
+            point_index.append(pt_indx)
+
+    num_chunks = len(chunk_dict)
+    log.debug("getPointData - num_chunks: {}".format(num_chunks))
+    max_chunks = config.get("max_chunks_per_request")
+    if num_chunks > max_chunks:
+        log.warn(f"Point selection request too large, num_chunks: {num_chunks} max_chunks: {max_chunks}")
+        raise HTTPRequestEntityTooLarge(num_chunks, max_chunks)
+ 
+    # create array to hold response data
+    # TBD: initialize to fill value if not 0
+    arr_rsp = np.zeros((num_points,), dtype=dset_dtype)
+    tasks = []
+    for chunk_id in chunk_dict.keys():
+        item = chunk_dict[chunk_id]
+        point_list = item["points"]
+        point_index = item["indices"]
+        task = asyncio.ensure_future(read_point_sel(app, chunk_id, dset_json, 
+            point_list, point_index, arr_rsp))
+        tasks.append(task)
+    await asyncio.gather(*tasks, loop=loop)
+
+    log.debug("arr shape: {}".format(arr_rsp.shape))
+    return arr_rsp
+
+
+"""
+Get info for chunk locations (for H5D_CHUNKED_REF_INDIRECT)
+"""
+async def  getChunkInfoMap(app, dset_id, dset_json, chunk_ids):
+    layout = dset_json["layout"]
+    if layout["class"] not in  ('H5D_CONTIGUOUS_REF', 'H5D_CHUNKED_REF', 'H5D_CHUNKED_REF_INDIRECT'):
+        log.debug(f"skip getChunkInfoMap for layout class: { layout['class'] }")
+        return None
+
+    datashape = dset_json["shape"]
+    if datashape["class"] == 'H5S_NULL':
+        log.error("H5S_NULL shape class used with reference chunk layout")
+        raise HTTPInternalServerError()    
+    dims = getShapeDims(datashape)
+    rank = len(dims)
+    log.debug(f"getChunkInfoMap for dset: {dset_id} rank: {rank} num chunk_ids: {len(chunk_ids)}")
+    chunkinfo_map = {}
+
+    if layout["class"] == 'H5D_CONTIGUOUS_REF':
+        s3path = layout["file_uri"]
+        s3offset = layout["offset"]
+        s3size = layout["size"]
+        for chunk_id in chunk_ids:    
+            chunkinfo_map[chunk_id] = {"s3path": s3path, "s3offset": s3offset, "s3size": s3size}
+    elif layout["class"] == 'H5D_CHUNKED_REF':
+        s3path = layout["file_uri"]
+        chunks = layout["chunks"]
+
+        for chunk_id in chunk_ids:
+            s3offset = 0
+            s3size = 0
+            chunk_key = getChunkSuffix(chunk_id)
+            if chunk_key in chunks:
+                item = chunks[chunk_key]
+                s3offset = item[0]
+                s3size = item[1]
+            chunkinfo_map[chunk_id] = {"s3path": s3path, "s3offset": s3offset, "s3size": s3size}
+    elif layout["class"] == 'H5D_CHUNKED_REF_INDIRECT':
+        if "chunk_table" not in layout:
+            log.error("Expected to find chunk_table in dataset layout")
+            raise HTTPInternalServerError()
+        chunktable_id = layout["chunk_table"]
+        # get  state for dataset from DN.
+        chunktable_json = await getObjectJson(app, chunktable_id, refresh=False)  
+        log.debug(f"chunktable_json: {chunktable_json}")
+        chunktable_dims = getShapeDims(chunktable_json["shape"])
+
+        if len(chunktable_dims) != rank:
+            msg = "Rank of chunktable should be same as the dataset"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        
+        # convert the list of chunk_ids into a set of points to query in the chunk table
+        num_pts = len(chunk_ids)
+        if rank == 1:
+            arr_points = np.zeros((num_pts,), dtype=np.dtype('u4'))
+        else:
+            arr_points = np.zeros((num_pts,rank), dtype=np.dtype('u4'))
+        for i in range(len(chunk_ids)):
+            chunk_id = chunk_ids[i]
+            log.debug(f"chunk_id for chunktable: {chunk_id}")
+            indx = getChunkIndex(chunk_id)
+            log.debug(f"get chunk indx: {indx}")
+            if rank == 1:
+                log.debug(f"convert: {indx[0]} to {indx}")
+                indx = indx[0]
+            arr_points[i] = indx
+        log.debug(f"got chunktable points: {arr_points}, calling getPointData")
+        point_data = await getPointData(app, chunktable_id, chunktable_json, arr_points)
+        log.debug(f"got chunktable data: {point_data}")
+        s3path = layout["file_uri"]
+
+        for i in range(len(chunk_ids)):
+            chunk_id = chunk_ids[i]
+            item = point_data[i]
+            s3offset = int(item[0])
+            s3size = int(item[1])
+            chunkinfo_map[chunk_id] = {"s3path": s3path, "s3offset": s3offset, "s3size": s3size}
+    else:
+        log.error(f"Unexpected chunk layout: {layout['class']}")
+        raise HTTPInternalServerError()  
+
+    log.debug(f"returning chunkinfo_map: {chunkinfo_map}")
+    return chunkinfo_map
+
 
 
 """
@@ -924,6 +1099,11 @@ async def GET_Value(request):
         log.warn(msg)
         raise HTTPRequestEntityTooLarge(num_chunks, max_chunks)
     chunk_ids = getChunkIds(dset_id, slices, layout)
+    # Get information about where chunks are located
+    #   Will be None except for H5D_CHUNKED_REF_INDIRECT type
+    chunkinfo = await getChunkInfoMap(app, dset_id, dset_json, chunk_ids)
+    log.debug(f"chunkinfo_map: {chunkinfo}")
+
 
     if request.method == "OPTIONS":
         # skip doing any big data load for options request
@@ -941,7 +1121,7 @@ async def GET_Value(request):
     else:
         log.debug("chunk_ids: {}".format(chunk_ids))
         try:
-            resp = await doHyperSlabRead(request, chunk_ids, dset_json, slices)
+            resp = await doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=chunkinfo)
         except CancelledError as ce:
             log.warn(f"Cancelled error on hyperslab read: {ce}")
             resp = await jsonResponse(request, None)  # TBD: what do return if client cancels
@@ -1006,7 +1186,7 @@ async def doQueryRead(request, chunk_ids, dset_json,  slices):
     resp = await jsonResponse(request, resp_json)
     return resp
 
-async def doHyperSlabRead(request, chunk_ids, dset_json, slices):
+async def doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=None):
     app = request.app 
     loop = app["loop"]
 
@@ -1042,7 +1222,7 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices):
     arr = np.zeros(np_shape, dtype=dset_dtype, order='C')
     tasks = []
     for chunk_id in chunk_ids:
-        task = asyncio.ensure_future(read_chunk_hyperslab(app, chunk_id, dset_json, slices, arr))
+        task = asyncio.ensure_future(read_chunk_hyperslab(app, chunk_id, dset_json, slices, arr, chunk_map=chunk_map))
         tasks.append(task)
     await asyncio.gather(*tasks, loop=loop)
 

@@ -28,7 +28,7 @@ from util.s3Util import  isS3Obj, getS3Bytes
 from util.hdf5dtype import createDataType
 from util.dsetUtil import  getSelectionShape, getSliceQueryParam
 from util.dsetUtil import getFillValue, getChunkLayout, getEvalStr, getDeflateLevel
-from util.chunkUtil import getChunkIndex, getChunkCoordinate, getChunkRelativePoint, getDatasetId, getChunkSuffix
+from util.chunkUtil import getChunkIndex, getChunkCoordinate, getChunkRelativePoint, getDatasetId
 
 
 import hsds_logger as log
@@ -51,66 +51,50 @@ def getDeflate(app, dset_id, dset_json):
 Utility method for GET_Chunk, PUT_Chunk, and POST_CHunk
 Get a numpy array for the chunk (possibly initizaling a new chunk if requested) 
 """
-async def getChunk(app, chunk_id, dset_json, chunk_init=False):
+async def getChunk(app, chunk_id, dset_json, s3path=None, s3offset=0, s3size=0, chunk_init=False):
     # if the chunk cache has too many dirty items, wait till items get flushed to S3
     MAX_WAIT_TIME = 10.0  # TBD - make this a config
     chunk_cache = app['chunk_cache']
+    if chunk_init and s3offset > 0:
+        log.error(f"unable to initiale chunk {chunk_id} for reference layouts ")
+        raise  HTTPInternalServerError()
+
     log.debug(f"getChunk cache utilization: {chunk_cache.cacheUtilizationPercent} per, dirty_count: {chunk_cache.dirtyCount}, mem_dirty: {chunk_cache.memDirty}")
 
     chunk_arr = None 
     dset_id = getDatasetId(chunk_id)
     dims = getChunkLayout(dset_json)
     type_json = dset_json["type"]
-    layout = dset_json["layout"]
     dt = createDataType(type_json)
 
     bucket = None
-    s3_offset = 0
-    s3_size = None
-    s3_key = None
+    s3key = None
 
-    log.debug(f"getChunk dset_layout: {layout}")
-    
-    if layout["class"] in ('H5D_CONTIGUOUS_REF', 'H5D_CHUNKED_REF'):
-        if chunk_init:
-            log.error(f"unable to initiale chunk {chunk_id} for H5D_CONTIGUOUS_REF layout ")
+    if s3path:
+        if not s3path.startswith("s3://"):
+            # TBD - verify these at dataset creation time?
+            log.error(f"unexpected s3path for getChunk: {s3path}")
             raise  HTTPInternalServerError()
-        if not layout["file_uri"].startswith("s3://"):
-            log.error(f"layout file_uri is invalid: {layout['file_uri']}")
-            raise HTTPInternalServerError()
-        s3path = layout["file_uri"][5:]  # strip off the s3:// part
-        index = s3path.find('/')   # split bucket and key
+        path = s3path[5:]
+        index = path.find('/')   # split bucket and key
         if index < 1:
             log.error(f"s3path is invalid: {s3path}")
             raise HTTPInternalServerError()
-        bucket = s3path[:index]
-        s3_key = s3path[(index+1):]
-        if layout["class"] == 'H5D_CONTIGUOUS_REF':
-            s3_offset = layout["offset"]
-            s3_size = layout["size"]
-        else:
-            # H5D_CHUNKED_REF
-            chunks = layout["chunks"]
-            chunk_key = getChunkSuffix(chunk_id)
-            if chunk_key in chunks:
-                item = chunks[chunk_key]
-                s3_offset = item[0]
-                s3_size = item[1]
-            else:
-                s3_offset = None  # signal that chunk doesn't exist
-
-        log.debug(f"getChunk range get - s3://{bucket}/{s3_key}  offset: {s3_offset} size: {s3_size} ")
+        bucket = path[:index]
+        log.debug(f"using bucket: {bucket}")
+        s3key = path[(index+1):]
+        log.debug(f"Using bucket: {bucket} and  s3key: {s3key}")
     else:
-        s3_key = getS3Key(chunk_id)
+        s3key = getS3Key(chunk_id)
 
-    log.debug("getChunk s3_key: {}".format(s3_key))
+    log.debug("getChunk s3key: {}".format(s3key))
     if chunk_id in chunk_cache:
         chunk_arr = chunk_cache[chunk_id]
     else:
-        if s3_offset is None:
+        if s3path and s3size == 0:
             obj_exists = False
         else:
-            obj_exists = await isS3Obj(app, s3_key, bucket=bucket)
+            obj_exists = await isS3Obj(app, s3key, bucket=bucket)
         # TBD - potential race condition?
         if obj_exists:
             pending_s3_read = app["pending_s3_read"]
@@ -131,13 +115,13 @@ async def getChunk(app, chunk_id, dset_json, chunk_init=False):
             if chunk_arr is None:
                 if chunk_id not in pending_s3_read:
                     pending_s3_read[chunk_id] = time.time()
-                log.debug("Reading chunk {} from S3".format(s3_key))
+                log.debug("Reading chunk {} from S3".format(s3key))
                 deflate_level = getDeflate(app, dset_id, dset_json)
-                chunk_bytes = await getS3Bytes(app, s3_key, deflate_level=deflate_level, s3_offset=s3_offset, s3_size=s3_size, bucket=bucket)
+                chunk_bytes = await getS3Bytes(app, s3key, deflate_level=deflate_level, s3offset=s3offset, s3size=s3size, bucket=bucket)
                 if chunk_id in pending_s3_read:
                     # read complete - remove from pending map
                     elapsed_time = time.time() - pending_s3_read[chunk_id]
-                    log.info(f"s3 read for {s3_key} took {elapsed_time}")
+                    log.info(f"s3 read for {s3key} took {elapsed_time}")
                     del pending_s3_read[chunk_id] 
                 else:
                     log.warn(f"expected to find {chunk_id} in pending_s3_read map")
@@ -357,7 +341,26 @@ async def GET_Chunk(request):
         s = selection[i]
         log.debug("selection[{}]: {}".format(i, s))
 
-    chunk_arr = await getChunk(app, chunk_id, dset_json)
+    s3path = None
+    s3offset = 0
+    s3size = 0
+    if "s3path" in params:
+        s3path = params["s3path"]
+        log.debug(f"GET_Chunk - useing s3path: {s3path}")
+    if "s3offset" in params:
+        try:
+            s3offset = int(params["s3offset"])
+        except ValueError:
+            log.error(f"invalid s3offset params: {params['s3offset']}")
+            raise HTTPBadRequest()
+    if "s3size" in params:
+        try:
+            s3size = int(params["s3size"])
+        except ValueError:
+            log.error(f"invalid s3size params: {params['s3sieze']}")
+            raise HTTPBadRequest()
+
+    chunk_arr = await getChunk(app, chunk_id, dset_json, s3path=s3path, s3offset=s3offset, s3size=s3size)
 
     if chunk_arr is None:
         # return a 404
