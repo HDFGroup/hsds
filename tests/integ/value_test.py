@@ -1876,7 +1876,6 @@ class ValueTest(unittest.TestCase):
         dset22_size = byteStream["size"]
         self.assertEqual(dset22_size, 60)
 
-
         # get domain
         req = helper.getEndpoint() + '/'
         rsp = requests.get(req, headers=headers)
@@ -1889,7 +1888,6 @@ class ValueTest(unittest.TestCase):
         data = { "type": 'H5T_STD_I32BE', "shape": 20 }
         layout = {"class": 'H5D_CONTIGUOUS_REF', "file_uri": s3path, "offset": dset112_offset, "size": dset112_size }
         data['creationProperties'] = {'layout': layout}
-
         
         req = self.endpoint + '/datasets' 
         rsp = requests.post(req, data=json.dumps(data), headers=headers)
@@ -1904,18 +1902,6 @@ class ValueTest(unittest.TestCase):
         payload = {"id": dset112_id}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
-
-        # read values from dset (should be the sequence 0 through 19)
-        req = self.endpoint + "/datasets/" + dset112_id + "/value" 
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("value" in rspJson)
-        value = rspJson["value"]
-        self.assertEqual(len(value), 20)
-        for i in range(20):
-            self.assertEqual(value[i], i)
 
         # create dataset for /g2/dset2.2
         data = { "type": 'H5T_IEEE_F32BE', "shape": [3, 5] }
@@ -1949,6 +1935,18 @@ class ValueTest(unittest.TestCase):
         for i in range(20):
             self.assertEqual(value[i], i)
 
+        # do a point selection read on dset22
+        req = self.endpoint + "/datasets/" + dset112_id + "/value" 
+        points = [2,3,5,7,11,13,17,19]
+        body = { "points": points }
+        rsp = requests.post(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        ret_value = rspJson["value"]
+        self.assertEqual(len(ret_value), len(points))
+        self.assertEqual(ret_value, points)  # get back the points since the dataset in the range 0-20
+
         # read values from dset22 (should be 3x5 array)
         req = self.endpoint + "/datasets/" + dset22_id + "/value" 
         rsp = requests.get(req, headers=headers)
@@ -1960,6 +1958,17 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(len(value), 3)
         for i in range(3):
             self.assertEqual(len(value[i]), 5)
+
+        # do a point selection read on dset22
+        req = self.endpoint + "/datasets/" + dset22_id + "/value" 
+        points = [(0,0), (1,1), (2,2)]
+        body = { "points": points }
+        rsp = requests.post(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        ret_value = rspJson["value"]
+        self.assertEqual(len(ret_value), len(points))
 
     def testChunkedRefDataset(self):
         print("testChunkedRefDataset", self.base_domain)
@@ -2064,6 +2073,21 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(item[1], 'MHFI')
         self.assertEqual(item[2], 3)
         # skip check rest of fields since float comparisons are trcky...
+
+        # do a point selection
+        req = self.endpoint + "/datasets/" + dset_id + "/value" 
+        points = [1234567,]
+        body = { "points": points }
+        rsp = requests.post(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+        self.assertEqual(len(value), len(points))
+        item = value[0]
+        self.assertEqual(item[0], '1998.10.22')
+        self.assertEqual(item[1], 'MHFI')
+        self.assertEqual(item[2], 3)
 
 
 
@@ -2206,6 +2230,20 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(item[2], 3)
         # skip check rest of fields since float comparisons are trcky...
         
+        # do a point selection
+        req = self.endpoint + "/datasets/" + dset_id + "/value" 
+        points = [1234567,]
+        body = { "points": points }
+        rsp = requests.post(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+        self.assertEqual(len(value), len(points))
+        item = value[0]
+        self.assertEqual(item[0], '1998.10.22')
+        self.assertEqual(item[1], 'MHFI')
+        self.assertEqual(item[2], 3)
              
 if __name__ == '__main__':
     #setup test files
