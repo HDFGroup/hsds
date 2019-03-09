@@ -372,6 +372,14 @@ class ChunkUtilTest(unittest.TestCase):
             self.assertEqual(chunk_id[2:-2], dset_id[2:])
             self.assertEqual(len(chunk_id), 2+36+2)
 
+        datashape = [3207353,]
+        layout = (60000,)
+        selection = getHyperslabSelection(datashape, 1234567, 1234568)
+        chunk_ids = getChunkIds(dset_id, selection, layout)
+        self.assertEqual(len(chunk_ids), 1)
+        self.assertTrue(chunk_ids[0].endswith("_20") )
+
+
         datashape = [100,100]
         layout = (10,20)
         selection = getHyperslabSelection(datashape)

@@ -190,7 +190,6 @@ arr: numpy array to store read bytes
 """
 async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_arr):
     
-    #msg = "read_point_sel, chunk_id:{}, points: {}, index: {}".format(chunk_id, point_list, point_index)
     msg = "read_point_sel, chunk_id: {}".format(chunk_id)
     log.info(msg)
 
@@ -400,8 +399,8 @@ async def getPointData(app, dset_id, dset_json, points):
     log.debug(f"points: {points}")
     chunk_dict = {}  # chunk ids to list of points in chunk
     datashape = dset_json["shape"]
-    if datashape["class"] == 'H5S_NULL':
-        log.error("H5S_NULL shape class used with point selection")
+    if datashape["class"] in ('H5S_NULL', 'H5S_SCALAR'):
+        log.error("H5S_NULL, H5S_SCALAR shape classes can not be used with point selection")
         raise HTTPInternalServerError()    
     dims = getShapeDims(datashape)
     rank = len(dims)
@@ -431,7 +430,6 @@ async def getPointData(app, dset_id, dset_json, points):
                     msg = msg.format(point)
                     log.warn(msg)
                     raise HTTPBadRequest(reason=msg) 
-
         chunk_id = getChunkId(dset_id, point, chunk_dims)
         log.debug(f"got chunk_id: {chunk_id}")
         if chunk_id not in chunk_dict:
@@ -470,7 +468,7 @@ async def getPointData(app, dset_id, dset_json, points):
 
 
 """
-Get info for chunk locations (for H5D_CHUNKED_REF_INDIRECT)
+Get info for chunk locations (for reference layouts)
 """
 async def  getChunkInfoMap(app, dset_id, dset_json, chunk_ids):
     layout = dset_json["layout"]
@@ -524,9 +522,9 @@ async def  getChunkInfoMap(app, dset_id, dset_json, chunk_ids):
         # convert the list of chunk_ids into a set of points to query in the chunk table
         num_pts = len(chunk_ids)
         if rank == 1:
-            arr_points = np.zeros((num_pts,), dtype=np.dtype('u4'))
+            arr_points = np.zeros((num_pts,), dtype=np.dtype('u8'))
         else:
-            arr_points = np.zeros((num_pts,rank), dtype=np.dtype('u4'))
+            arr_points = np.zeros((num_pts,rank), dtype=np.dtype('u8'))
         for i in range(len(chunk_ids)):
             chunk_id = chunk_ids[i]
             log.debug(f"chunk_id for chunktable: {chunk_id}")
@@ -1271,7 +1269,6 @@ async def POST_Value(request):
     log.request(request)
     
     app = request.app 
-    loop = app["loop"]
     body = None
 
     dset_id = request.match_info.get('id')
@@ -1336,20 +1333,16 @@ async def POST_Value(request):
         raise HTTPBadRequest(reason=msg)
     dims = getShapeDims(datashape)
     rank = len(dims)
-    
-    layout = getChunkLayout(dset_json)
-     
+         
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
     log.debug("item size: {}".format(item_size))
-    dset_dtype = createDataType(type_json)  # np datatype
 
     log.debug("got dset_json: {}".format(dset_json))
     await validateAction(app, domain, dset_id, username, "read")
 
     # read body data
     num_points = None
-    arr_points = None  # numpy array to hold request points
     point_dt = np.dtype('u8')  # use unsigned long for point index
     if request_type == "json":
         body = await request.json()
@@ -1377,69 +1370,16 @@ async def POST_Value(request):
             raise HTTPBadRequest(reason=msg)
         num_points = request.content_length // point_dt.itemsize
         log.debug("got {} num_points".format(num_points))
-        arr_points = np.fromstring(binary_data, dtype=point_dt)
+        points = np.fromstring(binary_data, dtype=point_dt)
         if rank > 1:
             if num_points % rank != 0:
                 msg = "Number of points is not consistent with dataset rank"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
             num_points //= rank
-            arr_points = arr_points.reshape((num_points, rank))  # conform to point index shape
-        points = arr_points.tolist()  # convert to Python list
+            points = points.reshape((num_points, rank))  # conform to point index shape
 
-    chunk_dict = {}  # chunk ids to list of points in chunk
-
-    for pt_indx in range(num_points):
-        point = points[pt_indx]
-        if rank == 1:
-            if point < 0 or point >= dims[0]:
-                msg = "POST Value point: {} is not within the bounds of the dataset"
-                msg = msg.format(point)
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg) 
-        else:
-            if len(point) != rank:
-                msg = "POST Value point value did not match dataset rank"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg) 
-            for i in range(rank):
-                if point[i] < 0 or point[i] >= dims[i]:
-                    msg = "POST Value point: {} is not within the bounds of the dataset"
-                    msg = msg.format(point)
-                    log.warn(msg)
-                    raise HTTPBadRequest(reason=msg) 
-        chunk_id = getChunkId(dset_id, point, layout)
-        if chunk_id not in chunk_dict:
-            point_list = [point,]
-            point_index =[pt_indx]
-            chunk_dict[chunk_id] = {"points": point_list, "indices": point_index}
-        else:
-            item = chunk_dict[chunk_id]
-            point_list = item["points"]
-            point_list.append(point)
-            point_index = item["indices"]
-            point_index.append(pt_indx)
-
-    num_chunks = len(chunk_dict)
-    log.debug("num_chunks: {}".format(num_chunks))
-    max_chunks = config.get("max_chunks_per_request")
-    if num_chunks > max_chunks:
-        log.warn(f"POST value request too large, num_chunks: {num_chunks} max_chunks: {max_chunks}")
-        raise HTTPRequestEntityTooLarge(num_chunks, max_chunks)
-
-    
-    # create array to hold response data
-    # TBD: initialize to fill value if not 0
-    arr_rsp = np.zeros((num_points,), dtype=dset_dtype)
-    tasks = []
-    for chunk_id in chunk_dict.keys():
-        item = chunk_dict[chunk_id]
-        point_list = item["points"]
-        point_index = item["indices"]
-        task = asyncio.ensure_future(read_point_sel(app, chunk_id, dset_json, 
-            point_list, point_index, arr_rsp))
-        tasks.append(task)
-    await asyncio.gather(*tasks, loop=loop)
+    arr_rsp = await getPointData(app, dset_id, dset_json, points)
 
     log.debug("arr shape: {}".format(arr_rsp.shape))
 

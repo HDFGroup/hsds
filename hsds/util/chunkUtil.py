@@ -285,7 +285,7 @@ def getChunkId(dset_id, point, layout):
             coord = point[dim]
          
         c = layout[dim]
-        chunk_index= coord // c
+        chunk_index= int(coord) // c
         chunk_id +=  str(chunk_index)
         if dim + 1 < rank:
             chunk_id += '_' # seperate dimensions with underscores
