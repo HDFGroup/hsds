@@ -43,7 +43,7 @@ cfg = {
     'node_sleep_time': 10,
     'async_sleep_time': 10,
     's3_sync_interval': 10,  # time to wait to write object data to S3 (in sec)     
-    'max_chunks_per_request': 1000,  # maximum number of chunks to be serviced by one request
+    'max_chunks_per_request': 2500,  # maximum number of chunks to be serviced by one request
     'min_chunk_size': '1m',  # 1 MB
     'max_chunk_size': '4m',  # 4 MB
     'max_request_size': '100m',  # 100 MB - should be no smaller than client_max_body_size in nginx tmpl
