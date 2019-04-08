@@ -241,10 +241,6 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(type["class"], 'H5T_INTEGER')
         self.assertEqual(type["base"], 'H5T_STD_I32BE')
 
-        cpl = rspJson["creationProperties"]
-        for name in ("layout", "fillTime"):
-            self.assertTrue(name in cpl)
-
         self.assertEqual(rspJson["attributeCount"], 2)
 
         # these properties should only be available when verbose is used
@@ -839,8 +835,8 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(len(shape['dims']), 2)
         self.assertEqual(shape['dims'][0], 10)  
         self.assertTrue('maxdims' in shape)
-        self.assertEqual(shape['maxdims'][0], 00)
-
+        self.assertEqual(shape['maxdims'][0], 0)
+     
         # extend the dataset by 5 elements in first dimension
         payload = {"extend": 5, "extend_dim": 0}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
