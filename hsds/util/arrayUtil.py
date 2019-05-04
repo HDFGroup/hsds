@@ -156,7 +156,12 @@ def jsonToArray(data_shape, data_dtype, data_json):
         arr = np.zeros((npoints,), dtype=data_dtype)
         fillVlenArray(np_shape_rank, data_json, arr, 0)
     else:
-        arr = np.array(data_json, dtype=data_dtype)
+        try:
+            arr = np.array(data_json, dtype=data_dtype)
+        except UnicodeEncodeError as ude:
+            msg = "Unable to encode data"
+            log.warn(msg)
+            raise ValueError(msg) from ude
     # raise an exception of the array shape doesn't match the selection shape
     # allow if the array is a scalar and the selection shape is one element,
     # numpy is ok with this
@@ -410,10 +415,3 @@ def bytesToArray(data, dt, shape):
             offset = readElement(data, offset, arr, index, dt)
     arr = arr.reshape(shape)
     return arr
-
-
-        
-
-
-    
-

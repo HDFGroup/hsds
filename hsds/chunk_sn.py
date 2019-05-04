@@ -477,6 +477,7 @@ async def  getChunkInfoMap(app, dset_id, dset_json, chunk_ids):
         return None
 
     datashape = dset_json["shape"]
+    datatype = dset_json["type"]
     if datashape["class"] == 'H5S_NULL':
         log.error("H5S_NULL shape class used with reference chunk layout")
         raise HTTPInternalServerError()    
@@ -487,10 +488,28 @@ async def  getChunkInfoMap(app, dset_id, dset_json, chunk_ids):
 
     if layout["class"] == 'H5D_CONTIGUOUS_REF':
         s3path = layout["file_uri"]
-        s3offset = layout["offset"]
         s3size = layout["size"]
+        chunk_dims = layout["dims"]
+        item_size = getItemSize(datatype)
+        chunk_size = item_size
+        for dim in chunk_dims:
+            chunk_size *= dim
+        log.debug(f"using chunk_size: {chunk_size}")
+
         for chunk_id in chunk_ids:    
-            chunkinfo_map[chunk_id] = {"s3path": s3path, "s3offset": s3offset, "s3size": s3size}
+            chunk_index = getChunkIndex(chunk_id)
+            if len(chunk_index) != rank:
+                log.error("Unexpected chunk_index")
+                raise HTTPInternalServerError()
+            extent = item_size
+            for i in range(rank):
+                index = chunk_index[i]
+                s3offset = layout["offset"] + extent * chunk_dims[i] * index 
+                extent *= dims[i]
+            log.debug("setting chunk_info_map to s3offset: {s3offset} s3size: {s3size} for chunk_id: {chunk_id}")
+            if s3offset > layout["offset"] + layout["size"]:
+                log.warn(f"range get of s3offset: {s3offset} s3size: {s3size} extends beyond end of contingous dataset for chunk_id: {chunk_id}")
+            chunkinfo_map[chunk_id] = {"s3path": s3path, "s3offset": s3offset, "s3size": chunk_size}
     elif layout["class"] == 'H5D_CHUNKED_REF':
         s3path = layout["file_uri"]
         chunks = layout["chunks"]
