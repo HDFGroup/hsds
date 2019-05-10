@@ -81,7 +81,6 @@ async def getChunk(app, chunk_id, dset_json, s3path=None, s3offset=0, s3size=0, 
             log.error(f"s3path is invalid: {s3path}")
             raise HTTPInternalServerError()
         bucket = path[:index]
-        log.debug(f"using bucket: {bucket}")
         s3key = path[(index+1):]
         log.debug(f"Using bucket: {bucket} and  s3key: {s3key}")
     else:
@@ -263,6 +262,7 @@ async def PUT_Chunk(request):
         
     input_arr = bytesToArray(input_bytes, dt, mshape)
 
+    # TBD: Skipp read if the input shape is the entire chunk?
     chunk_arr = await getChunk(app, chunk_id, dset_json, chunk_init=True)
 
     # update chunk array
@@ -346,7 +346,7 @@ async def GET_Chunk(request):
     s3size = 0
     if "s3path" in params:
         s3path = params["s3path"]
-        log.debug(f"GET_Chunk - useing s3path: {s3path}")
+        log.debug(f"GET_Chunk - using s3path: {s3path}")
     if "s3offset" in params:
         try:
             s3offset = int(params["s3offset"])

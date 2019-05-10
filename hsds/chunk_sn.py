@@ -182,7 +182,7 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_m
 Read point selection
 --
 app: application object
-chunk_id: id of chunk to write to
+chunk_id: id of chunk to read from
 dset_json: dset JSON
 point_list: array of points to read
 point_index: index of arr element to update for a given point
@@ -1106,7 +1106,7 @@ async def GET_Value(request):
     log.debug("selection shape:" + str(np_shape))
 
     npoints = getNumElements(np_shape)
-    log.debug("selection num points: " + str(npoints))
+    log.debug(f"selection num elements: {npoints}")
 
     num_chunks = getNumChunks(slices, layout)
     log.debug("num_chunks: {}".format(num_chunks))
