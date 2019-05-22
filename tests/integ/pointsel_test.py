@@ -308,7 +308,7 @@ class PointSelTest(unittest.TestCase):
 
         tall_json = helper.getHDF5JSON("tall.json")
         if not tall_json:
-            print("tall.json file not found, skipping testContiguousRefDataset")
+            print("tall.json file not found, skipping testPostContiguousDataset")
             return
 
         if "tall.h5" not in tall_json:
@@ -393,6 +393,10 @@ class PointSelTest(unittest.TestCase):
         points = [2,3,5,7,11,13,17,19]
         body = { "points": points }
         rsp = requests.post(req, data=json.dumps(body), headers=headers)
+        if rsp.status_code == 404:
+            print("s3object: {} not found, skipping point read chunk reference contiguous test".format(s3path))
+            return
+
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("value" in rspJson)
@@ -501,7 +505,7 @@ class PointSelTest(unittest.TestCase):
         body = { "points": points }
         rsp = requests.post(req, data=json.dumps(body), headers=headers)
         if rsp.status_code == 404:
-            print("s3object: {} not found, skipping point selection test".format(s3path))
+            print("s3object: {} not found, skipping point chun ref test".format(s3path))
         else:
             self.assertEqual(rsp.status_code, 200)
             rspJson = json.loads(rsp.text)
@@ -638,6 +642,10 @@ class PointSelTest(unittest.TestCase):
         points = [1234567,]
         body = { "points": points }
         rsp = requests.post(req, data=json.dumps(body), headers=headers)
+        if rsp.status_code == 404:
+            print("s3object: {} not found, skipping point read chunk reference indirect test".format(s3path))
+            return
+
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("value" in rspJson)

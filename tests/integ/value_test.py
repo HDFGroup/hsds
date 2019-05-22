@@ -1925,6 +1925,11 @@ class ValueTest(unittest.TestCase):
         # read values from dset112 (should be the sequence 0 through 19)
         req = self.endpoint + "/datasets/" + dset112_id + "/value" 
         rsp = requests.get(req, headers=headers)
+
+        if rsp.status_code == 404:
+            print("s3object: {} not found, skipping hyperslab read chunk contiguous reference test".format(s3path))
+            return
+
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -2035,22 +2040,23 @@ class ValueTest(unittest.TestCase):
         params = {"select": "[1234567:1234568]"} # read 1 element, starting at index 1234567
         rsp = requests.get(req, params=params, headers=headers)
         if rsp.status_code == 404:
-            print("s3object: {} not found, skipping hyperslab read selection test".format(s3path))
-        else:
-            self.assertEqual(rsp.status_code, 200)
-            rspJson = json.loads(rsp.text)
-            self.assertTrue("hrefs" in rspJson)
-            self.assertTrue("value" in rspJson)
-            value = rspJson["value"]
-            # should get one element back
-            self.assertEqual(len(value), 1)
-            item = value[0]
-            # verify that this is what we expected to get
-            self.assertEqual(len(item), len(fields))
-            self.assertEqual(item[0], '1998.10.22')
-            self.assertEqual(item[1], 'MHFI')
-            self.assertEqual(item[2], 3)
-            # skip check rest of fields since float comparisons are trcky...
+            print("s3object: {} not found, skipping hyperslab read chunk reference test".format(s3path))
+            return
+        
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+        # should get one element back
+        self.assertEqual(len(value), 1)
+        item = value[0]
+        # verify that this is what we expected to get
+        self.assertEqual(len(item), len(fields))
+        self.assertEqual(item[0], '1998.10.22')
+        self.assertEqual(item[1], 'MHFI')
+        self.assertEqual(item[2], 3)
+        # skip check rest of fields since float comparisons are trcky...
 
 
 
@@ -2177,7 +2183,13 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + "/datasets/" + dset_id + "/value" 
         params = {"select": "[1234567:1234568]"} # read 1 element, starting at index 1234567
         rsp = requests.get(req, params=params, headers=headers)
+
+        if rsp.status_code == 404:
+            print("s3object: {} not found, skipping hyperslab read chunk reference indirect test".format(s3path))
+            return
+
         self.assertEqual(rsp.status_code, 200)
+
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
