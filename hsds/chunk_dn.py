@@ -478,7 +478,7 @@ async def POST_Chunk(request):
     validateInPartition(app, chunk_id)
     log.debug("request params: {}".format(list(params.keys())))
     if "dset" not in params:
-        msg = "Missing dset in GET request"
+        msg = "Missing dset in POST request"
         log.error(msg)
         raise HTTPBadRequest(reason=msg)
     dset_json = json.loads(params["dset"])
@@ -520,8 +520,39 @@ async def POST_Chunk(request):
         log.error(msg)
         raise HTTPInternalServerError()
 
+    s3path = None
+    s3offset = 0
+    s3size = 0
+    if "s3path" in params:
+        if put_points:
+            log.error("s3path can not be used with put points POST request")
+            raise HTTPBadRequest()
+        s3path = params["s3path"]
+        log.debug(f"GET_Chunk - using s3path: {s3path}")
+    if "s3offset" in params:
+        try:
+            s3offset = int(params["s3offset"])
+        except ValueError:
+            log.error(f"invalid s3offset params: {params['s3offset']}")
+            raise HTTPBadRequest()
+    if "s3size" in params:
+        try:
+            s3size = int(params["s3size"])
+        except ValueError:
+            log.error(f"invalid s3size params: {params['s3sieze']}")
+            raise HTTPBadRequest()
+
     # get chunk from cache/s3.  If not found init a new chunk if this is a write request
-    chunk_arr = await getChunk(app, chunk_id, dset_json, chunk_init=put_points) 
+    chunk_arr = await getChunk(app, chunk_id, dset_json, s3path=s3path, s3offset=s3offset, s3size=s3size, chunk_init=put_points) 
+
+    if chunk_arr is None:
+        if put_points:
+            log.error("no array returned for put_points")
+            raise HTTPInternalServerError()
+        else:
+            # get points on a non-existent S3 objects?
+            log.warn("S3 object not found for get points")
+            raise HTTPNotFound()
 
    
     if put_points:

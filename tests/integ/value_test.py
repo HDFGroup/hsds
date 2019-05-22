@@ -1838,7 +1838,6 @@ class ValueTest(unittest.TestCase):
             print("hdf5_sample_bucket config not set, skipping testContiguousRefDataset")
             return
 
-        hdf5_sample_bucket = "hdfgroup"
 
         tall_json = helper.getHDF5JSON("tall.json")
         if not tall_json:
@@ -1935,18 +1934,6 @@ class ValueTest(unittest.TestCase):
         for i in range(20):
             self.assertEqual(value[i], i)
 
-        # do a point selection read on dset22
-        req = self.endpoint + "/datasets/" + dset112_id + "/value" 
-        points = [2,3,5,7,11,13,17,19]
-        body = { "points": points }
-        rsp = requests.post(req, data=json.dumps(body), headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("value" in rspJson)
-        ret_value = rspJson["value"]
-        self.assertEqual(len(ret_value), len(points))
-        self.assertEqual(ret_value, points)  # get back the points since the dataset in the range 0-20
-
         # read values from dset22 (should be 3x5 array)
         req = self.endpoint + "/datasets/" + dset22_id + "/value" 
         rsp = requests.get(req, headers=headers)
@@ -1959,19 +1946,8 @@ class ValueTest(unittest.TestCase):
         for i in range(3):
             self.assertEqual(len(value[i]), 5)
 
-        # do a point selection read on dset22
-        req = self.endpoint + "/datasets/" + dset22_id + "/value" 
-        points = [(0,0), (1,1), (2,2)]
-        body = { "points": points }
-        rsp = requests.post(req, data=json.dumps(body), headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("value" in rspJson)
-        ret_value = rspJson["value"]
-        self.assertEqual(len(ret_value), len(points))
-
-    def testChunkedRefDataset(self):
-        print("testChunkedRefDataset", self.base_domain)
+    def testGetSelectionChunkedRefDataset(self):
+        print("testGetSelectionChunkedRefDataset", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
         try:
@@ -1980,8 +1956,7 @@ class ValueTest(unittest.TestCase):
             print("hdf5_sample_bucket config not set, skipping testChunkedRefDataset")
             return
 
-        hdf5_sample_bucket = "hdfgroup"
-        s3path = "s3://" + hdf5_sample_bucket + "/data/hdf5demo" + "/snp500.h5"
+        s3path = "s3://" + hdf5_sample_bucket + "/data/hdf5test" + "/snp500.h5"
         SNP500_ROWS = 3207353
 
         snp500_json = helper.getHDF5JSON("snp500.json")
@@ -2059,35 +2034,23 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + "/datasets/" + dset_id + "/value" 
         params = {"select": "[1234567:1234568]"} # read 1 element, starting at index 1234567
         rsp = requests.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("value" in rspJson)
-        value = rspJson["value"]
-        # should get one element back
-        self.assertEqual(len(value), 1)
-        item = value[0]
-        # verify that this is what we expected to get
-        self.assertEqual(len(item), len(fields))
-        self.assertEqual(item[0], '1998.10.22')
-        self.assertEqual(item[1], 'MHFI')
-        self.assertEqual(item[2], 3)
-        # skip check rest of fields since float comparisons are trcky...
-
-        # do a point selection
-        req = self.endpoint + "/datasets/" + dset_id + "/value" 
-        points = [1234567,]
-        body = { "points": points }
-        rsp = requests.post(req, data=json.dumps(body), headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("value" in rspJson)
-        value = rspJson["value"]
-        self.assertEqual(len(value), len(points))
-        item = value[0]
-        self.assertEqual(item[0], '1998.10.22')
-        self.assertEqual(item[1], 'MHFI')
-        self.assertEqual(item[2], 3)
+        if rsp.status_code == 404:
+            print("s3object: {} not found, skipping hyperslab read selection test".format(s3path))
+        else:
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+            self.assertTrue("hrefs" in rspJson)
+            self.assertTrue("value" in rspJson)
+            value = rspJson["value"]
+            # should get one element back
+            self.assertEqual(len(value), 1)
+            item = value[0]
+            # verify that this is what we expected to get
+            self.assertEqual(len(item), len(fields))
+            self.assertEqual(item[0], '1998.10.22')
+            self.assertEqual(item[1], 'MHFI')
+            self.assertEqual(item[2], 3)
+            # skip check rest of fields since float comparisons are trcky...
 
 
 
@@ -2101,8 +2064,7 @@ class ValueTest(unittest.TestCase):
             print("hdf5_sample_bucket config not set, skipping testChunkedRefIndirectDataset")
             return
 
-        hdf5_sample_bucket = "hdfgroup"
-        s3path = "s3://" + hdf5_sample_bucket + "/data/hdf5demo" + "/snp500.h5"
+        s3path = "s3://" + hdf5_sample_bucket + "/data/hdf5test" + "/snp500.h5"
         SNP500_ROWS = 3207353
 
         snp500_json = helper.getHDF5JSON("snp500.json")
@@ -2230,20 +2192,6 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(item[2], 3)
         # skip check rest of fields since float comparisons are trcky...
         
-        # do a point selection
-        req = self.endpoint + "/datasets/" + dset_id + "/value" 
-        points = [1234567,]
-        body = { "points": points }
-        rsp = requests.post(req, data=json.dumps(body), headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("value" in rspJson)
-        value = rspJson["value"]
-        self.assertEqual(len(value), len(points))
-        item = value[0]
-        self.assertEqual(item[0], '1998.10.22')
-        self.assertEqual(item[1], 'MHFI')
-        self.assertEqual(item[2], 3)
              
 if __name__ == '__main__':
     #setup test files

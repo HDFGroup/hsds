@@ -18,7 +18,7 @@ from asyncio import CancelledError
 import json
 import base64 
 import numpy as np
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPRequestEntityTooLarge, HTTPConflict, HTTPInternalServerError, HTTPServiceUnavailable
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPRequestEntityTooLarge, HTTPConflict, HTTPInternalServerError, HTTPServiceUnavailable
 from aiohttp.client_exceptions import ClientError
 from aiohttp.web import StreamResponse
 
@@ -133,45 +133,61 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_m
      
     chunk_shape = getSelectionShape(chunk_sel)
     log.debug("chunk_shape: {}".format(chunk_shape))
-    setSliceQueryParam(params, chunk_sel)  
-    if chunk_map and chunk_id in chunk_map:
-        chunk_info = chunk_map[chunk_id]
-        params["s3path"] = chunk_info["s3path"]
-        params["s3offset"] = chunk_info["s3offset"]
-        params["s3size"] = chunk_info["s3size"]
     dt = np_arr.dtype
- 
+
+    def defaultChunk():
+        # no data, return zero array
+        if fill_value:
+            chunk_arr = np.empty(chunk_shape, dtype=dt, order='C')
+            chunk_arr[...] = fill_value
+        else:
+            chunk_arr = np.zeros(chunk_shape, dtype=dt, order='C')
+        return chunk_arr
+
     chunk_arr = None
-    try:
-        async with client.get(req, params=params) as rsp:
-            log.debug("http_get {} status: <{}>".format(req, rsp.status))
-            if rsp.status == 200:
-                data = await rsp.read()  # read response as bytes
-                chunk_arr = bytesToArray(data, dt, chunk_shape)  
-                npoints_read = getNumElements(chunk_arr.shape)
-                npoints_expected = getNumElements(chunk_shape)
-                if npoints_read != npoints_expected:
-                    log.error("Expected {} points, but got: {}".format(npoints_expected, npoints_read))
-                    raise HTTPInternalServerError()
-                chunk_arr = chunk_arr.reshape(chunk_shape)
-            elif rsp.status == 404:
-                # no data, return zero array
-                if fill_value:
-                    chunk_arr = np.empty(chunk_shape, dtype=dt, order='C')
-                    chunk_arr[...] = fill_value
+    setSliceQueryParam(params, chunk_sel)  
+    if chunk_map:
+        if chunk_id not in chunk_map:
+            log.debug(f"{chunk_id} not found in chunk_map, returning default arr")
+            chunk_arr = defaultChunk()
+        else:
+            chunk_info = chunk_map[chunk_id]
+            params["s3path"] = chunk_info["s3path"]
+            params["s3offset"] = chunk_info["s3offset"]
+            params["s3size"] = chunk_info["s3size"]
+  
+    if chunk_arr is None:
+        try:
+            async with client.get(req, params=params) as rsp:
+                log.debug("http_get {} status: <{}>".format(req, rsp.status))
+                if rsp.status == 200:
+                    data = await rsp.read()  # read response as bytes
+                    chunk_arr = bytesToArray(data, dt, chunk_shape)  
+                    npoints_read = getNumElements(chunk_arr.shape)
+                    npoints_expected = getNumElements(chunk_shape)
+                    if npoints_read != npoints_expected:
+                        log.error("Expected {} points, but got: {}".format(npoints_expected, npoints_read))
+                        raise HTTPInternalServerError()
+                    chunk_arr = chunk_arr.reshape(chunk_shape)
+                elif rsp.status == 404:
+                    if "s3path" in params:
+                        s3path = params["s3path"]
+                        # external HDF5 file, should exist 
+                        log.warn(f"s3path: {s3path} for S3 range get found")
+                        raise HTTPNotFound()
+                    # no data, return zero array
+                    chunk_arr = defaultChunk()
                 else:
-                    chunk_arr = np.zeros(chunk_shape, dtype=dt, order='C')
-            else:
-                msg = "request to {} failed with code: {}".format(req, rsp.status)
-                log.error(msg)
-                raise HTTPInternalServerError()
+                    msg = "request to {} failed with code: {}".format(req, rsp.status)
+                    log.error(msg)
+                    raise HTTPInternalServerError()
             
-    except ClientError as ce:
-        log.error("Error for http_get({}): {} ".format(req, str(ce)))
-        raise HTTPInternalServerError()
-    except CancelledError as cle:
-        log.warn("CancelledError for http_get({}): {}".format(req, str(cle)))
-        return
+        except ClientError as ce:
+            log.error("Error for http_get({}): {} ".format(req, str(ce)))
+            raise HTTPInternalServerError()
+        except CancelledError as cle:
+            log.warn("CancelledError for http_get({}): {}".format(req, str(cle)))
+            return
     
     log.info("chunk_arr shape: {}".format(chunk_arr.shape))
     log.info("data_sel: {}".format(data_sel))
@@ -188,7 +204,7 @@ point_list: array of points to read
 point_index: index of arr element to update for a given point
 arr: numpy array to store read bytes
 """
-async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_arr):
+async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_arr, chunk_map=None):
     
     msg = "read_point_sel, chunk_id: {}".format(chunk_id)
     log.info(msg)
@@ -217,38 +233,64 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_a
      
     np_arr_rsp = None
     dt = np_arr.dtype
-    try:
-        async with client.post(req, params=params, data=post_data) as rsp:
-            log.debug("http_post {} status: <{}>".format(req, rsp.status))
-            if rsp.status == 200:
-                rsp_data = await rsp.read()  # read response as bytes  
-                # TBD - Does not support VLEN response data       
-                np_arr_rsp = np.fromstring(rsp_data, dtype=dt) 
-                npoints_read = len(np_arr_rsp)
-                if npoints_read != num_points:
-                    msg = "Expected {} points, but got: {}".format(num_points, npoints_read)
+
+    def defaultArray():
+        # no data, return zero array
+        if fill_value:
+            arr = np.empty((num_points,), dtype=dt)
+            arr[...] = fill_value
+        else:
+            arr = np.zeros((num_points,), dtype=dt)
+        return arr
+
+    np_arr_rsp = None
+    if chunk_map:
+        if chunk_id not in chunk_map:
+            log.debug(f"{chunk_id} not found in chunk_map, returning default arr")
+            np_arr_rsp = defaultArray()
+        else:
+            chunk_info = chunk_map[chunk_id]
+            params["s3path"] = chunk_info["s3path"]
+            params["s3offset"] = chunk_info["s3offset"]
+            params["s3size"] = chunk_info["s3size"]
+
+    if np_arr_rsp is None:
+
+        try:
+            async with client.post(req, params=params, data=post_data) as rsp:
+                log.debug("http_post {} status: <{}>".format(req, rsp.status))
+                if rsp.status == 200:
+                    rsp_data = await rsp.read()  # read response as bytes  
+                    # TBD - Does not support VLEN response data       
+                    np_arr_rsp = np.fromstring(rsp_data, dtype=dt) 
+                    npoints_read = len(np_arr_rsp)
+                    if npoints_read != num_points:
+                        msg = "Expected {} points, but got: {}".format(num_points, npoints_read)
+                        log.error(msg)
+                        raise HTTPInternalServerError()
+                elif rsp.status == 404:
+                    if "s3path" in params:
+                        s3path = params["s3path"]
+                        # external HDF5 file, should exist 
+                        log.warn(f"s3path: {s3path} for S3 range get found")
+                        raise HTTPNotFound()
+                    # no data, return zero array
+                    np_arr_rsp = defaultArray()
+                else:
+                    msg = "request to {} failed with code: {}".format(req, rsp.status)
                     log.error(msg)
                     raise HTTPInternalServerError()
-            elif rsp.status == 404:
-                # no data, return zero array
-                if fill_value:
-                    np_arr_rsp = np.empty((num_points,), dtype=dt)
-                    np_arr_rsp[...] = fill_value
-                else:
-                    np_arr_rsp = np.zeros((num_points,), dtype=dt)
-            else:
-                msg = "request to {} failed with code: {}".format(req, rsp.status)
-                log.error(msg)
-                raise HTTPInternalServerError()
             
-    except ClientError as ce:
-        log.error("Error for http_get({}): {} ".format(req, str(ce)))
-        raise HTTPInternalServerError()
-    except CancelledError as cle:
-        log.warn("CancelledError for http_get({}): {}".format(req, str(cle)))
-        return
+        except ClientError as ce:
+            log.error("Error for http_get({}): {} ".format(req, str(ce)))
+            raise HTTPInternalServerError()
+        except CancelledError as cle:
+            log.warn("CancelledError for http_get({}): {}".format(req, str(cle)))
+            return
     
     log.info("got {} points response".format(num_points))
+    log.info(f"np_arr {np_arr}")
+    log.info(f"np_arr_rsp: {np_arr_rsp}")
 
     # Fill in the return array based on passed in index values
     for i in range(num_points):
@@ -449,6 +491,11 @@ async def getPointData(app, dset_id, dset_json, points):
     if num_chunks > max_chunks:
         log.warn(f"Point selection request too large, num_chunks: {num_chunks} max_chunks: {max_chunks}")
         raise HTTPRequestEntityTooLarge(num_chunks, max_chunks)
+
+    # Get information about where chunks are located
+    #   Will be None except for H5D_CHUNKED_REF_INDIRECT type
+    chunk_map = await getChunkInfoMap(app, dset_id, dset_json, list(chunk_dict))
+    log.debug(f"chunkinfo_map: {chunk_map}")
  
     # create array to hold response data
     # TBD: initialize to fill value if not 0
@@ -459,7 +506,7 @@ async def getPointData(app, dset_id, dset_json, points):
         point_list = item["points"]
         point_index = item["indices"]
         task = asyncio.ensure_future(read_point_sel(app, chunk_id, dset_json, 
-            point_list, point_index, arr_rsp))
+            point_list, point_index, arr_rsp, chunk_map=chunk_map))
         tasks.append(task)
     await asyncio.gather(*tasks, loop=loop)
 
@@ -470,7 +517,7 @@ async def getPointData(app, dset_id, dset_json, points):
 """
 Get info for chunk locations (for reference layouts)
 """
-async def  getChunkInfoMap(app, dset_id, dset_json, chunk_ids):
+async def getChunkInfoMap(app, dset_id, dset_json, chunk_ids):
     layout = dset_json["layout"]
     if layout["class"] not in  ('H5D_CONTIGUOUS_REF', 'H5D_CHUNKED_REF', 'H5D_CHUNKED_REF_INDIRECT'):
         log.debug(f"skip getChunkInfoMap for layout class: { layout['class'] }")
