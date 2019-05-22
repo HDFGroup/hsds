@@ -28,6 +28,7 @@ async def GET_Datatype(request):
     """
     log.request(request)
     app = request.app
+    params = request.rel_url.query
     ctype_id = get_obj_id(request)  
     
     if not isValidUuid(ctype_id, obj_class="type"):
@@ -43,6 +44,8 @@ async def GET_Datatype(request):
     resp_json["lastModified"] = ctype_json["lastModified"]
     resp_json["type"] = ctype_json["type"]
     resp_json["attributeCount"] = len(ctype_json["attributes"])
+    if "include_attrs" in params and params["include_attrs"]:
+        resp_json["attributes"] = ctype_json["attributes"]
      
     resp = json_response(resp_json)
     log.response(request, resp=resp)

@@ -33,6 +33,8 @@ async def GET_Group(request):
 
     h5path = None
     getAlias = False
+    include_links = False
+    include_attrs = False
     group_id = request.match_info.get('id')
     if not group_id and "h5path" not in params:
         # no id, or path provided, so bad request
@@ -56,6 +58,11 @@ async def GET_Group(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         log.info("GET_Group, h5path: {}".format(h5path))
+    if "include_links" in params and params["include_links"]:
+        include_links = True
+    if "include_attrs" in params and params["include_attrs"]:
+        include_attrs = True
+    
     
     username, pswd = getUserPasswordFromRequest(request)
     if username is None and app['allow_noauth']:
@@ -92,7 +99,7 @@ async def GET_Group(request):
     await validateAction(app, domain, group_id, username, "read")
         
     # get authoritative state for group from DN (even if it's in the meta_cache).
-    group_json = await getObjectJson(app, group_id, refresh=True)  
+    group_json = await getObjectJson(app, group_id, refresh=True, include_links=include_links, include_attrs=include_attrs)  
 
     group_json["domain"] = domain
 

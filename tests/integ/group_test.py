@@ -104,6 +104,10 @@ class GroupTest(unittest.TestCase):
         self.assertEqual(rspJson["linkCount"], 2)
         self.assertEqual(rspJson["root"], root_uuid)
         self.assertEqual(rspJson["domain"], domain)
+        # attribute should only be here if include_attrs is used
+        self.assertFalse("attributes" in rspJson)
+        # links should onnly be here if include_links is used
+        self.assertFalse("links" in rspJson)
         now = time.time()
         # the object shouldn't have been just created or updated
         self.assertTrue(rspJson["created"] < now - 10)
@@ -117,6 +121,26 @@ class GroupTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("alias" in rspJson)
         self.assertEqual(rspJson["alias"], ['/'])
+
+        # do a get including the links
+        params = {"include_links": 1}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("links" in rspJson)
+        links = rspJson["links"]
+        self.assertTrue("g1" in links)
+        self.assertTrue("g2" in links)
+
+        # do a get including attributes
+        params = {"include_attrs": 1}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("attributes" in rspJson)
+        attrs = rspJson["attributes"]
+        self.assertTrue("attr1" in attrs)
+        self.assertTrue("attr2" in attrs)
 
         # verify trying to read this group from a different domain fails
         headers = helper.getRequestHeaders(domain=self.base_domain)

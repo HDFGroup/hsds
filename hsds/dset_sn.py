@@ -197,6 +197,7 @@ async def GET_Dataset(request):
     log.request(request)
     app = request.app 
     params = request.rel_url.query
+    include_attrs = False
 
     h5path = None
     getAlias = False
@@ -205,6 +206,8 @@ async def GET_Dataset(request):
         msg = "Missing dataset id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    if "include_attrs" in params and params["include_attrs"]:
+        include_attrs = True
 
     if dset_id:
         if not isValidUuid(dset_id, "Dataset"):
@@ -266,7 +269,7 @@ async def GET_Dataset(request):
         log.info("get dataset_id: {} from h5path: {}".format(dset_id, h5path))
     
     # get authoritative state for dataset from DN (even if it's in the meta_cache).
-    dset_json = await getObjectJson(app, dset_id, refresh=True)  
+    dset_json = await getObjectJson(app, dset_id, refresh=True, include_attrs=include_attrs)  
 
     # check that we have permissions to read the object
     await validateAction(app, domain, dset_id, username, "read")
@@ -298,6 +301,8 @@ async def GET_Dataset(request):
         if h5path:
             alias.append(h5path)
         resp_json["alias"] = alias
+    if include_attrs:
+        resp_json["attributes"] = dset_json["attributes"]
     
     hrefs = []
     dset_uri = '/datasets/'+dset_id

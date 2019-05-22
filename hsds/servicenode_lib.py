@@ -114,8 +114,8 @@ async def validateAction(app, domain, obj_id, username, action):
         aclCheck(domain_json, action, username) 
 
 
-async def getObjectJson(app, obj_id, refresh=False):
-    """ Return top-level json (i.e. excluding attributes or links) for a given obj_id.
+async def getObjectJson(app, obj_id, refresh=False, include_links=False, include_attrs=False):
+    """ Return top-level json (i.e. excluding attributes or links by default) for a given obj_id.
     If refresh is False, any data present in the meta_cache will be returned.  If not
     the DN will be queries, and any resultant data added to the meta_cache.  
     Note: meta_cache values may be stale, but use of immutable data (e.g. type of a dataset)
@@ -123,6 +123,9 @@ async def getObjectJson(app, obj_id, refresh=False):
     """
     meta_cache = app['meta_cache']
     obj_json = None
+    if include_links or include_attrs:
+        # links and attributes are subject to change, so always refresh
+        refresh = True
     log.info("getObjectJson {}".format(obj_id))
     if obj_id in meta_cache and not refresh:
         log.debug("found {} in meta_cache".format(obj_id))
@@ -130,8 +133,13 @@ async def getObjectJson(app, obj_id, refresh=False):
     else:
         req = getDataNodeUrl(app, obj_id)
         collection =  getCollectionForId(obj_id) 
+        params = {}
+        if include_links:
+            params["include_links"] = 1
+        if include_attrs:
+            params["include_attrs"] = 1
         req += '/' + collection + '/' + obj_id
-        obj_json = await http_get(app, req)  # throws 404 if doesn't exist
+        obj_json = await http_get(app, req, params=params)  # throws 404 if doesn't exist
         meta_cache[obj_id] = obj_json
     if obj_json is None:
         msg = "Object: {} not found".format(obj_id)

@@ -282,6 +282,26 @@ class DatatypeTest(unittest.TestCase):
         rsp = requests.put(req, data=json.dumps(attr_payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # created
 
+        # read back the obj
+        req = self.endpoint + '/datatypes/' + ctype_id 
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("id" in rspJson)
+        self.assertEqual(rspJson["id"], ctype_id)
+        self.assertFalse("attributes" in rspJson)
+
+        # read back the obj with attributes
+        params = {"include_attrs": 1}
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("id" in rspJson)
+        self.assertEqual(rspJson["id"], ctype_id)
+        self.assertTrue("attributes" in rspJson)
+        attrs = rspJson["attributes"]
+        self.assertTrue("attr" in attrs)
+
     def testPostWithLink(self):
         # test POST with link
         print("testPutAttributeDatatype", self.base_domain)

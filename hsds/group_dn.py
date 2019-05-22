@@ -28,6 +28,7 @@ async def GET_Group(request):
     """
     log.request(request)
     app = request.app
+    params = request.rel_url.query
     group_id = get_obj_id(request)
     log.info("GET group: {}".format(group_id))
     
@@ -44,6 +45,11 @@ async def GET_Group(request):
     resp_json["lastModified"] = group_json["lastModified"]
     resp_json["linkCount"] = len(group_json["links"])
     resp_json["attributeCount"] = len(group_json["attributes"])
+
+    if "include_links" in params and params["include_links"]:
+        resp_json["links"] = group_json["links"]
+    if "include_attrs" in params and params["include_attrs"]:
+        resp_json["attributes"] = group_json["attributes"]
      
     resp = json_response(resp_json)
     log.response(request, resp=resp)

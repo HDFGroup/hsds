@@ -28,6 +28,7 @@ async def GET_Dataset(request):
     """
     log.request(request)
     app = request.app
+    params = request.rel_url.query
     dset_id = get_obj_id(request)
     
     if not isValidUuid(dset_id, obj_class="dataset"):
@@ -48,6 +49,9 @@ async def GET_Dataset(request):
         resp_json["creationProperties"] = dset_json["creationProperties"]
     if "layout" in dset_json:
         resp_json["layout"] = dset_json["layout"]
+
+    if "include_attrs" in params and params["include_attrs"]:
+        resp_json["attributes"] = dset_json["attributes"]
      
     resp = json_response(resp_json)
     log.response(request, resp=resp)

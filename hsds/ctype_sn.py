@@ -31,6 +31,7 @@ async def GET_Datatype(request):
     log.request(request)
     app = request.app 
     params = request.rel_url.query
+    include_attrs = False
 
     h5path = None
     getAlias = False
@@ -39,6 +40,8 @@ async def GET_Datatype(request):
         msg = "Missing type id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    if "include_attrs" in params and params["include_attrs"]:
+        include_attrs = True
 
     if ctype_id:
         if not isValidUuid(ctype_id, "Type"):
@@ -98,7 +101,7 @@ async def GET_Datatype(request):
     await validateAction(app, domain, ctype_id, username, "read")
 
     # get authoritative state for group from DN (even if it's in the meta_cache).
-    type_json = await getObjectJson(app, ctype_id, refresh=True)  
+    type_json = await getObjectJson(app, ctype_id, refresh=True, include_attrs=include_attrs)  
     type_json["domain"] = domain
 
     if getAlias:

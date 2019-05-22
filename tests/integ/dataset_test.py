@@ -247,6 +247,9 @@ class DatasetTest(unittest.TestCase):
         self.assertFalse("num_chunks" in rspJson)
         self.assertFalse("allocated_size" in rspJson)
 
+        # attribute should only be here if include_attrs is used
+        self.assertFalse("attributes" in rspJson)
+
         now = time.time()
         # the object shouldn't have been just created or updated
         self.assertTrue(rspJson["created"] < now - 10)
@@ -260,6 +263,17 @@ class DatasetTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("alias" in rspJson)
         self.assertEqual(rspJson["alias"], ['/g1/g1.1/dset1.1.1'])
+
+        # request attributes be included
+        params = {"include_attrs": 1}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("attributes" in rspJson)
+        attrs = rspJson["attributes"]
+        self.assertTrue("attr1" in attrs)
+        self.assertTrue("attr2" in attrs)
+
 
     def testGetByPath(self):
         domain = helper.getTestDomain("tall.h5")
