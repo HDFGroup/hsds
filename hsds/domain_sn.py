@@ -27,36 +27,9 @@ from util.authUtil import validateUserPassword, getAclKeys
 from util.domainUtil import getParentDomain, getDomainFromRequest
 from util.s3Util import getS3Keys
 from servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath, getRootInfo
-from basenode import getAsyncNodeUrl, getVersion
+from basenode import getVersion
 import hsds_logger as log
 import config
-
-
-async def get_toplevel_domains(app):
-    """ Get list of top level domains """
-    an_url = getAsyncNodeUrl(app)
-    req = an_url + "/domains"
-    params = {"domain": "/"}
-    log.info("ASync GET TopLevelDomains")
-    try:
-        rsp_json = await http_get(app, req, params=params)
-    except ClientResponseError as ce:
-        if ce.code == 501:
-            log.warn("sqlite db not available")
-            return None
-        if ce.code == 404:
-            # sqlite db not sync'd?
-            log.warn("404 repsonse for get_toplevel_domains")
-            return None
-        else:
-            log.error("Async error: {}".format(ce))
-            raise HTTPInternalServerError()
-    if "domains" not in rsp_json:
-        log.error("domains not found in get_toplevel_domain request")
-        raise HTTPInternalServerError()
-
-    return rsp_json["domains"]
-
 
 
 async def get_collections(app, root_id):
