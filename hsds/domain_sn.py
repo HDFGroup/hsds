@@ -83,6 +83,46 @@ async def get_collections(app, root_id):
     result["datasets"] = datasets
     result["datatypes"] = datatypes
     return result
+
+async def getDomainObjects(app, root_id, include_attrs=False):
+    """ Iterate through all objects in heirarchy and add to obj_dict keyed by obj id
+    """   
+
+    log.info(f"getDomainObjects for root: {root_id}")
+    lookup_ids = set()
+    lookup_ids.add(root_id)
+    obj_dict = {}
+
+    while lookup_ids:
+        obj_id = lookup_ids.pop()
+        obj_json = await getObjectJson(app, obj_id, include_links=True, include_attrs=include_attrs)  
+        log.debug(f"getDomainObjects for {obj_id}: {obj_json}")
+
+        # including links, so don't need link count
+        if "link_count" in obj_json:
+            del obj_json["link_count"]
+        obj_dict[obj_id] = obj_json
+        if include_attrs:
+            del obj_json["attributeCount"]
+
+        # if this is a group, iterate through all the hard links and 
+        # add to the lookup ids set
+        if getCollectionForId(obj_id) == "groups":
+            links = obj_json["links"]
+            log.debug(f"getDomainObjects links: {links}")
+            for title in links:
+                log.debug(f"getDomainObjects - got link: {title}")
+                link_obj = links[title]
+                if link_obj["class"] != 'H5L_TYPE_HARD':
+                    continue
+                link_id = link_obj["id"]
+                if link_id not in obj_dict:
+                    # haven't seen this object yet, get obj json
+                    log.debug(f"getDomainObjects - adding link_id: {link_id}")
+                    lookup_ids.add(link_id)
+             
+    log.info(f"getDomainObjects returning: {len(obj_dict)} objects")
+    return obj_dict
     
 def getIdList(objs, marker=None, limit=None):
     """ takes a map of ids to objs and returns ordered list
@@ -351,9 +391,18 @@ async def GET_Domain(request):
         resp = await jsonResponse(request, obj_json)
         log.response(request, resp=resp)
         return resp
-    
+
     # return just the keys as per the REST API
     rsp_json = await get_domain_response(app, domain_json, verbose=verbose)
+
+    # include domain objects if requested
+    if "getobjs" in params and params["getobjs"] and "root" in domain_json:
+        root_id = domain_json["root"]
+        include_attrs = False
+        if "include_attrs" in params and params["include_attrs"]:
+            include_attrs = True
+        domain_objs = await getDomainObjects(app, root_id, include_attrs=include_attrs)
+        rsp_json["domain_objs"] = domain_objs
      
     hrefs = []
     hrefs.append({'rel': 'self', 'href': getHref(request, '/')})

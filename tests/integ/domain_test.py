@@ -64,7 +64,6 @@ class DomainTest(unittest.TestCase):
             return  # abort rest of test
         self.assertEqual(rsp.headers['content-type'], 'application/json; charset=utf-8')
         rspJson = json.loads(rsp.text)
-
          
         for name in ("lastModified", "created", "hrefs", "root", "owner", "class"):
             self.assertTrue(name in rspJson)
@@ -76,9 +75,52 @@ class DomainTest(unittest.TestCase):
         self.assertTrue(rspJson["owner"])
         self.assertEqual(rspJson["class"], "domain")
         self.assertFalse("num_groups" in rspJson)  # should only show up with the verbose param
-        
+        self.assertFalse("domain_objs" in rspJson) # should only show if getobjs query param is used
+         
         root_uuid = rspJson["root"]
         helper.validateId(root_uuid)
+
+        # get a dict of all objects in the domain
+        params = {"getobjs": 1}
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("domain_objs" in rspJson)
+        domain_objs = rspJson["domain_objs"]
+        self.assertEqual(len(domain_objs), 10)
+        attr_count = 0
+        for objid in domain_objs:
+            obj_json = domain_objs[objid]
+            #print(f"{objid}: {obj_json}")
+            #print(" ")
+            self.assertTrue("id" in obj_json)
+            self.assertTrue("attributeCount" in obj_json)
+            attr_count += obj_json["attributeCount"]
+            self.assertFalse("attributes" in obj_json)
+
+        self.assertEqual(attr_count, 4)
+
+        # get a dict of all objects in the domain including any attributes
+        params["include_attrs"] = 1
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("domain_objs" in rspJson)
+        domain_objs = rspJson["domain_objs"]
+        self.assertEqual(len(domain_objs), 10)
+        attr_count = 0
+        for objid in domain_objs:
+            obj_json = domain_objs[objid]
+            #print(f"{objid}: {obj_json}")
+            #print(" ")
+            self.assertFalse("attributeCount" in obj_json)
+            self.assertTrue("attributes" in obj_json)
+            attributes = obj_json["attributes"]
+            for attr_name in attributes:
+                # only the names "attr1" and "attr2" are used in this domain
+                self.assertTrue(attr_name in ("attr1", "attr2"))
+                attr_count += 1
+        self.assertEqual(attr_count, 4)
 
         # verify that passing domain as query string works as well
         del headers["X-Hdf-domain"]
@@ -105,6 +147,36 @@ class DomainTest(unittest.TestCase):
 
         rsp = requests.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 400)
+
+    def testGetGH5Domain(self):
+        domain = "/home/john/BZY00136_20100304_140839_48.SC2_20100304_140839_483.gh5"
+        print("testGetDomain", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        
+        req = helper.getEndpoint() + '/'
+         
+        # get a dict of all objects in the domain
+        params = {"getobjs": 1}
+        params["include_attrs"] = 1
+
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+        print("bytes returned:", len(rsp.text))
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("domain_objs" in rspJson)
+        domain_objs = rspJson["domain_objs"]
+        self.assertEqual(len(domain_objs), 266)
+        attr_count = 0
+        for objid in domain_objs:
+            obj_json = domain_objs[objid]
+            #print(f"{objid}: {obj_json}")
+            #print(" ")
+            if "attributeCount" in obj_json:
+                attr_count += obj_json["attributeCount"]
+            else:
+                attr_count += len(obj_json["attributes"])
+
+        self.assertEqual(attr_count, 2257)
 
     def testGetByPath(self):
         domain = helper.getTestDomain("tall.h5")
