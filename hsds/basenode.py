@@ -33,7 +33,7 @@ from util.idUtil import getHeadNodeS3Key
 from util.authUtil import getUserPasswordFromRequest, validateUserPassword
 import hsds_logger as log
 
-HSDS_VERSION = "0.3"
+HSDS_VERSION = "0.4"
 
 def getVersion():
     return HSDS_VERSION
