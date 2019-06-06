@@ -148,36 +148,6 @@ class DomainTest(unittest.TestCase):
         rsp = requests.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 400)
 
-    def testGetGH5Domain(self):
-        domain = "/home/john/BZY00136_20100304_140839_48.SC2_20100304_140839_483.gh5"
-        print("testGetDomain", domain)
-        headers = helper.getRequestHeaders(domain=domain)
-        
-        req = helper.getEndpoint() + '/'
-         
-        # get a dict of all objects in the domain
-        params = {"getobjs": 1}
-        params["include_attrs"] = 1
-
-        rsp = requests.get(req, headers=headers, params=params)
-        self.assertEqual(rsp.status_code, 200)
-        print("bytes returned:", len(rsp.text))
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("domain_objs" in rspJson)
-        domain_objs = rspJson["domain_objs"]
-        self.assertEqual(len(domain_objs), 266)
-        attr_count = 0
-        for objid in domain_objs:
-            obj_json = domain_objs[objid]
-            #print(f"{objid}: {obj_json}")
-            #print(" ")
-            if "attributeCount" in obj_json:
-                attr_count += obj_json["attributeCount"]
-            else:
-                attr_count += len(obj_json["attributes"])
-
-        self.assertEqual(attr_count, 2257)
-
     def testGetByPath(self):
         domain = helper.getTestDomain("tall.h5")
         print("testGetByPath", domain)

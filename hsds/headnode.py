@@ -27,8 +27,8 @@ import aiobotocore
 import config
 from util.timeUtil import unixTimeToUTC, elapsedTime
 from util.httpUtil import http_get, getUrl
-from util.s3Util import  getS3JSONObj, putS3JSONObj, isS3Obj, getInitialS3Stats, getS3ObjStats
-from util.idUtil import  createNodeId, getHeadNodeS3Key
+from util.s3Util import getInitialS3Stats
+from util.idUtil import  createNodeId
 import hsds_logger as log
 
 NODE_STAT_KEYS = ("cpu", "diskio", "memory", "log_stats", "disk", "netio", 
@@ -39,12 +39,6 @@ async def healthCheck(app):
     If node doesn't respond, free up the node slot (the node can re-register if it comes back)'"""
 
     app["last_health_check"] = int(time.time())
-
-    # update/initialize root object before starting node updates
-    headnode_key = getHeadNodeS3Key()
-    log.info("headnode S3 key: {}".format(headnode_key))
-    headnode_obj_found = False
-    head_url = getUrl(app["head_host"], app["head_port"])  
     
     nodes = app["nodes"]
     while True:
@@ -55,49 +49,6 @@ async def healthCheck(app):
         now = int(time.time())
         log.info("health check {}".format(unixTimeToUTC(now)))
         
-        if not headnode_obj_found:
-            log.info("checking for headnode_key: {}".format(headnode_key))
-            if await isS3Obj(app, headnode_key):
-                headnode_obj_found = True
-                headnode_stats = await getS3ObjStats(app, headnode_key)
-                log.info("headnode_stats: {}".format(headnode_stats))
-            else:
-                # first time hsds has run with this bucket name?
-                log.warn("need to create headnode obj")
-                head_state = {  }
-                head_state["created"] = int(time.time())
-                head_state["id"] = app["id"]
-                head_state["last_health_check"] = app["last_health_check"]
-                head_state["head_url"] = head_url
-                log.info("write head_state to S3: {}".format(head_state))
-                try:
-                    await putS3JSONObj(app, headnode_key, head_state)
-                except HTTPInternalServerError as hpe:
-                    # Might be bad AWS config, transient S3 error, or minio not initialized yet...
-                    log.warn("HTTPInternalServerError writing head_state: {}: {}".format(headnode_key, str(hpe)))
-            continue # start health check on next iteration
-        
-        head_state = await getS3JSONObj(app, headnode_key)
-        log.info("head_state: {}".format(head_state))
-        log.info("elapsed time since last health check: {}".format(elapsedTime(head_state["last_health_check"])))
-        if head_state['id'] != app['id']:
-            log.warn("mis-match bucket head id: {}".format(head_state["id"]))
-            if now - head_state["last_health_check"] < sleep_secs * 4:
-                log.warn("other headnode may be active")
-                continue  # skip node checks and loop around again
-            else:
-                log.warn("other headnode is not active, making this headnode leader")
-                head_state['id'] = app['id']
-        else:
-            log.info("head_state id matches S3 Object")
-
-        head_state["last_health_check"] = now
-        app["last_health_check"] = now
-        head_state["head_url"] = head_url
-        log.info("write head_state to S3: {}".format(head_state))
-        await putS3JSONObj(app, headnode_key, head_state)
-         
-        log.info("putS3JSONObj complete")
         fail_count = 0
         HEALTH_CHECK_RETRY_COUNT = 1 # times to try before calling a node dead
         for node in nodes:         
@@ -395,10 +346,8 @@ async def init(loop):
     app["target_dn_count"] = int(config.get("target_dn_count"))
     log.info("target_sn_count: {}".format(app["target_sn_count"]))
     log.info("target_dn_count: {}".format(app["target_dn_count"]))
-    bucket_name = config.get("sys_bucket_name")
-    if not bucket_name:
-        # use a combine data/sys bucket
-        bucket_name = config.get("bucket_name")
+ 
+    bucket_name = config.get("bucket_name")
     if not bucket_name:
         log.error("BUCKET_NAME environment variable not set")
         sys.exit()

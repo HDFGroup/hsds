@@ -270,10 +270,6 @@ def getCollectionForId(obj_id):
         raise ValueError("not a collection id")
     return collection
 
-
-def getHeadNodeS3Key():
-    return "headnode"
-
 def validateUuid(id, obj_class=None):
     if not isinstance(id, str):
         raise ValueError("Expected string type")

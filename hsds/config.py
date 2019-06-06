@@ -26,7 +26,6 @@ cfg = {
     'aws_dynamodb_users_table': '',
     'password_salt': '',
     'bucket_name': 'hdfgroup_hsdsdev',
-    'sys_bucket_name': '',
     'head_host': 'localhost',
     'head_port': 5100,
     'an_port': 6100,

@@ -28,8 +28,7 @@ from aiobotocore import get_session
 import config
 from util.httpUtil import http_get, http_post, jsonResponse
 from util.idUtil import createNodeId
-from util.s3Util import getS3JSONObj, getInitialS3Stats 
-from util.idUtil import getHeadNodeS3Key
+from util.s3Util import getInitialS3Stats 
 from util.authUtil import getUserPasswordFromRequest, validateUserPassword
 import hsds_logger as log
 
@@ -38,38 +37,16 @@ HSDS_VERSION = "0.4"
 def getVersion():
     return HSDS_VERSION
 
-async def getHeadUrl(app):
+def getHeadUrl(app):
     head_url = None
     if head_url in app:
         head_url = app["head_url"]
     elif config.get("head_endpoint"):
         head_url = config.get("head_endpoint")
     else:
-        # pull url form headnode object in bucket
-        headnode_key = getHeadNodeS3Key()
-        head_state = None
-        # With Minio, reading from S3 may trigger an error if the minio container
-        # is initializing.  Cycle around till we get a valid response.
-        while not head_state:
-            try:
-                head_state = await getS3JSONObj(app, headnode_key)
-            except ClientError as ce:
-                log.warn("ClientError: {} for health check".format(str(ce)))
-                await asyncio.sleep(1)
-            except HTTPInternalServerError as he:
-                log.warn(f"HTTPInternalServiceError <{he}> for health check")
-                await asyncio.sleep(1)
-            except HTTPNotFound:
-                log.warn("headnode not found, sleeping")
-                await asyncio.sleep(1)
-
-        if "head_url" not in head_state:
-            msg = "head_url not found in head_state"
-            log.error(msg)
-        else:
-            head_url = head_state["head_url"]
-            app["head_url"] = head_url  # so we don't need to check S3 next time
-    log.debug("head_url: {}".format(head_url))
+        head_port = config.get("head_port")
+        head_url = f"http://hsds_head:{head_port}"
+    log.debug(f"head_url: {head_url}")
     return head_url
 
 def getAsyncNodeUrl(app):
@@ -88,7 +65,7 @@ def getAsyncNodeUrl(app):
 async def register(app):
     """ register node with headnode
     OK to call idempotently (e.g. if the headnode seems to have forgotten us)"""
-    head_url = await getHeadUrl(app)
+    head_url = getHeadUrl(app)
     if not head_url:
         log.warn("head_url is not set, can not register yet")
         return
@@ -115,7 +92,7 @@ async def healthCheck(app):
     calls headnode to verify vitals about this node (otherwise)"""
     log.info("health check start")
     sleep_secs = config.get("node_sleep_time")
-    head_url = await getHeadUrl(app)
+    head_url = getHeadUrl(app)
     while True:
         if app["node_state"] == "INITIALIZING" or (app["node_state"] == "WAITING" and app["node_number"] < 0):
             await register(app)
