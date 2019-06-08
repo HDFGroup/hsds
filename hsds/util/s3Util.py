@@ -156,12 +156,13 @@ def s3_stats_increment(app, counter, inc=1):
         
     s3_stats[counter] += inc
  
-async def getS3JSONObj(app, key):
+async def getS3JSONObj(app, key, bucket=None):
     """ Get S3 object identified by key and read as JSON
     """
     
     client = getS3Client(app)
-    bucket = app['bucket_name']
+    if not bucket:
+        bucket = app['bucket_name']
     if key[0] == '/':
         key = key[1:]  # no leading slash
     log.info("getS3JSONObj({})".format(key))
@@ -256,12 +257,13 @@ async def getS3Bytes(app, key, deflate_level=None, s3offset=0, s3size=None, buck
         
     return data
 
-async def putS3JSONObj(app, key, json_obj):
+async def putS3JSONObj(app, key, json_obj, bucket=None):
     """ Store JSON data as S3 object with given key
     """
    
     client = getS3Client(app)
-    bucket = app['bucket_name']
+    if not bucket:
+        bucket = app['bucket_name']
     if key[0] == '/':
         key = key[1:]  # no leading slash
     log.info("putS3JSONObj({})".format(key))
@@ -282,12 +284,13 @@ async def putS3JSONObj(app, key, json_obj):
     log.debug("putS3JSONObj complete, s3_rsp: {}".format(s3_rsp))
     return s3_rsp
 
-async def putS3Bytes(app, key, data, deflate_level=None):
+async def putS3Bytes(app, key, data, deflate_level=None, bucket=None):
     """ Store byte string as S3 object with given key
     """
     
     client = getS3Client(app)
-    bucket = app['bucket_name']
+    if not bucket:
+        bucket = app['bucket_name']
     if key[0] == '/':
         key = key[1:]  # no leading slash
     log.info("putS3Bytes({}), {} bytes".format(key, len(data)))
@@ -321,12 +324,13 @@ async def putS3Bytes(app, key, data, deflate_level=None):
     #       'HTTPStatusCode': 200, 'RequestId': '1529F570A809AD26'}}
     return s3_rsp
 
-async def deleteS3Obj(app, key):
+async def deleteS3Obj(app, key, bucket=None):
     """ Delete S3 object identfied by given key
     """
     
     client = getS3Client(app)
-    bucket = app['bucket_name']
+    if not bucket:
+        bucket = app['bucket_name']
     if key[0] == '/':
         key = key[1:]  # no leading slash
     log.info("deleteS3Obj({})".format(key))
@@ -347,12 +351,13 @@ async def deleteS3Obj(app, key):
         raise HTTPInternalServerError()
     log.debug("deleteS3Obj complete")
 
-async def getS3ObjStats(app, key):
+async def getS3ObjStats(app, key, bucket=None):
     """ Return etag, size, and last modified time for given object
     """
     
     client = getS3Client(app)
-    bucket = app['bucket_name']
+    if not bucket:
+        bucket = app['bucket_name']
     stats = {}
     
     if key[0] == '/':
@@ -480,10 +485,11 @@ def getPageItems(response, items, include_stats=False):
 # end getPageItems
     
 
-async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=False, callback=None):
+async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=False, callback=None, bucket=None):
     # return keys matching the arguments
     s3_client = getS3Client(app)
-    bucket_name = app['bucket_name']
+    if not bucket:
+        bucket = app['bucket_name']
     log.info(f"getS3Keys('{prefix}','{deliminator}','{suffix}', include_stats={include_stats}")
     paginator = s3_client.get_paginator('list_objects')
     if include_stats:
@@ -494,7 +500,7 @@ async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=Fal
         key_names = []
 
     async for page in paginator.paginate(
-        PaginationConfig={'PageSize': 1000}, Bucket=bucket_name,  Prefix=prefix, Delimiter=deliminator):
+        PaginationConfig={'PageSize': 1000}, Bucket=bucket,  Prefix=prefix, Delimiter=deliminator):
         assert not asyncio.iscoroutine(page)
         #log.info(f"got page: {page}")
         getPageItems(page, key_names, include_stats=include_stats)

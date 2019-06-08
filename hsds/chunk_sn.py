@@ -24,7 +24,7 @@ from aiohttp.web import StreamResponse
 
 from util.httpUtil import  getHref, getAcceptType, get_http_client, http_put, request_read, jsonResponse
 from util.idUtil import   isValidUuid, getDataNodeUrl
-from util.domainUtil import  getDomainFromRequest, isValidDomain
+from util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain
 from util.hdf5dtype import getItemSize, createDataType
 from util.dsetUtil import getSliceQueryParam, setSliceQueryParam, getFillValue, isExtensible 
 from util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout, getDeflateLevel
@@ -41,41 +41,43 @@ import hsds_logger as log
 """
 Write data to given chunk_id.  Pass in type, dims, and selection area.
 """
-async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level, arr):
+async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level, arr, bucket=None):
     """ write the chunk selection to the DN
     chunk_id: id of chunk to write to
     chunk_sel: chunk-relative selection to write to
     np_arr: numpy array of data to be written
     """
-    log.info("write_chunk_hyperslab, chunk_id:{}, slices:{}".format(chunk_id, slices))
+    log.info(f"write_chunk_hyperslab, chunk_id:{chunk_id}, slices:{slices}")
     if deflate_level is not None:
-        log.info("deflate_level: {}".format(deflate_level))
+        log.info("deflate_level: {deflate_level}")
     if "layout" not in dset_json:
-        log.error("No layout found in dset_json: {}".format(dset_json))
+        log.error(f"No layout found in dset_json: {dset_json}")
         raise HTTPInternalServerError()
      
     if "type" not in dset_json:
-        log.error("No type found in dset_json: {}".format(dset_json))
+        log.error(f"No type found in dset_json: {dset_json}")
         raise HTTPInternalServerError()
     
     layout = getChunkLayout(dset_json)
 
     chunk_sel = getChunkCoverage(chunk_id, slices, layout)
-    log.debug("chunk_sel: {}".format(chunk_sel))
+    log.debug(f"chunk_sel: {chunk_sel}")
     data_sel = getDataCoverage(chunk_id, slices, layout)
-    log.debug("data_sel: {}".format(data_sel))
-    log.debug("arr.shape: {}".format(arr.shape))
+    log.debug(f"data_sel: {data_sel}")
+    log.debug(f"arr.shape: {arr.shape}")
     arr_chunk = arr[data_sel]
     req = getDataNodeUrl(app, chunk_id)
     req += "/chunks/" + chunk_id  
 
-    log.debug("PUT chunk req: " + req)
+    log.debug(f"PUT chunk req: {req}")
     client = get_http_client(app)
     data = arrayToBytes(arr_chunk)  
     # pass itemsize, type, dimensions, and selection as query params
     params = {}
     params["dset"] = json.dumps(dset_json)
-    setSliceQueryParam(params, chunk_sel)   
+    setSliceQueryParam(params, chunk_sel)  
+    if bucket:
+        params["bucket"] = bucket 
 
     try:
         async with client.put(req, data=data, params=params) as rsp:
@@ -90,16 +92,16 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level,
                 raise HTTPInternalServerError()
                 
     except ClientError as ce:
-        log.error("Error for http_post({}): {} ".format(req, str(ce)))
+        log.error(f"Error for http_post({req}): {ce} ")
         raise HTTPInternalServerError()
     except CancelledError as cle:
-        log.warn("CancelledError for http_post({}): {}".format(req, str(cle)))
+        log.warn(f"CancelledError for http_post({req}): {cle}")
 
 
 """
 Read data from given chunk_id.  Pass in type, dims, and selection area.
 """ 
-async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_map=None):
+async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_map=None, bucket=None):
     """ read the chunk selection from the DN
     chunk_id: id of chunk to write to
     chunk_sel: chunk-relative selection to read from
@@ -107,7 +109,7 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_m
     chunk_offset: location of chunk with the s3 object
     chunk_offset: size of chunk within the s3 object (or 0 if the entire object)
     """
-    msg = "read_chunk_hyperslab, chunk_id:{}, slices: {}".format(chunk_id, slices)
+    msg = f"read_chunk_hyperslab, chunk_id: {chunk_id}, slices: {slices}"
     log.info(msg)
     if chunk_map and chunk_id not in chunk_map:
         log.warn(f"expected to find {chunk_id} in chunk_map")
@@ -118,7 +120,7 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_m
     client = get_http_client(app)
 
     if "type" not in dset_json:
-        log.error("No type found in dset_json: {}".format(dset_json))
+        log.error(f"No type found in dset_json: {dset_json}")
         raise HTTPInternalServerError()
     
     layout = getChunkLayout(dset_json)
@@ -132,7 +134,7 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_m
     fill_value = getFillValue(dset_json) 
      
     chunk_shape = getSelectionShape(chunk_sel)
-    log.debug("chunk_shape: {}".format(chunk_shape))
+    log.debug(f"chunk_shape: {chunk_shape}")
     dt = np_arr.dtype
 
     def defaultChunk():
@@ -155,18 +157,21 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_m
             params["s3path"] = chunk_info["s3path"]
             params["s3offset"] = chunk_info["s3offset"]
             params["s3size"] = chunk_info["s3size"]
+    elif bucket:
+        # bucket only applied when s3path is not defined
+        params["bucket"] = bucket
   
     if chunk_arr is None:
         try:
             async with client.get(req, params=params) as rsp:
-                log.debug("http_get {} status: <{}>".format(req, rsp.status))
+                log.debug(f"http_get {req} status: <{rsp.status}>")
                 if rsp.status == 200:
                     data = await rsp.read()  # read response as bytes
                     chunk_arr = bytesToArray(data, dt, chunk_shape)  
                     npoints_read = getNumElements(chunk_arr.shape)
                     npoints_expected = getNumElements(chunk_shape)
                     if npoints_read != npoints_expected:
-                        log.error("Expected {} points, but got: {}".format(npoints_expected, npoints_read))
+                        log.error(f"Expected {npoints_expected} points, but got: {npoints_read}")
                         raise HTTPInternalServerError()
                     chunk_arr = chunk_arr.reshape(chunk_shape)
                 elif rsp.status == 404:
@@ -178,19 +183,19 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_m
                     # no data, return zero array
                     chunk_arr = defaultChunk()
                 else:
-                    msg = "request to {} failed with code: {}".format(req, rsp.status)
+                    msg = f"request to {req} failed with code: {rsp.status}"
                     log.error(msg)
                     raise HTTPInternalServerError()
             
         except ClientError as ce:
-            log.error("Error for http_get({}): {} ".format(req, str(ce)))
+            log.error(f"Error for http_get({req}): {ce} ")
             raise HTTPInternalServerError()
         except CancelledError as cle:
-            log.warn("CancelledError for http_get({}): {}".format(req, str(cle)))
+            log.warn(f"CancelledError for http_get({req}): {cle}")
             return
     
-    log.info("chunk_arr shape: {}".format(chunk_arr.shape))
-    log.info("data_sel: {}".format(data_sel))
+    log.info(f"chunk_arr shape: {chunk_arr.shape}")
+    log.info(f"data_sel: {data_sel}")
 
     np_arr[data_sel] = chunk_arr
 
@@ -204,19 +209,19 @@ point_list: array of points to read
 point_index: index of arr element to update for a given point
 arr: numpy array to store read bytes
 """
-async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_arr, chunk_map=None):
+async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_arr, chunk_map=None, bucket=None):
     
-    msg = "read_point_sel, chunk_id: {}".format(chunk_id)
+    msg = f"read_point_sel, chunk_id: {chunk_id}"
     log.info(msg)
 
     req = getDataNodeUrl(app, chunk_id)
     req += "/chunks/" + chunk_id 
-    log.debug("POST chunk req: " + req)
+    log.debug(f"POST chunk req: {req}")
     client = get_http_client(app)
     point_dt = np.dtype('u8')  # use unsigned long for point index
 
     if "type" not in dset_json:
-        log.error("No type found in dset_json: {}".format(dset_json))
+        log.error(f"No type found in dset_json: {dset_json}")
         raise HTTPInternalServerError()
      
     num_points = len(point_list)
@@ -253,19 +258,22 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_a
             params["s3path"] = chunk_info["s3path"]
             params["s3offset"] = chunk_info["s3offset"]
             params["s3size"] = chunk_info["s3size"]
+    elif bucket:
+        # bucket only applies if s3path not set
+        params["bucket"] = bucket
 
     if np_arr_rsp is None:
 
         try:
             async with client.post(req, params=params, data=post_data) as rsp:
-                log.debug("http_post {} status: <{}>".format(req, rsp.status))
+                log.debug(f"http_post {req} status: <{rsp.status}>")
                 if rsp.status == 200:
                     rsp_data = await rsp.read()  # read response as bytes  
                     # TBD - Does not support VLEN response data       
                     np_arr_rsp = np.fromstring(rsp_data, dtype=dt) 
                     npoints_read = len(np_arr_rsp)
                     if npoints_read != num_points:
-                        msg = "Expected {} points, but got: {}".format(num_points, npoints_read)
+                        msg = f"Expected {num_points} points, but got: {npoints_read}"
                         log.error(msg)
                         raise HTTPInternalServerError()
                 elif rsp.status == 404:
@@ -277,18 +285,18 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_a
                     # no data, return zero array
                     np_arr_rsp = defaultArray()
                 else:
-                    msg = "request to {} failed with code: {}".format(req, rsp.status)
+                    msg = f"request to {req} failed with code: {rsp.status}"
                     log.error(msg)
                     raise HTTPInternalServerError()
             
         except ClientError as ce:
-            log.error("Error for http_get({}): {} ".format(req, str(ce)))
+            log.error(f"Error for http_get({req}): {ce} ")
             raise HTTPInternalServerError()
         except CancelledError as cle:
-            log.warn("CancelledError for http_get({}): {}".format(req, str(cle)))
+            log.warn(f"CancelledError for http_get({req}): {cle}")
             return
     
-    log.info("got {} points response".format(num_points))
+    log.info(f"got {num_points} points response")
     log.info(f"np_arr {np_arr}")
     log.info(f"np_arr_rsp: {np_arr_rsp}")
 
@@ -306,13 +314,12 @@ dset_json: dset JSON
 point_list: array of points to write
 point_data: index of arr element to update for a given point
 """
-async def write_point_sel(app, chunk_id, dset_json, point_list, point_data):
+async def write_point_sel(app, chunk_id, dset_json, point_list, point_data, bucket=None):
     
-    msg = "write_point_sel, chunk_id:{}, points: {}, data: {}".format(chunk_id, point_list, point_data)
-    #msg = "write_point_sel, chunk_id: {}".format(chunk_id)
+    msg = f"write_point_sel, chunk_id: {chunk_id}, points: {point_list}, data: {point_data}"
     log.info(msg)
     if "type" not in dset_json:
-        log.error("No type found in dset_json: {}".format(dset_json))
+        log.error(f"No type found in dset_json: {dset_json}")
         raise HTTPInternalServerError()
 
     datashape = dset_json["shape"]
@@ -336,7 +343,7 @@ async def write_point_sel(app, chunk_id, dset_json, point_list, point_data):
     if rank == 1:
         coord_type_str = "uint64"
     else:
-        coord_type_str = "({},)uint64".format(rank)
+        coord_type_str = f"({rank},)uint64"
     comp_type = np.dtype([("coord", np.dtype(coord_type_str)), ("value", dset_dtype)])
     np_arr = np.zeros((num_points,),dtype=comp_type)
     
@@ -356,34 +363,36 @@ async def write_point_sel(app, chunk_id, dset_json, point_list, point_data):
     params["dset"] = json.dumps(dset_json)
     params["action"] = "put"
     params["count"] = num_points
+    if bucket:
+        params["bucket"] = bucket
        
     try:
         async with client.post(req, params=params, data=post_data) as rsp:
-            log.debug("http_post {} status: <{}>".format(req, rsp.status))
+            log.debug(f"http_post {req} status: <{rsp.status}>")
             if rsp.status == 200:
-                log.info("req: {} OK".format(req))
+                log.info(f"req: {req} OK")
             else:
-                msg = "request to {} failed with code: {}".format(req, rsp.status)
+                msg = f"request to {req} failed with code: {rsp.status}"
                 log.error(msg)
                 raise HTTPInternalServerError()
             
     except ClientError as ce:
-        log.error("Error for http_get({}): {} ".format(req, str(ce)))
+        log.error(f"Error for http_get({req}): {ce} ")
         raise HTTPInternalServerError()
     except CancelledError as cle:
-        log.warn("CancelledError for http_get({}): {}".format(req, str(cle)))
+        log.warn(f"CancelledError for http_get({req}): {cle}")
 
 
 """
 Query for a given chunk_id.  Pass in type, dims, selection area, and query.
 """ 
-async def read_chunk_query(app, chunk_id, dset_json, slices, query, limit, rsp_dict):
+async def read_chunk_query(app, chunk_id, dset_json, slices, query, limit, rsp_dict, bucket=None):
     """ read the chunk selection from the DN
     chunk_id: id of chunk to write to
     chunk_sel: chunk-relative selection to read from
     np_arr: numpy array to store read bytes
     """
-    msg = "read_chunk_query, chunk_id:{}, slices: {}, query: {}".format(chunk_id, slices, query)
+    msg = f"read_chunk_query, chunk_id: {chunk_id}, slices: {slices}, query: {query}"
     log.info(msg)
 
     req = getDataNodeUrl(app, chunk_id)
@@ -400,17 +409,19 @@ async def read_chunk_query(app, chunk_id, dset_json, slices, query, limit, rsp_d
     params["query"] = query
     if limit > 0:
         params["Limit"] = limit
+    if bucket:
+        params["bucket"] = bucket
           
     chunk_shape = getSelectionShape(chunk_sel)
-    log.debug("chunk_shape: {}".format(chunk_shape))
+    log.debug(f"chunk_shape: {chunk_shape}")
     setSliceQueryParam(params, chunk_sel)  
     dn_rsp = None
     try:
         async with client.get(req, params=params) as rsp:
-            log.debug("http_get {} status: <{}>".format(req, rsp.status))
+            log.debug(f"http_get {req} status: <{rsp.status}>")
             if rsp.status == 200:
                 dn_rsp = await rsp.json()  # read response as json
-                log.debug("got query data: {}".format(dn_rsp))
+                log.debug(f"got query data: {dn_rsp}")
             elif rsp.status == 404:
                 # no data, don't return any results
                 dn_rsp = {"index": [], "value": []}
@@ -422,10 +433,10 @@ async def read_chunk_query(app, chunk_id, dset_json, slices, query, limit, rsp_d
                 raise HTTPInternalServerError()
             
     except ClientError as ce:
-        log.error("Error for http_get({}): {} ".format(req, str(ce)))
+        log.error(f"Error for http_get({req}): {ce} ")
         raise HTTPInternalServerError()
     except CancelledError as cle:
-        log.warn("CancelledError for http_get({}): {}".format(req, str(cle)))
+        log.warn(f"CancelledError for http_get({req}): {cle}")
         return
     
     rsp_dict[chunk_id] = dn_rsp
@@ -433,7 +444,7 @@ async def read_chunk_query(app, chunk_id, dset_json, slices, query, limit, rsp_d
 """
 Return list of elements from a dataset
 """
-async def getPointData(app, dset_id, dset_json, points):
+async def getPointData(app, dset_id, dset_json, points, bucket=None):
     loop = app["loop"]
     num_points = len(points)
     log.info(f"getPointData for {num_points} points")
@@ -457,8 +468,7 @@ async def getPointData(app, dset_id, dset_json, points):
         log.debug(f"point: {point}")
         if rank == 1:
             if point < 0 or point >= dims[0]:
-                msg = "POST Value point: {} is not within the bounds of the dataset"
-                msg = msg.format(point)
+                msg = f"POST Value point: {point} is not within the bounds of the dataset"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg) 
         else:
@@ -468,8 +478,7 @@ async def getPointData(app, dset_id, dset_json, points):
                 raise HTTPBadRequest(reason=msg) 
             for i in range(rank):
                 if point[i] < 0 or point[i] >= dims[i]:
-                    msg = "POST Value point: {} is not within the bounds of the dataset"
-                    msg = msg.format(point)
+                    msg = f"POST Value point: {point} is not within the bounds of the dataset"
                     log.warn(msg)
                     raise HTTPBadRequest(reason=msg) 
         chunk_id = getChunkId(dset_id, point, chunk_dims)
@@ -486,7 +495,7 @@ async def getPointData(app, dset_id, dset_json, points):
             point_index.append(pt_indx)
 
     num_chunks = len(chunk_dict)
-    log.debug("getPointData - num_chunks: {}".format(num_chunks))
+    log.debug(f"getPointData - num_chunks: {num_chunks}")
     max_chunks = config.get("max_chunks_per_request")
     if num_chunks > max_chunks:
         log.warn(f"Point selection request too large, num_chunks: {num_chunks} max_chunks: {max_chunks}")
@@ -506,18 +515,18 @@ async def getPointData(app, dset_id, dset_json, points):
         point_list = item["points"]
         point_index = item["indices"]
         task = asyncio.ensure_future(read_point_sel(app, chunk_id, dset_json, 
-            point_list, point_index, arr_rsp, chunk_map=chunk_map))
+            point_list, point_index, arr_rsp, chunk_map=chunk_map, bucket=bucket))
         tasks.append(task)
     await asyncio.gather(*tasks, loop=loop)
 
-    log.debug("arr shape: {}".format(arr_rsp.shape))
+    log.debug(f"arr shape: {arr_rsp.shape}")
     return arr_rsp
 
 
 """
 Get info for chunk locations (for reference layouts)
 """
-async def getChunkInfoMap(app, dset_id, dset_json, chunk_ids):
+async def getChunkInfoMap(app, dset_id, dset_json, chunk_ids, bucket=None):
     layout = dset_json["layout"]
     if layout["class"] not in  ('H5D_CONTIGUOUS_REF', 'H5D_CHUNKED_REF', 'H5D_CHUNKED_REF_INDIRECT'):
         log.debug(f"skip getChunkInfoMap for layout class: { layout['class'] }")
@@ -576,7 +585,7 @@ async def getChunkInfoMap(app, dset_id, dset_json, chunk_ids):
             raise HTTPInternalServerError()
         chunktable_id = layout["chunk_table"]
         # get  state for dataset from DN.
-        chunktable_json = await getObjectJson(app, chunktable_id, refresh=False)  
+        chunktable_json = await getObjectJson(app, chunktable_id, bucket=bucket, refresh=False)  
         log.debug(f"chunktable_json: {chunktable_json}")
         chunktable_dims = getShapeDims(chunktable_json["shape"])
 
@@ -601,7 +610,7 @@ async def getChunkInfoMap(app, dset_id, dset_json, chunk_ids):
                 indx = indx[0]
             arr_points[i] = indx
         log.debug(f"got chunktable points: {arr_points}, calling getPointData")
-        point_data = await getPointData(app, chunktable_id, chunktable_json, arr_points)
+        point_data = await getPointData(app, chunktable_id, chunktable_json, arr_points, bucket=bucket)
         log.debug(f"got chunktable data: {point_data}")
         s3path = layout["file_uri"]
 
@@ -659,7 +668,7 @@ async def PUT_Value(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     if not isValidUuid(dset_id, "Dataset"):
-        msg = "Invalid dataset id: {}".format(dset_id)
+        msg = f"Invalid dataset id: {dset_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
@@ -668,16 +677,17 @@ async def PUT_Value(request):
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
+        msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    bucket = getBucketForDomain(domain)
     
     request_type = "json"
     if "Content-Type" in request.headers:
         # client should use "application/octet-stream" for binary transfer
         content_type = request.headers["Content-Type"]
         if content_type not in ("application/json", "application/octet-stream"):
-            msg = "Unknown content_type: {}".format(content_type)
+            msg = f"Unknown content_type: {content_type}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         if content_type == "application/octet-stream":
@@ -717,7 +727,7 @@ async def PUT_Value(request):
             log.info(f"append_dim: {append_dim}")
     
     # get  state for dataset from DN.
-    dset_json = await getObjectJson(app, dset_id, refresh=False)  
+    dset_json = await getObjectJson(app, dset_id, bucket=bucket, refresh=False)  
 
     layout = None 
     datashape = dset_json["shape"]
@@ -735,7 +745,7 @@ async def PUT_Value(request):
      
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
-    log.debug("item size: {}".format(item_size))
+    log.debug(f"item size: {item_size}")
  
     if item_size == 'H5T_VARIABLE' and request_type != "json":
         msg = "Only JSON is supported for variable length data types"
@@ -800,10 +810,10 @@ async def PUT_Value(request):
             num_points = len(json_points)
             if rank == 1:
                 point_shape = (num_points,)
-                log.info("rank 1: point_shape: {}".format(point_shape))
+                log.info(f"rank 1: point_shape: {point_shape}")
             else:
                 point_shape = (num_points, rank)
-                log.info("rank >1: point_shape: {}".format(point_shape))
+                log.info(f"rank >1: point_shape: {point_shape}")
             try:
                 dt = np.dtype(np.uint64) # use uint64 so we can address large array extents
                 points = jsonToArray(point_shape, dt, json_points)
@@ -826,7 +836,7 @@ async def PUT_Value(request):
             raise  # re-throw
         
         if len(binary_data) != request.content_length:
-            msg = "Read {} bytes, expecting: {}".format(len(binary_data), request.content_length)
+            msg = f"Read {len(binary_data)} bytes, expecting: {request.content_length}"
             log.error(msg)
             raise HTTPBadRequest(reason=msg)
 
@@ -895,12 +905,14 @@ async def PUT_Value(request):
         except IndexError:
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        log.debug("got json arr: {}".format(arr.shape))
+        log.debug(f"got json arr: {arr.shape}")
 
     if append_rows:
         # extend the shape of the dataset 
         req = getDataNodeUrl(app, dset_id) + "/datasets/" + dset_id + "/shape"
         body = {"extend": append_rows, "extend_dim": append_dim}
+        if bucket:
+            body["bucket"] = bucket
         selection = None
         try:
             shape_rsp = await http_put(app, req, data=body)
@@ -965,9 +977,8 @@ async def PUT_Value(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
-        #log.info("got np array: {}".format(arr))
         num_chunks = getNumChunks(slices, layout)
-        log.debug("num_chunks: {}".format(num_chunks))
+        log.debug(f"num_chunks: {num_chunks}")
         max_chunks = int(config.get('max_chunks_per_request'))
         if num_chunks > max_chunks:
             log.warn(f"PUT value too many chunks: {num_chunks}, {max_chunks}")
@@ -978,12 +989,12 @@ async def PUT_Value(request):
         except ValueError:
             log.warn("getChunkIds failed")
             raise HTTPInternalServerError()
-        log.debug("chunk_ids: {}".format(chunk_ids))
+        log.debug(f"chunk_ids: {chunk_ids}")
 
         tasks = []
         task_batch_size = len(app["dn_urls"]) * 10
         for chunk_id in chunk_ids:
-            task = asyncio.ensure_future(write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level, arr))
+            task = asyncio.ensure_future(write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level, arr, bucket=bucket))
             tasks.append(task)
             if len(tasks) == task_batch_size:
                 await asyncio.gather(*tasks, loop=loop)
@@ -994,7 +1005,7 @@ async def PUT_Value(request):
         #
         # Do point PUT
         #
-        log.debug("num_points: {}".format(num_points))
+        log.debug(f"num_points: {num_points}")
         
         chunk_dict = {}  # chunk ids to list of points in chunk
 
@@ -1008,8 +1019,7 @@ async def PUT_Value(request):
                     point.append(int(point_tuple[i]))
             if rank == 1:
                 if point < 0 or point >= dims[0]:
-                    msg = "PUT Value point: {} is not within the bounds of the dataset"
-                    msg = msg.format(point)
+                    msg = f"PUT Value point: {point} is not within the bounds of the dataset"
                     log.warn(msg)
                     raise HTTPBadRequest(reason=msg) 
             else:
@@ -1019,8 +1029,7 @@ async def PUT_Value(request):
                     raise HTTPBadRequest(reason=msg) 
                 for i in range(rank):
                     if point[i] < 0 or point[i] >= dims[i]:
-                        msg = "PUT Value point: {} is not within the bounds of the dataset"
-                        msg = msg.format(point)
+                        msg = f"PUT Value point: {point} is not within the bounds of the dataset"
                         log.warn(msg)
                         raise HTTPBadRequest(reason=msg) 
             chunk_id = getChunkId(dset_id, point, layout)
@@ -1038,7 +1047,7 @@ async def PUT_Value(request):
                 point_data.append(value)
 
         num_chunks = len(chunk_dict)
-        log.debug("num_chunks: {}".format(num_chunks))
+        log.debug(f"num_chunks: {num_chunks}")
         max_chunks = int(config.get('max_chunks_per_request'))
         if num_chunks > max_chunks:
             msg = "PUT value request too large"
@@ -1050,7 +1059,7 @@ async def PUT_Value(request):
             point_list = item["points"]
             point_data = item["values"]
             task = asyncio.ensure_future(write_point_sel(app, chunk_id, dset_json, 
-                point_list, point_data))
+                point_list, point_data, bucket=bucket))
             tasks.append(task)
         await asyncio.gather(*tasks, loop=loop)
          
@@ -1086,7 +1095,7 @@ async def GET_Value(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     if not isValidUuid(dset_id, "Dataset"):
-        msg = "Invalid dataset id: {}".format(dset_id)
+        msg = f"Invalid dataset id: {dset_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
@@ -1098,13 +1107,14 @@ async def GET_Value(request):
      
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
+        msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)  
+    bucket = getBucketForDomain(domain)
    
     # get state for dataset from DN.
     dset_json = await getObjectJson(app, dset_id)  
-    log.debug("got dset_json: {}".format(dset_json))
+    log.debug(f"got dset_json: {dset_json}")
     
     datashape = dset_json["shape"]
     if datashape["class"] == 'H5S_NULL':
@@ -1136,7 +1146,7 @@ async def GET_Value(request):
                 slices.append(dim_slice)   
         except HTTPBadRequest:
             # exception might be due to us having stale version of dims, refresh
-            dset_json = await getObjectJson(app, dset_id, refresh=True)
+            dset_json = await getObjectJson(app, dset_id, bucket=bucket, refresh=True)
             dims = getShapeDims(dset_json["shape"]) 
             slices = None  # retry below
             
@@ -1147,7 +1157,7 @@ async def GET_Value(request):
             slices.append(dim_slice)  
             
     slices = tuple(slices)  
-    log.debug("GET Value selection: {}".format(slices))   
+    log.debug(f"GET Value selection: {slices}")
      
     np_shape = getSelectionShape(slices)                
     log.debug("selection shape:" + str(np_shape))
@@ -1156,7 +1166,7 @@ async def GET_Value(request):
     log.debug(f"selection num elements: {npoints}")
 
     num_chunks = getNumChunks(slices, layout)
-    log.debug("num_chunks: {}".format(num_chunks))
+    log.debug(f"num_chunks: {num_chunks}")
     max_chunks = int(config.get('max_chunks_per_request'))
     if num_chunks > max_chunks:
         msg = "GET value request too large"
@@ -1178,31 +1188,31 @@ async def GET_Value(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         try:
-            resp = await doQueryRead(request, chunk_ids, dset_json, slices)
+            resp = await doQueryRead(request, chunk_ids, dset_json, slices, bucket=bucket)
         except CancelledError as ce:
             log.warn(f"Cancelled error on query read: {ce}")
             resp = await jsonResponse(request, None)  # TBD: what do return if client cancels
     else:
-        log.debug("chunk_ids: {}".format(chunk_ids))
+        log.debug(f"chunk_ids: {chunk_ids}")
         try:
-            resp = await doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=chunkinfo)
+            resp = await doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=chunkinfo, bucket=bucket)
         except CancelledError as ce:
             log.warn(f"Cancelled error on hyperslab read: {ce}")
             resp = await jsonResponse(request, None)  # TBD: what do return if client cancels
     log.response(request, resp=resp)
     return resp
 
-async def doQueryRead(request, chunk_ids, dset_json,  slices):
+async def doQueryRead(request, chunk_ids, dset_json, slices, bucket=None):
     app = request.app 
     params = request.rel_url.query
     query = params["query"]
-    log.info("Query request: {}".format(query))
+    log.info(f"Query request: {query}")
     loop = app["loop"]
 
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
     
-    log.debug("item size: {}".format(item_size))
+    log.debug(f"item size: {item_size}")
     
     limit = 0
     if "Limit" in params:
@@ -1215,7 +1225,7 @@ async def doQueryRead(request, chunk_ids, dset_json,  slices):
 
     tasks = []
     node_count = app['node_count']
-    log.debug("node_count:  {}".format(node_count))
+    log.debug(f"node_count:  {node_count}")
     chunk_index = 0
     resp_index = [] 
     resp_value = []
@@ -1228,11 +1238,11 @@ async def doQueryRead(request, chunk_ids, dset_json,  slices):
             chunk_index += 1
             if chunk_index >= num_chunks:
                 break
-        log.debug("next chunk ids: {}".format(next_chunks))
+        log.debug(f"next chunk ids: {next_chunks}")
         # run query on DN nodes
         dn_rsp = {} # dictionary keyed by chunk_id
         for chunk_id in next_chunks:
-            task = asyncio.ensure_future(read_chunk_query(app, chunk_id, dset_json, slices, query, limit, dn_rsp))
+            task = asyncio.ensure_future(read_chunk_query(app, chunk_id, dset_json, slices, query, limit, dn_rsp, bucket=bucket))
             tasks.append(task)
         await asyncio.gather(*tasks, loop=loop)
     
@@ -1250,7 +1260,7 @@ async def doQueryRead(request, chunk_ids, dset_json,  slices):
     resp = await jsonResponse(request, resp_json)
     return resp
 
-async def doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=None):
+async def doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=None, bucket=None):
     app = request.app 
     loop = app["loop"]
 
@@ -1259,7 +1269,7 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=None)
 
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
-    log.debug("item size: {}".format(item_size))
+    log.debug(f"item size: {item_size}")
     dset_dtype = createDataType(type_json)  # np datatype
     if item_size == 'H5T_VARIABLE' and accept_type != "json":
         msg = "Client requested binary, but only JSON is supported for variable length data types"
@@ -1268,7 +1278,7 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=None)
 
     # create array to hold response data
     np_shape = getSelectionShape(slices)   
-    log.debug("selection shape: {}".format(np_shape))
+    log.debug(f"selection shape: {np_shape}")
 
     # check that the array size is reasonable
     request_size = np.prod(np_shape)
@@ -1276,7 +1286,7 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=None)
         request_size *= 512  # random guess of avg item_size
     else:
         request_size *= item_size
-    log.debug("request_size: {}".format(request_size))
+    log.debug(f"request_size: {request_size}")
     max_request_size = int(config.get("max_request_size"))
     if request_size >= max_request_size:
         msg = "GET value request too large"
@@ -1286,15 +1296,15 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=None)
     arr = np.zeros(np_shape, dtype=dset_dtype, order='C')
     tasks = []
     for chunk_id in chunk_ids:
-        task = asyncio.ensure_future(read_chunk_hyperslab(app, chunk_id, dset_json, slices, arr, chunk_map=chunk_map))
+        task = asyncio.ensure_future(read_chunk_hyperslab(app, chunk_id, dset_json, slices, arr, chunk_map=chunk_map, bucket=bucket))
         tasks.append(task)
     await asyncio.gather(*tasks, loop=loop)
 
-    log.debug("arr shape: {}".format(arr.shape))
+    log.debug(f"arr shape: {arr.shape}")
 
     if response_type == "binary":
         output_data = arr.tobytes()
-        log.debug("GET Value - returning {} bytes binary data".format(len(output_data)))
+        log.debug(f"GET Value - returning {len(output_data)} bytes binary data")
      
         # write response
         try:
@@ -1343,11 +1353,11 @@ async def POST_Value(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     if not isValidUuid(dset_id, "Dataset"):
-        msg = "Invalid dataset id: {}".format(dset_id)
+        msg = f"Invalid dataset id: {dset_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    log.info("POST_VALUE, id: {}".format(dset_id))
+    log.info(f"POST_VALUE, id: {dset_id}")
 
     username, pswd = getUserPasswordFromRequest(request)
     if username is None and app['allow_noauth']:
@@ -1357,9 +1367,10 @@ async def POST_Value(request):
      
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
+        msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    bucket=getBucketForDomain(domain)
 
 
     accept_type = getAcceptType(request)
@@ -1370,7 +1381,7 @@ async def POST_Value(request):
         # client should use "application/octet-stream" for binary transfer
         content_type = request.headers["Content-Type"]
         if content_type not in ("application/json", "application/octet-stream"):
-            msg = "Unknown content_type: {}".format(content_type)
+            msg = f"Unknown content_type: {content_type}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         if content_type == "application/octet-stream":
@@ -1386,7 +1397,7 @@ async def POST_Value(request):
     
    
     # get  state for dataset from DN.
-    dset_json = await getObjectJson(app, dset_id)  
+    dset_json = await getObjectJson(app, dset_id, bucket=bucket)  
 
     datashape = dset_json["shape"]
     if datashape["class"] == 'H5S_NULL':
@@ -1402,9 +1413,9 @@ async def POST_Value(request):
          
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
-    log.debug("item size: {}".format(item_size))
+    log.debug(f"item size: {item_size}")
 
-    log.debug("got dset_json: {}".format(dset_json))
+    log.debug(f"got dset_json: {dset_json}")
     await validateAction(app, domain, dset_id, username, "read")
 
     # read body data
@@ -1427,15 +1438,15 @@ async def POST_Value(request):
         # read binary data
         binary_data = await request_read(request)
         if len(binary_data) != request.content_length:
-            msg = "Read {} bytes, expecting: {}".format(len(binary_data), request.content_length)
+            msg = f"Read {len(binary_data)} bytes, expecting: {request.content_length}"
             log.error(msg)
             raise HTTPInternalServerError()
         if request.content_length % point_dt.itemsize != 0:
-            msg = "Content length: {} not divisible by element size: {}".format(request.content_length, item_size)
+            msg = f"Content length: {request.content_length} not divisible by element size: {item_size}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         num_points = request.content_length // point_dt.itemsize
-        log.debug("got {} num_points".format(num_points))
+        log.debug(f"got {num_points} num_points")
         points = np.fromstring(binary_data, dtype=point_dt)
         if rank > 1:
             if num_points % rank != 0:
@@ -1445,13 +1456,13 @@ async def POST_Value(request):
             num_points //= rank
             points = points.reshape((num_points, rank))  # conform to point index shape
 
-    arr_rsp = await getPointData(app, dset_id, dset_json, points)
+    arr_rsp = await getPointData(app, dset_id, dset_json, points, bucket=bucket)
 
-    log.debug("arr shape: {}".format(arr_rsp.shape))
+    log.debug(f"arr shape: {arr_rsp.shape}")
 
     if response_type == "binary":
         output_data = arr_rsp.tobytes()
-        log.debug("POST Value - returning {} bytes binary data".format(len(output_data)))
+        log.debug(f"POST Value - returning {len(output_data)} bytes binary data")
      
         # write response
         try:
@@ -1468,7 +1479,7 @@ async def POST_Value(request):
         log.debug("POST Value - returning JSON data")
         rsp_json = {}
         data = arr_rsp.tolist()
-        log.debug("got rsp data {} points".format(len(data)))
+        log.debug(f"got rsp data {len(data)} points")
         json_data = bytesArrayToList(data)
         rsp_json["value"] = json_data  
         resp = await jsonResponse(request, rsp_json)

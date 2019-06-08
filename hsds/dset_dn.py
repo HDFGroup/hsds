@@ -34,8 +34,12 @@ async def GET_Dataset(request):
     if not isValidUuid(dset_id, obj_class="dataset"):
         log.error( "Unexpected type_id: {}".format(dset_id))
         raise HTTPInternalServerError()
+    if "bucket" in params:
+        bucket = params["bucket"]
+    else:
+        bucket = None
     
-    dset_json = await get_metadata_obj(app, dset_id)
+    dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
 
     resp_json = { } 
     resp_json["id"] = dset_json["id"]
@@ -61,6 +65,7 @@ async def POST_Dataset(request):
     """ Handler for POST /datasets"""
     log.request(request)
     app = request.app
+    params = request.rel_url.query
 
     if not request.has_body:
         msg = "POST_Dataset with no body"
@@ -68,15 +73,21 @@ async def POST_Dataset(request):
         raise HTTPBadRequest(reason=msg)
 
     body = await request.json()
-    log.info("POST_Dataset, body: {}".format(body))
+    log.info(f"POST_Dataset, body: {body}")
+    if "bucket" in params:
+        bucket = params["bucket"]
+    elif "bucket" in body:
+        bucket = params["bucket"]
+    else:
+        bucket = None
 
     dset_id = get_obj_id(request, body=body)
     if not isValidUuid(dset_id, obj_class="dataset"):
-        log.error( "Unexpected dataset_id: {}".format(dset_id))
+        log.error(f"Unexpected dataset_id: {dset_id}")
         raise HTTPInternalServerError()
 
     # verify the id doesn't already exist
-    obj_found = await check_metadata_obj(app, dset_id)
+    obj_found = await check_metadata_obj(app, dset_id, bucket=bucket)
     if obj_found:
         log.error( "Post with existing dset_id: {}".format(dset_id))
         raise HTTPInternalServerError()
@@ -119,7 +130,7 @@ async def POST_Dataset(request):
     if layout is not None:
         dset_json["layout"] = layout
 
-    await save_metadata_obj(app, dset_id, dset_json, notify=True, flush=True)
+    await save_metadata_obj(app, dset_id, dset_json, bucket=bucket, notify=True, flush=True)
      
     resp_json = {} 
     resp_json["id"] = dset_id 
@@ -142,18 +153,23 @@ async def DELETE_Dataset(request):
     app = request.app
     params = request.rel_url.query
     dset_id = request.match_info.get('id')
-    log.info("DELETE dataset: {}".format(dset_id))
+    log.info(f"DELETE dataset: {dset_id}")
 
     if not isValidUuid(dset_id, obj_class="dataset"):
-        log.error( "Unexpected dataset id: {}".format(dset_id))
+        log.error(f"Unexpected dataset id: {dset_id}")
         raise HTTPInternalServerError()
 
+    if "bucket" in params:
+        bucket = params["bucket"]
+    else:
+        bucket = None
+
     # verify the id  exist
-    obj_found = await check_metadata_obj(app, dset_id) 
+    obj_found = await check_metadata_obj(app, dset_id, bucket=bucket) 
     if not obj_found:
         raise HTTPNotFound()
 
-    log.debug("deleting dataset: {}".format(dset_id))
+    log.debug(f"deleting dataset: {dset_id}")
 
     notify=True
     if "Notify" in params and not params["Notify"]:
@@ -170,6 +186,7 @@ async def PUT_DatasetShape(request):
     """HTTP method to update dataset's shape"""
     log.request(request)
     app = request.app
+    params = request.rel_url.query
     dset_id = request.match_info.get('id')
     
     if not isValidUuid(dset_id, obj_class="dataset"):
@@ -178,16 +195,23 @@ async def PUT_DatasetShape(request):
 
     body = await request.json()
 
-    log.info("PUT datasetshape: {}, body: {}".format(dset_id, body))
+    log.info(f"PUT datasetshape: {dset_id}, body: {body}")
 
     if "shape" not in body and "extend" not in body:
         log.error("Expected shape or extend keys")
         raise HTTPInternalServerError()
 
-    dset_json = await get_metadata_obj(app, dset_id)
+    if "bucket" in params:
+        bucket = params["bucket"]
+    elif "bucket" in body:
+        bucket = params["bucket"]
+    else:
+        bucket = None
+
+    dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
 
     shape_orig = dset_json["shape"]
-    log.debug("shape_orig: {}".format(shape_orig))
+    log.debug(f"shape_orig: {shape_orig}")
 
     if "maxdims" not in shape_orig:
         log.error("expected maxdims in dataset json")
@@ -249,7 +273,7 @@ async def PUT_DatasetShape(request):
          
     # write back to S3, save to metadata cache
     log.info(f"Updated dimensions: {dims}")
-    await save_metadata_obj(app, dset_id, dset_json)
+    await save_metadata_obj(app, dset_id, dset_json, bucket=bucket)
  
     resp = json_response(resp_json, status=201)
     log.response(request, resp=resp)

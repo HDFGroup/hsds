@@ -20,7 +20,7 @@ from aiohttp.web import StreamResponse
 from util.httpUtil import  http_get, http_put, http_delete, getHref, getAcceptType, jsonResponse
 from util.idUtil import   isValidUuid, getDataNodeUrl
 from util.authUtil import getUserPasswordFromRequest, validateUserPassword
-from util.domainUtil import  getDomainFromRequest, isValidDomain
+from util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain
 from util.attrUtil import  validateAttributeName, getRequestCollectionName
 from util.hdf5dtype import validateTypeItem, getBaseTypeJson, createDataType, getItemSize
 from util.arrayUtil import jsonToArray, getShapeDims, getNumElements, bytesArrayToList
@@ -69,9 +69,10 @@ async def GET_Attributes(request):
     
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
+        msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    bucket = getBucketForDomain(domain)
 
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "read")
@@ -86,10 +87,12 @@ async def GET_Attributes(request):
         params["Marker"] = marker
     if include_data:
         params["IncludeData"] = '1'
+    if bucket:
+        params["bucket"] = bucket
          
-    log.debug("get attributes: " + req)
+    log.debug(f"get attributes: {req}")
     dn_json = await http_get(app, req, params=params)
-    log.debug("got attributes json from dn for obj_id: " + str(obj_id)) 
+    log.debug(f"got attributes json from dn for obj_id: {obj_id}") 
     attributes = dn_json["attributes"]
 
     # mixin hrefs
@@ -124,7 +127,7 @@ async def GET_Attribute(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     if not isValidUuid(obj_id, obj_class=collection):
-        msg = "Invalid object id: {}".format(obj_id)
+        msg = f"Invalid object id: {obj_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     attr_name = request.match_info.get('name')
@@ -138,9 +141,10 @@ async def GET_Attribute(request):
     
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
+        msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    bucket = getBucketForDomain(domain)
 
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "read")
@@ -148,7 +152,10 @@ async def GET_Attribute(request):
     req = getDataNodeUrl(app, obj_id)
     req += '/' + collection + '/' + obj_id + "/attributes/" + attr_name
     log.debug("get Attribute: " + req)
-    dn_json = await http_get(app, req)
+    params = {}
+    if bucket:
+        params["bucket"] = bucket
+    dn_json = await http_get(app, req, params=params)
     log.debug("got attributes json from dn for obj_id: " + str(obj_id)) 
    
      
@@ -186,14 +193,14 @@ async def PUT_Attribute(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     if not isValidUuid(obj_id, obj_class=collection):
-        msg = "Invalid object id: {}".format(obj_id)
+        msg = f"Invalid object id: {obj_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     attr_name = request.match_info.get('name')
-    log.debug("Attribute name: [{}]".format(attr_name) )
+    log.debug(f"Attribute name: [{attr_name}]")
     validateAttributeName(attr_name)
 
-    log.info("PUT Attribute id: {} name: {}".format(obj_id, attr_name))
+    log.info(f"PUT Attribute id: {obj_id} name: {attr_name}")
     username, pswd = getUserPasswordFromRequest(request)
     # write actions need auth
     await validateUserPassword(app, username, pswd)
@@ -207,14 +214,15 @@ async def PUT_Attribute(request):
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
+        msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    bucket = getBucketForDomain(domain)
     
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
     if "root" not in domain_json:
-        log.error("Expected root key for domain: {}".format(domain))
+        log.error(f"Expected root key for domain: {domain}")
         raise HTTPBadRequest(reason="Unexpected Error")
     root_id = domain_json["root"]
 
@@ -230,9 +238,9 @@ async def PUT_Attribute(request):
     if isinstance(datatype, str) and datatype.startswith("t-"):
         # Committed type - fetch type json from DN
         ctype_id = datatype
-        log.debug("got ctypeid: {}".format(ctype_id)) 
-        ctype_json = await getObjectJson(app, ctype_id)  
-        log.debug("ctype: {}".format(ctype_json))
+        log.debug(f"got ctypeid: {ctype_id}") 
+        ctype_json = await getObjectJson(app, ctype_id, bucket=bucket)  
+        log.debug(f"ctype {ctype_id}: {ctype_json}")
         if ctype_json["root"] != root_id:
             msg = "Referenced committed datatype must belong in same domain"
             log.warn(msg)
@@ -245,7 +253,7 @@ async def PUT_Attribute(request):
             # convert predefined type string (e.g. "H5T_STD_I32LE") to 
             # corresponding json representation
             datatype = getBaseTypeJson(datatype)
-            log.debug("got datatype: {}".format(datatype))
+            log.debug(f"got datatype: {datatype}")
         except TypeError:
             msg = "PUT attribute with invalid predefined type"
             log.warn(msg)
@@ -285,7 +293,7 @@ async def PUT_Attribute(request):
                 dims = getShapeDims(shape_body)
                 shape_json["dims"] = dims
             else:
-                msg = "Unknown shape class: {}".format(shape_class)
+                msg = f"Unknown shape class: {shape_class}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
         else:
@@ -315,15 +323,15 @@ async def PUT_Attribute(request):
             np_dims = [1,]
         else:
             np_dims = dims
-        log.debug("attribute dims: {}".format(np_dims))
-        log.debug("attribute value: {}".format(value))
+        log.debug(f"attribute dims: {np_dims}")
+        log.debug(f"attribute value: {value}")
         try:
             arr = jsonToArray(np_dims, arr_dtype, value)
         except ValueError:
             msg = "Bad Request: input data doesn't match selection"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        log.info("Got: {} array elements".format(arr.size))
+        log.info(f"Got: {arr.size} array elements")
     else:
         value = None
 
@@ -337,9 +345,12 @@ async def PUT_Attribute(request):
     attr_json["shape"] = shape_json
     if value is not None:
         attr_json["value"] = value
+    params = {}
+    if bucket:
+        params["bucket"] = bucket
     
-    put_rsp = await http_put(app, req, data=attr_json)
-    log.info("PUT Attribute resp: " + str(put_rsp))
+    put_rsp = await http_put(app, req, params=params, data=attr_json)
+    log.info(f"PUT Attribute resp: {put_rsp}")
     
     hrefs = []  # TBD
     req_rsp = { "hrefs": hrefs }
@@ -360,11 +371,11 @@ async def DELETE_Attribute(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     if not isValidUuid(obj_id, obj_class=collection):
-        msg = "Invalid object id: {}".format(obj_id)
+        msg = f"Invalid object id: {obj_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     attr_name = request.match_info.get('name')
-    log.debug("Attribute name: [{}]".format(attr_name) )
+    log.debug(f"Attribute name: [{attr_name}]")
     validateAttributeName(attr_name)
 
     username, pswd = getUserPasswordFromRequest(request)
@@ -372,14 +383,15 @@ async def DELETE_Attribute(request):
     
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
+        msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    bucket = getBucketForDomain(domain)
     
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
     if "root" not in domain_json:
-        log.error("Expected root key for domain: {}".format(domain))
+        log.error(f"Expected root key for domain: {domain}")
         raise HTTPBadRequest(reason="Unexpected Error")
 
     # TBD - verify that the obj_id belongs to the given domain
@@ -388,9 +400,12 @@ async def DELETE_Attribute(request):
     req = getDataNodeUrl(app, obj_id)
     req += '/' + collection + '/' + obj_id + "/attributes/" + attr_name
     log.info("PUT Attribute: " + req)
-    rsp_json = await http_delete(app, req)
+    params = {}
+    if bucket:
+        params["bucket"] = bucket
+    rsp_json = await http_delete(app, req, params=params)
     
-    log.info("PUT Attribute resp: " + str(rsp_json))
+    log.info(f"PUT Attribute resp: {rsp_json}")
     
     hrefs = []  # TBD
     req_rsp = { "hrefs": hrefs }
@@ -411,7 +426,7 @@ async def GET_AttributeValue(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     if not isValidUuid(obj_id, obj_class=collection):
-        msg = "Invalid object id: {}".format(obj_id)
+        msg = f"Invalid object id: {obj_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     attr_name = request.match_info.get('name')
@@ -425,14 +440,15 @@ async def GET_AttributeValue(request):
     
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
+        msg = f"Invalid domain value: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    bucket = getBucketForDomain(domain)
     
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
     if "root" not in domain_json:
-        log.error("Expected root key for domain: {}".format(domain))
+        log.error(f"Expected root key for domain: {domain}")
         raise HTTPBadRequest(reason="Unexpected Error")
 
     # TBD - verify that the obj_id belongs to the given domain
@@ -441,11 +457,14 @@ async def GET_AttributeValue(request):
     req = getDataNodeUrl(app, obj_id)
     req += '/' + collection + '/' + obj_id + "/attributes/" + attr_name
     log.debug("get Attribute: " + req)
-    dn_json = await http_get(app, req)
+    params = {}
+    if bucket:
+        params["bucket"] = bucket
+    dn_json = await http_get(app, req, params=params)
     log.debug("got attributes json from dn for obj_id: " + str(dn_json)) 
 
     attr_shape = dn_json["shape"]
-    log.debug("attribute shape: {}".format(attr_shape))
+    log.debug(f"attribute shape: {attr_shape}")
     if attr_shape["class"] == 'H5S_NULL':
         msg = "Null space attributes can not be read"
         log.warn(msg)
@@ -472,7 +491,7 @@ async def GET_AttributeValue(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         output_data = arr.tobytes()
-        log.debug("GET AttributeValue - returning {} bytes binary data".format(len(output_data)))
+        log.debug(f"GET AttributeValue - returning {len(output_data)} bytes binary data")
         # write response
         try: 
             resp = StreamResponse()
@@ -519,14 +538,14 @@ async def PUT_AttributeValue(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     if not isValidUuid(obj_id, obj_class=collection):
-        msg = "Invalid object id: {}".format(obj_id)
+        msg = f"Invalid object id: {obj_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     attr_name = request.match_info.get('name')
-    log.debug("Attribute name: [{}]".format(attr_name) )
+    log.debug(f"Attribute name: [{attr_name}]")
     validateAttributeName(attr_name)
 
-    log.info("PUT Attribute Value id: {} name: {}".format(obj_id, attr_name))
+    log.info(f"PUT Attribute Value id: {obj_id} name: {attr_name}")
     username, pswd = getUserPasswordFromRequest(request)
     # write actions need auth
     await validateUserPassword(app, username, pswd)
@@ -538,14 +557,15 @@ async def PUT_AttributeValue(request):
     
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
+        msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    bucket = getBucketForDomain(domain)
     
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
     if "root" not in domain_json:
-        log.error("Expected root key for domain: {}".format(domain))
+        log.error(f"Expected root key for domain: {domain}")
         raise HTTPInternalServerError()
 
     # TBD - verify that the obj_id belongs to the given domain
@@ -554,9 +574,12 @@ async def PUT_AttributeValue(request):
     req = getDataNodeUrl(app, obj_id)
     req += '/' + collection + '/' + obj_id + "/attributes/" + attr_name
     log.debug("get Attribute: " + req)
-    dn_json = await http_get(app, req)
+    params = {}
+    if bucket:
+        params["bucket"] = bucket
+    dn_json = await http_get(app, req, params=params)
     log.debug("got attributes json from dn for obj_id: " + str(obj_id)) 
-    log.debug("got dn_json: {}".format(dn_json))
+    log.debug(f"got dn_json: {dn_json}")
 
     attr_shape = dn_json["shape"]
     if attr_shape["class"] == 'H5S_NULL':
@@ -573,7 +596,7 @@ async def PUT_AttributeValue(request):
         # client should use "application/octet-stream" for binary transfer
         content_type = request.headers["Content-Type"]
         if content_type not in ("application/json", "application/octet-stream"):
-            msg = "Unknown content_type: {}".format(content_type)
+            msg = f"Unknown content_type: {content_type}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         if content_type == "application/octet-stream":
@@ -593,7 +616,7 @@ async def PUT_AttributeValue(request):
         # read binary data
         binary_data = await request.read()
         if len(binary_data) != request.content_length:
-            msg = "Read {} bytes, expecting: {}".format(len(binary_data), request.content_length)
+            msg = f"Read {len(binary_data)} bytes, expecting: {request.content_length}"
             log.error(msg)
             raise HTTPInternalServerError()
 
@@ -626,7 +649,7 @@ async def PUT_AttributeValue(request):
             msg = "Bad Request: input data doesn't match selection"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-    log.info("Got: {} array elements".format(arr.size))
+    log.info(f"Got: {arr.size} array elements")
      
     # ready to add attribute now
     attr_json = {}
@@ -636,12 +659,15 @@ async def PUT_AttributeValue(request):
 
     req = getDataNodeUrl(app, obj_id)
     req += '/' + collection + '/' + obj_id + "/attributes/" + attr_name  
-    log.info("PUT Attribute Value: " + req)
+    log.info(f"PUT Attribute Value: {req}")
 
     dn_json["value"] = value
+    params = {}
     params = {"replace": 1}  # let the DN know we can overwrite the attribute
+    if bucket:
+        params["bucket"] = bucket
     put_rsp = await http_put(app, req, params=params, data=attr_json)
-    log.info("PUT Attribute Value resp: " + str(put_rsp))
+    log.info(f"PUT Attribute Value resp: {put_rsp}")
     
     hrefs = []  # TBD
     req_rsp = { "hrefs": hrefs }

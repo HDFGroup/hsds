@@ -113,8 +113,8 @@ def validateDomainPath(path):
         raise ValueError("Expected string type")
     if len(path) < 1:
         raise ValueError("Domain path too short")
-    if path[0] != '/':
-        raise ValueError("Domain path should start with '/'")
+    if path.find('/') == -1:
+        raise ValueError("Domain path should have at least one '/'")
     if path[-1] !=  '/':
         raise ValueError("Domain path must end with '/'")
 
@@ -161,7 +161,7 @@ def getDomainForHost(host_value):
     return domain
 
 def getDomainFromRequest(request, domain_path=False, validate=True):
-    #domain = request.match_info.get()
+    app = request.app
     domain = None
     params = request.rel_url.query
     if "domain" in params:
@@ -194,11 +194,25 @@ def getDomainFromRequest(request, domain_path=False, validate=True):
             validateDomainPath(domain)
         else:
             validateDomain(domain)
+    if domain[0] == '/':
+        bucket = None
+        if "bucket_name" in request.app and request.app["bucket_name"]:
+            # prefix the domain with the bucket name
+            domain = request.app["bucket_name"] + domain
+        else:
+            # if no default bucket is set, domain paths must include bucket name
+            raise ValueError("bucket not specified")
+    
     return domain
 
 
 def getS3PrefixForDomain(domain):
-    domain_key = domain[1:]  # strip off leading slash
+    if domain[0] == '/':
+        domain_key = domain[1:]  # strip off leading slash
+    else:
+        # get path after bucket specifiers
+        index = domain.find['/']
+        domain_key = domain[(index+1):]
     if domain_key.endswith(DOMAIN_SUFFIX):
         path_len = len(domain_key) - len(DOMAIN_SUFFIX)
         domain_key = domain_key[:path_len]
@@ -206,10 +220,10 @@ def getS3PrefixForDomain(domain):
         #domain_key += '/'
         domain_key = domain_key[:-1]
     return domain_key
-    
 
-
-
-
-
- 
+def getBucketForDomain(domain):
+    if domain[0] == '/':
+        # no bucket specified
+        return None
+    index = domain.find['/']
+    return domain[:index]

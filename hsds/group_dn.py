@@ -30,13 +30,17 @@ async def GET_Group(request):
     app = request.app
     params = request.rel_url.query
     group_id = get_obj_id(request)
-    log.info("GET group: {}".format(group_id))
+    if "bucket" in params:
+        bucket = params["bucket"]
+    else:
+        bucket = None
+    log.info(f"GET group: {group_id} bucket: {bucket}")
     
     if not isValidUuid(group_id, obj_class="group"):
         log.error( "Unexpected group_id: {}".format(group_id))
         raise HTTPInternalServerError()
     
-    group_json = await get_metadata_obj(app, group_id)
+    group_json = await get_metadata_obj(app, group_id, bucket=bucket)
 
     resp_json = { } 
     resp_json["id"] = group_json["id"]
@@ -59,6 +63,7 @@ async def POST_Group(request):
     """ Handler for POST /groups"""
     log.request(request)
     app = request.app
+    params = request.rel_url.query
 
     if not request.has_body:
         msg = "POST_Group with no body"
@@ -66,25 +71,30 @@ async def POST_Group(request):
         raise HTTPBadRequest(reason=msg)
 
     body = await request.json()
+    if "bucket" in params:
+        bucket = params["bucket"]
+    elif "bucket" in body:
+        bucket = params["bucket"]
+    else:
+        bucket = None
 
     group_id = get_obj_id(request, body=body)
-    log.info("POST group: {}".format(group_id))
-    if not isValidUuid(group_id, obj_class="group"):
-        log.error( "Unexpected group_id: {}".format(group_id))
-        raise HTTPInternalServerError()
-
-    # verify the id doesn't already exist
-    obj_found = await check_metadata_obj(app, group_id)
-    if obj_found:
-        log.error( "Post with existing group_id: {}".format(group_id))
-        raise HTTPInternalServerError()
-     
-    root_id = None
     
+    log.info(f"POST group: {group_id} {bucket}")
+    if not isValidUuid(group_id, obj_class="group"):
+        log.error(f"Unexpected group_id: {group_id}")
+        raise HTTPInternalServerError()
     if "root" not in body:
         msg = "POST_Group with no root"
         log.error(msg)
         raise HTTPInternalServerError()
+
+    # verify the id doesn't already exist
+    obj_found = await check_metadata_obj(app, group_id, bucket=bucket)
+    if obj_found:
+        log.error(f"Post with existing group_id: {group_id}")
+        raise HTTPInternalServerError()
+
     root_id = body["root"]
     
     if not isValidUuid(root_id, obj_class="group"):
@@ -98,7 +108,7 @@ async def POST_Group(request):
     group_json = {"id": group_id, "root": root_id, "created": now, "lastModified": now,  
         "links": {}, "attributes": {} }
 
-    await save_metadata_obj(app, group_id, group_json, notify=True, flush=True)
+    await save_metadata_obj(app, group_id, group_json, bucket=bucket, notify=True, flush=True)
      
     # formulate response 
     resp_json = {} 
@@ -121,13 +131,20 @@ async def PUT_Group(request):
     FLUSH_SLEEP_INTERVAL = 0.1  # TBD make config
     log.request(request)
     app = request.app
+    params = request.rel_url.query
 
     root_id = request.match_info.get('id')
     log.info("PUT group: {}  (flush)".format(root_id))
 
     if not isValidUuid(root_id, obj_class="group"):
-        log.error( f"Unexpected group_id: {root_id}")
+        log.error(f"Unexpected group_id: {root_id}")
         raise HTTPInternalServerError()
+
+    if "bucket" in params:
+        bucket = params["bucket"]
+    else:
+        bucket = None
+    log.warn(f"what to do with bucket: {bucket}?")
 
     schema2 = isSchema2Id(root_id)
 
@@ -156,7 +173,7 @@ async def PUT_Group(request):
         for obj_id in flush_set:
             if not obj_id in dirty_ids:
                 log.debug(f"flush - {obj_id} has been written")
-            elif dirty_ids[obj_id] > flush_start:
+            elif dirty_ids[obj_id][0] > flush_start:
                 log.debug(f"flush - {obj_id} has been updated after flush start")
             else:
                 log.debug(f"flush - {obj_id} still pending")
@@ -187,11 +204,16 @@ async def DELETE_Group(request):
     log.info("DELETE group: {}".format(group_id))
 
     if not isValidUuid(group_id, obj_class="group"):
-        log.error( "Unexpected group_id: {}".format(group_id))
+        log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
 
+    if "bucket" in params:
+        bucket = params["bucket"]
+    else:
+        bucket = None
+
     # verify the id exist
-    obj_found = await check_metadata_obj(app, group_id)
+    obj_found = await check_metadata_obj(app, group_id, bucket=bucket)
     if not obj_found:
         log.debug(f"delete called on non-exsistet obj: {group_id}")
         raise HTTPNotFound()

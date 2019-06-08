@@ -42,10 +42,10 @@ async def GET_Group(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     if group_id:
-        log.info("GET_Group, id: {}".format(group_id))
+        log.info(f"GET_Group, id: {group_id}")
         # is the id a group id and not something else?
         if not isValidUuid(group_id, "Group"):
-            msg = "Invalid group id: {}".format(group_id)
+            msg = f"Invalid group id: {group_id}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg) 
         if "getalias" in params:
@@ -57,7 +57,7 @@ async def GET_Group(request):
             msg = "h5paths must be absolute if no parent id is provided"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        log.info("GET_Group, h5path: {}".format(h5path))
+        log.info(f"GET_Group, h5path: {h5path}")
     if "include_links" in params and params["include_links"]:
         include_links = True
     if "include_attrs" in params and params["include_attrs"]:
@@ -72,7 +72,7 @@ async def GET_Group(request):
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
+        msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     
@@ -82,7 +82,7 @@ async def GET_Group(request):
         
         domain_json = await getDomainJson(app, domain)
         if "root" not in domain_json:
-            msg = "Expected root key for domain: {}".format(domain)
+            msg = f"Expected root key for domain: {domain}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         group_id = domain_json["root"]
@@ -90,10 +90,10 @@ async def GET_Group(request):
     if h5path:
         group_id = await getObjectIdByPath(app, group_id, h5path)  # throws 404 if not found
         if not isValidUuid(group_id, "Group"):
-            msg = "No group exist with the path: {}".format(h5path)
+            msg = f"No group exist with the path: {h5path}"
             log.warn(msg)
             raise HTTPNotFound()
-        log.info("get group_id: {} from h5path: {}".format(group_id, h5path))
+        log.info(f"get group_id: {group_id} from h5path: {h5path}")
 
     # verify authorization to read the group
     await validateAction(app, domain, group_id, username, "read")
@@ -140,7 +140,7 @@ async def POST_Group(request):
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
+        msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     
@@ -149,7 +149,7 @@ async def POST_Group(request):
     aclCheck(domain_json, "create", username)  # throws exception if not allowed
 
     if "root" not in domain_json:
-        msg = "Expected root key for domain: {}".format(domain)
+        msg = f"Expected root key for domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
@@ -158,28 +158,28 @@ async def POST_Group(request):
     link_title = None
     if request.has_body:
         body = await request.json()  
-        log.info("POST Group body: {}".format(body))
+        log.info(f"POST Group body: {body}")
         if body:
             if "link" in body:
                 link_body = body["link"]
-                log.debug("link_body: {}".format(link_body))
+                log.debug(f"link_body: {link_body}")
                 if "id" in link_body:
                     link_id = link_body["id"]
                 if "name" in link_body:
                     link_title = link_body["name"]
                 if link_id and link_title:
-                    log.debug("link id: {}".format(link_id))
+                    log.debug(f"link id: {link_id}")
                     # verify that the referenced id exists and is in this domain
                     # and that the requestor has permissions to create a link
                     await validateAction(app, domain, link_id, username, "create")
             if not link_id or not link_title:
-                log.warn("POST Group body with no link: {}".format(body))
+                log.warn(f"POST Group body with no link: {body}")
 
     domain_json = await getDomainJson(app, domain) # get again in case cache was invalidated
          
     root_id = domain_json["root"]
     group_id = createObjId("groups", rootid=root_id) 
-    log.info("new  group id: {}".format(group_id))
+    log.info(f"new  group id: {group_id}")
     group_json = {"id": group_id, "root": root_id }
     log.debug("create group, body: " + json.dumps(group_json))
     req = getDataNodeUrl(app, group_id) + "/groups"
@@ -195,7 +195,7 @@ async def POST_Group(request):
         link_req += "/groups/" + link_id + "/links/" + link_title
         log.debug("PUT link - : " + link_req)
         put_json_rsp = await http_put(app, link_req, data=link_json)
-        log.debug("PUT Link resp: {}".format(put_json_rsp))
+        log.debug(f"PUT Link resp: {put_json_rsp}")
     log.debug("returning resp")
     # group creation successful     
     resp = await jsonResponse(request, group_json, status=201)
@@ -214,7 +214,7 @@ async def DELETE_Group(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     if not isValidUuid(group_id, "Group"):
-        msg = "Invalid group id: {}".format(group_id)
+        msg = f"Invalid group id: {group_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
@@ -223,14 +223,14 @@ async def DELETE_Group(request):
     
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
+        msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
     if "root" not in domain_json:
-        log.error("Expected root key for domain: {}".format(domain))
+        log.error(f"Expected root key for domain: {domain}")
         raise HTTPBadRequest(reason="Unexpected Error")
 
     # TBD - verify that the obj_id belongs to the given domain

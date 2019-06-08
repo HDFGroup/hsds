@@ -24,7 +24,7 @@ from util.dsetUtil import  getPreviewQuery
 from util.arrayUtil import getNumElements
 from util.chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk, getContiguousLayout
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
-from util.domainUtil import  getDomainFromRequest, isValidDomain
+from util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain
 from util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson, getItemSize
 from servicenode_lib import getDomainJson, getObjectJson, validateAction, getObjectIdByPath, getPathForObjectId, getRootInfo
 import config
@@ -164,7 +164,7 @@ def validateChunkLayout(shape_json, item_size, layout):
         msg = f"Unexpected layout: {layout['class']}"
 
 
-async def getDatasetDetails(app, dset_id, root_id):  
+async def getDatasetDetails(app, dset_id, root_id, bucket=None):  
     """ Get extra information about the given dataset """
     # Gather additional info on the domain
     log.debug(f"getDatasetDetails {dset_id}")
@@ -173,7 +173,7 @@ async def getDatasetDetails(app, dset_id, root_id):
         log.info(f"no dataset details not available for schema v1 id: {root_id} returning null results")
         return None
 
-    root_info = await getRootInfo(app, root_id)
+    root_info = await getRootInfo(app, root_id, bucket=bucket)
     if not root_info:
         log.warn(f"info.json not found for root: {root_id}")
         return None
@@ -211,7 +211,7 @@ async def GET_Dataset(request):
 
     if dset_id:
         if not isValidUuid(dset_id, "Dataset"):
-            msg = "Invalid dataset id: {}".format(dset_id)
+            msg = f"Invalid dataset id: {dset_id}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         if "getalias" in params:
@@ -222,7 +222,7 @@ async def GET_Dataset(request):
         if "grpid" in params:
             group_id = params["grpid"]
             if not isValidUuid(group_id, "Group"):
-                msg = "Invalid parent group id: {}".format(group_id)
+                msg = f"Invalid parent group id: {group_id}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
         if "h5path" not in params:
@@ -235,7 +235,7 @@ async def GET_Dataset(request):
             msg = "h5paths must be absolute"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        log.info("GET_Dataset, h5path: {}".format(h5path))
+        log.info(f"GET_Dataset, h5path: {h5path}")
 
     username, pswd = getUserPasswordFromRequest(request)
     if username is None and app['allow_noauth']:
@@ -245,9 +245,10 @@ async def GET_Dataset(request):
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
+        msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    bucket = getBucketForDomain(domain)
 
     verbose = False
     if "verbose" in params and params["verbose"]:
@@ -257,16 +258,16 @@ async def GET_Dataset(request):
         if group_id is None:
             domain_json = await getDomainJson(app, domain)
             if "root" not in domain_json:
-                msg = "Expected root key for domain: {}".format(domain)
+                msg = f"Expected root key for domain: {domain}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
             group_id = domain_json["root"]
         dset_id = await getObjectIdByPath(app, group_id, h5path)  # throws 404 if not found
         if not isValidUuid(dset_id, "Dataset"):
-            msg = "No dataset exist with the path: {}".format(h5path)
+            msg = f"No dataset exist with the path: {h5path}"
             log.warn(msg)
             raise HTTPNotFound()
-        log.info("get dataset_id: {} from h5path: {}".format(dset_id, h5path))
+        log.info(f"get dataset_id: {dset_id} from h5path: {h5path}")
     
     # get authoritative state for dataset from DN (even if it's in the meta_cache).
     dset_json = await getObjectJson(app, dset_id, refresh=True, include_attrs=include_attrs)  
@@ -274,7 +275,7 @@ async def GET_Dataset(request):
     # check that we have permissions to read the object
     await validateAction(app, domain, dset_id, username, "read")
 
-    log.debug("got dset_json: {}".format(dset_json))
+    log.debug(f"got dset_json: {dset_json}")
 
     resp_json = {}
     resp_json["id"] = dset_json["id"]
@@ -333,7 +334,7 @@ async def GET_Dataset(request):
 
     if verbose:
         # get allocated size and num_chunks for the dataset if available
-        dset_detail = await getDatasetDetails(app, dset_id, dset_json["root"])
+        dset_detail = await getDatasetDetails(app, dset_id, dset_json["root"], bucket=bucket)
         if dset_detail is not None:
             if "num_chunks" in dset_detail:
                 resp_json["num_chunks"] = dset_detail["num_chunks"]
@@ -357,7 +358,7 @@ async def GET_DatasetType(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     if not isValidUuid(dset_id, "Dataset"):
-        msg = "Invalid dataset id: {}".format(dset_id)
+        msg = f"Invalid dataset id: {dset_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
@@ -369,7 +370,7 @@ async def GET_DatasetType(request):
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
+        msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     
@@ -406,7 +407,7 @@ async def GET_DatasetShape(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     if not isValidUuid(dset_id, "Dataset"):
-        msg = "Invalid dataset id: {}".format(dset_id)
+        msg = f"Invalid dataset id: {dset_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
@@ -418,7 +419,7 @@ async def GET_DatasetShape(request):
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
+        msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     
@@ -460,7 +461,7 @@ async def PUT_DatasetShape(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     if not isValidUuid(dset_id, "Dataset"):
-        msg = "Invalid dataset id: {}".format(dset_id)
+        msg = f"Invalid dataset id: {dset_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
@@ -484,7 +485,7 @@ async def PUT_DatasetShape(request):
         if isinstance(shape_update, int):
             # convert to a list
             shape_update = [shape_update,]
-        log.debug("shape_update: {}".format(shape_update))
+        log.debug(f"shape_update: {shape_update}")
 
     if "extend" in data:
         try:
@@ -511,7 +512,7 @@ async def PUT_DatasetShape(request):
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
+        msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
@@ -522,7 +523,7 @@ async def PUT_DatasetShape(request):
     # get authoritative state for dataset from DN (even if it's in the meta_cache).
     dset_json = await getObjectJson(app, dset_id, refresh=True)  
     shape_orig = dset_json["shape"]
-    log.debug("shape_orig: {}".format(shape_orig))
+    log.debug(f"shape_orig: {shape_orig}")
 
     # verify that the extend request is valid
     if shape_orig["class"] != "H5S_SIMPLE":
@@ -597,7 +598,7 @@ async def POST_Dataset(request):
     # get domain, check authorization
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
+        msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     
@@ -607,7 +608,7 @@ async def POST_Dataset(request):
     aclCheck(domain_json, "create", username)  # throws exception if not allowed
 
     if "root" not in domain_json:
-        msg = "Expected root key for domain: {}".format(domain)
+        msg = f"Expected root key for domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
@@ -623,9 +624,9 @@ async def POST_Dataset(request):
     if isinstance(datatype, str) and datatype.startswith("t-"):
         # Committed type - fetch type json from DN
         ctype_id = datatype
-        log.debug("got ctypeid: {}".format(ctype_id)) 
+        log.debug(f"got ctypeid: {ctype_id}")
         ctype_json = await getObjectJson(app, ctype_id)  
-        log.debug("ctype: {}".format(ctype_json))
+        log.debug(f"ctype: {ctype_json}")
         if ctype_json["root"] != root_id:
             msg = "Referenced committed datatype must belong in same domain"
             log.warn(msg)
@@ -638,7 +639,7 @@ async def POST_Dataset(request):
             # convert predefined type string (e.g. "H5T_STD_I32LE") to 
             # corresponding json representation
             datatype = getBaseTypeJson(datatype)
-            log.debug("got datatype: {}".format(datatype))
+            log.debug(f"got datatype: {datatype}")
         except TypeError:
             msg = "POST Dataset with invalid predefined type"
             log.warn(msg)
@@ -775,14 +776,14 @@ async def POST_Dataset(request):
         chunk_dims = layout["dims"]
         chunk_size = getChunkSize(chunk_dims, item_size)
        
-        log.debug("chunk_size: {}, min: {}, max: {}".format(chunk_size, min_chunk_size, max_chunk_size))
+        log.debug(f"chunk_size: {chunk_size}, min: {min_chunk_size}, max: {max_chunk_size}")
         # adjust the chunk shape if chunk size is too small or too big
         adjusted_chunk_dims = None
         if chunk_size < min_chunk_size:
-            log.debug("chunk size: {} less than min size: {}, expanding".format(chunk_size, min_chunk_size))
+            log.debug(f"chunk size: {chunk_size} less than min size: {min_chunk_size}, expanding")
             adjusted_chunk_dims = expandChunk(chunk_dims, item_size, shape_json, chunk_min=min_chunk_size, layout_class=layout["class"])
         elif chunk_size > max_chunk_size:
-            log.debug("chunk size: {} greater than max size: {}, expanding".format(chunk_size, max_chunk_size, layout_class=layout["class"]))
+            log.debug(f"chunk size: {chunk_size} greater than max size: {max_chunk_size}, shrinking")
             adjusted_chunk_dims = shrinkChunk(chunk_dims, item_size, chunk_max=max_chunk_size)
         if adjusted_chunk_dims:
             log.debug(f"requested chunk_dimensions: {chunk_dims} modified dimensions: {adjusted_chunk_dims}")
@@ -792,12 +793,12 @@ async def POST_Dataset(request):
         chunk_dims = layout["dims"]
         chunk_size = getChunkSize(chunk_dims, item_size)
        
-        log.debug("chunk_size: {}, min: {}, max: {}".format(chunk_size, min_chunk_size, max_chunk_size))
+        log.debug(f"chunk_size: {chunk_size}, min: {min_chunk_size}, max: {max_chunk_size}")
         # adjust the chunk shape if chunk size is too small or too big
         if chunk_size < min_chunk_size:
-            log.warn("chunk size: {} less than min size: {} for H5D_CHUNKED_REF dataset".format(chunk_size, min_chunk_size))
+            log.warn(f"chunk size: {chunk_size} less than min size: {min_chunk_size} for H5D_CHUNKED_REF dataset")
         elif chunk_size > max_chunk_size:
-            log.warn("chunk size: {} greater than max size: {}, for H5D_CHUNKED_REF dataset".format(chunk_size, max_chunk_size, layout_class=layout["class"]))
+            log.warn(f"chunk size: {chunk_size} greater than max size: {max_chunk_size}, for H5D_CHUNKED_REF dataset")
         
         
     link_id = None
@@ -809,13 +810,13 @@ async def POST_Dataset(request):
         if "name" in link_body:
             link_title = link_body["name"]
         if link_id and link_title:
-            log.info("link id: {}".format(link_id))
+            log.info(f"link id: {link_id}")
             # verify that the referenced id exists and is in this domain
             # and that the requestor has permissions to create a link
             await validateAction(app, domain, link_id, username, "create")
 
     dset_id = createObjId("datasets", rootid=root_id) 
-    log.info("new  dataset id: {}".format(dset_id))
+    log.info(f"new  dataset id: {dset_id}")
 
     dataset_json = {"id": dset_id, "root": root_id, "type": datatype, "shape": shape_json }
 
@@ -831,7 +832,7 @@ async def POST_Dataset(request):
             try:
                 np.asarray(fill_value, dtype=dt)
             except (TypeError, ValueError):
-                msg = "Fill value {} not compatible with dataset type: {}".format(fill_value, datatype)
+                msg = f"Fill value {fill_value} not compatible with dataset type: {datatype}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
 
@@ -854,7 +855,7 @@ async def POST_Dataset(request):
         link_req += "/groups/" + link_id + "/links/" + link_title
         log.info("PUT link - : " + link_req)
         put_rsp = await http_put(app, link_req, data=link_json)
-        log.debug("PUT Link resp: {}".format(put_rsp))
+        log.debug(f"PUT Link resp: {put_rsp}")
 
     # dataset creation successful     
     resp = await jsonResponse(request, post_json, status=201)
@@ -874,7 +875,7 @@ async def DELETE_Dataset(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     if not isValidUuid(dset_id, "Dataset"):
-        msg = "Invalid dataset id: {}".format(dset_id)
+        msg = f"Invalid dataset id: {dset_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
@@ -883,14 +884,14 @@ async def DELETE_Dataset(request):
     
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
+        msg = f"Invalid oomain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
     if "root" not in domain_json:
-        log.error("Expected root key for domain: {}".format(domain))
+        log.error(f"Expected root key for domain: {domain}")
         raise HTTPBadRequest(reason="Unexpected Error")
 
     # TBD - verify that the obj_id belongs to the given domain

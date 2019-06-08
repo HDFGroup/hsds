@@ -20,7 +20,7 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPGone
 from util.httpUtil import http_post, http_put, http_delete, getHref, jsonResponse
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
-from util.domainUtil import  getDomainFromRequest, isValidDomain
+from util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketFromDomain
 from util.hdf5dtype import validateTypeItem, getBaseTypeJson
 from servicenode_lib import getDomainJson, getObjectJson, validateAction, getObjectIdByPath, getPathForObjectId
 import hsds_logger as log
@@ -45,7 +45,7 @@ async def GET_Datatype(request):
 
     if ctype_id:
         if not isValidUuid(ctype_id, "Type"):
-            msg = "Invalid type id: {}".format(ctype_id)
+            msg = f"Invalid type id: {ctype_id}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         if "getalias" in params:
@@ -56,7 +56,7 @@ async def GET_Datatype(request):
         if "grpid" in params:
             group_id = params["grpid"]
             if not isValidUuid(group_id, "Group"):
-                msg = "Invalid parent group id: {}".format(group_id)
+                msg = f"Invalid parent group id: {group_id}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
         if "h5path" not in params:
@@ -69,7 +69,7 @@ async def GET_Datatype(request):
             msg = "h5paths must be absolute"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        log.info("GET_Datatype, h5path: {}".format(h5path))
+        log.info(f"GET_Datatype, h5path: {h5path}")
 
     username, pswd = getUserPasswordFromRequest(request)
     if username is None and app['allow_noauth']:
@@ -79,36 +79,37 @@ async def GET_Datatype(request):
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
+        msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    bucket = getBucketFromDomain(domain)
 
     if h5path:
         domain_json = await getDomainJson(app, domain)
         if "root" not in domain_json:
-            msg = "Expected root key for domain: {}".format(domain)
+            msg = f"Expected root key for domain: {domain}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         if group_id is None:
             group_id = domain_json["root"]
-        ctype_id = await getObjectIdByPath(app, group_id, h5path)  # throws 404 if not found
+        ctype_id = await getObjectIdByPath(app, group_id, h5path, bucket=bucket)  # throws 404 if not found
         if not isValidUuid(ctype_id, "Datatype"):
-            msg = "No datatype exist with the path: {}".format(h5path)
+            msg = f"No datatype exist with the path: {h5path}"
             log.warn(msg)
             raise HTTPGone()
-        log.info("got ctype_id: {} from h5path: {}".format(ctype_id, h5path))
+        log.info(f"got ctype_id: {ctype_id} from h5path: {h5path}")
 
     await validateAction(app, domain, ctype_id, username, "read")
 
     # get authoritative state for group from DN (even if it's in the meta_cache).
-    type_json = await getObjectJson(app, ctype_id, refresh=True, include_attrs=include_attrs)  
+    type_json = await getObjectJson(app, ctype_id, bucket=bucket, refresh=True, include_attrs=include_attrs)  
     type_json["domain"] = domain
 
     if getAlias:
         root_id = type_json["root"]
         alias = []
         idpath_map = {root_id: '/'}
-        h5path = await getPathForObjectId(app, root_id, idpath_map, tgt_id=ctype_id)
+        h5path = await getPathForObjectId(app, root_id, idpath_map, bucket=bucket, tgt_id=ctype_id)
         if h5path:
             alias.append(h5path)
         type_json["alias"] = alias
@@ -151,7 +152,7 @@ async def POST_Datatype(request):
             # convert predefined type string (e.g. "H5T_STD_I32LE") to 
             # corresponding json representation
             datatype = getBaseTypeJson(datatype)
-            log.debug("got datatype: {}".format(datatype))
+            log.debug(f"got datatype: {datatype}")
         except TypeError:
             msg = "POST Dataset with invalid predefined type"
             log.warn(msg)
@@ -160,16 +161,16 @@ async def POST_Datatype(request):
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
+        msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    
+    bucket = getBucketFromDomain(domain)
     domain_json = await getDomainJson(app, domain, reload=True)
 
     aclCheck(domain_json, "create", username)  # throws exception if not allowed
 
     if "root" not in domain_json:
-        msg = "Expected root key for domain: {}".format(domain)
+        msg = f"Expected root key for domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
@@ -182,19 +183,19 @@ async def POST_Datatype(request):
         if "name" in link_body:
             link_title = link_body["name"]
         if link_id and link_title:
-            log.debug("link id: {}".format(link_id))
+            log.debug(f"link id: {link_id}")
             # verify that the referenced id exists and is in this domain
             # and that the requestor has permissions to create a link
             await validateAction(app, domain, link_id, username, "create")
 
     root_id = domain_json["root"]
     ctype_id = createObjId("datatypes", rootid=root_id) 
-    log.debug("new  type id: {}".format(ctype_id))
+    log.debug(f"new  type id: {ctype_id}")
     ctype_json = {"id": ctype_id, "root": root_id, "type": datatype }
     log.debug("create named type, body: " + json.dumps(ctype_json))
     req = getDataNodeUrl(app, ctype_id) + "/datatypes"
     
-    type_json = await http_post(app, req, data=ctype_json)
+    type_json = await http_post(app, req, data=ctype_json, bucket=bucket)
 
     # create link if requested
     if link_id and link_title:
@@ -204,8 +205,8 @@ async def POST_Datatype(request):
         link_req = getDataNodeUrl(app, link_id)
         link_req += "/groups/" + link_id + "/links/" + link_title
         log.debug("PUT link - : " + link_req)
-        put_rsp = await http_put(app, link_req, data=link_json)
-        log.debug("PUT Link resp: {}".format(put_rsp))
+        put_rsp = await http_put(app, link_req, data=link_json, bucket=bucket)
+        log.debug(f"PUT Link resp: {put_rsp}")
 
     # datatype creation successful     
     resp = await jsonResponse(request, type_json, status=201)
@@ -225,7 +226,7 @@ async def DELETE_Datatype(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     if not isValidUuid(ctype_id, "Type"):
-        msg = "Invalid committed type id: {}".format(ctype_id)
+        msg = f"Invalid committed type id: {ctype_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
@@ -234,14 +235,15 @@ async def DELETE_Datatype(request):
     
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
+        msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    bucket = getBucketFromDomain(domain)
     
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
     if "root" not in domain_json:
-        log.error("Expected root key for domain: {}".format(domain))
+        log.error(f"Expected root key for domain: {domain}")
         raise HTTPBadRequest(reason="Unexpected Error")
 
     # TBD - verify that the obj_id belongs to the given domain
@@ -249,7 +251,7 @@ async def DELETE_Datatype(request):
 
     req = getDataNodeUrl(app, ctype_id) + "/datatypes/" + ctype_id
  
-    await http_delete(app, req)
+    await http_delete(app, req, bucket=bucket)
 
     if ctype_id in meta_cache:
         del meta_cache[ctype_id]  # remove from cache

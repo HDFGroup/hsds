@@ -32,10 +32,15 @@ async def GET_Datatype(request):
     ctype_id = get_obj_id(request)  
     
     if not isValidUuid(ctype_id, obj_class="type"):
-        log.error( "Unexpected type_id: {}".format(ctype_id))
+        log.error(f"Unexpected type_id: {ctype_id}")
         raise HTTPInternalServerError()
-    
-    ctype_json = await get_metadata_obj(app, ctype_id)
+
+    if "bucket" in params:
+        bucket = params["bucket"]
+    else:
+        bucket = None
+
+    ctype_json = await get_metadata_obj(app, ctype_id, bucket=bucket)
 
     resp_json = { } 
     resp_json["id"] = ctype_json["id"]
@@ -56,6 +61,7 @@ async def POST_Datatype(request):
     log.info("Post_Datatype")
     log.request(request)
     app = request.app
+    params = request.rel_url.query
 
     if not request.has_body:
         msg = "POST_Datatype with no body"
@@ -63,6 +69,12 @@ async def POST_Datatype(request):
         raise HTTPBadRequest(reason=msg)
 
     body = await request.json()
+    if "bucket" in params:
+        bucket = params["bucket"]
+    elif "bucket" in body:
+        bucket = params["bucket"]
+    else:
+        bucket = None
     
     ctype_id = get_obj_id(request, body=body)
     if not isValidUuid(ctype_id, obj_class="datatype"):
@@ -70,7 +82,7 @@ async def POST_Datatype(request):
         raise HTTPInternalServerError()
 
     # verify the id doesn't already exist
-    obj_found = await check_metadata_obj(app, ctype_id)
+    obj_found = await check_metadata_obj(app, ctype_id, bucket=bucket)
     if obj_found:
         log.error( "Post with existing type_id: {}".format(ctype_id))
         raise HTTPInternalServerError()
@@ -125,7 +137,12 @@ async def DELETE_Datatype(request):
     params = request.rel_url.query
     
     ctype_id = get_obj_id(request)
-    log.info("DELETE ctype: {}".format(ctype_id))
+    log.info(f"DELETE ctype: {ctype_id}")
+
+    if "bucket" in params:
+        bucket = params["bucket"]
+    else:
+        bucket = None
 
     # verify the id  exist
     obj_found = await check_metadata_obj(app, ctype_id)
@@ -141,7 +158,7 @@ async def DELETE_Datatype(request):
         notify=False
     log.info("notify: {}".format(notify))
     
-    await delete_metadata_obj(app, ctype_id, notify=notify)
+    await delete_metadata_obj(app, ctype_id, bucket=bucket, notify=notify)
  
     resp_json = {  } 
     resp = json_response(resp_json)

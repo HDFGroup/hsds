@@ -38,6 +38,10 @@ async def GET_Attributes(request):
     params = request.rel_url.query
 
     obj_id = get_obj_id(request)  
+    if "bucket" in params:
+        bucket = params["bucket"]
+    else:
+        bucket = None
      
     include_data = False
     if "IncludeData" in params and params["IncludeData"]:
@@ -58,7 +62,7 @@ async def GET_Attributes(request):
         marker = params["Marker"]
         log.info("GET_Links - using Marker: {}".format(marker))
      
-    obj_json = await get_metadata_obj(app, obj_id)
+    obj_json = await get_metadata_obj(app, obj_id, bucket=bucket)
     
     log.debug("GET attributes obj_id: {} got json".format(obj_id))
     if "attributes" not in obj_json:
@@ -108,18 +112,23 @@ async def GET_Attribute(request):
     """
     log.request(request)
     app = request.app
+    params = request.rel_url.query
 
     obj_id = get_obj_id(request)  
 
     attr_name = request.match_info.get('name')
     validateAttributeName(attr_name)
+    if "bucket" in params:
+        bucket = params["bucket"]
+    else:
+        bucket = None
         
-    obj_json = await get_metadata_obj(app, obj_id)
-    log.info("GET attribute obj_id: {} name: {}".format(obj_id, attr_name))
+    obj_json = await get_metadata_obj(app, obj_id, bucket=bucket)
+    log.info(f"GET attribute obj_id: {obj_id} name: {attr_name} bucket: {bucket}")
     log.debug(f"got obj_json: {obj_json}")
 
     if "attributes" not in obj_json:
-        log.error("unexpected obj data for id: {}".format(obj_id))
+        log.error(f"unexpected obj data for id: {obj_id}")
         raise HTTPInternalServerError()
 
     attributes = obj_json["attributes"]
@@ -151,6 +160,12 @@ async def PUT_Attribute(request):
         raise HTTPBadRequest(message="body expected")
 
     body = await request.json() 
+    if "bucket" in params:
+        bucket = params["bucket"]
+    elif "bucket" in body:
+        bucket = params["bucket"]
+    else:
+        bucket = None
     
     replace = False
     if "replace" in params and params["replace"]:
@@ -174,22 +189,22 @@ async def PUT_Attribute(request):
     if "value" in body:
         value = body["value"]
 
-    obj_json = await get_metadata_obj(app, obj_id)
-    log.debug("PUT attribute obj_id: {} got json".format(obj_id))
+    obj_json = await get_metadata_obj(app, obj_id, bucket=bucket)
+    log.debug(f"PUT attribute obj_id: {obj_id} bucket: {bucket} got json")
 
     if "attributes" not in obj_json:
-        log.error("unexpected obj data for id: {}".format(obj_id))
+        log.error(f"unexpected obj data for id: {obj_id}")
         raise HTTPInternalServerError()
 
     attributes = obj_json["attributes"]
     if attr_name in attributes and not replace:
         # Attribute already exists, return a 409
-        log.warn("Attempt to overwrite attribute: {} in obj_id:".format(attr_name, obj_id))
+        log.warn(f"Attempt to overwrite attribute: {attr_name} in obj_id: {obj_id}")
         raise HTTPConflict()
     
     if replace and attr_name not in attributes:
         # Replace requires attribute exists
-        log.warn("Attempt to update missing attribute: {} in obj_id:".format(attr_name, obj_id))
+        log.warn(f"Attempt to update missing attribute: {attr_name} in obj_id: {obj_id}")
         raise HTTPNotFound()
 
     if replace:
@@ -203,7 +218,7 @@ async def PUT_Attribute(request):
     attributes[attr_name] = attr_json
      
     # write back to S3, save to metadata cache
-    await save_metadata_obj(app, obj_id, obj_json)
+    await save_metadata_obj(app, obj_id, obj_json, bucket=bucket)
  
     resp_json = { } 
 
@@ -217,18 +232,23 @@ async def DELETE_Attribute(request):
     """
     log.request(request)
     app = request.app
+    params = request.rel_url.query
     
     obj_id = get_obj_id(request) 
+    if "bucket" in params:
+        bucket = params["bucket"]
+    else:
+        bucket = None
 
     attr_name = request.match_info.get('name')
-    log.info("DELETE attribute {} in {}".format(attr_name, obj_id))
+    log.info(f"DELETE attribute {attr_name} in {obj_id} bucket: {bucket}")
     validateAttributeName(attr_name)
 
     obj_json = await get_metadata_obj(app, obj_id)
     
-    log.debug("DELETE attribute obj_id: {} got json".format(obj_id))
+    log.debug(f"DELETE attribute obj_id: {obj_id} got json")
     if "attributes" not in obj_json:
-        msg = "unexpected data for obj id: {}".format(obj_id)
+        msg = f"unexpected data for obj id: {obj_id}"
         msg.error(msg)
         raise HTTPInternalServerError()
 
@@ -236,18 +256,15 @@ async def DELETE_Attribute(request):
     attributes = obj_json["attributes"]
 
     if attr_name not in attributes:
-        msg = "Attribute  {} not found in id: {}".format(attr_name, obj_id)
+        msg = f"Attribute  {attr_name} not found in objid: {obj_id}"
         log.warn(msg)
         raise HTTPNotFound()
 
     del attributes[attr_name] 
 
-    await save_metadata_obj(app, obj_id, obj_json)
+    await save_metadata_obj(app, obj_id, obj_json, bucket=bucket)
 
     resp_json = { } 
     resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp    
-
- 
-     

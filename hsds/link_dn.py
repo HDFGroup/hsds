@@ -40,16 +40,16 @@ async def GET_Links(request):
     app = request.app
     params = request.rel_url.query
     group_id = get_obj_id(request)  
-    log.info("GET links: {}".format(group_id))
+    log.info(f"GET links: {group_id}")
     if not isValidUuid(group_id, obj_class="group"):
-        log.error( "Unexpected group_id: {}".format(group_id))
+        log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
  
     limit = None
     if "Limit" in params:
         try:
             limit = int(params["Limit"])
-            log.info("GET_Links - using Limit: {}".format(limit))
+            log.info(f"GET_Links - using Limit: {limit}")
         except ValueError:
             msg = "Bad Request: Expected int type for limit"
             log.error(msg)  # should be validated by SN
@@ -57,13 +57,18 @@ async def GET_Links(request):
     marker = None
     if "Marker" in params:
         marker = params["Marker"]
-        log.info("GET_Links - using Marker: {}".format(marker))
+        log.info(f"GET_Links - using Marker: {marker}")
+
+    if "bucket" in params:
+        bucket = params["bucket"]
+    else:
+        bucket = None
      
-    group_json = await get_metadata_obj(app, group_id)
+    group_json = await get_metadata_obj(app, group_id, bucket=bucket)
     
-    log.info("for id: {} got group json: {}".format(group_id, str(group_json)))
+    log.info(f"for id: {group_id} got group json: {group_json}")
     if "links" not in group_json:
-        msg.error("unexpected group data for id: {}".format(group_id))
+        msg.error(f"unexpected group data for id: {group_id}")
         raise HTTPInternalServerError()
 
     # return a list of links based on sorted dictionary keys
@@ -77,7 +82,7 @@ async def GET_Links(request):
         start_index = index(titles, marker) + 1
         if start_index == 0:
             # marker not found, return 404
-            msg = "Link marker: {}, not found".format(marker)
+            msg = f"Link marker: {marker}, not found"
             log.warn(msg)
             raise HTTPNotFound()
 
@@ -102,26 +107,32 @@ async def GET_Link(request):
     """
     log.request(request)
     app = request.app
+    params = request.rel_url.query
     group_id = get_obj_id(request)
-    log.info("GET link: {}".format(group_id))
+    log.info(f"GET link: {group_id}")
 
     if not isValidUuid(group_id, obj_class="group"):
-        log.error( "Unexpected group_id: {}".format(group_id))
+        log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
 
     link_title = request.match_info.get('title')
 
     validateLinkName(link_title)
 
-    group_json = await get_metadata_obj(app, group_id)
-    log.info("for id: {} got group json: {}".format(group_id, str(group_json)))
+    if "bucket" in params:
+        bucket = params["bucket"]
+    else:
+        bucket = None
+
+    group_json = await get_metadata_obj(app, group_id, bucket=bucket)
+    log.info(f"for id: {group_id} got group json: {group_json}")
     if "links" not in group_json:
-        log.error("unexpected group data for id: {}".format(group_id))
+        log.error(f"unexpected group data for id: {group_id}")
         raise HTTPInternalServerError()
 
     links = group_json["links"]
     if link_title not in links:
-        log.warn("Link name {} not found in group: {}".format(link_title, group_id))
+        log.warn(f"Link name {link_title} not found in group: {group_id}")
         raise HTTPNotFound()
 
     link_json = links[link_title]
@@ -134,16 +145,17 @@ async def PUT_Link(request):
     """ Handler creating a new link"""
     log.request(request)
     app = request.app
+    params = request.rel_url.query
     group_id = get_obj_id(request)
-    log.info("PUT link: {}".format(group_id))
+    log.info(f"PUT link: {group_id}")
     if not isValidUuid(group_id, obj_class="group"):
-        log.error( "Unexpected group_id: {}".format(group_id))
+        log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
 
     link_title = request.match_info.get('title')
     validateLinkName(link_title)
 
-    log.info("link_title: {}".format(link_title))
+    log.info(f"link_title: {link_title}")
 
     if not request.has_body:
         msg = "PUT Link with no body"
@@ -168,14 +180,21 @@ async def PUT_Link(request):
     if "h5domain" in body:
         link_json["h5domain"] = body["h5domain"]
 
-    group_json = await get_metadata_obj(app, group_id)
+    if "bucket" in params:
+        bucket = params["bucket"]
+    elif "bucket" in body:
+        bucket = params["bucket"]
+    else:
+        bucket = None
+
+    group_json = await get_metadata_obj(app, group_id, bucket=bucket)
     if "links" not in group_json:
-        log.error( "unexpected group data for id: {}".format(group_id))
+        log.error(f"unexpected group data for id: {group_id}")
         raise HTTPInternalServerError()
 
     links = group_json["links"]
     if link_title in links:
-        msg = "Link name {} already found in group: {}".format(link_title, group_id)
+        msg = f"Link name {link_title} already found in group: {group_id}"
         log.warn(msg)
         raise HTTPConflict()
     
@@ -203,8 +222,9 @@ async def DELETE_Link(request):
     """
     log.request(request)
     app = request.app
+    params = request.rel_url.query
     group_id = get_obj_id(request)
-    log.info("DELETE link: {}".format(group_id))
+    log.info(f"DELETE link: {group_id}")
 
     if not isValidUuid(group_id, obj_class="group"):
         msg = f"Unexpected group_id: {group_id}"
@@ -214,15 +234,20 @@ async def DELETE_Link(request):
     link_title = request.match_info.get('title')
     validateLinkName(link_title)
 
-    group_json = await get_metadata_obj(app, group_id)
+    if "bucket" in params:
+        bucket = params["bucket"]
+    else:
+        bucket = None
+
+    group_json = await get_metadata_obj(app, group_id, bucket=bucket)
     # TBD: Possible race condition
     if "links" not in group_json:
-        log.error("unexpected group data for id: {}".format(group_id))
+        log.error(f"unexpected group data for id: {group_id}")
         raise HTTPInternalServerError()
 
     links = group_json["links"]
     if link_title not in links:
-        msg = "Link name {} not found in group: {}".format(link_title, group_id)
+        msg = f"Link name {link_title} not found in group: {group_id}"
         log.warn(msg)
         raise HTTPNotFound()
 
@@ -233,7 +258,7 @@ async def DELETE_Link(request):
     group_json["lastModified"] = now
 
     # write back to S3
-    await save_metadata_obj(app, group_id, group_json)
+    await save_metadata_obj(app, group_id, group_json, bucket=bucket)
 
     hrefs = []  # TBD
     resp_json = {"href":  hrefs} 
@@ -241,4 +266,3 @@ async def DELETE_Link(request):
     resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
-   

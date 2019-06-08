@@ -185,7 +185,7 @@ def getLimits():
     limits["max_chunks_per_request"] = int(config.get("max_chunks_per_request"))
     return limits
 
-async def get_domain_response(app, domain_json, verbose=False):
+async def get_domain_response(app, domain_json, bucket=None, verbose=False):
     rsp_json = { }
     if "root" in domain_json:
         rsp_json["root"] = domain_json["root"]
@@ -204,7 +204,7 @@ async def get_domain_response(app, domain_json, verbose=False):
     allocated_bytes = 0
 
     if verbose and "root" in domain_json:
-        root_info = await getRootInfo(app, domain_json["root"])
+        root_info = await getRootInfo(app, domain_json["root"], bucket=bucket)
         if root_info:
             allocated_bytes = root_info["allocated_bytes"]  
             totalSize += allocated_bytes
@@ -388,12 +388,12 @@ async def GET_Domain(request):
         return resp
 
 
-    log.info("got domain: {}".format(domain))
+    log.info(f"got domain: {domain}")
    
     domain_json = await getDomainJson(app, domain, reload=True)
      
     if domain_json is None:
-        log.warn("domain: {} not found".format(domain))
+        log.warn(f"domain: {domain} not found")
         raise HTTPNotFound()
      
     if 'owner' not in domain_json:
@@ -404,7 +404,7 @@ async def GET_Domain(request):
         log.error("No acls key found in domain")
         raise HTTPInternalServerError()
 
-    log.debug("got domain_json: {}".format(domain_json))
+    log.debug("fgot domain_json: {domain_json}")
     # validate that the requesting user has permission to read this domain
     aclCheck(domain_json, "read", username)  # throws exception if not authorized
 
@@ -414,7 +414,7 @@ async def GET_Domain(request):
         h5path = params["h5path"]
         root_id = domain_json["root"]
         obj_id = await getObjectIdByPath(app, root_id, h5path)  # throws 404 if not found
-        log.info("get obj_id: {} from h5path: {}".format(obj_id, h5path))
+        log.info(f"get obj_id: {obj_id} from h5path: {h5path}")
         # get authoritative state for object from DN (even if it's in the meta_cache).
         obj_json = await getObjectJson(app, obj_id, refresh=True)
         obj_json["domain"] = domain
@@ -446,7 +446,7 @@ async def GET_Domain(request):
     
     hrefs.append({'rel': 'acls', 'href': getHref(request, '/acls')})
     parent_domain = getParentDomain(domain)
-    log.debug("href parent domain: {}".format(parent_domain))
+    log.debug(f"href parent domain: {parent_domain}")
     if parent_domain:
         hrefs.append({'rel': 'parent', 'href': getHref(request, '/', domain=parent_domain)})
 
@@ -513,20 +513,20 @@ async def PUT_Domain(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
  
-    log.info("PUT domain: {}, username: {}".format(domain, username))
+    log.info(f"PUT domain: {domain}, username: {username}")
 
     body = None
     if request.has_body:
         body = await request.json()   
-        log.debug("PUT domain with body: {}".format(body))
+        log.debug(f"PUT domain with body: {body}")
 
     if ("flush" in params and params["flush"]) or (body and "flush" in body and body["flush"]):
         # flush domain - update existing domain rather than create a new resource
         domain_json = await getDomainJson(app, domain, reload=True)
-        log.debug("got domain_json: {}".format(domain_json))
+        log.debug(f"got domain_json: {domain_json}")
     
         if domain_json is None:
-            log.warn("domain: {} not found".format(domain))
+            log.warn(f"domain: {domain} not found")
             raise HTTPNotFound()
      
         if 'owner' not in domain_json:
@@ -570,7 +570,7 @@ async def PUT_Domain(request):
 
 
     parent_domain = getParentDomain(domain)
-    log.debug("Parent domain: [{}]".format(parent_domain))
+    log.debug(f"Parent domain: [{parent_domain}]")
     
     if (not parent_domain or parent_domain == '/') and not is_folder:
         msg = "Only folder domains can be created at the top-level"
@@ -589,18 +589,18 @@ async def PUT_Domain(request):
             parent_json = await getDomainJson(app, parent_domain, reload=True)
         except ClientResponseError as ce:
             if ce.code == 404:
-                msg = "Parent domain: {} not found".format(parent_domain)
+                msg = f"Parent domain: {parent_domain} not found"
                 log.warn(msg)
                 raise HTTPNotFound()
             elif ce.code == 410:
-                msg = "Parent domain: {} removed".format(parent_domain)
+                msg = f"Parent domain: {parent_domain} removed"
                 log.warn(msg)
                 raise HTTPGone()
             else:
                 log.error(f"Unexpected error: {ce.code}")
                 raise HTTPInternalServerError()
 
-        log.debug("parent_json {}: {}".format(parent_domain, parent_json))
+        log.debug(f"parent_json {parent_domain}: {parent_json}")
         if "root" in parent_json and parent_json["root"]:
             msg = "Parent domain must be a folder"
             log.warn(msg)
@@ -626,7 +626,7 @@ async def PUT_Domain(request):
     if not is_folder and not linked_json:
         # create a root group for the new domain
         root_id = createObjId("roots") 
-        log.debug("new root group id: {}".format(root_id))
+        log.debug(f"new root group id: {root_id}")
         group_json = {"id": root_id, "root": root_id, "domain": domain }
         log.debug("create group for domain, body: " + json.dumps(group_json))
     
@@ -648,7 +648,7 @@ async def PUT_Domain(request):
     domain_acls[owner] = owner_perm
     if config.get("default_public") or is_folder:
         # this will make the domain public readable
-        log.debug("adding default perm for domain: {}".format(domain))
+        log.debug(f"adding default perm for domain: {domain}")
         domain_acls["default"] =  default_perm
 
     # construct dn request to create new domain
@@ -660,7 +660,7 @@ async def PUT_Domain(request):
     if root_id:
         body["root"] = root_id
 
-    log.debug("creating domain: {} with body: {}".format(domain, body))
+    log.debug(f"creating domain: {domain} with body: {body}")
     try:
         domain_json = await http_put(app, req, data=body)
     except ClientResponseError as ce:
@@ -710,12 +710,12 @@ async def DELETE_Domain(request):
         if "keep_root" in params:
             keep_root = params["keep_root"]
 
-    log.info("meta_only domain delete: {}".format(meta_only))
+    log.info(f"meta_only domain delete: {meta_only}")
     if meta_only:
         # remove from domain cache if present
         domain_cache = app["domain_cache"]
         if domain in domain_cache:
-            log.info("deleting {} from domain_cache".format(domain))
+            log.info(f"deleting {domain} from domain_cache")
             del domain_cache[domain]
         resp = await jsonResponse(request, {})
         return resp
@@ -782,12 +782,12 @@ async def DELETE_Domain(request):
             continue # don't send to ourselves
         sn_url = sn_urls[node_no]
         req = sn_url + "/"
-        log.info("sending sn request: {}".format(req))
+        log.info(f"sending sn request: {req}")
         try: 
             sn_rsp = await http_delete(app, req, data=body)
-            log.info("{} response: {}".format(req, sn_rsp))
+            log.info(f"{req} response: {sn_rsp}")
         except ClientResponseError as ce:
-            log.warn("got error for sn_delete: {}".format(ce))
+            log.warn(f"got error for sn_delete: {ce}")
     
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
@@ -846,10 +846,10 @@ async def GET_ACL(request):
 
     acls = domain_json["acls"]
 
-    log.debug("got domain_json: {}".format(domain_json))
+    log.debug(f"got domain_json: {domain_json}")
 
     if acl_username not in acls:
-        msg = "acl for username: [{}] not found".format(acl_username)
+        msg = f"acl for username: [{acl_username}] not found"
         log.warn(msg)
         raise HTTPNotFound()
 
@@ -910,7 +910,7 @@ async def GET_ACLs(request):
 
     acls = domain_json["acls"]
 
-    log.debug("got domain_json: {}".format(domain_json))
+    log.debug(f"got domain_json: {domain_json}")
     # validate that the requesting user has permission to read this domain
     aclCheck(domain_json, "readACL", username)  # throws exception if not authorized
 
@@ -964,11 +964,11 @@ async def PUT_ACL(request):
 
     for k in body.keys():
         if k not in acl_keys:
-            msg = "Unexpected key in request body: {}".format(k)
+            msg = f"Unexpected key in request body: {k}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         if body[k] not in (True, False):
-            msg = "Unexpected value for key in request body: {}".format(k)
+            msg = f"Unexpected value for key in request body: {k}"
             log.warn(k)
             raise HTTPBadRequest(reason=msg)
 
@@ -985,7 +985,7 @@ async def PUT_ACL(request):
     # the domain from the authoritative source (the dn node)
     req = getDataNodeUrl(app, domain)
     req += "/acls/" + acl_username
-    log.info("sending dn req: {}".format(req))    
+    log.info(f"sending dn req: {req}")  
     body["domain"] = domain
 
     put_rsp = await http_put(app, req, data=body)
@@ -1021,11 +1021,11 @@ async def GET_Datasets(request):
         domain_json = await getDomainJson(app, domain)
     except ClientResponseError as ce:
         if ce.code == 404:
-            msg = "Domain: {} not found".format(domain)
+            msg = f"Domain: {domain} not found"
             log.warn(msg)
             raise HTTPNotFound()
         elif ce.code == 410:
-            msg = "Domain: {} removed".format(domain)
+            msg = f"Domain: {domain} removed"
             log.warn(msg)
             raise HTTPGone()
         else:
@@ -1043,7 +1043,7 @@ async def GET_Datasets(request):
         log.error("No acls key found in domain")
         raise HTTPInternalServerError()
 
-    log.debug("got domain_json: {}".format(domain_json))
+    log.debug(f"got domain_json: {domain_json}")
     # validate that the requesting user has permission to read this domain
     aclCheck(domain_json, "read", username)  # throws exception if not authorized
 
@@ -1066,7 +1066,7 @@ async def GET_Datasets(request):
         objs = collections["datasets"]
         obj_ids = getIdList(objs, marker=marker, limit=limit)
         
-    log.debug("returning obj_ids: {}".format(obj_ids))
+    log.debug(f"returning obj_ids: {obj_ids}")
      
     # create hrefs 
     hrefs = []
@@ -1124,7 +1124,7 @@ async def GET_Groups(request):
         log.error("No acls key found in domain")
         raise HTTPInternalServerError()
 
-    log.debug("got domain_json: {}".format(domain_json))
+    log.debug(f"got domain_json: {domain_json}")
     # validate that the requesting user has permission to read this domain
     aclCheck(domain_json, "read", username)  # throws exception if not authorized
 
@@ -1204,7 +1204,7 @@ async def GET_Datatypes(request):
         log.error("No acls key found in domain")
         raise HTTPInternalServerError()
 
-    log.debug("got domain_json: {}".format(domain_json))
+    log.debug(f"got domain_json: {domain_json}")
     # validate that the requesting user has permission to read this domain
     aclCheck(domain_json, "read", username)  # throws exception if not authorized
 

@@ -36,7 +36,7 @@ async def GET_Links(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     if not isValidUuid(group_id, obj_class="Group"):
-        msg = "Invalid group id: {}".format(group_id)
+        msg = f"Invalid group id: {group_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     limit = None
@@ -59,7 +59,7 @@ async def GET_Links(request):
     
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
+        msg = f"domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     
@@ -76,7 +76,7 @@ async def GET_Links(request):
         
     log.debug("get LINKS: " + req)
     links_json = await http_get(app, req)
-    log.debug("got links json from dn for group_id: {}".format(group_id)) 
+    log.debug(f"got links json from dn for group_id: {group_id}")
     links = links_json["links"]
 
     # mix in collection key, target and hrefs
@@ -113,7 +113,7 @@ async def GET_Link(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     if not isValidUuid(group_id, obj_class="Group"):
-        msg = "Invalid group id: {}".format(group_id)
+        msg = f"Invalid group id: {group_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     link_title = request.match_info.get('title')
@@ -127,7 +127,7 @@ async def GET_Link(request):
     
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
+        msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     await validateAction(app, domain, group_id, username, "read")
@@ -139,17 +139,18 @@ async def GET_Link(request):
     log.debug("got link_json: " + str(link_json)) 
     resp_link = {}
     resp_link["title"] = link_title
-    resp_link["class"] = link_json["class"]
-    if link_json["class"] == "H5L_TYPE_HARD":
+    link_class = link_json["class"]
+    resp_link["class"] = link_class
+    if link_class == "H5L_TYPE_HARD":
         resp_link["id"] = link_json["id"]
         resp_link["collection"] = getCollectionForId(link_json["id"])
-    elif link_json["class"] == "H5L_TYPE_SOFT":
+    elif link_class == "H5L_TYPE_SOFT":
         resp_link["h5path"] = link_json["h5path"]
-    elif link_json["class"] == "H5L_TYPE_EXTERNAL":
+    elif link_class == "H5L_TYPE_EXTERNAL":
         resp_link["h5path"] = link_json["h5path"]
         resp_link["h5domain"] = link_json["h5domain"]
     else:
-        log.warn("Unexpected link class: {}".format(link_json["class"]))
+        log.warn(f"Unexpected link class: {link_class}")
     resp_json = {}
     resp_json["link"] = resp_link
     resp_json["created"] = link_json["created"]
@@ -182,11 +183,11 @@ async def PUT_Link(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     if not isValidUuid(group_id, obj_class="Group"):
-        msg = "Invalid group id: {}".format(group_id)
+        msg = f"Invalid group id: {group_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     link_title = request.match_info.get('title')
-    log.info("PUT Link_title: [{}]".format(link_title) )
+    log.info(f"PUT Link_title: [{link_title}]")
     validateLinkName(link_title)
 
 
@@ -226,7 +227,7 @@ async def PUT_Link(request):
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
+        msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     await validateAction(app, domain, group_id, username, "create")
@@ -268,7 +269,7 @@ async def DELETE_Link(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     if not isValidUuid(group_id, obj_class="Group"):
-        msg = "Invalid group id: {}".format(group_id)
+        msg = f"Invalid group id: {group_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     link_title = request.match_info.get('title')
@@ -279,7 +280,7 @@ async def DELETE_Link(request):
     
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
-        msg = "Invalid host value: {}".format(domain)
+        msg = f"domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
