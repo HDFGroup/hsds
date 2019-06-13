@@ -122,10 +122,10 @@ def setupDomain(domain, folder=False):
         return  # already have domain
     if rsp.status_code != 404:
         # something other than "not found"
-        raise ValueError("Unexpected get domain error: {}".format(rsp.status_code))
+        raise ValueError(f"Unexpected get domain error: {rsp.status_code}")
     parent_domain = getParentDomain(domain)
     if parent_domain is None:
-        raise ValueError("Invalid parent domain: {}".format(domain))
+        raise ValueError(f"Invalid parent domain: {domain}")
     # create parent domain if needed
     setupDomain(parent_domain, folder=True)  
      
@@ -137,7 +137,7 @@ def setupDomain(domain, folder=False):
     else:
         rsp = requests.put(req, headers=headers)
     if rsp.status_code != 201:
-        raise ValueError("Unexpected put domain error: {}".format(rsp.status_code))
+        raise ValueError(f"Unexpected put domain error: {rsp.status_code}")
 
 """
 Helper function - get root uuid for domain

@@ -49,6 +49,7 @@ def validateObjId(obj_id, bucket):
     elif not isValidUuid(obj_id):
         msg = f"Invalid obj id: {obj_id}"
         log.error(msg)
+        
         raise HTTPInternalServerError()
 
 
@@ -183,8 +184,6 @@ async def save_metadata_obj(app, obj_id, obj_json, bucket=None, notify=False, fl
         raise HTTPInternalServerError()
 
     validateObjId(obj_id, bucket)
-    if isValidDomain(obj_id):
-        bucket = getBucketForDomain(obj_id)
     
     if not isinstance(obj_json, dict):
         log.error("Passed non-dict obj to save_metadata_obj")
@@ -222,7 +221,7 @@ async def save_metadata_obj(app, obj_id, obj_json, bucket=None, notify=False, fl
             log.warn("flush not supported for save_metadata_obj with chunks")
             raise HTTPBadRequest()
         try:
-            await write_s3_obj(app, obj_id)
+            await write_s3_obj(app, obj_id, bucket=bucket)
         except KeyError as ke:
             log.error(f"s3 sync got key error: {ke}")
             raise HTTPInternalServerError()
@@ -234,7 +233,7 @@ async def save_metadata_obj(app, obj_id, obj_json, bucket=None, notify=False, fl
     else:
         # flag to write to S3
         dirty_ids[obj_id] = (now, bucket)
-  
+        
      
     # message AN immediately if notify flag is set
     # otherwise AN will be notified at next S3 sync
@@ -253,7 +252,7 @@ async def save_metadata_obj(app, obj_id, obj_json, bucket=None, notify=False, fl
                 log.info(f"ASync PUT notify: {req} params: {params}")
                 await http_put(app, req, params=params)
             except HTTPInternalServerError as hpe:
-                log.error(f"got error notifying async node: {hpe}")
+                log.warn(f"got error notifying async node: {hpe}")
 
         else:
             req = an_url + "/object/" + obj_id
@@ -261,7 +260,7 @@ async def save_metadata_obj(app, obj_id, obj_json, bucket=None, notify=False, fl
                 log.info(f"ASync PUT notify: {req}")
                 await http_put(app, req)
             except HTTPInternalServerError:
-                log.error(f"got error notifying async node")
+                log.warn(f"got error notifying async node")
         
 
 
@@ -497,6 +496,7 @@ async def s3sync(app):
             bucket = app["bucket_name"]
         s3key = getS3Key(obj_id)
         log.debug(f"s3sync dirty id: {obj_id}, s3key: {s3key} bucket: {bucket}")
+        
         create_task = True
         if s3key in pending_s3_write:
             log.debug(f"key {s3key} has been pending for {s3sync_start - pending_s3_write[s3key]}")
