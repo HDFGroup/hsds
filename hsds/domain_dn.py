@@ -59,7 +59,11 @@ async def GET_Domain(request):
     domain = get_domain(request)
     log.debug(f"get domain: {domain}")
     bucket = getBucketForDomain(domain)
-    domain_json = await get_metadata_obj(app, domain, bucket=bucket)
+    if not bucket:
+        log.error(f"expected bucket to be used in domain: {domain}")
+        raise HTTPInternalServerError()
+    log.debug(f"using bucket: {bucket}")
+    domain_json = await get_metadata_obj(app, domain)
     log.debug(f"returning domain_json: {domain_json}")
 
     resp = json_response(domain_json)
@@ -83,6 +87,9 @@ async def PUT_Domain(request):
  
     log.debug("PUT domain: {}".format(domain))
     bucket = getBucketForDomain(domain)
+    if not bucket:
+        log.error(f"expected bucket to be used in domain: {domain}")
+        raise HTTPInternalServerError()
  
     body_json = await request.json()
     if "owner" not in body_json:
@@ -95,7 +102,7 @@ async def PUT_Domain(request):
         raise HTTPInternalServerError() 
 
     # try getting the domain, should raise 404
-    domain_exists = await check_metadata_obj(app, domain, bucket=bucket)
+    domain_exists = await check_metadata_obj(app, domain)
       
     if domain_exists:
         # domain already exists
@@ -116,7 +123,7 @@ async def PUT_Domain(request):
     domain_json["lastModified"] = now
 
     # write the domain json to S3 immediately so it will show up in a get_domains S3 scan
-    await save_metadata_obj(app, domain, domain_json, bucket=bucket, notify=True, flush=True)
+    await save_metadata_obj(app, domain, domain_json, notify=True, flush=True)
  
     resp = json_response(domain_json, status=201)
     log.response(request, resp=resp)
@@ -138,7 +145,12 @@ async def DELETE_Domain(request):
     log.info("delete domain: {}".format(domain))
 
     # raises exception if domain not found
-    domain_json = await get_metadata_obj(app, domain, bucket=bucket)
+    if not bucket:
+        log.error(f"expected bucket to be used in domain: {domain}")
+        raise HTTPInternalServerError()
+    log.debug(f"using bucket: {bucket}")
+
+    domain_json = await get_metadata_obj(app, domain)
     if domain_json:
         log.debug("got domain json")
     # delete domain
@@ -164,12 +176,11 @@ async def PUT_ACL(request):
     body_json = await request.json() 
 
     domain = get_domain(request, body=body_json)
-    bucket = getBucketForDomain(domain)
 
     log.info("put_acl - domain: {}, username:".format(domain, acl_username))
 
     # raises exception if domain not found
-    domain_json = await get_metadata_obj(app, domain, bucket=bucket)
+    domain_json = await get_metadata_obj(app, domain)
 
     if "acls" not in domain_json:
         log.error( "unexpected domain data for domain: {}".format(domain))
@@ -197,7 +208,7 @@ async def PUT_ACL(request):
     domain_json["lastModified"] = now
      
     # write back to S3
-    await save_metadata_obj(app, domain, domain_json, bucket=bucket)
+    await save_metadata_obj(app, domain, domain_json)
     
     resp_json = { } 
      

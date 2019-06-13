@@ -20,7 +20,7 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPGone
 from util.httpUtil import http_post, http_put, http_delete, getHref, jsonResponse
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
-from util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketFromDomain
+from util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain
 from util.hdf5dtype import validateTypeItem, getBaseTypeJson
 from servicenode_lib import getDomainJson, getObjectJson, validateAction, getObjectIdByPath, getPathForObjectId
 import hsds_logger as log
@@ -82,7 +82,7 @@ async def GET_Datatype(request):
         msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    bucket = getBucketFromDomain(domain)
+    bucket = getBucketForDomain(domain)
 
     if h5path:
         domain_json = await getDomainJson(app, domain)
@@ -101,7 +101,7 @@ async def GET_Datatype(request):
 
     await validateAction(app, domain, ctype_id, username, "read")
 
-    # get authoritative state for group from DN (even if it's in the meta_cache).
+    # get authoritative state for ctype from DN (even if it's in the meta_cache).
     type_json = await getObjectJson(app, ctype_id, bucket=bucket, refresh=True, include_attrs=include_attrs)  
     type_json["domain"] = domain
 
@@ -109,7 +109,7 @@ async def GET_Datatype(request):
         root_id = type_json["root"]
         alias = []
         idpath_map = {root_id: '/'}
-        h5path = await getPathForObjectId(app, root_id, idpath_map, bucket=bucket, tgt_id=ctype_id)
+        h5path = await getPathForObjectId(app, root_id, idpath_map, tgt_id=ctype_id, bucket=bucket)
         if h5path:
             alias.append(h5path)
         type_json["alias"] = alias
@@ -164,7 +164,7 @@ async def POST_Datatype(request):
         msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    bucket = getBucketFromDomain(domain)
+    bucket = getBucketForDomain(domain)
     domain_json = await getDomainJson(app, domain, reload=True)
 
     aclCheck(domain_json, "create", username)  # throws exception if not allowed
@@ -194,8 +194,11 @@ async def POST_Datatype(request):
     ctype_json = {"id": ctype_id, "root": root_id, "type": datatype }
     log.debug("create named type, body: " + json.dumps(ctype_json))
     req = getDataNodeUrl(app, ctype_id) + "/datatypes"
+    params = {}
+    if bucket:
+        params["bucket"] = bucket
     
-    type_json = await http_post(app, req, data=ctype_json, bucket=bucket)
+    type_json = await http_post(app, req, data=ctype_json, params=params)
 
     # create link if requested
     if link_id and link_title:
@@ -205,7 +208,7 @@ async def POST_Datatype(request):
         link_req = getDataNodeUrl(app, link_id)
         link_req += "/groups/" + link_id + "/links/" + link_title
         log.debug("PUT link - : " + link_req)
-        put_rsp = await http_put(app, link_req, data=link_json, bucket=bucket)
+        put_rsp = await http_put(app, link_req, data=link_json, params=params)
         log.debug(f"PUT Link resp: {put_rsp}")
 
     # datatype creation successful     
@@ -238,7 +241,10 @@ async def DELETE_Datatype(request):
         msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    bucket = getBucketFromDomain(domain)
+    bucket = getBucketForDomain(domain)
+    params = {}
+    if bucket:
+        params["bucket"] = bucket
     
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
@@ -251,7 +257,7 @@ async def DELETE_Datatype(request):
 
     req = getDataNodeUrl(app, ctype_id) + "/datatypes/" + ctype_id
  
-    await http_delete(app, req, bucket=bucket)
+    await http_delete(app, req, params=params)
 
     if ctype_id in meta_cache:
         del meta_cache[ctype_id]  # remove from cache

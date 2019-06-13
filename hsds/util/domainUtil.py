@@ -82,6 +82,8 @@ def validateHostDomain(id):
         raise ValueError("Domain looks like IP address")
     if id.find('/') >= 0:
         raise ValueError("Domain cannot contain slash")
+    if id.find(".") == -1:
+        raise ValueError("Host domain must have a dot")
 
 def isValidHostDomain(id):
     try:
@@ -95,8 +97,8 @@ def validateDomain(id):
         raise ValueError("Expected string type")
     if len(id) < 3:
         raise ValueError("Domain name too short")
-    if id[0] != '/':
-        raise ValueError("Domain names should start with '/'")
+    if id.find('/') == -1:
+        raise ValueError("Domain names should include a '/'")
     if id[-1] ==  '/':
         raise ValueError("Slash at end not allowed")    
 
@@ -113,8 +115,10 @@ def validateDomainPath(path):
         raise ValueError("Expected string type")
     if len(path) < 1:
         raise ValueError("Domain path too short")
-    if path.find('/') == -1:
-        raise ValueError("Domain path should have at least one '/'")
+    if path == '/':
+        return  # default buckete, root folder
+    if path[:-1].find('/') == -1:
+        raise ValueError("Domain path should have at least one '/' before trailing slash")
     if path[-1] !=  '/':
         raise ValueError("Domain path must end with '/'")
 
@@ -160,7 +164,7 @@ def getDomainForHost(host_value):
      
     return domain
 
-def getDomainFromRequest(request, domain_path=False, validate=True):
+def getDomainFromRequest(request, validate=True):
     app = request.app
     domain = None
     params = request.rel_url.query
@@ -175,10 +179,11 @@ def getDomainFromRequest(request, domain_path=False, validate=True):
             domain = request.headers["X-Forwarded-Host"]
         else:
             domain = request.host
+    if not domain:
+        raise ValueError("no domain")
             
-    if domain and not domain.find('/') > -1:  #DNS style host
-        if domain_path and validate:
-            raise ValueError("Domain paths can not be DNS-style")
+    if domain[0] != '/':  
+        #DNS style host
         if validate:
             validateHostDomain(domain) # throw ValueError if invalid
             domain = getDomainForHost(domain)  # convert to s3 path
@@ -190,40 +195,52 @@ def getDomainFromRequest(request, domain_path=False, validate=True):
                 pass # ignore
     # now validate that its a properly formed domain
     if validate:
-        if domain_path:
-            validateDomainPath(domain)
-        else:
-            validateDomain(domain)
-    if domain[0] == '/':
-        bucket = None
-        if "bucket_name" in request.app and request.app["bucket_name"]:
-            # prefix the domain with the bucket name
-            domain = request.app["bucket_name"] + domain
-        else:
-            # if no default bucket is set, domain paths must include bucket name
-            raise ValueError("bucket not specified")
+        validateDomain(domain)
+    if "bucket_name" in request.app and request.app["bucket_name"]:
+        # prefix the domain with the bucket name
+        domain = app["bucket_name"] + domain
+    else:
+        # if no default bucket is set, domain paths must include bucket name
+        raise ValueError("bucket not specified")
     
     return domain
-
+"""
 
 def getS3PrefixForDomain(domain):
     if domain[0] == '/':
         domain_key = domain[1:]  # strip off leading slash
+        print("wout slash:", domain_key)
     else:
         # get path after bucket specifiers
-        index = domain.find['/']
+        index = domain.find('/')
         domain_key = domain[(index+1):]
     if domain_key.endswith(DOMAIN_SUFFIX):
         path_len = len(domain_key) - len(DOMAIN_SUFFIX)
-        domain_key = domain_key[:path_len]
+        domain_key = domain_key[:(path_len-1)]  # path_len]
+        print("updated domain key:", domain_key)
     if not domain_key[-1] == '/':
         #domain_key += '/'
         domain_key = domain_key[:-1]
     return domain_key
+    """
+
+def getPathForDomain(domain):
+    """
+    Return the non-bucket part of the domain
+    """
+    index = domain.find('/')
+    if index < 1:
+        return domain  # no bucket
+    return domain[(index):]  
 
 def getBucketForDomain(domain):
-    if domain[0] == '/':
+    """ get the bucket for the domain or None
+        if no bucket is given
+    """
+    if domain and domain[0] == '/':
         # no bucket specified
         return None
-    index = domain.find['/']
+    index = domain.find('/')
+    if index < 0:
+        raise ValueError(f"invalid domain: {domain}")
     return domain[:index]

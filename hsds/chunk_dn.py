@@ -535,6 +535,7 @@ async def POST_Chunk(request):
             raise HTTPBadRequest()
         s3path = params["s3path"]
         log.debug(f"GET_Chunk - using s3path: {s3path}")
+        bucket = None
     elif "bucket" in params:
         bucket = params["bucket"]
     else:

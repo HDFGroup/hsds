@@ -24,7 +24,7 @@ from util.httpUtil import  http_post, http_put, http_get, http_delete, getHref, 
 from util.idUtil import  getDataNodeUrl, createObjId, getCollectionForId, getDataNodeUrls
 from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
-from util.domainUtil import getParentDomain, getDomainFromRequest
+from util.domainUtil import getParentDomain, getDomainFromRequest, isValidDomain, getBucketForDomain
 from util.s3Util import getS3Keys
 from servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath, getRootInfo
 from basenode import getVersion
@@ -32,7 +32,7 @@ import hsds_logger as log
 import config
 
 class DomainCrawler:
-    def __init__(self, app, root_id, include_attrs=True, max_tasks=40):
+    def __init__(self, app, root_id, bucket=None, include_attrs=True, max_tasks=40):
         log.info(f"DomainCrawler.__init__  root_id: {root_id}")
         self._app = app
         self._include_attrs = include_attrs
@@ -41,6 +41,7 @@ class DomainCrawler:
         self._obj_dict = {}
         self.seen_ids = set()
         self._q.put_nowait(root_id)
+        self._bucket = bucket
 
     async def crawl(self):
         workers = [asyncio.Task(self.work())
@@ -62,7 +63,7 @@ class DomainCrawler:
 
     async def fetch(self, obj_id):
         log.debug(f"DomainCrawler - fetch for obj_id: {obj_id}")
-        obj_json = await getObjectJson(self._app, obj_id, include_links=True, include_attrs=self._include_attrs)  
+        obj_json = await getObjectJson(self._app, obj_id, include_links=True, include_attrs=self._include_attrs, bucket=self._bucket)  
         log.debug(f"DomainCrawler - for {obj_id} got json: {obj_json}")
 
         # including links, so don't need link count
@@ -143,13 +144,13 @@ async def get_collections(app, root_id):
     result["datatypes"] = datatypes
     return result
 
-async def getDomainObjects(app, root_id, include_attrs=False):
+async def getDomainObjects(app, root_id, include_attrs=False, bucket=None):
     """ Iterate through all objects in heirarchy and add to obj_dict keyed by obj id
     """   
    
     log.info(f"getDomainObjects for root: {root_id}")
 
-    crawler = DomainCrawler(app, root_id, include_attrs=include_attrs)
+    crawler = DomainCrawler(app, root_id, include_attrs=include_attrs, bucket=bucket)
     await crawler.crawl()
     log.info(f"getDomainObjects returning: {len(crawler._obj_dict)} objects")
 
@@ -248,6 +249,7 @@ async def get_domain_response(app, domain_json, bucket=None, verbose=False):
 async def get_domains(request):
     """ This method is called by GET_Domains and GET_Domain """
     app = request.app
+    params = request.rel_url.query
     
     # if there is no domain passed in, get a list of top level domains
     if "domain" not in request.rel_url.query:
@@ -282,7 +284,15 @@ async def get_domains(request):
         marker = request.rel_url.query["Marker"]
         log.debug(f"got Marker request param: {marker}")
 
-    
+    if "bucket" in params:
+        bucket = params["bucket"]
+    else:
+        bucket = app["bucket_name"]
+    if not bucket:
+        msg = "no bucket specified for request"
+        log.warn(msg)
+        raise HTTPBadRequest(msg)
+
     # list the S3 keys for this prefix
     domainNames = []
     if prefix == "/":
@@ -291,7 +301,7 @@ async def get_domains(request):
     else:
         s3prefix = prefix[1:]
         log.debug(f"listing S3 keys for {s3prefix}")
-        s3keys = await getS3Keys(app, include_stats=False, prefix=s3prefix, deliminator='/')  
+        s3keys = await getS3Keys(app, include_stats=False, prefix=s3prefix, deliminator='/', bucket=bucket)  
         log.debug(f"getS3Keys returned: {len(s3keys)} keys")
         log.debug(f"s3keys {s3keys}")
         
@@ -320,8 +330,9 @@ async def get_domains(request):
         try:
             # query DN's for domain json
             # TBD - multicast to DN nodes
-            log.debug(f"getDomainJson for {domain}")
-            domain_json = await getDomainJson(app, domain, reload=True)
+            domain_key = bucket + domain
+            log.debug(f"getDomainJson for {domain_key}")
+            domain_json = await getDomainJson(app, domain_key, reload=True)
             if domain_json:
                 domain_rsp = await get_domain_response(app, domain_json, verbose=verbose)
                 # mixin domain anme
@@ -372,6 +383,8 @@ async def GET_Domain(request):
     except ValueError:
         log.warn("Invalid domain")
         raise HTTPBadRequest(reason="Invalid domain name")
+    log.debug(f"got domain: {domain}")
+    bucket = getBucketForDomain(domain)
 
     verbose = False
     if "verbose" in params and params["verbose"]:
@@ -386,7 +399,6 @@ async def GET_Domain(request):
         resp = await jsonResponse(request, rsp_json)
         log.response(request, resp=resp)
         return resp
-
 
     log.info(f"got domain: {domain}")
    
@@ -413,10 +425,10 @@ async def GET_Domain(request):
         #   (if exists)
         h5path = params["h5path"]
         root_id = domain_json["root"]
-        obj_id = await getObjectIdByPath(app, root_id, h5path)  # throws 404 if not found
+        obj_id = await getObjectIdByPath(app, root_id, h5path, bucket=bucket)  # throws 404 if not found
         log.info(f"get obj_id: {obj_id} from h5path: {h5path}")
         # get authoritative state for object from DN (even if it's in the meta_cache).
-        obj_json = await getObjectJson(app, obj_id, refresh=True)
+        obj_json = await getObjectJson(app, obj_id, refresh=True, bucket=bucket)
         obj_json["domain"] = domain
         # Not bothering with hrefs for h5path lookups...
         resp = await jsonResponse(request, obj_json)
@@ -432,7 +444,7 @@ async def GET_Domain(request):
         include_attrs = False
         if "include_attrs" in params and params["include_attrs"]:
             include_attrs = True
-        domain_objs = await getDomainObjects(app, root_id, include_attrs=include_attrs)
+        domain_objs = await getDomainObjects(app, root_id, include_attrs=include_attrs, bucket=bucket)
         rsp_json["domain_objs"] = domain_objs
      
     hrefs = []
@@ -449,9 +461,7 @@ async def GET_Domain(request):
     log.debug(f"href parent domain: {parent_domain}")
     if parent_domain:
         hrefs.append({'rel': 'parent', 'href': getHref(request, '/', domain=parent_domain)})
-
-    
-         
+   
     rsp_json["hrefs"] = hrefs
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
@@ -562,7 +572,21 @@ async def PUT_Domain(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         linked_domain = body["linked_domain"]
-        log.info(f"linking to domain: {linked_domain}")
+        if not isValidDomain(linked_domain):
+            msg = f"linked_domain: {linked_domain} is not valid"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        if linked_domain[0] == '/':
+            # need to prefix wih the bucket before sending to DN
+            if "bucket_name" in request.app and request.app["bucket_name"]:
+                # prefix the domain with the bucket name
+                linked_domain = app["bucket_name"] + linked_domain
+            else:
+                # if no default bucket is set, domain paths must include bucket name
+                #TBD - only user define bucket to be specified
+                msg = "No bucket given for linked domain"
+                raise HTTPBadRequest(reason=msg)
+                log.warn(msg)
 
     if owner != username and username != "admin":
         log.warn("Only admin users are allowed to set owner for new domains");   
@@ -710,6 +734,20 @@ async def DELETE_Domain(request):
         if "keep_root" in params:
             keep_root = params["keep_root"]
 
+    if not domain:
+        msg = "No domain given"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    if domain[0] == '/':
+        # add in the bucket name
+        if "bucket_name" in app:
+            domain = app["bucket_name"] + domain 
+        else:
+            msg = "no bucket specified for DELETE domain request"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    log.info(f"Deleting domain: {domain}")
+
     log.info(f"meta_only domain delete: {meta_only}")
     if meta_only:
         # remove from domain cache if present
@@ -746,9 +784,11 @@ async def DELETE_Domain(request):
 
     # check for sub-objects if this is a folder
     if "root" not in domain_json:
-        s3prefix = domain[1:] + '/'
-        log.info(f"checking kets with prefix: {s3prefix} ")
-        s3keys = await getS3Keys(app, include_stats=False, prefix=s3prefix, deliminator='/') 
+        index = domain.find('/') 
+        s3prefix = domain[(index+1):] + '/'
+        bucket = getBucketForDomain(domain)
+        log.info(f"checking s3key with prefix: {s3prefix} in bucket: {bucket}")
+        s3keys = await getS3Keys(app, include_stats=False, prefix=s3prefix, deliminator='/', bucket=bucket) 
         for s3key in s3keys:
             if s3key.endswith("/"):
                 log.warn(f"attempt to delete folder {domain} with sub-items")

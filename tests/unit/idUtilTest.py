@@ -45,11 +45,9 @@ class IdUtilTest(unittest.TestCase):
         dataset_id = "d-4c48f3ae-9954-11e6-a3cd-3c15c2da029e"
         ctype_id = "t-8c785f1c-9953-11e6-9bc2-0242ac110005"
         chunk_id = "c-8c785f1c-9953-11e6-9bc2-0242ac110005_7_2"
-        domain_id = "/home/bob/mydata.h5"
+        domain_id = "mybucket/bob/mydata.h5"
         valid_ids = (group_id, dataset_id, ctype_id, chunk_id, domain_id)
-        bad_ids = ("g-1e76d862",
-                   "g-1e76d862/7abe-11e6-8852-3c15c2da029e",
-                   "1e76d862-7abe-11e6-8852-3c15c2da029e-g")
+        bad_ids = ("g-1e76d862", "/bob/mydata.h5")
          
         self.assertTrue(isValidUuid(group_id))
         self.assertFalse(isSchema2Id(group_id))
@@ -76,6 +74,8 @@ class IdUtilTest(unittest.TestCase):
             s3key = getS3Key(item)
             self.assertTrue(s3key[0] != '/')
             self.assertTrue(isS3ObjKey(s3key))
+            if item.find('/') > 0:
+                continue  # bucket name gets lost when domain ids get converted to s3keys
             objid = getObjId(s3key)
             self.assertEqual(objid, item)
         for item in bad_ids:

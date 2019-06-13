@@ -92,10 +92,10 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level,
                 raise HTTPInternalServerError()
                 
     except ClientError as ce:
-        log.error(f"Error for http_post({req}): {ce} ")
+        log.error(f"Error for http_put({req}): {ce} ")
         raise HTTPInternalServerError()
     except CancelledError as cle:
-        log.warn(f"CancelledError for http_post({req}): {cle}")
+        log.warn(f"CancelledError for http_put({req}): {cle}")
 
 
 """
@@ -778,7 +778,7 @@ async def PUT_Value(request):
     
     # refetch the dims if the dataset is extensible 
     if isExtensible(dims, maxdims):
-        dset_json = await getObjectJson(app, dset_id, refresh=True)
+        dset_json = await getObjectJson(app, dset_id, bucket=bucket, refresh=True)
         dims = getShapeDims(dset_json["shape"]) 
 
     if request_type == "json":
@@ -911,11 +911,12 @@ async def PUT_Value(request):
         # extend the shape of the dataset 
         req = getDataNodeUrl(app, dset_id) + "/datasets/" + dset_id + "/shape"
         body = {"extend": append_rows, "extend_dim": append_dim}
+        params = {}
         if bucket:
-            body["bucket"] = bucket
+            params["bucket"] = bucket
         selection = None
         try:
-            shape_rsp = await http_put(app, req, data=body)
+            shape_rsp = await http_put(app, req, data=body, params=params)
             log.info(f"got shape put rsp: {shape_rsp}")
             if "selection" in shape_rsp:
                 selection = shape_rsp["selection"]
@@ -1113,7 +1114,7 @@ async def GET_Value(request):
     bucket = getBucketForDomain(domain)
    
     # get state for dataset from DN.
-    dset_json = await getObjectJson(app, dset_id)  
+    dset_json = await getObjectJson(app, dset_id, bucket=bucket)  
     log.debug(f"got dset_json: {dset_json}")
     
     datashape = dset_json["shape"]
@@ -1132,7 +1133,7 @@ async def GET_Value(request):
     # refetch the dims if the dataset is extensible and requestor hasn't provided 
     # an explicit region
     if isExtensible(dims, maxdims) and "select" not in params:
-        dset_json = await getObjectJson(app, dset_id, refresh=True)
+        dset_json = await getObjectJson(app, dset_id, bucket=bucket, refresh=True)
         dims = getShapeDims(dset_json["shape"])  
 
     slices = None  # selection for read 

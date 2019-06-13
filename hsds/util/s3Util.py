@@ -165,7 +165,7 @@ async def getS3JSONObj(app, key, bucket=None):
         bucket = app['bucket_name']
     if key[0] == '/':
         key = key[1:]  # no leading slash
-    log.info("getS3JSONObj({})".format(key))
+    log.info(f"getS3JSONObj({key}) bucket: {bucket}")
     s3_stats_increment(app, "get_count")
     try:
         resp = await client.get_object(Bucket=bucket, Key=key)
@@ -186,7 +186,11 @@ async def getS3JSONObj(app, key, bucket=None):
                 del pending_s3_read[key]
          
         if response_code == "NoSuchKey":
-            msg = "s3_key: {} not found ".format(key,)
+            msg = f"s3_key: {key} not found "
+            log.info(msg)
+            raise HTTPNotFound()
+        elif response_code == "NoSuchBucket":
+            msg = f"s3_bucket: {bucket} not fiound"
             log.info(msg)
             raise HTTPNotFound()
         else:
@@ -232,10 +236,15 @@ async def getS3Bytes(app, key, deflate_level=None, s3offset=0, s3size=None, buck
     except ClientError as ce:
         # key does not exist?
         # check for not found status
-        if ce.response["Error"]["Code"] == "NoSuchKey":
+        response_code = ce.response["Error"]["Code"]
+        if response_code == "NoSuchKey":
             msg = "s3_key: {} not found ".format(key,)
             log.warn(msg)
             raise HTTPInternalServerError()
+        elif response_code == "NoSuchBucket":
+            msg = f"s3_bucket: {bucket} not fiound"
+            log.info(msg)
+            raise HTTPNotFound()
         else:
             s3_stats_increment(app, "error_count")
             log.warn("got ClientError on s3 get: {}".format(str(ce)))

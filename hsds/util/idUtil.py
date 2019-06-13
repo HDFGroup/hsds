@@ -132,10 +132,11 @@ def getS3Key(id):
         
     For domain id's return a key with the .domain suffix and no preceeding slash
     """
-    if id[0] == '/':
+    if id.find('/') > 0:
         # a domain id
         domain_suffix = ".domain.json"
-        key = id[1:]
+        index = id.find('/') + 1
+        key = id[index:]
         if not key.endswith(domain_suffix):
             if key[-1] != '/':
                 key += '/'
@@ -336,8 +337,8 @@ def isObjId(id):
     """ return true if uuid or domain """
     if not isinstance(id, str) or len(id) == 0:
         return False
-    if id[0] == '/':
-        return True  # domain id is any string that starts with '/'
+    if id.find('/') > 0:
+        return True  # domain id is any string in the form <bucket_name>/<domain_path>
     return isValidUuid(id)
 
 

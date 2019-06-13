@@ -417,7 +417,6 @@ class LinkTest(unittest.TestCase):
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        print(rspJson)
         self.assertTrue("hrefs" in rspJson)
         hrefs = rspJson["hrefs"]
         self.assertEqual(len(hrefs), 3)

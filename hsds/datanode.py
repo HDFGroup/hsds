@@ -94,7 +94,7 @@ if __name__ == '__main__':
     app['meta_cache'] = LruCache(mem_target=metadata_mem_cache_size, chunk_cache=False)
     app['chunk_cache'] = LruCache(mem_target=chunk_mem_cache_size, chunk_cache=True)
     app['deleted_ids'] = set()
-    app['dirty_ids'] = {}  # map of objids to timestamp of which they were last updated
+    app['dirty_ids'] = {}  # map of objids to timestamp and bucket of which they were last updated
     app['deflate_map'] = {} # map of dataset ids to deflate levels (if compressed)
     app["pending_s3_read"] = {} # map of s3key to timestamp for in-flight read requests
     app["pending_s3_write"] = {} # map of s3key to timestamp for in-flight write requests

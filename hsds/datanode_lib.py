@@ -19,7 +19,7 @@ from aiohttp.client_exceptions import ClientError
 
 from util.idUtil import validateInPartition, getS3Key, isValidUuid, isValidChunkId
 from util.s3Util import getS3JSONObj, putS3JSONObj, putS3Bytes, isS3Obj, deleteS3Obj
-from util.domainUtil import isValidDomain
+from util.domainUtil import isValidDomain, getBucketForDomain
 from util.attrUtil import getRequestCollectionName
 from util.httpUtil import http_put, http_delete
 from util.chunkUtil import getDatasetId
@@ -27,6 +27,29 @@ from util.arrayUtil import arrayToBytes
 from basenode import getAsyncNodeUrl
 import config
 import hsds_logger as log
+
+def validateObjId(obj_id, bucket):
+    """
+    Verifies the passed in is what we are expecting.
+    For uuids, obj_id should be an actual uuid and bucket should be non-null
+    For domains, obj_id should include the bucket prefix and bucket should be empty
+       e.g. obj_id="mybucket/home/bob/myfile.h5"
+    """
+    if isValidDomain(obj_id):
+        if obj_id[0] == '/':
+            # bucket name should always be prefixed 
+            # (so the obj_id is cannonical)
+            msg = f"bucket not included for domain: {obj_id}"
+            log.error(msg)
+            raise HTTPInternalServerError()
+        if bucket:
+            msg = f"bucket param should not be used with obj_id for domain: {obj_id}"
+            log.error(msg)
+            raise HTTPInternalServerError()
+    elif not isValidUuid(obj_id):
+        msg = f"Invalid obj id: {obj_id}"
+        log.error(msg)
+        raise HTTPInternalServerError()
 
 
 def get_obj_id(request, body=None):
@@ -49,7 +72,7 @@ def get_obj_id(request, body=None):
         raise HTTPInternalServerError()
 
     if not isValidUuid(obj_id, obj_class=collection):
-        msg = "Invalid obj id: {}".format(obj_id)
+        msg = f"Invalid obj id: {obj_id}"
         log.error(msg)
         raise HTTPInternalServerError()
 
@@ -61,13 +84,12 @@ def get_obj_id(request, body=None):
 
     return obj_id   
 
-async def check_metadata_obj(app, obj_id):
+async def check_metadata_obj(app, obj_id, bucket=None):
     """ Return False is obj does not exist
     """
-    if not isValidDomain(obj_id) and not isValidUuid(obj_id):
-        msg = "Invalid obj id: {}".format(obj_id)
-        log.error(msg)
-        raise HTTPInternalServerError()
+    validateObjId(obj_id, bucket)
+    if isValidDomain(obj_id):
+        bucket = getBucketForDomain(obj_id)
 
     try:
         validateInPartition(app, obj_id)
@@ -77,7 +99,7 @@ async def check_metadata_obj(app, obj_id):
 
     deleted_ids = app['deleted_ids']
     if obj_id in deleted_ids:
-        msg = "{} has been deleted".format(obj_id)
+        msg = f"{obj_id} has been deleted"
         log.info(msg)
         return False
     
@@ -87,9 +109,9 @@ async def check_metadata_obj(app, obj_id):
     else:
         # Not in chache, check s3 obj exists   
         s3_key = getS3Key(obj_id)
-        log.debug("check_metadata_obj({})".format(s3_key))
+        log.debug(f"check_metadata_obj({s3_key})")
         # does key exist?
-        found = await isS3Obj(app, s3_key)
+        found = await isS3Obj(app, s3_key, bucket=bucket)
     return found
     
  
@@ -98,23 +120,11 @@ async def get_metadata_obj(app, obj_id, bucket=None):
     """ Get object from metadata cache (if present).
         Otherwise fetch from S3 and add to cache
     """
-    log.info("get_metadata_obj: {}".format(obj_id))
+    log.info(f"get_metadata_obj: {obj_id} bucket: {bucket}")
+    validateObjId(obj_id, bucket) # throws internal server error if invalid
     if isValidDomain(obj_id):
-        if obj_id[0] == '/':
-            # bucket name should always be prefixed 
-            # (so the obj_id is cannonical)
-            msg = f"bucket not included in get_metadata_obj for domain: {obj_id}"
-            log.error(msg)
-            raise HTTPInternalServerError()
-        if bucket:
-            msg = f"bucket param should not be used with get_metadata_obj for domain: {obj_id}"
-            log.error(msg)
-            raise HTTPInternalServerError()
-    elif not isValidUuid(obj_id):
-        msg = f"Invalid obj id: {obj_id}"
-        log.error(msg)
-        raise HTTPInternalServerError()
-
+        bucket = getBucketForDomain(obj_id)
+    
     try:
         validateInPartition(app, obj_id)
     except KeyError:
@@ -123,14 +133,14 @@ async def get_metadata_obj(app, obj_id, bucket=None):
 
     deleted_ids = app['deleted_ids']
     if obj_id in deleted_ids:
-        msg = "{} has been deleted".format(obj_id)
+        msg = f"{obj_id} has been deleted"
         log.warn(msg)
         raise HTTPGone() 
     
     meta_cache = app['meta_cache'] 
     obj_json = None 
     if obj_id in meta_cache:
-        log.debug("{} found in meta cache".format(obj_id))
+        log.debug(f"{obj_id} found in meta cache")
         obj_json = meta_cache[obj_id]
     else:   
         s3_key = getS3Key(obj_id)
@@ -151,7 +161,7 @@ async def get_metadata_obj(app, obj_id, bucket=None):
         
         # invoke S3 read unless the object has just come in from pending read
         if not obj_json:
-            log.debug("getS3JSONObj({})".format(s3_key))
+            log.debug(f"getS3JSONObj({s3_key}, bucket={bucket})")
             if obj_id not in pending_s3_read:
                 pending_s3_read[obj_id] = time.time()
             # read S3 object as JSON
@@ -172,10 +182,10 @@ async def save_metadata_obj(app, obj_id, obj_json, bucket=None, notify=False, fl
         log.error("notify not valid when flush is false")
         raise HTTPInternalServerError()
 
-    if not isValidDomain(obj_id) and not isValidUuid(obj_id):
-        msg = "Invalid obj id: {}".format(obj_id)
-        log.error(msg)
-        raise HTTPInternalServerError()
+    validateObjId(obj_id, bucket)
+    if isValidDomain(obj_id):
+        bucket = getBucketForDomain(obj_id)
+    
     if not isinstance(obj_json, dict):
         log.error("Passed non-dict obj to save_metadata_obj")
         raise HTTPInternalServerError() 
@@ -192,14 +202,14 @@ async def save_metadata_obj(app, obj_id, obj_json, bucket=None, notify=False, fl
         if isValidUuid(obj_id):
             # domain objects may be re-created, but shouldn't see repeats of 
             # deleted uuids
-            log.warn("{} has been deleted".format(obj_id))
+            log.warn(f"{obj_id} has been deleted")
             raise HTTPInternalServerError() 
         elif obj_id in deleted_ids:
             deleted_ids.remove(obj_id)  # un-gone the domain id
     
     # update meta cache
     meta_cache = app['meta_cache'] 
-    log.debug("save: {} to cache".format(obj_id))
+    log.debug(f"save: {obj_id} to cache")
     meta_cache[obj_id] = obj_json
 
     meta_cache.setDirty(obj_id)
@@ -240,16 +250,15 @@ async def save_metadata_obj(app, obj_id, obj_json, bucket=None, notify=False, fl
             if "owner" in obj_json:
                 params["owner"] = obj_json["owner"]
             try:
-                log.info("ASync PUT notify: {} params: {}".format(req, params))
+                log.info(f"ASync PUT notify: {req} params: {params}")
                 await http_put(app, req, params=params)
             except HTTPInternalServerError as hpe:
                 log.error(f"got error notifying async node: {hpe}")
-                log.error(msg)
 
         else:
             req = an_url + "/object/" + obj_id
             try:
-                log.info("ASync PUT notify: {}".format(req))
+                log.info(f"ASync PUT notify: {req}")
                 await http_put(app, req)
             except HTTPInternalServerError:
                 log.error(f"got error notifying async node")
@@ -260,11 +269,10 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None, bucket=Non
     """ Delete the given object """
     meta_cache = app['meta_cache'] 
     dirty_ids = app["dirty_ids"]
-    log.info("delete_meta_data_obj: {} notify: {}".format(obj_id, notify))
-    if not isValidDomain(obj_id) and not isValidUuid(obj_id):
-        msg = "Invalid obj id: {}".format(obj_id)
-        log.error(msg)
-        raise HTTPInternalServerError()
+    log.info(f"delete_meta_data_obj: {obj_id} notify: {notify}")
+    validateObjId(obj_id, bucket)
+    if isValidDomain(obj_id):
+        bucket = getBucketForDomain(obj_id)
         
     try:
         validateInPartition(app, obj_id)
@@ -274,7 +282,7 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None, bucket=Non
 
     deleted_ids = app['deleted_ids']
     if obj_id in deleted_ids:
-        log.warn("{} has already been deleted".format(obj_id))
+        log.warn(f"{obj_id} has already been deleted")
     else:
         deleted_ids.add(obj_id)
      
@@ -301,7 +309,7 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None, bucket=Non
             params = {"domain": obj_id}
             
             try:
-                log.info("ASync DELETE notify: {} params: {}".format(req, params))
+                log.info(f"ASync DELETE notify: {req} params: {params}")
                 await http_delete(app, req, params=params)
             except ClientError as ce:
                 log.error(f"got error notifying async node: {ce}")
@@ -333,6 +341,10 @@ async def write_s3_obj(app, obj_id, bucket=None):
     notify_objs = app["an_notify_objs"]
     deleted_ids = app['deleted_ids']
     success = False
+
+    validateObjId(obj_id, bucket)
+    if isValidDomain(obj_id):
+        bucket = getBucketForDomain(obj_id)
 
     if s3key in pending_s3_write:
         msg = f"write_s3_key - not expected for key {s3key} to be in pending_s3_write map"
@@ -370,7 +382,7 @@ async def write_s3_obj(app, obj_id, bucket=None):
     try:
         if isValidChunkId(obj_id):
             if obj_id not in chunk_cache:
-                log.error("expected to find obj_id: {} in chunk cache".format(obj_id))
+                log.error(f"expected to find obj_id: {obj_id} in chunk cache")
                 raise KeyError(f"{obj_id} not found in chunk cache")
             if not chunk_cache.isDirty(obj_id):
                 log.error(f"expected chunk cache obj {obj_id} to be dirty")
@@ -381,7 +393,7 @@ async def write_s3_obj(app, obj_id, bucket=None):
             deflate_level = None
             if dset_id in deflate_map:
                 deflate_level = deflate_map[dset_id]
-                log.debug("got deflate_level: {} for dset: {}".format(deflate_level, dset_id))
+                log.debug(f"got deflate_level: {deflate_level} for dset: {dset_id}")
      
             await putS3Bytes(app, s3key, chunk_bytes, deflate_level=deflate_level, bucket=bucket)
             success = True
@@ -400,7 +412,7 @@ async def write_s3_obj(app, obj_id, bucket=None):
             # meta data update     
             # check for object in meta cache
             if obj_id not in meta_cache:
-                log.error("expected to find obj_id: {} in meta cache".format(obj_id))
+                log.error(f"expected to find obj_id: {obj_id} in meta cache")
                 raise KeyError(f"{obj_id} not found in meta cache")
             if not meta_cache.isDirty(obj_id):
                 log.error(f"expected meta cache obj {obj_id} to be dirty")
@@ -475,9 +487,12 @@ async def s3sync(app):
     
     update_count = 0
     s3sync_start = time.time()
-        
+
+    log.info(f"processing {len(dirty_ids)} dirty_ids")   
     for obj_id in dirty_ids:
-        bucket = dirty_ids[1]
+        item = dirty_ids[obj_id]
+        log.debug(f"got item: {item} for obj_id: {obj_id}")
+        bucket = item[1]
         if not bucket:
             bucket = app["bucket_name"]
         s3key = getS3Key(obj_id)
@@ -519,10 +534,10 @@ async def s3sync(app):
 
         req = an_url + "/objects"
         try:
-            log.info("ASync PUT notify: {} body: {}".format(req, body))
+            log.info(f"ASync PUT notify: {req} body: {body}")
             await http_put(app, req, data=body)
         except HTTPInternalServerError as hpe:
-            msg = "got error notifying async node: {}".format(hpe)
+            msg =f"got error notifying async node: {hpe}"
             log.error(msg)
 
     # return number of objects written

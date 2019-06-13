@@ -17,7 +17,7 @@ import os
 sys.path.append('../../hsds/util')
 sys.path.append('../../hsds')
 from domainUtil import getParentDomain, isValidDomain, isValidHostDomain
-from domainUtil import getDomainForHost, getS3PrefixForDomain, isValidDomainPath
+from domainUtil import getDomainForHost, isValidDomainPath, getBucketForDomain, getPathForDomain
 
 class DomainUtilTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -33,12 +33,12 @@ class DomainUtilTest(unittest.TestCase):
                            'x.y..z',  # consecutive periods
                            '192.168.1.100',  # looks like IP
                            '172.17.0.9:5101', # IP with port
-                           'mydomain/foobar', # has a slash
+                           'mydomain/foobar', # no dots
                            None)      # none
         for domain in invalid_domains:
             self.assertFalse(isValidHostDomain(domain))  
 
-        valid_domains =  ("nex.nasa.gov", "home")
+        valid_domains =  ("nex.nasa.gov",)
         for domain in valid_domains:
             self.assertTrue(isValidHostDomain(domain))  
 
@@ -52,10 +52,9 @@ class DomainUtilTest(unittest.TestCase):
             self.assertTrue(isValidDomain(domain))  
 
     def testValidDomainPath(self):
-        invalid_domains = (123, "home/test/", "/home/test")
+        invalid_domains = (123, "home_test", "/home/test")
         for domain in invalid_domains:
             self.assertFalse(isValidDomainPath(domain))
-
         valid_domains = ("/home/test_user1/mytests/", "/")
         for domain in valid_domains:
             self.assertTrue(isValidDomainPath(domain))
@@ -75,17 +74,27 @@ class DomainUtilTest(unittest.TestCase):
         parent = getParentDomain(domain)
         self.assertEqual(parent, None)
 
-    def TestGetS3PrefixForDomain(self):
+    def testGetDomainFragments(self):
         domain = "/gov/nasa/nex/climate.h5"
-        s3prefix = getS3PrefixForDomain(domain)
-        self.assertEqual(s3prefix, "gov/nasa/nex/")
+        domain_path = getPathForDomain(domain)
+        self.assertEqual(domain, domain_path)
+        bucket = getBucketForDomain(domain)
+        self.assertEqual(bucket, None)
+
         domain = "/home/test_user1/hsds_test/"
-        s3prefix = getS3PrefixForDomain(domain)
-        self.assertEqual(s3prefix, "home/test_user1/")
+        domain_path = getPathForDomain(domain)
+        self.assertEqual(domain, domain_path)
+        bucket = getBucketForDomain(domain)
+        self.assertEqual(bucket, None)
+
+        domain = "mybucket/home/test_user1/myfile.h5"
+        domain_path = getPathForDomain(domain)
+        self.assertEqual(domain_path, "/home/test_user1/myfile.h5")
+        bucket = getBucketForDomain(domain)
+        self.assertEqual(bucket, "mybucket")
                                   
              
 if __name__ == '__main__':
     #setup test files
     
     unittest.main()
-    

@@ -20,6 +20,7 @@ from util.idUtil import getDataNodeUrl, getCollectionForId, isSchema2Id, getS3Ke
 from util.s3Util import getS3JSONObj
 from util.authUtil import aclCheck
 from util.httpUtil import http_get
+from util.domainUtil import getBucketForDomain
 
 import hsds_logger as log
 
@@ -86,7 +87,11 @@ async def validateAction(app, domain, obj_id, username, action):
         collection = getCollectionForId(obj_id)
         req = getDataNodeUrl(app, obj_id)
         req += '/' + collection + '/' + obj_id
-        obj_json = await http_get(app, req) 
+        bucket = getBucketForDomain(domain)
+        params = {}
+        if bucket:
+            params["bucket"] = bucket
+        obj_json = await http_get(app, req, params=params) 
         meta_cache[obj_id] = obj_json
 
     log.debug("obj_json[root]: {} domain_json[root]: {}".format(obj_json["root"], domain_json["root"]))
@@ -229,7 +234,7 @@ async def getPathForObjectId(app, parent_id, idpath_map, tgt_id=None, bucket=Non
         idpath_map[link_id] = op.join(parent_path, title)
         if getCollectionForId(link_id) != "groups":
             continue
-        h5path = await getPathForObjectId(app, link_id, idpath_map, tgt_id=tgt_id, buckeet=bucket) # recursive call
+        h5path = await getPathForObjectId(app, link_id, idpath_map, tgt_id=tgt_id, bucket=bucket) # recursive call
         if tgt_id is not None and h5path:
             break
     

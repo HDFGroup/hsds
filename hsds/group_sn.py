@@ -20,7 +20,7 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
 from util.httpUtil import http_post, http_put, http_delete, getHref, jsonResponse
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
-from util.domainUtil import  getDomainFromRequest, isValidDomain
+from util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain, getPathForDomain
 from servicenode_lib import getDomainJson, getObjectJson, validateAction, getObjectIdByPath, getPathForObjectId
 import hsds_logger as log
 
@@ -75,6 +75,7 @@ async def GET_Group(request):
         msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    bucket = getBucketForDomain(domain)
     
     if h5path and h5path[0] == '/':
         # ignore the request path id (if given) and start
@@ -88,7 +89,7 @@ async def GET_Group(request):
         group_id = domain_json["root"]
 
     if h5path:
-        group_id = await getObjectIdByPath(app, group_id, h5path)  # throws 404 if not found
+        group_id = await getObjectIdByPath(app, group_id, h5path, bucket=bucket)  # throws 404 if not found
         if not isValidUuid(group_id, "Group"):
             msg = f"No group exist with the path: {h5path}"
             log.warn(msg)
@@ -99,9 +100,11 @@ async def GET_Group(request):
     await validateAction(app, domain, group_id, username, "read")
         
     # get authoritative state for group from DN (even if it's in the meta_cache).
-    group_json = await getObjectJson(app, group_id, refresh=True, include_links=include_links, include_attrs=include_attrs)  
-
-    group_json["domain"] = domain
+    group_json = await getObjectJson(app, group_id, refresh=True, include_links=include_links, include_attrs=include_attrs, bucket=bucket)  
+    log.debug(f"domain from request: {domain}")
+    group_json["domain"] = getPathForDomain(domain)
+    if bucket:
+        group_json["bucket"] = bucket
 
     if getAlias:
         root_id = group_json["root"]
@@ -110,7 +113,7 @@ async def GET_Group(request):
             alias.append('/')
         else:
             idpath_map = {root_id: '/'}
-            h5path = await getPathForObjectId(app, root_id, idpath_map, tgt_id=group_id)
+            h5path = await getPathForObjectId(app, root_id, idpath_map, tgt_id=group_id, bucket=bucket)
             if h5path:
                 alias.append(h5path)
         group_json["alias"] = alias
@@ -143,6 +146,7 @@ async def POST_Group(request):
         msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    bucket = getBucketForDomain(domain)
     
     domain_json = await getDomainJson(app, domain, reload=True)
 
@@ -153,7 +157,6 @@ async def POST_Group(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-     
     link_id = None
     link_title = None
     if request.has_body:
@@ -183,8 +186,11 @@ async def POST_Group(request):
     group_json = {"id": group_id, "root": root_id }
     log.debug("create group, body: " + json.dumps(group_json))
     req = getDataNodeUrl(app, group_id) + "/groups"
+    params = {}
+    if bucket:
+        params["bucket"] = bucket
     
-    group_json = await http_post(app, req, data=group_json)
+    group_json = await http_post(app, req, data=group_json, params=params)
 
     # create link if requested
     if link_id and link_title:
@@ -194,7 +200,7 @@ async def POST_Group(request):
         link_req = getDataNodeUrl(app, link_id)
         link_req += "/groups/" + link_id + "/links/" + link_title
         log.debug("PUT link - : " + link_req)
-        put_json_rsp = await http_put(app, link_req, data=link_json)
+        put_json_rsp = await http_put(app, link_req, data=link_json, params=params)
         log.debug(f"PUT Link resp: {put_json_rsp}")
     log.debug("returning resp")
     # group creation successful     
@@ -226,6 +232,7 @@ async def DELETE_Group(request):
         msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    bucket = getBucketForDomain(domain)
     
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
@@ -243,8 +250,11 @@ async def DELETE_Group(request):
 
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id
+    params = {}
+    if bucket:
+        params["bucket"] = bucket
  
-    await http_delete(app, req)
+    await http_delete(app, req, params=params)
 
     if group_id in meta_cache:
         del meta_cache[group_id]  # remove from cache

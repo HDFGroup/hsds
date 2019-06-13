@@ -21,7 +21,6 @@ class DomainTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(DomainTest, self).__init__(*args, **kwargs)
         self.base_domain = helper.getTestDomainName(self.__class__.__name__)
-        print("base_domain: {}".format(self.base_domain))
         helper.setupDomain(self.base_domain, folder=True)
         
         # main
@@ -91,8 +90,6 @@ class DomainTest(unittest.TestCase):
         attr_count = 0
         for objid in domain_objs:
             obj_json = domain_objs[objid]
-            #print(f"{objid}: {obj_json}")
-            #print(" ")
             self.assertTrue("id" in obj_json)
             self.assertTrue("attributeCount" in obj_json)
             attr_count += obj_json["attributeCount"]
@@ -111,8 +108,6 @@ class DomainTest(unittest.TestCase):
         attr_count = 0
         for objid in domain_objs:
             obj_json = domain_objs[objid]
-            #print(f"{objid}: {obj_json}")
-            #print(" ")
             self.assertFalse("attributeCount" in obj_json)
             self.assertTrue("attributes" in obj_json)
             attributes = obj_json["attributes"]
@@ -141,12 +136,13 @@ class DomainTest(unittest.TestCase):
         root_uuid_3 = rspJson["root"]
         self.assertEqual(root_uuid, root_uuid_3)
 
-        # verify that invalid domain fails
+        # verify that request with invalid domain fails
         domain = domain[1:]  # strip off the '/'
         params = {"domain": domain}
 
         rsp = requests.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 400)
+    
 
     def testGetByPath(self):
         domain = helper.getTestDomain("tall.h5")
@@ -415,8 +411,7 @@ class DomainTest(unittest.TestCase):
          
         self.assertTrue("owner" in rspJson)
         self.assertTrue("class" in rspJson)
-        self.assertEqual(rspJson["class"], "folder")
-         
+        self.assertEqual(rspJson["class"], "folder")    
 
         # try doing a un-authenticated request
         if config.get("test_noauth") and config.get("default_public"):
@@ -467,12 +462,11 @@ class DomainTest(unittest.TestCase):
 
         # try delete the folder
         domain = self.base_domain + "/" + folder_name
-        print("testCreateFolder", domain)        
         headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/'
         body = {"folder": True}
         rsp = requests.delete(req, headers=headers)
-        # should get a09
+        # should get 409
         self.assertEqual(rsp.status_code, 409)
 
         # delete the child domain
@@ -483,7 +477,6 @@ class DomainTest(unittest.TestCase):
 
         # try delete the folder
         domain = self.base_domain + "/" + folder_name
-        print("delete child domain", domain)        
         headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + '/'
         body = {"folder": True}

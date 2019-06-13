@@ -24,7 +24,7 @@ from util.dsetUtil import  getPreviewQuery
 from util.arrayUtil import getNumElements
 from util.chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk, getContiguousLayout
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
-from util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain
+from util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain, getPathForDomain
 from util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson, getItemSize
 from servicenode_lib import getDomainJson, getObjectJson, validateAction, getObjectIdByPath, getPathForObjectId, getRootInfo
 import config
@@ -262,7 +262,7 @@ async def GET_Dataset(request):
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
             group_id = domain_json["root"]
-        dset_id = await getObjectIdByPath(app, group_id, h5path)  # throws 404 if not found
+        dset_id = await getObjectIdByPath(app, group_id, h5path, bucket=bucket)  # throws 404 if not found
         if not isValidUuid(dset_id, "Dataset"):
             msg = f"No dataset exist with the path: {h5path}"
             log.warn(msg)
@@ -270,7 +270,7 @@ async def GET_Dataset(request):
         log.info(f"get dataset_id: {dset_id} from h5path: {h5path}")
     
     # get authoritative state for dataset from DN (even if it's in the meta_cache).
-    dset_json = await getObjectJson(app, dset_id, refresh=True, include_attrs=include_attrs)  
+    dset_json = await getObjectJson(app, dset_id, refresh=True, include_attrs=include_attrs, bucket=bucket)  
 
     # check that we have permissions to read the object
     await validateAction(app, domain, dset_id, username, "read")
@@ -292,13 +292,13 @@ async def GET_Dataset(request):
     resp_json["attributeCount"] = dset_json["attributeCount"]
     resp_json["created"] = dset_json["created"]
     resp_json["lastModified"] = dset_json["lastModified"]
-    resp_json["domain"] = domain
+    resp_json["domain"] = getPathForDomain(domain)
 
     if getAlias:
         root_id = dset_json["root"]
         alias = []
         idpath_map = {root_id: '/'}
-        h5path = await getPathForObjectId(app, root_id, idpath_map, tgt_id=dset_id)
+        h5path = await getPathForObjectId(app, root_id, idpath_map, tgt_id=dset_id, bucket=bucket)
         if h5path:
             alias.append(h5path)
         resp_json["alias"] = alias
@@ -373,9 +373,10 @@ async def GET_DatasetType(request):
         msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    bucket = getBucketForDomain(domain)
     
     # get authoritative state for group from DN (even if it's in the meta_cache).
-    dset_json = await getObjectJson(app, dset_id, refresh=True)  
+    dset_json = await getObjectJson(app, dset_id, refresh=True, bucket=bucket)  
 
     await validateAction(app, domain, dset_id, username, "read")
 
@@ -422,9 +423,10 @@ async def GET_DatasetShape(request):
         msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    bucket = getBucketForDomain(domain)
     
     # get authoritative state for dataset from DN (even if it's in the meta_cache).
-    dset_json = await getObjectJson(app, dset_id, refresh=True)  
+    dset_json = await getObjectJson(app, dset_id, refresh=True, bucket=bucket)  
 
     await validateAction(app, domain, dset_id, username, "read")
 
@@ -515,13 +517,13 @@ async def PUT_DatasetShape(request):
         msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-
+    bucket = getBucketForDomain(domain)
     
     # verify the user has permission to update shape
     await validateAction(app, domain, dset_id, username, "update")
     
     # get authoritative state for dataset from DN (even if it's in the meta_cache).
-    dset_json = await getObjectJson(app, dset_id, refresh=True)  
+    dset_json = await getObjectJson(app, dset_id, refresh=True, bucket=bucket)  
     shape_orig = dset_json["shape"]
     log.debug(f"shape_orig: {shape_orig}")
 
@@ -559,13 +561,16 @@ async def PUT_DatasetShape(request):
     req = getDataNodeUrl(app, dset_id) + "/datasets/" + dset_id + "/shape"
     
     json_resp = { "hrefs": []}
+    params = {}
+    if bucket:
+        params["bucket"] = bucket
 
     if extend:
         data = {"extend": extend, "extend_dim": extend_dim}
     else:
         data = {"shape": shape_update}
     try:
-        put_rsp = await http_put(app, req, data=data)
+        put_rsp = await http_put(app, req, data=data, params=params)
         log.info(f"got shape put rsp: {put_rsp}")
         if "selection" in put_rsp:
             json_resp["selection"] = put_rsp["selection"]
@@ -601,6 +606,7 @@ async def POST_Dataset(request):
         msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    bucket = getBucketForDomain(domain)
     
     domain_json = await getDomainJson(app, domain, reload=True)
     root_id = domain_json["root"]
@@ -625,7 +631,7 @@ async def POST_Dataset(request):
         # Committed type - fetch type json from DN
         ctype_id = datatype
         log.debug(f"got ctypeid: {ctype_id}")
-        ctype_json = await getObjectJson(app, ctype_id)  
+        ctype_json = await getObjectJson(app, ctype_id, bucket=bucket)  
         log.debug(f"ctype: {ctype_json}")
         if ctype_json["root"] != root_id:
             msg = "Referenced committed datatype must belong in same domain"
@@ -843,8 +849,11 @@ async def POST_Dataset(request):
     
     log.debug("create dataset: " + json.dumps(dataset_json))
     req = getDataNodeUrl(app, dset_id) + "/datasets"
+    params = {}
+    if bucket:
+        params["bucket"] = bucket
     
-    post_json = await http_post(app, req, data=dataset_json)
+    post_json = await http_post(app, req, data=dataset_json, params=params)
 
     # create link if requested
     if link_id and link_title:
@@ -854,7 +863,7 @@ async def POST_Dataset(request):
         link_req = getDataNodeUrl(app, link_id)
         link_req += "/groups/" + link_id + "/links/" + link_title
         log.info("PUT link - : " + link_req)
-        put_rsp = await http_put(app, link_req, data=link_json)
+        put_rsp = await http_put(app, link_req, data=link_json, params=params)
         log.debug(f"PUT Link resp: {put_rsp}")
 
     # dataset creation successful     
@@ -887,6 +896,7 @@ async def DELETE_Dataset(request):
         msg = f"Invalid oomain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    bucket = getBucketForDomain(domain)
     
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
@@ -899,7 +909,10 @@ async def DELETE_Dataset(request):
 
     req = getDataNodeUrl(app, dset_id) + "/datasets/" + dset_id
  
-    await http_delete(app, req)
+    params = {}
+    if bucket:
+        params["bucket"] = bucket
+    await http_delete(app, req, params=params)
 
     if dset_id in meta_cache:
         del meta_cache[dset_id]  # remove from cache

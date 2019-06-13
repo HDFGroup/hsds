@@ -18,7 +18,7 @@ from aiohttp.web_exceptions import HTTPBadRequest
 from util.httpUtil import  http_get, http_put, http_delete, getHref, jsonResponse
 from util.idUtil import   isValidUuid, getDataNodeUrl, getCollectionForId
 from util.authUtil import getUserPasswordFromRequest,   validateUserPassword
-from util.domainUtil import  getDomainFromRequest, isValidDomain
+from util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain
 from util.linkUtil import validateLinkName
 from servicenode_lib import  validateAction, getObjectJson
 import hsds_logger as log
@@ -62,6 +62,7 @@ async def GET_Links(request):
         msg = f"domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    bucket = getBucketForDomain(domain)
     
     await validateAction(app, domain, group_id, username, "read")
 
@@ -75,7 +76,10 @@ async def GET_Links(request):
         req += query_sep + "Marker=" + marker
         
     log.debug("get LINKS: " + req)
-    links_json = await http_get(app, req)
+    params = {}
+    if bucket:
+        params["bucket"] = bucket
+    links_json = await http_get(app, req, params=params)
     log.debug(f"got links json from dn for group_id: {group_id}")
     links = links_json["links"]
 
@@ -130,12 +134,16 @@ async def GET_Link(request):
         msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    bucket = getBucketForDomain(domain)
     await validateAction(app, domain, group_id, username, "read")
     
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id + "/links/" + link_title
     log.debug("get LINK: " + req)
-    link_json = await http_get(app, req)
+    params = {}
+    if bucket:
+        params["bucket"] = bucket
+    link_json = await http_get(app, req, params=params)
     log.debug("got link_json: " + str(link_json)) 
     resp_link = {}
     resp_link["title"] = link_title
@@ -230,14 +238,15 @@ async def PUT_Link(request):
         msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    bucket = getBucketForDomain(domain)
     await validateAction(app, domain, group_id, username, "create")
     
 
     # for hard links, verify that the referenced id exists and is in this domain
     if "id" in body:
         ref_id = body["id"]
-        ref_json = await getObjectJson(app, ref_id)
-        group_json = await getObjectJson(app, group_id)
+        ref_json = await getObjectJson(app, ref_id, bucket=bucket)
+        group_json = await getObjectJson(app, group_id, bucket=bucket)
         if ref_json["root"] != group_json["root"]:
             msg = "Hard link must reference an object in the same domain"
             log.warn(msg)
