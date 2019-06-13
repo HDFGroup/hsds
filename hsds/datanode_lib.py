@@ -341,9 +341,12 @@ async def write_s3_obj(app, obj_id, bucket=None):
     deleted_ids = app['deleted_ids']
     success = False
 
-    validateObjId(obj_id, bucket)
     if isValidDomain(obj_id):
-        bucket = getBucketForDomain(obj_id)
+        domain_bucket = getBucketForDomain(obj_id)
+        if bucket and bucket != domain_bucket:
+            log.error(f"expected bucket for domain: {obj_id} to match what wsas passed to write_s3_obj")
+        else:
+            bucket = domain_bucket
 
     if s3key in pending_s3_write:
         msg = f"write_s3_key - not expected for key {s3key} to be in pending_s3_write map"
