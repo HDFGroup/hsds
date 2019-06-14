@@ -54,6 +54,3 @@ def validateAttributeName(name):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     # TBD - add any other restrictions
-    
- 
- 

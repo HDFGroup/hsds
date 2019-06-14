@@ -80,7 +80,7 @@ async def POST_Group(request):
 
     group_id = get_obj_id(request, body=body)
     
-    log.info(f"POST group: {group_id} {bucket}")
+    log.info(f"POST group: {group_id} bucket: {bucket}")
     if not isValidUuid(group_id, obj_class="group"):
         log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
@@ -223,7 +223,40 @@ async def DELETE_Group(request):
     notify=True
     if "Notify" in params and not params["Notify"]:
         notify=False
-    await delete_metadata_obj(app, group_id, notify=notify)
+    await delete_metadata_obj(app, group_id, bucket=bucket, notify=notify)
+
+    resp_json = {  } 
+      
+    resp = json_response(resp_json)
+    log.response(request, resp=resp)
+    return resp
+
+async def POST_Root(request):
+    """ Notify root that content in the domain has been modified.
+    """
+    log.request(request)
+    app = request.app
+    root_id = request.match_info.get('id')
+    if not root_id:
+        log.error("missing id in request")
+        raise HTTPInternalServerError()
+    if not isSchema2Id(root_id):
+        log.error(f"expected schema2 id but got: {root_id}")
+        raise HTTPInternalServerError()
+    if not isRootObjId(root_id):
+        log.error(f"Expected root id but got: {root_id}")
+        raise HTTPInternalServerError()
+    params = request.rel_url.query
+    if "bucket" in params:
+        bucket = params["bucket"]
+    else:
+        bucket = None
+    
+    log.info(f"POST_Root: {root_id} bucket: {bucket}")
+
+    # add id to be scanned by the s3sync task
+    root_scan_ids = app["root_scan_ids"]
+    root_scan_ids[root_id] = bucket
 
     resp_json = {  } 
       

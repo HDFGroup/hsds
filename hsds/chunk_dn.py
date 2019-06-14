@@ -182,6 +182,7 @@ async def PUT_Chunk(request):
         raise HTTPBadRequest(reason=msg)
     if "bucket" in params:
         bucket = params["bucket"]
+        log.debug(f"PUT_Chunk using bucket: {bucket}")
     else:
         bucket = None
 
@@ -199,6 +200,8 @@ async def PUT_Chunk(request):
         msg = "Missing dset in GET request"
         log.error(msg)
         raise HTTPBadRequest(reason=msg)
+
+    log.debug(f"PUT_Chunk - id: {chunk_id}")
     dset_json = json.loads(params["dset"])
     log.debug(f"dset_json: {dset_json}")
 
@@ -263,7 +266,7 @@ async def PUT_Chunk(request):
         
     input_arr = bytesToArray(input_bytes, dt, mshape)
 
-    # TBD: Skipp read if the input shape is the entire chunk?
+    # TBD: Skip read if the input shape is the entire chunk?
     chunk_arr = await getChunk(app, chunk_id, dset_json, chunk_init=True)
 
     # update chunk array

@@ -244,7 +244,7 @@ async def DELETE_Attribute(request):
     log.info(f"DELETE attribute {attr_name} in {obj_id} bucket: {bucket}")
     validateAttributeName(attr_name)
 
-    obj_json = await get_metadata_obj(app, obj_id)
+    obj_json = await get_metadata_obj(app, obj_id, bucket=bucket)
     
     log.debug(f"DELETE attribute obj_id: {obj_id} got json")
     if "attributes" not in obj_json:

@@ -208,7 +208,7 @@ async def PUT_Link(request):
     group_json["lastModified"] = now
 
     # write back to S3, save to metadata cache
-    await save_metadata_obj(app, group_id, group_json)
+    await save_metadata_obj(app, group_id, group_json, bucket=bucket)
     
     resp_json = { } 
      

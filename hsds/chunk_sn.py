@@ -78,6 +78,7 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level,
     setSliceQueryParam(params, chunk_sel)  
     if bucket:
         params["bucket"] = bucket 
+        log.debug(f"write_chunk_hyperslab - using bucket: {bucket}")
 
     try:
         async with client.put(req, data=data, params=params) as rsp:
@@ -726,7 +727,7 @@ async def PUT_Value(request):
                 raise HTTPBadRequest(reason=msg)
             log.info(f"append_dim: {append_dim}")
     
-    # get  state for dataset from DN.
+    # get state for dataset from DN.
     dset_json = await getObjectJson(app, dset_id, bucket=bucket, refresh=False)  
 
     layout = None 

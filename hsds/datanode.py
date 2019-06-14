@@ -20,14 +20,14 @@ from util.lruCache import LruCache
 from basenode import healthCheck, baseInit
 import hsds_logger as log
 from domain_dn import GET_Domain, PUT_Domain, DELETE_Domain, PUT_ACL
-from group_dn import GET_Group, POST_Group, DELETE_Group, PUT_Group
+from group_dn import GET_Group, POST_Group, DELETE_Group, PUT_Group, POST_Root
 from link_dn import GET_Links, GET_Link, PUT_Link, DELETE_Link
 from attr_dn import GET_Attributes, GET_Attribute, PUT_Attribute, DELETE_Attribute
 from ctype_dn import GET_Datatype, POST_Datatype, DELETE_Datatype
 from dset_dn import GET_Dataset, POST_Dataset, DELETE_Dataset, PUT_DatasetShape
 from chunk_dn import PUT_Chunk, GET_Chunk, POST_Chunk, DELETE_Chunk
 from datanode_lib import s3syncCheck 
-
+from async_lib import scanRoot
                
 
 async def init(loop):
@@ -72,9 +72,46 @@ async def init(loop):
     app.router.add_route('GET', '/chunks/{id}', GET_Chunk)
     app.router.add_route('POST', '/chunks/{id}', POST_Chunk)
     app.router.add_route('DELETE', '/chunks/{id}', DELETE_Chunk)
+    app.router.add_route("POST", '/roots/{id}', POST_Root)
     
       
     return app
+
+async def bucketScan(app):
+    """ Scan v2 keys and update .info.json
+    """
+ 
+    log.info("bucketScan start")
+
+    async_sleep_time = config.get("async_sleep_time")
+    log.info("async_sleep_time: {}".format(async_sleep_time))
+     
+    # update/initialize root object before starting node updates
+ 
+    while True:  
+        if app["node_state"] != "READY":
+            log.info("bucketScan waiting for Node state to be READY")
+            await asyncio.sleep(1)
+            continue  # wait for READY state
+
+        root_scan_ids = app["root_scan_ids"]
+        root_ids = {}
+        # copy ids to a new map so we don't need to worry about race conditions
+        for root_id in root_scan_ids:
+            root_ids[root_id] = root_scan_ids[root_id]
+        # remove from map
+        for root_id in root_ids:
+            del root_scan_ids[root_id]
+
+        for root_id in root_ids:
+            bucket = root_ids[root_id]
+            log.info(f"bucketScan for: {root_id} bucket: {bucket}")
+            await scanRoot(app, root_id, update=True, bucket=bucket)
+           
+        await asyncio.sleep(async_sleep_time)   
+
+    # shouldn't ever get here     
+    log.error("bucketScan terminating unexpectedly")
 
 #
 # Main
@@ -99,7 +136,8 @@ if __name__ == '__main__':
     app["pending_s3_read"] = {} # map of s3key to timestamp for in-flight read requests
     app["pending_s3_write"] = {} # map of s3key to timestamp for in-flight write requests
     app["pending_s3_write_tasks"] = {} # map of objid to asyncio Task objects for writes
-    app["an_notify_objs"] = set()   # set of objids to tell the AN about
+    app["root_notify_ids"] = {}   # map of root_id to bucket name used for notify root of changes in domain
+    app["root_scan_ids"] = {}   # map of root_id to bucket name for pending root scans
     # TODO - there's nothing to prevent the deflate_map from getting ever larger 
     # (though it is only one int per dataset id)
     # add a timestamp and remove at a certain time?
@@ -110,7 +148,10 @@ if __name__ == '__main__':
 
     # run data sync tasks
     asyncio.ensure_future(s3syncCheck(app), loop=loop)
-   
+
+    # run root scan
+    asyncio.ensure_future(bucketScan(app), loop=loop) 
+
     # run the app
     port = int(config.get("dn_port"))
     run_app(app, port=port)

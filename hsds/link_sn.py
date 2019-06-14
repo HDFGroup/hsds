@@ -256,8 +256,10 @@ async def PUT_Link(request):
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id + "/links/" + link_title
     log.debug("PUT link - getting group: " + req)
-    
-    put_rsp = await http_put(app, req, data=link_json)
+    params = {}
+    if bucket:
+        params["bucket"] = bucket
+    put_rsp = await http_put(app, req, data=link_json, params=params)
     log.debug("PUT Link resp: " + str(put_rsp))
 
     hrefs = []  # TBD
@@ -293,11 +295,15 @@ async def DELETE_Link(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
+    bucket = getBucketForDomain(domain)
     await validateAction(app, domain, group_id, username, "delete")
 
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id + "/links/" + link_title
-    rsp_json = await http_delete(app, req)
+    params = {}
+    if bucket:
+        params["bucket"] = bucket
+    rsp_json = await http_delete(app, req, params=params)
     
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)

@@ -646,7 +646,6 @@ async def PUT_Domain(request):
     else:
         linked_json = None
 
-    
     if not is_folder and not linked_json:
         # create a root group for the new domain
         root_id = createObjId("roots") 
@@ -656,8 +655,12 @@ async def PUT_Domain(request):
     
         # create root group
         req = getDataNodeUrl(app, root_id) + "/groups"
+        params = {}
+        bucket = getBucketForDomain(domain)
+        if bucket:
+            params["bucket"] = bucket
         try:
-            group_json = await http_post(app, req, data=group_json)
+            group_json = await http_post(app, req, data=group_json, params=params)
         except ClientResponseError as ce:
             msg="Error creating root group for domain -- " + str(ce)
             log.error(msg)

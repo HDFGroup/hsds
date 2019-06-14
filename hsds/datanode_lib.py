@@ -15,16 +15,15 @@
 import asyncio
 import time 
 from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError, HTTPBadRequest
-from aiohttp.client_exceptions import ClientError
 
-from util.idUtil import validateInPartition, getS3Key, isValidUuid, isValidChunkId
+from util.idUtil import validateInPartition, getS3Key, isValidUuid, isValidChunkId, getDataNodeUrl, isSchema2Id, getRootObjId
 from util.s3Util import getS3JSONObj, putS3JSONObj, putS3Bytes, isS3Obj, deleteS3Obj
 from util.domainUtil import isValidDomain, getBucketForDomain
 from util.attrUtil import getRequestCollectionName
-from util.httpUtil import http_put, http_delete
+from util.httpUtil import http_post
 from util.chunkUtil import getDatasetId
 from util.arrayUtil import arrayToBytes
-from basenode import getAsyncNodeUrl
+#from basenode import getAsyncNodeUrl
 import config
 import hsds_logger as log
 
@@ -84,6 +83,20 @@ def get_obj_id(request, body=None):
         raise HTTPInternalServerError() 
 
     return obj_id   
+
+async def notify_root(app, root_id, bucket=None):
+    # flag to write to S3
+    
+    log.info(f"notify_root: {root_id}")
+    if not isValidUuid(root_id) or not isSchema2Id(root_id):
+        log.error(f"unexpected call to notify with invalid id: {root_id}")
+        return
+    notify_req = getDataNodeUrl(app, root_id) + "/roots/" + root_id
+    log.info(f"Notify: {notify_req} [{bucket}]")
+    params = {}
+    if bucket:
+        params["bucket"] = bucket
+    await http_post(app, notify_req, data={}, params=params)
 
 async def check_metadata_obj(app, obj_id, bucket=None):
     """ Return False is obj does not exist
@@ -230,38 +243,18 @@ async def save_metadata_obj(app, obj_id, obj_json, bucket=None, notify=False, fl
             raise  # re-throw  
         if obj_id in dirty_ids:
             log.warn(f"save_metadata_obj flush - object {obj_id} is still dirty")
+        # message AN immediately if notify flag is set
+        # otherwise AN will be notified at next S3 sync
+        if notify:
+            if isValidUuid(obj_id) and isSchema2Id(obj_id):
+                root_id = getRootObjId(obj_id)
+                await notify_root(app, root_id, bucket=bucket)
     else:
-        # flag to write to S3
+        log.debug(f"setting dirty_ids[{obj_id}] = ({now}, {bucket})")
+        if not bucket:
+            log.warn(f"bucket is not defined for save_metadata_obj: {obj_id}")
         dirty_ids[obj_id] = (now, bucket)
-        
-     
-    # message AN immediately if notify flag is set
-    # otherwise AN will be notified at next S3 sync
-    if notify:
-        an_url = getAsyncNodeUrl(app)
-
-        if obj_id.startswith("/"):
-            # domain update
-            req = an_url + "/domain"
-            params = {"domain": obj_id}
-            if "root" in obj_json:
-                params["root"] = obj_json["root"]
-            if "owner" in obj_json:
-                params["owner"] = obj_json["owner"]
-            try:
-                log.info(f"ASync PUT notify: {req} params: {params}")
-                await http_put(app, req, params=params)
-            except HTTPInternalServerError as hpe:
-                log.warn(f"got error notifying async node: {hpe}")
-
-        else:
-            req = an_url + "/object/" + obj_id
-            try:
-                log.info(f"ASync PUT notify: {req}")
-                await http_put(app, req)
-            except HTTPInternalServerError:
-                log.warn(f"got error notifying async node")
-        
+         
 
 
 async def delete_metadata_obj(app, obj_id, notify=True, root_id=None, bucket=None):
@@ -290,6 +283,7 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None, bucket=Non
         del meta_cache[obj_id]
     
     if obj_id in dirty_ids:
+        log.debug(f"removing dirty_ids for: {obj_id}")
         del dirty_ids[obj_id]
 
     # remove from S3 (if present)
@@ -301,6 +295,10 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None, bucket=Non
         log.info(f"delete_metadata_obj - key {s3key} not found (never written)?")
     
     if notify:
+        if isValidUuid(obj_id) and isSchema2Id(obj_id):
+            root_id = getRootObjId(obj_id)
+            await notify_root(app, root_id, bucket=bucket)
+        """
         an_url = getAsyncNodeUrl(app)
         if isValidDomain(obj_id):
             # domain delete
@@ -323,6 +321,7 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None, bucket=Non
                 log.error(f"got ClientError notifying async node: {ce}")
             except HTTPInternalServerError as ise:
                 log.error(f"got HTTPInternalServerError notifying async node: {ise}")
+        """
     log.debug(f"delete_metadata_obj for {obj_id} done")
 
 
@@ -337,7 +336,7 @@ async def write_s3_obj(app, obj_id, bucket=None):
     chunk_cache = app['chunk_cache']
     meta_cache = app['meta_cache']
     deflate_map = app['deflate_map']
-    notify_objs = app["an_notify_objs"]
+    notify_objs = app["root_notify_ids"]
     deleted_ids = app['deleted_ids']
     success = False
 
@@ -360,7 +359,7 @@ async def write_s3_obj(app, obj_id, bucket=None):
     if obj_id in deleted_ids and isValidUuid(obj_id):
         # if this objid has been deleted (and its unique since this is not a domain id)
         # cancel any pending task and return
-        log.warn(f"Canceling wrfite for {obj_id} since it has been deleted")
+        log.warn(f"Canceling write for {obj_id} since it has been deleted")
         if obj_id in pending_s3_write_tasks:
             log.info(f"removing pending s3 write task for {obj_id}")
             task = pending_s3_write_tasks[obj_id]
@@ -453,8 +452,10 @@ async def write_s3_obj(app, obj_id, bucket=None):
             log.debug(f"clearing dirty flag for {obj_id}")
             del dirty_ids[obj_id]
         
-    # add to set so that AN can be notified about changed objects
-    notify_objs.add(obj_id)
+    # add to map so that root can be notified about changed objects
+    if isValidUuid(obj_id) and isSchema2Id(obj_id):
+        root_id = getRootObjId(obj_id)
+        notify_objs[root_id] = bucket 
 
     # calculate time to do the write
     elapsed_time = time.time() - now
@@ -490,7 +491,7 @@ async def s3sync(app):
     update_count = 0
     s3sync_start = time.time()
 
-    log.info(f"processing {len(dirty_ids)} dirty_ids")   
+    log.info(f"s3sync - processing {len(dirty_ids)} dirty_ids")   
     for obj_id in dirty_ids:
         item = dirty_ids[obj_id]
         log.debug(f"got item: {item} for obj_id: {obj_id}")
@@ -517,32 +518,33 @@ async def s3sync(app):
                 create_task = False
                 if obj_id not in pending_s3_write_tasks:
                     log.error(f"expected to find {obj_id} in pending_s3_write_tasks")
-        if create_task and len(pending_s3_write_tasks) < MAX_PENDING_WRITE_REQUESTS:
-            # create a task to write this object
-            log.debug(f"s3sync - ensure future for {obj_id}")
-            task = asyncio.ensure_future(write_s3_obj(app, obj_id, bucket=bucket))
-            task.add_done_callback(callback)
-            pending_s3_write_tasks[obj_id] = task
-            update_count += 1
+        if create_task:
+            if len(pending_s3_write_tasks) < MAX_PENDING_WRITE_REQUESTS:
+                # create a task to write this object
+                log.debug(f"s3sync - ensure future for {obj_id}")
+                task = asyncio.ensure_future(write_s3_obj(app, obj_id, bucket=bucket))
+                task.add_done_callback(callback)
+                pending_s3_write_tasks[obj_id] = task
+                update_count += 1
+            else:
+                log.debug(f"s3sync - too many pending tasks, not creating task for: {obj_id} now")
 
 
-    # notify AN of key updates 
-    an_url = getAsyncNodeUrl(app)
-    
-    notify_objs = app["an_notify_objs"]
-    if len(notify_objs) > 0:           
-        log.info(f"Notifying AN for {len(notify_objs)} S3 Updates")
-        body = { "objs": list(notify_objs) }
-        notify_objs.clear()
-
-        req = an_url + "/objects"
-        try:
-            log.info(f"ASync PUT notify: {req} body: {body}")
-            await http_put(app, req, data=body)
-        except HTTPInternalServerError as hpe:
-            msg =f"got error notifying async node: {hpe}"
-            log.error(msg)
-
+    # notify root of obj updates 
+    notify_ids = app["root_notify_ids"]
+    if len(notify_ids) > 0:           
+        log.info(f"Notifying for {len(notify_ids)} S3 Updates")
+        # create a set since we are not allowed to change 
+        root_ids = set()
+        for root_id in notify_ids:
+            root_ids.add(root_id)
+        
+        for root_id in root_ids:
+            bucket = notify_ids[root_id]
+            await notify_root(app, root_id, bucket=bucket)
+            del notify_ids[root_id]
+        log.info("root notify complete")
+        
     # return number of objects written
     return update_count
 

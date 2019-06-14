@@ -174,7 +174,7 @@ async def DELETE_Dataset(request):
     notify=True
     if "Notify" in params and not params["Notify"]:
         notify=False
-    await delete_metadata_obj(app, dset_id, notify=notify)
+    await delete_metadata_obj(app, dset_id, bucket=bucket, notify=notify)
 
     resp_json = {  } 
       

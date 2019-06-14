@@ -115,7 +115,7 @@ async def POST_Datatype(request):
     ctype_json = {"id": ctype_id, "root": root_id, "created": now, 
         "lastModified": now, "type": type_json, "attributes": {} }
      
-    await save_metadata_obj(app, ctype_id, ctype_json, notify=True, flush=True)
+    await save_metadata_obj(app, ctype_id, ctype_json, bucket=bucket, notify=True, flush=True)
 
     resp_json = {} 
     resp_json["id"] = ctype_id 

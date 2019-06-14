@@ -28,7 +28,8 @@ def scanRootCallback(app, s3keys):
         raise ValueError("unexpected callback format")
         
     results = app["scanRoot_results"]
-    log.debug(f"previous scanRoot_results:".format(results))
+    if results:
+        log.debug(f"previous scanRoot_results:".format(results))
     for s3key in s3keys.keys():
 
         if not isS3ObjKey(s3key):
@@ -85,13 +86,13 @@ def scanRootCallback(app, s3keys):
             log.error(f"Unexpected collection type for id: {objid}")
        
 
-async def scanRoot(app, rootid, update=False):
+async def scanRoot(app, rootid, update=False, bucket=None):
 
     # iterate through all s3 keys under the given root.
     # Return dict with stats for the root.
     #
     # Note: not re-entrant!  Only one scanRoot an be run at a time per app.
-    log.info(f"scanRoot for rootid: {rootid}")
+    log.info(f"scanRoot for rootid: {rootid} bucket: {bucket}")
 
     if not isValidUuid(rootid):
         raise ValueError("Invalid root id")
@@ -106,7 +107,7 @@ async def scanRoot(app, rootid, update=False):
         raise ValueError("unexpected root key")
     root_prefix = root_key[:-(len(".group.json"))]
     
-    log.debug(f"using prefix: {root_prefix}")
+    log.debug(f"scanRoot - using prefix: {root_prefix}")
 
     results = {}
     results["lastModified"] = 0
@@ -177,6 +178,9 @@ async def removeKeys(app, objid):
         log.error("unexpected s3key for delete_set")
         raise KeyError("unexpected key suffix")
     log.info(f"delete for {objid} searching for s3prefix: {s3prefix}")
+    if app["objDelete_prefix"]:
+        log.error("objDelete_prefix is already set - impropere use of non-reentrant call?")
+        # just continue and reset
     app["objDelete_prefix"] = s3prefix
     try:
         await getS3Keys(app, prefix=s3prefix, include_stats=False, callback=objDeleteCallback)
