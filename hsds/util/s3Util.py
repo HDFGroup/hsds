@@ -248,7 +248,7 @@ async def getS3Bytes(app, key, deflate_level=None, s3offset=0, s3size=None, buck
             raise HTTPNotFound()
         else:
             s3_stats_increment(app, "error_count")
-            log.error(f"got unexpect3ed ClientError on s3 get {key}: {ce}")
+            log.error(f"got unexpected ClientError on s3 get {key}: {ce}")
             raise HTTPInternalServerError()
 
     if data and len(data) > 0:
