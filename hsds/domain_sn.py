@@ -471,10 +471,12 @@ async def GET_Domain(request):
     log.response(request, resp=resp)
     return resp
 
-async def doFlush(app, root_id):
+async def doFlush(app, root_id, bucket=None):
     """ return wnen all DN nodes have wrote any pending changes to S3"""
     log.info(f"doFlush {root_id}")
     params = {"flush": 1}
+    if bucket:
+        params["bucket"] = bucket
     client = get_http_client(app)
     dn_urls = getDataNodeUrls(app)
     log.debug(f"dn_urls: {dn_urls}")
@@ -554,7 +556,8 @@ async def PUT_Domain(request):
         aclCheck(domain_json, "update", username)  # throws exception if not allowed
         if "root" in domain_json:
             # nothing to do for folder objects
-            await doFlush(app, domain_json["root"])
+            bucket = getBucketForDomain(domain)
+            await doFlush(app, domain_json["root"], bucket=bucket)
         # flush  successful     
         resp = await jsonResponse(request, None, status=204)
         log.response(request, resp=resp)

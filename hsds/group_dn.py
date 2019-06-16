@@ -134,17 +134,16 @@ async def PUT_Group(request):
     params = request.rel_url.query
 
     root_id = request.match_info.get('id')
-    log.info("PUT group: {}  (flush)".format(root_id))
-
-    if not isValidUuid(root_id, obj_class="group"):
-        log.error(f"Unexpected group_id: {root_id}")
-        raise HTTPInternalServerError()
-
     if "bucket" in params:
         bucket = params["bucket"]
     else:
         bucket = None
-    log.warn(f"what to do with bucket: {bucket}?")
+    log.info(f"PUT group (flush): {root_id}  bucket: {bucket}")
+    # don't really need bucket param since the dirty ids know which bucket they should write too
+
+    if not isValidUuid(root_id, obj_class="group"):
+        log.error(f"Unexpected group_id: {root_id}")
+        raise HTTPInternalServerError()
 
     schema2 = isSchema2Id(root_id)
 

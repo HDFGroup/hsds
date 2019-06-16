@@ -176,8 +176,8 @@ async def getS3JSONObj(app, key, bucket=None):
         # key does not exist?
         # check for not found status
         # Note: Error.Code should always exist - cf https://github.com/boto/botocore/issues/885
-        log.info("ClientError on getS3JSONObj")
         response_code = ce.response['Error']['Code']
+        log.info(f"ClientError on getS3JSONObj key: {key} bucket: {bucket}: {response_code}")
 
         # remove key from pending map if present
         if "pending_s3_read" in app:  
@@ -289,7 +289,7 @@ async def putS3JSONObj(app, key, json_obj, bucket=None):
         raise HTTPInternalServerError()
     if data and len(data) > 0:
         s3_stats_increment(app, "bytes_out", inc=len(data))
-    log.debug(f"putS3JSONObj complete, s3_rsp: {s3_rsp}")
+    log.debug(f"putS3JSONObj {key} complete, s3_rsp: {s3_rsp}")
     return s3_rsp
 
 async def putS3Bytes(app, key, data, deflate_level=None, bucket=None):

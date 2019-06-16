@@ -250,7 +250,7 @@ async def save_metadata_obj(app, obj_id, obj_json, bucket=None, notify=False, fl
                 await notify_root(app, root_id, bucket=bucket)
     else:
         log.debug(f"setting dirty_ids[{obj_id}] = ({now}, {bucket})")
-        if not bucket:
+        if isValidUuid(obj_id) and  not bucket:
             log.warn(f"bucket is not defined for save_metadata_obj: {obj_id}")
         dirty_ids[obj_id] = (now, bucket)
          
@@ -275,6 +275,7 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None, bucket=Non
     if obj_id in deleted_ids:
         log.warn(f"{obj_id} has already been deleted")
     else:
+        log.debug(f"adding {obj_id} to deleted ids")
         deleted_ids.add(obj_id)
      
     if obj_id in meta_cache:
@@ -405,7 +406,9 @@ async def write_s3_obj(app, obj_id, bucket=None):
             await putS3JSONObj(app, s3key, obj_json, bucket=bucket)                     
             success = True 
             # should still be in meta_cache...
-            if obj_id not in meta_cache:
+            if obj_id in deleted_ids:
+                log.info(f"obj {obj_id} has been deleted while write was in progress")
+            elif obj_id not in meta_cache:
                 msg = f"expected to find {obj_id} in meta_cache"
                 log.error(msg)
             elif obj_id in dirty_ids and dirty_ids[obj_id][0] > last_update_time:

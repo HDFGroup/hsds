@@ -208,7 +208,7 @@ async def PUT_ACL(request):
     domain_json["lastModified"] = now
      
     # write back to S3
-    await save_metadata_obj(app, domain, domain_json)
+    await save_metadata_obj(app, domain, domain_json, flush=True)
     
     resp_json = { } 
      
