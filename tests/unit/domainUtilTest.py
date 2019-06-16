@@ -43,11 +43,11 @@ class DomainUtilTest(unittest.TestCase):
             self.assertTrue(isValidHostDomain(domain))  
 
     def testValidDomain(self):
-        invalid_domains = (123, 'abc/', '', None)
+        invalid_domains = (123, '/', 'abc/', '', None)
         for domain in invalid_domains:
             self.assertFalse(isValidDomain(domain))  
 
-        valid_domains = ("/gov/nasa/nex", "/home")
+        valid_domains = ('/gov/nasa/nex', '/home')
         for domain in valid_domains:
             self.assertTrue(isValidDomain(domain))  
 
@@ -67,12 +67,37 @@ class DomainUtilTest(unittest.TestCase):
 
 
     def testGetParentDomain(self):
-        domain = "gov/nasa/ne"
+        
+        domain = "/nasa/nex"
+        parent = getParentDomain(domain)
+        self.assertEqual(parent, "/nasa")
+        domain = "/nasa"
+        parent = getParentDomain(domain)
+        self.assertEqual(parent, "/")
+        domain = "/"
+        parent = getParentDomain(domain)
+        self.assertEqual(parent, "/")
+
+        domain = "gov/nasa/nex"
         parent = getParentDomain(domain)
         self.assertEqual(parent, "gov/nasa")
-        domain = "gov"
+        domain = "gov/nasa"
         parent = getParentDomain(domain)
-        self.assertEqual(parent, None)
+        self.assertEqual(parent, "gov/")
+        domain = "gov/"
+        parent = getParentDomain(domain)
+        self.assertEqual(parent, "gov/")
+
+        domain = "gov/nasa/nex/.domain.json"
+        parent = getParentDomain(domain)
+        self.assertEqual(parent, "gov/nasa")
+        domain = "gov/nasa"
+        parent = getParentDomain(domain)
+        self.assertEqual(parent, "gov/")
+        domain = "gov/.domain.json"
+        parent = getParentDomain(domain)
+        self.assertEqual(parent, "gov/")
+
 
     def testGetDomainFragments(self):
         domain = "/gov/nasa/nex/climate.h5"

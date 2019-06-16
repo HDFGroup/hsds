@@ -16,14 +16,13 @@ import asyncio
 import time 
 from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError, HTTPBadRequest
 
-from util.idUtil import validateInPartition, getS3Key, isValidUuid, isValidChunkId, getDataNodeUrl, isSchema2Id, getRootObjId
+from util.idUtil import validateInPartition, getS3Key, isValidUuid, isValidChunkId, getDataNodeUrl, isSchema2Id, getRootObjId, isRootObjId
 from util.s3Util import getS3JSONObj, putS3JSONObj, putS3Bytes, isS3Obj, deleteS3Obj
 from util.domainUtil import isValidDomain, getBucketForDomain
 from util.attrUtil import getRequestCollectionName
 from util.httpUtil import http_post
 from util.chunkUtil import getDatasetId
 from util.arrayUtil import arrayToBytes
-#from basenode import getAsyncNodeUrl
 import config
 import hsds_logger as log
 
@@ -294,34 +293,17 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None, bucket=Non
     else:
         log.info(f"delete_metadata_obj - key {s3key} not found (never written)?")
     
-    if notify:
-        if isValidUuid(obj_id) and isSchema2Id(obj_id):
+    if isValidUuid(obj_id) and isSchema2Id(obj_id):
+        if isRootObjId(obj_id):
+            # add to gc ids so sub-objects will be deleted
+            gc_ids = app["gc_ids"]
+            log.info(f"adding root id: {obj_id} for GC cleanup")
+            gc_ids.add(obj_id)
+        elif notify:
             root_id = getRootObjId(obj_id)
             await notify_root(app, root_id, bucket=bucket)
-        """
-        an_url = getAsyncNodeUrl(app)
-        if isValidDomain(obj_id):
-            # domain delete
-            req = an_url + "/domain"
-            params = {"domain": obj_id}
-            
-            try:
-                log.info(f"ASync DELETE notify: {req} params: {params}")
-                await http_delete(app, req, params=params)
-            except ClientError as ce:
-                log.error(f"got error notifying async node: {ce}")
-            except HTTPInternalServerError as hse:
-                log.error(f"got HTTPInternalServerError: {hse}")
-        else:
-            req = an_url + "/object/" + obj_id
-            try:
-                log.info(f"ASync DELETE notify: {req}")
-                await http_delete(app, req)
-            except ClientError as ce:
-                log.error(f"got ClientError notifying async node: {ce}")
-            except HTTPInternalServerError as ise:
-                log.error(f"got HTTPInternalServerError notifying async node: {ise}")
-        """
+        # no notify for domain deletes since the root group is being deleted
+       
     log.debug(f"delete_metadata_obj for {obj_id} done")
 
 
@@ -486,7 +468,7 @@ async def s3sync(app):
         except HTTPInternalServerError as hse:
             log.error(f"write_s3_obj callback got 500: {hse}")
         except Exception as e:
-            log.error(f"write_s3_obj callback unexpected exception: {e}")
+            log.error(f"write_s3_obj callback unexpected exception {type(e)}: {e}")
     
     update_count = 0
     s3sync_start = time.time()

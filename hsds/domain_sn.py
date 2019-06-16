@@ -24,7 +24,7 @@ from util.httpUtil import  http_post, http_put, http_get, http_delete, getHref, 
 from util.idUtil import  getDataNodeUrl, createObjId, getCollectionForId, getDataNodeUrls
 from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
-from util.domainUtil import getParentDomain, getDomainFromRequest, isValidDomain, getBucketForDomain
+from util.domainUtil import getParentDomain, getDomainFromRequest, isValidDomain, getBucketForDomain, getPathForDomain
 from util.s3Util import getS3Keys
 from servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath, getRootInfo
 from basenode import getVersion
@@ -458,8 +458,12 @@ async def GET_Domain(request):
     
     hrefs.append({'rel': 'acls', 'href': getHref(request, '/acls')})
     parent_domain = getParentDomain(domain)
+    if not parent_domain or getPathForDomain(parent_domain) == '/':
+        is_toplevel = True
+    else:
+        is_toplevel = False
     log.debug(f"href parent domain: {parent_domain}")
-    if parent_domain:
+    if not is_toplevel:
         hrefs.append({'rel': 'parent', 'href': getHref(request, '/', domain=parent_domain)})
    
     rsp_json["hrefs"] = hrefs
@@ -595,20 +599,25 @@ async def PUT_Domain(request):
 
     parent_domain = getParentDomain(domain)
     log.debug(f"Parent domain: [{parent_domain}]")
+
+    if not parent_domain or getPathForDomain(parent_domain) == '/':
+        is_toplevel = True
+    else:
+        is_toplevel = False
     
-    if (not parent_domain or parent_domain == '/') and not is_folder:
+    if is_toplevel and not is_folder:
         msg = "Only folder domains can be created at the top-level"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    if (not parent_domain or parent_domain == '/') and username != "admin":
+    if is_toplevel and username != "admin":
         msg = "creation of top-level domains is only supported by admin users"
         log.warn(msg)
         raise HTTPForbidden()
     
 
     parent_json = None
-    if parent_domain and parent_domain != '/':
+    if not is_toplevel:
         try:
             parent_json = await getDomainJson(app, parent_domain, reload=True)
         except ClientResponseError as ce:
@@ -765,7 +774,12 @@ async def DELETE_Domain(request):
     await validateUserPassword(app, username, pswd)
 
     parent_domain = getParentDomain(domain)
-    if (not parent_domain or parent_domain == '/') and username != "admin":
+    if not parent_domain or getPathForDomain(parent_domain) == '/':
+        is_toplevel = True
+    else:
+        is_toplevel = False
+
+    if is_toplevel and username != "admin":
         msg = "Deletion of top-level domains is only supported by admin users"
         log.warn(msg)
         raise HTTPForbidden()

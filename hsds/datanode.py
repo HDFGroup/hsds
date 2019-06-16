@@ -17,6 +17,7 @@ import asyncio
 from aiohttp.web import run_app
 import config
 from util.lruCache import LruCache
+from util.idUtil import isValidUuid, isSchema2Id, getCollectionForId, isRootObjId
 from basenode import healthCheck, baseInit
 import hsds_logger as log
 from domain_dn import GET_Domain, PUT_Domain, DELETE_Domain, PUT_ACL
@@ -27,7 +28,7 @@ from ctype_dn import GET_Datatype, POST_Datatype, DELETE_Datatype
 from dset_dn import GET_Dataset, POST_Dataset, DELETE_Dataset, PUT_DatasetShape
 from chunk_dn import PUT_Chunk, GET_Chunk, POST_Chunk, DELETE_Chunk
 from datanode_lib import s3syncCheck 
-from async_lib import scanRoot
+from async_lib import scanRoot, removeKeys
                
 
 async def init(loop):
@@ -107,11 +108,55 @@ async def bucketScan(app):
             bucket = root_ids[root_id]
             log.info(f"bucketScan for: {root_id} bucket: {bucket}")
             await scanRoot(app, root_id, update=True, bucket=bucket)
-           
+
+        log.info(f"bucketScan - sleep: {async_sleep_time}")   
         await asyncio.sleep(async_sleep_time)   
 
     # shouldn't ever get here     
     log.error("bucketScan terminating unexpectedly")
+
+async def bucketGC(app):
+    """ remove objects from db for any deleted root groups or datasets
+    """
+    log.info("bucketGC start")
+    async_sleep_time = config.get("async_sleep_time")
+    log.info("async_sleep_time: {}".format(async_sleep_time))
+     
+    # update/initialize root object before starting GC
+ 
+    while True:  
+        if app["node_state"] != "READY":
+            log.info("bucketGC - waiting for Node state to be READY")
+            await asyncio.sleep(1)
+            continue  # wait for READY state
+
+        gc_ids = app["gc_ids"]
+        while len(gc_ids) > 0:
+            obj_id = gc_ids.pop()
+            log.info(f"got gc id: {obj_id}")
+            if not isValidUuid(obj_id):
+                log.error(f"bucketGC - got unexpected gc id: {obj_id}")
+                continue
+            if not isSchema2Id(obj_id):
+                log.warn(f"bucketGC - ignoring v1 id: {obj_id}")
+                continue
+            if getCollectionForId(obj_id) == "groups":
+                if not isRootObjId(obj_id):
+                    log.error(f"bucketGC - unexpected non-root id: {obj_id}")
+                    continue
+                log.info(f"bucketGC - delete root objs: {obj_id}")
+                await removeKeys(app, obj_id)
+            elif getCollectionForId(obj_id) == "datasets":
+                log.info(f"bucketGC - delete dataset: {obj_id}")
+                await removeKeys(app, obj_id)
+            else:
+                log.error(f"bucketGC - unexpected obj_id class: {obj_id}")
+           
+        log.info(f"bucketGC - sleep: {async_sleep_time}") 
+        await asyncio.sleep(async_sleep_time)   
+
+    # shouldn't ever get here     
+    log.error("bucketGC terminating unexpectedly")
 
 #
 # Main
@@ -138,6 +183,8 @@ if __name__ == '__main__':
     app["pending_s3_write_tasks"] = {} # map of objid to asyncio Task objects for writes
     app["root_notify_ids"] = {}   # map of root_id to bucket name used for notify root of changes in domain
     app["root_scan_ids"] = {}   # map of root_id to bucket name for pending root scans
+    app["gc_ids"] = set()       # set of root or dataset ids for deletion
+    app["objDelete_prefix"] = None  # used by async_lib removeKeys
     # TODO - there's nothing to prevent the deflate_map from getting ever larger 
     # (though it is only one int per dataset id)
     # add a timestamp and remove at a certain time?
@@ -151,6 +198,9 @@ if __name__ == '__main__':
 
     # run root scan
     asyncio.ensure_future(bucketScan(app), loop=loop) 
+
+    # run root/dataset GC
+    asyncio.ensure_future(bucketGC(app), loop=loop) 
 
     # run the app
     port = int(config.get("dn_port"))

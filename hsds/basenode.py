@@ -49,19 +49,6 @@ def getHeadUrl(app):
     log.debug(f"head_url: {head_url}")
     return head_url
 
-def getAsyncNodeUrl(app):
-    """ Return host/port for async node
-    Throw exception if service is not ready"""
-    if "an_url" not in app or not app["an_url"]:
-        msg="Service not ready"
-        log.warn(msg)
-        raise HTTPInternalServerError()
-
-    an_url = app["an_url"]
-    #log.debug("got an url: {}".format(an_url))
-    return an_url
-
-
 async def register(app):
     """ register node with headnode
     OK to call idempotently (e.g. if the headnode seems to have forgotten us)"""
@@ -114,7 +101,6 @@ async def healthCheck(app):
                     # save the url's to each of the active nodes'
                     sn_urls = {}
                     dn_urls = {}
-                    an_url = None
                     #  or rsp_json["host"] is None or rsp_json["id"] != app["id"]
                     this_node = None
                     for node in rsp_json["nodes"]:
@@ -142,13 +128,10 @@ async def healthCheck(app):
                             dn_urls[node_number] = url
                         elif node["node_type"] == "sn":
                             sn_urls[node_number] = url
-                        elif node["node_type"] == "an":
-                            an_url = url
                         else:
                             log.error("Unexpected node_type for node: {}".format(node))
                     app["sn_urls"] = sn_urls
                     app["dn_urls"] = dn_urls
-                    app["an_url"] = an_url
                      
                     if this_node is None  and rsp_json["cluster_state"] != "READY":
                         log.warn("this node not found, re-initialize")

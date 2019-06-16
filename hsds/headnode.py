@@ -164,7 +164,7 @@ async def register(request):
         raise HTTPBadRequest(reason=msg)
     if 'node_type' not in body:
         raise HTTPBadRequest(reason="missing key 'node_type'")
-    if body['node_type'] not in ('sn', 'dn', 'an'):
+    if body['node_type'] not in ('sn', 'dn'):
         msg="invalid node_type"
         log.response(request, code=400, message=msg)
         raise HTTPBadRequest(reason=msg)
@@ -315,8 +315,6 @@ def getTargetNodeCount(app, node_type):
         count = app['target_dn_count']
     elif node_type == "sn":
         count = app['target_sn_count']
-    elif node_type == "an":
-        count = 1   # async node is a singleton
     return count
 
 def getActiveNodeCount(app, node_type):
@@ -358,7 +356,7 @@ async def init(loop):
     app["head_port"] = config.get("head_port")
     
     nodes = []
-    for node_type in ("dn", "sn", "an"):
+    for node_type in ("dn", "sn"):
         target_count = getTargetNodeCount(app, node_type)
         for i in range(target_count):
             node = {"node_number": i,

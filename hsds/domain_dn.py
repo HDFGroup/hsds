@@ -30,7 +30,7 @@ def get_domain(request, body=None):
     domain = None
     if "domain" in params:
         domain = params["domain"]
-        log.debug("got domain param: {}".format(domain))
+        log.debug(f"got domain param: {domain}")
     elif body and "domain" in body:
         domain = body["domain"]
              
@@ -40,7 +40,7 @@ def get_domain(request, body=None):
         raise HTTPInternalServerError() 
 
     if not isValidDomain(domain):
-        msg = "Expected valid domain for [{}]".format(domain)
+        msg = f"Expected valid domain for [{domain}]"
         log.error(msg)
         raise HTTPInternalServerError() 
     try:
@@ -85,7 +85,7 @@ async def PUT_Domain(request):
 
     domain = get_domain(request, body=body)
  
-    log.debug("PUT domain: {}".format(domain))
+    log.debug(f"PUT domain: {domain}")
     bucket = getBucketForDomain(domain)
     if not bucket:
         log.error(f"expected bucket to be used in domain: {domain}")
@@ -142,7 +142,7 @@ async def DELETE_Domain(request):
     domain = get_domain(request, body=body)
     bucket = getBucketForDomain(domain)
 
-    log.info("delete domain: {}".format(domain))
+    log.info(f"delete domain: {domain}")
 
     # raises exception if domain not found
     if not bucket:
@@ -177,13 +177,13 @@ async def PUT_ACL(request):
 
     domain = get_domain(request, body=body_json)
 
-    log.info("put_acl - domain: {}, username:".format(domain, acl_username))
+    log.info(f"put_acl - domain: {domain}, username: {acl_username}")
 
     # raises exception if domain not found
     domain_json = await get_metadata_obj(app, domain)
 
     if "acls" not in domain_json:
-        log.error( "unexpected domain data for domain: {}".format(domain))
+        log.error(f"unexpected domain data for domain: {domain}")
         raise HTTPInternalServerError() # 500 
 
     acl_keys = getAclKeys()

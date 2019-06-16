@@ -51,9 +51,19 @@ def getParentDomain(domain):
     Return None if the given domain is already a top-level domain.
     """
     if domain.endswith(DOMAIN_SUFFIX):
-        n = len(DOMAIN_SUFFIX)
-        domain = domain[:-n]
-    parent = op.dirname(domain)
+        n = len(DOMAIN_SUFFIX) - 1 
+        domain = domain[:-n] 
+
+    bucket = getBucketForDomain(domain)
+    domain_path = getPathForDomain(domain)
+    if len(domain_path) > 1 and domain_path[-1] == '/':
+        domain_path = domain_path[:-1]
+    dirname = op.dirname(domain_path)
+    if bucket:
+        parent = bucket + dirname
+    else:
+        parent = dirname
+
     
     if not parent:
         parent = None

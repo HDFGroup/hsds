@@ -25,30 +25,7 @@ services:
         max-file: "5"
     depends_on:
     - proxy
-  an:
-    build: .
-    container_name: hsds_async
-    restart: ${RESTART_POLICY}
-    mem_limit: ${AN_RAM}
-    environment:
-      - AWS_IAM_ROLE=${AWS_IAM_ROLE}
-      - AN_PORT=${AN_PORT}
-      - NODE_TYPE=an
-      - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
-      - AWS_REGION=${AWS_REGION}
-      - BUCKET_NAME=${BUCKET_NAME}
-      - LOG_LEVEL=${LOG_LEVEL}
-      - ANONYMOUS_TTL=${ANONYMOUS_TTL}
-    volumes:
-      - /data:/data
-    depends_on:
-      - head
-    ports:
-      - ${AN_PORT}:${AN_PORT}
-    logging:
-     options:
-        max-size: "5k"
-        max-file: "5"
+
   dn:
     build: .
     restart: ${RESTART_POLICY}
@@ -64,12 +41,12 @@ services:
       - LOG_LEVEL=${LOG_LEVEL}
       - CHUNK_MEM_CACHE_SIZE=${CHUNK_MEM_CACHE_SIZE}
       - MAX_CHUNK_SIZE=${MAX_CHUNK_SIZE}
-    depends_on:
-      - an
     logging:
      options:
         max-size: "5k"
         max-file: "5"
+    depends_on:
+      - head
   sn:
     build: .
     restart: ${RESTART_POLICY}
@@ -92,12 +69,12 @@ services:
       - VIRTUAL_PORT=${SN_PORT}
       - LETSENCRYPT_HOST=${PUBLIC_DNS}
       - LETSENCRYPT_EMAIL=jguerrero@teravisiontech.com
-    depends_on:
-      - an
     logging:
      options:
         max-size: "5k"
         max-file: "5"
+    depends_on:
+      - head
   proxy:
     image: nginx
     restart: always

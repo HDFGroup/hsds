@@ -22,6 +22,7 @@ import subprocess
 import datetime
 from botocore.exceptions import ClientError
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
+from asyncio import CancelledError
 from aiobotocore.config import AioConfig
  
 
@@ -238,7 +239,7 @@ async def getS3Bytes(app, key, deflate_level=None, s3offset=0, s3size=None, buck
         # check for not found status
         response_code = ce.response["Error"]["Code"]
         if response_code == "NoSuchKey":
-            msg = "s3_key: {} not found ".format(key,)
+            msg = f"s3_key: {key} not found "
             log.warn(msg)
             raise HTTPInternalServerError()
         elif response_code == "NoSuchBucket":
@@ -247,22 +248,20 @@ async def getS3Bytes(app, key, deflate_level=None, s3offset=0, s3size=None, buck
             raise HTTPNotFound()
         else:
             s3_stats_increment(app, "error_count")
-            log.warn("got ClientError on s3 get: {}".format(str(ce)))
-            msg = "Error getting s3 obj: " + str(ce)
-            log.error(msg)
+            log.error(f"got unexpect3ed ClientError on s3 get {key}: {ce}")
             raise HTTPInternalServerError()
 
     if data and len(data) > 0:
         s3_stats_increment(app, "bytes_in", inc=len(data))
-        log.info("read: {} bytes for S3 key: {}".format(len(data), key))
+        log.info(f"read: {len(data)} bytes for S3 key: {key}")
         if deflate_level is not None:
             try:
                 unzip_data = zlib.decompress(data)
-                log.info("uncompressed to {} bytes".format(len(unzip_data)))
+                log.info(f"uncompressed to {len(unzip_data)} bytes")
                 data = unzip_data
             except zlib.error as zlib_error:
-                log.info("zlib_err: {}".format(zlib_error))
-                log.warn("unable to uncompress s3 obj: {}, returning raw bytes".format(key))
+                log.info(f"zlib_err: {zlib_error}")
+                log.warn(f"unable to uncompress s3 obj: {key}")
         
     return data
 
@@ -285,12 +284,12 @@ async def putS3JSONObj(app, key, json_obj, bucket=None):
         s3_rsp = {"etag": rsp["ETag"], "size": len(data), "lastModified": now}
     except ClientError as ce:
         s3_stats_increment(app, "error_count")
-        msg = "Error putting s3 obj: " + str(ce)
+        msg = f"Error putting s3 obj {key}: {ce}"
         log.error(msg)
         raise HTTPInternalServerError()
     if data and len(data) > 0:
         s3_stats_increment(app, "bytes_out", inc=len(data))
-    log.debug("putS3JSONObj complete, s3_rsp: {}".format(s3_rsp))
+    log.debug(f"putS3JSONObj complete, s3_rsp: {s3_rsp}")
     return s3_rsp
 
 async def putS3Bytes(app, key, data, deflate_level=None, bucket=None):
@@ -302,18 +301,18 @@ async def putS3Bytes(app, key, data, deflate_level=None, bucket=None):
         bucket = app['bucket_name']
     if key[0] == '/':
         key = key[1:]  # no leading slash
-    log.info("putS3Bytes({}), {} bytes".format(key, len(data)))
+    log.info(f"putS3Bytes({key}), {len(data)} bytes")
     s3_stats_increment(app, "put_count")
     if deflate_level is not None:
         try:
             # the keyword parameter is enabled with py3.6
             # zip_data = zlib.compress(data, level=deflate_level)
             zip_data = zlib.compress(data, deflate_level)
-            log.info("compressed from {} bytes to {} bytes with level: {}".format(len(data), len(zip_data), deflate_level))
+            log.info(f"compressed from {len(data)} bytes to {len(zip_data)} bytes with level: {deflate_level}")
             data = zip_data
         except zlib.error as zlib_error:
-            log.info("zlib_err: {}".format(zlib_error))
-            log.warn("unable to compress s3 obj: {}, using raw bytes".format(key))
+            log.info(f"zlib_err: {zlib_error}")
+            log.warn(f"unable to compress s3 obj: {key}, using raw bytes")
     
     try:
         rsp = await client.put_object(Bucket=bucket, Key=key, Body=data)
@@ -321,12 +320,22 @@ async def putS3Bytes(app, key, data, deflate_level=None, bucket=None):
         s3_rsp = {"etag": rsp["ETag"], "size": len(data), "lastModified": now}
     except ClientError as ce:
         s3_stats_increment(app, "error_count")
-        msg = "Error putting s3 obj: " + str(ce)
+        msg = f"ClientError putting s3 obj {key}: {ce}"
+        log.error(msg)
+        raise HTTPInternalServerError()
+    except CancelledError as cle:
+        s3_stats_increment(app, "error_count")
+        msg = f"CancelledError putting s3 obj {key}: {cle}"
+        log.error(msg)
+        raise HTTPInternalServerError()
+    except Exception as e:
+        s3_stats_increment(app, "error_count")
+        msg = f"Unexpected Exception {type(e)} putting s3 obj {key}: {e}"
         log.error(msg)
         raise HTTPInternalServerError()
     if data and len(data) > 0:
         s3_stats_increment(app, "bytes_in", inc=len(data))
-    log.debug("putS3Bytes complete, s3_rsp: {}".format(s3_rsp))
+    log.debug(f"putS3Bytes complete for s3 obj {key}, s3_rsp: {s3_rsp}")
     # s3 rsp format:
     # {'ETag': '"1b95a7bf5fab6f5c0620b8e3b30a53b9"', 'ResponseMetadata': 
     #     {'HostId': '', 'HTTPHeaders': {'X-Amz-Request-Id': '1529F570A809AD26', 'Server': 'Minio/RELEASE.2017-08-05T00-00-53Z (linux; amd64)', 'Vary': 'Origin', 'Date': 'Sun, 29 Apr 2018 16:36:53 GMT', 'Content-Length': '0', 'Content-Type': 'text/plain; charset=utf-8', 'Etag': '"1b95a7bf5fab6f5c0620b8e3b30a53b9"', 'X-Amz-Bucket-Region': 'us-east-1', 'Accept-Ranges': 'bytes'}, 
