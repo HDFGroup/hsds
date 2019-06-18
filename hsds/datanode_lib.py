@@ -482,7 +482,11 @@ async def s3sync(app):
         log.debug(f"got item: {item} for obj_id: {obj_id}")
         bucket = item[1]
         if not bucket:
-            bucket = app["bucket_name"]
+            if "bucket_name" in app and app["bucket_name"]:
+                bucket = app["bucket_name"]
+            else:
+                log.error(f"can not determine bucket for s3sync obj_id: {obj_id}")
+                continue
         s3key = getS3Key(obj_id)
         log.debug(f"s3sync dirty id: {obj_id}, s3key: {s3key} bucket: {bucket}")
         

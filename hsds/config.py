@@ -25,7 +25,7 @@ cfg = {
     'aws_dynamodb_gateway': 'https://dynamodb.us-east-1.amazonaws.com',
     'aws_dynamodb_users_table': '',
     'password_salt': '',
-    'bucket_name': 'hdfgroup_hsdsdev',
+    'bucket_name': '',  # set to usee a default bucket, otherwise bucket param is needed for all requests
     'head_host': 'localhost',
     'head_port': 5100,
     'an_port': 6100,

@@ -166,7 +166,7 @@ async def getS3JSONObj(app, key, bucket=None):
         bucket = app['bucket_name']
     if key[0] == '/':
         key = key[1:]  # no leading slash
-    log.info(f"getS3JSONObj({key}) bucket: {bucket}")
+    log.info(f"getS3JSONObj(s3://{bucket})/{key}")
     s3_stats_increment(app, "get_count")
     try:
         resp = await client.get_object(Bucket=bucket, Key=key)
@@ -222,7 +222,7 @@ async def getS3Bytes(app, key, deflate_level=None, s3offset=0, s3size=None, buck
         bucket = app['bucket_name']
     if key[0] == '/':
         key = key[1:]  # no leading slash
-    log.info("getS3Bytes({})".format(key))
+    log.info(f"getS3Bytes(s3://{bucket}/{key})")
     s3_stats_increment(app, "get_count")
     range=""
     if s3size:
@@ -274,7 +274,7 @@ async def putS3JSONObj(app, key, json_obj, bucket=None):
         bucket = app['bucket_name']
     if key[0] == '/':
         key = key[1:]  # no leading slash
-    log.info("putS3JSONObj({})".format(key))
+    log.info(f"putS3JSONObj(s3://{bucket}/{key})")
     s3_stats_increment(app, "put_count")
     data = json.dumps(json_obj)
     data = data.encode('utf8')
@@ -301,7 +301,7 @@ async def putS3Bytes(app, key, data, deflate_level=None, bucket=None):
         bucket = app['bucket_name']
     if key[0] == '/':
         key = key[1:]  # no leading slash
-    log.info(f"putS3Bytes({key}), {len(data)} bytes")
+    log.info(f"putS3Bytes(s3://{bucket}/{key}), {len(data)} bytes")
     s3_stats_increment(app, "put_count")
     if deflate_level is not None:
         try:

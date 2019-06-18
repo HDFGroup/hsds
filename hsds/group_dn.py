@@ -200,8 +200,7 @@ async def DELETE_Group(request):
     app = request.app
     params = request.rel_url.query
     group_id = get_obj_id(request)
-    log.info("DELETE group: {}".format(group_id))
-
+    
     if not isValidUuid(group_id, obj_class="group"):
         log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
@@ -211,6 +210,8 @@ async def DELETE_Group(request):
     else:
         bucket = None
 
+    log.info(f"DELETE group: {group_id} bucket: {bucket}")
+ 
     # verify the id exist
     obj_found = await check_metadata_obj(app, group_id, bucket=bucket)
     if not obj_found:

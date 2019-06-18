@@ -16,6 +16,7 @@ from util.idUtil import isValidUuid, isSchema2Id, getS3Key, isS3ObjKey, getObjId
 from util.chunkUtil import getDatasetId
 from util.s3Util import getS3Keys, putS3JSONObj, deleteS3Obj
 import hsds_logger as log
+import config
 
  
 # List all keys under given root and optionally update info.json
@@ -101,6 +102,11 @@ async def scanRoot(app, rootid, update=False, bucket=None):
         log.warn(f"no tabulation for schema v1 id: {rootid} returning null results")
         return {}
 
+    if not bucket:
+        bucket = config.get("bucket_name")
+    if not bucket:
+        raise ValueError(f"no bucket defined for scan of {rootid}")
+
     root_key = getS3Key(rootid)
 
     if not root_key.endswith("/.group.json"):
@@ -121,7 +127,7 @@ async def scanRoot(app, rootid, update=False, bucket=None):
 
     app["scanRoot_results"] = results
      
-    await getS3Keys(app, prefix=root_prefix, include_stats=True, callback=scanRootCallback)
+    await getS3Keys(app, prefix=root_prefix, include_stats=True, bucket=bucket, callback=scanRootCallback)
 
     log.info(f"scan complete for rootid: {rootid}")
     results["scan_complete"] = time.time()
@@ -130,7 +136,7 @@ async def scanRoot(app, rootid, update=False, bucket=None):
         # write .info object back to S3
         info_key = root_prefix + ".info.json"
         log.info(f"updating info key: {info_key}")
-        await putS3JSONObj(app, info_key, results) 
+        await putS3JSONObj(app, info_key, results, bucket=bucket) 
     return results
 
 async def objDeleteCallback(app, s3keys):

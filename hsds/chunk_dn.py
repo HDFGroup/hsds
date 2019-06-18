@@ -80,11 +80,10 @@ async def getChunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset=
             raise HTTPInternalServerError()
         bucket = path[:index]
         s3key = path[(index+1):]
-        log.debug(f"Using bucket: {bucket} and  s3key: {s3key}")
+        log.debug(f"Using s3path bucket: {bucket} and  s3key: {s3key}")
     else:
         s3key = getS3Key(chunk_id)
-
-    log.debug(f"getChunk s3key: {s3key}")
+        log.debug(f"getChunk chunkid: chunk_id bucket: {bucket}")
     if chunk_id in chunk_cache:
         chunk_arr = chunk_cache[chunk_id]
     else:
@@ -267,7 +266,7 @@ async def PUT_Chunk(request):
     input_arr = bytesToArray(input_bytes, dt, mshape)
 
     # TBD: Skip read if the input shape is the entire chunk?
-    chunk_arr = await getChunk(app, chunk_id, dset_json, chunk_init=True)
+    chunk_arr = await getChunk(app, chunk_id, dset_json, chunk_init=True, bucket=bucket)
 
     # update chunk array
     chunk_arr[selection] = input_arr

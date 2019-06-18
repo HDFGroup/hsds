@@ -47,7 +47,7 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level,
     chunk_sel: chunk-relative selection to write to
     np_arr: numpy array of data to be written
     """
-    log.info(f"write_chunk_hyperslab, chunk_id:{chunk_id}, slices:{slices}")
+    log.info(f"write_chunk_hyperslab, chunk_id:{chunk_id}, slices:{slices}, bucket: {bucket}")
     if deflate_level is not None:
         log.info("deflate_level: {deflate_level}")
     if "layout" not in dset_json:
@@ -78,7 +78,6 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level,
     setSliceQueryParam(params, chunk_sel)  
     if bucket:
         params["bucket"] = bucket 
-        log.debug(f"write_chunk_hyperslab - using bucket: {bucket}")
 
     try:
         async with client.put(req, data=data, params=params) as rsp:
@@ -637,6 +636,7 @@ async def PUT_Value(request):
     log.request(request)
     app = request.app 
     loop = app["loop"]
+    bucket = None
     body = None
     json_data = None
     params = request.rel_url.query
@@ -662,6 +662,8 @@ async def PUT_Value(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         log.info(f"append_dim: {append_dim}")
+    if "bucket" in params:
+        bucket = params["bucket"]
 
     dset_id = request.match_info.get('id')
     if not dset_id:

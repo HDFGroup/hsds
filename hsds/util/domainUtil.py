@@ -11,6 +11,7 @@
 ##############################################################################
 
 import os.path as op
+import re
 #
 # Domain utilities
 # 
@@ -73,25 +74,25 @@ def validateHostDomain(id):
     if not isinstance(id, str):
         raise ValueError("Expected string type")
     if len(id) < 3:
-        raise ValueError("Domain name is too short")
+        raise ValueError("Host Domain name is too short")
     if len(id) == 38 and id[5] == '-' and id[7] == '-' and id[16] == '-' and id[21] == '-' and id[26] == '-':  
-        raise ValueError("Domain name not allowed")
+        raise ValueError("Host Domain name not allowed")
     if len(id) == 14 and id.endswith("-headnode"):
-        raise ValueError("Domain name not allowed")
+        raise ValueError("Host Domain name not allowed")
     if id.startswith('.'):
-        raise ValueError("Domain cannot start with dot")
+        raise ValueError("Host Domain cannot start with dot")
     if id.endswith('.'):
-        raise ValueError("Domain cannot end with dot")
+        raise ValueError("Host Domain cannot end with dot")
     if id.startswith('-'):
-        raise ValueError("Domain cannot start with hyphen")
+        raise ValueError("Host Domain cannot start with hyphen")
     if id.endswith('-'):
-        raise ValueError("Domain cannot end with hyphen")
+        raise ValueError("Host Domain cannot end with hyphen")
     if id.find('..') > 0:
-        raise ValueError("Domain cannot contain consecutive dots")
+        raise ValueError("Host Domain cannot contain consecutive dots")
     if isIPAddress(id):
-        raise ValueError("Domain looks like IP address")
+        raise ValueError("Host Domain looks like IP address")
     if id.find('/') >= 0:
-        raise ValueError("Domain cannot contain slash")
+        raise ValueError("Host Domain cannot contain slash")
     if id.find(".") == -1:
         raise ValueError("Host domain must have a dot")
 
@@ -177,6 +178,7 @@ def getDomainForHost(host_value):
 def getDomainFromRequest(request, validate=True):
     app = request.app
     domain = None
+    bucket = None
     params = request.rel_url.query
     if "domain" in params:
         domain = params["domain"]
@@ -205,39 +207,31 @@ def getDomainFromRequest(request, validate=True):
                 pass # ignore
     # now validate that its a properly formed domain
     if validate:
+        print("got domain: ", domain)
         validateDomain(domain)
-    if "bucket_name" in request.app and request.app["bucket_name"]:
+    if "bucket" in params and params["bucket"]:
+        bucket = params["bucket"] 
+    elif "X-Hdf-bucket" in request.headers:
+        bucket = request.headers["X-Hdf-bucket"] 
+    elif "bucket_name" in request.app and request.app["bucket_name"]:
         # prefix the domain with the bucket name
-        domain = app["bucket_name"] + domain
+        bucket = app["bucket_name"] 
     else:
-        # if no default bucket is set, domain paths must include bucket name
-        raise ValueError("bucket not specified")
+        pass # no domain specified
+
+    if bucket:
+        if not re.match("^[a-zA-Z0-9.\-_]{1,255}$", bucket):
+            raise ValueError(f"bucket name: {bucket} is not valid")
+        domain = bucket + domain
     
     return domain
-"""
-
-def getS3PrefixForDomain(domain):
-    if domain[0] == '/':
-        domain_key = domain[1:]  # strip off leading slash
-        print("wout slash:", domain_key)
-    else:
-        # get path after bucket specifiers
-        index = domain.find('/')
-        domain_key = domain[(index+1):]
-    if domain_key.endswith(DOMAIN_SUFFIX):
-        path_len = len(domain_key) - len(DOMAIN_SUFFIX)
-        domain_key = domain_key[:(path_len-1)]  # path_len]
-        print("updated domain key:", domain_key)
-    if not domain_key[-1] == '/':
-        #domain_key += '/'
-        domain_key = domain_key[:-1]
-    return domain_key
-    """
 
 def getPathForDomain(domain):
     """
     Return the non-bucket part of the domain
     """
+    if not domain:
+        return None
     index = domain.find('/')
     if index < 1:
         return domain  # no bucket
@@ -247,10 +241,13 @@ def getBucketForDomain(domain):
     """ get the bucket for the domain or None
         if no bucket is given
     """
-    if domain and domain[0] == '/':
+    if not domain:
+        return None
+    if domain[0] == '/':
         # no bucket specified
         return None
     index = domain.find('/')
     if index < 0:
-        raise ValueError(f"invalid domain: {domain}")
+        # invalid domain?
+        return None
     return domain[:index]

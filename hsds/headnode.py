@@ -13,7 +13,6 @@
 # Head node of hsds cluster
 # 
 import asyncio
-import sys
 import json
 import time
 
@@ -346,11 +345,11 @@ async def init(loop):
     log.info("target_dn_count: {}".format(app["target_dn_count"]))
  
     bucket_name = config.get("bucket_name")
-    if not bucket_name:
-        log.error("BUCKET_NAME environment variable not set")
-        sys.exit()
-    log.info("using bucket: {}".format(bucket_name))
-    app["bucket_name"] = bucket_name
+    if bucket_name:
+        log.info("using bucket: {}".format(bucket_name))
+        app["bucket_name"] = bucket_name
+    else:
+        log.info("No default bucket name is set")
         
     app["head_host"] = config.get("head_host")
     app["head_port"] = config.get("head_port")

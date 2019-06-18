@@ -13,7 +13,6 @@
 # common node methods of hsds cluster
 # 
 import asyncio
-import sys
 import time
 import psutil
 from copy import copy
@@ -284,10 +283,10 @@ def baseInit(loop, node_type):
     app["start_time"] = int(time.time())  # seconds after epoch
     app['register_time'] = 0
     bucket_name = config.get("bucket_name")
-    if not bucket_name:
-        log.error("BUCKET_NAME environment variable not set")
-        sys.exit()
-    log.info("using bucket: {}".format(bucket_name))
+    if bucket_name:
+        log.info("using bucket: {}".format(bucket_name))
+    else:
+        log.info("no default bucket defined")
     app["bucket_name"] = bucket_name
     app["sn_urls"] = {}
     app["dn_urls"] = {}

@@ -286,12 +286,17 @@ async def get_domains(request):
 
     if "bucket" in params:
         bucket = params["bucket"]
-    else:
+    elif "X-Hdf-bucket" in request.headers:
+        bucket = request.headers["X-Hdf-bucket"] 
+    elif "bucket_name" in app and app["bucket_name"]:
         bucket = app["bucket_name"]
+    else:
+        bucket = None
     if not bucket:
         msg = "no bucket specified for request"
         log.warn(msg)
-        raise HTTPBadRequest(msg)
+        raise HTTPBadRequest(reason=msg)
+    log.info(f"get_domains prefix: {prefix} bucket: {bucket}")
 
     # list the S3 keys for this prefix
     domainNames = []
@@ -381,11 +386,17 @@ async def GET_Domain(request):
     try:
         domain = getDomainFromRequest(request)
     except ValueError:
-        log.warn("Invalid domain")
+        log.warn(f"Invalid domain: {domain}")
         raise HTTPBadRequest(reason="Invalid domain name")
-    log.debug(f"got domain: {domain}")
     bucket = getBucketForDomain(domain)
+    log.debug(f"GET_Domain domain: {domain} bucket: {bucket}")
 
+    if not bucket and not config.get("bucket_name"):
+        # no bucket defined, raise 400
+        msg = "Bucket not provided"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+        
     verbose = False
     if "verbose" in params and params["verbose"]:
         verbose = True
@@ -416,7 +427,7 @@ async def GET_Domain(request):
         log.error("No acls key found in domain")
         raise HTTPInternalServerError()
 
-    log.debug("fgot domain_json: {domain_json}")
+    log.debug(f"got domain_json: {domain_json}")
     # validate that the requesting user has permission to read this domain
     aclCheck(domain_json, "read", username)  # throws exception if not authorized
 
@@ -436,7 +447,7 @@ async def GET_Domain(request):
         return resp
 
     # return just the keys as per the REST API
-    rsp_json = await get_domain_response(app, domain_json, verbose=verbose)
+    rsp_json = await get_domain_response(app, domain_json, bucket=bucket, verbose=verbose)
 
     # include domain objects if requested
     if "getobjs" in params and params["getobjs"] and "root" in domain_json:
@@ -529,7 +540,9 @@ async def PUT_Domain(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
  
-    log.info(f"PUT domain: {domain}, username: {username}")
+    bucket = getBucketForDomain(domain)
+
+    log.info(f"PUT domain: {domain}, bucket: {bucket}")
 
     body = None
     if request.has_body:
@@ -556,7 +569,6 @@ async def PUT_Domain(request):
         aclCheck(domain_json, "update", username)  # throws exception if not allowed
         if "root" in domain_json:
             # nothing to do for folder objects
-            bucket = getBucketForDomain(domain)
             await doFlush(app, domain_json["root"], bucket=bucket)
         # flush  successful     
         resp = await jsonResponse(request, None, status=204)
@@ -566,6 +578,7 @@ async def PUT_Domain(request):
     is_folder = False
     owner = username
     linked_domain = None
+    linked_bucket = None
     root_id = None
     
     if body and "folder" in body:
@@ -583,17 +596,19 @@ async def PUT_Domain(request):
             msg = f"linked_domain: {linked_domain} is not valid"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        if linked_domain[0] == '/':
-            # need to prefix wih the bucket before sending to DN
-            if "bucket_name" in request.app and request.app["bucket_name"]:
-                # prefix the domain with the bucket name
-                linked_domain = app["bucket_name"] + linked_domain
-            else:
-                # if no default bucket is set, domain paths must include bucket name
-                #TBD - only user define bucket to be specified
-                msg = "No bucket given for linked domain"
-                raise HTTPBadRequest(reason=msg)
-                log.warn(msg)
+        if "linked_bucket" in body:
+            linked_bucket = body["linked_bucket"]
+        elif bucket:
+            linked_bucket = bucket
+        elif  "bucket_name" in request.app and request.app["bucket_name"]:
+            linked_bucket = request.app["bucket_name"]
+        else:
+            linked_bucket = None
+
+        if not linked_bucket:
+            msg = "Could not determine bucket for linked domain"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)    
 
     if owner != username and username != "admin":
         log.warn("Only admin users are allowed to set owner for new domains");   
@@ -646,7 +661,7 @@ async def PUT_Domain(request):
         aclCheck(parent_json, "create", username)  # throws exception if not allowed
 
     if linked_domain:
-        linked_json = await getDomainJson(app, linked_domain, reload=True)
+        linked_json = await getDomainJson(app, linked_bucket + linked_domain, reload=True)
         log.debug(f"got linked json: {linked_json}")
         if "root" not in linked_json:
             msg = "Folder domains cannot ber used as link target"
@@ -726,42 +741,29 @@ async def DELETE_Domain(request):
     keep_root = False
     if request.has_body:
         body = await request.json() 
-        if "domain" in body:
-            domain = body["domain"]
-        else:
-            msg = "No domain in request body"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-
+   
         if "meta_only" in body:
             meta_only = body["meta_only"]
         if "keep_root" in body:
             keep_root = body["keep_root"]
 
     else:
-        # get domain from request uri
-        try:
-            domain = getDomainFromRequest(request)
-        except ValueError:
-            msg = "Invalid domain"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
         if "keep_root" in params:
             keep_root = params["keep_root"]
+
+    domain = None
+    try:
+        domain = getDomainFromRequest(request)
+    except ValueError:
+        log.warn(f"Invalid domain: {domain}")
+        raise HTTPBadRequest(reason="Invalid domain name")
+    bucket = getBucketForDomain(domain)
+    log.debug(f"GET_Domain domain: {domain} bucket: {bucket}")
 
     if not domain:
         msg = "No domain given"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if domain[0] == '/':
-        # add in the bucket name
-        if "bucket_name" in app:
-            domain = app["bucket_name"] + domain 
-        else:
-            msg = "no bucket specified for DELETE domain request"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-    log.info(f"Deleting domain: {domain}")
 
     log.info(f"meta_only domain delete: {meta_only}")
     if meta_only:
@@ -806,7 +808,6 @@ async def DELETE_Domain(request):
     if "root" not in domain_json:
         index = domain.find('/') 
         s3prefix = domain[(index+1):] + '/'
-        bucket = getBucketForDomain(domain)
         log.info(f"checking s3key with prefix: {s3prefix} in bucket: {bucket}")
         s3keys = await getS3Keys(app, include_stats=False, prefix=s3prefix, deliminator='/', bucket=bucket) 
         for s3key in s3keys:
@@ -821,13 +822,17 @@ async def DELETE_Domain(request):
     body = { "domain": domain }
     
     rsp_json = await http_delete(app, req, data=body)
+    params = {} # for http_delete requests to DN nodes
+    if bucket:
+        params["bucket"] = bucket
  
     if "root" in domain_json and not keep_root:
         # delete the root group
+        
         root_id = domain_json["root"]
         req = getDataNodeUrl(app, root_id)
         req += "/groups/" + root_id
-        await http_delete(app, req)
+        await http_delete(app, req, params=params)
 
     # remove from domain cache if present
     domain_cache = app["domain_cache"]
@@ -844,7 +849,7 @@ async def DELETE_Domain(request):
         req = sn_url + "/"
         log.info(f"sending sn request: {req}")
         try: 
-            sn_rsp = await http_delete(app, req, data=body)
+            sn_rsp = await http_delete(app, req, data=body, params=params)
             log.info(f"{req} response: {sn_rsp}")
         except ClientResponseError as ce:
             log.warn(f"got error for sn_delete: {ce}")

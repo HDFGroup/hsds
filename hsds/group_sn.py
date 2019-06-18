@@ -253,6 +253,7 @@ async def DELETE_Group(request):
     params = {}
     if bucket:
         params["bucket"] = bucket
+    log.debug(f"http_delete req: {req} params: {params}")
  
     await http_delete(app, req, params=params)
 

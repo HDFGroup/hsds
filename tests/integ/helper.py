@@ -68,13 +68,15 @@ def getTestDomainName(name):
 """
 Helper - get default request headers for domain
 """
-def getRequestHeaders(domain=None, username=None, password=None, **kwargs):
+def getRequestHeaders(domain=None, username=None, bucket=None, password=None, **kwargs):
     if username is None:
         username = config.get("user_name")
     if password is None:
         password = config.get("user_password")
     headers = { }
     if domain is not None:
+        #if config.get("bucket_name"):
+        #    domain = config.get("bucket_name") + domain
         headers['X-Hdf-domain'] = domain.encode('utf-8')
     if username and password:
         auth_string = username + ':' + password
@@ -82,6 +84,13 @@ def getRequestHeaders(domain=None, username=None, password=None, **kwargs):
         auth_string = base64.b64encode(auth_string)
         auth_string = b"Basic " + auth_string
         headers['Authorization'] = auth_string
+
+    if config.get("bucket_name"):
+        bucket_name = config.get("bucket_name")
+    else:
+        bucket_name = bucket
+    if bucket_name:
+        headers['X-Hdf-bucket'] = bucket_name.encode('utf-8')
 
     for k in kwargs.keys():
         headers[k] = kwargs[k]
