@@ -339,7 +339,7 @@ class DomainTest(unittest.TestCase):
                 self.assertTrue(k in rspJson)
             # we should get the same value for root id
             self.assertEqual(root_id, rspJson["root"])
-    """
+    
     def testCreateLinkedDomain(self):
         target_domain = self.base_domain + "/target_domain.h5"
         print("testCreateLinkedDomain", target_domain)        
@@ -369,7 +369,7 @@ class DomainTest(unittest.TestCase):
         headers = helper.getRequestHeaders(domain=linked_domain)
         body = {"linked_domain": target_domain } 
         rsp = requests.put(req, data=json.dumps(body), headers=headers)
-        print("rsp:", rsp)
+        
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         for k in ("root", "owner", "acls", "created", "lastModified"):
@@ -377,8 +377,8 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rspJson["root"], root_id)
 
         # delete the target domain but keep the root
-        headers = helper.getRequestHeaders()
-        body = { "domain": target_domain, "keep_root": 1}
+        headers =  helper.getRequestHeaders(domain=target_domain)
+        body = { "keep_root": 1}
         rsp = requests.delete(req, data=json.dumps(body), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
@@ -387,7 +387,6 @@ class DomainTest(unittest.TestCase):
         root_req =  helper.getEndpoint() + "/groups/" + root_id
         rsp = requests.get(root_req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
-    """
 
 
     def testCreateFolder(self):

@@ -741,13 +741,13 @@ async def DELETE_Domain(request):
     keep_root = False
     if request.has_body:
         body = await request.json() 
-   
         if "meta_only" in body:
             meta_only = body["meta_only"]
         if "keep_root" in body:
             keep_root = body["keep_root"]
-
     else:
+        f "meta_only" in body:
+            meta_only = body["meta_only"]
         if "keep_root" in params:
             keep_root = params["keep_root"]
 
