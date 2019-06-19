@@ -306,7 +306,7 @@ async def get_domains(request):
     else:
         s3prefix = prefix[1:]
         log.debug(f"listing S3 keys for {s3prefix}")
-        s3keys = await getS3Keys(app, include_stats=False, prefix=s3prefix, deliminator='/', bucket=bucket)  
+        s3keys = await getS3Keys(app, include_stats=False, prefix=s3prefix, deliminator='/', bucket=bucket, limit=1000)  
         log.debug(f"getS3Keys returned: {len(s3keys)} keys")
         log.debug(f"s3keys {s3keys}")
         

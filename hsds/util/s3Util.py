@@ -503,7 +503,7 @@ def getPageItems(response, items, include_stats=False):
 # end getPageItems
     
 
-async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=False, callback=None, bucket=None):
+async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=False, callback=None, bucket=None, limit=None):
     # return keys matching the arguments
     s3_client = getS3Client(app)
     if not bucket:
@@ -516,6 +516,7 @@ async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=Fal
     else:
         # just use a list
         key_names = []
+    count = 0
 
     try:
         async for page in paginator.paginate(
@@ -523,6 +524,7 @@ async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=Fal
             assert not asyncio.iscoroutine(page)
             #log.info(f"got page: {page}")
             getPageItems(page, key_names, include_stats=include_stats)
+            count += len(key_names)
             if callback:
                 if iscoroutinefunction(callback):
                     await callback(app, key_names)
@@ -532,6 +534,9 @@ async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=Fal
                     key_names = {}
                 else:
                     key_names = []
+            if limit and count >= limit:
+                log.info(f"getS3Keys - reached limit {limit}")
+                break
     except ClientError as ce:
         log.warn(f"bucket: {bucket} does not exist, exception: {ce}")
         raise HTTPNotFound()
