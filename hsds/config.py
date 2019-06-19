@@ -55,11 +55,10 @@ cfg = {
     'gc_freq': 20*60,  # time between gc runs
     'password_file': '/usr/local/src/hsds/passwd.txt',  # filepath to a text file of username/passwords
     'server_name': 'Highly Scalable Data Service (HSDS)', # this gets returned in the about request
-    'db_file': 'bucket.db',  # SQLite db file used by AN node
-    'db_dir': '/data', # Directory path to store db file
     'greeting': 'Welcome to HSDS!',
     'about': 'HSDS is a webservice for HDF data',
-    'top_level_domains': ["/home", "/shared"]  # list of possible top-level domains
+    'top_level_domains': []  # list of possible top-level domains, example: ["/home", "/shared"]
+   
 }
    
 def get(x): 

@@ -517,20 +517,27 @@ async def getS3Keys(app, prefix='', deliminator='', suffix='', include_stats=Fal
         # just use a list
         key_names = []
 
-    async for page in paginator.paginate(
-        PaginationConfig={'PageSize': 1000}, Bucket=bucket,  Prefix=prefix, Delimiter=deliminator):
-        assert not asyncio.iscoroutine(page)
-        #log.info(f"got page: {page}")
-        getPageItems(page, key_names, include_stats=include_stats)
-        if callback:
-            if iscoroutinefunction(callback):
-                await callback(app, key_names)
-            else:
-                callback(app, key_names)
-            if include_stats:
-                key_names = {}
-            else:
-                key_names = []
+    try:
+        async for page in paginator.paginate(
+            PaginationConfig={'PageSize': 1000}, Bucket=bucket,  Prefix=prefix, Delimiter=deliminator):
+            assert not asyncio.iscoroutine(page)
+            #log.info(f"got page: {page}")
+            getPageItems(page, key_names, include_stats=include_stats)
+            if callback:
+                if iscoroutinefunction(callback):
+                    await callback(app, key_names)
+                else:
+                    callback(app, key_names)
+                if include_stats:
+                    key_names = {}
+                else:
+                    key_names = []
+    except ClientError as ce:
+        log.warn(f"bucket: {bucket} does not exist, exception: {ce}")
+        raise HTTPNotFound()
+    except Exception as e:
+        log.error(f"s3 paginate got exception {type(e)}: {e}")
+        raise HTTPInternalServerError()
 
  
     log.info(f"getS3Keys done, got {len(key_names)} keys")

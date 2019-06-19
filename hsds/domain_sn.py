@@ -300,7 +300,7 @@ async def get_domains(request):
 
     # list the S3 keys for this prefix
     domainNames = []
-    if prefix == "/":
+    if prefix == "/" and config.get("top_level_domains"):
         # search for domains from the top_level domains config
         domainNames = config.get("top_level_domains")
     else:
@@ -746,8 +746,8 @@ async def DELETE_Domain(request):
         if "keep_root" in body:
             keep_root = body["keep_root"]
     else:
-        f "meta_only" in body:
-            meta_only = body["meta_only"]
+        if "meta_only" in params:
+            meta_only = params["meta_only"]
         if "keep_root" in params:
             keep_root = params["keep_root"]
 
