@@ -53,7 +53,7 @@ cfg = {
     'timeout': 30,  # http timeout - 30 sec
     'anonymous_ttl': 10*60,  # time after which anonymous objects will be deleted - 10 m, 0 for infinite
     'gc_freq': 20*60,  # time between gc runs
-    'password_file': '/usr/local/src/hsds/passwd.txt',  # filepath to a text file of username/passwords
+    'password_file': '/usr/local/src/hsds/passwd.txt',  # filepath to a text file of username/passwords. set to '' for no-auth access
     'server_name': 'Highly Scalable Data Service (HSDS)', # this gets returned in the about request
     'greeting': 'Welcome to HSDS!',
     'about': 'HSDS is a webservice for HDF data',

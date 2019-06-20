@@ -170,8 +170,12 @@ def initUserDB(app):
         user_db = {}
     else:
         password_file = config.get("password_file")
-        log.info("Loading password file: {}".format(password_file))
-        user_db = loadPasswordFile(password_file)
+        if not password_file:
+            log.info("No password file, allowing no-auth access")
+            user_db = {}
+        else:
+            log.info("Loading password file: {}".format(password_file))
+            user_db = loadPasswordFile(password_file)
 
     app["user_db"] = user_db
     
@@ -259,6 +263,9 @@ async def validateUserPassword(app, username, password):
             await validateUserPasswordDynamoDB(app, username, password)
         elif config.get("PASSWORD_SALT"):
             validatePasswordSHA512(app, username, password)
+        elif not config.get("password_file"):
+            log.info(f"no-auth access for user: {username}")
+            user_db[username] = {"pwd": password}
         else:
             log.info("user not found")
             raise HTTPUnauthorized() # 401   
@@ -266,7 +273,7 @@ async def validateUserPassword(app, username, password):
     user_data = user_db[username] 
     
     if user_data['pwd'] == password:
-        log.debug("user  password validated")
+        log.debug("user password validated")
     else:
         log.info("user password is not valid for user: {}".format(username))
         raise HTTPUnauthorized() # 401  
@@ -372,8 +379,3 @@ def aclOpForRequest(request):
 def getAclKeys():
     """ Return the set of ACL keys """
     return ('create', 'read', 'update', 'delete', 'readACL', 'updateACL')
- 
-
-
-
-         
