@@ -20,6 +20,8 @@ import time
 import zlib
 import subprocess
 import datetime
+import numpy as np
+from numba import jit
 from botocore.exceptions import ClientError
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 from asyncio import CancelledError
@@ -28,6 +30,51 @@ from aiobotocore.config import AioConfig
 
 import hsds_logger as log
 import config
+
+@jit(nopython=True)
+def _doShuffle(src, des, element_size):
+    count = len(src) // element_size
+    for i in range(count):
+        offset = i*element_size
+        e = src[offset:(offset+element_size)]
+        for byte_index in range(element_size):
+            j = byte_index*count + i
+            des[j] = e[byte_index]
+    return des
+
+@jit(nopython=True)
+def _doUnshuffle(src, des, element_size):
+    count = len(src) // element_size
+    for i in range(element_size):
+        offset = i*count
+        e = src[offset:(offset+count)]
+        for byte_index in range(count):
+            j = byte_index*element_size + i
+            des[j] = e[byte_index]
+    return des
+
+def _shuffle(element_size, chunk):
+    if element_size <= 1:
+        return  None # no shuffling needed
+    chunk_size = len(chunk)
+    if chunk_size % element_size != 0:
+        raise ValueError("unexpected chunk size")
+    
+    arr = np.zeros((chunk_size,), dtype='u1')
+    _doShuffle(chunk, arr, element_size)
+
+    return arr.tobytes()
+
+def _unshuffle(element_size, chunk):
+    if element_size <= 1:
+        return  None # no shuffling needed
+    chunk_size = len(chunk)
+    if chunk_size % element_size != 0:
+        raise ValueError("unexpected chunk size")
+    arr = np.zeros((chunk_size,), dtype='u1')
+    _doUnshuffle(chunk, arr, element_size)
+
+    return arr.tobytes()
 
 def getS3Client(app):
     """ Return s3client handle
@@ -213,7 +260,7 @@ async def getS3JSONObj(app, key, bucket=None):
     log.debug("s3 returned: {}".format(json_dict))
     return json_dict
 
-async def getS3Bytes(app, key, deflate_level=None, s3offset=0, s3size=None, bucket=None):
+async def getS3Bytes(app, key, shuffle=0, deflate_level=None, s3offset=0, s3size=None, bucket=None):
     """ Get S3 object identified by key and read as bytes
     """
     
@@ -262,6 +309,10 @@ async def getS3Bytes(app, key, deflate_level=None, s3offset=0, s3size=None, buck
             except zlib.error as zlib_error:
                 log.info(f"zlib_err: {zlib_error}")
                 log.warn(f"unable to uncompress s3 obj: {key}")
+        if shuffle > 0:
+            unshuffled = _unshuffle(shuffle, data)
+            log.info(f"unshuffled to {len(unshuffled)} bytes")
+            data = unshuffled
         
     return data
 
@@ -292,7 +343,7 @@ async def putS3JSONObj(app, key, json_obj, bucket=None):
     log.debug(f"putS3JSONObj {key} complete, s3_rsp: {s3_rsp}")
     return s3_rsp
 
-async def putS3Bytes(app, key, data, deflate_level=None, bucket=None):
+async def putS3Bytes(app, key, data, shuffle=0, deflate_level=None, bucket=None):
     """ Store byte string as S3 object with given key
     """
     
@@ -303,6 +354,11 @@ async def putS3Bytes(app, key, data, deflate_level=None, bucket=None):
         key = key[1:]  # no leading slash
     log.info(f"putS3Bytes(s3://{bucket}/{key}), {len(data)} bytes")
     s3_stats_increment(app, "put_count")
+    if shuffle > 0:
+        shuffled_data = _shuffle(shuffle, data)
+        log.info(f"shuffled data to {len(shuffled_data)}")
+        data = shuffled_data
+
     if deflate_level is not None:
         try:
             # the keyword parameter is enabled with py3.6

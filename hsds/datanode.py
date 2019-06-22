@@ -178,6 +178,7 @@ if __name__ == '__main__':
     app['deleted_ids'] = set()
     app['dirty_ids'] = {}  # map of objids to timestamp and bucket of which they were last updated
     app['deflate_map'] = {} # map of dataset ids to deflate levels (if compressed)
+    app["shuffle_map"] = {} # map of dataset ids to shuffle items size (if shuffle filter is applied)
     app["pending_s3_read"] = {} # map of s3key to timestamp for in-flight read requests
     app["pending_s3_write"] = {} # map of s3key to timestamp for in-flight write requests
     app["pending_s3_write_tasks"] = {} # map of objid to asyncio Task objects for writes

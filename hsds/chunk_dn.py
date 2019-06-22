@@ -25,9 +25,9 @@ from util.httpUtil import  request_read
 from util.arrayUtil import bytesArrayToList, bytesToArray, arrayToBytes
 from util.idUtil import getS3Key, validateInPartition, isValidUuid
 from util.s3Util import  isS3Obj, getS3Bytes, deleteS3Obj 
-from util.hdf5dtype import createDataType
-from util.dsetUtil import  getSelectionShape, getSliceQueryParam
-from util.dsetUtil import getFillValue, getChunkLayout, getEvalStr, getDeflateLevel
+from util.hdf5dtype import createDataType, getItemSize
+from util.dsetUtil import  getSelectionShape, getSliceQueryParam, getEvalStr
+from util.dsetUtil import getFillValue, getChunkLayout, getDeflateLevel, isShuffle
 from util.chunkUtil import getChunkIndex, getChunkCoordinate, getChunkRelativePoint, getDatasetId
 
 
@@ -38,14 +38,39 @@ Get the deflate level for given dset
 """
 def getDeflate(app, dset_id, dset_json):
     deflate_level = getDeflateLevel(dset_json)
-    log.debug("got deflate_level: {}".format(deflate_level))
+    log.debug(f"got deflate_level: {deflate_level}")
     if deflate_level is not None:
         deflate_map = app['deflate_map']  
         if dset_id not in deflate_map:
             # save the deflate level so the lazy chunk writer can access it
             deflate_map[dset_id] = deflate_level
-            log.debug("update deflate_map: {}: {}".format(dset_id, deflate_level))
+            log.debug(f"update deflate_map {dset_id}: {deflate_level}")
     return deflate_level
+
+
+"""
+Get the shuffle item size for given dset (if shuffle filter is used)
+"""
+def getShuffle(app, dset_id, dset_json):
+    shuffle_size = 0
+    if isShuffle(dset_json):
+        type_json = dset_json["type"]
+        item_size = getItemSize(type_json)
+        if item_size == 'H5T_VARIABLE':
+            log.warn(f"shuffle filter can't be used on variable datatype for datasset: {dset_id}")
+        else:
+            shuffle_size = item_size
+            log.debug(f"got shuffle_size: {shuffle_size}")
+    else:
+        log.debug("isShuffle is false")
+
+    if shuffle_size > 1:
+        shuffle_map = app['shuffle_map']  
+        if dset_id not in shuffle_map:
+            # save the shuffle size so the lazy chunk writer can access it
+            shuffle_map[dset_id] = shuffle_size
+            log.debug(f"update shuffle_map {dset_id}: {shuffle_size}")
+    return shuffle_size
 
 """
 Utility method for GET_Chunk, PUT_Chunk, and POST_CHunk
@@ -66,6 +91,12 @@ async def getChunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset=
     dims = getChunkLayout(dset_json)
     type_json = dset_json["type"]
     dt = createDataType(type_json)
+    # note - officially we should follow the order in which the filters are defined in the filter_list,
+    # but since we currently have just deflate and shuffle we will always apply deflate then shuffle on read,
+    # and shuffle then deflate on write
+    # also note - get deflate and shuffle will update the deflate and shuffle map so that the s3sync will do the right thing
+    deflate_level = getDeflate(app, dset_id, dset_json)
+    shuffle = getShuffle(app, dset_id, dset_json)
     s3key = None
 
     if s3path:
@@ -112,8 +143,8 @@ async def getChunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset=
                 if chunk_id not in pending_s3_read:
                     pending_s3_read[chunk_id] = time.time()
                 log.debug("Reading chunk {} from S3".format(s3key))
-                deflate_level = getDeflate(app, dset_id, dset_json)
-                chunk_bytes = await getS3Bytes(app, s3key, deflate_level=deflate_level, s3offset=s3offset, s3size=s3size, bucket=bucket)
+                
+                chunk_bytes = await getS3Bytes(app, s3key, shuffle=shuffle, deflate_level=deflate_level, s3offset=s3offset, s3size=s3size, bucket=bucket)
                 if chunk_id in pending_s3_read:
                     # read complete - remove from pending map
                     elapsed_time = time.time() - pending_s3_read[chunk_id]
@@ -678,12 +709,16 @@ async def DELETE_Chunk(request):
         del chunk_cache[chunk_id]
 
     deflate_map = app["deflate_map"]
+    shuffle_map = app["shuffle_map"]
     dset_id = getDatasetId(chunk_id)
     if dset_id in deflate_map:
         # The only reason chunks are ever deleted is if the dataset is being deleted,
         # so it should be safe to remove this entry now
         log.info(f"Removing deflate_map entry for {dset_id}")
         del deflate_map[dset_id]
+    if dset_id in shuffle_map:
+        log.info(f"Removing shuffle_map entry for {dset_id}")
+        del shuffle_map[dset_id]
 
     if await isS3Obj(app, s3key, bucket=bucket):
         await deleteS3Obj(app, s3key, bucket=bucket)

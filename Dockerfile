@@ -1,6 +1,6 @@
-FROM hdfgroup/python:3.6
+FROM hdfgroup/python:3.7
 MAINTAINER John Readey <jreadey@hdfgroup.org>
-RUN mkdir  /usr/local/src/ /usr/local/src/hsds/ /usr/local/src/tests/
+RUN mkdir /usr/local/src/hsds/ /usr/local/src/tests/
 COPY hsds /usr/local/src/hsds/
 COPY admin/config/passwd.txt /usr/local/src/hsds/
 COPY tests /usr/local/src/tests/

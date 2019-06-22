@@ -319,6 +319,7 @@ async def write_s3_obj(app, obj_id, bucket=None):
     chunk_cache = app['chunk_cache']
     meta_cache = app['meta_cache']
     deflate_map = app['deflate_map']
+    shuffle_map = app['shuffle_map']
     notify_objs = app["root_notify_ids"]
     deleted_ids = app['deleted_ids']
     success = False
@@ -375,11 +376,17 @@ async def write_s3_obj(app, obj_id, bucket=None):
             chunk_bytes = arrayToBytes(chunk_arr)
             dset_id = getDatasetId(obj_id)
             deflate_level = None
+            shuffle = 0
+            if dset_id in shuffle_map:
+                shuffle = shuffle_map[dset_id]
             if dset_id in deflate_map:
                 deflate_level = deflate_map[dset_id]
                 log.debug(f"got deflate_level: {deflate_level} for dset: {dset_id}")
-     
-            await putS3Bytes(app, s3key, chunk_bytes, deflate_level=deflate_level, bucket=bucket)
+            if dset_id in shuffle_map:
+                shuffle = shuffle_map[dset_id]
+                log.debug(f"got shuffle size: {shuffle} for dset: {dset_id}")
+            
+            await putS3Bytes(app, s3key, chunk_bytes, shuffle=shuffle, deflate_level=deflate_level, bucket=bucket)
             success = True
         
             # if chunk has been evicted from cache something has gone wrong

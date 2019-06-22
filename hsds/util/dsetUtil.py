@@ -390,6 +390,26 @@ def getDeflateLevel(dset_json):
             deflate_level = filter["level"]
     return deflate_level
 
+""" Return true if Shuffle is enabled
+"""
+def isShuffle(dset_json):
+    if "creationProperties" not in dset_json:
+        return False
+    creationProperties = dset_json["creationProperties"]
+    if "filters" not in creationProperties:
+        return False
+    is_shuffle = False
+    filters = creationProperties["filters"]
+    for filter in filters:
+        if "class" not in filter:
+            continue
+        filterClass = filter["class"]
+        if filterClass == "H5Z_FILTER_SHUFFLE":
+            is_shuffle = True
+            break
+    return is_shuffle
+
+
 
 
 
