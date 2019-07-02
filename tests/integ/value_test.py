@@ -48,6 +48,13 @@ class ValueTest(unittest.TestCase):
         dset_id = rspJson["id"]
         self.assertTrue(helper.validateId(dset_id))
 
+        # add an attribute
+        attr_payload = {'type': 'H5T_STD_I32LE', 'value': 42}
+        attr_name = "attr1"
+        req = self.endpoint + '/datasets/' + dset_id + "/attributes/" + attr_name
+        rsp = requests.put(req, data=json.dumps(attr_payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # created
+
         # link new dataset as 'dset1d'
         name = "dset1d"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
@@ -988,7 +995,9 @@ class ValueTest(unittest.TestCase):
         # create the dataset 
         req = self.endpoint + "/datasets"
         payload = {'type': 'H5T_STD_I32LE', 'shape': 10}
-        payload['creationProperties'] = {'fillValue': 42 }
+        creation_props = {'fillValue': 42 }
+        payload['creationProperties'] = creation_props
+ 
         req = self.endpoint + "/datasets"
         rsp = requests.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
@@ -2315,6 +2324,67 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(item[1], 'MHFI')
         self.assertEqual(item[2], 3)
         # skip check rest of fields since float comparisons are trcky...
+
+    def testLargeCreationProperties(self):
+        # test Dataset with artifically large creation_properties data
+        print("testLargeCreationProperties", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+
+        # get domain
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # create the dataset 
+        req = self.endpoint + "/datasets"
+        payload = {'type': 'H5T_STD_I32LE', 'shape': 10}
+        creation_props = {'fillValue': 42 }
+        foo_bar = {}
+        for i in range(500):
+            foo_bar[i] = f"this is a test {i}"
+        creation_props['foo_bar'] = foo_bar
+
+        payload['creationProperties'] = creation_props
+        
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dset_uuid))
+
+        # link new dataset as 'dset'
+        name = 'dset'
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {"id": dset_uuid}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+ 
+        # read back the data
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], [42,]*10)
+
+        # write some values
+        payload = { 'start': 0, 'stop': 5, 'value': [24,]*5 }
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        ret_values = rspJson["value"]
+        for i in range(5):
+            self.assertEqual(ret_values[i], 24)
+            self.assertEqual(ret_values[i+5], 42)
         
              
 if __name__ == '__main__':

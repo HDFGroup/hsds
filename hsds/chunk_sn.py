@@ -15,7 +15,6 @@
 # 
 import asyncio
 from asyncio import CancelledError
-import json
 import base64 
 import numpy as np
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPRequestEntityTooLarge, HTTPConflict, HTTPInternalServerError, HTTPServiceUnavailable
@@ -74,7 +73,6 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level,
     data = arrayToBytes(arr_chunk)  
     # pass itemsize, type, dimensions, and selection as query params
     params = {}
-    params["dset"] = json.dumps(dset_json)
     setSliceQueryParam(params, chunk_sel)  
     if bucket:
         params["bucket"] = bucket 
@@ -106,8 +104,10 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_m
     chunk_id: id of chunk to write to
     chunk_sel: chunk-relative selection to read from
     np_arr: numpy array to store read bytes
-    chunk_offset: location of chunk with the s3 object
-    chunk_offset: size of chunk within the s3 object (or 0 if the entire object)
+    chunk_map: map of chunk_id to chunk_offset and chunk_size
+        chunk_offset: location of chunk with the s3 object
+        chunk_size: size of chunk within the s3 object (or 0 if the entire object)
+    bucket: s3 bucket to read from
     """
     msg = f"read_chunk_hyperslab, chunk_id: {chunk_id}, slices: {slices}"
     log.info(msg)
@@ -129,7 +129,6 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_m
     
     # pass dset json and selection as query params
     params = {}
-    params["dset"] = json.dumps(dset_json)
      
     fill_value = getFillValue(dset_json) 
      
@@ -229,9 +228,8 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_a
     post_data = np_arr_points.tobytes()
     
 
-    # pass dset_json as query params
+    # set action as query params
     params = {}
-    params["dset"] = json.dumps(dset_json)
     params["action"] = "get"
      
     fill_value = getFillValue(dset_json)
@@ -360,7 +358,6 @@ async def write_point_sel(app, chunk_id, dset_json, point_list, point_data, buck
     
     # pass dset_json as query params
     params = {}
-    params["dset"] = json.dumps(dset_json)
     params["action"] = "put"
     params["count"] = num_points
     if bucket:
@@ -403,9 +400,8 @@ async def read_chunk_query(app, chunk_id, dset_json, slices, query, limit, rsp_d
     layout = getChunkLayout(dset_json)
     chunk_sel = getChunkCoverage(chunk_id, slices, layout)
     
-    # pass dset json and selection as query params
+    # pass query as param
     params = {}
-    params["dset"] = json.dumps(dset_json)
     params["query"] = query
     if limit > 0:
         params["Limit"] = limit

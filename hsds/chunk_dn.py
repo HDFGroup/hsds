@@ -15,7 +15,6 @@
 # 
 #
 import asyncio
-import json
 import time
 import numpy as np
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalServerError, HTTPServiceUnavailable
@@ -29,6 +28,7 @@ from util.hdf5dtype import createDataType, getItemSize
 from util.dsetUtil import  getSelectionShape, getSliceQueryParam, getEvalStr
 from util.dsetUtil import getFillValue, getChunkLayout, getDeflateLevel, isShuffle
 from util.chunkUtil import getChunkIndex, getChunkCoordinate, getChunkRelativePoint, getDatasetId
+from datanode_lib import get_metadata_obj
 
 
 import hsds_logger as log
@@ -226,13 +226,17 @@ async def PUT_Chunk(request):
         raise HTTPBadRequest(reason=msg)
 
     validateInPartition(app, chunk_id)
-    if "dset" not in params:
-        msg = "Missing dset in GET request"
+    if "dset" in params:
+        msg = "Unexpected param dset in GET request"
         log.error(msg)
         raise HTTPBadRequest(reason=msg)
 
     log.debug(f"PUT_Chunk - id: {chunk_id}")
-    dset_json = json.loads(params["dset"])
+
+    dset_id = getDatasetId(chunk_id)
+
+    dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
+
     log.debug(f"dset_json: {dset_json}")
 
     dims = getChunkLayout(dset_json)
@@ -336,11 +340,39 @@ async def GET_Chunk(request):
     
     validateInPartition(app, chunk_id)
     log.debug("request params: {}".format(list(params.keys())))
-    if "dset" not in params:
-        msg = "Missing dset in GET request"
+    
+    s3path = None
+    s3offset = 0
+    s3size = 0
+    bucket = None
+    if "s3path" in params:
+        s3path = params["s3path"]
+        log.debug(f"GET_Chunk - using s3path: {s3path}")
+    elif "bucket" in params:
+        bucket = params["bucket"]
+    else:
+        bucket = None
+    if "s3offset" in params:
+        try:
+            s3offset = int(params["s3offset"])
+        except ValueError:
+            log.error(f"invalid s3offset params: {params['s3offset']}")
+            raise HTTPBadRequest()
+    if "s3size" in params:
+        try:
+            s3size = int(params["s3size"])
+        except ValueError:
+            log.error(f"invalid s3size params: {params['s3sieze']}")
+            raise HTTPBadRequest()
+
+    if "dset" in params:
+        msg = "Unexpected dset in GET request"
         log.error(msg)
         raise HTTPBadRequest(reason=msg)
-    dset_json = json.loads(params["dset"])
+
+    dset_id = getDatasetId(chunk_id)
+
+    dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
     
     log.debug(f"dset_json: {dset_json}") 
     type_json = dset_json["type"]
@@ -374,30 +406,6 @@ async def GET_Chunk(request):
     for i in range(rank):
         s = selection[i]
         log.debug("selection[{}]: {}".format(i, s))
-
-    s3path = None
-    s3offset = 0
-    s3size = 0
-    bucket = None
-    if "s3path" in params:
-        s3path = params["s3path"]
-        log.debug(f"GET_Chunk - using s3path: {s3path}")
-    elif "bucket" in params:
-        bucket = params["bucket"]
-    else:
-        bucket = None
-    if "s3offset" in params:
-        try:
-            s3offset = int(params["s3offset"])
-        except ValueError:
-            log.error(f"invalid s3offset params: {params['s3offset']}")
-            raise HTTPBadRequest()
-    if "s3size" in params:
-        try:
-            s3size = int(params["s3size"])
-        except ValueError:
-            log.error(f"invalid s3size params: {params['s3sieze']}")
-            raise HTTPBadRequest()
 
     chunk_arr = await getChunk(app, chunk_id, dset_json, bucket=bucket, s3path=s3path, s3offset=s3offset, s3size=s3size)
 
@@ -499,6 +507,32 @@ async def POST_Chunk(request):
         put_points = True
     else:
         log.info("POST Chunk get points")
+    s3path = None
+    s3offset = 0
+    s3size = 0
+    if "s3path" in params:
+        if put_points:
+            log.error("s3path can not be used with put points POST request")
+            raise HTTPBadRequest()
+        s3path = params["s3path"]
+        log.debug(f"GET_Chunk - using s3path: {s3path}")
+        bucket = None
+    elif "bucket" in params:
+        bucket = params["bucket"]
+    else:
+        bucket = None
+    if "s3offset" in params:
+        try:
+            s3offset = int(params["s3offset"])
+        except ValueError:
+            log.error(f"invalid s3offset params: {params['s3offset']}")
+            raise HTTPBadRequest()
+    if "s3size" in params:
+        try:
+            s3size = int(params["s3size"])
+        except ValueError:
+            log.error(f"invalid s3size params: {params['s3sieze']}")
+            raise HTTPBadRequest()
 
     chunk_id = request.match_info.get('id')
     if not chunk_id:
@@ -516,11 +550,14 @@ async def POST_Chunk(request):
 
     validateInPartition(app, chunk_id)
     log.debug("request params: {}".format(list(params.keys())))
-    if "dset" not in params:
-        msg = "Missing dset in POST request"
+    if "dset" in params:
+        msg = "Unexpected dset in POST request"
         log.error(msg)
         raise HTTPBadRequest(reason=msg)
-    dset_json = json.loads(params["dset"])
+
+    dset_id = getDatasetId(chunk_id)
+
+    dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
     log.debug(f"dset_json: {dset_json}")
     chunk_layout = getChunkLayout(dset_json)
     chunk_coord = getChunkCoordinate(chunk_id, chunk_layout)
@@ -559,33 +596,6 @@ async def POST_Chunk(request):
         log.error(msg)
         raise HTTPInternalServerError()
 
-    s3path = None
-    s3offset = 0
-    s3size = 0
-    if "s3path" in params:
-        if put_points:
-            log.error("s3path can not be used with put points POST request")
-            raise HTTPBadRequest()
-        s3path = params["s3path"]
-        log.debug(f"GET_Chunk - using s3path: {s3path}")
-        bucket = None
-    elif "bucket" in params:
-        bucket = params["bucket"]
-    else:
-        bucket = None
-    if "s3offset" in params:
-        try:
-            s3offset = int(params["s3offset"])
-        except ValueError:
-            log.error(f"invalid s3offset params: {params['s3offset']}")
-            raise HTTPBadRequest()
-    if "s3size" in params:
-        try:
-            s3size = int(params["s3size"])
-        except ValueError:
-            log.error(f"invalid s3size params: {params['s3sieze']}")
-            raise HTTPBadRequest()
-
     # get chunk from cache/s3.  If not found init a new chunk if this is a write request
     chunk_arr = await getChunk(app, chunk_id, dset_json, bucket=bucket, s3path=s3path, s3offset=s3offset, s3size=s3size, chunk_init=put_points) 
 
@@ -598,7 +608,6 @@ async def POST_Chunk(request):
             log.warn("S3 object not found for get points")
             raise HTTPNotFound()
 
-   
     if put_points:
         # writing point data
         

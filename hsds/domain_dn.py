@@ -134,12 +134,7 @@ async def DELETE_Domain(request):
     """
     log.request(request)
     app = request.app
-    if not request.has_body:
-        msg = "Expected body in delete domain"
-        log.error(msg)
-        raise HTTPInternalServerError() 
-    body = await request.json() 
-    domain = get_domain(request, body=body)
+    domain = get_domain(request)
     bucket = getBucketForDomain(domain)
 
     log.info(f"delete domain: {domain}")
@@ -155,7 +150,6 @@ async def DELETE_Domain(request):
         log.debug("got domain json")
     # delete domain
     await delete_metadata_obj(app, domain, notify=True)
-
 
     json_rsp = { "domain": domain }
 

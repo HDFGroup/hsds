@@ -736,7 +736,6 @@ async def DELETE_Domain(request):
     app = request.app 
     params = request.rel_url.query
 
-    domain = None
     meta_only = False  # if True, just delete the meta cache value
     keep_root = False
     if request.has_body:
@@ -758,7 +757,7 @@ async def DELETE_Domain(request):
         log.warn(f"Invalid domain: {domain}")
         raise HTTPBadRequest(reason="Invalid domain name")
     bucket = getBucketForDomain(domain)
-    log.debug(f"GET_Domain domain: {domain} bucket: {bucket}")
+    log.debug(f"GET_Domain domain: {domain}")
 
     if not domain:
         msg = "No domain given"
@@ -819,13 +818,11 @@ async def DELETE_Domain(request):
 
     req = getDataNodeUrl(app, domain)
     req += "/domains" 
-    body = { "domain": domain }
     
-    rsp_json = await http_delete(app, req, data=body)
     params = {} # for http_delete requests to DN nodes
-    if bucket:
-        params["bucket"] = bucket
- 
+    params["domain"] = domain
+    rsp_json = await http_delete(app, req, params=params)
+
     if "root" in domain_json and not keep_root:
         # delete the root group
         
@@ -841,7 +838,10 @@ async def DELETE_Domain(request):
 
     # delete domain cache from other sn_urls
     sn_urls = app["sn_urls"]
-    body["meta_only"] = True 
+    params = {}
+    params["domain"] = getPathForDomain(domain)
+    params["bucket"] = getBucketForDomain(domain)
+    params["meta_only"] = 1  # can't pass booleans as params, so use 1 instead of True 
     for node_no in sn_urls:
         if node_no == app["node_number"]:
             continue # don't send to ourselves
@@ -849,7 +849,7 @@ async def DELETE_Domain(request):
         req = sn_url + "/"
         log.info(f"sending sn request: {req}")
         try: 
-            sn_rsp = await http_delete(app, req, data=body, params=params)
+            sn_rsp = await http_delete(app, req, params=params)
             log.info(f"{req} response: {sn_rsp}")
         except ClientResponseError as ce:
             log.warn(f"got error for sn_delete: {ce}")
