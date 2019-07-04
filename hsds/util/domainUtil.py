@@ -207,7 +207,6 @@ def getDomainFromRequest(request, validate=True):
                 pass # ignore
     # now validate that its a properly formed domain
     if validate:
-        print("got domain: ", domain)
         validateDomain(domain)
     if "bucket" in params and params["bucket"]:
         bucket = params["bucket"] 
