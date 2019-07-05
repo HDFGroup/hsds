@@ -216,9 +216,12 @@ async def getS3JSONObj(app, key, bucket=None):
         key = key[1:]  # no leading slash
     log.info(f"getS3JSONObj(s3://{bucket})/{key}")
     s3_stats_increment(app, "get_count")
+    start_time = time.time()
     try:
         resp = await client.get_object(Bucket=bucket, Key=key)
         data = await resp['Body'].read()
+        finish_time = time.time()
+        log.info(f"s3Util.getS3JSONObj({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f} bytes={len(data)}")
         resp['Body'].close()
     except ClientError as ce:
         # key does not exist?
@@ -271,6 +274,7 @@ async def getS3Bytes(app, key, shuffle=0, deflate_level=None, s3offset=0, s3size
     if key[0] == '/':
         key = key[1:]  # no leading slash
     log.info(f"getS3Bytes(s3://{bucket}/{key})")
+    start_time = time.time()
     s3_stats_increment(app, "get_count")
     range=""
     if s3size:
@@ -281,6 +285,9 @@ async def getS3Bytes(app, key, shuffle=0, deflate_level=None, s3offset=0, s3size
 
         resp = await client.get_object(Bucket=bucket, Key=key, Range=range)
         data = await resp['Body'].read()
+        finish_time = time.time()
+        log.info(f"s3Util.getS3Bytes({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f} bytes={len(data)}")
+
         resp['Body'].close()
     except ClientError as ce:
         # key does not exist?
@@ -330,10 +337,12 @@ async def putS3JSONObj(app, key, json_obj, bucket=None):
     s3_stats_increment(app, "put_count")
     data = json.dumps(json_obj)
     data = data.encode('utf8')
+    start_time = time.time()
     try:
         rsp = await client.put_object(Bucket=bucket, Key=key, Body=data)
-        now = int(time.time())
-        s3_rsp = {"etag": rsp["ETag"], "size": len(data), "lastModified": now}
+        finish_time = time.time()
+        log.info(f"s3Util.putS3JSONObj({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f} bytes={len(data)}")
+        s3_rsp = {"etag": rsp["ETag"], "size": len(data), "lastModified": int(finish_time)}
     except ClientError as ce:
         s3_stats_increment(app, "error_count")
         msg = f"Error putting s3 obj {key}: {ce}"
@@ -372,9 +381,11 @@ async def putS3Bytes(app, key, data, shuffle=0, deflate_level=None, bucket=None)
             log.warn(f"unable to compress s3 obj: {key}, using raw bytes")
     
     try:
+        start_time = time.time()
         rsp = await client.put_object(Bucket=bucket, Key=key, Body=data)
-        now = int(time.time())
-        s3_rsp = {"etag": rsp["ETag"], "size": len(data), "lastModified": now}
+        finish_time = time.time()
+        log.info(f"s3Util.putS3Bytes({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f} bytes={len(data)}")
+        s3_rsp = {"etag": rsp["ETag"], "size": len(data), "lastModified": int(finish_time)}
     except ClientError as ce:
         s3_stats_increment(app, "error_count")
         msg = f"ClientError putting s3 obj {key}: {ce}"
@@ -500,7 +511,11 @@ async def isS3Obj(app, key, bucket=None):
     log.debug(f"isS3Obj s3://{bucket}/{key}") 
     s3_stats_increment(app, "list_count")
     try:
+        start_time = time.time()
         resp = await client.list_objects(Bucket=bucket, MaxKeys=1, Prefix=key)
+        finish_time = time.time()
+        log.info(f"s3Util.isS3Obj({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f}")
+
     except ClientError as ce:
         # key does not exist? 
         # TBD - does this ever get triggered when the key is present?
