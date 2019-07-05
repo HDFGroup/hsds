@@ -115,14 +115,14 @@ def getS3Client(app):
         aws_access_key_id = None
   
     if aws_iam_role and not aws_secret_access_key:
-        log.info("using iam role: {}".format(aws_iam_role))
+        log.info(f"using iam role: {aws_iam_role}")
         log.info("getting EC2 IAM role credentials")
         # Use EC2 IAM role to get credentials
         # See: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html?icmpid=docs_ec2_console
-        curl_cmd = ["curl", "http://169.254.169.254/latest/meta-data/iam/security-credentials/{}".format(aws_iam_role)]
+        curl_cmd = ["curl", f"http://169.254.169.254/latest/meta-data/iam/security-credentials/{aws_iam_role}"]
         p = subprocess.run(curl_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if p.returncode != 0:
-            msg = "Error getting IAM role credentials: {}".format(p.stderr)
+            msg = f"Error getting IAM role credentials: {p.stderr}"
             log.error(msg)
         else:
             stdout = p.stdout.decode("utf-8")
@@ -130,10 +130,11 @@ def getS3Client(app):
                 cred = json.loads(stdout)
                 aws_secret_access_key = cred["SecretAccessKey"]
                 aws_access_key_id = cred["AccessKeyId"]
-                log.info("Got ACCESS_KEY_ID: {} from EC2 metadata".format(aws_access_key_id))     
+                aws_cred_expiration = cred["Expiration"]
+                log.info(f"Got ACCESS_KEY_ID: {aws_access_key_id} from EC2 metadata")     
                 aws_session_token = cred["Token"]
-                log.info("Got Expiration of: {}".format(cred["Expiration"]))
-                expiration_str = cred["Expiration"][:-1] + "UTC" # trim off 'Z' and add 'UTC'
+                log.info(f"Got Expiration of: {aws_cred_expiration}")
+                expiration_str = aws_cred_expiration[:-1] + "UTC" # trim off 'Z' and add 'UTC'
                 # save the expiration
                 app["token_expiration"] = datetime.datetime.strptime(expiration_str, "%Y-%m-%dT%H:%M:%S%Z")
             except json.JSONDecodeError:
@@ -196,10 +197,10 @@ def s3_stats_increment(app, counter, inc=1):
         return # app hasn't set up s3stats
     s3_stats = app['s3_stats']
     if counter not in s3_stats:
-        log.error("unexpected counter for s3_stats: {}".format(counter))
+        log.error(f"unexpected counter for s3_stats: {counter}")
         return
     if inc < 1:
-        log.error("unexpected inc for s3_stats: {}".format(inc))
+        log.error(f"unexpected inc for s3_stats: {inc}")
         return
         
     s3_stats[counter] += inc
@@ -243,7 +244,7 @@ async def getS3JSONObj(app, key, bucket=None):
             raise HTTPNotFound()
         else:
             s3_stats_increment(app, "error_count")
-            log.warn("got ClientError on s3 get: {}".format(str(ce)))
+            log.warn(f"got ClientError on s3 get: {ce}")
             msg = "Error getting s3 obj: " + str(ce)
             log.error(msg)
             raise HTTPInternalServerError()
@@ -253,11 +254,11 @@ async def getS3JSONObj(app, key, bucket=None):
         json_dict = json.loads(data.decode('utf8'))
     except UnicodeDecodeError:
         s3_stats_increment(app, "error_count")
-        log.error("Error loading JSON at key: {}".format(key))
+        log.error(f"Error loading JSON at key: {key}")
         msg = "Unexpected i/o error"
         raise HTTPInternalServerError()
 
-    log.debug("s3 returned: {}".format(json_dict))
+    log.debug(f"s3 key {key} returned: {json_dict}")
     return json_dict
 
 async def getS3Bytes(app, key, shuffle=0, deflate_level=None, s3offset=0, s3size=None, bucket=None):
@@ -407,7 +408,7 @@ async def deleteS3Obj(app, key, bucket=None):
         bucket = app['bucket_name']
     if key[0] == '/':
         key = key[1:]  # no leading slash
-    log.info("deleteS3Obj({})".format(key))
+    log.info(f"deleteS3Obj({key})")
     s3_stats_increment(app, "delete_count")
     try:
         await client.delete_object(Bucket=bucket, Key=key)
@@ -436,11 +437,11 @@ async def getS3ObjStats(app, key, bucket=None):
     
     if key[0] == '/':
         #key = key[1:]  # no leading slash
-        msg = "key with leading slash: {}".format(key)
+        msg = f"key with leading slash: {key}"
         log.error(msg)
         raise KeyError(msg)
 
-    log.info("getS3ObjStats({})".format(key))
+    log.info(f"getS3ObjStats({key})")
     
     s3_stats_increment(app, "list_count")
     try:
@@ -452,11 +453,11 @@ async def getS3ObjStats(app, key, bucket=None):
         log.error(msg)
         raise HTTPInternalServerError()
     if 'Contents' not in resp:
-        msg = "key: {} not found".format(key)
+        msg = f"key: {key} not found"
         log.info(msg)
         raise HTTPInternalServerError()
     contents = resp['Contents']
-    log.debug("s3_contents: {}".format(contents))
+    log.debug(f"s3_contents: {contents}")
     
     found = False
     if len(contents) > 0:
@@ -475,13 +476,13 @@ async def getS3ObjStats(app, key, bucket=None):
                 if "Owner" in item and "ID" in item["Owner"] and item["Owner"]["ID"] == "minio":
                     pass # minio is not creating ETags...
                 else:
-                    log.warn("No ETag for key: {}".format(key))
+                    log.warn(f"No ETag for key: {key}")
                 # If no ETAG put in a fake one
                 stats["ETag"] = "9999"
             stats["Size"] = item["Size"]
             stats["LastModified"] = int(item["LastModified"].timestamp())
     if not found:
-        msg = "key: {} not found".format(key)
+        msg = f"key: {key} not found"
         log.info(msg)
         raise HTTPNotFound()
 
@@ -503,11 +504,11 @@ async def isS3Obj(app, key, bucket=None):
     except ClientError as ce:
         # key does not exist? 
         # TBD - does this ever get triggered when the key is present?
-        log.warn("isS3Obj {} client error: {}".format(key, str(ce)))
+        log.warn(f"isS3Obj {key} client error: {ce}")
         s3_stats_increment(app, "error_count")
         return False
     if 'Contents' not in resp:
-        log.debug("isS3Obj {} not found (no Contents)".format(key))
+        log.debug(f"isS3Obj {key} not found (no Contents)")
         return False
     contents = resp['Contents']
     if len(contents) > 0:
@@ -516,7 +517,7 @@ async def isS3Obj(app, key, bucket=None):
             # if the key is a S3 folder, the key will be the first object in the folder,
             # not the requested object
             found = True
-    log.debug("isS3Obj {} returning {}".format(key, found))
+    log.debug(f"isS3Obj {key} returning {found}")
     return found
 
  
@@ -529,7 +530,7 @@ def getPageItems(response, items, include_stats=False):
         common = response["CommonPrefixes"]
         for item in common:
             if 'Prefix' in item:
-                log.debug("got s3 prefix: {}".format(item['Prefix']))
+                log.debug(f"got s3 prefix: {item['Prefix']}")
                 items.append(item["Prefix"])
                  
     elif 'Contents' in response:
@@ -542,16 +543,16 @@ def getPageItems(response, items, include_stats=False):
                 if item["ETag"]:
                     stats["ETag"] = item["ETag"]
                 else:
-                    log.warn("No ETag for key: {}".format(key_name))
+                    log.warn(f"No ETag for key: {key_name}")
                 if "Size" in item:
                     stats["Size"] = item["Size"]
                 else:
-                    log.warn("No Size for key: {}".format(key_name))
+                    log.warn(f"No Size for key: {key_name}")
                 if "LastModified" in item:
                     stats["LastModified"] = int(item["LastModified"].timestamp())
                 else:
-                    log.warn("No LastModified for key: {}".format(key_name))
-                log.debug("key: {} stats: {}".format(key_name, stats))
+                    log.warn(f"No LastModified for key: {key_name}")
+                log.debug(f"key: {key_name} stats: {stats}")
                 items[key_name] = stats
             else:
                 items.append(key_name)
