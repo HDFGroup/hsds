@@ -311,18 +311,21 @@ async def get_domains(request):
         prefix = '/'
     else:
         prefix = request.rel_url.query["domain"]
-    log.info(f"get_domains for: {prefix}")
+
+    # use "verbose" to pull extra info 
+    if "verbose" in request.rel_url.query and request.rel_url.query["verbose"]:
+        verbose = True
+    else:
+        verbose = False
+
+    log.info(f"get_domains for: {prefix} verbose: {verbose}")
 
     if not prefix.startswith('/'):
         msg = "Prefix must start with '/'"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)  
 
-    # always use "verbose" to pull extra info 
-    if "verbose" in request.rel_url.query and request.rel_url.query["verbose"]:
-        verbose = True
-    else:
-        verbose = False
+    
 
     limit = None
     if "Limit" in request.rel_url.query:
@@ -361,7 +364,7 @@ async def get_domains(request):
     else:
         s3prefix = prefix[1:]
         log.debug(f"listing S3 keys for {s3prefix}")
-        s3keys = await getS3Keys(app, include_stats=False, prefix=s3prefix, deliminator='/', bucket=bucket, limit=1000)  
+        s3keys = await getS3Keys(app, include_stats=False, prefix=s3prefix, deliminator='/', bucket=bucket)  
         log.debug(f"getS3Keys returned: {len(s3keys)} keys")
         log.debug(f"s3keys {s3keys}")
         
