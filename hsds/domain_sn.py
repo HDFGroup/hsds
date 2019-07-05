@@ -91,6 +91,61 @@ class DomainCrawler:
                     self._q.put_nowait(link_id)
         log.debug(f"DomainCrawler - fetch conplete obj_id: {obj_id}")
 
+class FolderCrawler:
+    def __init__(self, app, domains, bucket=None, verbose=False, max_tasks=40):
+        log.info(f"FolderCrawler.__init__ ")
+        self._app = app
+        self._verbose = verbose
+        self._max_tasks = max_tasks
+        self._q = asyncio.Queue()
+        self._domain_dict = {}
+        for domain in domains:
+            self._q.put_nowait(domain)
+        self._bucket = bucket
+
+    async def crawl(self):
+        workers = [asyncio.Task(self.work())
+                   for _ in range(self._max_tasks)]
+        # When all work is done, exit.
+        log.info("FolderCrawler - await queue.join")
+        await self._q.join()
+        log.info("FolderCrawler - join complete")
+
+        for w in workers:
+            w.cancel()
+        log.debug("FolderCrawler - workers canceled")
+
+    async def work(self):
+        while True:
+            domain = await self._q.get()
+            await self.fetch(domain)
+            self._q.task_done()
+
+    async def fetch(self, domain):
+        log.debug(f"FolderCrawler - fetch for domain: {domain} bucket: {self._bucket}")
+        domain_key = self._bucket + domain 
+        try:
+            domain_json = await getDomainJson(self._app, domain_key, reload=True) 
+            log.debug(f"FolderCrawler - {domain} got domain_json: {domain_json}")
+            if domain_json:
+                
+                domain_rsp = await get_domain_response(self._app, domain_json, verbose=self._verbose)
+                if "limits" in domain_rsp:
+                    # don't return limits for multi-domain responses
+                    del domain_rsp["limits"]
+                if "version" in domain_rsp:
+                    del domain_rsp["version"]
+                log.debug(f"FolderCrawler - {domain} get domain_rsp: {domain_rsp}")
+                # mixin domain anme
+                self._domain_dict[domain] = domain_rsp
+            else:
+                log.warn(f"FolderCrawler - no domain found for {domain}")
+        except HTTPNotFound:
+            # One of the dmains not found, but continue through the list
+            log.warn(f"not found error for: {domain}")
+
+ 
+
 
 async def get_collections(app, root_id):
     """ Return the object ids for given root.
@@ -331,21 +386,17 @@ async def get_domains(request):
 
     # get domain info for each domain
     domains = []
+
+    crawler = FolderCrawler(app, domainNames, bucket=bucket, verbose=verbose)
+    await crawler.crawl()
     for domain in domainNames:
-        try:
-            # query DN's for domain json
-            # TBD - multicast to DN nodes
-            domain_key = bucket + domain
-            log.debug(f"getDomainJson for {domain_key}")
-            domain_json = await getDomainJson(app, domain_key, reload=True)
-            if domain_json:
-                domain_rsp = await get_domain_response(app, domain_json, verbose=verbose)
-                # mixin domain anme
-                domain_rsp["name"] = domain
-                domains.append(domain_rsp)
-        except HTTPNotFound:
-            # One of the dmains not found, but continue through the list
-            log.debug(f"not found error for: {domain}")
+        if domain in crawler._domain_dict:
+            domain_json = crawler._domain_dict[domain]
+            # mixin domain name
+            domain_json["name"] = domain
+            domains.append(domain_json)
+        else:
+            log.warn(f"domain: {domain} not found in crawler dict")
 
     return domains
 
