@@ -10,6 +10,7 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import unittest
+from os import path as pp
 import requests
 import time
 import json
@@ -853,8 +854,10 @@ class DomainTest(unittest.TestCase):
 
         # create some domains in the base_domain folder
         domain_count = 8
+        basenames = []
         for i in range(domain_count):
             domain = "domain_" + str(i) + ".h5"
+            basenames.append(domain)
             helper.setupDomain(folder + '/' + domain)
 
         headers = helper.getRequestHeaders()
@@ -874,6 +877,7 @@ class DomainTest(unittest.TestCase):
         for item in domains:
             self.assertTrue("name" in item)
             name = item["name"]
+            self.assertTrue(pp.basename(name) in basenames)
             self.assertEqual(name[0], '/')
             self.assertTrue(name[-1] != '/')
             self.assertTrue("owner" in item)
@@ -895,6 +899,7 @@ class DomainTest(unittest.TestCase):
         for item in part1:
             self.assertTrue("name" in item)
             name = item["name"]
+            self.assertTrue(pp.basename(name) in basenames[0:4])
             self.assertEqual(name[0], '/')
             self.assertTrue(name[-1] != '/')
              
@@ -911,6 +916,7 @@ class DomainTest(unittest.TestCase):
         for item in part2:
             self.assertTrue("name" in item)
             name = item["name"]
+            self.assertTrue(pp.basename(name) in basenames[4:8])
             self.assertTrue(name != params["Marker"])
 
         # empty sub-domains

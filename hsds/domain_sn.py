@@ -340,7 +340,7 @@ async def get_domains(request):
     marker = None        
     if "Marker" in request.rel_url.query:
         marker = request.rel_url.query["Marker"]
-        log.debug(f"got Marker request param: {marker}")
+        log.debug(f"got marker request param: {marker}")
 
     if "bucket" in params:
         bucket = params["bucket"]
@@ -375,9 +375,11 @@ async def get_domains(request):
             log.debug(f"got s3key: {s3key}")
             domain = "/" + s3key[:-1]
             if marker:
+                log.debug(f"compare marker {marker} and {domain}")
                 if marker == domain:
+                    log.debug(f"clearing marker")
                     marker = None
-                    continue
+                continue
             
             log.debug(f"adding domain: {domain} to domain list")
             domainNames.append(domain)
