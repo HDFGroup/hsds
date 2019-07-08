@@ -919,6 +919,21 @@ class DomainTest(unittest.TestCase):
             self.assertTrue(pp.basename(name) in basenames[4:8])
             self.assertTrue(name != params["Marker"])
 
+        # try using a regex pattern
+        pattern = "domain_[0,2,4,6]\.h5"
+        params = {"domain": folder+'/', "pattern": pattern}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("domains" in rspJson)
+        domains = rspJson["domains"]
+        self.assertEqual(len(domains), 4)
+        for item in domains:
+            self.assertTrue("name" in item)
+            name = item["name"]
+            self.assertTrue(pp.basename(name) in ("domain_0.h5", "domain_2.h5", "domain_4.h5", "domain_6.h5"))
+
+
         # empty sub-domains
         domain = helper.getTestDomain("tall.h5") + '/'
         params = {"domain": domain}

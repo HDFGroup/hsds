@@ -15,6 +15,8 @@
 from asyncio import CancelledError
 import asyncio
 import json
+import os.path as op
+import re
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPGone, HTTPInternalServerError, HTTPConflict
 from aiohttp import ClientResponseError
@@ -312,6 +314,14 @@ async def get_domains(request):
     else:
         prefix = request.rel_url.query["domain"]
 
+    if "pattern" not in request.rel_url.query:
+        pattern = None
+        regex = None
+    else:
+        pattern = request.rel_url.query["pattern"]
+        log.info(f"get_domains - using regex pattern: {pattern}")
+        regex = re.compile(pattern)
+
     # use "verbose" to pull extra info 
     if "verbose" in request.rel_url.query and request.rel_url.query["verbose"]:
         verbose = True
@@ -324,8 +334,6 @@ async def get_domains(request):
         msg = "Prefix must start with '/'"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)  
-
-    
 
     limit = None
     if "Limit" in request.rel_url.query:
@@ -374,6 +382,13 @@ async def get_domains(request):
                 continue
             log.debug(f"got s3key: {s3key}")
             domain = "/" + s3key[:-1]
+            if regex:
+                # do a pattern match on the basename
+                basename = op.basename(domain)
+                if not regex.match(basename):
+                    log.debug(f"get_domains - {basename} did not match regex: {pattern}")
+                    continue
+                    
             if marker:
                 log.debug(f"compare marker {marker} and {domain}")
                 if marker == domain:
