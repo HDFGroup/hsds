@@ -1193,7 +1193,6 @@ async def GET_Value(request):
             log.warn(f"Cancelled error on query read: {ce}")
             resp = await jsonResponse(request, None)  # TBD: what do return if client cancels
     else:
-        log.debug(f"chunk_ids: {chunk_ids}")
         try:
             resp = await doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=chunkinfo, bucket=bucket)
         except CancelledError as ce:
@@ -1263,6 +1262,9 @@ async def doQueryRead(request, chunk_ids, dset_json, slices, bucket=None):
 async def doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=None, bucket=None):
     app = request.app 
     loop = app["loop"]
+    log.info(f"doHyperSlabRead - number of chunk_ids: {len(chunk_ids)}")
+    log.debug(f"doHyperSlabRead - chunk_ids: {chunk_ids}")
+
 
     accept_type = getAcceptType(request)
     response_type = accept_type    # will adjust later if binary not possible

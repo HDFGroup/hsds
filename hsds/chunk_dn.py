@@ -125,6 +125,7 @@ async def getChunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset=
         # TBD - potential race condition?
         if obj_exists:
             pending_s3_read = app["pending_s3_read"]
+            
             if chunk_id in pending_s3_read:
                 # already a read in progress, wait for it to complete
                 read_start_time = pending_s3_read[chunk_id]
@@ -153,9 +154,8 @@ async def getChunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset=
                 else:
                     log.warn(f"expected to find {chunk_id} in pending_s3_read map")
 
-            
-            chunk_arr = np.fromstring(chunk_bytes, dtype=dt)
-            chunk_arr = chunk_arr.reshape(dims)
+                chunk_arr = np.fromstring(chunk_bytes, dtype=dt)
+                chunk_arr = chunk_arr.reshape(dims)
 
             log.debug(f"chunk size: {chunk_arr.size}") 
            

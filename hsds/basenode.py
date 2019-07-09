@@ -151,7 +151,9 @@ async def healthCheck(app):
                 log.warn(f"HTTPGone <{hg.code}> for health heck")
 
         svmem = psutil.virtual_memory()
-        log.debug(f"health check sleep: {sleep_secs}, vm: {svmem.percent}") 
+        num_tasks = len(asyncio.Task.all_tasks())
+        active_tasks = len([task for task in asyncio.Task.all_tasks() if not task.done()])
+        log.debug(f"health check sleep: {sleep_secs}, vm: {svmem.percent} num tasks: {num_tasks} active tasks: {active_tasks}") 
         await asyncio.sleep(sleep_secs)
 
 async def about(request):
