@@ -28,7 +28,6 @@ cfg = {
     'bucket_name': '',  # set to usee a default bucket, otherwise bucket param is needed for all requests
     'head_host': 'localhost',
     'head_port': 5100,
-    'an_port': 6100,
     'dn_host': 'localhost',
     'dn_port' : 6101,  # Start dn ports at 6101
     'sn_host': 'localhost',
