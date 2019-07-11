@@ -75,11 +75,11 @@ async def register(app):
     except OSError:
         log.error("failed to register")
 
-async def oio_register(app, oio_proxy):
+async def oio_register(app):
     """ register with oio conscience 
     """
     log.info("oio_register")
-   
+    oio_proxy = config.get("oio_proxy")
     host_ip = config.get("host_ip")
     if not host_ip:
         log.error("host ip not set")
@@ -113,22 +113,17 @@ async def healthCheck(app):
     calls headnode to verify vitals about this node (otherwise)"""
     log.info("health check start")
     sleep_secs = config.get("node_sleep_time")
-    
-    if config.get("oio_proxy"):
-        await check_conscience(app)
-        return 
-    
 
     head_url = getHeadUrl(app)
     while True:
         print("node_state:", app["node_state"])
         if app["node_state"] == "INITIALIZING" or (app["node_state"] == "WAITING" and app["node_number"] < 0):
             if config.get("oio_proxy"):
-                print('register oio')
+                await oio_register(app)
             else:
                 await register(app)
         elif config.get("oio_proxy"):
-            print("conciscience healthcheck")
+            log.info("todo: conscience healthcheck")
         else:
             # check in with the head node and make sure we are still active
             req_node = "{}/nodestate".format(head_url)
