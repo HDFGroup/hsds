@@ -89,11 +89,11 @@ async def oio_register(app):
         log.error("unexpected node type")
         return
     service_name = "hdf" + node_type
-    req = oio_proxy + "/v3.0/" + service_name + "/conscience/register"
+    req = oio_proxy + "/v3.0//conscience/register"
     log.info(f"conscience register: {req}")
     body = {
         "addr": host_ip + ":" + str(app["node_port"]),
-        "tags": { "stat.cpu": 100, "stat.idle": 100, "stat.io": 100 },
+        "tags": { "stat.cpu": 100, "tag.up": True},
         "type": service_name
     }
     rsp_json = await http_post(app, req, data=body)
@@ -117,13 +117,12 @@ async def healthCheck(app):
     head_url = getHeadUrl(app)
     while True:
         print("node_state:", app["node_state"])
-        if app["node_state"] == "INITIALIZING" or (app["node_state"] == "WAITING" and app["node_number"] < 0):
-            if config.get("oio_proxy"):
-                await oio_register(app)
-            else:
-                await register(app)
-        elif config.get("oio_proxy"):
-            log.info("todo: conscience healthcheck")
+        if config.get("oio_proxy"):
+            # for OIO post registration request every time interval
+            await oio_register(app)
+        elif app["node_state"] == "INITIALIZING" or (app["node_state"] == "WAITING" and app["node_number"] < 0):
+            # startup docker registration
+            await register(app)
         else:
             # check in with the head node and make sure we are still active
             req_node = "{}/nodestate".format(head_url)
