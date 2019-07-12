@@ -9,6 +9,7 @@
 # distribution tree.  If you do not have access to this file, you may        #
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
+import os
 import base64
 import hashlib
 import json
@@ -169,7 +170,13 @@ def initUserDB(app):
         # use salt key to verify passwords
         user_db = {}
     else:
-        password_file = config.get("password_file")
+        password_file = None
+        if "PASSWORD_FILE" in os.environ:
+            # need to fetch this directly from os.environ to
+            # have null override existing config value
+            password_file = os.environ["PASSWORD_FILE"] 
+        else:
+            password_file = config.get("password_file")
         if not password_file:
             log.info("No password file, allowing no-auth access")
             user_db = {}
