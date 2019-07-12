@@ -37,3 +37,26 @@ echo "PUBLIC_DNS:" $PUBLIC_DNS
 echo "OIO_PROXY:" $OIO_PROXY
 
 python hsds/servicenode.py
+
+####################
+#
+# The OpenIO conscience must be aware of new service types:
+#
+# Please append to /etc/oio/sds/OPENIO/conscience-0/conscience-0-services.conf:
+# [type:hdfsn]
+# score_expr=(num stat.cpu)
+# score_timeout=120
+# lock_at_first_register=false
+#
+# [type:hdfdn]
+# score_expr=(num stat.cpu)
+# score_timeout=120
+# lock_at_first_register=false
+#
+# And restart conscience
+# gridinit_cmd restart @conscience
+#
+# After maximun 30s, the new types should be visible in
+# $ curl http://{IP}:6006/v3.0/OPENIO/conscience/info?what=types
+# ["account","beanstalkd","hdfdn","hdfsn","meta0","meta1","meta2","oioproxy","rawx","rdir","redis","sqlx"]
+
