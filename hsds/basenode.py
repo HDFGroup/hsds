@@ -89,7 +89,7 @@ async def oio_register(app):
         log.error("unexpected node type")
         return
     service_name = "hdf" + node_type
-    req = oio_proxy + "/v3.0//conscience/register"
+    req = oio_proxy + "/v3.0/OPENIO/conscience/register"
     log.info(f"conscience register: {req}")
     body = {
         "addr": host_ip + ":" + str(app["node_port"]),
