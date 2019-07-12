@@ -22,6 +22,7 @@ from aiohttp.web_exceptions import HTTPNotFound, HTTPGone, HTTPInternalServerErr
 
 from aiohttp.client_exceptions import ClientError
 from aiobotocore import get_session
+from asyncio import CancelledError
 
 
 import config
@@ -90,15 +91,23 @@ async def oio_register(app):
         return
     service_name = "hdf" + node_type
     req = oio_proxy + "/v3.0/OPENIO/conscience/register"
-    log.info(f"conscience register: {req}")
+    
     body = {
         "addr": host_ip + ":" + str(app["node_port"]),
         "tags": { "stat.cpu": 100, "tag.up": True},
         "type": service_name
     }
-    rsp_json = await http_post(app, req, data=body)
-    log.info(f"got response: {rsp_json}")
-
+    log.debug(f"conscience register: body: {body}")
+    try:
+        await http_post(app, req, data=body)
+    except ClientError as client_exception:
+        log.error(f"got ClientError registering with oio_proxy: {client_exception}")
+        return
+    except CancelledError as cancelled_exception:
+        log.error(f"got CanceeledError registering with oio_proxy: {cancelled_exception}")
+        return
+    log.info("oio registration successful")
+    
 
 async def check_conscience(app):
     oio_proxy = config.get("oio_proxy")
@@ -117,9 +126,10 @@ async def healthCheck(app):
     head_url = getHeadUrl(app)
     while True:
         print("node_state:", app["node_state"])
-        if config.get("oio_proxy"):
+        if "oio_proxy" in app:
             # for OIO post registration request every time interval
             await oio_register(app)
+
         elif app["node_state"] == "INITIALIZING" or (app["node_state"] == "WAITING" and app["node_number"] < 0):
             # startup docker registration
             await register(app)
