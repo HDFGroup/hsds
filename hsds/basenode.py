@@ -209,10 +209,14 @@ async def oio_register(app):
     node_index = 0
     node_count = len(addrs)
     dn_urls = {}
+    this_node_found = False
+    this_node_id = app["id"]
     for addr in addrs:
         dn_node = dn_node_map[addr]
         log.debug(f"dn_node for index {node_index}: {dn_node}")
         node_id = dn_node["node_id"]
+        if node_id == this_node_id:
+            this_node_found = True
         node_number = dn_node["node_number"]
         dn_urls[node_number] = "http://" + dn_node["addr"]
         if node_index != node_number or dn_node["node_count"] != node_count:
@@ -239,11 +243,15 @@ async def oio_register(app):
     if invalid_count == 0:
         log.debug("no invalid nodes!")
         if app["node_state"] != "READY":
-            log.info("setting node state to READY")
-            app["node_state"] = "READY"
-            if app["node_type"] == "sn" and app["node_number"] == -1:
-                # node number shouldn't matter for SN nodes, so set to 1
-                app["node_number"] = 1
+            if app["node_type"] == "dn" and not this_node_found:
+                # don't go to READY unless this node shows up
+                log.info(f"node {this_node_id} not yet showing in proxy list, stay in INITIALIZING")
+            else:
+                log.info("setting node state to READY")
+                app["node_state"] = "READY"
+                if app["node_type"] == "sn" and app["node_number"] == -1:
+                    # node number shouldn't matter for SN nodes, so set to 1
+                    app["node_number"] = 1
         if app["node_count"] != node_count:
             log.info(f"setting node_count to: {node_count}")
             app["node_count"] = node_count
