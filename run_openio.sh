@@ -24,6 +24,7 @@ export OIO_PROXY=http://192.168.1.121:6006
 export OIO_NS=OPENIO
 export HOST_IP=192.168.1.100
 export PASSWORD_FILE=""
+export ASYNC_SLEEP_TIME=60
 
 if [ $# -eq 2 ]; then
     export SN_PORT=$2
@@ -34,10 +35,10 @@ else
 fi
 
 if [ $1 == "sn" ]; then
-    python hsds/servicenode.py
+    python -u hsds/servicenode.py
 elif [ $1 == "dn" ]; then
     echo "run dn"
-    python hsds/datanode.py
+    python -u hsds/datanode.py
 else
     echo $USAGE
 fi
