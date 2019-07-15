@@ -112,8 +112,8 @@ async def oio_register(app):
     """
     log.info("oio_register")
     
-    oio_proxy = config.get("oio_proxy")
-    host_ip = config.get("host_ip")
+    oio_proxy = app["oio_proxy"]
+    host_ip = app["host_ip"]
     if not host_ip:
         log.error("host ip not set")
         return
@@ -150,7 +150,7 @@ async def oio_register(app):
     except CancelledError as cancelled_exception:
         log.error(f"got CanceeledError listing dn nodes with oio_proxy: {cancelled_exception}")
         return
-    log.info(f"got {len(dn_node_list)} conscience list item")
+    log.info(f"got {len(dn_node_list)} conscience list items")
     # create map keyed by dn addr
     dn_node_map = {}
     for dn_node in dn_node_list:
@@ -178,7 +178,7 @@ async def oio_register(app):
             log.error("expecteed to find node key in info resp")
             continue
         info_node = info_rsp["node"]
-        log.info(f"got info resp: {info_node}")
+        log.debug(f"got info resp: {info_node}")
         for key in ("type", "id", "node_number", "node_count"):
             if key not in info_node:
                 log.error(f"unexpected node type in node state, expected to find key: {key}")
@@ -265,7 +265,6 @@ async def healthCheck(app):
     await asyncio.sleep(1)
     log.info("health check start")
     sleep_secs = config.get("node_sleep_time")
-
 
     while True:
         print("node_state:", app["node_state"])
@@ -510,6 +509,8 @@ def baseInit(loop, node_type):
         app["oio_proxy"] = config.get("oio_proxy")
     if config.get("host_ip"):
         app["host_ip"] = config.get("host_ip")
+    else:
+        app["host_ip"] = "127.0.0.1"
     
     log.app = app
     # save session object

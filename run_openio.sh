@@ -15,13 +15,12 @@ unset AWS_S3_GATEWAY
 # for lakesamm
 export AWS_ACCESS_KEY_ID=demo:demo
 export AWS_SECRET_ACCESS_KEY=DEMO_PASS
-export BUCKET_NAME=hsds.lakesamm
+export BUCKET_NAME=hsds.oio.test
 export AWS_REGION=us-east-1
 export AWS_S3_GATEWAY="[http://192.168.1.121:6007,  http://192.168.1.122:6007, http://192.168.1.123:6007]"
-export HSDS_ENDPOINT=http://hsds.lakesamm.test
+export HSDS_ENDPOINT=http://192.168.1.100:8888
 export LOG_LEVEL=DEBUG
 export OIO_PROXY=http://192.168.1.121:6006
-export OIO_NS=OPENIO
 export HOST_IP=192.168.1.100
 export PASSWORD_FILE=""
 export ASYNC_SLEEP_TIME=60
