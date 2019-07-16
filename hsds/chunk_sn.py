@@ -14,6 +14,7 @@
 # handles dataset /value requests
 # 
 import asyncio
+import json
 from asyncio import CancelledError
 import base64 
 import numpy as np
@@ -623,7 +624,169 @@ async def getChunkInfoMap(app, dset_id, dset_json, chunk_ids, bucket=None):
     log.debug(f"returning chunkinfo_map: {chunkinfo_map}")
     return chunkinfo_map
 
+"""
+  Update given chunk based on query and query_update value
+"""
+async def write_chunk_query(app, chunk_id, dset_json, slices, query, query_update, limit, bucket=None):
+    """ update the chunk selection from the DN based on query string
+    chunk_id: id of chunk to write to
+    chunk_sel: chunk-relative selection to read from
+    np_arr: numpy array to store read bytes
+    """
+    # TBD = see if this code can be merged with the read_chunk_query function
+    msg = f"write_chunk_query, chunk_id: {chunk_id}, slices: {slices}, query: {query}, query_udpate: {query_update}"
+    log.info(msg)
 
+    req = getDataNodeUrl(app, chunk_id)
+    req += "/chunks/" + chunk_id 
+    log.debug("GET chunk req: " + req)
+    client = get_http_client(app)
+  
+    layout = getChunkLayout(dset_json)
+    chunk_sel = getChunkCoverage(chunk_id, slices, layout)
+    
+    # pass query as param
+    params = {}
+    params["query"] = query
+    if limit > 0:
+        params["Limit"] = limit
+    if bucket:
+        params["bucket"] = bucket
+          
+    chunk_shape = getSelectionShape(chunk_sel)
+    log.debug(f"chunk_shape: {chunk_shape}")
+    setSliceQueryParam(params, chunk_sel)  
+    dn_rsp = None
+    try:
+        async with client.put(req, data=json.dumps(query_update), params=params) as rsp:
+            log.debug(f"http_get {req} status: <{rsp.status}>")
+            if rsp.status == 200:
+                dn_rsp = await rsp.json()  # read response as json
+                log.debug(f"got query data: {dn_rsp}")
+            elif rsp.status == 404:
+                # no data, don't return any results
+                dn_rsp = {"index": [], "value": []}
+            elif rsp.status == 400:
+                log.warn(f"request {req} failed withj code {rsp.status}")
+                raise HTTPBadRequest()
+            else:
+                log.error(f"request {req} failed with code: {rsp.status}")
+                raise HTTPInternalServerError()
+            
+    except ClientError as ce:
+        log.error(f"Error for http_get({req}): {ce} ")
+        raise HTTPInternalServerError()
+    except CancelledError as cle:
+        log.warn(f"CancelledError for http_get({req}): {cle}")
+        return
+    
+    return dn_rsp
+
+"""
+Helper function for PUT queries
+"""
+async def doPutQuery(request, query_update, dset_json):
+    app = request.app
+    params = request.rel_url.query
+    if not isinstance(query_update, dict):
+        msg = f"Expected dict type for PUT query body, but got: {type(query_update)}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    query = params["query"]
+    bucket = None
+    if "bucket" in params:
+        bucket = params["bucket"]
+    datashape = dset_json["shape"]    
+    dims = getShapeDims(datashape)
+    num_rows = dims[0]
+    log.debug(f"doPutQuery - num_rows: {num_rows}")
+
+    type_json = dset_json["type"]
+    log.debug(f"doPutQuery - type json: {type_json}")
+
+    if type_json["class"] != 'H5T_COMPOUND':
+        msg = "Expected compound type for PUT query operation"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    fields = type_json["fields"]
+    field_names = set()
+    for field in fields:
+        field_names.add(field['name'])
+    for key in query_update:
+        if key not in field_names:
+            msg = f"Unknown fieldname: {key} in update body"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+    limit = 0
+    if "Limit" in params:
+        try:
+            limit = int(params["Limit"])
+        except ValueError:
+            msg = "Invalid Limit query param"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+    slices = []
+    dim_slice = getSliceQueryParam(request, 0, dims[0])
+    slices.append(dim_slice)
+    log.info(f"doPutQuery - got dim_slice: {dim_slice}, type: {type(dim_slice)}")
+    
+    layout = getChunkLayout(dset_json) 
+
+    num_chunks = getNumChunks(slices, layout)
+    log.debug(f"doPutQuery - num_chunks: {num_chunks}")
+    max_chunks = int(config.get('max_chunks_per_request'))
+    if num_chunks > max_chunks:
+        log.warn(f"doPutQuery - too many chunks: {num_chunks}, {max_chunks}")
+        raise HTTPRequestEntityTooLarge(num_chunks, max_chunks)
+
+    dset_id = dset_json["id"]
+         
+    try: 
+        chunk_ids = getChunkIds(dset_id, slices, layout)
+    except ValueError:
+        log.warn("doPutQuery - getChunkIds failed")
+        raise HTTPInternalServerError()
+    log.debug(f"doPutQuery - chunk_ids: {chunk_ids}")
+
+    node_count = app['node_count']
+    resp_index = [] 
+    resp_value = []
+    chunk_index = 0
+    num_chunks = len(chunk_ids)
+    count = 0
+
+    while chunk_index < num_chunks:
+        next_chunks = []
+        for i in range(node_count):
+            next_chunks.append(chunk_ids[chunk_index])
+            chunk_index += 1
+            if chunk_index >= num_chunks:
+                break
+        log.debug(f"doPutQuery - next chunk ids: {next_chunks}")
+        # run query on DN nodes
+        # do write_chunks sequentially do avoid exceeding the limit value
+        for chunk_id in next_chunks:
+            dn_rsp = await write_chunk_query(app, chunk_id, dset_json, slices, query, query_update, limit, bucket=bucket)
+            log.debug(f"write_chunk_query: {dn_rsp}")
+            num_hits = len(dn_rsp["index"])
+            count += num_hits
+            log.debug(f"doPutQuery - got {num_hits} for chunk_id: {chunk_id}, total: {count}")
+            resp_index.extend(dn_rsp["index"])
+            resp_value.extend(dn_rsp["value"])
+            if limit > 0 and count >= limit:
+                log.debug(f"doPutQuery - reached limit")
+                break
+        if limit > 0 and count >= limit:
+            # break out of outer loop
+            break
+    
+    resp_json = { "index": resp_index, "value": resp_value}
+    resp_json["hrefs"] = get_hrefs(request, dset_json)
+    log.debug(f"doPutQuery - done returning {count} values")
+    return resp_json
 
 """
  Handler for PUT /<dset_uuid>/value request
@@ -634,6 +797,7 @@ async def PUT_Value(request):
     loop = app["loop"]
     bucket = None
     body = None
+    query = None
     json_data = None
     params = request.rel_url.query
     append_rows = None # this is a append update or not
@@ -660,7 +824,13 @@ async def PUT_Value(request):
         log.info(f"append_dim: {append_dim}")
     if "bucket" in params:
         bucket = params["bucket"]
-
+    if "query" in params:
+        if "append" in params:
+            msg = "Query string can not be used with append parameter"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        query = params["query"]
+         
     dset_id = request.match_info.get('id')
     if not dset_id:
         msg = "Missing dataset id"
@@ -699,6 +869,7 @@ async def PUT_Value(request):
         msg = "PUT Value with no body"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+
     if request_type == "json":
         body = await request.json()
         if "append" in body and body["append"]:
@@ -739,6 +910,11 @@ async def PUT_Value(request):
     maxdims = getDsetMaxDims(dset_json)
     rank = len(dims)
 
+    if query and rank > 1:
+        msg = "Query string is not supported for multidimensional arrays"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
     layout = getChunkLayout(dset_json)
     deflate_level = getDeflateLevel(dset_json)
      
@@ -750,10 +926,21 @@ async def PUT_Value(request):
         msg = "Only JSON is supported for variable length data types"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    dset_dtype = createDataType(type_json)  # np datatype
+
+    if query and request_type != "json":
+        msg = "Only JSON is supported for query updates"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
     
     await validateAction(app, domain, dset_id, username, "update")
+
+    if query:
+        # divert here if we are doing a put query
+        put_query_rsp = await doPutQuery(request, body, dset_json)
+        resp = await jsonResponse(request, put_query_rsp)
+        return resp
  
+    dset_dtype = createDataType(type_json)  # np datatype
     binary_data = None
     np_shape = None  # expected shape of input data
     points = None # used for point selection writes
@@ -785,7 +972,6 @@ async def PUT_Value(request):
     else:
         body_json = None
 
-    
     if request_type == "json":
         if "value" in body:
             json_data = body["value"]

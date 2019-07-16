@@ -143,7 +143,7 @@ async def getChunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset=
             if chunk_arr is None:
                 if chunk_id not in pending_s3_read:
                     pending_s3_read[chunk_id] = time.time()
-                log.debug("Reading chunk {} from S3".format(s3key))
+                log.debug(f"Reading chunk {s3key} from S3")
                 
                 chunk_bytes = await getS3Bytes(app, s3key, shuffle=shuffle, deflate_level=deflate_level, s3offset=s3offset, s3size=s3size, bucket=bucket)
                 if chunk_id in pending_s3_read:
@@ -195,14 +195,17 @@ async def PUT_Chunk(request):
     log.request(request)
     app = request.app 
     params = request.rel_url.query
-  
+    query = None
+    if "query" in params:
+        query = params["query"]
+        log.info(f"PUT_Chunk query: {query}")
     chunk_id = request.match_info.get('id')
     if not chunk_id:
         msg = "Missing chunk id"
         log.error(msg)
         raise HTTPBadRequest(reason=msg)
     if not isValidUuid(chunk_id, "Chunk"):
-        msg = "Invalid chunk id: {}".format(chunk_id)
+        msg = f"Invalid chunk id: {chunk_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
   
@@ -216,14 +219,17 @@ async def PUT_Chunk(request):
     else:
         bucket = None
 
-    content_type = "application/octet-stream"
+    if query:
+        expected_content_type = "text/plain; charset=utf-8"
+    else:
+        expected_content_type = "application/octet-stream"
     if "Content-Type" in request.headers:
         # client should use "application/octet-stream" for binary transfer
         content_type = request.headers["Content-Type"]
-    if content_type != "application/octet-stream":
-        msg = f"Unexpected content_type: {content_type}"
-        log.error(msg)
-        raise HTTPBadRequest(reason=msg)
+        if content_type != expected_content_type:
+            msg = f"Unexpected content_type: {content_type}"
+            log.error(msg)
+            raise HTTPBadRequest(reason=msg)
 
     validateInPartition(app, chunk_id)
     if "dset" in params:
@@ -280,42 +286,118 @@ async def PUT_Chunk(request):
     num_elements = 1
     for extent in mshape:
         num_elements *= extent
-        
-    # check that the content_length is what we expect
-    if itemsize != 'H5T_VARIABLE':
-        log.debug("expect content_length: {}".format(num_elements*itemsize))
-    log.debug(f"actual content_length: {request.content_length}")
 
-    if itemsize != 'H5T_VARIABLE' and (num_elements * itemsize) != request.content_length:
-        msg = "Expected content_length of: {}, but got: {}".format(num_elements*itemsize, request.content_length)
-        log.error(msg)
-        raise HTTPBadRequest(reason=msg)
-
-     # create a numpy array for incoming data
-    input_bytes = await request_read(request)  # TBD - will it cause problems when failures are raised before reading data?
-    if len(input_bytes) != request.content_length:
-        msg = "Read {} bytes, expecting: {}".format(len(input_bytes), request.content_length)
-        log.error(msg)
-        raise HTTPInternalServerError()
+    resp = {}
+    query_update = None
+    limit = 0
+    chunk_init=True
+    input_arr = None
+    if query:
+        if not dt.fields:
+            log.error("expected compound dtype for PUT query")
+            raise HTTPInternalServerError()
+        query_update = await request.json()
+        log.debug(f"query_update: {query_update}")
+        if "Limit" in params:
+            limit = int(params["Limit"])
+        chunk_init = False
+    else:
+        # regular chunk update
         
-    input_arr = bytesToArray(input_bytes, dt, mshape)
+        # check that the content_length is what we expect
+        if itemsize != 'H5T_VARIABLE':
+            log.debug(f"expect content_length: {num_elements*itemsize}")
+        log.debug(f"actual content_length: {request.content_length}")
+
+        if itemsize != 'H5T_VARIABLE' and (num_elements * itemsize) != request.content_length:
+            msg = f"Expected content_length of: {num_elements*itemsize}, but got: {request.content_length}"
+            log.error(msg)
+            raise HTTPBadRequest(reason=msg)
+
+        # create a numpy array for incoming data
+        input_bytes = await request_read(request)  # TBD - will it cause problems when failures are raised before reading data?
+        if len(input_bytes) != request.content_length:
+            msg = f"Read {len(input_bytes)} bytes, expecting: {request.content_length}"
+            log.error(msg)
+            raise HTTPInternalServerError()
+        
+        input_arr = bytesToArray(input_bytes, dt, mshape)
 
     # TBD: Skip read if the input shape is the entire chunk?
-    chunk_arr = await getChunk(app, chunk_id, dset_json, chunk_init=True, bucket=bucket)
+    chunk_arr = await getChunk(app, chunk_id, dset_json, chunk_init=chunk_init, bucket=bucket)
+    is_dirty = False
+    if query:
+        values = []
+        indices = []
+        if chunk_arr is not None:
+            # do query selection
+            limit = 0
+            if "Limit" in params:
+                limit = int(params["Limit"])
 
-    # update chunk array
-    chunk_arr[selection] = input_arr
-    chunk_cache = app["chunk_cache"]
-    chunk_cache.setDirty(chunk_id)
-    log.info(f"PUT_Chunk dirty cache count: {chunk_cache.dirtyCount}")
+            field_names = list(dt.fields.keys())
+            replace_mask = [None,] * len(field_names)
+            for i in range(len(field_names)):
+                field_name = field_names[i]
+                if field_name in query_update:
+                    replace_mask[i] = query_update[field_name]
+            log.debug(f"replace_mask: {replace_mask}")
 
-    # async write to S3   
-    dirty_ids = app["dirty_ids"]
-    now = int(time.time())
-    dirty_ids[chunk_id] = (now, bucket)
+            x = chunk_arr[selection]
+            log.debug(f"put_query - x: {x}")
+            eval_str = getEvalStr(query, "x", field_names)
+            log.debug(f"put_query - eval_str: {eval_str}")
+            where_result = np.where(eval(eval_str))
+            log.debug(f"put_query - where_result: {where_result}")
+            where_result_index = where_result[0]
+            log.debug(f"put_query - whare_result index: {where_result_index}")
+            log.debug(f"put_query - boolean selection: {x[where_result_index]}") 
+            s = selection[0]
+            count = 0
+            for index in where_result_index:
+                log.debug(f"put_query - index: {index}")
+                value = x[index]
+                log.debug(f"put_query - original value: {value}")
+                for i in range(len(field_names)):
+                    if replace_mask[i] is not None:
+                        value[i] = replace_mask[i]
+                log.debug(f"put_query - modified value: {value}")
+                x[index] = value
+
+                json_val = bytesArrayToList(value)
+                log.debug(f"put_query - json_value: {json_val}")
+                json_index = index.tolist() * s.step + s.start  # adjust for selection
+                indices.append(json_index)
+                values.append(json_val)
+                count += 1
+                is_dirty = True
+                if limit > 0 and count >= limit:
+                    log.info("put_query - got limit items")
+                    break
+         
+        query_result = {}
+        query_result["index"] = indices
+        query_result["value"] = values
+        log.info(f"query_result retiurning: {len(indices)} rows")
+        log.debug(f"query_result: {query_result}")
+        resp = json_response(query_result)
+    else:
+        # update chunk array
+        chunk_arr[selection] = input_arr
+        is_dirty = True
+        resp = json_response({}, status=201)
+
+    if is_dirty:
+        chunk_cache = app["chunk_cache"]
+        chunk_cache.setDirty(chunk_id)
+        log.info(f"PUT_Chunk dirty cache count: {chunk_cache.dirtyCount}")
+
+        # async write to S3   
+        dirty_ids = app["dirty_ids"]
+        now = int(time.time())
+        dirty_ids[chunk_id] = (now, bucket)
     
     # chunk update successful     
-    resp = json_response({}, status=201)
     log.response(request, resp=resp)
     return resp
 
@@ -339,7 +421,7 @@ async def GET_Chunk(request):
         raise HTTPBadRequest(reason=msg)
     
     validateInPartition(app, chunk_id)
-    log.debug("request params: {}".format(list(params.keys())))
+    log.debug(f"request params: {params.keys()}")
     
     s3path = None
     s3offset = 0
@@ -378,12 +460,10 @@ async def GET_Chunk(request):
     type_json = dset_json["type"]
      
     dims = getChunkLayout(dset_json)
-    log.debug("got dims: {}".format(dims))
+    log.debug(f"got dims: {dims}")
     rank = len(dims)  
          
     # get chunk selection from query params
-    if "select" in params:
-        log.debug("select: {}".format(params["select"]))
     selection = []
     for i in range(rank):
         dim_slice = getSliceQueryParam(request, i, dims[i])
@@ -405,13 +485,13 @@ async def GET_Chunk(request):
         raise HTTPBadRequest(reason=msg)
     for i in range(rank):
         s = selection[i]
-        log.debug("selection[{}]: {}".format(i, s))
+        log.debug(f"selection[{i}]: {s}")
 
     chunk_arr = await getChunk(app, chunk_id, dset_json, bucket=bucket, s3path=s3path, s3offset=s3offset, s3size=s3size)
 
     if chunk_arr is None:
         # return a 404
-        msg = "Chunk {} does not exist".format(chunk_id)
+        msg = f"Chunk {chunk_id} does not exist"
         log.info(msg)
         raise HTTPNotFound()
      
@@ -437,22 +517,22 @@ async def GET_Chunk(request):
             field_names = list(dt.fields.keys())
 
         x = chunk_arr[selection]
-        log.debug("x: {}".format(x))
+        log.debug(f"x: {x}")
         eval_str = getEvalStr(query, "x", field_names)
-        log.debug("eval_str: {}".format(eval_str))
+        log.debug(f"eval_str: {eval_str}")
         where_result = np.where(eval(eval_str))
-        log.debug("where_result: {}".format(where_result))
+        log.debug(f"where_result: {where_result}")
         where_result_index = where_result[0]
-        log.debug("whare_result index: {}".format(where_result_index))
-        log.debug("boolean selection: {}".format(x[where_result_index]))
+        log.debug(f"whare_result index: {where_result_index}")
+        log.debug(f"boolean selection: {x[where_result_index]}")
         s = selection[0]
         count = 0
         for index in where_result_index:
-            log.debug("index: {}".format(index))
+            log.debug(f"index: {index}")
             value = x[index].tolist()
-            log.debug("value: {}".format(value))
+            log.debug(f"value: {value}")
             json_val = bytesArrayToList(value)
-            log.debug("json_value: {}".format(json_val))
+            log.debug(f"json_value: {json_val}")
             json_index = index.tolist() * s.step + s.start  # adjust for selection
             indices.append(json_index)
             values.append(json_val)
@@ -502,7 +582,7 @@ async def POST_Chunk(request):
         num_points = int(params["count"])
 
     if "action" in params and params["action"] == "put":
-        log.info("POST Chunk put points, num_points: {}".format(num_points))
+        log.info(f"POST Chunk put points, num_points: {num_points}")
 
         put_points = True
     else:
@@ -549,7 +629,7 @@ async def POST_Chunk(request):
         raise HTTPBadRequest(reason=msg)
 
     validateInPartition(app, chunk_id)
-    log.debug("request params: {}".format(list(params.keys())))
+    log.debug(f"request params: {list(params.keys())}")
     if "dset" in params:
         msg = "Unexpected dset in POST request"
         log.error(msg)
@@ -573,7 +653,7 @@ async def POST_Chunk(request):
         # client should use "application/octet-stream" for binary transfer
         content_type = request.headers["Content-Type"]
     if content_type != "application/octet-stream":
-        msg = "Unexpected content_type: {}".format(content_type)
+        msg = f"Unexpected content_type: {content_type}"
         log.error(msg)
         raise HTTPBadRequest(reason=msg)
      
@@ -592,7 +672,7 @@ async def POST_Chunk(request):
     # create a numpy array for incoming points
     input_bytes = await request_read(request) 
     if len(input_bytes) != request.content_length:
-        msg = "Read {} bytes, expecting: {}".format(len(input_bytes), request.content_length)
+        msg = f"Read {len(input_bytes)} bytes, expecting: {request.content_length}"
         log.error(msg)
         raise HTTPInternalServerError()
 
@@ -616,11 +696,11 @@ async def POST_Chunk(request):
         if rank == 1:
             coord_type_str = "uint64"
         else:
-            coord_type_str = "({},)uint64".format(rank)
+            coord_type_str = f"({rank},)uint64"
         comp_dtype = np.dtype([("coord", np.dtype(coord_type_str)), ("value", dset_dtype)])
         point_arr = np.fromstring(input_bytes, dtype=comp_dtype)
         if len(point_arr) != num_points:
-            msg = "Unexpected size of point array, got: {} expected: {}".format(len(point_arr), num_points)
+            msg = f"Unexpected size of point array, got: {len(point_arr)} expected: {num_points}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         for i in range(num_points):
