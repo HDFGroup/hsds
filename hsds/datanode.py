@@ -162,7 +162,7 @@ async def bucketGC(app):
 # Main
 #
 
-if __name__ == '__main__':
+def main():
     log.info("datanode start")
     loop = asyncio.get_event_loop()
 
@@ -207,3 +207,6 @@ if __name__ == '__main__':
     port = int(config.get("dn_port"))
     log.info(f"run_app on port: {port}")
     run_app(app, port=port)
+
+if __name__ == '__main__':
+    main()
