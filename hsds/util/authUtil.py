@@ -9,6 +9,7 @@
 # distribution tree.  If you do not have access to this file, you may        #
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
+import os
 import base64
 import hashlib
 import json
@@ -169,9 +170,16 @@ def initUserDB(app):
         # use salt key to verify passwords
         user_db = {}
     else:
-        password_file = config.get("password_file")
+        password_file = None
+        if "PASSWORD_FILE" in os.environ:
+            # need to fetch this directly from os.environ to
+            # have null override existing config value
+            password_file = os.environ["PASSWORD_FILE"] 
+        else:
+            password_file = config.get("password_file")
         if not password_file:
             log.info("No password file, allowing no-auth access")
+            app["no_auth"] = True  # flag so we know we are in no auth mode
             user_db = {}
         else:
             log.info("Loading password file: {}".format(password_file))
@@ -243,6 +251,7 @@ async def validateUserPassword(app, username, password):
         throws exception if not valid
     Note: make this async since we'll eventually need some sort of http request to validate user/passwords
     """
+    log.debug(f"validateUserPassword username: {username}")
     
     if not username:
         log.info('validateUserPassword - null user')
@@ -258,14 +267,14 @@ async def validateUserPassword(app, username, password):
         raise HTTPInternalServerError()  # 500
     user_db = app["user_db"]    
     if username not in user_db:
-        if config.get("AWS_DYNAMODB_USERS_TABLE"):
+        if "no_auth" in app and app["no_auth"]:
+            log.info(f"no-auth access for user: {username}")
+            user_db[username] = {"pwd": password}
+        elif config.get("AWS_DYNAMODB_USERS_TABLE"):
             # look up in Dyanmo db - will throw exception if user not found
             await validateUserPasswordDynamoDB(app, username, password)
         elif config.get("PASSWORD_SALT"):
             validatePasswordSHA512(app, username, password)
-        elif not config.get("password_file"):
-            log.info(f"no-auth access for user: {username}")
-            user_db[username] = {"pwd": password}
         else:
             log.info("user not found")
             raise HTTPUnauthorized() # 401   

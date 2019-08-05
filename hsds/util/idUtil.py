@@ -367,16 +367,16 @@ def getDataNodeUrl(app, obj_id):
     """ Return host/port for datanode for given obj_id.
     Throw exception if service is not ready"""
     dn_urls = app["dn_urls"]
-    node_number = app["node_number"]
-    if app["node_state"] != "READY" or node_number not in dn_urls:
-        log.info("Node_state:".format(app["node_state"]))
-        log.info("node_number:".format(node_number))
+    node_count = app["node_count"]
+    node_state = app["node_state"]
+    if node_state!= "READY" or node_count <= 0 or node_count != len(dn_urls):
+        log.info(f"getDataNodeUrl returning 503 - node_state: {node_state} node count: {node_count}")
         msg="Service not ready"
         log.warn(msg)
         raise HTTPServiceUnavailable()
-    dn_number = getObjPartition(obj_id, app['node_count'])
-      
+    dn_number = getObjPartition(obj_id, node_count) 
     url = dn_urls[dn_number]
+    log.debug(f"got dn_url: {url} for obj_id: {obj_id}")
     return url
 
 def getDataNodeUrls(app):

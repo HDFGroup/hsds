@@ -84,7 +84,7 @@ async def bucketScan(app):
  
     log.info("bucketScan start")
 
-    async_sleep_time = config.get("async_sleep_time")
+    async_sleep_time = int(config.get("async_sleep_time"))
     log.info("async_sleep_time: {}".format(async_sleep_time))
      
     # update/initialize root object before starting node updates
@@ -92,7 +92,7 @@ async def bucketScan(app):
     while True:  
         if app["node_state"] != "READY":
             log.info("bucketScan waiting for Node state to be READY")
-            await asyncio.sleep(1)
+            await asyncio.sleep(async_sleep_time)
             continue  # wait for READY state
 
         root_scan_ids = app["root_scan_ids"]
@@ -119,7 +119,7 @@ async def bucketGC(app):
     """ remove objects from db for any deleted root groups or datasets
     """
     log.info("bucketGC start")
-    async_sleep_time = config.get("async_sleep_time")
+    async_sleep_time = int(config.get("async_sleep_time"))
     log.info("async_sleep_time: {}".format(async_sleep_time))
      
     # update/initialize root object before starting GC
@@ -127,7 +127,7 @@ async def bucketGC(app):
     while True:  
         if app["node_state"] != "READY":
             log.info("bucketGC - waiting for Node state to be READY")
-            await asyncio.sleep(1)
+            await asyncio.sleep(async_sleep_time)
             continue  # wait for READY state
 
         gc_ids = app["gc_ids"]

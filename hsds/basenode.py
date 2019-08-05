@@ -22,6 +22,7 @@ from aiohttp.web_exceptions import HTTPNotFound, HTTPGone, HTTPInternalServerErr
 
 from aiohttp.client_exceptions import ClientError
 from aiobotocore import get_session
+from asyncio import CancelledError
 
 
 import config
@@ -38,16 +39,14 @@ def getVersion():
 
 def getHeadUrl(app):
     head_url = None
-    if "oio_proxy" in app:
-        head_url = app["oio_proxy"]
+    
+    if head_url in app:
+        head_url = app["head_url"]
+    elif config.get("head_endpoint"):
+        head_url = config.get("head_endpoint")
     else:
-        if head_url in app:
-            head_url = app["head_url"]
-        elif config.get("head_endpoint"):
-            head_url = config.get("head_endpoint")
-        else:
-            head_port = config.get("head_port")
-            head_url = f"http://hsds_head:{head_port}"
+        head_port = config.get("head_port")
+        head_url = f"http://hsds_head:{head_port}"
     log.debug(f"head_url: {head_url}")
     return head_url
 
@@ -75,12 +74,46 @@ async def register(app):
     except OSError:
         log.error("failed to register")
 
+async def get_info(app, url):
+    """
+    Invoke the /info request on the indicated url and return the response
+    """
+    req = url + "/info"
+    log.info(f"get_info({url})")
+    try:
+        rsp_json = await http_get(app, req)
+        if "node" not in rsp_json:
+            log.error("Unexpected response from node")
+            return None
+                
+    except OSError as ose:
+        log.warn("OSError for req: {}: {}".format(req, str(ose)))
+        return None
+                
+    except HTTPInternalServerError as hpe:
+        log.warn(f"HTTPInternalServerError for req {req}: {hpe}")
+        # node has gone away?
+        return None
+    
+    except HTTPNotFound as nfe:
+        log.warn(f"HTTPNotFound error for req {req}: {nfe}")
+        # node has gone away?
+        return None
+               
+    except TimeoutError as toe:
+        log.warn("Timeout error for req: {}: {}".format(req, str(toe)))
+        # node has gone away?
+        return None
+    return rsp_json
+                 
+
 async def oio_register(app):
     """ register with oio conscience 
     """
     log.info("oio_register")
-    oio_proxy = config.get("oio_proxy")
-    host_ip = config.get("host_ip")
+    
+    oio_proxy = app["oio_proxy"]
+    host_ip = app["host_ip"]
     if not host_ip:
         log.error("host ip not set")
         return
@@ -89,42 +122,170 @@ async def oio_register(app):
         log.error("unexpected node type")
         return
     service_name = "hdf" + node_type
-    req = oio_proxy + "/v3.0//conscience/register"
-    log.info(f"conscience register: {req}")
+    req = oio_proxy + "/v3.0/OPENIO/conscience/register"
+    
     body = {
         "addr": host_ip + ":" + str(app["node_port"]),
         "tags": { "stat.cpu": 100, "tag.up": True},
         "type": service_name
     }
-    rsp_json = await http_post(app, req, data=body)
-    log.info(f"got response: {rsp_json}")
+    log.debug(f"conscience register: body: {body}")
+    try:
+        await http_post(app, req, data=body)
+    except ClientError as client_exception:
+        log.error(f"got ClientError registering with oio_proxy: {client_exception}")
+        return
+    except CancelledError as cancelled_exception:
+        log.error(f"got CanceeledError registering with oio_proxy: {cancelled_exception}")
+        return
+    log.info("oio registration successful")
 
+    # get list of DN containers
+    req = oio_proxy + "/v3.0/OPENIO/conscience/list?type=hdfdn"
+    try:
+        dn_node_list = await http_get(app, req)
+    except ClientError as client_exception:
+        log.error(f"got ClientError listing dn nodes with oio_proxy: {client_exception}")
+        return
+    except CancelledError as cancelled_exception:
+        log.error(f"got CanceeledError listing dn nodes with oio_proxy: {cancelled_exception}")
+        return
+    log.info(f"got {len(dn_node_list)} conscience list items")
+    # create map keyed by dn addr
+    dn_node_map = {}
+    for dn_node in dn_node_list:
+        log.debug(f"checking dn conscience list item: {dn_node}")
+        if "addr" not in dn_node:
+            log.warn(f"conscience list item with no addr: {dn_node}")
+            continue
+        addr = dn_node["addr"]
+        if "score" not in dn_node:
+            log.warn(f'conscience list item with no score key: {dn_node}')
+            continue
+        if dn_node["score"] <= 0:
+            log.debug(f"zero score - skipping conscience list addr: {addr}")
+            continue
+        if addr in dn_node_map:
+            # shouldn't ever get this?
+            log.warn(f"duplicate entry for node: {dn_node}")
+            continue
+        # send an info request to the node
+        info_rsp = await get_info(app, "http://" + addr)
+        if not info_rsp:
+            # timeout or other failure
+            continue
+        if "node" not in info_rsp:
+            log.error("expecteed to find node key in info resp")
+            continue
+        info_node = info_rsp["node"]
+        log.debug(f"got info resp: {info_node}")
+        for key in ("type", "id", "node_number", "node_count"):
+            if key not in info_node:
+                log.error(f"unexpected node type in node state, expected to find key: {key}")
+                continue
+        if info_node["type"] != "dn":
+            log.error(f"expecteed node_type to be dn")
+            continue
+        # mix in node id, node number, node_count to the conscience info
+        dn_node["node_id"] = info_node["id"]
+        dn_node["node_number"] = info_node["node_number"]
+        dn_node["node_count"] = info_node["node_count"]
 
-async def check_conscience(app):
-    oio_proxy = config.get("oio_proxy")
-    if not oio_proxy:
-        log.error("oio_proxy environment not set, failed to register")
-        return 
-    await oio_register(app, oio_proxy)
+        dn_node_map["addr"] = dn_node
+
+    log.info(f"done with dn_node_list, got: {len(dn_node_map)} active nodes")
+    if len(dn_node_map) == 0:
+        if app["node_state"] != "INITIALIZING":
+            log.info("no active DN nodes, setting cluster state to INITIALIZING")
+            app["node_state"] = "INITIALIZING"
+        return
+
+    # sort map by address
+    addrs = list(dn_node_map.keys())
+    addrs.sort()
+
+    # check that node number is set and is the expected value for each node key
+    invalid_count = 0
+    node_index = 0
+    node_count = len(addrs)
+    dn_urls = {}
+    this_node_found = False
+    this_node_id = app["id"]
+    for addr in addrs:
+        dn_node = dn_node_map[addr]
+        log.debug(f"dn_node for index {node_index}: {dn_node}")
+        node_id = dn_node["node_id"]
+        if node_id == this_node_id:
+            this_node_found = True
+        node_number = dn_node["node_number"]
+        dn_urls[node_number] = "http://" + dn_node["addr"]
+        if node_index != node_number or dn_node["node_count"] != node_count:
+            if node_number == -1:
+                log.info(f"node {node_index} not yet initialized")
+            elif node_index != node_number:
+                log.warn(f"node_id {node_id}, expected node_number of {node_index} but found {node_number}")
+            invalid_count += 1
+            if node_id == app["id"]:
+                # this is us, update our node_number, node_count
+                if app["node_number"] != node_index:
+                    # TBD - clean cache items
+                    log.info(f"setting node_number for this node to: {node_index}")
+                    app["node_number"] = node_index
+                if app["node_count"] != node_count:
+                    # TBD - clean cache items
+                    log.info(f"setting node_count for this node to: {node_count}")
+                    app["node_count"] = node_count
+            invalid_count += 1
+        else:
+            log.debug(f"node {node_id} node number is correct")
+        node_index += 1
+
+    if invalid_count == 0:
+        log.debug("no invalid nodes!")
+        if app["node_state"] != "READY":
+            if app["node_type"] == "dn" and not this_node_found:
+                # don't go to READY unless this node shows up
+                log.info(f"node {this_node_id} not yet showing in proxy list, stay in INITIALIZING")
+            else:
+                log.info("setting node state to READY")
+                app["node_state"] = "READY"
+                if app["node_type"] == "sn" and app["node_number"] == -1:
+                    # node number shouldn't matter for SN nodes, so set to 1
+                    app["node_number"] = 1
+        if app["node_count"] != node_count:
+            log.info(f"setting node_count to: {node_count}")
+            app["node_count"] = node_count
+        app["dn_urls"] = dn_urls
+    else:
+        log.debug(f"number invalid nodes: {invalid_count}")
+        if app["node_state"] == "READY":
+            log.warn("invalid nodes found, setting node state to INITIALIZING")
+            app["node_state"] = "INITIALIZING"
+
+    log.info("oio_register done")
 
 
 async def healthCheck(app):
     """ Periodic method that either registers with headnode (if state in INITIALIZING) or 
     calls headnode to verify vitals about this node (otherwise)"""
+    
+    # let the server event loop startup before sarting the health check
+    await asyncio.sleep(1)
     log.info("health check start")
     sleep_secs = config.get("node_sleep_time")
 
-    head_url = getHeadUrl(app)
     while True:
         print("node_state:", app["node_state"])
-        if config.get("oio_proxy"):
+        if "oio_proxy" in app:
             # for OIO post registration request every time interval
             await oio_register(app)
+
         elif app["node_state"] == "INITIALIZING" or (app["node_state"] == "WAITING" and app["node_number"] < 0):
             # startup docker registration
             await register(app)
         else:
             # check in with the head node and make sure we are still active
+            head_url = getHeadUrl(app)
             req_node = "{}/nodestate".format(head_url)
             log.debug("health check req {}".format(req_node))
             try:
@@ -317,10 +478,13 @@ def baseInit(loop, node_type):
     app = Application(loop=loop)
 
     # set a bunch of global state 
-    app["id"] = createNodeId(node_type)
+    node_id = createNodeId(node_type)
+    app["id"] = node_id
     app["node_state"] = "INITIALIZING"
     app["node_type"] = node_type
+    node_port = config.get(node_type + "_port")
     app["node_port"] = config.get(node_type + "_port")
+    log.info(f"baseInit - node_id: {node_id} node_port: {node_port}")
     app["node_number"] = -1
     app["node_count"] = -1
     app["start_time"] = int(time.time())  # seconds after epoch
@@ -351,6 +515,10 @@ def baseInit(loop, node_type):
 
     if config.get("oio_proxy"):
         app["oio_proxy"] = config.get("oio_proxy")
+    if config.get("host_ip"):
+        app["host_ip"] = config.get("host_ip")
+    else:
+        app["host_ip"] = "127.0.0.1"
     
     log.app = app
     # save session object

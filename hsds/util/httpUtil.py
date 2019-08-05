@@ -134,6 +134,8 @@ async def http_post(app, url, data=None, params=None):
                 pass  # ok
             elif rsp.status == 201:
                 pass # also ok
+            elif rsp.status == 204: # no data
+                return None
             elif rsp.status == 404:
                 log.info(f"POST  reqest HTTPNotFound error for url: {url}")
             elif rsp.status == 410:
