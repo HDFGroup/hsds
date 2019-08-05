@@ -158,7 +158,6 @@ if __name__ == '__main__':
 
     initUserDB(app)
 
-    # run background task
     asyncio.ensure_future(healthCheck(app), loop=loop)
 
     # run the app

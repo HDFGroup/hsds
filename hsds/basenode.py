@@ -38,13 +38,16 @@ def getVersion():
 
 def getHeadUrl(app):
     head_url = None
-    if head_url in app:
-        head_url = app["head_url"]
-    elif config.get("head_endpoint"):
-        head_url = config.get("head_endpoint")
+    if "oio_proxy" in app:
+        head_url = app["oio_proxy"]
     else:
-        head_port = config.get("head_port")
-        head_url = f"http://hsds_head:{head_port}"
+        if head_url in app:
+            head_url = app["head_url"]
+        elif config.get("head_endpoint"):
+            head_url = config.get("head_endpoint")
+        else:
+            head_port = config.get("head_port")
+            head_url = f"http://hsds_head:{head_port}"
     log.debug(f"head_url: {head_url}")
     return head_url
 
@@ -72,15 +75,53 @@ async def register(app):
     except OSError:
         log.error("failed to register")
 
+async def oio_register(app):
+    """ register with oio conscience 
+    """
+    log.info("oio_register")
+    oio_proxy = config.get("oio_proxy")
+    host_ip = config.get("host_ip")
+    if not host_ip:
+        log.error("host ip not set")
+        return
+    node_type = app["node_type"]
+    if node_type not in ("sn", "dn"):
+        log.error("unexpected node type")
+        return
+    service_name = "hdf" + node_type
+    req = oio_proxy + "/v3.0//conscience/register"
+    log.info(f"conscience register: {req}")
+    body = {
+        "addr": host_ip + ":" + str(app["node_port"]),
+        "tags": { "stat.cpu": 100, "tag.up": True},
+        "type": service_name
+    }
+    rsp_json = await http_post(app, req, data=body)
+    log.info(f"got response: {rsp_json}")
+
+
+async def check_conscience(app):
+    oio_proxy = config.get("oio_proxy")
+    if not oio_proxy:
+        log.error("oio_proxy environment not set, failed to register")
+        return 
+    await oio_register(app, oio_proxy)
+
 
 async def healthCheck(app):
     """ Periodic method that either registers with headnode (if state in INITIALIZING) or 
     calls headnode to verify vitals about this node (otherwise)"""
     log.info("health check start")
     sleep_secs = config.get("node_sleep_time")
+
     head_url = getHeadUrl(app)
     while True:
-        if app["node_state"] == "INITIALIZING" or (app["node_state"] == "WAITING" and app["node_number"] < 0):
+        print("node_state:", app["node_state"])
+        if config.get("oio_proxy"):
+            # for OIO post registration request every time interval
+            await oio_register(app)
+        elif app["node_state"] == "INITIALIZING" or (app["node_state"] == "WAITING" and app["node_number"] < 0):
+            # startup docker registration
             await register(app)
         else:
             # check in with the head node and make sure we are still active
@@ -307,6 +348,9 @@ def baseInit(loop, node_type):
     app["log_count"] = counter
  
     app["s3_stats"] = getInitialS3Stats()
+
+    if config.get("oio_proxy"):
+        app["oio_proxy"] = config.get("oio_proxy")
     
     log.app = app
     # save session object
