@@ -15,7 +15,6 @@ services:
       - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
       - AWS_REGION=${AWS_REGION}
       - BUCKET_NAME=${BUCKET_NAME}
-      - SYS_BUCKET_NAME=${SYS_BUCKET_NAME}
       - LOG_LEVEL=${LOG_LEVEL}
     ports:
       - ${HEAD_PORT}:${HEAD_PORT}

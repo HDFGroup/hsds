@@ -17,7 +17,6 @@ services:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_REGION=${AWS_REGION}
       - BUCKET_NAME=${BUCKET_NAME}
-      - SYS_BUCKET_NAME=${SYS_BUCKET_NAME}
       - LOG_LEVEL=${LOG_LEVEL}
     ports:
       - ${HEAD_PORT}:${HEAD_PORT}
@@ -125,5 +124,5 @@ services:
     - /var/run/docker.sock:/tmp/docker.sock:ro
     logging:
      options:
-        max-size: "5m"
+        max-size: "50m"
         max-file: "5"

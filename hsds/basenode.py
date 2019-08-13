@@ -491,7 +491,7 @@ def baseInit(loop, node_type):
     app['register_time'] = 0
     bucket_name = config.get("bucket_name")
     if bucket_name:
-        log.info("using bucket: {}".format(bucket_name))
+        log.info(f"using bucket: {bucket_name}")
     else:
         log.info("no default bucket defined")
     app["bucket_name"] = bucket_name
