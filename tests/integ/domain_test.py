@@ -858,7 +858,34 @@ class DomainTest(unittest.TestCase):
         for i in range(domain_count):
             domain = "domain_" + str(i) + ".h5"
             basenames.append(domain)
-            helper.setupDomain(folder + '/' + domain)
+            sub_domain = folder + '/' + domain
+            helper.setupDomain(sub_domain)
+            print(i, ':', sub_domain)
+            headers = helper.getRequestHeaders(domain=sub_domain)
+            # get root id
+            req = helper.getEndpoint() + '/'
+            rsp = requests.get(req, headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+            root_id = rspJson["root"]
+            helper.validateId(root_id)
+            # create attr1 in root group
+            attr_name = "attr1"
+            attr_payload = {'type': 'H5T_STD_I32LE', 'value': i*2}
+            req = helper.getEndpoint() + '/groups/' + root_id + "/attributes/" + attr_name
+            rsp = requests.put(req, data=json.dumps(attr_payload), headers=headers)
+            self.assertEqual(rsp.status_code, 201)  # created
+            # create attr2 in root group
+            attr_name = "attr2"
+            fixed_str_type = {
+                "charSet": "H5T_CSET_ASCII", 
+                "class": "H5T_STRING", 
+                "length": 8, 
+                "strPad": "H5T_STR_NULLPAD" }
+            attr_payload = { "type": fixed_str_type, "value": f"A{i:07}" }
+            req = helper.getEndpoint() + '/groups/' + root_id + "/attributes/" + attr_name
+            rsp = requests.put(req, data=json.dumps(attr_payload), headers=headers)
+            self.assertEqual(rsp.status_code, 201)  # created
 
         headers = helper.getRequestHeaders()
         params = {"domain": folder+'/'}
@@ -933,6 +960,41 @@ class DomainTest(unittest.TestCase):
             name = item["name"]
             self.assertTrue(pp.basename(name) in ("domain_0.h5", "domain_2.h5", "domain_4.h5", "domain_6.h5"))
 
+        # use reg ex with attribute specification
+        query = "attr1 > 7"
+        params = {"domain": folder+'/', "query": query}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("domains" in rspJson)
+        domains = rspJson["domains"]
+        self.assertEqual(len(domains), 4)
+
+        # not equal query on attr2
+        query = "attr2 != 'A0000004'"
+        params = {"domain": folder+'/', "query": query}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("domains" in rspJson)
+        domains = rspJson["domains"]
+        self.assertEqual(len(domains), 7)
+
+        # combination query on attr1 and attr2
+        query = "attr1 > 7 AND attr2 != 'A0000004'"
+        params = {"domain": folder+'/', "query": query}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("domains" in rspJson)
+        domains = rspJson["domains"]
+        self.assertEqual(len(domains), 3)
+
+        # bad query expression
+        query = "atttr1 > 7 AND"
+        params = {"domain": folder+'/', "query": query}
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 400)
 
         # empty sub-domains
         domain = helper.getTestDomain("tall.h5") + '/'

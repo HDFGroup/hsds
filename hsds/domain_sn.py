@@ -28,6 +28,7 @@ from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
 from util.domainUtil import getParentDomain, getDomainFromRequest, isValidDomain, getBucketForDomain, getPathForDomain
 from util.s3Util import getS3Keys
+from util.boolparser import BooleanParser
 from servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath, getRootInfo
 from basenode import getVersion
 import hsds_logger as log
@@ -94,13 +95,15 @@ class DomainCrawler:
         log.debug(f"DomainCrawler - fetch conplete obj_id: {obj_id}")
 
 class FolderCrawler:
-    def __init__(self, app, domains, bucket=None, verbose=False, max_tasks=40):
+    def __init__(self, app, domains, bucket=None, get_root=False, verbose=False, max_tasks=40):
         log.info(f"FolderCrawler.__init__ ")
         self._app = app
+        self._get_root = get_root
         self._verbose = verbose
         self._max_tasks = max_tasks
         self._q = asyncio.Queue()
         self._domain_dict = {}
+        self._group_dict = {}
         for domain in domains:
             self._q.put_nowait(domain)
         self._bucket = bucket
@@ -140,6 +143,13 @@ class FolderCrawler:
                 log.debug(f"FolderCrawler - {domain} get domain_rsp: {domain_rsp}")
                 # mixin domain anme
                 self._domain_dict[domain] = domain_rsp
+                if self._get_root and "root" in domain_json:
+                    root_id = domain_json["root"]
+                    log.debug(f"fetching root json for {root_id}")
+                    root_json = await getObjectJson(self._app, root_id, include_links=False, include_attrs=True, bucket=self._bucket)  
+                    log.debug(f"got root_json: {root_json}")
+                    self._group_dict[root_id] = root_json
+
             else:
                 log.warn(f"FolderCrawler - no domain found for {domain}")
         except HTTPNotFound:
@@ -322,6 +332,11 @@ async def get_domains(request):
         log.info(f"get_domains - using regex pattern: {pattern}")
         regex = re.compile(pattern)
 
+    if "query" not in request.rel_url.query:
+        query = None
+    else:
+        query = request.rel_url.query["query"]
+
     # use "verbose" to pull extra info 
     if "verbose" in request.rel_url.query and request.rel_url.query["verbose"]:
         verbose = True
@@ -406,9 +421,75 @@ async def get_domains(request):
 
     # get domain info for each domain
     domains = []
-
-    crawler = FolderCrawler(app, domainNames, bucket=bucket, verbose=verbose)
+    if query:
+        get_root = True
+    else:
+        get_root = False
+    crawler = FolderCrawler(app, domainNames, bucket=bucket, get_root=get_root, verbose=verbose)
     await crawler.crawl()
+
+    if query:
+        log.info(f"proccessing query: {query}")
+        try:
+            parser = BooleanParser(query)
+        except IndexError as ie:
+            log.warn(f"domaing query syntax error: {ie}")
+            raise HTTPBadRequest(reason="Invalid query expression")
+        attr_names = parser.getVariables()
+        log.info(f"query variables: {attr_names}")
+        # remove any domains from dict for which the attribute query is false
+        domain_keys = list(crawler._domain_dict.keys())
+        
+        for domain in domain_keys:
+            domain_json = crawler._domain_dict[domain]
+            if "root" not in domain_json:
+                log.debug(f"skipping folder: {domain} for attribute query search")
+                del domain_keys[domain]
+                continue
+            
+            root_id = domain_json["root"]
+            if root_id not in crawler._group_dict:
+                log.warn(f"Expected to find {root_id} in crawler group dict")
+                continue
+            root_json = crawler._group_dict[root_id]
+            attributes = root_json["attributes"]
+            variable_dict = {}
+            for attr_name in attr_names:
+                if attr_name not in attributes:
+                    log.debug(f"{attr_name} not found")
+                    del crawler._domain_dict[domain]
+                    continue
+                attr_json = attributes[attr_name]
+                log.debug(f"{attr_name}: {attr_json}")
+                attr_type = attr_json["type"]
+                attr_type_class = attr_type["class"]
+                if attr_type_class not in ('H5T_INTEGER', 'H5T_FLOAT', 'H5T_STRING'):
+                    log.debug("unable to query non-primitive attribute class: {attr_type_class}")
+                    del crawler._domain_dict[domain]
+                    continue
+                attr_shape = attr_json["shape"]
+                attr_shape_class = attr_shape["class"]
+                if attr_shape_class == 'H5S_SCALAR':
+                    variable_dict[attr_name] = attr_json["value"]
+                else:
+                    log.debug("unable to query non-scalar attributes")
+                    del crawler._domain_dict[domain]
+                    continue
+            # evaluate the boolean expression
+            if len(variable_dict) == len(attr_names):
+                # we have all the variables, evaluate
+                parser_value = False
+                try:
+                    parser_value = parser.evaluate(variable_dict)
+                except TypeError as te:
+                    log.warn(f"evalue {query} for domain {domain} but got erro: {te}")
+                if parser_value:
+                    log.info(f"domain {domain} passed query test")
+                else:
+                    log.debug(f"domain {domain} failed query test")
+                    del crawler._domain_dict[domain]
+                    
+
     for domain in domainNames:
         if domain in crawler._domain_dict:
             domain_json = crawler._domain_dict[domain]
@@ -416,7 +497,8 @@ async def get_domains(request):
             domain_json["name"] = domain
             domains.append(domain_json)
         else:
-            log.warn(f"domain: {domain} not found in crawler dict")
+            if not query:
+                log.warn(f"domain: {domain} not found in crawler dict")
 
     return domains
 
