@@ -205,4 +205,5 @@ if __name__ == '__main__':
 
     # run the app
     port = int(config.get("dn_port"))
+    log.info(f"run_app on port: {port}")
     run_app(app, port=port)

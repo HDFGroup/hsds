@@ -162,9 +162,5 @@ if __name__ == '__main__':
 
     # run the app
     port = int(config.get("sn_port"))
-    if "host_ip" in app:
-        host_ip = app["host_ip"]
-    else:
-        host_ip = None
-    run_app(app, host=host_ip, port=port)
+    log.info(f"run_app on port: {port}")
     run_app(app, port=port)
