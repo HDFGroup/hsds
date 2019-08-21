@@ -2,7 +2,7 @@
 
 ------
 
-HSDS was originally developed for AWS, but as many users are on other cloud platforms, supporting additional cloud vendors  would be desirable.  In this document we'll outline changes needed to support Azure (Microsoft), the #2 most popular cloud vendor.  Though the focus is on Azure, the architectural changes describe should be helpful in supporting additional vendors as well.
+HSDS was originally developed for AWS, but as many users are on other cloud platforms, supporting additional cloud vendors  is desirable.  In this document we'll outline changes needed to support Azure (Microsoft's close), the #2 most popular cloud vendor.  Though the focus is on Azure, the architectural changes describe should be helpful in supporting additional vendors as well.
 
 ------
 
@@ -30,7 +30,7 @@ The current implementation of HSDS uses these AWS specific technologies:
 
 When running HSDS on a single VM using Docker, there should be no differences between AWS and Azure as far as how containers are set (i.e. the same docker-compose configuration should work for both).  
 
-For running HSDS in a self-managed Kubernetes cluster, this should also work the same way on Azure.  In addition, both Amazon and Microsoft offers a supported Kubernetes services: AWS EKS and Azure AKS.  But self-hosted Kubernetes, vs AWS EKS vs. Azure should work the same way via the Kubernetes API and command line tools (e.g. kubectl), so we won't address Kubernetes differences here.
+For running HSDS in a self-managed Kubernetes cluster, this should also work the same way on Azure.  In addition, both Amazon and Microsoft offers a supported Kubernetes services: AWS EKS and Azure AKS.  But self-hosted Kubernetes, vs AWS EKS vs. Azure should have minimal differences given common Kubernetes API and command line tools (e.g. kubectl), so we won't address Kubernetes differences here.
 
 In addition, AWS Lambda is under consideration as a means to accelerate some operations in HSDS.  Azure offers an equivalent to AWS Lambda, known as "Azure Functions" (https://azure.microsoft.com/en-us/services/functions/).  Since Lambda is not currently being used in HSDS, we will not address how Azure Functions would be supported in this document though.  
 
@@ -71,8 +71,6 @@ HSDS uses just the DynamoDB GET operation to retrieve the password for a given u
 
 
 
-
-
 ### 2.2 Azure Equivalents
 
 Next, we will discuss equivalent functionality on Azure.
@@ -85,18 +83,7 @@ Azure also supports the equivalent of AWS IAM, knows as Azure Active Directory (
 
 #### 2.2.2 Azure Blob Storage
 
-The Azure equivalent of AWS S3 is "Azure Block Blobs".  In Azure-speak, "blobs" are the equivalent of S3 objects and "containers" are the equivalent to S3 Buckets.   Microsoft offers a SDK for reading and writing to blob storage (https://github.com/Azure/azure-storage-python), but this package does not currently support async IO (see: https://github.com/Azure/azure-storage-python/issues/534).  
-
-Microsoft documents the REST API for Blob storage: https://docs.microsoft.com/en-us/rest/api/storageservices/operations-on-blobs, so one approach would be to create a utility library that provides the equivalents of the aiobotocore package but using the Blob storage REST API.
-
-Azure Blob REST API operations equivalents:
-
-1. GET: Get Blob - https://docs.microsoft.com/en-us/rest/api/storageservices/get-blob
-2. PUT: Put Blob - https://docs.microsoft.com/en-us/rest/api/storageservices/put-blob
-3. DELETE: Delete Blob - https://docs.microsoft.com/en-us/rest/api/storageservices/delete-blob  
-4. LIST: List Blobs - https://docs.microsoft.com/en-us/rest/api/storageservices/list-blobs
-
-All these operations are similar to the S3 API equivalents and should be straightforward to implement.
+The Azure equivalent of AWS S3 is "Azure Block Blobs".  In Azure-speak, "blobs" are the equivalent of S3 objects and "containers" are the equivalent to S3 Buckets.   Microsoft offers a SDK for reading and writing to blob storage (https://github.com/Azure/azure-storage-python), but this package only recently (9/11/2019) added support async IO (see: https://github.com/Azure/azure-storage-python/issues/534).  An example of how the async api is used is here: https://github.com/Azure/azure-sdk-for-python/blob/master/sdk/storage/azure-storage-blob/tests/test_blob_samples_common_async.py.  
 
 #### 2.2.3 Azure Table
 
@@ -139,9 +126,7 @@ The call tree for when s3Util is used as follows:
 
 For the first release on Azure, the authUtil.py file will not need to be updated - only static password files will be supported, and DynamoDB code will not be invoked.  For subsequent releases, support for Azure Table will be added.  This will be done via using Async REST calls or creating a new async package for Azure Tables (as with block blobs described below).
 
-To support async Azure block blob operations, a new package will be created, aio-azure-storage-python, that supports basic operations: GET, PUT, DELETE, and LIST.  This package will use the Azure REST API and the aiohttp package to support async operations.
-
-In hsds/util, a new class will be created, storageUtil, that provides a set of generic operations on storage objects. E.g. getObjectJSON rather than getS3JSONObj.  This class will invoke calls on s3Util.py or the new air-azure-storage-python package based on existence of AWS Specific keys vs Azure Specific keys.
+In hsds/util, a new class will be created, storageUtil, that provides a set of generic operations on storage objects. E.g. getObjectJSON rather than getS3JSONObj.  This class will invoke calls on s3Util.py or the new azure-storage-blob package based on a storage type environment variable
 
 Finally, any data node classes that currently call s3Util, will be updated to use the storageUtil class.
 
