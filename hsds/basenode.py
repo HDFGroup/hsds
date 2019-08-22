@@ -12,6 +12,7 @@
 #
 # common node methods of hsds cluster
 # 
+import os.path as ospath
 import asyncio
 import time
 import psutil
@@ -31,6 +32,8 @@ from util.idUtil import createNodeId
 from util.s3Util import getInitialS3Stats 
 from util.authUtil import getUserPasswordFromRequest, validateUserPassword
 import hsds_logger as log
+from kubernetes import client as k8s_client
+from kubernetes import config as k8s_config
 
 HSDS_VERSION = "0.4"
 
@@ -219,25 +222,6 @@ async def oio_register(app):
             this_node_found = True
         node_number = dn_node["node_number"]
         dn_urls[node_number] = "http://" + dn_node["addr"]
-        if node_index != node_number or dn_node["node_count"] != node_count:
-            if node_number == -1:
-                log.info(f"node {node_index} not yet initialized")
-            elif node_index != node_number:
-                log.warn(f"node_id {node_id}, expected node_number of {node_index} but found {node_number}")
-            invalid_count += 1
-            if node_id == app["id"]:
-                # this is us, update our node_number, node_count
-                if app["node_number"] != node_index:
-                    # TBD - clean cache items
-                    log.info(f"setting node_number for this node to: {node_index}")
-                    app["node_number"] = node_index
-                if app["node_count"] != node_count:
-                    # TBD - clean cache items
-                    log.info(f"setting node_count for this node to: {node_count}")
-                    app["node_count"] = node_count
-            invalid_count += 1
-        else:
-            log.debug(f"node {node_id} node number is correct")
         node_index += 1
 
     if invalid_count == 0:
@@ -264,6 +248,89 @@ async def oio_register(app):
 
     log.info("oio_register done")
 
+async def k8s_register(app):
+    log.info("k8s_register")
+    # TBD - find more elegant way to avoid this warning
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    k8s_config.load_incluster_config() #get the config from within the cluster and set it as the default config for all new clients
+    c=k8s_client.Configuration() #go and get a copy of the default config
+    c.verify_ssl=False #set verify_ssl to false in that config
+    k8s_client.Configuration.set_default(c) #make that config the default for all new clients
+    v1 = k8s_client.CoreV1Api()
+    # TBD - use the async version
+    ret = v1.list_pod_for_all_namespaces(watch=False)
+    pod_ips = []
+    sn_urls = []
+    dn_urls = []
+    for i in ret.items:
+        pod_ip = i.status.pod_ip
+        labels = i.metadata.labels
+        if "app" in labels and labels["app"] == "hsds":
+            log.info(f"hsds pod - ip: {pod_ip}")
+            pod_ips.append(pod_ip)
+    if not pod_ips:
+        log.error("Expected to find at least one hsds pod")
+        return
+    pod_ips.sort()  # for assigning node numbers
+    node_count = len(pod_ips)
+    ready_count = 0
+    this_node_id = app["id"]
+    sn_port = config.get("sn_port")
+    dn_port = config.get("dn_port")
+    for node_number in range(node_count):
+        # send an info request to the node
+        pod_ip = pod_ips[node_number]
+        sn_url = f"http://{pod_ip}:{sn_port}"
+        sn_urls.append(sn_url)
+        
+        dn_url = f"http://{pod_ip}:{dn_port}"
+        dn_urls.append(dn_url)
+        info_rsp = await get_info(app, dn_url)
+        if not info_rsp:
+            # timeout or other failure
+            continue
+        if "node" not in info_rsp:
+            log.error("expecteed to find node key in info resp")
+            continue
+      
+        dn_node = info_rsp["node"]
+        log.debug(f"got info resp: {dn_node}")
+        for key in ("type", "id", "node_number", "node_count"):
+            if key not in dn_node:
+                log.error(f"unexpected node type in node state, expected to find key: {key}")
+                continue
+        if dn_node["type"] != "dn":
+            log.error(f"expecteed node_type to be dn")
+            continue
+        node_id = dn_node["id"]
+        if node_id == this_node_id:
+            # set node_number and node_count
+            if app["node_number"] != node_number:
+                old_number = app["node_number"]
+                # TBD - invalidate cache state
+                log.info(f"node number was: {old_number} setting to: {node_number}")
+                app["node_number"] = node_number
+                app['register_time'] = time.time()
+            if app["node_count"] != node_count:
+                old_count = app["node_count"]
+                log.info(f"node count was: {old_count} setting to: {node_count}")
+                app["node_count"] = node_count
+        if node_number == dn_node["node_number"] and node_count == dn_node["node_count"]:
+            ready_count += 1
+
+    if ready_count == node_count:
+        if app["node_state"] != "READY":
+            log.info("setting node state to READY")
+            app["node_state"] = "READY"
+            app["sn_urls"] = sn_urls
+            app["dn_urls"] = dn_urls
+    else:
+        log.info(f"ready_count: {ready_count}/{node_count}")
+        if app["node_state"] == "READY":
+            log.info("setting node state to INITIALIZING")
+            app["node_state"] = "INITIALIZING"
+        
 
 async def healthCheck(app):
     """ Periodic method that either registers with headnode (if state in INITIALIZING) or 
@@ -279,6 +346,8 @@ async def healthCheck(app):
         if "oio_proxy" in app:
             # for OIO post registration request every time interval
             await oio_register(app)
+        elif "is_k8s" in app:
+            await k8s_register(app) 
 
         elif app["node_state"] == "INITIALIZING" or (app["node_state"] == "WAITING" and app["node_number"] < 0):
             # startup docker registration
@@ -519,6 +588,10 @@ def baseInit(loop, node_type):
         app["host_ip"] = config.get("host_ip")
     else:
         app["host_ip"] = "127.0.0.1"
+
+    # check to see if we are running in a k8s cluster
+    if ospath.exists("/var/run/secrets/kubernetes.io") or True:
+        app["is_k8s"] = True
     
     log.app = app
     # save session object

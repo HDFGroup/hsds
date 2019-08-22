@@ -30,7 +30,6 @@ cfg = {
     'head_port': 5100,
     'dn_host': 'localhost',
     'dn_port' : 6101,  # Start dn ports at 6101
-    'sn_host': 'localhost',
     'sn_port': 5101,   # Start sn ports at 5101
     'target_sn_count': 4,
     'target_dn_count': 4,

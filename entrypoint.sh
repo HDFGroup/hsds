@@ -1,5 +1,8 @@
 #!/bin/bash
+echo "hsds entrypoint"
+echo "node type: " $NODE_TYPE
 cd /usr/local/src/hsds
+
 
 if [ -z $NODE_TYPE ]; then
   # run client
