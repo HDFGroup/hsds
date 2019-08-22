@@ -222,6 +222,25 @@ async def oio_register(app):
             this_node_found = True
         node_number = dn_node["node_number"]
         dn_urls[node_number] = "http://" + dn_node["addr"]
+        if node_index != node_number or dn_node["node_count"] != node_count:
+            if node_number == -1:
+                log.info(f"node {node_index} not yet initialized")
+            elif node_index != node_number:
+                log.warn(f"node_id {node_id}, expected node_number of {node_index} but found {node_number}")
+            invalid_count += 1
+            if node_id == app["id"]:
+                # this is us, update our node_number, node_count
+                if app["node_number"] != node_index:
+                    # TBD - clean cache items
+                    log.info(f"setting node_number for this node to: {node_index}")
+                    app["node_number"] = node_index
+                if app["node_count"] != node_count:
+                    # TBD - clean cache items
+                    log.info(f"setting node_count for this node to: {node_count}")
+                    app["node_count"] = node_count
+            invalid_count += 1
+        else:
+            log.debug(f"node {node_id} node number is correct")
         node_index += 1
 
     if invalid_count == 0:
