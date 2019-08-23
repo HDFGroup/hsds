@@ -5,7 +5,7 @@ metadata:
     app: hsds
   name: hsds-deployment
 spec: 
-  replicas: 4
+  replicas: 1
   selector: 
     matchLabels: 
       app: hsds
@@ -16,9 +16,9 @@ spec:
     spec: 
       containers: 
         - 
-          image: "hsds_sn"
-          imagePullPolicy: Never
           name: sn
+          image: "hsds"
+          imagePullPolicy: Never
           ports: 
             - 
               containerPort: 5101
@@ -27,12 +27,12 @@ spec:
             value: sn
           - name: AWS_S3_GATEWAY
             value: http://s3.amazonaws.com
-          - name: AWS_SECRET_ACCESS_KEY
+          - name: AWS_ACCESS_KEY_ID 
             valueFrom: 
               secretKeyRef:
                 name: aws-auth-keys
                 key: aws_access_key_id
-          - name: AWS_ACCESS_KEY_ID
+          - name: AWS_SECRET_ACCESS_KEY
             valueFrom: 
               secretKeyRef:
                 name: aws-auth-keys
@@ -52,9 +52,9 @@ spec:
           - name: ABOUT
             value: "HSDS is a webservice for HDF data"
         - 
-          image: "hsds_dn"
-          imagePullPolicy: Never
           name: dn
+          image: "hsds"
+          imagePullPolicy: Never 
           ports: 
             - 
               containerPort: 6101
@@ -63,12 +63,12 @@ spec:
             value: dn
           - name: AWS_S3_GATEWAY
             value: http://s3.amazonaws.com
-          - name: AWS_SECRET_ACCESS_KEY
+          - name: AWS_ACCESS_KEY_ID 
             valueFrom: 
               secretKeyRef:
                 name: aws-auth-keys
                 key: aws_access_key_id
-          - name: AWS_ACCESS_KEY_ID
+          - name: AWS_SECRET_ACCESS_KEY
             valueFrom: 
               secretKeyRef:
                 name: aws-auth-keys
@@ -76,7 +76,7 @@ spec:
           - name: AWS_REGION
             value: us-east-1
           - name: BUCKET_NAME
-            value: hsds.bucket
+            value: jreadey.mac.hsdsv2.test
           - name: LOG_LEVEL
             value: DEBUG
           - name: HSDS_ENDPOINT

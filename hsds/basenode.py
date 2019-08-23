@@ -12,7 +12,6 @@
 #
 # common node methods of hsds cluster
 # 
-import os.path as ospath
 import asyncio
 import time
 import psutil
@@ -280,8 +279,8 @@ async def k8s_register(app):
     # TBD - use the async version
     ret = v1.list_pod_for_all_namespaces(watch=False)
     pod_ips = []
-    sn_urls = []
-    dn_urls = []
+    sn_urls = {}
+    dn_urls = {}
     for i in ret.items:
         pod_ip = i.status.pod_ip
         labels = i.metadata.labels
@@ -298,52 +297,55 @@ async def k8s_register(app):
     sn_port = config.get("sn_port")
     dn_port = config.get("dn_port")
     for node_number in range(node_count):
-        # send an info request to the node
-        pod_ip = pod_ips[node_number]
-        sn_url = f"http://{pod_ip}:{sn_port}"
-        sn_urls.append(sn_url)
-        
-        dn_url = f"http://{pod_ip}:{dn_port}"
-        dn_urls.append(dn_url)
-        info_rsp = await get_info(app, dn_url)
-        if not info_rsp:
-            # timeout or other failure
-            continue
-        if "node" not in info_rsp:
-            log.error("expecteed to find node key in info resp")
-            continue
-      
-        dn_node = info_rsp["node"]
-        log.debug(f"got info resp: {dn_node}")
-        for key in ("type", "id", "node_number", "node_count"):
-            if key not in dn_node:
-                log.error(f"unexpected node type in node state, expected to find key: {key}")
-                continue
-        if dn_node["type"] != "dn":
-            log.error(f"expecteed node_type to be dn")
-            continue
-        node_id = dn_node["id"]
-        if node_id == this_node_id:
-            # set node_number and node_count
-            if app["node_number"] != node_number:
-                old_number = app["node_number"]
-                # TBD - invalidate cache state
-                log.info(f"node number was: {old_number} setting to: {node_number}")
-                app["node_number"] = node_number
-                app['register_time'] = time.time()
-            if app["node_count"] != node_count:
-                old_count = app["node_count"]
-                log.info(f"node count was: {old_count} setting to: {node_count}")
-                app["node_count"] = node_count
-        if node_number == dn_node["node_number"] and node_count == dn_node["node_count"]:
-            ready_count += 1
+        for port in (sn_port, dn_port):
+            # send an info request to the node
+            pod_ip = pod_ips[node_number]
+            url = f"http://{pod_ip}:{port}"
+            if port == sn_port:
+                sn_urls[node_number] = url
+            else:
+                dn_urls[node_number] = url
 
-    if ready_count == node_count:
+            info_rsp = await get_info(app, url)
+            if not info_rsp:
+                # timeout or other failure
+                continue
+            if "node" not in info_rsp:
+                log.error("expecteed to find node key in info resp")
+                continue
+      
+            node_rsp = info_rsp["node"]
+            log.debug(f"got info resp: {node_rsp}")
+            for key in ("type", "id", "node_number", "node_count"):
+                if key not in node_rsp:
+                    log.error(f"unexpected node type in node state, expected to find key: {key}")
+                    continue
+            if node_rsp["type"] not in ("sn", "dn"):
+                log.error(f"expecteed node_type to be sn or dn")
+                continue
+            node_id = node_rsp["id"]
+            if node_id == this_node_id:
+                # set node_number and node_count
+                if app["node_number"] != node_number:
+                    old_number = app["node_number"]
+                    # TBD - invalidate cache state for dn nodes
+                    log.info(f"node number was: {old_number} setting to: {node_number}")
+                    app["node_number"] = node_number
+                    app['register_time'] = time.time()
+                if app["node_count"] != node_count:
+                    old_count = app["node_count"]
+                    log.info(f"node count was: {old_count} setting to: {node_count}")
+                    app["node_count"] = node_count
+            if node_number == node_rsp["node_number"] and node_count == node_rsp["node_count"]:
+                ready_count += 1
+
+    if ready_count == node_count*2:
         if app["node_state"] != "READY":
             log.info("setting node state to READY")
             app["node_state"] = "READY"
-            app["sn_urls"] = sn_urls
-            app["dn_urls"] = dn_urls
+        app["node_count"] = node_count
+        app["sn_urls"] = sn_urls
+        app["dn_urls"] = dn_urls
     else:
         log.info(f"ready_count: {ready_count}/{node_count}")
         if app["node_state"] == "READY":
@@ -609,7 +611,9 @@ def baseInit(loop, node_type):
         app["host_ip"] = "127.0.0.1"
 
     # check to see if we are running in a k8s cluster
-    if ospath.exists("/var/run/secrets/kubernetes.io") or True:
+    #if ospath.exists("/var/run/secrets/kubernetes.io") or True:
+    if config.get("KUBERNETES_SERVICE_HOST"):
+        log.info("running in kubernetes")
         app["is_k8s"] = True
     
     log.app = app

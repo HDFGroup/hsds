@@ -100,13 +100,14 @@ def getS3Client(app):
     
     # first time setup of s3 client or limited time token has expired
     aws_region = config.get("aws_region")
-    log.info(f"aws_region {aws_region}")
+    log.info(f"getS3Client - aws_region {aws_region}")
     aws_secret_access_key = None
     aws_access_key_id = None 
     aws_session_token = None
     aws_iam_role = config.get("aws_iam_role")
     aws_secret_access_key = config.get("aws_secret_access_key")
-    aws_access_key_id = config.get("aws_access_key_id")
+    aws_access_key_id = config.get("aws_access_key_id")  
+
     if not aws_secret_access_key or aws_secret_access_key == 'xxx':
         log.info("aws secret access key not set")
         aws_secret_access_key = None
@@ -131,7 +132,6 @@ def getS3Client(app):
                 aws_secret_access_key = cred["SecretAccessKey"]
                 aws_access_key_id = cred["AccessKeyId"]
                 aws_cred_expiration = cred["Expiration"]
-                log.info(f"Got ACCESS_KEY_ID: {aws_access_key_id} from EC2 metadata")     
                 aws_session_token = cred["Token"]
                 log.info(f"Got Expiration of: {aws_cred_expiration}")
                 expiration_str = aws_cred_expiration[:-1] + "UTC" # trim off 'Z' and add 'UTC'
@@ -164,6 +164,7 @@ def getS3Client(app):
         log.debug(f"selecting: {item} from s3_gateway list: {s3_gateway}")
         s3_gateway = item
     log.info(f"Using S3Gateway: {s3_gateway}")
+   
     use_ssl = False
     if s3_gateway.startswith("https"):
         use_ssl = True

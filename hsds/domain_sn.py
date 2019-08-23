@@ -991,11 +991,14 @@ async def DELETE_Domain(request):
 
     # delete domain cache from other sn_urls
     sn_urls = app["sn_urls"]
+    log.debug(f"sn_urls: {sn_urls}")
+    log.debug(f"node_number: {app['node_number']}")
     params = {}
     params["domain"] = getPathForDomain(domain)
     params["bucket"] = getBucketForDomain(domain)
     params["meta_only"] = 1  # can't pass booleans as params, so use 1 instead of True 
     for node_no in sn_urls:
+        log.debug(f"node_no: {node_no}")
         if node_no == app["node_number"]:
             continue # don't send to ourselves
         sn_url = sn_urls[node_no]
