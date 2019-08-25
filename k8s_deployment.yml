@@ -40,7 +40,7 @@ spec:
           - name: AWS_REGION
             value: us-east-1
           - name: BUCKET_NAME
-            value: jreadey.mac.hsdsv2.test
+            value: hsds.bucket
           - name: LOG_LEVEL
             value: DEBUG
           - name: SERVER_NAME
