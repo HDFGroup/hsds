@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata: 
+  name: hsds
+  labels:
+    app: hsds
+spec:
+  selector:
+    app: hsds
+  ports:
+  - port: 5101
+    targetPort: 5101
