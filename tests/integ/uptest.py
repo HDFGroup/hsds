@@ -39,6 +39,8 @@ class UpTest(unittest.TestCase):
         self.assertTrue("greeting" in rspJson)
         self.assertTrue("name" in rspJson)
         self.assertTrue("start_time" in rspJson)
+        self.asserrTrue("node_count") in rspJson
+        self.assertTrue(rspJson["node_count"] > 0)
         start_time = rspJson["start_time"]
         now = int(time.time())
         self.assertTrue(now > start_time)
