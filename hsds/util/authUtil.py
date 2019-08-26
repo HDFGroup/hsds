@@ -168,6 +168,7 @@ def initUserDB(app):
         user_db = {}
     elif config.get("PASSWORD_SALT"):
         # use salt key to verify passwords
+        log.info("using PASSWORD_SALT")
         user_db = {}
     else:
         password_file = None
