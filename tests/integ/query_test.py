@@ -45,12 +45,12 @@ class QueryTest(unittest.TestCase):
                 "class": "H5T_STRING", 
                 "length": 4, 
                 "strPad": "H5T_STR_NULLPAD" }
-        fixed_str6_type = {"charSet": "H5T_CSET_ASCII", 
+        fixed_str8_type = {"charSet": "H5T_CSET_ASCII", 
                 "class": "H5T_STRING", 
-                "length": 6, 
+                "length": 8, 
                 "strPad": "H5T_STR_NULLPAD" }
         fields = (  {'name': 'symbol', 'type': fixed_str4_type}, 
-                    {'name': 'date', 'type': fixed_str6_type},
+                    {'name': 'date', 'type': fixed_str8_type},
                     {'name': 'open', 'type': 'H5T_STD_I32LE'},
                     {'name': 'close', 'type': 'H5T_STD_I32LE'} ) 
         datatype = {'class': 'H5T_COMPOUND', 'fields': fields }
@@ -93,9 +93,26 @@ class QueryTest(unittest.TestCase):
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
+
+        # read first row with AAPL
+        params = {'query': "symbol == b'AAPL'" }
+        params["Limit"] = 1
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        #self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        self.assertTrue("index" in rspJson)
+        readData = rspJson["value"]
+        self.assertEqual(len(readData), 1)
+        item = readData[0]
+        self.assertEqual(item, ["AAPL", "20170102", 3054, 2933])
+        self.assertEqual(item[0], "AAPL")
+        indices = rspJson["index"]
+        self.assertEqual(indices, [1])
+        del params["Limit"]
         
         # get back rows for AAPL
-        params = {'query': "symbol == b'AAPL'" }
         rsp = requests.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
