@@ -439,8 +439,10 @@ async def get_domains(request):
         log.info(f"query variables: {attr_names}")
         # remove any domains from dict for which the attribute query is false
         domain_keys = list(crawler._domain_dict.keys())
+        log.debug(f"querying through {len(domain_keys)}")
         
         for domain in domain_keys:
+            log.debug(f"query search for: {domain}")
             domain_json = crawler._domain_dict[domain]
             if "root" not in domain_json:
                 log.debug(f"skipping folder: {domain} for attribute query search")
