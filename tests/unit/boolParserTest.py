@@ -33,7 +33,7 @@ class BooleanParserTest(unittest.TestCase):
         self.assertTrue(p.evaluate({'x1': 'hi', 'y2': 43}))  
 
 
-        # usee single instead of double quotes
+        # use single instead of double quotes
         p = BooleanParser("x1 == 'hi' AND y2 > 42") 
         variables = p.getVariables()
         
@@ -42,31 +42,35 @@ class BooleanParserTest(unittest.TestCase):
         self.assertTrue("y2" in variables)
         self.assertTrue(p.evaluate({'x1': 'hi', 'y2': 43}))  
 
+        p = BooleanParser("x == 'hi' OR x == 'bye'") 
+        self.assertTrue(p.evaluate({'x': "bye"}))
+        self.assertFalse(p.evaluate({'x': "aloha"}))   
+
         p = BooleanParser("x > 2 AND y < 3") 
         self.assertTrue(p.evaluate({'x':3, 'y': 1}))   
         self.assertFalse(p.evaluate({'x':1, 'y': 1}))   
 
         try:
             p.evaluate({'x':'3', 'y': 1})
-            self.assertTrue(false)  # expected exception
+            self.assertTrue(False)  # expected exception
         except TypeError:
             pass # expected - type of x is not int
 
         try:
             p.evaluate({'x': {'a': 1, 'b': 2}, 'y': 1})
-            self.assertTrue(false)  # expected exception - dict pased for x value
+            self.assertTrue(False)  # expected exception - dict pased for x value
         except TypeError:
             pass # expected - type of x is not int
 
         try:
             p.evaluate({'y': 1})
-            self.assertTrue(false)  # expected exception
+            self.assertTrue(False)  # expected exception
         except TypeError:
             pass # expected - missing 'x' in dict
 
         try:
             BooleanParser("x > 2 AND")
-            self.assertTrue(false)  # expected exception
+            self.assertTrue(False)  # expected exception
         except IndexError:
             pass # expected - malformed exception
 
