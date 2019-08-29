@@ -100,10 +100,11 @@ class Tokenizer:
 				
 
 	def getVariables(self):
-		variables = []
+		s = set()
 		for i in range(len(self.tokens)):
 			if self.tokenTypes[i] == TokenType.VAR:
-				variables.append(self.tokens[i])
+				s.add(self.tokens[i])
+		variables = list(s)
 		variables.sort()
 		return variables
 

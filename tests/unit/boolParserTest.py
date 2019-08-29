@@ -43,6 +43,9 @@ class BooleanParserTest(unittest.TestCase):
         self.assertTrue(p.evaluate({'x1': 'hi', 'y2': 43}))  
 
         p = BooleanParser("x == 'hi' OR x == 'bye'") 
+        variables = p.getVariables()
+        self.assertEqual(len(variables), 1)
+        self.assertTrue("x" in variables)
         self.assertTrue(p.evaluate({'x': "bye"}))
         self.assertFalse(p.evaluate({'x': "aloha"}))   
 
