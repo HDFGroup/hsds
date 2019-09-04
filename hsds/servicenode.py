@@ -139,7 +139,7 @@ async def init(loop):
 # Main
 #
 
-if __name__ == '__main__':
+def main():
     log.info("Servicenode initializing")
     loop = asyncio.get_event_loop()
     #create the app object
@@ -164,3 +164,6 @@ if __name__ == '__main__':
     port = int(config.get("sn_port"))
     log.info(f"run_app on port: {port}")
     run_app(app, port=port)
+
+if __name__ == '__main__':
+    main()
