@@ -167,7 +167,11 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_m
                 log.debug(f"http_get {req} status: <{rsp.status}>")
                 if rsp.status == 200:
                     data = await rsp.read()  # read response as bytes
-                    chunk_arr = bytesToArray(data, dt, chunk_shape)  
+                    try:
+                        chunk_arr = bytesToArray(data, dt, chunk_shape) 
+                    except ValueError as ve:
+                        log.warn(f"bytesToArray ValueError: {ve}") 
+                        raise HTTPBadRequest()
                     npoints_read = getNumElements(chunk_arr.shape)
                     npoints_expected = getNumElements(chunk_shape)
                     if npoints_read != npoints_expected:
@@ -921,11 +925,6 @@ async def PUT_Value(request):
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
     log.debug(f"item size: {item_size}")
- 
-    if item_size == 'H5T_VARIABLE' and request_type != "json":
-        msg = "Only JSON is supported for variable length data types"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
 
     if query and request_type != "json":
         msg = "Only JSON is supported for query updates"
@@ -1062,7 +1061,8 @@ async def PUT_Value(request):
         raise HTTPBadRequest(reason=msg)
 
     arr = None  # np array to hold request data
-    if binary_data:
+    if binary_data and isinstance(item_size, int):
+        item_size == 'H5T_VARIABLE'
         if num_elements*item_size != len(binary_data):
             msg = "Expected: " + str(num_elements*item_size) + " bytes, but got: " + str(len(binary_data))
             log.warn(msg)
@@ -1073,7 +1073,15 @@ async def PUT_Value(request):
         except ValueError:
             msg = "Bad Request: binary input data doesn't match selection" 
             log.warn(msg)
-            raise HTTPBadRequest(reason=msg)      
+            raise HTTPBadRequest(reason=msg)  
+    elif binary_data and item_size == 'H5T_VARIABLE':    
+        # binary variable length data
+        try:
+            arr = bytesToArray(binary_data, dset_dtype, np_shape)
+        except ValueError as ve:
+            log.warn(f"bytesToArray value error: {ve}")
+            raise HTTPBadRequest()
+        log.debug(f"got vlen arr: {arr}")
     else:
         #
         # data is json
@@ -1459,10 +1467,6 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=None,
     item_size = getItemSize(type_json)
     log.debug(f"item size: {item_size}")
     dset_dtype = createDataType(type_json)  # np datatype
-    if item_size == 'H5T_VARIABLE' and accept_type != "json":
-        msg = "Client requested binary, but only JSON is supported for variable length data types"
-        log.info(msg)
-        response_type = "json"
 
     # create array to hold response data
     np_shape = getSelectionShape(slices)   
@@ -1491,9 +1495,8 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=None,
     log.debug(f"arr shape: {arr.shape}")
 
     if response_type == "binary":
-        output_data = arr.tobytes()
-        log.debug(f"GET Value - returning {len(output_data)} bytes binary data")
-     
+        output_data = arrayToBytes(arr)
+         
         # write response
         try:
             resp = StreamResponse()

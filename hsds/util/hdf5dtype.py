@@ -15,9 +15,6 @@ import weakref
 import numpy as np
 from aiohttp.web_exceptions import HTTPBadRequest
 
-
-import hsds_logger as log
-
 class Reference():
 
     """
@@ -753,11 +750,10 @@ Validate a json type
 """
 def validateTypeItem(typeItem):
     try:
-        dt = createDataType(typeItem)
-        log.debug("got numpy type: {}".format(str(dt)))
+        createDataType(typeItem)
     except (KeyError, TypeError, ValueError) as e:
-        log.warn("Got error parsing type... {}".format(e))
-        raise HTTPBadRequest(reason=str(e))
+        msg = f"Got error parsing type... {e}"
+        raise HTTPBadRequest(reason=msg) 
      
 
 """

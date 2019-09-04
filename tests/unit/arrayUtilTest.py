@@ -234,7 +234,6 @@ class ArrayUtilTest(unittest.TestCase):
 
     def testToBytes(self):
         # Simple array
-        
         dt = np.dtype("<i4")
         arr = np.asarray((1,2,3,4), dtype=dt)
         buffer = arrayToBytes(arr)
@@ -243,6 +242,16 @@ class ArrayUtilTest(unittest.TestCase):
         # convert buffer back to arr
         arr_copy = bytesToArray(buffer, dt, (4,))
         #print("arr_copy: {}".format(arr_copy))
+        self.assertTrue(np.array_equal(arr, arr_copy))
+        
+        # fixed length string
+        dt = np.dtype("S8")
+        arr = np.asarray(("abcdefgh", "ABCDEFGH", "12345678"), dtype=dt)
+        buffer = arrayToBytes(arr)
+        self.assertEqual(buffer, arr.tobytes())
+        
+        # convert back to arry
+        arr_copy = bytesToArray(buffer, dt, (3,))
         self.assertTrue(np.array_equal(arr, arr_copy))
 
         # Compound non-vlen
@@ -255,7 +264,6 @@ class ArrayUtilTest(unittest.TestCase):
         
         # convert back to array
         arr_copy = bytesToArray(buffer, dt, (4,))
-        #print("arr_copy: {}".format(arr_copy))
         self.assertTrue(np.array_equal(arr, arr_copy))
         
         # VLEN of int32's
@@ -293,7 +301,6 @@ class ArrayUtilTest(unittest.TestCase):
 
         # convert back to array
         arr_copy = bytesToArray(buffer, dt, (5,))
-        #print("arr_copy: {}".format(arr_copy))
         self.assertTrue(np.array_equal(arr, arr_copy))
         
         # VLEN of bytes
@@ -312,20 +319,24 @@ class ArrayUtilTest(unittest.TestCase):
 
         # convert back to array
         arr_copy = bytesToArray(buffer, dt, (5,))
-        #print("arr_copy: {}".format(arr_copy))
         self.assertTrue(np.array_equal(arr, arr_copy))
         
         # Compound vlen
-        dt_str = np.dtype('O', metadata={'vlen': str})
-        dt = np.dtype([('x', 'i4'), ('tag', dt_str)])
+        dt_vstr = np.dtype('O', metadata={'vlen': str})
+        dt = np.dtype([('x', 'i4'), ('tag', dt_vstr), ( 'code', 'S4')])
         arr = np.zeros((4,), dtype=dt)
-        arr[0] = (42, "Hello")
-        arr[3] = (84, "Bye")
+        arr[0] = (42, "Hello", "X1")
+        arr[3] = (84, "Bye", "XYZ")
         count = getByteArraySize(arr)
         buffer = arrayToBytes(arr)
-        self.assertEqual(len(buffer), 40)
+        for i in range(len(buffer)):
+            c = buffer[i]
+
+        self.assertEqual(len(buffer), 56)
         self.assertEqual(buffer.find(b"Hello"), 8)
-        self.assertEqual(buffer.find(b"Bye"), 37)
+        self.assertEqual(buffer.find(b"Bye"), 49)
+        self.assertEqual(buffer.find(b"X1"), 13)
+        self.assertEqual(buffer.find(b"XYZ"), 52)
         
         # convert back to array
         arr_copy = bytesToArray(buffer, dt, (4,))
@@ -493,5 +504,3 @@ if __name__ == '__main__':
     #setup test files
     
     unittest.main()
-
-
