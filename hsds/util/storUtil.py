@@ -10,8 +10,8 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 #
-# s3Util:
-# S3-related functions
+# storUtil:
+# storage access functions.  Abstracts S3 API vs Azure storage access
 # 
 import json
 import zlib
@@ -75,7 +75,7 @@ def _getStorageClient(app):
     return client
 
 async def releaseStorageClient(app):
-    """ release the client collection to s3
+    """ release the client storage connection
      (Used for cleanup on application exit)
     """
     # TBB - return azure client baseed on config
@@ -91,7 +91,7 @@ async def getStorJSONObj(app, key, bucket=None):
         bucket = app['bucket_name']
     if key[0] == '/':
         key = key[1:]  # no leading slash
-    log.info(f"getStorJSONObj(s3://{bucket})/{key}")
+    log.info(f"getStorJSONObj({bucket})/{key}")
      
     data = await client.get_object(key, bucket=bucket)
      
@@ -113,11 +113,11 @@ async def getStorBytes(app, key, shuffle=0, deflate_level=None, s3offset=0, s3si
         bucket = app['bucket_name']
     if key[0] == '/':
         key = key[1:]  # no leading slash
-    log.info(f"getS3Bytes(s3://{bucket}/{key})")
+    log.info(f"getStorBytes({bucket}/{key})")
     range=""
     if s3size:
         range = f"bytes={s3offset}-{s3offset+s3size-1}"
-        log.info(f"s3 range request: {range}")
+        log.info(f"storage range request: {range}")
 
     data = await client.get_object(bucket=bucket, Key=key, Range=range)
 
@@ -130,7 +130,7 @@ async def getStorBytes(app, key, shuffle=0, deflate_level=None, s3offset=0, s3si
                 data = unzip_data
             except zlib.error as zlib_error:
                 log.info(f"zlib_err: {zlib_error}")
-                log.warn(f"unable to uncompress s3 obj: {key}")
+                log.warn(f"unable to uncompress obj: {key}")
         if shuffle > 0:
             unshuffled = _unshuffle(shuffle, data)
             log.info(f"unshuffled to {len(unshuffled)} bytes")
@@ -147,7 +147,7 @@ async def putStorJSONObj(app, key, json_obj, bucket=None):
         bucket = app['bucket_name']
     if key[0] == '/':
         key = key[1:]  # no leading slash
-    log.info(f"putS3JSONObj(s3://{bucket}/{key})")
+    log.info(f"putS3JSONObj({bucket}/{key})")
     data = json.dumps(json_obj)
     data = data.encode('utf8')
 
@@ -179,7 +179,7 @@ async def putStorBytes(app, key, data, shuffle=0, deflate_level=None, bucket=Non
             data = zip_data
         except zlib.error as zlib_error:
             log.info(f"zlib_err: {zlib_error}")
-            log.warn(f"unable to compress s3 obj: {key}, using raw bytes")
+            log.warn(f"unable to compress obj: {key}, using raw bytes")
     
     
     rsp = await client.put_object(key, data, bucket=bucket)
@@ -270,7 +270,7 @@ async def isStorObj(app, key, bucket=None):
         bucket = app['bucket_name']
     else:
         log.debug(f"using bucket: [{bucket}]")
-    log.debug(f"isS3Obj s3://{bucket}/{key}") 
+    log.debug(f"isStorObj {bucket}/{key}") 
   
     found = False
 
