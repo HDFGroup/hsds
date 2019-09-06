@@ -192,7 +192,7 @@ async def oio_register(app):
         dn_node["node_number"] = info_node["node_number"]
         dn_node["node_count"] = info_node["node_count"]
 
-        dn_node_map["addr"] = dn_node
+        dn_node_map[addr] = dn_node
 
     log.info(f"done with dn_node_list, got: {len(dn_node_map)} active nodes")
     if len(dn_node_map) == 0:
