@@ -111,7 +111,16 @@ class S3Client():
         """ Incremenet the indicated connter
         """
         if "s3_stats" not in self._app:
-             return # app hasn't set up s3stats
+            # setup stats
+            s3_stats = {}
+            s3_stats["get_count"] = 0
+            s3_stats["put_count"] = 0
+            s3_stats["delete_count"] = 0
+            s3_stats["list_count"] = 0
+            s3_stats["error_count"] = 0
+            s3_stats["bytes_in"] = 0
+            s3_stats["bytes_out"] = 0
+            self._app["s3_stats"] = s3_stats
         s3_stats = self._app['s3_stats']
         if counter not in s3_stats:
             log.error(f"unexpected counter for s3_stats: {counter}")
@@ -122,7 +131,7 @@ class S3Client():
              
         s3_stats[counter] += inc
 
-    async def get_object(self, key, bucket=None, range=None):
+    async def get_object(self, key, bucket=None, range=''):
         """ Return data for object at given key.
            If Range is set, return the given byte range.
         """

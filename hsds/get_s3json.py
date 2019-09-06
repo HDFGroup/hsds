@@ -14,14 +14,13 @@ import sys
 import json
 from aiobotocore import get_session
 from aiohttp.client_exceptions import ClientOSError
-from util.s3Util import getS3JSONObj, isS3Obj, getS3Client
+from util.storUtil import getStorJSONObj, isStorObj, releaseStorageClient
 from util.idUtil import getS3Key, isValidUuid
 import config
  
 # This is a utility to dump a JSON obj (group, dataset, ctype) given the
 # the objects UUID
     
-
 #
 # Print usage and exit
 #
@@ -34,17 +33,18 @@ def printUsage():
 async def printS3Obj(app, obj_id):
     try:
         s3_key = getS3Key(obj_id)
-        obj_exists = await isS3Obj(app, s3_key)
+        obj_exists = await isStorObj(app, s3_key)
         if not obj_exists:
-            print("s3 key: {} not found".format(s3_key))
+            print(f"key: {s3_key} not found")
             return
-        json_obj = await getS3JSONObj(app, s3_key)
-        print("s3key {}:".format(s3_key))
+        json_obj = await getStorJSONObj(app, s3_key)
+        print(f"s3key {s3_key}:")
         print(json.dumps(json_obj, sort_keys=True, indent=4))
     except ValueError as ve:
-        print("Got ValueError exception: {}".format(str(ve)))
+        print(f"Got ValueError exception: {ve}")
     except ClientOSError as coe:
-        print("Got S3 error: {}".format(str(coe))) 
+        print(f"Got error: {coe}") 
+    await releaseStorageClient(app)
     
                
 def main():
@@ -60,18 +60,13 @@ def main():
     loop = asyncio.get_event_loop()
     session = get_session(loop=loop)
 
-    s3client = getS3Client(session)
-
     app = {}
-    app['s3'] = s3client
+    app["session"] = session
     app['bucket_name'] = config.get("bucket_name")
 
     loop.run_until_complete(printS3Obj(app, obj_id))
     
     loop.close()
-    s3client.close()     
+    
 
 main()
-
-    
-	
