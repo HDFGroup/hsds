@@ -23,7 +23,7 @@ from aiohttp.web import json_response, StreamResponse
 from util.httpUtil import  request_read
 from util.arrayUtil import bytesArrayToList, bytesToArray, arrayToBytes
 from util.idUtil import getS3Key, validateInPartition, isValidUuid
-from util.s3Util import  isS3Obj, getS3Bytes, deleteS3Obj 
+from util.storUtil import  isStorObj, getStorBytes, deleteStorObj 
 from util.hdf5dtype import createDataType, getItemSize
 from util.dsetUtil import  getSelectionShape, getSliceQueryParam, getEvalStr
 from util.dsetUtil import getFillValue, getChunkLayout, getDeflateLevel, isShuffle
@@ -121,7 +121,7 @@ async def getChunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset=
         if s3path and s3size == 0:
             obj_exists = False
         else:
-            obj_exists = await isS3Obj(app, s3key, bucket=bucket)
+            obj_exists = await isStorObj(app, s3key, bucket=bucket)
         # TBD - potential race condition?
         if obj_exists:
             pending_s3_read = app["pending_s3_read"]
@@ -145,7 +145,7 @@ async def getChunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset=
                     pending_s3_read[chunk_id] = time.time()
                 log.debug(f"Reading chunk {s3key} from S3")
                 
-                chunk_bytes = await getS3Bytes(app, s3key, shuffle=shuffle, deflate_level=deflate_level, s3offset=s3offset, s3size=s3size, bucket=bucket)
+                chunk_bytes = await getStorBytes(app, s3key, shuffle=shuffle, deflate_level=deflate_level, s3offset=s3offset, s3size=s3size, bucket=bucket)
                 if chunk_id in pending_s3_read:
                     # read complete - remove from pending map
                     elapsed_time = time.time() - pending_s3_read[chunk_id]
@@ -809,8 +809,8 @@ async def DELETE_Chunk(request):
         log.info(f"Removing shuffle_map entry for {dset_id}")
         del shuffle_map[dset_id]
 
-    if await isS3Obj(app, s3key, bucket=bucket):
-        await deleteS3Obj(app, s3key, bucket=bucket)
+    if await isStorObj(app, s3key, bucket=bucket):
+        await deleteStorObj(app, s3key, bucket=bucket)
     else:
         log.info(f"delete_metadata_obj - key {s3key} not found (never written)?")
 

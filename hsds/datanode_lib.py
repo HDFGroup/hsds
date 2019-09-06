@@ -17,7 +17,7 @@ import time
 from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError, HTTPBadRequest
 
 from util.idUtil import validateInPartition, getS3Key, isValidUuid, isValidChunkId, getDataNodeUrl, isSchema2Id, getRootObjId, isRootObjId
-from util.s3Util import getS3JSONObj, putS3JSONObj, putS3Bytes, isS3Obj, deleteS3Obj
+from util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes, isStorObj, deleteStorObj
 from util.domainUtil import isValidDomain, getBucketForDomain
 from util.attrUtil import getRequestCollectionName
 from util.httpUtil import http_post
@@ -124,7 +124,7 @@ async def check_metadata_obj(app, obj_id, bucket=None):
         s3_key = getS3Key(obj_id)
         log.debug(f"check_metadata_obj({s3_key})")
         # does key exist?
-        found = await isS3Obj(app, s3_key, bucket=bucket)
+        found = await isStorObj(app, s3_key, bucket=bucket)
     return found
     
  
@@ -180,7 +180,7 @@ async def get_metadata_obj(app, obj_id, bucket=None):
             if obj_id not in pending_s3_read:
                 pending_s3_read[obj_id] = time.time()
             # read S3 object as JSON
-            obj_json = await getS3JSONObj(app, s3_key, bucket=bucket)
+            obj_json = await getStorJSONObj(app, s3_key, bucket=bucket)
             if obj_id in pending_s3_read:
                 # read complete - remove from pending map
                 elapsed_time = time.time() - pending_s3_read[obj_id]
@@ -291,8 +291,8 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None, bucket=Non
     # remove from S3 (if present)
     s3key = getS3Key(obj_id)
 
-    if await isS3Obj(app, s3key, bucket=bucket):
-        await deleteS3Obj(app, s3key, bucket=bucket)
+    if await isStorObj(app, s3key, bucket=bucket):
+        await deleteStorObj(app, s3key, bucket=bucket)
     else:
         log.info(f"delete_metadata_obj - key {s3key} not found (never written)?")
     
@@ -388,7 +388,7 @@ async def write_s3_obj(app, obj_id, bucket=None):
                 shuffle = shuffle_map[dset_id]
                 log.debug(f"got shuffle size: {shuffle} for dset: {dset_id}")
             
-            await putS3Bytes(app, s3key, chunk_bytes, shuffle=shuffle, deflate_level=deflate_level, bucket=bucket)
+            await putStorBytes(app, s3key, chunk_bytes, shuffle=shuffle, deflate_level=deflate_level, bucket=bucket)
             success = True
         
             # if chunk has been evicted from cache something has gone wrong
@@ -412,7 +412,7 @@ async def write_s3_obj(app, obj_id, bucket=None):
                 raise ValueError("bad dirty state for obj")
             obj_json = meta_cache[obj_id]
             
-            await putS3JSONObj(app, s3key, obj_json, bucket=bucket)                     
+            await putStorJSONObj(app, s3key, obj_json, bucket=bucket)                     
             success = True 
             # should still be in meta_cache...
             if obj_id in deleted_ids:

@@ -14,6 +14,9 @@ import sys
 import json
 from aiobotocore import get_session
 from aiohttp.client_exceptions import ClientOSError
+
+sys.path.append('../../hsds')
+sys.path.append('../../hsds/util')
 from util.storUtil import getStorJSONObj, isStorObj, releaseStorageClient
 from util.idUtil import getS3Key, isValidUuid
 import config

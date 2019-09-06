@@ -26,7 +26,10 @@ import hsds_logger as log
 # (assuming the requestor has the proper authorization),
 # but a top-level domain must be created using S3 directory rather
 # than going through a service.
-    
+
+#
+# Note - should be obsolete now.  Use admin account to create top level domains
+#
 
 #
 # Print usage and exit
@@ -159,6 +162,3 @@ def main():
     
 
 main()
-
-    
-	

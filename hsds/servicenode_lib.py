@@ -17,7 +17,7 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, 
 
 
 from util.idUtil import getDataNodeUrl, getCollectionForId, isSchema2Id, getS3Key
-from util.s3Util import getS3JSONObj
+from util.storUtil import getStorJSONObj
 from util.authUtil import aclCheck
 from util.httpUtil import http_get
 from util.domainUtil import getBucketForDomain
@@ -261,7 +261,7 @@ async def getRootInfo(app, root_id, bucket=None):
     info_key = f"db/{parts[1]}/.info.json"
 
     try:
-        info_json = await getS3JSONObj(app, info_key, bucket=bucket)
+        info_json = await getStorJSONObj(app, info_key, bucket=bucket)
     except HTTPNotFound:
         log.warn(f"info.json not found for key: {info_key}")
         return None

@@ -26,7 +26,6 @@ import aiobotocore
 import config
 from util.timeUtil import unixTimeToUTC, elapsedTime
 from util.httpUtil import http_get, getUrl
-from util.s3Util import getInitialS3Stats
 from util.idUtil import  createNodeId
 import hsds_logger as log
 
@@ -369,7 +368,6 @@ async def init(loop):
     app["nodes"] = nodes
     app["node_stats"] = {}  # stats retuned by node/info request.  Keyed by node id
     app["node_ids"] = {}  # dictionary to look up node by id
-    app["s3_stats"] = getInitialS3Stats()
     app.router.add_get('/', info)
     app.router.add_get('/nodestate', nodestate)
     app.router.add_get('/nodestate/{nodetype}', nodestate)

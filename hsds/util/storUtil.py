@@ -119,7 +119,7 @@ async def getStorBytes(app, key, shuffle=0, deflate_level=None, s3offset=0, s3si
         range = f"bytes={s3offset}-{s3offset+s3size-1}"
         log.info(f"storage range request: {range}")
 
-    data = await client.get_object(bucket=bucket, Key=key, Range=range)
+    data = await client.get_object(bucket=bucket, key=key, range=range)
 
     if data and len(data) > 0:
         log.info(f"read: {len(data)} bytes for key: {key}")
@@ -290,16 +290,16 @@ async def isStorObj(app, key, bucket=None):
     log.debug(f"isStorObj {key} returning {found}")
     return found 
   
-async def getStorageKeys(app, prefix='', deliminator='', suffix='', include_stats=False, callback=None, bucket=None, limit=None):
+async def getStorKeys(app, prefix='', deliminator='', suffix='', include_stats=False, callback=None, bucket=None, limit=None):
     # return keys matching the arguments
     client = _getStorageClient(app)
     if not bucket:
         bucket = app['bucket_name']
-    log.info(f"getStorageeKeys('{prefix}','{deliminator}','{suffix}', include_stats={include_stats}")
+    log.info(f"getStorKeys('{prefix}','{deliminator}','{suffix}', include_stats={include_stats}")
      
-    key_names = await client.getStorageKeys(prefix=prefix, deliminator=deliminator, suffix=suffix, 
+    key_names = await client.list_keys(prefix=prefix, deliminator=deliminator, suffix=suffix, 
         include_stats=include_stats, callback=callback, bucket=bucket, limit=limit)
  
-    log.info(f"getStorageKeys done, got {len(key_names)} keys")
+    log.info(f"getStorKeys done, got {len(key_names)} keys")
                
     return key_names

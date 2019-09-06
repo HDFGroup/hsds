@@ -27,7 +27,7 @@ from util.idUtil import  getDataNodeUrl, createObjId, getCollectionForId, getDat
 from util.authUtil import getUserPasswordFromRequest, aclCheck
 from util.authUtil import validateUserPassword, getAclKeys
 from util.domainUtil import getParentDomain, getDomainFromRequest, isValidDomain, getBucketForDomain, getPathForDomain
-from util.s3Util import getS3Keys
+from util.storUtil import getStorKeys
 from util.boolparser import BooleanParser
 from servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath, getRootInfo
 from basenode import getVersion
@@ -387,7 +387,7 @@ async def get_domains(request):
     else:
         s3prefix = prefix[1:]
         log.debug(f"listing S3 keys for {s3prefix}")
-        s3keys = await getS3Keys(app, include_stats=False, prefix=s3prefix, deliminator='/', bucket=bucket)  
+        s3keys = await getStorKeys(app, include_stats=False, prefix=s3prefix, deliminator='/', bucket=bucket)  
         log.debug(f"getS3Keys returned: {len(s3keys)} keys")
         log.debug(f"s3keys {s3keys}")
         
@@ -963,7 +963,7 @@ async def DELETE_Domain(request):
         index = domain.find('/') 
         s3prefix = domain[(index+1):] + '/'
         log.info(f"checking s3key with prefix: {s3prefix} in bucket: {bucket}")
-        s3keys = await getS3Keys(app, include_stats=False, prefix=s3prefix, deliminator='/', bucket=bucket) 
+        s3keys = await getStorKeys(app, include_stats=False, prefix=s3prefix, deliminator='/', bucket=bucket) 
         for s3key in s3keys:
             if s3key.endswith("/"):
                 log.warn(f"attempt to delete folder {domain} with sub-items")

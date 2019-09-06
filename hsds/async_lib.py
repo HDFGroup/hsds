@@ -14,7 +14,7 @@ import time
 from aiohttp.client_exceptions import ClientError
 from util.idUtil import isValidUuid, isSchema2Id, getS3Key, isS3ObjKey, getObjId, isValidChunkId, getCollectionForId
 from util.chunkUtil import getDatasetId
-from util.s3Util import getS3Keys, putS3JSONObj, deleteS3Obj
+from util.storUtil import getStorKeys, putStorJSONObj, deleteStorObj
 import hsds_logger as log
 import config
 
@@ -127,7 +127,7 @@ async def scanRoot(app, rootid, update=False, bucket=None):
 
     app["scanRoot_results"] = results
      
-    await getS3Keys(app, prefix=root_prefix, include_stats=True, bucket=bucket, callback=scanRootCallback)
+    await getStorKeys(app, prefix=root_prefix, include_stats=True, bucket=bucket, callback=scanRootCallback)
 
     log.info(f"scan complete for rootid: {rootid}")
     results["scan_complete"] = time.time()
@@ -136,7 +136,7 @@ async def scanRoot(app, rootid, update=False, bucket=None):
         # write .info object back to S3
         info_key = root_prefix + ".info.json"
         log.info(f"updating info key: {info_key}")
-        await putS3JSONObj(app, info_key, results, bucket=bucket) 
+        await putStorJSONObj(app, info_key, results, bucket=bucket) 
     return results
 
 async def objDeleteCallback(app, s3keys):
@@ -159,7 +159,7 @@ async def objDeleteCallback(app, s3keys):
             raise ValueError("invalid s3key for objDeleteCallback")
         full_key = prefix + s3key[prefix_len:]
         log.info(f"objDeleteCallback got key: {full_key}")
-        await deleteS3Obj(app, full_key)
+        await deleteStorObj(app, full_key)
         
 
     log.info("objDeleteCallback complete")
@@ -189,7 +189,7 @@ async def removeKeys(app, objid):
         # just continue and reset
     app["objDelete_prefix"] = s3prefix
     try:
-        await getS3Keys(app, prefix=s3prefix, include_stats=False, callback=objDeleteCallback)
+        await getStorKeys(app, prefix=s3prefix, include_stats=False, callback=objDeleteCallback)
     except ClientError as ce:
         log.error(f"getS3Keys faiiled: {ce}")
     # reset the prefix

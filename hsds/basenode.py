@@ -28,7 +28,6 @@ from asyncio import CancelledError
 import config
 from util.httpUtil import http_get, http_post, jsonResponse
 from util.idUtil import createNodeId
-from util.s3Util import getInitialS3Stats 
 from util.authUtil import getUserPasswordFromRequest, validateUserPassword
 import hsds_logger as log
 from kubernetes import client as k8s_client
@@ -531,7 +530,8 @@ async def info(request):
     answer["disk"] = disk_stats
     answer["log_stats"] = app["log_count"]
     answer["req_count"] = app["req_count"]
-    answer["s3_stats"] = app["s3_stats"]
+    if "s3_stats" in app:
+        answer["s3_stats"] = app["s3_stats"]
     mc_stats = {}
     if "meta_cache" in app:
         mc = app["meta_cache"]  # only DN nodes have this
@@ -604,8 +604,6 @@ def baseInit(loop, node_type):
     counter["ERROR"] = 0
     app["log_count"] = counter
  
-    app["s3_stats"] = getInitialS3Stats()
-
     if config.get("oio_proxy"):
         app["oio_proxy"] = config.get("oio_proxy")
     if config.get("host_ip"):

@@ -140,6 +140,7 @@ class S3Client():
             raise HTTPInternalServerError()
 
         start_time = time.time()
+        log.debug(f"s3CLient.get_object({bucket}/{key} start: {start_time}")
         try:
             resp = await self._client.get_object(Bucket=bucket, Key=key, Range=range)
             data = await resp['Body'].read()
@@ -154,7 +155,7 @@ class S3Client():
             if response_code == "NoSuchKey":
                 msg = f"s3_key: {key} not found "
                 log.warn(msg)
-                raise HTTPInternalServerError()
+                raise HTTPNotFound()
             elif response_code == "NoSuchBucket":
                 msg = f"s3_bucket: {bucket} not fiound"
                 log.info(msg)
@@ -184,6 +185,7 @@ class S3Client():
             raise HTTPInternalServerError()
 
         start_time = time.time()
+        log.debug(f"s3CLient.put_object({bucket}/{key} start: {start_time}")
         try:
             rsp = await self._client.put_object(Bucket=bucket, Key=key, Body=data)
             finish_time = time.time()
@@ -215,6 +217,9 @@ class S3Client():
         if not bucket:
             log.error("putt_object - bucket not set")
             raise HTTPInternalServerError()
+
+        start_time = time.time()
+        log.debug(f"s3CLient.delete_object({bucket}/{key} start: {start_time}")
         try:
             await self._client.delete_object(Bucket=bucket, Key=key)
         except ClientError as ce:
