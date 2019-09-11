@@ -484,7 +484,7 @@ async def get_domains(request):
                 try:
                     parser_value = parser.evaluate(variable_dict)
                 except TypeError as te:
-                    log.warn(f"evalue {query} for domain {domain} but got erro: {te}")
+                    log.warn(f"evalue {query} for domain {domain} but got error: {te}")
                 if parser_value:
                     log.info(f"domain {domain} passed query test")
                 else:
