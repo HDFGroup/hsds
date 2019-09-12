@@ -29,7 +29,7 @@ from util.hdf5dtype import getItemSize, createDataType
 from util.dsetUtil import getSliceQueryParam, setSliceQueryParam, getFillValue, isExtensible 
 from util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout, getDeflateLevel
 from util.chunkUtil import getNumChunks, getChunkIds, getChunkId, getChunkIndex, getChunkSuffix
-from util.chunkUtil import getChunkCoverage, getDataCoverage
+from util.chunkUtil import getChunkCoverage, getDataCoverage, getChunkIdForPartition
 from util.arrayUtil import bytesArrayToList, jsonToArray, getShapeDims, getNumElements, arrayToBytes, bytesToArray
 from util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from servicenode_lib import getObjectJson, validateAction
@@ -53,13 +53,16 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level,
     if "layout" not in dset_json:
         log.error(f"No layout found in dset_json: {dset_json}")
         raise HTTPInternalServerError()
+    partition_chunk_id = getChunkIdForPartition(chunk_id, dset_json)
+    if partition_chunk_id != chunk_id:
+        log.debug(f"using partition_chunk_id: {partition_chunk_id}")
+        chunk_id = partition_chunk_id  # replace the chunk_id
      
     if "type" not in dset_json:
         log.error(f"No type found in dset_json: {dset_json}")
         raise HTTPInternalServerError()
-    
+        
     layout = getChunkLayout(dset_json)
-
     chunk_sel = getChunkCoverage(chunk_id, slices, layout)
     log.debug(f"chunk_sel: {chunk_sel}")
     data_sel = getDataCoverage(chunk_id, slices, layout)
@@ -115,6 +118,11 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_m
     if chunk_map and chunk_id not in chunk_map:
         log.warn(f"expected to find {chunk_id} in chunk_map")
 
+    partition_chunk_id = getChunkIdForPartition(chunk_id, dset_json)
+    if partition_chunk_id != chunk_id:
+        log.debug(f"using partition_chunk_id: {partition_chunk_id}")
+        chunk_id = partition_chunk_id  # replace the chunk_id
+
     req = getDataNodeUrl(app, chunk_id)
     req += "/chunks/" + chunk_id 
     log.debug("GET chunk req: " + req)
@@ -123,8 +131,9 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_m
     if "type" not in dset_json:
         log.error(f"No type found in dset_json: {dset_json}")
         raise HTTPInternalServerError()
-    
+
     layout = getChunkLayout(dset_json)
+    
     chunk_sel = getChunkCoverage(chunk_id, slices, layout)
     data_sel = getDataCoverage(chunk_id, slices, layout)
     
@@ -218,9 +227,14 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_a
     msg = f"read_point_sel, chunk_id: {chunk_id}"
     log.info(msg)
 
+    partition_chunk_id = getChunkIdForPartition(chunk_id, dset_json)
+    if partition_chunk_id != chunk_id:
+        log.debug(f"using partition_chunk_id: {partition_chunk_id}")
+        chunk_id = partition_chunk_id  # replace the chunk_id
+    
     req = getDataNodeUrl(app, chunk_id)
     req += "/chunks/" + chunk_id 
-    log.debug(f"POST chunk req: {req}")
+    log.debug(f"GET chunk req: {req}")
     client = get_http_client(app)
     point_dt = np.dtype('u8')  # use unsigned long for point index
 
@@ -331,6 +345,11 @@ async def write_point_sel(app, chunk_id, dset_json, point_list, point_data, buck
     type_json = dset_json["type"]
     dset_dtype = createDataType(type_json)  # np datatype
 
+    partition_chunk_id = getChunkIdForPartition(chunk_id, dset_json)
+    if partition_chunk_id != chunk_id:
+        log.debug(f"using partition_chunk_id: {partition_chunk_id}")
+        chunk_id = partition_chunk_id  # replace the chunk_id
+
     req = getDataNodeUrl(app, chunk_id)
     req += "/chunks/" + chunk_id 
     log.debug("POST chunk req: " + req)
@@ -396,6 +415,11 @@ async def read_chunk_query(app, chunk_id, dset_json, slices, query, limit, rsp_d
     """
     msg = f"read_chunk_query, chunk_id: {chunk_id}, slices: {slices}, query: {query}"
     log.info(msg)
+
+    partition_chunk_id = getChunkIdForPartition(chunk_id, dset_json)
+    if partition_chunk_id != chunk_id:
+        log.debug(f"using partition_chunk_id: {partition_chunk_id}")
+        chunk_id = partition_chunk_id  # replace the chunk_id
 
     req = getDataNodeUrl(app, chunk_id)
     req += "/chunks/" + chunk_id 
@@ -640,6 +664,10 @@ async def write_chunk_query(app, chunk_id, dset_json, slices, query, query_updat
     # TBD = see if this code can be merged with the read_chunk_query function
     msg = f"write_chunk_query, chunk_id: {chunk_id}, slices: {slices}, query: {query}, query_udpate: {query_update}"
     log.info(msg)
+    partition_chunk_id = getChunkIdForPartition(chunk_id, dset_json)
+    if partition_chunk_id != chunk_id:
+        log.debug(f"using partition_chunk_id: {partition_chunk_id}")
+        chunk_id = partition_chunk_id  # replace the chunk_id
 
     req = getDataNodeUrl(app, chunk_id)
     req += "/chunks/" + chunk_id 

@@ -128,17 +128,21 @@ class IdUtilTest(unittest.TestCase):
         self.assertEqual(getCollectionForId(dataset_id), "datasets")
         self.assertEqual(getCollectionForId(ctype_id), "datatypes")
         chunk_id = 'c' + dataset_id[1:] + "_1_2"
+        print(chunk_id)
+        chunk_partition_id = 'c42-' + dataset_id[2:] + "_1_2"
 
-        try:
-            getCollectionForId(chunk_id)
-            self.assertTrue(False)
-        except ValueError:
-            pass # expected
-        valid_ids = (group_id, dataset_id, ctype_id, chunk_id, root_id)
+        for id in (chunk_id, chunk_partition_id):
+            try:
+                getCollectionForId(id)
+                self.assertTrue(False)
+            except ValueError:
+                pass # expected
+        valid_ids = (group_id, dataset_id, ctype_id, chunk_id, chunk_partition_id, root_id)
         s3prefix = getS3Key(root_id)
         self.assertTrue(s3prefix.endswith("/.group.json"))
         s3prefix = s3prefix[:-(len(".group.json"))]  
         for oid in valid_ids:
+            print("oid:", oid)
             self.assertTrue(len(oid) >= 38)
             parts = oid.split('-')
             self.assertEqual(len(parts), 6)
@@ -151,6 +155,7 @@ class IdUtilTest(unittest.TestCase):
             self.assertEqual(getRootObjId(oid), root_id)
     
             s3key = getS3Key(oid)
+            print(s3key)
             self.assertTrue(s3key.startswith(s3prefix))
             self.assertEqual(getObjId(s3key), oid)
             self.assertTrue(isS3ObjKey(s3key))

@@ -367,6 +367,7 @@ def getChunkLayout(dset_json):
     layout = layout_json["dims"]
     return layout
 
+
 """ Get the Deflate compression value.
 """
 def getDeflateLevel(dset_json):

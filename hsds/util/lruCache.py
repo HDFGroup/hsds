@@ -141,7 +141,7 @@ class LruCache(object):
             if len(key) < 38:  
                 # id should be prefix (e.g. "c-") and uuid value + chunk_index
                 raise ValueError("Unexpected id length")
-            if not key.startswith("c-"):
+            if not key.startswith("c"):
                 raise ValueError("Unexpected prefix")
             mem_size = getArraySize(data)  # can just compute size for numpy array
         else:

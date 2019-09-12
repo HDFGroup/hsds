@@ -15,7 +15,7 @@ import sys
 sys.path.append('../../hsds/util')
 sys.path.append('../../hsds')
 from dsetUtil import getHyperslabSelection
-from chunkUtil import guessChunk, getNumChunks, getChunkIds, getChunkId
+from chunkUtil import guessChunk, getNumChunks, getChunkIds, getChunkId, getPartitionKey, getChunkPartition
 from chunkUtil import getChunkIndex, getChunkSelection, getChunkCoverage, getDataCoverage, ChunkIterator
 from chunkUtil import getChunkSize, shrinkChunk, expandChunk, getDatasetId, getContiguousLayout
 
@@ -227,9 +227,6 @@ class ChunkUtilTest(unittest.TestCase):
                 self.assertEqual(layout[0], 1)
             self.assertTrue(chunk_bytes <= chunk_max)
 
-   
- 
-
     def testGetNumChunks(self):
         datashape = [100,]
         layout = (10,)
@@ -306,11 +303,12 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(chunk_id[2:-2], dset_id[2:])
         self.assertEqual(len(chunk_id), 2+36+2)
         self.assertEqual(getDatasetId(chunk_id), dset_id)
-
+         
         datashape = [100,]
         layout = (10,)
         selection = getHyperslabSelection(datashape)
         chunk_ids = getChunkIds(dset_id, selection, layout)
+        partition_count = 10
         self.assertEqual(len(chunk_ids), 10)
         for i in range(10):
             chunk_id = chunk_ids[i]
@@ -321,6 +319,14 @@ class ChunkUtilTest(unittest.TestCase):
             self.assertTrue(chunk_id.endswith('_' + str(i)))
             self.assertEqual(chunk_id[2:-2], dset_id[2:])
             self.assertEqual(len(chunk_id), 2+36+2)
+            chunk_id = getPartitionKey(chunk_id, partition_count)
+            print(chunk_id)
+
+            partition = getChunkPartition(chunk_id)
+            self.assertTrue(partition is not None)
+            self.assertTrue(partition >= 0)
+            self.assertTrue(partition < partition_count)
+            
 
         selection = getHyperslabSelection(datashape, 20)
         chunk_ids = getChunkIds(dset_id, selection, layout)
@@ -341,6 +347,7 @@ class ChunkUtilTest(unittest.TestCase):
             self.assertTrue(chunk_id.endswith('_' + str(i+2)))
             self.assertEqual(chunk_id[2:-2], dset_id[2:])
             self.assertEqual(len(chunk_id), 2+36+2)
+            
 
         selection = getHyperslabSelection(datashape, 29, 81)
         chunk_ids = getChunkIds(dset_id, selection, layout)
@@ -394,6 +401,7 @@ class ChunkUtilTest(unittest.TestCase):
                 index2 = int(chunk_id[-1])
                 self.assertEqual(index1, i)
                 self.assertEqual(index2, j)
+                 
 
         selection = getHyperslabSelection(datashape, (12, 23),(88,80))
         chunk_ids = getChunkIds(dset_id, selection, layout)

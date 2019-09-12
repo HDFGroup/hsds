@@ -4,6 +4,7 @@ CHUNK_BASE =  16*1024   # Multiplier by which chunks are adjusted
 CHUNK_MIN =  512*1024   # Soft lower limit (512k)
 CHUNK_MAX = 2048*1024   # Hard upper limit (2M) 
 DEFAULT_TYPE_SIZE = 128 # Type size case when it is variable
+PRIMES = [29, 31, 37, 41, 43, 47, 53, 59, 61, 67] # for chunk partitioning
 
 def getChunkSize(layout, type_size):
     """ Return chunk size given layout.
@@ -207,8 +208,6 @@ def getContiguousLayout(shape_json, item_size, chunk_min=1000*1000, chunk_max=4*
     return layout
 
 
-
-
 def frac(x, d):
     """
     Utility func -- Works like fractional div, but returns ceiling rather than floor
@@ -271,34 +270,108 @@ def getNumChunks(selection, layout):
         num_chunks *= count
     return num_chunks
 
-            
 def getChunkId(dset_id, point, layout):
     """ get chunkid for given point in the dataset
     """
+    
     chunk_id = "c-" + dset_id[2:] + '_'
     rank = len(layout)
+     
     for dim in range(rank):
         coord = None
         if rank == 1:
             coord = point  # integer for 1d dataset
         else:
             coord = point[dim]
-         
         c = layout[dim]
         chunk_index= int(coord) // c
         chunk_id +=  str(chunk_index)
         if dim + 1 < rank:
             chunk_id += '_' # seperate dimensions with underscores
-    # got the complete chunk_id
+              
     return chunk_id
 
 def getDatasetId(chunk_id):
     """ Get dataset id given a chunk id
     """
-    obj_uuid = chunk_id[2:38]
+    n = chunk_id.find('-') + 1
+    if n <= 0:
+        raise ValueError("Unexpected chunk id")
+    obj_uuid = chunk_id[n:(36+n)]
     dset_id = "d-" + obj_uuid
     return dset_id
- 
+
+def getChunkIndex(chunk_id):
+    """ given a chunk_id (e.g.: c-12345678-1234-1234-1234-1234567890ab_6_4) 
+    return the coordinates of the chunk. In this case (6,4)
+    """  
+    # go to the first underscore
+    n = chunk_id.find('_')  + 1
+    if n == 0:
+        raise ValueError("Invalid chunk_id: {}".format(chunk_id))
+    suffix = chunk_id[n:]   
+    
+    index = []
+    parts = suffix.split('_')
+    for part in parts:
+        index.append(int(part))
+
+    return index
+
+def getChunkPartition(chunk_id):
+    """ return partition (if any) for the given chunk id.
+    Parition is encoded in digits after the initial 'c' character.
+    E.g. for:  c56-12345678-1234-1234-1234-1234567890ab_6_4, the 
+    partition would be 56.  
+    For c-12345678-1234-1234-1234-1234567890ab_6_4, the 
+    partition would be None. 
+    """
+    if not chunk_id or chunk_id[0] != 'c':
+        raise ValueError("unexpected chunk id")
+    n = chunk_id.find('-') # go to first underscore
+    if n == 1:
+        return None  # no partition
+    partition = int(chunk_id[1:n])
+    return partition
+
+
+
+def getPartitionKey(chunk_id, partition_count):
+    """ mixin the the partition specifier based on dataset shape and partition_count
+    """
+    if not partition_count or partition_count < 2:
+        return chunk_id # no partition key needed
+
+    chunk_index = getChunkIndex(chunk_id)
+    rank = len(chunk_index)
+
+    partition_index = 0 
+    for dim in range(rank):
+        prime_factor = PRIMES[dim % len(PRIMES)]
+        partition_index += chunk_index[dim] * prime_factor
+
+    partition_index %= partition_count
+    n = chunk_id.find("-")  # get the part after the first hyphen
+    s = chunk_id[n:]
+    chunk_id = 'c' + str(partition_index) + s
+    return chunk_id
+
+
+def getChunkIdForPartition(chunk_id, dset_json):
+    """ Return the partition specific chunk id for given chunk
+    """
+    if "layout" not in dset_json:
+        msg = "No layout found in dset_json"
+        log.error(msg)
+        raise KeyError(msg)
+    layout_json = dset_json["layout"]
+    if "partition_count" in layout_json:
+        partition_count = layout_json["partition_count"]
+        partition = getChunkPartition(chunk_id)
+        if partition is None:
+            # mix in the partition key
+            chunk_id = getPartitionKey(chunk_id, partition_count)
+    return chunk_id
 
 def getChunkIds(dset_id, selection, layout, dim=0, prefix=None, chunk_ids=None):
     """ Get the all the chunk ids for chunks that lie in the selection of the 
@@ -367,22 +440,7 @@ def getChunkSuffix(chunk_id):
     suffix = chunk_id[n:]   
     return suffix
 
-def getChunkIndex(chunk_id):
-    """ given a chunk_id (e.g.: c-12345678-1234-1234-1234-1234567890ab_6_4) 
-    return the coordinates of the chunk. In this case (6,4)
-    """  
-    # go to the first underscore
-    n = chunk_id.find('_')  + 1
-    if n == 0:
-        raise ValueError("Invalid chunk_id: {}".format(chunk_id))
-    suffix = chunk_id[n:]   
-    
-    index = []
-    parts = suffix.split('_')
-    for part in parts:
-        index.append(int(part))
 
-    return index
     
 def getChunkCoordinate(chunk_id, layout):
     """ given a chunk_id (e.g.: c-12345678-1234-1234-1234-1234567890ab_6_4) 

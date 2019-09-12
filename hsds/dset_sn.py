@@ -15,6 +15,7 @@
 # 
  
 import json
+import math
 import numpy as np
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict
  
@@ -660,6 +661,7 @@ async def POST_Dataset(request):
     #
     dims = None
     shape_json = {}
+    rank = 0
 
     if "shape" not in body:
         shape_json["class"] = "H5S_SCALAR"
@@ -669,6 +671,7 @@ async def POST_Dataset(request):
             shape_json["class"] = "H5S_SIMPLE"
             dims = [shape,]
             shape_json["dims"] = dims
+            rank = 1
         elif isinstance(shape, str):
             # only valid string value is H5S_NULL
             if shape != "H5S_NULL":
@@ -683,13 +686,14 @@ async def POST_Dataset(request):
                 shape_json["class"] = "H5S_SIMPLE"
                 shape_json["dims"] = shape
                 dims = shape
+                rank = len(dims)
         else:
             msg = "Bad Request: shape is invalid"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
                 
     if dims is not None:
-        for i  in range(len(dims)):
+        for i  in range(rank):
             extent = dims[i]
             if not isinstance(extent, int):
                 msg = "Invalid shape type"
@@ -737,7 +741,7 @@ async def POST_Dataset(request):
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
         shape_json["maxdims"] = []
-        for i in range(len(dims)):
+        for i in range(rank):
             maxextent = maxdims[i]
             if not isinstance(maxextent, int):
                 msg = "Bad Request: maxdims must be integer type"
@@ -794,6 +798,44 @@ async def POST_Dataset(request):
         if adjusted_chunk_dims:
             log.debug(f"requested chunk_dimensions: {chunk_dims} modified dimensions: {adjusted_chunk_dims}")
             layout["dims"] = adjusted_chunk_dims
+        
+        # set partition_count if needed:
+        max_chunks_per_folder = int(config.get("max_chunks_per_folder"))
+        if  max_chunks_per_folder > 0 and "dims" in shape_json and "dims" in layout:
+            chunk_dims = layout["dims"]
+            shape_dims = shape_json["dims"]
+            if "maxdims" in shape_json:
+                max_dims = shape_json["maxdims"]
+            else:
+                max_dims = None
+            num_chunks = 1
+            rank = len(shape_dims)
+            unlimited_count = 0
+            if max_dims:
+                for i in range(rank):
+                    if max_dims[i] == 0:
+                        unlimited_count += 1
+                log.debug(f"number of unlimited dimensions: {unlimited_count}")
+
+            for i in range(rank):
+                max_dim = 1
+                if max_dims:
+                    max_dim = max_dims[i]
+                    if max_dim == 0:
+                        # don't really know what the ultimate extent could be, but assume
+                        # 10^6 for total number of elements and square-shaped array...
+                        MAX_ELEMENT_GUESS = 10.0 ** 6
+                        max_dim = int(math.pow(MAX_ELEMENT_GUESS, 1/unlimited_count))
+                else:
+                    max_dim = shape_dims[i]
+                num_chunks *= math.ceil(max_dim/chunk_dims[i])
+
+            if num_chunks > max_chunks_per_folder:
+                partition_count = math.ceil(num_chunks/max_chunks_per_folder)
+                log.debug(f"set partition count to: {partition_count}, num_chunks: {num_chunks}")
+                layout["partition_count"] = partition_count
+            else:
+                log.debug(f"do not neeed partitions, num_chunks: {num_chunks}")
 
     if layout and layout["class"] in ('H5D_CHUNKED_REF', 'H5D_CHUNKED_REF_INDIRECT'):
         chunk_dims = layout["dims"]

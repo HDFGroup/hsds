@@ -234,6 +234,7 @@ class DatasetTest(unittest.TestCase):
         layout = rspJson["layout"]
         self.assertEqual(layout["class"], 'H5D_CHUNKED')
         self.assertEqual(layout["dims"], [10,10])
+        self.assertTrue("partition_count" not in layout)
          
         type = rspJson["type"]
         for name in ("base", "class"):
@@ -937,6 +938,8 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(layout_json["class"], 'H5D_CHUNKED')
         self.assertTrue("dims" in layout_json)
         self.assertEqual(layout_json["dims"], [1, 390, 1024])
+        self.assertTrue("partition_count" in layout_json)
+        self.assertEqual(layout_json["partition_count"], 10)
 
         # verify compression
         self.assertTrue("creationProperties" in rspJson)
@@ -1027,6 +1030,7 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("class" in layout_json)
         self.assertEqual(layout_json["class"], 'H5D_CHUNKED')
         self.assertTrue("dims" in layout_json)
+        self.assertTrue("partition_count" not in layout_json)
         layout = layout_json["dims"]
         self.assertEqual(len(layout), 1)
         self.assertTrue(layout[0] < dims[0])
@@ -1529,6 +1533,124 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(len(chunk_dims), 2)
         self.assertTrue("chunk_table" in layout)
         self.assertEqual(layout["chunk_table"], chunkinfo_uuid)
+
+    def testDatasetChunkPartitioning(self):
+        # test Dataset partitioning logic for large datasets
+        domain = self.base_domain + "/testDatasetChunkPartitioning.h5"
+        helper.setupDomain(domain)
+        print("testDatasetChunkPartitioning", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        # get domain
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+    
+        # create the dataset 
+        req = self.endpoint + "/datasets"
+        # 50K x 80K x 90K dataset
+        dims = [50000, 80000, 90000]
+        payload = {'type': 'H5T_IEEE_F32LE', 'shape': dims }
+            
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+             
+        dset_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dset_uuid))
+             
+        # link new dataset as 'dset'
+        name = 'dset'
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {"id": dset_uuid}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+    
+        # verify layout
+        req = helper.getEndpoint() + "/datasets/" + dset_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("layout" in rspJson)
+        layout_json = rspJson["layout"]
+        print(layout_json)
+        self.assertTrue("class" in layout_json)
+        self.assertEqual(layout_json["class"], 'H5D_CHUNKED')
+        self.assertTrue("dims" in layout_json)
+        self.assertTrue("partition_count" in layout_json)
+
+        layout = layout_json["dims"]
+    
+        self.assertEqual(len(layout), 3)
+        self.assertTrue(layout[0] < dims[0])
+        self.assertTrue(layout[1] < dims[1])
+        self.assertTrue(layout[2] < dims[2])
+        chunk_size = layout[0] * layout[1] * layout[2] * 4
+        # chunk size should be between chunk min and max
+        self.assertTrue(chunk_size >= CHUNK_MIN)
+        self.assertTrue(chunk_size <= CHUNK_MAX)
+
+    def testExtendibleDatasetChunkPartitioning(self):
+        # test Dataset partitioning logic for large datasets
+        domain = self.base_domain + "/testExtendibleDatasetChunkPartitioning.h5"
+        helper.setupDomain(domain)
+        print("testExtendibleDatasetChunkPartitioning", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        # get domain
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+        
+        # create the dataset 
+        req = self.endpoint + "/datasets"
+        # 50K x 80K x 90K dataset
+        dims = [0, 80000, 90000]
+        # unlimited extend in dim 0, fixeed in dimension 2, extenbile by 10x in dim 3
+        max_dims = [0,80000,900000]  
+        payload = {'type': 'H5T_IEEE_F32LE', 'shape': dims, 'maxdims': max_dims }
+                
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+                 
+        dset_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dset_uuid))
+                 
+        # link new dataset as 'dset'
+        name = 'dset'
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        payload = {"id": dset_uuid}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        
+        # verify layout
+        req = helper.getEndpoint() + "/datasets/" + dset_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        print(rspJson)
+        self.assertTrue("layout" in rspJson)
+        layout_json = rspJson["layout"]
+        print(layout_json)
+        self.assertTrue("class" in layout_json)
+        self.assertEqual(layout_json["class"], 'H5D_CHUNKED')
+        self.assertTrue("dims" in layout_json)
+        self.assertTrue("partition_count" in layout_json)
+    
+        layout = layout_json["dims"]
+        
+        self.assertEqual(len(layout), 3)
+        chunk_size = layout[0] * layout[1] * layout[2] * 4
+        # chunk size should be between chunk min and max
+        self.assertTrue(chunk_size >= CHUNK_MIN)
+        self.assertTrue(chunk_size <= CHUNK_MAX)
+    
+
         
              
 if __name__ == '__main__':

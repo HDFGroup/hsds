@@ -152,12 +152,20 @@ def getS3Key(id):
             if isRootObjId(id):
                 key = f"db/{hexid[0:8]}-{hexid[8:16]}"
             else:
+                partition = ""
                 if prefix == 'c':
                     s3col = 'd'  # so that chunks will show up under their dataset
+                    n = id.find('-')
+                    if n > 1:
+                        # extract the partition index if present
+                        partition = 'p' + id[1:n]
                 else:
                     s3col = prefix
                 key = f"db/{hexid[0:8]}-{hexid[8:16]}/{s3col}/{hexid[16:20]}-{hexid[20:26]}-{hexid[26:32]}"
             if prefix == 'c':
+                if partition:
+                    key += '/' 
+                    key += partition
                 # add the chunk coordinate
                 index = id.index('_')  # will raise ValueError if not found
                 coord = id[index+1:]
@@ -191,6 +199,7 @@ def getObjId(s3key):
         # schema v2 object key
         parts = s3key.split('/')
         chunk_coord = ""  # used only for chunk ids
+        partition = ""    # likewise
         token = []
         for ch in parts[1]:
             if ch != '-':
@@ -224,14 +233,29 @@ def getObjId(s3key):
                     chunk_coord = "_" + parts[4]
             else:
                 raise ValueError(f"unexpected S3Key: {s3key}")
+        elif len(parts) == 6:
+            # chunk key with partitioning
+            for ch in parts[3]:
+                if ch != '-':
+                    token.append(ch)
+            if parts[2][0] != 'd':
+                raise ValueError(f"unexpected S3Key: {s3key}")
+            prefix = 'c'
+            partition = parts[4]
+            if partition[0] != 'p':
+                raise ValueError(f"unexpected S3Key: {s3key}")
+            partition = partition[1:]  # strip off the p
+            chunk_coord = "_" + parts[5]
+
+
+
         else:
             raise ValueError(f"unexpected S3Key: {s3key}")
         
         token = "".join(token)
-        objid = prefix + '-' + token[0:8] + '-' + token[8:16] + '-' + token[16:20] + '-' + token[20:26] + '-' + token[26:32] + chunk_coord
+        objid = prefix + partition + '-' + token[0:8] + '-' + token[8:16] + '-' + token[16:20] + '-' + token[20:26] + '-' + token[26:32] + chunk_coord
     else:
         raise ValueError(f"unexpected S3Key: {s3key}")
-
     return objid
 
 
@@ -279,7 +303,8 @@ def validateUuid(id, obj_class=None):
         raise ValueError("Unexpected id length")
     if id[0] not in ('g', 'd', 't', 'c'):
         raise ValueError("Unexpected prefix")
-    if id[1] != '-':
+    if id[0] != 'c' and id[1] != '-':
+        # chunk ids may have a partition index following the c
         raise ValueError("Unexpected prefix")
     if obj_class is not None:
         obj_class = obj_class.lower()
@@ -289,13 +314,18 @@ def validateUuid(id, obj_class=None):
         if id[0] != prefix:
             raise ValueError("Unexpected prefix for class: " + obj_class)
     if id[0] == 'c':
-        # trim the chunk index for chunk ids
-        index = id.find('_')
-        if index == -1:
+        # trim the type char and any partition id
+        n = id.find('-')
+        if n == -1:
             raise ValueError("Invalid chunk id")
-        id = id[:index]
+        
+        # trim the chunk index for chunk ids
+        m = id.find('_')
+        if m == -1:
+            raise ValueError("Invalid chunk id")
+        id = "c-" + id[(n+1):m]
     if len(id) != 38:
-        # id should be 38 now
+        # id should be 36 now
         raise ValueError("Unexpected id length")
 
     for ch in id:
