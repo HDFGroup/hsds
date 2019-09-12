@@ -1575,11 +1575,11 @@ class DatasetTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("layout" in rspJson)
         layout_json = rspJson["layout"]
-        print(layout_json)
         self.assertTrue("class" in layout_json)
         self.assertEqual(layout_json["class"], 'H5D_CHUNKED')
         self.assertTrue("dims" in layout_json)
         self.assertTrue("partition_count" in layout_json)
+        self.assertEqual(layout_json["partition_count"], 1377)  # will change if max_chunks_per_folder is updated
 
         layout = layout_json["dims"]
     
@@ -1633,10 +1633,8 @@ class DatasetTest(unittest.TestCase):
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        print(rspJson)
         self.assertTrue("layout" in rspJson)
         layout_json = rspJson["layout"]
-        print(layout_json)
         self.assertTrue("class" in layout_json)
         self.assertEqual(layout_json["class"], 'H5D_CHUNKED')
         self.assertTrue("dims" in layout_json)

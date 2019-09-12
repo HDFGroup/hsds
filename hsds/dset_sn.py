@@ -832,10 +832,10 @@ async def POST_Dataset(request):
 
             if num_chunks > max_chunks_per_folder:
                 partition_count = math.ceil(num_chunks/max_chunks_per_folder)
-                log.debug(f"set partition count to: {partition_count}, num_chunks: {num_chunks}")
+                log.info(f"set partition count to: {partition_count}, num_chunks: {num_chunks}")
                 layout["partition_count"] = partition_count
             else:
-                log.debug(f"do not neeed partitions, num_chunks: {num_chunks}")
+                log.info(f"do not need chunk partitions, num_chunks: {num_chunks} max_chunks_per_folder: {max_chunks_per_folder}")
 
     if layout and layout["class"] in ('H5D_CHUNKED_REF', 'H5D_CHUNKED_REF_INDIRECT'):
         chunk_dims = layout["dims"]
