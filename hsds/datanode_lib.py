@@ -14,7 +14,7 @@
 # 
 import asyncio
 import time 
-from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError, HTTPBadRequest
+from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError, HTTPBadRequest, HTTPNotFound, HTTPForbidden
 
 from util.idUtil import validateInPartition, getS3Key, isValidUuid, isValidChunkId, getDataNodeUrl, isSchema2Id, getRootObjId, isRootObjId
 from util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes, isStorObj, deleteStorObj
@@ -180,7 +180,23 @@ async def get_metadata_obj(app, obj_id, bucket=None):
             if obj_id not in pending_s3_read:
                 pending_s3_read[obj_id] = time.time()
             # read S3 object as JSON
-            obj_json = await getStorJSONObj(app, s3_key, bucket=bucket)
+            try:
+                obj_json = await getStorJSONObj(app, s3_key, bucket=bucket)
+            except HTTPNotFound:
+                log.warn(f"HTTPpNotFound error for {s3_key} bucket:{bucket}")
+                if obj_id in pending_s3_read:
+                    del pending_s3_read[obj_id] 
+                raise
+            except HTTPForbidden:
+                log.warn(f"HTTPForbidden error for {s3_key} bucket:{bucket}")
+                if obj_id in pending_s3_read:
+                    del pending_s3_read[obj_id] 
+                raise
+            except HTTPInternalServerError:
+                log.warn(f"HTTPInternalServerError error for {s3_key} bucket:{bucket}")
+                if obj_id in pending_s3_read:
+                    del pending_s3_read[obj_id] 
+                raise
             if obj_id in pending_s3_read:
                 # read complete - remove from pending map
                 elapsed_time = time.time() - pending_s3_read[obj_id]

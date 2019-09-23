@@ -96,7 +96,7 @@ class DomainCrawler:
 
 class FolderCrawler:
     def __init__(self, app, domains, bucket=None, get_root=False, verbose=False, max_tasks=40):
-        log.info(f"FolderCrawler.__init__ ")
+        log.info(f"FolderCrawler.__init__  {len(domains)} domain names")
         self._app = app
         self._get_root = get_root
         self._verbose = verbose
@@ -141,7 +141,7 @@ class FolderCrawler:
                 if "version" in domain_rsp:
                     del domain_rsp["version"]
                 log.debug(f"FolderCrawler - {domain} get domain_rsp: {domain_rsp}")
-                # mixin domain anme
+                # mixin domain name
                 self._domain_dict[domain] = domain_rsp
                 if self._get_root and "root" in domain_json:
                     root_id = domain_json["root"]
@@ -157,12 +157,11 @@ class FolderCrawler:
             log.warn(f"not found error for: {domain}")
 
  
-
-
 async def get_collections(app, root_id):
     """ Return the object ids for given root.
     """   
 
+    log.info(f"get_collections for {root_id}")
     groups = {}
     datasets = {}
     datatypes = {}
@@ -285,14 +284,15 @@ async def get_domain_response(app, domain_json, bucket=None, verbose=False):
             num_datatypes = root_info["num_datatypes"]
             num_datasets = len(root_info["datasets"])
             num_chunks = root_info["num_chunks"]
+        
         else:
-            # no info json (either v1 schema or not created yet)
-            # get collection sizes by interating over graph
-            collections = await get_collections(app, domain_json["root"])
-            num_groups = len(collections["groups"]) + 1  # add 1 for root group
-            num_datasets = len(collections["datasets"])
-            num_datatypes = len(collections["datatypes"])
+            allocated_bytes = 0
+            totalSize = 0
+            num_groups = 0
+            num_datasets = 0
+            num_datatypes = 0
             num_chunks = 0
+            
 
         num_objects = num_groups + num_datasets + num_datatypes + num_chunks
         rsp_json["num_groups"] = num_groups

@@ -205,23 +205,29 @@ def getDomainFromRequest(request, validate=True):
                 domain = getDomainForHost(domain)
             except ValueError:
                 pass # ignore
+    print(f"getDomainFromRequest got domain: {domain}")
     # now validate that its a properly formed domain
     if validate:
         validateDomain(domain)
     if "bucket" in params and params["bucket"]:
         bucket = params["bucket"] 
+        print(f"found bucket: {bucket} in params")
     elif "X-Hdf-bucket" in request.headers:
         bucket = request.headers["X-Hdf-bucket"] 
+        print(f"found bucket: {bucket} in request headers")
     elif "bucket_name" in request.app and request.app["bucket_name"]:
         # prefix the domain with the bucket name
         bucket = app["bucket_name"] 
+        print(f"using bucket: {bucket} from app")
     else:
         pass # no domain specified
 
     if bucket:
         if not re.match("^[a-zA-Z0-9.\-_]{1,255}$", bucket):
             raise ValueError(f"bucket name: {bucket} is not valid")
-        domain = bucket + domain
+        if domain[0] == '/':
+            print("adding bucket to domain")
+            domain = bucket + domain
     
     return domain
 

@@ -49,8 +49,9 @@ async def getDomainJson(app, domain, reload=False):
 
     req = getDataNodeUrl(app, domain)
     req += "/domains"
-    params = { "domain": domain } 
-    log.debug(f"sending dn req: {req}")
+    params = { "domain": domain }
+     
+    log.debug(f"sending dn req: {req} params: {params}")
     
     domain_json = await http_get(app, req, params=params)
     

@@ -7,7 +7,7 @@ import json
 import time
 from aiobotocore.config import AioConfig
 from botocore.exceptions import ClientError
-from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError, HTTPForbidden
 import hsds_logger as log
 import config
 
@@ -145,7 +145,7 @@ class S3Client():
             resp = await self._client.get_object(Bucket=bucket, Key=key, Range=range)
             data = await resp['Body'].read()
             finish_time = time.time()
-            log.info(f"s3Clieent.getS3Bytes({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f} bytes={len(data)}")
+            log.info(f"s3Client.getS3Bytes({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f} bytes={len(data)}")
  
             resp['Body'].close()
         except ClientError as ce:
@@ -160,9 +160,13 @@ class S3Client():
                 msg = f"s3_bucket: {bucket} not fiound"
                 log.info(msg)
                 raise HTTPNotFound()
+            elif response_code == "AccessDenied":
+                msg = f"access denied for s3_bucket: {bucket}"
+                log.info(msg)
+                raise HTTPForbidden()
             else:
                 self._s3_stats_increment("error_count")
-                log.error(f"got unexpected ClientError on s3 get {key}: {ce}")
+                log.error(f"got unexpected ClientError on s3 get {key}: {response_code}")
                 raise HTTPInternalServerError()
         except CancelledError as cle:
             self._s3_stats_increment("error_count")

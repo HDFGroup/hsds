@@ -16,7 +16,7 @@
 from asyncio import CancelledError
 from aiohttp.web import json_response
 from aiohttp import  ClientSession, TCPConnector
-from aiohttp.web_exceptions import HTTPNotFound, HTTPConflict, HTTPGone, HTTPInternalServerError, HTTPRequestEntityTooLarge
+from aiohttp.web_exceptions import HTTPForbidden, HTTPNotFound, HTTPConflict, HTTPGone, HTTPInternalServerError, HTTPRequestEntityTooLarge, HTTPServiceUnavailable
 from aiohttp.client_exceptions import ClientError
 
 
@@ -106,12 +106,18 @@ async def http_get(app, url, params=None, format="json"):
         log.error("CancelledError for http_get({}): {}".format(url, str(cle)))
         raise HTTPInternalServerError()
     
-    if status_code == 404:
+    if status_code == 403:
+        log.warn(f"Forbiden to access {url}")
+        raise HTTPForbidden()
+    elif status_code == 404:
         log.warn(f"Object: {url} not found")
         raise HTTPNotFound()
     elif status_code == 410:
         log.warn(f"Object: {url} removed")
         raise HTTPGone()
+    elif status_code == 503:
+        log.warn(f"503 error for http_get_Json {url}")
+        raise HTTPServiceUnavailable()
     elif status_code != 200:
         log.error(f"Error for http_get_json({url}): {status_code}")
         raise HTTPInternalServerError() 
@@ -140,6 +146,10 @@ async def http_post(app, url, data=None, params=None):
                 log.info(f"POST  reqest HTTPNotFound error for url: {url}")
             elif rsp.status == 410:
                 log.info(f"POST  reqest HTTPGone error for url: {url}")
+            elif rsp.status == 503:
+                log.warn(f"503 error for http_get_Json {url}")
+                raise HTTPServiceUnavailable()
+
             else:
                 log.warn(f"POST request error for url: {url} - status: {rsp.status}")  
                 raise HTTPInternalServerError()
@@ -173,6 +183,9 @@ async def http_put(app, url, data=None, params=None):
             elif rsp.status == 409:
                 log.info(f"HTTPConflict for: {url}")
                 raise HTTPConflict()
+            elif rsp.status == 503:
+                log.warn(f"503 error for http_put url: {url}")
+                raise HTTPServiceUnavailable()
             else:
                 log.error(f"PUT request error for url: {url} - status: {rsp.status}")
                 raise HTTPInternalServerError()
@@ -203,6 +216,9 @@ async def http_put_binary(app, url, data=None, params=None):
             if rsp.status != 201:
                 log.error(f"PUT (binary) request error for {url}: status {rsp.status}")
                 raise HTTPInternalServerError()
+            elif rsp.status == 503:
+                log.warn(f"503 error for http_put_binary {url}")
+                raise HTTPServiceUnavailable()
 
             rsp_json = await rsp.json()
             log.debug(f"http_put_binary({url}) response: {rsp_json}")
@@ -218,6 +234,7 @@ async def http_put_binary(app, url, data=None, params=None):
 Helper function  - async HTTP DELETE
 """ 
 async def http_delete(app, url, data=None, params=None):
+    # TBD - do we really need a data param?
     log.info(f"http_delete('{url}')")
     #client = get_http_client(app)
     rsp_json = None
@@ -232,6 +249,9 @@ async def http_delete(app, url, data=None, params=None):
                     pass  # expectred
                 elif rsp.status == 404:
                     log.info(f"NotFound response for DELETE for url: {url}")
+                elif rsp.status == 503:
+                    log.warn(f"503 error for http_delete {url}")
+                    raise HTTPServiceUnavailable()
                 else:
                     log.error(f"DELETE request error for url: {url} - status: {rsp.status}")
                     raise HTTPInternalServerError()
