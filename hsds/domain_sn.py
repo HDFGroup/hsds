@@ -286,6 +286,7 @@ async def get_domain_response(app, domain_json, bucket=None, verbose=False):
             num_chunks = root_info["num_chunks"]
         
         else:
+            # root info not available - just return 0 for these values
             allocated_bytes = 0
             totalSize = 0
             num_groups = 0
