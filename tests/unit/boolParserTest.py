@@ -49,6 +49,18 @@ class BooleanParserTest(unittest.TestCase):
         self.assertTrue(p.evaluate({'x': "bye"}))
         self.assertFalse(p.evaluate({'x': "aloha"}))   
 
+        # do lexigraphical comparison
+        p = BooleanParser('x1 >= "cat" AND x1 <= "pig"') 
+        variables = p.getVariables()
+        self.assertEqual(len(variables), 1)
+        self.assertTrue("x1" in variables)
+        self.assertTrue(p.evaluate({'x1': 'cat'}))
+        self.assertFalse(p.evaluate({'x1': 'aardvark'}))
+        self.assertTrue(p.evaluate({'x1': 'dog'}))
+        self.assertTrue(p.evaluate({'x1': 'pig'}))
+        self.assertFalse(p.evaluate({'x1': 'piglet'}))
+
+
         p = BooleanParser("x > 2 AND y < 3") 
         self.assertTrue(p.evaluate({'x':3, 'y': 1}))   
         self.assertFalse(p.evaluate({'x':1, 'y': 1}))   
