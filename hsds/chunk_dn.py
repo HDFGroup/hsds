@@ -688,6 +688,8 @@ async def POST_Chunk(request):
             log.warn("S3 object not found for get points")
             raise HTTPNotFound()
 
+    log.debug(f"chunk_arr.shape: {chunk_arr.shape}")
+
     if put_points:
         # writing point data
         
@@ -699,18 +701,35 @@ async def POST_Chunk(request):
             coord_type_str = f"({rank},)uint64"
         comp_dtype = np.dtype([("coord", np.dtype(coord_type_str)), ("value", dset_dtype)])
         point_arr = np.fromstring(input_bytes, dtype=comp_dtype)
+
         if len(point_arr) != num_points:
             msg = f"Unexpected size of point array, got: {len(point_arr)} expected: {num_points}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
+
         for i in range(num_points):
             elem = point_arr[i]
+            log.debug(f"non-relative coordinate: {elem}")
             if rank == 1:
                 coord = int(elem[0])
+                coord = coord % chunk_layout[0] # adjust to chunk relative
+
             else:
-                coord = tuple(elem[0]) # index to update
+                coord = elem[0] # index to update
+                for dim in range(rank):
+                    # adjust to chunk relative
+                    coord[dim] = int(coord[dim]) % chunk_layout[dim]
+                coord = tuple(coord)  # need to convert to a tuple
+            log.debug(f"relative coordinate: {coord}")
+
+
             val = elem[1]   # value 
-            chunk_arr[coord] = val # update the point
+            try:
+                chunk_arr[coord] = val # update the point
+            except IndexError:
+                msg = "Out of bounds point index for POST Chunk"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
 
         chunk_cache = app["chunk_cache"]
         chunk_cache.setDirty(chunk_id)

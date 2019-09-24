@@ -939,9 +939,88 @@ class PointSelTest(unittest.TestCase):
                     self.assertEqual(row[y], 1)
                 else:
                     self.assertEqual(row[y], 0)
-             
+
     
-             
+    def testDatasetChunkPartitioning(self):
+        # test Dataset partitioning logic for large datasets
+        print("testDatasetChunkPartitioning:", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        # get domain
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # create the dataset
+        req = self.endpoint + "/datasets"
+        # 50K x 80K x 90K dataset
+        dims = [50000, 80000, 90000]
+        payload = {'type': 'H5T_STD_I32LE', 'shape': dims }
+
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+
+        dset_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dset_uuid))
+
+        # link new dataset as 'big_dset'
+        name = 'big_dset'
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": dset_uuid}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # verify layout
+        req = helper.getEndpoint() + "/datasets/" + dset_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("layout" in rspJson)
+        layout_json = rspJson["layout"]
+        self.assertTrue("class" in layout_json)
+        self.assertEqual(layout_json["class"], 'H5D_CHUNKED')
+        self.assertTrue("dims" in layout_json)
+        self.assertTrue("partition_count" in layout_json)
+        self.assertEqual(layout_json["partition_count"], 1377)  # will change if max_chunks_per_folder is updated
+
+        # make up some points
+        NUM_POINTS = 20
+        points = []
+        value = []
+        for i in range(NUM_POINTS):
+            x = (dims[0] // NUM_POINTS) * i
+            y = (dims[1] // NUM_POINTS) * i
+            z = (dims[2] // NUM_POINTS) * i
+            points.append((x, y, z))
+            value.append(i)
+
+        # write 1's to all the point locations 
+        payload = { 'points': points, 'value': value }
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200) 
+
+        # read back data
+        body = { "points": points }
+        # read a selected points
+        rsp = requests.post(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        expected_result = [50005, 50010, 50015, 50020, 50025, 100005, 100010, 
+            100015, 100020, 100025, 150005, 150010, 150015, 150020, 150025]
+
+        self.assertTrue("value" in rspJson)
+        # verify the correct elements got set
+        value = rspJson["value"]
+        self.assertEqual(len(value), NUM_POINTS)
+        for i in range(NUM_POINTS):
+            self.assertEqual(value[i], i)
+         
+
 if __name__ == '__main__':
     #setup test files
     

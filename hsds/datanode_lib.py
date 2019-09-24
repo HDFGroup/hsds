@@ -138,13 +138,13 @@ async def get_metadata_obj(app, obj_id, bucket=None):
     if isValidDomain(obj_id):
         bucket = getBucketForDomain(obj_id)
     
-    """
+    
     try:
         validateInPartition(app, obj_id)
     except KeyError:
         log.error("Domain not in partition")
         raise HTTPInternalServerError() 
-    """
+    
 
     deleted_ids = app['deleted_ids']
     if obj_id in deleted_ids:
