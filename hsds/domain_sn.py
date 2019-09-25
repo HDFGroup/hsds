@@ -134,7 +134,7 @@ class FolderCrawler:
             log.debug(f"FolderCrawler - {domain} got domain_json: {domain_json}")
             if domain_json:
 
-                domain_rsp = await get_domain_response(self._app, domain_json, verbose=self._verbose)
+                domain_rsp = await get_domain_response(self._app, domain_json, verbose=self._verbose, bucket=self._bucket)
                 if "limits" in domain_rsp:
                     # don't return limits for multi-domain responses
                     del domain_rsp["limits"]
