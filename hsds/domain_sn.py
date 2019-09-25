@@ -18,7 +18,7 @@ import json
 import os.path as op
 import re
 
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPGone, HTTPInternalServerError, HTTPConflict
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPGone, HTTPInternalServerError, HTTPConflict, HTTPServiceUnavailable
 from aiohttp import ClientResponseError
 from aiohttp.client_exceptions import ClientError
 
@@ -50,9 +50,9 @@ class DomainCrawler:
         workers = [asyncio.Task(self.work())
                    for _ in range(self._max_tasks)]
         # When all work is done, exit.
-        log.info("DomainCrawler - await queue.join")
+        log.info(f"DomainCrawler - await queue.join - count: {len(self._obj_dict)}")
         await self._q.join()
-        log.info("DomainCrawler - join complete")
+        log.info(f"DomainCrawler - join complete - count: {len(self._obj_dict)}")
 
         for w in workers:
             w.cancel()
@@ -112,9 +112,9 @@ class FolderCrawler:
         workers = [asyncio.Task(self.work())
                    for _ in range(self._max_tasks)]
         # When all work is done, exit.
-        log.info("FolderCrawler - await queue.join")
+        log.info(f"FolderCrawler - await queue.join - count: {len(self._domain_dict)}")
         await self._q.join()
-        log.info("FolderCrawler - join complete")
+        log.info(f"FolderCrawler - join complete - count: {len(self._domain_dict)}")
 
         for w in workers:
             w.cancel()
@@ -154,7 +154,19 @@ class FolderCrawler:
                 log.warn(f"FolderCrawler - no domain found for {domain}")
         except HTTPNotFound:
             # One of the dmains not found, but continue through the list
-            log.warn(f"not found error for: {domain}")
+            log.warn(f"fetch result - not found error for: {domain}")
+        except HTTPGone:
+            log.warn(f"fetch result - domain: {domain} has been deletted")
+        except HTTPInternalServerError:
+            log.error(f"fetch result - internal error fetching: {domain}")
+        except HTTPForbidden:
+            log.warn(f"fetch result - access not allowed for: {domain}")
+        except HTTPBadRequest:
+            log.error(f"fetch result - bad request for: {domain}")
+        except HTTPServiceUnavailable:
+            log.warn(f"fetch result - service unavailable for domain: {domain}")
+        except Exception as e:
+            log.error(f"fetch result - unexpected exception for domain {domain}: {e}")
 
  
 async def get_collections(app, root_id):
@@ -396,6 +408,9 @@ async def get_domains(request):
             if s3key[-1] != '/':
                 log.debug(f"ignoring key: {s3key}")
                 continue
+            if len(s3key) > 1 and s3key[-2] == '/':
+                # trim off double slash
+                s3key = s3key[:-1]
             log.debug(f"got s3key: {s3key}")
             domain = "/" + s3key[:-1]
             if regex:

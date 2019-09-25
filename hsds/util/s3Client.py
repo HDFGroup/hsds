@@ -304,7 +304,6 @@ class S3Client():
             async for page in paginator.paginate(
                 PaginationConfig={'PageSize': 1000}, Bucket=bucket,  Prefix=prefix, Delimiter=deliminator):
                 assert not asyncio.iscoroutine(page)
-                log.debug(f"got page: {page}")
                 self._getPageItems(page, key_names, include_stats=include_stats)
                 count += len(key_names)
                 if callback:
