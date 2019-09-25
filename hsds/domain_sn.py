@@ -11,7 +11,7 @@
 ##############################################################################
 #
 # service node of hsds cluster
-# 
+#
 from asyncio import CancelledError
 import asyncio
 import json
@@ -133,7 +133,7 @@ class FolderCrawler:
             domain_json = await getDomainJson(self._app, domain_key, reload=True) 
             log.debug(f"FolderCrawler - {domain} got domain_json: {domain_json}")
             if domain_json:
-                
+
                 domain_rsp = await get_domain_response(self._app, domain_json, verbose=self._verbose)
                 if "limits" in domain_rsp:
                     # don't return limits for multi-domain responses
@@ -168,10 +168,9 @@ class FolderCrawler:
         except Exception as e:
             log.error(f"fetch result - unexpected exception for domain {domain}: {e}")
 
- 
 async def get_collections(app, root_id):
     """ Return the object ids for given root.
-    """   
+    """
 
     log.info(f"get_collections for {root_id}")
     groups = {}
@@ -190,7 +189,7 @@ async def get_collections(app, root_id):
         except HTTPNotFound:
             log.warn(f"get_collection, group {grp_id} not found")
             continue
-        
+
         log.debug(f"got links json from dn for group_id: {grp_id}") 
         links = links_json["links"]
         log.debug(f"get_collection: got links: {links}")
@@ -224,8 +223,8 @@ async def get_collections(app, root_id):
 
 async def getDomainObjects(app, root_id, include_attrs=False, bucket=None):
     """ Iterate through all objects in heirarchy and add to obj_dict keyed by obj id
-    """   
-   
+    """
+
     log.info(f"getDomainObjects for root: {root_id}")
 
     crawler = DomainCrawler(app, root_id, include_attrs=include_attrs, bucket=bucket)
@@ -233,7 +232,7 @@ async def getDomainObjects(app, root_id, include_attrs=False, bucket=None):
     log.info(f"getDomainObjects returning: {len(crawler._obj_dict)} objects")
 
     return crawler._obj_dict
-    
+
 def getIdList(objs, marker=None, limit=None):
     """ takes a map of ids to objs and returns ordered list
         of ids, optionally reduced by marker and limit """
@@ -285,7 +284,7 @@ async def get_domain_response(app, domain_json, bucket=None, verbose=False):
     if verbose and "root" in domain_json:
         root_info = await getRootInfo(app, domain_json["root"], bucket=bucket)
         if root_info:
-            allocated_bytes = root_info["allocated_bytes"]  
+            allocated_bytes = root_info["allocated_bytes"]
             totalSize += allocated_bytes
             if "metadata_bytes" in root_info:
                 # this key was added for schema v2
@@ -296,7 +295,7 @@ async def get_domain_response(app, domain_json, bucket=None, verbose=False):
             num_datatypes = root_info["num_datatypes"]
             num_datasets = len(root_info["datasets"])
             num_chunks = root_info["num_chunks"]
-        
+
         else:
             # root info not available - just return 0 for these values
             allocated_bytes = 0
@@ -305,7 +304,7 @@ async def get_domain_response(app, domain_json, bucket=None, verbose=False):
             num_datasets = 0
             num_datatypes = 0
             num_chunks = 0
-            
+
 
         num_objects = num_groups + num_datasets + num_datatypes + num_chunks
         rsp_json["num_groups"] = num_groups
@@ -317,20 +316,19 @@ async def get_domain_response(app, domain_json, bucket=None, verbose=False):
         rsp_json["num_objects"] =  num_objects
 
     # pass back config parameters the client may care about
-    
+
     rsp_json["limits"] = getLimits()
     rsp_json["version"] = getVersion()
 
     rsp_json["lastModified"] = lastModified
     return rsp_json
 
- 
-        
+
 async def get_domains(request):
     """ This method is called by GET_Domains and GET_Domain """
     app = request.app
     params = request.rel_url.query
-    
+
     # if there is no domain passed in, get a list of top level domains
     if "domain" not in request.rel_url.query:
         prefix = '/'
@@ -350,7 +348,7 @@ async def get_domains(request):
     else:
         query = request.rel_url.query["query"]
 
-    # use "verbose" to pull extra info 
+    # use "verbose" to pull extra info
     if "verbose" in request.rel_url.query and request.rel_url.query["verbose"]:
         verbose = True
     else:
@@ -361,22 +359,25 @@ async def get_domains(request):
     if not prefix.startswith('/'):
         msg = "Prefix must start with '/'"
         log.warn(msg)
-        raise HTTPBadRequest(reason=msg)  
+        raise HTTPBadRequest(reason=msg)
 
     limit = None
     if "Limit" in request.rel_url.query:
         try:
             limit = int(request.rel_url.query["Limit"])
-            log.debug(f"GET_Domains - using Limit: {limit}")
+            log.debug(f"get_domains - using Limit: {limit}")
         except ValueError:
             msg = "Bad Request: Expected int type for limit"
-            log.warn(msg)   
+            log.warn(msg)
             raise HTTPBadRequest(reason=msg)
+    else:
+        log.debug(f"get_domains - no limit")
 
-    marker = None        
+
+    marker = None
     if "Marker" in request.rel_url.query:
         marker = request.rel_url.query["Marker"]
-        log.debug(f"got marker request param: {marker}")
+        log.debug(f"get_domains - got marker request param: {marker}")
 
     if "bucket" in params:
         bucket = params["bucket"]
@@ -390,7 +391,7 @@ async def get_domains(request):
         msg = "no bucket specified for request"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    log.info(f"get_domains prefix: {prefix} bucket: {bucket}")
+    log.info(f"get_domains - prefix: {prefix} bucket: {bucket}")
 
     # list the S3 keys for this prefix
     domainNames = []
@@ -399,19 +400,18 @@ async def get_domains(request):
         domainNames = config.get("top_level_domains")
     else:
         s3prefix = prefix[1:]
-        log.debug(f"listing S3 keys for {s3prefix}")
+        log.debug(f"get_domains - listing S3 keys for {s3prefix}")
         s3keys = await getStorKeys(app, include_stats=False, prefix=s3prefix, deliminator='/', bucket=bucket)  
-        log.debug(f"getS3Keys returned: {len(s3keys)} keys")
-        log.debug(f"s3keys {s3keys}")
-        
+        log.debug(f"get_domains - getS3Keys returned: {len(s3keys)} keys")
+
         for s3key in s3keys:
             if s3key[-1] != '/':
-                log.debug(f"ignoring key: {s3key}")
+                log.debug(f"get_domains - ignoring key: {s3key}")
                 continue
             if len(s3key) > 1 and s3key[-2] == '/':
                 # trim off double slash
                 s3key = s3key[:-1]
-            log.debug(f"got s3key: {s3key}")
+            log.debug(f"get_domains - got s3key: {s3key}")
             domain = "/" + s3key[:-1]
             if regex:
                 # do a pattern match on the basename
@@ -419,15 +419,15 @@ async def get_domains(request):
                 if not regex.match(basename):
                     log.debug(f"get_domains - {basename} did not match regex: {pattern}")
                     continue
-                    
+
             if marker:
-                log.debug(f"compare marker {marker} and {domain}")
+                log.debug(f"get_domains - compare marker {marker} and {domain}")
                 if marker == domain:
-                    log.debug(f"clearing marker")
+                    log.debug(f"get_domains - clearing marker")
                     marker = None
                 continue
-            
-            log.debug(f"adding domain: {domain} to domain list")
+
+            log.debug(f"get_domains - adding domain: {domain} to domain list")
             domainNames.append(domain)
 
             if limit and len(domainNames) == limit:
@@ -445,26 +445,26 @@ async def get_domains(request):
     await crawler.crawl()
 
     if query:
-        log.info(f"proccessing query: {query}")
+        log.info(f"get_domains - proccessing query: {query}")
         try:
             parser = BooleanParser(query)
         except IndexError as ie:
-            log.warn(f"domaing query syntax error: {ie}")
+            log.warn(f"get_domains - domaing query syntax error: {ie}")
             raise HTTPBadRequest(reason="Invalid query expression")
         attr_names = parser.getVariables()
-        log.info(f"query variables: {attr_names}")
+        log.info(f"get_domains - query variables: {attr_names}")
         # remove any domains from dict for which the attribute query is false
         domain_keys = list(crawler._domain_dict.keys())
-        log.debug(f"querying through {len(domain_keys)}")
-        
+        log.debug(f"get_domains - querying through {len(domain_keys)}")
+
         for domain in domain_keys:
-            log.debug(f"query search for: {domain}")
+            log.debug(f"get_domains - query search for: {domain}")
             domain_json = crawler._domain_dict[domain]
             if "root" not in domain_json:
-                log.debug(f"skipping folder: {domain} for attribute query search")
+                log.debug(f"get_domains - skipping folder: {domain} for attribute query search")
                 del domain_keys[domain]
                 continue
-            
+
             root_id = domain_json["root"]
             if root_id not in crawler._group_dict:
                 log.warn(f"Expected to find {root_id} in crawler group dict")
@@ -490,7 +490,7 @@ async def get_domains(request):
                 if attr_shape_class == 'H5S_SCALAR':
                     variable_dict[attr_name] = attr_json["value"]
                 else:
-                    log.debug("unable to query non-scalar attributes")
+                    log.debug("get_domains - unable to query non-scalar attributes")
                     del crawler._domain_dict[domain]
                     continue
             # evaluate the boolean expression
@@ -500,13 +500,12 @@ async def get_domains(request):
                 try:
                     parser_value = parser.evaluate(variable_dict)
                 except TypeError as te:
-                    log.warn(f"evalue {query} for domain {domain} but got error: {te}")
+                    log.warn(f"get_domains - evaluate {query} for {domain} but got error: {te}")
                 if parser_value:
-                    log.info(f"domain {domain} passed query test")
+                    log.info(f"get_domains - {domain} passed query test")
                 else:
-                    log.debug(f"domain {domain} failed query test")
+                    log.debug(f"get_domains - {domain} failed query test")
                     del crawler._domain_dict[domain]
-                    
 
     for domain in domainNames:
         if domain in crawler._domain_dict:
@@ -516,7 +515,7 @@ async def get_domains(request):
             domains.append(domain_json)
         else:
             if not query:
-                log.warn(f"domain: {domain} not found in crawler dict")
+                log.warn(f"get_domains - domain: {domain} not found in crawler dict")
 
     return domains
 
@@ -540,7 +539,6 @@ async def GET_Domains(request):
     log.response(request, resp=resp)
     return resp
 
- 
 async def GET_Domain(request):
     """HTTP method to return JSON for given domain"""
     log.request(request)
@@ -567,12 +565,12 @@ async def GET_Domain(request):
         msg = "Bucket not provided"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-        
+
     verbose = False
     if "verbose" in params and params["verbose"]:
         verbose = True
 
-    if not domain: 
+    if not domain:
         log.info("no domain passed in, returning all top-level domains")
         # no domain passed in, return top-level domains for this request
         domains = await get_domains(request)
@@ -583,13 +581,13 @@ async def GET_Domain(request):
         return resp
 
     log.info(f"got domain: {domain}")
-   
+
     domain_json = await getDomainJson(app, domain, reload=True)
-     
+
     if domain_json is None:
         log.warn(f"domain: {domain} not found")
         raise HTTPNotFound()
-     
+
     if 'owner' not in domain_json:
         log.error("No owner key found in domain")
         raise HTTPInternalServerError()
@@ -628,7 +626,7 @@ async def GET_Domain(request):
             include_attrs = True
         domain_objs = await getDomainObjects(app, root_id, include_attrs=include_attrs, bucket=bucket)
         rsp_json["domain_objs"] = domain_objs
-     
+
     hrefs = []
     hrefs.append({'rel': 'self', 'href': getHref(request, '/')})
     if "root" in domain_json:
@@ -637,7 +635,7 @@ async def GET_Domain(request):
         hrefs.append({'rel': 'groupbase', 'href': getHref(request, '/groups')})
         hrefs.append({'rel': 'typebase', 'href': getHref(request, '/datatypes')})
         hrefs.append({'rel': 'root', 'href': getHref(request, '/groups/' + root_uuid)})
-    
+
     hrefs.append({'rel': 'acls', 'href': getHref(request, '/acls')})
     parent_domain = getParentDomain(domain)
     if not parent_domain or getPathForDomain(parent_domain) == '/':
@@ -647,7 +645,7 @@ async def GET_Domain(request):
     log.debug(f"href parent domain: {parent_domain}")
     if not is_toplevel:
         hrefs.append({'rel': 'parent', 'href': getHref(request, '/', domain=parent_domain)})
-   
+
     rsp_json["hrefs"] = hrefs
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
@@ -663,12 +661,12 @@ async def doFlush(app, root_id, bucket=None):
     dn_urls = getDataNodeUrls(app)
     log.debug(f"dn_urls: {dn_urls}")
 
-    try: 
+    try:
         tasks = []
         for dn_url in dn_urls:
-            req = dn_url + "/groups/" + root_id 
+            req = dn_url + "/groups/" + root_id
             task = asyncio.ensure_future(client.put(req, params=params))
-            tasks.append(task)  
+            tasks.append(task)
         done, pending = await asyncio.wait(tasks)
         if pending:
             # should be empty since we didn't use return_when parameter
@@ -684,7 +682,7 @@ async def doFlush(app, root_id, bucket=None):
                 log.warn(f"expected 204 but got: {clientResponse.status}")
                 raise HTTPInternalServerError()
     except ClientError as ce:
-        log.error(f"Error for http_put('/groups/{root_id}'): {str(ce)}")   
+        log.error(f"Error for http_put('/groups/{root_id}'): {str(ce)}")
         raise HTTPInternalServerError()
     except CancelledError as cle:
         log.warn(f"CancelledError '/groups/{root_id}'): {str(cle)}")
@@ -703,32 +701,32 @@ async def PUT_Domain(request):
     # inital perms for owner and default
     owner_perm = {'create': True, 'read': True, 'update': True, 'delete': True, 'readACL': True, 'updateACL': True } 
     default_perm = {'create': False, 'read': True, 'update': False, 'delete': False, 'readACL': False, 'updateACL': False } 
-    
+
     try:
         domain = getDomainFromRequest(request)
     except ValueError:
         msg = "Invalid domain"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
- 
+
     bucket = getBucketForDomain(domain)
 
     log.info(f"PUT domain: {domain}, bucket: {bucket}")
 
     body = None
     if request.has_body:
-        body = await request.json()   
+        body = await request.json()
         log.debug(f"PUT domain with body: {body}")
 
     if ("flush" in params and params["flush"]) or (body and "flush" in body and body["flush"]):
         # flush domain - update existing domain rather than create a new resource
         domain_json = await getDomainJson(app, domain, reload=True)
         log.debug(f"got domain_json: {domain_json}")
-    
+
         if domain_json is None:
             log.warn(f"domain: {domain} not found")
             raise HTTPNotFound()
-     
+
         if 'owner' not in domain_json:
             log.error("No owner key found in domain")
             raise HTTPInternalServerError()
@@ -741,7 +739,7 @@ async def PUT_Domain(request):
         if "root" in domain_json:
             # nothing to do for folder objects
             await doFlush(app, domain_json["root"], bucket=bucket)
-        # flush  successful     
+        # flush  successful
         resp = await jsonResponse(request, None, status=204)
         log.response(request, resp=resp)
         return resp
@@ -751,7 +749,7 @@ async def PUT_Domain(request):
     linked_domain = None
     linked_bucket = None
     root_id = None
-    
+
     if body and "folder" in body:
         if body["folder"]:
             is_folder = True
@@ -779,10 +777,10 @@ async def PUT_Domain(request):
         if not linked_bucket:
             msg = "Could not determine bucket for linked domain"
             log.warn(msg)
-            raise HTTPBadRequest(reason=msg)    
+            raise HTTPBadRequest(reason=msg)
 
     if owner != username and username != "admin":
-        log.warn("Only admin users are allowed to set owner for new domains");   
+        log.warn("Only admin users are allowed to set owner for new domains")
         raise HTTPForbidden()
 
 
@@ -793,7 +791,7 @@ async def PUT_Domain(request):
         is_toplevel = True
     else:
         is_toplevel = False
-    
+
     if is_toplevel and not is_folder:
         msg = "Only folder domains can be created at the top-level"
         log.warn(msg)
@@ -803,7 +801,7 @@ async def PUT_Domain(request):
         msg = "creation of top-level domains is only supported by admin users"
         log.warn(msg)
         raise HTTPForbidden()
-    
+
 
     parent_json = None
     if not is_toplevel:
@@ -846,11 +844,11 @@ async def PUT_Domain(request):
 
     if not is_folder and not linked_json:
         # create a root group for the new domain
-        root_id = createObjId("roots") 
+        root_id = createObjId("roots")
         log.debug(f"new root group id: {root_id}")
         group_json = {"id": root_id, "root": root_id, "domain": domain }
         log.debug("create group for domain, body: " + json.dumps(group_json))
-    
+
         # create root group
         req = getDataNodeUrl(app, root_id) + "/groups"
         params = {}
@@ -865,9 +863,9 @@ async def PUT_Domain(request):
             raise HTTPInternalServerError()
     else:
         log.debug("no root group, creating folder")
- 
+
     domain_json = { }
-    
+
     domain_acls = {}
     # owner gets full control
     domain_acls[owner] = owner_perm
@@ -878,7 +876,7 @@ async def PUT_Domain(request):
 
     # construct dn request to create new domain
     req = getDataNodeUrl(app, domain)
-    req += "/domains" 
+    req += "/domains"
     body = { "owner": owner, "domain": domain }
     body["acls"] = domain_acls
 
@@ -893,7 +891,7 @@ async def PUT_Domain(request):
         log.error(msg)
         raise HTTPInternalServerError()
 
-    # domain creation successful     
+    # domain creation successful
     # maxin limits
     domain_json["limits"] = getLimits()
     domain_json["version"] = getVersion()
@@ -904,13 +902,13 @@ async def PUT_Domain(request):
 async def DELETE_Domain(request):
     """HTTP method to delete a domain resource"""
     log.request(request)
-    app = request.app 
+    app = request.app
     params = request.rel_url.query
 
     meta_only = False  # if True, just delete the meta cache value
     keep_root = False
     if request.has_body:
-        body = await request.json() 
+        body = await request.json()
         if "meta_only" in body:
             meta_only = body["meta_only"]
         if "keep_root" in body:
@@ -976,7 +974,7 @@ async def DELETE_Domain(request):
 
     # check for sub-objects if this is a folder
     if "root" not in domain_json:
-        index = domain.find('/') 
+        index = domain.find('/')
         s3prefix = domain[(index+1):] + '/'
         log.info(f"checking s3key with prefix: {s3prefix} in bucket: {bucket}")
         s3keys = await getStorKeys(app, include_stats=False, prefix=s3prefix, deliminator='/', bucket=bucket) 
@@ -984,19 +982,19 @@ async def DELETE_Domain(request):
             if s3key.endswith("/"):
                 log.warn(f"attempt to delete folder {domain} with sub-items")
                 log.debug(f"got prefix: {s3keys[0]}")
-                raise HTTPConflict(reason="folder has sub-items")  
-            
+                raise HTTPConflict(reason="folder has sub-items")
+
 
     req = getDataNodeUrl(app, domain)
-    req += "/domains" 
-    
+    req += "/domains"
+
     params = {} # for http_delete requests to DN nodes
     params["domain"] = domain
     rsp_json = await http_delete(app, req, params=params)
 
     if "root" in domain_json and not keep_root:
         # delete the root group
-        
+
         root_id = domain_json["root"]
         req = getDataNodeUrl(app, root_id)
         req += "/groups/" + root_id
@@ -1022,12 +1020,12 @@ async def DELETE_Domain(request):
         sn_url = sn_urls[node_no]
         req = sn_url + "/"
         log.info(f"sending sn request: {req}")
-        try: 
+        try:
             sn_rsp = await http_delete(app, req, params=params)
             log.info(f"{req} response: {sn_rsp}")
         except ClientResponseError as ce:
             log.warn(f"got error for sn_delete: {ce}")
-    
+
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp
@@ -1067,14 +1065,14 @@ async def GET_ACL(request):
         else:
             log.error(f"unexpected error: {ce.code}")
             raise HTTPInternalServerError()
-     
+
     # validate that the requesting user has permission to read ACLs in this domain
     if acl_username in (username, "default"):
         # allow read access for a users on ACL, or default
         aclCheck(domain_json, "read", username)  # throws exception if not authorized
     else:
         aclCheck(domain_json, "readACL", username)  # throws exception if not authorized
-     
+
     if 'owner' not in domain_json:
         log.warn("No owner key found in domain")
         raise HTTPInternalServerError()
@@ -1130,7 +1128,7 @@ async def GET_ACLs(request):
         msg = "Invalid domain"
         log.warn(msg)
         raise HTTPBadRequest(message=msg)
-    
+
     # use reload to get authoritative domain json
     try:
         domain_json = await getDomainJson(app, domain, reload=True)
@@ -1138,7 +1136,7 @@ async def GET_ACLs(request):
         log.warn("domain not found")
         log.warn(msg)
         raise HTTPNotFound()
-     
+
     if 'owner' not in domain_json:
         log.error("No owner key found in domain")
         raise HTTPInternalServerError()
@@ -1177,7 +1175,7 @@ async def GET_ACLs(request):
 
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
-    return resp    
+    return resp
 
 async def PUT_ACL(request):
     """HTTP method to add a new ACL for a domain"""
@@ -1198,7 +1196,7 @@ async def PUT_ACL(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    body = await request.json()   
+    body = await request.json()
     acl_keys = getAclKeys()
 
     for k in body.keys():
@@ -1218,19 +1216,18 @@ async def PUT_ACL(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-     
-    # don't use app["domain_cache"]  if a direct domain request is made 
+    # don't use app["domain_cache"]  if a direct domain request is made
     # as opposed to an implicit request as with other operations, query
     # the domain from the authoritative source (the dn node)
     req = getDataNodeUrl(app, domain)
     req += "/acls/" + acl_username
-    log.info(f"sending dn req: {req}")  
+    log.info(f"sending dn req: {req}")
     body["domain"] = domain
 
     put_rsp = await http_put(app, req, data=body)
     log.info("PUT ACL resp: " + str(put_rsp))
-    
-    # ACL update successful     
+
+    # ACL update successful
     resp = await jsonResponse(request, put_rsp, status=201)
     log.response(request, resp=resp)
     return resp
@@ -1255,7 +1252,7 @@ async def GET_Datasets(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    # verify the domain 
+    # verify the domain
     try:
         domain_json = await getDomainJson(app, domain)
     except ClientResponseError as ce:
@@ -1273,7 +1270,7 @@ async def GET_Datasets(request):
         msg = "domain not found"
         log.warn(msg)
         raise HTTPNotFound()
-     
+
     if 'owner' not in domain_json:
         log.error("No owner key found in domain")
         raise HTTPInternalServerError()
@@ -1301,13 +1298,13 @@ async def GET_Datasets(request):
     obj_ids = []
     if "root" in domain_json or domain_json["root"]:
         # get the dataset collection list
-        collections = await get_collections(app, domain_json["root"])  
+        collections = await get_collections(app, domain_json["root"])
         objs = collections["datasets"]
         obj_ids = getIdList(objs, marker=marker, limit=limit)
-        
+
     log.debug(f"returning obj_ids: {obj_ids}")
-     
-    # create hrefs 
+
+    # create hrefs
     hrefs = []
     hrefs.append({'rel': 'self', 'href': getHref(request, '/datasets')})
     if "root" in domain_json:
@@ -1319,7 +1316,7 @@ async def GET_Datasets(request):
     rsp_json = { }
     rsp_json["datasets"] = obj_ids
     rsp_json["hrefs"] = hrefs
-     
+
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp
@@ -1335,14 +1332,14 @@ async def GET_Groups(request):
         username = "default"
     else:
         await validateUserPassword(app, username, pswd)
-    
+
     try:
         domain = getDomainFromRequest(request)
     except ValueError:
         msg = "Invalid domain"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    
+
     # use reload to get authoritative domain json
     try:
         domain_json = await getDomainJson(app, domain, reload=True)
@@ -1354,7 +1351,7 @@ async def GET_Groups(request):
         else:
             log.error(f"Unexpected error: {ce.code}")
             raise HTTPInternalServerError()
-     
+
     if 'owner' not in domain_json:
         log.error("No owner key found in domain")
         raise HTTPInternalServerError()
@@ -1383,11 +1380,11 @@ async def GET_Groups(request):
     obj_ids = []
     if "root" in domain_json or domain_json["root"]:
         # get the groups collection list
-        collections = await get_collections(app, domain_json["root"])  
+        collections = await get_collections(app, domain_json["root"])
         objs = collections["groups"]
         obj_ids = getIdList(objs, marker=marker, limit=limit)
- 
-    # create hrefs 
+
+    # create hrefs
     hrefs = []
     hrefs.append({'rel': 'self', 'href': getHref(request, '/groups')})
     if "root" in domain_json:
@@ -1399,7 +1396,7 @@ async def GET_Groups(request):
     rsp_json = { }
     rsp_json["groups"] = obj_ids
     rsp_json["hrefs"] = hrefs
-     
+
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp
@@ -1415,14 +1412,14 @@ async def GET_Datatypes(request):
         username = "default"
     else:
         await validateUserPassword(app, username, pswd)
-    
+
     try:
         domain = getDomainFromRequest(request)
     except ValueError:
         msg = "Invalid domain"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    
+
     # use reload to get authoritative domain json
     try:
         domain_json = await getDomainJson(app, domain, reload=True)
@@ -1434,7 +1431,7 @@ async def GET_Datatypes(request):
         else:
             log.error(f"Unexpected Error: {ce.code})")
             raise HTTPInternalServerError()
-     
+
     if 'owner' not in domain_json:
         log.error("No owner key found in domain")
         raise HTTPInternalServerError()
@@ -1463,11 +1460,11 @@ async def GET_Datatypes(request):
     obj_ids = []
     if "root" in domain_json or domain_json["root"]:
         # get the groups collection list
-        collections = await get_collections(app, domain_json["root"])  
+        collections = await get_collections(app, domain_json["root"])
         objs = collections["datatypes"]
         obj_ids = getIdList(objs, marker=marker, limit=limit)
- 
-    # create hrefs 
+
+    # create hrefs
     hrefs = []
     hrefs.append({'rel': 'self', 'href': getHref(request, '/datatypes')})
     if "root" in domain_json:
@@ -1479,7 +1476,7 @@ async def GET_Datatypes(request):
     rsp_json = { }
     rsp_json["datatypes"] = obj_ids
     rsp_json["hrefs"] = hrefs
-     
+
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp
