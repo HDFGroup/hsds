@@ -95,24 +95,27 @@ class DomainCrawler:
         log.debug(f"DomainCrawler - fetch conplete obj_id: {obj_id}")
 
 class FolderCrawler:
-    def __init__(self, app, domains, bucket=None, get_root=False, verbose=False, max_tasks=40):
+    def __init__(self, app, domains, bucket=None, get_root=False, verbose=False, max_tasks=400):
         log.info(f"FolderCrawler.__init__  {len(domains)} domain names")
         self._app = app
         self._get_root = get_root
         self._verbose = verbose
-        self._max_tasks = max_tasks
         self._q = asyncio.Queue()
         self._domain_dict = {}
         self._group_dict = {}
         for domain in domains:
             self._q.put_nowait(domain)
         self._bucket = bucket
+        if len(domains) > max_tasks:
+            self._max_tasks = max_tasks
+        else:
+            self._max_tasks = len(domains)
 
     async def crawl(self):
         workers = [asyncio.Task(self.work())
                    for _ in range(self._max_tasks)]
         # When all work is done, exit.
-        log.info(f"FolderCrawler - await queue.join - count: {len(self._domain_dict)}")
+        log.info(f"FolderCrawler max_tasks {self._max_tasks} = await queue.join - count: {len(self._domain_dict)}")
         await self._q.join()
         log.info(f"FolderCrawler - join complete - count: {len(self._domain_dict)}")
 
@@ -128,12 +131,11 @@ class FolderCrawler:
 
     async def fetch(self, domain):
         log.debug(f"FolderCrawler - fetch for domain: {domain} bucket: {self._bucket}")
-        domain_key = self._bucket + domain 
+        domain_key = self._bucket + domain
         try:
-            domain_json = await getDomainJson(self._app, domain_key, reload=True) 
+            domain_json = await getDomainJson(self._app, domain_key, reload=True)
             log.debug(f"FolderCrawler - {domain} got domain_json: {domain_json}")
             if domain_json:
-
                 domain_rsp = await get_domain_response(self._app, domain_json, verbose=self._verbose, bucket=self._bucket)
                 if "limits" in domain_rsp:
                     # don't return limits for multi-domain responses
@@ -146,17 +148,16 @@ class FolderCrawler:
                 if self._get_root and "root" in domain_json:
                     root_id = domain_json["root"]
                     log.debug(f"fetching root json for {root_id}")
-                    root_json = await getObjectJson(self._app, root_id, include_links=False, include_attrs=True, bucket=self._bucket)  
+                    root_json = await getObjectJson(self._app, root_id, include_links=False, include_attrs=True, bucket=self._bucket)
                     log.debug(f"got root_json: {root_json}")
                     self._group_dict[root_id] = root_json
-
             else:
                 log.warn(f"FolderCrawler - no domain found for {domain}")
         except HTTPNotFound:
             # One of the dmains not found, but continue through the list
             log.warn(f"fetch result - not found error for: {domain}")
         except HTTPGone:
-            log.warn(f"fetch result - domain: {domain} has been deletted")
+            log.warn(f"fetch result - domain: {domain} has been deleted")
         except HTTPInternalServerError:
             log.error(f"fetch result - internal error fetching: {domain}")
         except HTTPForbidden:
@@ -190,7 +191,7 @@ async def get_collections(app, root_id):
             log.warn(f"get_collection, group {grp_id} not found")
             continue
 
-        log.debug(f"got links json from dn for group_id: {grp_id}") 
+        log.debug(f"got links json from dn for group_id: {grp_id}")
         links = links_json["links"]
         log.debug(f"get_collection: got links: {links}")
         for link in links:
