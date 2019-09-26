@@ -26,30 +26,6 @@ from util.arrayUtil import arrayToBytes
 import config
 import hsds_logger as log
 
-def validateObjId(obj_id, bucket):
-    """
-    Verifies the passed in is what we are expecting.
-    For uuids, obj_id should be an actual uuid and bucket should be non-null
-    For domains, obj_id should include the bucket prefix and bucket should be empty
-       e.g. obj_id="mybucket/home/bob/myfile.h5"
-    """
-    if isValidDomain(obj_id):
-        if obj_id[0] == '/':
-            # bucket name should always be prefixed 
-            # (so the obj_id is cannonical)
-            msg = f"bucket not included for domain: {obj_id}"
-            log.error(msg)
-            raise HTTPInternalServerError()
-        if bucket:
-            msg = f"bucket param should not be used with obj_id for domain: {obj_id}"
-            log.error(msg)
-            raise HTTPInternalServerError()
-    elif not isValidUuid(obj_id):
-        msg = f"Invalid obj id: {obj_id}"
-        log.error(msg)
-        
-        raise HTTPInternalServerError()
-
 
 def get_obj_id(request, body=None):
     """ Get object id from request 
@@ -100,7 +76,6 @@ async def notify_root(app, root_id, bucket=None):
 async def check_metadata_obj(app, obj_id, bucket=None):
     """ Return False is obj does not exist
     """
-    validateObjId(obj_id, bucket)
     if isValidDomain(obj_id):
         bucket = getBucketForDomain(obj_id)
 
@@ -134,17 +109,11 @@ async def get_metadata_obj(app, obj_id, bucket=None):
         Otherwise fetch from S3 and add to cache
     """
     log.info(f"get_metadata_obj: {obj_id} bucket: {bucket}")
-    validateObjId(obj_id, bucket) # throws internal server error if invalid
     if isValidDomain(obj_id):
         bucket = getBucketForDomain(obj_id)
-    
-    
-    try:
-        validateInPartition(app, obj_id)
-    except KeyError:
-        log.error("Domain not in partition")
-        raise HTTPInternalServerError() 
-    
+
+    # don't call validateInPartition since this is used to pull in
+    # immutable data from other nodes
 
     deleted_ids = app['deleted_ids']
     if obj_id in deleted_ids:
@@ -213,8 +182,6 @@ async def save_metadata_obj(app, obj_id, obj_json, bucket=None, notify=False, fl
         log.error("notify not valid when flush is false")
         raise HTTPInternalServerError()
 
-    validateObjId(obj_id, bucket)
-    
     if not isinstance(obj_json, dict):
         log.error("Passed non-dict obj to save_metadata_obj")
         raise HTTPInternalServerError() 
@@ -279,7 +246,6 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None, bucket=Non
     meta_cache = app['meta_cache'] 
     dirty_ids = app["dirty_ids"]
     log.info(f"delete_meta_data_obj: {obj_id} notify: {notify}")
-    validateObjId(obj_id, bucket)
     if isValidDomain(obj_id):
         bucket = getBucketForDomain(obj_id)
         
