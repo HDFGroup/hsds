@@ -48,7 +48,7 @@ def get_http_client(app):
     loop = app["loop"]
     max_tcp_connections = int(config.get("max_tcp_connections"))
     log.info(f"Initiating TCPConnector with limit {max_tcp_connections} connections")
-    client = ClientSession(loop=loop, connector=TCPConnector(limit=max_tcp_connections))
+    client = ClientSession(loop=loop, connector=TCPConnector(limit_per_host=max_tcp_connections))
     #create the app object
     app['client'] = client
     return client
