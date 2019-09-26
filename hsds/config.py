@@ -33,13 +33,12 @@ cfg = {
     'sn_port': 5101,   # Start sn ports at 5101
     'target_sn_count': 4,
     'target_dn_count': 4,
-    'log_file': 'head.log',
     'log_level': 'INFO',   # ERROR, WARNING, INFO, DEBUG, or NOTSET,
     'max_tcp_connections': 16,
     'head_sleep_time': 10,
     'node_sleep_time': 10,
     'async_sleep_time': 10,
-    's3_sync_interval': 10,  # time to wait to write object data to S3 (in sec)     
+    's3_sync_interval': 10,  # time to wait to write object data to S3 (in sec)
     'max_chunks_per_request': 2500,  # maximum number of chunks to be serviced by one request
     'min_chunk_size': '1m',  # 1 MB
     'max_chunk_size': '4m',  # 4 MB
@@ -50,17 +49,15 @@ cfg = {
     'metadata_mem_cache_size': '128m',
     'chunk_mem_cache_size': '128m',  # 128 MB
     'timeout': 30,  # http timeout - 30 sec
-    'anonymous_ttl': 10*60,  # time after which anonymous objects will be deleted - 10 m, 0 for infinite
-    'gc_freq': 20*60,  # time between gc runs
     'password_file': '/usr/local/src/hsds/passwd.txt',  # filepath to a text file of username/passwords. set to '' for no-auth access
     'server_name': 'Highly Scalable Data Service (HSDS)', # this gets returned in the about request
     'greeting': 'Welcome to HSDS!',
     'about': 'HSDS is a webservice for HDF data',
     'top_level_domains': []  # list of possible top-level domains, example: ["/home", "/shared"]
-   
+
 }
-   
-def get(x): 
+
+def get(x):
     # see if there is a command-line override
     #print("config get:", x)
     option = '--'+x+'='
@@ -68,14 +65,14 @@ def get(x):
     for i in range(1, len(sys.argv)):
         #print(i, sys.argv[i])
         if sys.argv[i].startswith(option):
-            # found an override     
+            # found an override
             arg = sys.argv[i]
-            retval = arg[len(option):]  # return text after option string    
+            retval = arg[len(option):]  # return text after option string
     # see if there are an environment variable override
     if not retval and  x.upper() in os.environ:
         retval = os.environ[x.upper()]
-    # no command line override, just return the cfg value  
-    if not retval and x in cfg:    
+    # no command line override, just return the cfg value
+    if not retval and x in cfg:
         retval = cfg[x]
     if isinstance(retval, str) and len(retval) > 1 and retval[-1] in ('g', 'm', 'k') and retval[:-1].isdigit():
         # convert values like 512m to corresponding integer
