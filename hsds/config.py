@@ -34,7 +34,7 @@ cfg = {
     'target_sn_count': 4,
     'target_dn_count': 4,
     'log_level': 'INFO',   # ERROR, WARNING, INFO, DEBUG, or NOTSET,
-    'max_tcp_connections': 16,
+    'max_tcp_connections': 100,
     'head_sleep_time': 10,
     'node_sleep_time': 10,
     'async_sleep_time': 10,
