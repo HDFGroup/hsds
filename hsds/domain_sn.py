@@ -17,6 +17,7 @@ import asyncio
 import json
 import os.path as op
 import re
+import time
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPGone, HTTPInternalServerError, HTTPConflict, HTTPServiceUnavailable
 from aiohttp import ClientResponseError
@@ -95,7 +96,7 @@ class DomainCrawler:
         log.debug(f"DomainCrawler - fetch conplete obj_id: {obj_id}")
 
 class FolderCrawler:
-    def __init__(self, app, domains, bucket=None, get_root=False, verbose=False, max_tasks=400):
+    def __init__(self, app, domains, bucket=None, get_root=False, verbose=False, max_tasks_per_node=100):
         log.info(f"FolderCrawler.__init__  {len(domains)} domain names")
         self._app = app
         self._get_root = get_root
@@ -106,6 +107,7 @@ class FolderCrawler:
         for domain in domains:
             self._q.put_nowait(domain)
         self._bucket = bucket
+        max_tasks = max_tasks_per_node * app['node_count']
         if len(domains) > max_tasks:
             self._max_tasks = max_tasks
         else:
@@ -125,9 +127,12 @@ class FolderCrawler:
 
     async def work(self):
         while True:
+            start = time.time()
             domain = await self._q.get()
             await self.fetch(domain)
             self._q.task_done()
+            elapsed = time.time() - start
+            log.debug(f"FolderCrawler - task {domain} start: {start:.3f} elapsed: {elapsed:.3f}")
 
     async def fetch(self, domain):
         log.debug(f"FolderCrawler - fetch for domain: {domain} bucket: {self._bucket}")
@@ -348,12 +353,15 @@ async def get_domains(request):
         query = None
     else:
         query = request.rel_url.query["query"]
+        log.info(f"get_domains - using query: {query}")
 
     # use "verbose" to pull extra info
     if "verbose" in request.rel_url.query and request.rel_url.query["verbose"]:
         verbose = True
     else:
         verbose = False
+
+    verbose = False  # test
 
     log.info(f"get_domains for: {prefix} verbose: {verbose}")
 

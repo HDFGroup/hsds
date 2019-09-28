@@ -66,13 +66,14 @@ def request(req):
 		active_tasks = len([task for task in asyncio.Task.all_tasks() if not task.done()])
 		counter["num_tasks"] = num_tasks
 		if config.get("log_level") == "DEBUG":
-			print(f"DEBUG> num_tasks: {num_tasks} active tasks: {active_tasks}")
+			print(f"DEBUG> num tasks: {num_tasks} active tasks: {active_tasks}")
+
 		max_task_count = config.get("max_task_count")
 		if app["node_type"] == "sn" and max_task_count and active_tasks > max_task_count:
 			print(f"WARN: more than {max_task_count} tasks, returning 503")
 			raise HTTPServiceUnavailable()
 
- 
+
 def response(req, resp=None, code=None, message=None):
 	level = "INFO"
 	if code is None:
