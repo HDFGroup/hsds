@@ -149,7 +149,7 @@ def validateChunkLayout(shape_json, item_size, layout):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)   
         if "chunk_table" not in layout:
-            msg = "'chunk_table' key must be provided for H5D_CHUNKED_REF layout"
+            msg = "'chunk_table' key must be provided for H5D_CHUNKED_REF_INDIRECT layout"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg) 
     elif layout["class"] == 'H5D_CHUNKED':
