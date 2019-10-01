@@ -12,8 +12,8 @@
 #
 # linkdUtil:
 # link related functions
-# 
-from aiohttp.web_exceptions import HTTPBadRequest 
+#
+from aiohttp.web_exceptions import HTTPBadRequest
 
 import hsds_logger as log
 
@@ -26,5 +26,5 @@ def validateLinkName(name):
         msg = "link name contains slash"
         log.error(msg)
         raise HTTPBadRequest(reason=msg)
- 
- 
+
+

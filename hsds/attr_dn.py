@@ -11,7 +11,7 @@
 ##############################################################################
 #
 # attribute handling routines
-# 
+#
 import time
 from bisect import bisect_left
 
@@ -29,7 +29,7 @@ def index(a, x):
     if i != len(a) and a[i] == x:
         return i
     return -1
-    
+
 async def GET_Attributes(request):
     """ Return JSON for attribute collection
     """
@@ -37,12 +37,12 @@ async def GET_Attributes(request):
     app = request.app
     params = request.rel_url.query
 
-    obj_id = get_obj_id(request)  
+    obj_id = get_obj_id(request)
     if "bucket" in params:
         bucket = params["bucket"]
     else:
         bucket = None
-     
+
     include_data = False
     if "IncludeData" in params and params["IncludeData"]:
         include_data = True
@@ -61,9 +61,9 @@ async def GET_Attributes(request):
     if "Marker" in params:
         marker = params["Marker"]
         log.info("GET_Links - using Marker: {}".format(marker))
-     
+
     obj_json = await get_metadata_obj(app, obj_id, bucket=bucket)
-    
+
     log.debug("GET attributes obj_id: {} got json".format(obj_id))
     if "attributes" not in obj_json:
         msg = "unexpected data for obj id: {}".format(obj_id)
@@ -73,7 +73,7 @@ async def GET_Attributes(request):
     # return a list of attributes based on sorted dictionary keys
     attr_dict = obj_json["attributes"]
     attr_names = list(attr_dict.keys())
-    attr_names.sort()  # sort by key 
+    attr_names.sort()  # sort by key
     # TBD: provide an option to sort by create date
 
     start_index = 0
@@ -85,10 +85,10 @@ async def GET_Attributes(request):
             log.warn(msg)
             raise HTTPNotFound()
 
-    end_index = len(attr_names) 
+    end_index = len(attr_names)
     if limit is not None and (end_index - start_index) > limit:
         end_index = start_index + limit
-    
+
     attr_list = []
     for i in range(start_index, end_index):
         attr_name = attr_names[i]
@@ -102,10 +102,10 @@ async def GET_Attributes(request):
             des_attr["value"] = src_attr["value"]
         attr_list.append(des_attr)
 
-    resp_json = {"attributes": attr_list} 
+    resp_json = {"attributes": attr_list}
     resp = json_response(resp_json)
     log.response(request, resp=resp)
-    return resp    
+    return resp
 
 async def GET_Attribute(request):
     """HTTP GET method to return JSON for /(obj)/<id>/attributes/<name>
@@ -114,7 +114,7 @@ async def GET_Attribute(request):
     app = request.app
     params = request.rel_url.query
 
-    obj_id = get_obj_id(request)  
+    obj_id = get_obj_id(request)
 
     attr_name = request.match_info.get('name')
     validateAttributeName(attr_name)
@@ -122,7 +122,7 @@ async def GET_Attribute(request):
         bucket = params["bucket"]
     else:
         bucket = None
-        
+
     obj_json = await get_metadata_obj(app, obj_id, bucket=bucket)
     log.info(f"GET attribute obj_id: {obj_id} name: {attr_name} bucket: {bucket}")
     log.debug(f"got obj_json: {obj_json}")
@@ -138,7 +138,7 @@ async def GET_Attribute(request):
         raise HTTPNotFound()
 
     attr_json = attributes[attr_name]
-     
+
     resp = json_response(attr_json)
     log.response(request, resp=resp)
     return resp
@@ -149,24 +149,24 @@ async def PUT_Attribute(request):
     log.request(request)
     app = request.app
     params = request.rel_url.query
-    obj_id = get_obj_id(request) 
+    obj_id = get_obj_id(request)
 
     attr_name = request.match_info.get('name')
     log.info("PUT attribute {} in {}".format(attr_name, obj_id))
     validateAttributeName(attr_name)
-        
+
     if not request.has_body:
         log.error( "PUT_Attribute with no body")
         raise HTTPBadRequest(message="body expected")
 
-    body = await request.json() 
+    body = await request.json()
     if "bucket" in params:
         bucket = params["bucket"]
     elif "bucket" in body:
         bucket = params["bucket"]
     else:
         bucket = None
-    
+
     replace = False
     if "replace" in params and params["replace"]:
         replace = True
@@ -201,7 +201,7 @@ async def PUT_Attribute(request):
         # Attribute already exists, return a 409
         log.warn(f"Attempt to overwrite attribute: {attr_name} in obj_id: {obj_id}")
         raise HTTPConflict()
-    
+
     if replace and attr_name not in attributes:
         # Replace requires attribute exists
         log.warn(f"Attempt to update missing attribute: {attr_name} in obj_id: {obj_id}")
@@ -216,11 +216,11 @@ async def PUT_Attribute(request):
     # ok - all set, create attribute obj
     attr_json = {"type": datatype, "shape": shape, "value": value, "created": create_time }
     attributes[attr_name] = attr_json
-     
+
     # write back to S3, save to metadata cache
     await save_metadata_obj(app, obj_id, obj_json, bucket=bucket)
- 
-    resp_json = { } 
+
+    resp_json = { }
 
     resp = json_response(resp_json, status=201)
     log.response(request, resp=resp)
@@ -233,8 +233,8 @@ async def DELETE_Attribute(request):
     log.request(request)
     app = request.app
     params = request.rel_url.query
-    
-    obj_id = get_obj_id(request) 
+
+    obj_id = get_obj_id(request)
     if "bucket" in params:
         bucket = params["bucket"]
     else:
@@ -245,7 +245,7 @@ async def DELETE_Attribute(request):
     validateAttributeName(attr_name)
 
     obj_json = await get_metadata_obj(app, obj_id, bucket=bucket)
-    
+
     log.debug(f"DELETE attribute obj_id: {obj_id} got json")
     if "attributes" not in obj_json:
         msg = f"unexpected data for obj id: {obj_id}"
@@ -260,11 +260,11 @@ async def DELETE_Attribute(request):
         log.warn(msg)
         raise HTTPNotFound()
 
-    del attributes[attr_name] 
+    del attributes[attr_name]
 
     await save_metadata_obj(app, obj_id, obj_json, bucket=bucket)
 
-    resp_json = { } 
+    resp_json = { }
     resp = json_response(resp_json)
     log.response(request, resp=resp)
-    return resp    
+    return resp

@@ -14,11 +14,11 @@ import time
 import requests
 import json
 import helper
- 
+
 class UpTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(UpTest, self).__init__(*args, **kwargs)
-        
+
         # main
     def testGetAbout(self):
         endpoint = helper.getEndpoint()
@@ -44,7 +44,7 @@ class UpTest(unittest.TestCase):
         start_time = rspJson["start_time"]
         now = int(time.time())
         self.assertTrue(now > start_time)
-      
+
 
     def testGetInfo(self):
         req = helper.getEndpoint() + '/info'
@@ -66,11 +66,11 @@ class UpTest(unittest.TestCase):
         self.assertTrue("type" in node)
         self.assertEqual(node["type"], "sn")
         self.assertTrue("state" in node)
-        self.assertEqual(node["state"], "READY")  
-        
- 
-             
+        self.assertEqual(node["state"], "READY")
+
+
+
 if __name__ == '__main__':
     #setup test files
-    
+
     unittest.main()

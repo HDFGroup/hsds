@@ -13,7 +13,7 @@ import unittest
 import requests
 import json
 import helper
- 
+
 
 class QueryTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -21,9 +21,9 @@ class QueryTest(unittest.TestCase):
         self.base_domain = helper.getTestDomainName(self.__class__.__name__)
         helper.setupDomain(self.base_domain)
         self.endpoint = helper.getEndpoint()
-        
+
         # main
-     
+
     def testSimpleQuery(self):
         # Test query value for 1d dataset
         print("testSimpleQuery", self.base_domain)
@@ -38,21 +38,21 @@ class QueryTest(unittest.TestCase):
         root_uuid = rspJson["root"]
         helper.validateId(root_uuid)
 
-        #    
+        #
         #create 1d dataset
         #
-        fixed_str4_type = {"charSet": "H5T_CSET_ASCII", 
-                "class": "H5T_STRING", 
-                "length": 4, 
+        fixed_str4_type = {"charSet": "H5T_CSET_ASCII",
+                "class": "H5T_STRING",
+                "length": 4,
                 "strPad": "H5T_STR_NULLPAD" }
-        fixed_str8_type = {"charSet": "H5T_CSET_ASCII", 
-                "class": "H5T_STRING", 
-                "length": 8, 
+        fixed_str8_type = {"charSet": "H5T_CSET_ASCII",
+                "class": "H5T_STRING",
+                "length": 8,
                 "strPad": "H5T_STR_NULLPAD" }
-        fields = (  {'name': 'symbol', 'type': fixed_str4_type}, 
+        fields = (  {'name': 'symbol', 'type': fixed_str4_type},
                     {'name': 'date', 'type': fixed_str8_type},
                     {'name': 'open', 'type': 'H5T_STD_I32LE'},
-                    {'name': 'close', 'type': 'H5T_STD_I32LE'} ) 
+                    {'name': 'close', 'type': 'H5T_STD_I32LE'} )
         datatype = {'class': 'H5T_COMPOUND', 'fields': fields }
 
         num_elements = 12
@@ -60,19 +60,19 @@ class QueryTest(unittest.TestCase):
         req = self.endpoint + "/datasets"
         rsp = requests.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
-        
+
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
         self.assertTrue(helper.validateId(dset_uuid))
-         
+
         # link new dataset as 'dset1'
         name = 'dset'
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
-        
+
         # write entire array
         value = [
             ("EBAY", "20170102", 3023, 3088),
@@ -87,8 +87,8 @@ class QueryTest(unittest.TestCase):
             ("EBAY", "20170105", 2973, 2962),
             ("AAPL", "20170105", 2934, 3010),
             ("AMZN", "20170105", 3018, 3086)
-        ] 
-         
+        ]
+
         payload = {'value': value}
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
@@ -111,7 +111,7 @@ class QueryTest(unittest.TestCase):
         indices = rspJson["index"]
         self.assertEqual(indices, [1])
         del params["Limit"]
-        
+
         # get back rows for AAPL
         rsp = requests.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -180,21 +180,21 @@ class QueryTest(unittest.TestCase):
         root_uuid = rspJson["root"]
         helper.validateId(root_uuid)
 
-        #    
+        #
         #create 1d dataset
         #
-        fixed_str4_type = {"charSet": "H5T_CSET_ASCII", 
-                "class": "H5T_STRING", 
-                "length": 4, 
+        fixed_str4_type = {"charSet": "H5T_CSET_ASCII",
+                "class": "H5T_STRING",
+                "length": 4,
                 "strPad": "H5T_STR_NULLPAD" }
-        fixed_str8_type = {"charSet": "H5T_CSET_ASCII", 
-                "class": "H5T_STRING", 
-                "length": 8, 
+        fixed_str8_type = {"charSet": "H5T_CSET_ASCII",
+                "class": "H5T_STRING",
+                "length": 8,
                 "strPad": "H5T_STR_NULLPAD" }
-        fields = (  {'name': 'symbol', 'type': fixed_str4_type}, 
+        fields = (  {'name': 'symbol', 'type': fixed_str4_type},
                     {'name': 'date', 'type': fixed_str8_type},
                     {'name': 'open', 'type': 'H5T_STD_I32LE'},
-                    {'name': 'close', 'type': 'H5T_STD_I32LE'} ) 
+                    {'name': 'close', 'type': 'H5T_STD_I32LE'} )
         datatype = {'class': 'H5T_COMPOUND', 'fields': fields }
 
         num_elements = 12
@@ -202,19 +202,19 @@ class QueryTest(unittest.TestCase):
         req = self.endpoint + "/datasets"
         rsp = requests.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
-        
+
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
         self.assertTrue(helper.validateId(dset_uuid))
-         
+
         # link new dataset as 'dset1'
         name = 'dset'
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
-        
+
         # write entire array
         value = [
             ("EBAY", "20170102", 3023, 3088),
@@ -229,13 +229,13 @@ class QueryTest(unittest.TestCase):
             ("EBAY", "20170105", 2973, 2962),
             ("AAPL", "20170105", 2934, 3010),
             ("AMZN", "20170105", 3018, 3086)
-        ] 
-         
+        ]
+
         payload = {'value': value}
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
-        
+
         # set any rows with AAPL to have open of 999
         params = {'query': "symbol == b'AAPL'" }
         update_value = {"open": 999}
@@ -318,9 +318,9 @@ class QueryTest(unittest.TestCase):
 
 
 
-       
+
 
 if __name__ == '__main__':
     #setup test files
-    
+
     unittest.main()

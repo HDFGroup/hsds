@@ -11,7 +11,7 @@
 ##############################################################################
 #
 # data node of hsds cluster
-# 
+#
 import time
 from copy import copy
 from bisect import bisect_left
@@ -19,7 +19,7 @@ from bisect import bisect_left
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict, HTTPInternalServerError
 from aiohttp.web import json_response
 
- 
+
 from util.idUtil import  isValidUuid
 from util.linkUtil import validateLinkName
 from datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
@@ -39,12 +39,12 @@ async def GET_Links(request):
     log.request(request)
     app = request.app
     params = request.rel_url.query
-    group_id = get_obj_id(request)  
+    group_id = get_obj_id(request)
     log.info(f"GET links: {group_id}")
     if not isValidUuid(group_id, obj_class="group"):
         log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
- 
+
     limit = None
     if "Limit" in params:
         try:
@@ -63,9 +63,9 @@ async def GET_Links(request):
         bucket = params["bucket"]
     else:
         bucket = None
-     
+
     group_json = await get_metadata_obj(app, group_id, bucket=bucket)
-    
+
     log.info(f"for id: {group_id} got group json: {group_json}")
     if "links" not in group_json:
         msg.error(f"unexpected group data for id: {group_id}")
@@ -74,7 +74,7 @@ async def GET_Links(request):
     # return a list of links based on sorted dictionary keys
     link_dict = group_json["links"]
     titles = list(link_dict.keys())
-    titles.sort()  # sort by key 
+    titles.sort()  # sort by key
     # TBD: provide an option to sort by create date
 
     start_index = 0
@@ -86,10 +86,10 @@ async def GET_Links(request):
             log.warn(msg)
             raise HTTPNotFound()
 
-    end_index = len(titles) 
+    end_index = len(titles)
     if limit is not None and (end_index - start_index) > limit:
         end_index = start_index + limit
-    
+
     link_list = []
     for i in range(start_index, end_index):
         title = titles[i]
@@ -97,10 +97,10 @@ async def GET_Links(request):
         link["title"] = title
         link_list.append(link)
 
-    resp_json = {"links": link_list} 
+    resp_json = {"links": link_list}
     resp = json_response(resp_json)
     log.response(request, resp=resp)
-    return resp    
+    return resp
 
 async def GET_Link(request):
     """HTTP GET method to return JSON for a link
@@ -136,7 +136,7 @@ async def GET_Link(request):
         raise HTTPNotFound()
 
     link_json = links[link_title]
-     
+
     resp = json_response(link_json)
     log.response(request, resp=resp)
     return resp
@@ -162,20 +162,20 @@ async def PUT_Link(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    body = await request.json()   
-    
-    if "class" not in body: 
+    body = await request.json()
+
+    if "class" not in body:
         msg = "PUT Link with no class key body"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     link_class = body["class"]
-     
+
     link_json = {}
     link_json["class"] = link_class
 
     if "id" in body:
-        link_json["id"] = body["id"]    
-    if "h5path" in body:    
+        link_json["id"] = body["id"]
+    if "h5path" in body:
         link_json["h5path"] = body["h5path"]
     if "h5domain" in body:
         link_json["h5domain"] = body["h5domain"]
@@ -197,7 +197,7 @@ async def PUT_Link(request):
         msg = f"Link name {link_title} already found in group: {group_id}"
         log.warn(msg)
         raise HTTPConflict()
-    
+
     now = time.time()
     link_json["created"] = now
 
@@ -209,9 +209,9 @@ async def PUT_Link(request):
 
     # write back to S3, save to metadata cache
     await save_metadata_obj(app, group_id, group_json, bucket=bucket)
-    
-    resp_json = { } 
-     
+
+    resp_json = { }
+
     resp = json_response(resp_json, status=201)
     log.response(request, resp=resp)
     return resp
@@ -230,7 +230,7 @@ async def DELETE_Link(request):
         msg = f"Unexpected group_id: {group_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
- 
+
     link_title = request.match_info.get('title')
     validateLinkName(link_title)
 
@@ -261,8 +261,8 @@ async def DELETE_Link(request):
     await save_metadata_obj(app, group_id, group_json, bucket=bucket)
 
     hrefs = []  # TBD
-    resp_json = {"href":  hrefs} 
-     
+    resp_json = {"href":  hrefs}
+
     resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp

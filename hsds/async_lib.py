@@ -18,16 +18,16 @@ from util.storUtil import getStorKeys, putStorJSONObj, deleteStorObj
 import hsds_logger as log
 import config
 
- 
+
 # List all keys under given root and optionally update info.json
-# Note: only works with schema v2 domains!  
-  
+# Note: only works with schema v2 domains!
+
 def scanRootCallback(app, s3keys):
     log.debug(f"scanRootCallback, {len(s3keys)} items")
     if isinstance(s3keys, list):
         log.error("got list result for s3keys callback")
         raise ValueError("unexpected callback format")
-        
+
     results = app["scanRoot_results"]
     if results:
         log.debug(f"previous scanRoot_results:".format(results))
@@ -59,8 +59,8 @@ def scanRootCallback(app, s3keys):
             results["allocated_bytes"] += obj_size
         else:
             results["metadata_bytes"] += obj_size
-        
-  
+
+
         if is_chunk or getCollectionForId(objid) == "datasets":
             if is_chunk:
                 dsetid = getDatasetId(objid)
@@ -85,7 +85,7 @@ def scanRootCallback(app, s3keys):
             results["num_datatypes"] += 1
         else:
             log.error(f"Unexpected collection type for id: {objid}")
-       
+
 
 async def scanRoot(app, rootid, update=False, bucket=None):
 
@@ -112,7 +112,7 @@ async def scanRoot(app, rootid, update=False, bucket=None):
     if not root_key.endswith("/.group.json"):
         raise ValueError("unexpected root key")
     root_prefix = root_key[:-(len(".group.json"))]
-    
+
     log.debug(f"scanRoot - using prefix: {root_prefix}")
 
     results = {}
@@ -126,7 +126,7 @@ async def scanRoot(app, rootid, update=False, bucket=None):
     results["scan_start"] = time.time()
 
     app["scanRoot_results"] = results
-     
+
     await getStorKeys(app, prefix=root_prefix, include_stats=True, bucket=bucket, callback=scanRootCallback)
 
     log.info(f"scan complete for rootid: {rootid}")
@@ -136,23 +136,23 @@ async def scanRoot(app, rootid, update=False, bucket=None):
         # write .info object back to S3
         info_key = root_prefix + ".info.json"
         log.info(f"updating info key: {info_key}")
-        await putStorJSONObj(app, info_key, results, bucket=bucket) 
+        await putStorJSONObj(app, info_key, results, bucket=bucket)
     return results
 
 async def objDeleteCallback(app, s3keys):
     log.info(f"objDeleteCallback, {len(s3keys)} items")
-    
+
     if not isinstance(s3keys, list):
         log.error("expected list result for objDeleteCallback")
         raise ValueError("unexpected callback format")
 
-    
+
     if "objDelete_prefix" not in app or not app["objDelete_prefix"]:
         log.error("Unexpected objDeleteCallback")
         raise ValueError("Invalid objDeleteCallback")
 
-    prefix = app["objDelete_prefix"]  
-    prefix_len = len(prefix)  
+    prefix = app["objDelete_prefix"]
+    prefix_len = len(prefix)
     for s3key in s3keys:
         if not s3key.startswith(prefix):
             log.error(f"Unexpected key {s3key} for prefix: {prefix}")
@@ -160,7 +160,7 @@ async def objDeleteCallback(app, s3keys):
         full_key = prefix + s3key[prefix_len:]
         log.info(f"objDeleteCallback got key: {full_key}")
         await deleteStorObj(app, full_key)
-        
+
 
     log.info("objDeleteCallback complete")
 
@@ -176,7 +176,7 @@ async def removeKeys(app, objid):
     log.debug(f"got s3key: {s3key}")
     expected_suffixes = (".dataset.json", ".group.json")
     s3prefix = None
-    
+
     for suffix in expected_suffixes:
         if s3key.endswith(suffix):
                 s3prefix = s3key[:-len(suffix)]

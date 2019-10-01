@@ -12,11 +12,11 @@
 #
 # service node of hsds cluster
 # handles datatypes requests
-# 
- 
+#
+
 import json
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPGone
- 
+
 from util.httpUtil import http_post, http_put, http_delete, getHref, jsonResponse
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
 from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
@@ -29,7 +29,7 @@ import hsds_logger as log
 async def GET_Datatype(request):
     """HTTP method to return JSON for committed datatype"""
     log.request(request)
-    app = request.app 
+    app = request.app
     params = request.rel_url.query
     include_attrs = False
 
@@ -50,7 +50,7 @@ async def GET_Datatype(request):
             raise HTTPBadRequest(reason=msg)
         if "getalias" in params:
             if params["getalias"]:
-                getAlias = True 
+                getAlias = True
     else:
         group_id = None
         if "grpid" in params:
@@ -102,7 +102,7 @@ async def GET_Datatype(request):
     await validateAction(app, domain, ctype_id, username, "read")
 
     # get authoritative state for ctype from DN (even if it's in the meta_cache).
-    type_json = await getObjectJson(app, ctype_id, bucket=bucket, refresh=True, include_attrs=include_attrs)  
+    type_json = await getObjectJson(app, ctype_id, bucket=bucket, refresh=True, include_attrs=include_attrs)
     type_json["domain"] = domain
 
     if getAlias:
@@ -117,7 +117,7 @@ async def GET_Datatype(request):
     hrefs = []
     ctype_uri = '/datatypes/'+ctype_id
     hrefs.append({'rel': 'self', 'href': getHref(request, ctype_uri)})
-    root_uri = '/groups/' + type_json["root"]    
+    root_uri = '/groups/' + type_json["root"]
     hrefs.append({'rel': 'root', 'href': getHref(request, root_uri)})
     hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
     hrefs.append({'rel': 'attributes', 'href': getHref(request, ctype_uri+'/attributes')})
@@ -149,14 +149,14 @@ async def POST_Datatype(request):
     datatype = body["type"]
     if isinstance(datatype, str):
         try:
-            # convert predefined type string (e.g. "H5T_STD_I32LE") to 
+            # convert predefined type string (e.g. "H5T_STD_I32LE") to
             # corresponding json representation
             datatype = getBaseTypeJson(datatype)
             log.debug(f"got datatype: {datatype}")
         except TypeError:
             msg = "POST Dataset with invalid predefined type"
             log.warn(msg)
-            raise HTTPBadRequest(reason=msg) 
+            raise HTTPBadRequest(reason=msg)
     validateTypeItem(datatype)
 
     domain = getDomainFromRequest(request)
@@ -189,7 +189,7 @@ async def POST_Datatype(request):
             await validateAction(app, domain, link_id, username, "create")
 
     root_id = domain_json["root"]
-    ctype_id = createObjId("datatypes", rootid=root_id) 
+    ctype_id = createObjId("datatypes", rootid=root_id)
     log.debug(f"new  type id: {ctype_id}")
     ctype_json = {"id": ctype_id, "root": root_id, "type": datatype }
     log.debug("create named type, body: " + json.dumps(ctype_json))
@@ -197,7 +197,7 @@ async def POST_Datatype(request):
     params = {}
     if bucket:
         params["bucket"] = bucket
-    
+
     type_json = await http_post(app, req, data=ctype_json, params=params)
 
     # create link if requested
@@ -211,7 +211,7 @@ async def POST_Datatype(request):
         put_rsp = await http_put(app, link_req, data=link_json, params=params)
         log.debug(f"PUT Link resp: {put_rsp}")
 
-    # datatype creation successful     
+    # datatype creation successful
     resp = await jsonResponse(request, type_json, status=201)
     log.response(request, resp=resp)
 
@@ -220,7 +220,7 @@ async def POST_Datatype(request):
 async def DELETE_Datatype(request):
     """HTTP method to delete a committed type resource"""
     log.request(request)
-    app = request.app 
+    app = request.app
     meta_cache = app['meta_cache']
 
     ctype_id = request.match_info.get('id')
@@ -235,7 +235,7 @@ async def DELETE_Datatype(request):
 
     username, pswd = getUserPasswordFromRequest(request)
     await validateUserPassword(app, username, pswd)
-    
+
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
         msg = f"Invalid domain: {domain}"
@@ -245,7 +245,7 @@ async def DELETE_Datatype(request):
     params = {}
     if bucket:
         params["bucket"] = bucket
-    
+
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
     if "root" not in domain_json:
@@ -256,12 +256,12 @@ async def DELETE_Datatype(request):
     await validateAction(app, domain, ctype_id, username, "delete")
 
     req = getDataNodeUrl(app, ctype_id) + "/datatypes/" + ctype_id
- 
+
     await http_delete(app, req, params=params)
 
     if ctype_id in meta_cache:
         del meta_cache[ctype_id]  # remove from cache
- 
+
     resp = await jsonResponse(request, {})
     log.response(request, resp=resp)
     return resp

@@ -19,8 +19,8 @@ import helper
 class HeadTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(HeadTest, self).__init__(*args, **kwargs)
-        self.endpoint =  config.get('head_endpoint')    
-       
+        self.endpoint =  config.get('head_endpoint')
+
     def testGetInfo(self):
         req = self.endpoint + "/info"
         print("req", req)
@@ -42,14 +42,14 @@ class HeadTest(unittest.TestCase):
         active_sn, active_dn = helper.getActiveNodeCount()
         self.assertEqual(active_sn, 0)
         self.assertEqual(active_dn, 0)
-        
+
         reg_call_count = 9
         sn_node_numbers = set()
         dn_node_numbers = set()
         sn_node_count = 0
         dn_node_count = 0
         node_type = 'dn'
-        
+
         # node_types = ("dn", "sn") * type_count
         for i in range(reg_call_count):
             # register some fake nodes
@@ -60,8 +60,8 @@ class HeadTest(unittest.TestCase):
             rsp = requests.post(register_req, data=json.dumps(body))
             self.assertEqual(rsp.status_code, 200)
             rsp_json = json.loads(rsp.text)
-            print(rsp_json)         
-            
+            print(rsp_json)
+
             self.assertTrue("node_number" in rsp_json)
             if rsp_json["node_number"] >= 0:
                 if node_type == "dn":
@@ -75,17 +75,17 @@ class HeadTest(unittest.TestCase):
                 self.assertEqual(len(dn_node_numbers), dn_node_count)
                 self.assertEqual(node_type, "dn")
                 node_type = "sn" # switch to sn
-             
+
 
         self.assertEqual(sn_node_count, 4)
         self.assertEqual(dn_node_count, 4)
         self.assertEqual(len(sn_node_numbers), sn_node_count)
         self.assertEqual(len(dn_node_numbers), dn_node_count)
-        
+
         rsp = requests.get(info_req)
         self.assertEqual(rsp.status_code, 200)
         rsp_json = json.loads(rsp.text)
-    
+
         self.assertEqual(rsp_json["active_dn_count"], 4)
         self.assertEqual(rsp_json["active_sn_count"], 4)
         self.assertEqual(rsp_json["target_dn_count"], 4)
@@ -100,7 +100,7 @@ class HeadTest(unittest.TestCase):
             rsp_json = json.loads(rsp.text)
             self.assertTrue("nodes" in rsp_json)
             nodes = rsp_json["nodes"]
-            node_urls = set()  # we should have disting host + port for each node       
+            node_urls = set()  # we should have disting host + port for each node
 
             for node in nodes:
                 self.assertTrue("id" in node)

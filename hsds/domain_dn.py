@@ -11,7 +11,7 @@
 ##############################################################################
 #
 # data node of hsds cluster
-# 
+#
 import time
 from aiohttp.web_exceptions import HTTPConflict, HTTPInternalServerError
 from aiohttp.web import json_response
@@ -33,16 +33,16 @@ def get_domain(request, body=None):
         log.debug(f"got domain param: {domain}")
     elif body and "domain" in body:
         domain = body["domain"]
-             
-    if not domain: 
-        msg = "No domain provided"  
+
+    if not domain:
+        msg = "No domain provided"
         log.error(msg)
-        raise HTTPInternalServerError() 
+        raise HTTPInternalServerError()
 
     if not isValidDomain(domain):
         msg = f"Expected valid domain for [{domain}]"
         log.error(msg)
-        raise HTTPInternalServerError() 
+        raise HTTPInternalServerError()
     try:
         validateInPartition(app, domain)
     except KeyError:
@@ -79,38 +79,38 @@ async def PUT_Domain(request):
     if not request.has_body:
         msg = "Expected body in put domain"
         log.error(msg)
-        raise HTTPInternalServerError() 
-    body = await request.json() 
+        raise HTTPInternalServerError()
+    body = await request.json()
     log.debug(f"got body: {body}")
 
     domain = get_domain(request, body=body)
- 
+
     log.debug(f"PUT domain: {domain}")
     bucket = getBucketForDomain(domain)
     if not bucket:
         log.error(f"expected bucket to be used in domain: {domain}")
         raise HTTPInternalServerError()
- 
+
     body_json = await request.json()
     if "owner" not in body_json:
         msg = "Expected Owner Key in Body"
         log.warn(msg)
-        raise HTTPInternalServerError() 
+        raise HTTPInternalServerError()
     if "acls" not in body_json:
         msg = "Expected Owner Key in Body"
         log.warn(msg)
-        raise HTTPInternalServerError() 
+        raise HTTPInternalServerError()
 
     # try getting the domain, should raise 404
     domain_exists = await check_metadata_obj(app, domain)
-      
+
     if domain_exists:
         # domain already exists
         msg = "Conflict: resource exists: " + domain
         log.info(msg)
         raise HTTPConflict()
 
-          
+
     domain_json = { }
     if "root" in body_json:
         domain_json["root"] = body_json["root"]
@@ -124,7 +124,7 @@ async def PUT_Domain(request):
 
     # write the domain json to S3 immediately so it will show up in a get_domains S3 scan
     await save_metadata_obj(app, domain, domain_json, notify=True, flush=True)
- 
+
     resp = json_response(domain_json, status=201)
     log.response(request, resp=resp)
     return resp
@@ -166,8 +166,8 @@ async def PUT_ACL(request):
     if not request.has_body:
         msg = "Expected body in delete domain"
         log.error(msg)
-        raise HTTPInternalServerError() 
-    body_json = await request.json() 
+        raise HTTPInternalServerError()
+    body_json = await request.json()
 
     domain = get_domain(request, body=body_json)
 
@@ -178,7 +178,7 @@ async def PUT_ACL(request):
 
     if "acls" not in domain_json:
         log.error(f"unexpected domain data for domain: {domain}")
-        raise HTTPInternalServerError() # 500 
+        raise HTTPInternalServerError() # 500
 
     acl_keys = getAclKeys()
     acls = domain_json["acls"]
@@ -196,16 +196,16 @@ async def PUT_ACL(request):
 
     # replace/insert the updated/new acl
     acls[acl_username] = acl
-    
+
     # update the timestamp
     now = time.time()
     domain_json["lastModified"] = now
-     
+
     # write back to S3
     await save_metadata_obj(app, domain, domain_json, flush=True)
-    
-    resp_json = { } 
-     
+
+    resp_json = { }
+
     resp = json_response(resp_json, status=201)
     log.response(request, resp=resp)
     return resp

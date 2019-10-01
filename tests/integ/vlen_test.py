@@ -19,16 +19,16 @@ sys.path.append('../../hsds/util')
 from arrayUtil import arrayToBytes, bytesToArray
 from hdf5dtype import createDataType
 
- 
+
 class VlenTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(VlenTest, self).__init__(*args, **kwargs)
         self.base_domain = helper.getTestDomainName(self.__class__.__name__)
         helper.setupDomain(self.base_domain)
         self.endpoint = helper.getEndpoint()
-        
+
         # main
-     
+
     def testPutVLenInt(self):
         # Test PUT value for 1d attribute with variable length int types
         print("testPutVLenInt", self.base_domain)
@@ -52,17 +52,17 @@ class VlenTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
         self.assertTrue(helper.validateId(dset_uuid))
-         
+
         # link new dataset as 'dset'
         name = 'dset'
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # write values to dataset
         data = [[1,], [1,2], [1,2,3], [1,2,3,4]]
-        req = self.endpoint + "/datasets/" + dset_uuid + "/value" 
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         payload = { 'value': data }
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -92,7 +92,7 @@ class VlenTest(unittest.TestCase):
     def testPutVLenIntBinary(self):
         # Test PUT value for 1d attribute with variable length int types using binary transfer
         print("testPutVLenIntBinary", self.base_domain)
-        
+
         count = 4
         test_values = []
         for i in range(count):
@@ -101,9 +101,9 @@ class VlenTest(unittest.TestCase):
                 e.append(j+2)
             test_values.append(e)
         # test_values == [[1], [1,2]]
-    
+
         headers = helper.getRequestHeaders(domain=self.base_domain)
-        headers_bin_req = helper.getRequestHeaders(domain=self.base_domain) 
+        headers_bin_req = helper.getRequestHeaders(domain=self.base_domain)
         headers_bin_req["Content-Type"] = "application/octet-stream"
         headers_bin_rsp = helper.getRequestHeaders(domain=self.base_domain)
         headers_bin_rsp["accept"] = "application/octet-stream"
@@ -126,10 +126,10 @@ class VlenTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
         self.assertTrue(helper.validateId(dset_uuid))
-         
+
         # link new dataset as 'dset'
         name = 'dset'
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
@@ -139,7 +139,7 @@ class VlenTest(unittest.TestCase):
         arr = np.zeros((count,), dtype=dt)
         for i in range(count):
             arr[i] = np.int32(test_values[i])
-        
+
         # write as binary data
         data = arrayToBytes(arr)
         self.assertEqual(len(data), 56)
@@ -169,7 +169,7 @@ class VlenTest(unittest.TestCase):
         for i in range(count):
             self.assertEqual(value[i], test_values[i])
 
-           
+
         # read back a selection
         params = {"select": "[2:3]"}
         rsp = requests.get(req, headers=headers, params=params)
@@ -180,7 +180,7 @@ class VlenTest(unittest.TestCase):
         value = rspJson["value"]
         self.assertEqual(len(value), 1)
         self.assertEqual(value[0], [1,2,3])
-            
+
 
 
     def testPutVLen2DInt(self):
@@ -208,14 +208,14 @@ class VlenTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
         self.assertTrue(helper.validateId(dset_uuid))
-         
+
         # link new dataset as 'dset'
         name = 'dset'
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
-    
+
         # write values to dataset
         data = []
         for i in range(nrow):
@@ -225,8 +225,8 @@ class VlenTest(unittest.TestCase):
                 end = start+j+1
                 row.append(list(range(start,end)))
             data.append(row)
-        
-        req = self.endpoint + "/datasets/" + dset_uuid + "/value" 
+
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         payload = { 'value': data }
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -275,7 +275,7 @@ class VlenTest(unittest.TestCase):
 
         # create dataset
         vlen_type =  {"class": "H5T_STRING", "charSet": "H5T_CSET_ASCII",
-                    "strPad": "H5T_STR_NULLTERM", "length": "H5T_VARIABLE"} 
+                    "strPad": "H5T_STR_NULLTERM", "length": "H5T_VARIABLE"}
         payload = {'type': vlen_type, 'shape': [4,]}
         req = self.endpoint + "/datasets"
         rsp = requests.post(req, data=json.dumps(payload), headers=headers)
@@ -283,17 +283,17 @@ class VlenTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
         self.assertTrue(helper.validateId(dset_uuid))
-         
+
         # link new dataset as 'dset'
         name = 'dset'
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # write values to dataset
         data = ["This is", "a variable length", "string", "array"]
-        req = self.endpoint + "/datasets/" + dset_uuid + "/value" 
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         payload = { 'value': data }
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -308,15 +308,15 @@ class VlenTest(unittest.TestCase):
         self.assertEqual(len(value), 4)
         for i in range(4):
             self.assertEqual(value[i], data[i])
-        
+
     def testPutVLenCompound(self):
         # Test PUT value for 1d attribute with variable length int types
         print("testPutVLenCompound", self.base_domain)
-        
+
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
         req = self.endpoint + '/'
-        
+
         # Get root uuid
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -325,18 +325,18 @@ class VlenTest(unittest.TestCase):
         helper.validateId(root_uuid)
 
         count = 4
-        
+
         # create dataset
-        fixed_str8_type = {"charSet": "H5T_CSET_ASCII", 
-            "class": "H5T_STRING", 
-            "length": 8, 
+        fixed_str8_type = {"charSet": "H5T_CSET_ASCII",
+            "class": "H5T_STRING",
+            "length": 8,
             "strPad": "H5T_STR_NULLPAD" }
-        fields = [ {"type": {"class": "H5T_INTEGER", "base": "H5T_STD_U64BE"}, "name": "VALUE1"}, 
-            {"type": fixed_str8_type, "name": "VALUE2"}, 
-            {"type": {"class": "H5T_ARRAY", "dims": [2], "base": 
+        fields = [ {"type": {"class": "H5T_INTEGER", "base": "H5T_STD_U64BE"}, "name": "VALUE1"},
+            {"type": fixed_str8_type, "name": "VALUE2"},
+            {"type": {"class": "H5T_ARRAY", "dims": [2], "base":
             {"class": "H5T_STRING", "charSet": "H5T_CSET_ASCII",
             "strPad": "H5T_STR_NULLTERM", "length": "H5T_VARIABLE"}}, "name": "VALUE3"}]
-                                   
+
         datatype = {'class': 'H5T_COMPOUND', 'fields': fields }
         payload = {'type': datatype, 'shape': [count,]}
         req = self.endpoint + "/datasets"
@@ -345,14 +345,14 @@ class VlenTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
         self.assertTrue(helper.validateId(dset_uuid))
-                 
+
         # link new dataset as 'dset'
         name = 'dset'
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
-                
+
         # write values to dataset
         data = []
         for i in range(count):
@@ -362,11 +362,11 @@ class VlenTest(unittest.TestCase):
                 s += chr(ord('A') + offset)
             e = [i+1, s, ["Hi! "*(i+1), "Bye!" *(i+1)]]
             data.append(e)
-        req = self.endpoint + "/datasets/" + dset_uuid + "/value" 
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         payload = { 'value': data }
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
-        
+
         # read values from dataset
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -381,7 +381,7 @@ class VlenTest(unittest.TestCase):
         print("testPutVLenCompoundBinary", self.base_domain)
 
         headers = helper.getRequestHeaders(domain=self.base_domain)
-        headers_bin_req = helper.getRequestHeaders(domain=self.base_domain) 
+        headers_bin_req = helper.getRequestHeaders(domain=self.base_domain)
         headers_bin_req["Content-Type"] = "application/octet-stream"
         headers_bin_rsp = helper.getRequestHeaders(domain=self.base_domain)
         headers_bin_rsp["accept"] = "application/octet-stream"
@@ -398,16 +398,16 @@ class VlenTest(unittest.TestCase):
         count = 4
 
         # create dataset
-        fixed_str8_type = {"charSet": "H5T_CSET_ASCII", 
-                "class": "H5T_STRING", 
-                "length": 8, 
+        fixed_str8_type = {"charSet": "H5T_CSET_ASCII",
+                "class": "H5T_STRING",
+                "length": 8,
                 "strPad": "H5T_STR_NULLPAD" }
-        fields = [ {"type": {"class": "H5T_INTEGER", "base": "H5T_STD_U64BE"}, "name": "VALUE1"}, 
-                   {"type": fixed_str8_type, "name": "VALUE2"}, 
-                   {"type": {"class": "H5T_ARRAY", "dims": [2], "base": 
+        fields = [ {"type": {"class": "H5T_INTEGER", "base": "H5T_STD_U64BE"}, "name": "VALUE1"},
+                   {"type": fixed_str8_type, "name": "VALUE2"},
+                   {"type": {"class": "H5T_ARRAY", "dims": [2], "base":
                          {"class": "H5T_STRING", "charSet": "H5T_CSET_ASCII",
                           "strPad": "H5T_STR_NULLTERM", "length": "H5T_VARIABLE"}}, "name": "VALUE3"}]
-                           
+
         datatype = {'class': 'H5T_COMPOUND', 'fields': fields }
         payload = {'type': datatype, 'shape': [count,]}
         req = self.endpoint + "/datasets"
@@ -416,18 +416,18 @@ class VlenTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
         self.assertTrue(helper.validateId(dset_uuid))
-         
+
         # link new dataset as 'dset'
         name = 'dset'
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         dt_compound = createDataType(datatype)
-        
+
         # create numpy vlen array
-        
+
         arr = np.zeros((count,), dtype=dt_compound)
         for i in range(count):
             e = arr[i]
@@ -445,7 +445,7 @@ class VlenTest(unittest.TestCase):
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         rsp = requests.put(req, data=data, headers=headers_bin_req)
         self.assertEqual(rsp.status_code, 200)
-        
+
         # read values from dataset as json
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -462,11 +462,11 @@ class VlenTest(unittest.TestCase):
         data = rsp.content
         self.assertEqual(len(data), 192)
         arr = bytesToArray(data, dt_compound, [count,])
-         
 
-        
-             
+
+
+
 if __name__ == '__main__':
     #setup test files
-    
+
     unittest.main()

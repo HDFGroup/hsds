@@ -67,7 +67,7 @@ class DomainCrawler:
 
     async def fetch(self, obj_id):
         log.debug(f"DomainCrawler - fetch for obj_id: {obj_id}")
-        obj_json = await getObjectJson(self._app, obj_id, include_links=True, include_attrs=self._include_attrs, bucket=self._bucket)  
+        obj_json = await getObjectJson(self._app, obj_id, include_links=True, include_attrs=self._include_attrs, bucket=self._bucket)
         log.debug(f"DomainCrawler - for {obj_id} got json: {obj_json}")
 
         # including links, so don't need link count
@@ -77,7 +77,7 @@ class DomainCrawler:
         if self._include_attrs:
             del obj_json["attributeCount"]
 
-        # if this is a group, iterate through all the hard links and 
+        # if this is a group, iterate through all the hard links and
         # add to the lookup ids set
         if getCollectionForId(obj_id) == "groups":
             links = obj_json["links"]
@@ -391,7 +391,7 @@ async def get_domains(request):
     if "bucket" in params:
         bucket = params["bucket"]
     elif "X-Hdf-bucket" in request.headers:
-        bucket = request.headers["X-Hdf-bucket"] 
+        bucket = request.headers["X-Hdf-bucket"]
     elif "bucket_name" in app and app["bucket_name"]:
         bucket = app["bucket_name"]
     else:
@@ -410,7 +410,7 @@ async def get_domains(request):
     else:
         s3prefix = prefix[1:]
         log.debug(f"get_domains - listing S3 keys for {s3prefix}")
-        s3keys = await getStorKeys(app, include_stats=False, prefix=s3prefix, deliminator='/', bucket=bucket)  
+        s3keys = await getStorKeys(app, include_stats=False, prefix=s3prefix, deliminator='/', bucket=bucket)
         log.debug(f"get_domains - getS3Keys returned: {len(s3keys)} keys")
 
         for s3key in s3keys:
@@ -708,8 +708,8 @@ async def PUT_Domain(request):
     await validateUserPassword(app, username, pswd)
 
     # inital perms for owner and default
-    owner_perm = {'create': True, 'read': True, 'update': True, 'delete': True, 'readACL': True, 'updateACL': True } 
-    default_perm = {'create': False, 'read': True, 'update': False, 'delete': False, 'readACL': False, 'updateACL': False } 
+    owner_perm = {'create': True, 'read': True, 'update': True, 'delete': True, 'readACL': True, 'updateACL': True }
+    default_perm = {'create': False, 'read': True, 'update': False, 'delete': False, 'readACL': False, 'updateACL': False }
 
     try:
         domain = getDomainFromRequest(request)
@@ -986,7 +986,7 @@ async def DELETE_Domain(request):
         index = domain.find('/')
         s3prefix = domain[(index+1):] + '/'
         log.info(f"checking s3key with prefix: {s3prefix} in bucket: {bucket}")
-        s3keys = await getStorKeys(app, include_stats=False, prefix=s3prefix, deliminator='/', bucket=bucket) 
+        s3keys = await getStorKeys(app, include_stats=False, prefix=s3prefix, deliminator='/', bucket=bucket)
         for s3key in s3keys:
             if s3key.endswith("/"):
                 log.warn(f"attempt to delete folder {domain} with sub-items")
@@ -1021,7 +1021,7 @@ async def DELETE_Domain(request):
     params = {}
     params["domain"] = getPathForDomain(domain)
     params["bucket"] = getBucketForDomain(domain)
-    params["meta_only"] = 1  # can't pass booleans as params, so use 1 instead of True 
+    params["meta_only"] = 1  # can't pass booleans as params, so use 1 instead of True
     for node_no in sn_urls:
         log.debug(f"node_no: {node_no}")
         if node_no == app["node_number"]:

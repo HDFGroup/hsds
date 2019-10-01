@@ -18,16 +18,16 @@ sys.path.append('../../hsds/util')
 sys.path.append('../../hsds')
 from s3Util import _shuffle, _unshuffle
 
- 
+
 class ShuffleUtilTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(ShuffleUtilTest, self).__init__(*args, **kwargs)
         # main
-    
+
     def testShuffle(self):
         arr = np.zeros((3,), dtype='<u2')
         arr[0] = 0x0001
-        arr[1] = 0x0002        
+        arr[1] = 0x0002
         arr[2] = 0x0003
         data = arr.tobytes()
         fmt = '{:02X}{:02X} ' * (len(data)//2)
@@ -38,27 +38,27 @@ class ShuffleUtilTest(unittest.TestCase):
         self.assertEqual(fmt.format(*data), "0100 0200 0300 ")
         for i in range(len(data)):
             self.assertEqual(data[i], unshuffled[i])
-    
+
     def testTime(self):
         arr = np.random.rand(1000,1000)
         now = time.time()
-        data = arr.tobytes()     
+        data = arr.tobytes()
         shuffled = _shuffle(8, data)
-       
+
         self.assertEqual(len(data), len(shuffled))
         unshuffled = _unshuffle(8, shuffled)
         elapsed = time.time() - now
-        
+
         # this was taking ~0.04 s with an i7
         # without numba, time was 2.4s (60x slower)
         #print("time:", elapsed)
-        self.assertTrue(elapsed < 0.1)  
+        self.assertTrue(elapsed < 0.1)
 
         self.assertEqual(len(shuffled), len(unshuffled))
         self.assertEqual(data, unshuffled)
-        
-             
+
+
 if __name__ == '__main__':
     #setup test files
-    
+
     unittest.main()

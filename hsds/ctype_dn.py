@@ -11,17 +11,17 @@
 ##############################################################################
 #
 # data node of hsds cluster
-# 
+#
 import time
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalServerError
 from aiohttp.web import json_response
 
- 
+
 from util.idUtil import isValidUuid, validateUuid
 from datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj, delete_metadata_obj, check_metadata_obj
 import hsds_logger as log
-    
+
 
 async def GET_Datatype(request):
     """HTTP GET method to return JSON for /groups/
@@ -29,8 +29,8 @@ async def GET_Datatype(request):
     log.request(request)
     app = request.app
     params = request.rel_url.query
-    ctype_id = get_obj_id(request)  
-    
+    ctype_id = get_obj_id(request)
+
     if not isValidUuid(ctype_id, obj_class="type"):
         log.error(f"Unexpected type_id: {ctype_id}")
         raise HTTPInternalServerError()
@@ -42,7 +42,7 @@ async def GET_Datatype(request):
 
     ctype_json = await get_metadata_obj(app, ctype_id, bucket=bucket)
 
-    resp_json = { } 
+    resp_json = { }
     resp_json["id"] = ctype_json["id"]
     resp_json["root"] = ctype_json["root"]
     resp_json["created"] = ctype_json["created"]
@@ -51,7 +51,7 @@ async def GET_Datatype(request):
     resp_json["attributeCount"] = len(ctype_json["attributes"])
     if "include_attrs" in params and params["include_attrs"]:
         resp_json["attributes"] = ctype_json["attributes"]
-     
+
     resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
@@ -75,7 +75,7 @@ async def POST_Datatype(request):
         bucket = params["bucket"]
     else:
         bucket = None
-    
+
     ctype_id = get_obj_id(request, body=body)
     if not isValidUuid(ctype_id, obj_class="datatype"):
         log.error( "Unexpected type_id: {}".format(ctype_id))
@@ -88,7 +88,7 @@ async def POST_Datatype(request):
         raise HTTPInternalServerError()
 
     root_id = None
-    
+
     if "root" not in body:
         msg = "POST_Datatype with no root"
         log.error(msg)
@@ -100,25 +100,25 @@ async def POST_Datatype(request):
         msg = "Invalid root_id: " + root_id
         log.error(msg)
         raise HTTPInternalServerError()
-     
+
     if "type" not in body:
         msg = "POST_Datatype with no type"
         log.error(msg)
         raise HTTPInternalServerError()
     type_json = body["type"]
-     
+
     # ok - all set, create committed type obj
     now = time.time()
 
     log.info("POST_datatype, typejson: {}". format(type_json))
-    
-    ctype_json = {"id": ctype_id, "root": root_id, "created": now, 
+
+    ctype_json = {"id": ctype_id, "root": root_id, "created": now,
         "lastModified": now, "type": type_json, "attributes": {} }
-     
+
     await save_metadata_obj(app, ctype_id, ctype_json, bucket=bucket, notify=True, flush=True)
 
-    resp_json = {} 
-    resp_json["id"] = ctype_id 
+    resp_json = {}
+    resp_json["id"] = ctype_id
     resp_json["root"] = root_id
     resp_json["created"] = ctype_json["created"]
     resp_json["lastModified"] = ctype_json["lastModified"]
@@ -135,7 +135,7 @@ async def DELETE_Datatype(request):
     log.request(request)
     app = request.app
     params = request.rel_url.query
-    
+
     ctype_id = get_obj_id(request)
     log.info(f"DELETE ctype: {ctype_id}")
 
@@ -149,7 +149,7 @@ async def DELETE_Datatype(request):
     if not obj_found:
         log.warn(f"Delete on non-existent obj: {ctype_id}")
         raise HTTPNotFound
-        
+
     log.info("deleting ctype: {}".format(ctype_id))
 
     notify=True
@@ -157,10 +157,10 @@ async def DELETE_Datatype(request):
         log.info("notify value: {}".format(params["Notify"]))
         notify=False
     log.info("notify: {}".format(notify))
-    
+
     await delete_metadata_obj(app, ctype_id, bucket=bucket, notify=notify)
- 
-    resp_json = {  } 
+
+    resp_json = {  }
     resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp

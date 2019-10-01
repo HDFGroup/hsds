@@ -11,27 +11,27 @@
 ##############################################################################
 #
 # service node of hsds cluster
-# 
+#
 import asyncio
- 
+
 from aiohttp.web import  run_app
 from util.lruCache import LruCache
- 
+
 import config
 from basenode import healthCheck,  baseInit
 import hsds_logger as log
 from util.authUtil import initUserDB
-from domain_sn import GET_Domain, PUT_Domain, DELETE_Domain, GET_Domains 
+from domain_sn import GET_Domain, PUT_Domain, DELETE_Domain, GET_Domains
 from domain_sn import GET_Datasets, GET_Groups, GET_Datatypes
 from domain_sn import GET_ACL, GET_ACLs, PUT_ACL
 from group_sn import GET_Group, POST_Group, DELETE_Group
 from link_sn import GET_Links, GET_Link, PUT_Link, DELETE_Link
-from attr_sn import GET_Attributes, GET_Attribute, PUT_Attribute 
+from attr_sn import GET_Attributes, GET_Attribute, PUT_Attribute
 from attr_sn import DELETE_Attribute, GET_AttributeValue, PUT_AttributeValue
 from ctype_sn import GET_Datatype, POST_Datatype, DELETE_Datatype
 from dset_sn import GET_Dataset, POST_Dataset, DELETE_Dataset, GET_DatasetShape, PUT_DatasetShape, GET_DatasetType
 from chunk_sn import PUT_Value, GET_Value, POST_Value
- 
+
 
 async def init(loop):
     """Intitialize application and return app object"""
@@ -132,7 +132,7 @@ async def init(loop):
     app.router.add_route('PUT', '/datasets/{id}/acls/{username}', PUT_ACL)
     app.router.add_route('GET', '/datasets/{id}/acls', GET_ACLs)
     app.router.add_route('OPTIONS', '/datasets/{id}/acls', GET_ACLs)
-      
+
     return app
 
 #
@@ -149,7 +149,7 @@ def main():
     log.info("Using metadata memory cache size of: {}".format(metadata_mem_cache_size))
     app['meta_cache'] = LruCache(mem_target=metadata_mem_cache_size, chunk_cache=False)
     app['domain_cache'] = LruCache(mem_target=metadata_mem_cache_size, chunk_cache=False)
-     
+
     app['loop'] = loop
     if config.get("allow_noauth"):
         app['allow_noauth'] = True

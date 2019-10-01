@@ -2,7 +2,7 @@ import hsds_logger as log
 
 CHUNK_BASE =  16*1024   # Multiplier by which chunks are adjusted
 CHUNK_MIN =  512*1024   # Soft lower limit (512k)
-CHUNK_MAX = 2048*1024   # Hard upper limit (2M) 
+CHUNK_MAX = 2048*1024   # Hard upper limit (2M)
 DEFAULT_TYPE_SIZE = 128 # Type size case when it is variable
 PRIMES = [29, 31, 37, 41, 43, 47, 53, 59, 61, 67] # for chunk partitioning
 
@@ -11,8 +11,8 @@ def getChunkSize(layout, type_size):
     i.e. just the product of the values in the list.
     """
     if type_size == 'H5T_VARIABLE':
-        type_size = DEFAULT_TYPE_SIZE 
-    
+        type_size = DEFAULT_TYPE_SIZE
+
     chunk_size = type_size
     for n in layout:
         if n <= 0:
@@ -30,11 +30,11 @@ def get_dset_size(shape_json, typesize):
     if shape_json["class"] == 'H5S_SCALAR':
         return typesize  # just return size for one item
     if typesize == 'H5T_VARIABLE':
-        typesize = DEFAULT_TYPE_SIZE  # just take a guess at the item size 
+        typesize = DEFAULT_TYPE_SIZE  # just take a guess at the item size
     dset_size = typesize
     shape = shape_json["dims"]
     rank = len(shape)
-   
+
     for n in range(rank):
         if shape[n] == 0:
             # extendable extent with value of 0
@@ -60,7 +60,7 @@ def expandChunk(layout, typesize, shape_json, chunk_min=CHUNK_MIN, layout_class=
         for n in range(rank):
             if maxdims[n] == 0 or maxdims[n] > dims[n]:
                 extendable_dims += 1
-                 
+
     dset_size = get_dset_size(shape_json, typesize)
     if dset_size <= chunk_min and extendable_dims == 0:
         # just use the entire dataspace shape as one big chunk
@@ -73,8 +73,8 @@ def expandChunk(layout, typesize, shape_json, chunk_min=CHUNK_MIN, layout_class=
         # just adjust along extendable dimensions first
         old_chunk_size = chunk_size
         for n in range(rank):
-            dim = rank - n - 1 # start from 
-            
+            dim = rank - n - 1 # start from
+
             if extendable_dims > 0:
                 if maxdims[dim] == 0:
                     # infinately extendable dimensions
@@ -88,7 +88,7 @@ def expandChunk(layout, typesize, shape_json, chunk_min=CHUNK_MIN, layout_class=
                     if layout[dim] >= dims[dim]:
                         layout[dim] = maxdims[dim]  # trim back
                         extendable_dims -= 1  # one less extenable dimension
-                    
+
                     chunk_size = getChunkSize(layout, typesize)
                     if chunk_size > chunk_min:
                         break
@@ -109,7 +109,7 @@ def expandChunk(layout, typesize, shape_json, chunk_min=CHUNK_MIN, layout_class=
         if chunk_size <= old_chunk_size:
             # reality check to see if we'll ever break out of the while loop
             log.warn("Unexpected error in guess_chunk size")
-             
+
             break
         elif chunk_size > chunk_min:
             break  # we're good
@@ -119,13 +119,13 @@ def expandChunk(layout, typesize, shape_json, chunk_min=CHUNK_MIN, layout_class=
 
 def shrinkChunk(layout, typesize, chunk_max=CHUNK_MAX, layout_class='H5D_CHUNKED'):
     """ Shrink the chunk shape until it is less than the MAX target.
-    """  
+    """
     layout = list(layout)
     chunk_size = getChunkSize(layout, typesize)
     if chunk_size <= chunk_max:
         return tuple(layout)  # good already
     rank = len(layout)
-     
+
     while chunk_size > chunk_max:
         # just adjust along extendable dimensions first
         old_chunk_size = chunk_size
@@ -159,14 +159,14 @@ def guessChunk(shape_json, typesize):
         return None
     if shape_json["class"] == 'H5S_SCALAR':
         return (1,)  # just enough to store one item
-    
+
     if "maxdims" in shape_json:
         shape = shape_json["maxdims"]
     else:
         shape = shape_json["dims"]
 
     if typesize == 'H5T_VARIABLE':
-        typesize = 128  # just take a guess at the item size 
+        typesize = 128  # just take a guess at the item size
 
 
     # For unlimited dimensions we have to guess. use 1024
@@ -200,10 +200,10 @@ def getContiguousLayout(shape_json, item_size, chunk_min=1000*1000, chunk_max=4*
         elif nsize <= chunk_min:
             layout[dim] = extent
         elif nsize <= chunk_max:
-            layout[dim] = (chunk_min * extent) // nsize 
+            layout[dim] = (chunk_min * extent) // nsize
             unit_chunk = True
         else:
-            layout[dim] = (chunk_max * extent) // nsize 
+            layout[dim] = (chunk_max * extent) // nsize
             unit_chunk = True
     return layout
 
@@ -220,7 +220,7 @@ def slice_stop(s):
     """
     if s.step > 1:
         num_points = frac((s.stop-s.start), s.step)
-        w = num_points * s.step - (s.step - 1) 
+        w = num_points * s.step - (s.step - 1)
     else:
         w = s.stop - s.start # selection width (>0)
     return s.start + w
@@ -239,15 +239,15 @@ def getNumChunks(selection, layout):
             log.debug("null selection")
             return 0
     num_chunks = 1
-    for i in range(len(selection)): 
+    for i in range(len(selection)):
         s = selection[i]
-         
+
         if s.step > 1:
             num_points = frac((s.stop-s.start), s.step)
-            w = num_points * s.step - (s.step - 1) 
+            w = num_points * s.step - (s.step - 1)
         else:
             w = s.stop - s.start # selection width (>0)
-        
+
         c = layout[i]   # chunk size
 
         lc = frac(s.start, c) * c
@@ -273,10 +273,10 @@ def getNumChunks(selection, layout):
 def getChunkId(dset_id, point, layout):
     """ get chunkid for given point in the dataset
     """
-    
+
     chunk_id = "c-" + dset_id[2:] + '_'
     rank = len(layout)
-     
+
     for dim in range(rank):
         coord = None
         if rank == 1:
@@ -288,7 +288,7 @@ def getChunkId(dset_id, point, layout):
         chunk_id +=  str(chunk_index)
         if dim + 1 < rank:
             chunk_id += '_' # seperate dimensions with underscores
-              
+
     return chunk_id
 
 def getDatasetId(chunk_id):
@@ -302,15 +302,15 @@ def getDatasetId(chunk_id):
     return dset_id
 
 def getChunkIndex(chunk_id):
-    """ given a chunk_id (e.g.: c-12345678-1234-1234-1234-1234567890ab_6_4) 
+    """ given a chunk_id (e.g.: c-12345678-1234-1234-1234-1234567890ab_6_4)
     return the coordinates of the chunk. In this case (6,4)
-    """  
+    """
     # go to the first underscore
     n = chunk_id.find('_')  + 1
     if n == 0:
         raise ValueError("Invalid chunk_id: {}".format(chunk_id))
-    suffix = chunk_id[n:]   
-    
+    suffix = chunk_id[n:]
+
     index = []
     parts = suffix.split('_')
     for part in parts:
@@ -321,10 +321,10 @@ def getChunkIndex(chunk_id):
 def getChunkPartition(chunk_id):
     """ return partition (if any) for the given chunk id.
     Parition is encoded in digits after the initial 'c' character.
-    E.g. for:  c56-12345678-1234-1234-1234-1234567890ab_6_4, the 
-    partition would be 56.  
-    For c-12345678-1234-1234-1234-1234567890ab_6_4, the 
-    partition would be None. 
+    E.g. for:  c56-12345678-1234-1234-1234-1234567890ab_6_4, the
+    partition would be 56.
+    For c-12345678-1234-1234-1234-1234567890ab_6_4, the
+    partition would be None.
     """
     if not chunk_id or chunk_id[0] != 'c':
         raise ValueError("unexpected chunk id")
@@ -345,7 +345,7 @@ def getPartitionKey(chunk_id, partition_count):
     chunk_index = getChunkIndex(chunk_id)
     rank = len(chunk_index)
 
-    partition_index = 0 
+    partition_index = 0
     for dim in range(rank):
         prime_factor = PRIMES[dim % len(PRIMES)]
         partition_index += chunk_index[dim] * prime_factor
@@ -374,7 +374,7 @@ def getChunkIdForPartition(chunk_id, dset_json):
     return chunk_id
 
 def getChunkIds(dset_id, selection, layout, dim=0, prefix=None, chunk_ids=None):
-    """ Get the all the chunk ids for chunks that lie in the selection of the 
+    """ Get the all the chunk ids for chunks that lie in the selection of the
     given dataset.
     """
     num_chunks = getNumChunks(selection, layout)
@@ -392,7 +392,7 @@ def getChunkIds(dset_id, selection, layout, dim=0, prefix=None, chunk_ids=None):
         chunk_ids = []
     s = selection[dim]
     c = layout[dim]
-    
+
     if s.step > c:
         # chunks may not be contiguous,  skip along the selection and add
         # whatever chunks we land in
@@ -410,13 +410,13 @@ def getChunkIds(dset_id, selection, layout, dim=0, prefix=None, chunk_ids=None):
         # get a contiguous set of chunks along the selection
         if s.step > 1:
             num_points = frac((s.stop-s.start), s.step)
-            w = num_points * s.step - (s.step - 1) 
+            w = num_points * s.step - (s.step - 1)
         else:
             w = s.stop - s.start # selection width (>0)
 
         chunk_index_start = s.start // c
         chunk_index_end = frac((s.start + w), c)
-        
+
         for i in range(chunk_index_start, chunk_index_end):
             chunk_id = prefix + str(i)
             if dim + 1 == rank:
@@ -430,23 +430,23 @@ def getChunkIds(dset_id, selection, layout, dim=0, prefix=None, chunk_ids=None):
     return chunk_ids
 
 def getChunkSuffix(chunk_id):
-    """ given a chunk_id (e.g.: c-12345678-1234-1234-1234-1234567890ab_6_4) 
+    """ given a chunk_id (e.g.: c-12345678-1234-1234-1234-1234567890ab_6_4)
     return the coordinates as a string. In this case 6_4
-    """  
+    """
     # go to the first underscore
     n = chunk_id.find('_')  + 1
     if n == 0:
         raise ValueError("Invalid chunk_id: {}".format(chunk_id))
-    suffix = chunk_id[n:]   
+    suffix = chunk_id[n:]
     return suffix
 
 
-    
+
 def getChunkCoordinate(chunk_id, layout):
-    """ given a chunk_id (e.g.: c-12345678-1234-1234-1234-1234567890ab_6_4) 
+    """ given a chunk_id (e.g.: c-12345678-1234-1234-1234-1234567890ab_6_4)
     and a layout (e.g. (10,10))
     return the coordinates of the chunk in dataset space. In this case (60,40)
-    """  
+    """
     coord = getChunkIndex(chunk_id)
     for i in range(len(layout)):
         coord[i] *= layout[i]
@@ -455,7 +455,7 @@ def getChunkCoordinate(chunk_id, layout):
 
 
 def getChunkSelection(chunk_id, slices, layout):
-    """ 
+    """
     Return the intersection of the chunk with the given slices selection of the array.
     """
     chunk_index = getChunkIndex(chunk_id)
@@ -464,7 +464,7 @@ def getChunkSelection(chunk_id, slices, layout):
     for dim in range(rank):
         s = slices[dim]
         c = layout[dim]
-        n = chunk_index[dim] * c 
+        n = chunk_index[dim] * c
         if s.start >= n + c:
             return None  # null intersection
         #s_stop = slice_stop(s)
@@ -479,11 +479,11 @@ def getChunkSelection(chunk_id, slices, layout):
             start = frac(w, s.step) * s.step + s.start
         else:
             start = s.start
-        step = s.step 
+        step = s.step
         cs = slice(start, stop, step)
-        stop = slice_stop(cs)        
-         
-         
+        stop = slice_stop(cs)
+
+
         sel.append(slice(start, stop, step))
     return sel
 
@@ -529,7 +529,7 @@ def getDataCoverage(chunk_id, slices, layout):
         stop = frac((c.stop - s.start), s.step)
         step = 1
         sel.append(slice(start, stop, step))
-            
+
     return tuple(sel)
 
 def getChunkRelativePoint(chunkCoord, point):
@@ -547,11 +547,11 @@ def getChunkRelativePoint(chunkCoord, point):
 
 class ChunkIterator:
     """
-    Class to iterate through list of chunks given dset_id, selection, 
+    Class to iterate through list of chunks given dset_id, selection,
     and layout.
     """
-    def __init__(self, dset_id, selection, layout):       
-        self._prefix = "c-" + dset_id[2:] 
+    def __init__(self, dset_id, selection, layout):
+        self._prefix = "c-" + dset_id[2:]
         self._layout = layout
         self._selection = selection
         self._rank = len(selection)
@@ -560,8 +560,8 @@ class ChunkIterator:
             s = selection[i]
             c = layout[i]
             self._chunk_index[i] = s.start // c
-        
-    
+
+
     def __iter__(self):
         return self
 
@@ -580,14 +580,14 @@ class ChunkIterator:
             c = self._layout[dim]
             s = self._selection[dim]
             self._chunk_index[dim] += 1
-            
+
             chunk_end = self._chunk_index[dim] * c
             if chunk_end < s.stop:
                 # we still have room to extend along this dimensions
                 return chunk_id
-             
+
             if dim > 0:
                 # reset to the start and continue iterating with higher dimension
-                self._chunk_index[dim] = s.start // c 
+                self._chunk_index[dim] = s.start // c
             dim -= 1
         return chunk_id

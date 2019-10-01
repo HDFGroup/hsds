@@ -72,14 +72,14 @@ class RegionReference():
     def __init__(self, bind):
         """ Create a new reference by binding to a group/dataset/committed type
         """
-        
+
         self._id = bind._id
         self._objref = weakref.ref(bind)
 
     def __repr__(self):
         return "<HDF5 region reference>"
 
- 
+
 def special_dtype(**kwds):
     """ Create a new h5py "special" type.  Only one keyword may be given.
 
@@ -252,7 +252,7 @@ def getTypeItem(dt, metadata=None):
     #if len(dt) > 1:
     #    print(">  len:", len(dt))
 
-    
+
 
     type_info = {}
     if len(dt) > 1:
@@ -278,12 +278,12 @@ def getTypeItem(dt, metadata=None):
         # vlen string or data
         #
         # check for h5py variable length extension
-          
+
         if metadata and "vlen" in metadata:
             vlen_check = metadata["vlen"]
-            if vlen_check is not None and not isinstance(vlen_check, np.dtype):        
+            if vlen_check is not None and not isinstance(vlen_check, np.dtype):
                 vlen_check = np.dtype(vlen_check)
-        
+
         if metadata and "ref" in metadata:
             ref_check = metadata["ref"]
         else:
@@ -356,7 +356,7 @@ def getTypeItem(dt, metadata=None):
         mapping =  {
             "FALSE": 0,
             "TRUE": 1
-        }      
+        }
         type_info['class'] = 'H5T_ENUM'
         type_info['mapping'] = mapping
         base_info = { "class": "H5T_INTEGER" }
@@ -648,9 +648,9 @@ def createBaseDataType(typeItem):
         metadata = None
         if baseType.metadata:
             metadata = dict(baseType.metadata)
-            dtRet = np.dtype(dims+baseType.str, metadata=metadata)      
+            dtRet = np.dtype(dims+baseType.str, metadata=metadata)
         else:
-            dtRet =  np.dtype(dims+baseType.str)  
+            dtRet =  np.dtype(dims+baseType.str)
         return dtRet  # return predefined type
     elif typeClass == 'H5T_REFERENCE':
         if 'base' not in typeItem:
@@ -675,13 +675,13 @@ def createBaseDataType(typeItem):
         mapping = typeItem["mapping"]
         if len(mapping) == 0:
             raise KeyError("empty enum map")
-        
+
         dt = createBaseDataType(base_json)
         if dt.kind == 'i' and dt.name=='int8' and len(mapping) == 2 and 'TRUE' in mapping and 'FALSE' in mapping:
             # convert to numpy boolean type
             dtRet = np.dtype("bool")
         else:
-            # not a boolean enum, use h5py special dtype 
+            # not a boolean enum, use h5py special dtype
             dtRet = special_dtype(enum=(dt, mapping))
 
     else:
@@ -733,8 +733,8 @@ def createDataType(typeItem):
             try:
                 field_name.encode('ascii')
             except UnicodeEncodeError:
-                raise TypeError("non-ascii field name not allowed")    
-    
+                raise TypeError("non-ascii field name not allowed")
+
             dt = createDataType(field['type'])  # recursive call
             if dt is None:
                 raise Exception("unexpected error")
@@ -753,8 +753,8 @@ def validateTypeItem(typeItem):
         createDataType(typeItem)
     except (KeyError, TypeError, ValueError) as e:
         msg = f"Got error parsing type... {e}"
-        raise HTTPBadRequest(reason=msg) 
-     
+        raise HTTPBadRequest(reason=msg)
+
 
 """
 Return JSON representation of a predefined type string
@@ -769,7 +769,7 @@ def getBaseTypeJson(type_name):
           'H5T_STD_U32',
           'H5T_STD_I64',
           'H5T_STD_U64'
-    ) 
+    )
     predefined_float_types = (
           'H5T_IEEE_F16',
           'H5T_IEEE_F32',

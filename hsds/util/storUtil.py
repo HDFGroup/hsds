@@ -12,16 +12,16 @@
 #
 # storUtil:
 # storage access functions.  Abstracts S3 API vs Azure storage access
-# 
+#
 import json
 import zlib
 import numpy as np
 from numba import jit
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
- 
+
 
 import hsds_logger as log
-from util.s3Client import S3Client 
+from util.s3Client import S3Client
 
 @jit(nopython=True)
 def _doShuffle(src, des, element_size):
@@ -51,7 +51,7 @@ def _shuffle(element_size, chunk):
     chunk_size = len(chunk)
     if chunk_size % element_size != 0:
         raise ValueError("unexpected chunk size")
-    
+
     arr = np.zeros((chunk_size,), dtype='u1')
     _doShuffle(chunk, arr, element_size)
 
@@ -81,20 +81,20 @@ async def releaseStorageClient(app):
     # TBB - return azure client baseed on config
     client = S3Client(app)
     await client.releaseClient()
- 
+
 async def getStorJSONObj(app, key, bucket=None):
     """ Get object identified by key and read as JSON
     """
-    
+
     client = _getStorageClient(app)
     if not bucket:
         bucket = app['bucket_name']
     if key[0] == '/':
         key = key[1:]  # no leading slash
     log.info(f"getStorJSONObj({bucket})/{key}")
-     
+
     data = await client.get_object(key, bucket=bucket)
-     
+
     try:
         json_dict = json.loads(data.decode('utf8'))
     except UnicodeDecodeError:
@@ -107,7 +107,7 @@ async def getStorJSONObj(app, key, bucket=None):
 async def getStorBytes(app, key, shuffle=0, deflate_level=None, s3offset=0, s3size=None, bucket=None):
     """ Get object identified by key and read as bytes
     """
-    
+
     client = _getStorageClient(app)
     if not bucket:
         bucket = app['bucket_name']
@@ -135,13 +135,13 @@ async def getStorBytes(app, key, shuffle=0, deflate_level=None, s3offset=0, s3si
             unshuffled = _unshuffle(shuffle, data)
             log.info(f"unshuffled to {len(unshuffled)} bytes")
             data = unshuffled
-        
+
     return data
 
 async def putStorJSONObj(app, key, json_obj, bucket=None):
     """ Store JSON data as storage object with given key
     """
-   
+
     client = _getStorageClient(app)
     if not bucket:
         bucket = app['bucket_name']
@@ -152,13 +152,13 @@ async def putStorJSONObj(app, key, json_obj, bucket=None):
     data = data.encode('utf8')
 
     rsp = await client.put_object(key, data, bucket=bucket)
-    
+
     return rsp
 
 async def putStorBytes(app, key, data, shuffle=0, deflate_level=None, bucket=None):
     """ Store byte string as S3 object with given key
     """
-    
+
     client = _getStorageClient(app)
     if not bucket:
         bucket = app['bucket_name']
@@ -180,20 +180,20 @@ async def putStorBytes(app, key, data, shuffle=0, deflate_level=None, bucket=Non
         except zlib.error as zlib_error:
             log.info(f"zlib_err: {zlib_error}")
             log.warn(f"unable to compress obj: {key}, using raw bytes")
-    
-    
+
+
     rsp = await client.put_object(key, data, bucket=bucket)
-         
+
     # s3 rsp format:
-    # {'ETag': '"1b95a7bf5fab6f5c0620b8e3b30a53b9"', 'ResponseMetadata': 
-    #     {'HostId': '', 'HTTPHeaders': {'X-Amz-Request-Id': '1529F570A809AD26', 'Server': 'Minio/RELEASE.2017-08-05T00-00-53Z (linux; amd64)', 'Vary': 'Origin', 'Date': 'Sun, 29 Apr 2018 16:36:53 GMT', 'Content-Length': '0', 'Content-Type': 'text/plain; charset=utf-8', 'Etag': '"1b95a7bf5fab6f5c0620b8e3b30a53b9"', 'X-Amz-Bucket-Region': 'us-east-1', 'Accept-Ranges': 'bytes'}, 
+    # {'ETag': '"1b95a7bf5fab6f5c0620b8e3b30a53b9"', 'ResponseMetadata':
+    #     {'HostId': '', 'HTTPHeaders': {'X-Amz-Request-Id': '1529F570A809AD26', 'Server': 'Minio/RELEASE.2017-08-05T00-00-53Z (linux; amd64)', 'Vary': 'Origin', 'Date': 'Sun, 29 Apr 2018 16:36:53 GMT', 'Content-Length': '0', 'Content-Type': 'text/plain; charset=utf-8', 'Etag': '"1b95a7bf5fab6f5c0620b8e3b30a53b9"', 'X-Amz-Bucket-Region': 'us-east-1', 'Accept-Ranges': 'bytes'},
     #       'HTTPStatusCode': 200, 'RequestId': '1529F570A809AD26'}}
     return rsp
 
 async def deleteStorObj(app, key, bucket=None):
     """ Delete storage object identfied by given key
     """
-    
+
     client = _getStorageClient(app)
     if not bucket:
         bucket = app['bucket_name']
@@ -202,19 +202,19 @@ async def deleteStorObj(app, key, bucket=None):
     log.info(f"deleteStorObj({key})")
 
     await client.delete_object(key, bucket=bucket)
-     
+
     log.debug("deleteStorObj complete")
 
 async def getStorObjStats(app, key, bucket=None):
     """ Return etag, size, and last modified time for given object
     """
     # TBD - will need to be refactored to handle azure responses
-    
+
     client = _getStorageClient(app)
     if not bucket:
         bucket = app['bucket_name']
     stats = {}
-    
+
     if key[0] == '/':
         #key = key[1:]  # no leading slash
         msg = f"key with leading slash: {key}"
@@ -222,16 +222,16 @@ async def getStorObjStats(app, key, bucket=None):
         raise KeyError(msg)
 
     log.info(f"getStorObjStats({key})")
-        
+
     resp = await client.list_keys(bucket=bucket, limit=1, prefix=key)
-    
+
     if 'Contents' not in resp:
         msg = f"key: {key} not found"
         log.info(msg)
         raise HTTPInternalServerError()
     contents = resp['Contents']
     log.debug(f"storage_contents: {contents}")
-    
+
     found = False
     if len(contents) > 0:
         item = contents[0]
@@ -260,7 +260,7 @@ async def getStorObjStats(app, key, bucket=None):
         raise HTTPNotFound()
 
     return stats
-    
+
 async def isStorObj(app, key, bucket=None):
     """ Test if the given key maps to S3 object
     """
@@ -270,8 +270,8 @@ async def isStorObj(app, key, bucket=None):
         bucket = app['bucket_name']
     else:
         log.debug(f"using bucket: [{bucket}]")
-    log.debug(f"isStorObj {bucket}/{key}") 
-  
+    log.debug(f"isStorObj {bucket}/{key}")
+
     found = False
 
     try:
@@ -288,18 +288,18 @@ async def isStorObj(app, key, bucket=None):
         pass  # key does not exist
 
     log.debug(f"isStorObj {key} returning {found}")
-    return found 
-  
+    return found
+
 async def getStorKeys(app, prefix='', deliminator='', suffix='', include_stats=False, callback=None, bucket=None, limit=None):
     # return keys matching the arguments
     client = _getStorageClient(app)
     if not bucket:
         bucket = app['bucket_name']
     log.info(f"getStorKeys('{prefix}','{deliminator}','{suffix}', include_stats={include_stats}")
-     
-    key_names = await client.list_keys(prefix=prefix, deliminator=deliminator, suffix=suffix, 
+
+    key_names = await client.list_keys(prefix=prefix, deliminator=deliminator, suffix=suffix,
         include_stats=include_stats, callback=callback, bucket=bucket, limit=limit)
- 
+
     log.info(f"getStorKeys done, got {len(key_names)} keys")
-               
+
     return key_names

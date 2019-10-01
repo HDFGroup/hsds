@@ -38,7 +38,7 @@ def getHyperslabSelection(dsetshape, start=None, stop=None, step=None):
         start = []
         for dim in range(rank):
             start.append(0)
-    
+
     if stop:
         if not isinstance(stop, (list, tuple)):
             stop = [stop]
@@ -74,9 +74,9 @@ def getHyperslabSelection(dsetshape, start=None, stop=None, step=None):
             step.append(1)
 
     slices = []
-    
+
     for dim in range(rank):
-        
+
         try:
             s = slice(int(start[dim]), int(stop[dim]), int(step[dim]))
         except ValueError:
@@ -87,7 +87,7 @@ def getHyperslabSelection(dsetshape, start=None, stop=None, step=None):
     return tuple(slices)
 
 def getSelectionShape(selection):
-    """ Return the shape of the given selection. 
+    """ Return the shape of the given selection.
       Examples (selection -> returned shape):
       [(3,7,1)] -> [4]
       [(3, 7, 3)] -> [1]
@@ -162,7 +162,7 @@ Helper method - return slice for dim based on query params
             start and end: n:m
             start, end, and stride: n:m:s
 """
-def getSliceQueryParam(request, dim, extent, body=None):        
+def getSliceQueryParam(request, dim, extent, body=None):
     # Get optional query parameters for given dim
     log.debug("getSliceQueryParam: " + str(dim) + ", " + str(extent))
     params = request.rel_url.query
@@ -182,7 +182,7 @@ def getSliceQueryParam(request, dim, extent, body=None):
             start = start_val[dim]
         else:
             start = start_val
-        
+
     if body and "stop" in body:
         stop_val = body["stop"]
         if isinstance(stop_val, (list, tuple)):
@@ -226,7 +226,7 @@ def getSliceQueryParam(request, dim, extent, body=None):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         dim_query = query_array[dim].strip()
-    
+
         if dim_query.find(':') < 0:
             # just a number - return start = stop for this value
             try:
@@ -286,7 +286,7 @@ Helper method - set query parameter for given shape + selection
             start and end: n:m
             start, end, and stride: n:m:s
 """
-def setSliceQueryParam(params, sel):  
+def setSliceQueryParam(params, sel):
     # pass dimensions, and selection as query params
     rank = len(sel)
     if rank > 0:
@@ -315,7 +315,7 @@ Helper method - set chunk dim param
             start and end: n:m
             start, end, and stride: n:m:s
 """
-def setChunkDimQueryParam(params, dims):  
+def setChunkDimQueryParam(params, dims):
     # pass dimensions, and selection as query params
     rank = len(dims)
     if rank > 0:
@@ -326,10 +326,10 @@ def setChunkDimQueryParam(params, dims):
         dim_param += ']'
         log.debug("dim query param: {}".format(dim_param))
         params["dim"] = dim_param
- 
 
 
-""" 
+
+"""
 Get maxdims from a given shape.  Return [1,] for Scalar datasets
 
 Use with H5S_NULL datasets will throw a 400 error.
@@ -371,7 +371,7 @@ def getChunkLayout(dset_json):
 """ Get the Deflate compression value.
 """
 def getDeflateLevel(dset_json):
-    
+
     if "creationProperties" not in dset_json:
         return None
     creationProperties = dset_json["creationProperties"]
@@ -418,7 +418,7 @@ def isShuffle(dset_json):
     data preview selection. Return None if the dataset is small
     enough that a preview is not needed.
 """
-def getPreviewQuery(dims):   
+def getPreviewQuery(dims):
     select = "select=["
     rank = len(dims)
 
@@ -465,9 +465,9 @@ def getFillValue(dset_json):
 
 """
 getEvalStr: Get eval string for given query
-     
+
     Gets Eval string to use with numpy where method.
-"""    
+"""
 def getEvalStr(query, arr_name, field_names):
     i = 0
     eval_str = ""
@@ -497,7 +497,7 @@ def getEvalStr(query, arr_name, field_names):
             eval_str += arr_name + "['" + var_name + "']"
             var_name = None
             var_count += 1
-            
+
         if end_quote_char:
             if ch == end_quote_char:
                 # end of literal
@@ -539,7 +539,7 @@ def getEvalStr(query, arr_name, field_names):
         msg = "Mismatched paren"
         #log.warn("Bad query: " + msg)
         raise HTTPBadRequest(reason=msg)
-    #log.info("eval_str: {}".format(eval_str))       
+    #log.info("eval_str: {}".format(eval_str))
     return eval_str
 
 """
@@ -563,7 +563,7 @@ def isExtensible(dims, maxdims):
 Class to iterator through items in a selection
 """
 class ItemIterator:
-   
+
     def __init__(self, selection):
         self._selection = selection
         self._rank = len(selection)
@@ -580,7 +580,7 @@ class ItemIterator:
             # ran past last item, end iteration
             raise StopIteration()
         dim = self._rank - 1
-    
+
         index = [0,] * self._rank
         for i in range(self._rank):
             index[i] = self._index[i]

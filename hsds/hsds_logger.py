@@ -26,7 +26,7 @@ def debug(msg):
 		counter["DEBUG"] += 1
 
 def info(msg):
-	if config.get("log_level") not in  ("ERROR", "WARNING", "WARN"):  
+	if config.get("log_level") not in  ("ERROR", "WARNING", "WARN"):
 		print("INFO> " + msg)
 	if app:
 		counter = app["log_count"]
@@ -86,7 +86,7 @@ def response(req, resp=None, code=None, message=None):
 			level = "WARN"
 		else:
 			level = "ERROR"
-	
+
 	log_level = config.get("log_level")
 	if log_level in ("DEBUG", "INFO") or (log_level == "WARN" and level != "INFO") or (log_level == "ERROR" and level == "ERROR"):
 		print("{} RSP> <{}> ({}): {}".format(level, code, message, req.path))

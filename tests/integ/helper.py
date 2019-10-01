@@ -19,10 +19,10 @@ import base64
 
 import config
 """
-    Helper function - get endpoint we'll send http requests to 
-""" 
+    Helper function - get endpoint we'll send http requests to
+"""
 def getEndpoint():
-    
+
     endpoint = config.get("hsds_endpoint")
     return endpoint
 
@@ -30,7 +30,7 @@ def getEndpoint():
 Helper function - return true if the parameter looks like a UUID
 """
 def validateId(id):
-    if type(id) != str: 
+    if type(id) != str:
         # should be a string
         return False
     if len(id) != 38:
@@ -43,7 +43,7 @@ Helper - return number of active sn/dn nodes
 """
 def getActiveNodeCount():
     req = getEndpoint("head") + "/info"
-    rsp = requests.get(req)   
+    rsp = requests.get(req)
     rsp_json = json.loads(rsp.text)
     sn_count = rsp_json["active_sn_count"]
     dn_count = rsp_json["active_dn_count"]
@@ -57,12 +57,12 @@ def getTestDomainName(name):
     dt = datetime.fromtimestamp(now, pytz.utc)
     domain = "/home/"
     domain += config.get('user_name')
-    domain += '/' 
+    domain += '/'
     domain += 'hsds_test'
-    domain += '/' 
+    domain += '/'
     domain += name.lower()
-    domain += '/' 
-    domain += "{:04d}{:02d}{:02d}T{:02d}{:02d}{:02d}_{:06d}Z".format(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, dt.microsecond)  
+    domain += '/'
+    domain += "{:04d}{:02d}{:02d}T{:02d}{:02d}{:02d}_{:06d}Z".format(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, dt.microsecond)
     return domain
 
 """
@@ -136,8 +136,8 @@ def setupDomain(domain, folder=False):
     if parent_domain is None:
         raise ValueError(f"Invalid parent domain: {domain}")
     # create parent domain if needed
-    setupDomain(parent_domain, folder=True)  
-     
+    setupDomain(parent_domain, folder=True)
+
     headers = getRequestHeaders(domain=domain)
     body=None
     if folder:
@@ -150,11 +150,11 @@ def setupDomain(domain, folder=False):
 
 """
 Helper function - get root uuid for domain
-""" 
+"""
 def getRootUUID(domain, username=None, password=None):
     req = getEndpoint() + "/"
     headers = getRequestHeaders(domain=domain, username=username, password=password)
-    
+
     rsp = requests.get(req, headers=headers)
     root_uuid= None
     if rsp.status_code == 200:
@@ -176,36 +176,36 @@ Helper function - get uuid for a given path
 def getUUIDByPath(domain, path, username=None, password=None):
     if path[0] != '/':
         raise KeyError("only abs paths") # only abs paths
-            
-    parent_uuid = getRootUUID(domain, username=username, password=password)  
-     
+
+    parent_uuid = getRootUUID(domain, username=username, password=password)
+
     if path == '/':
         return parent_uuid
 
     headers = getRequestHeaders(domain=domain)
-          
+
     # make a fake tgt_json to represent 'link' to root group
     tgt_json = {'collection': "groups", 'class': "H5L_TYPE_HARD", 'id': parent_uuid }
     tgt_uuid = None
-            
-    names = path.split('/')         
-                      
+
+    names = path.split('/')
+
     for name in names:
-        if not name: 
+        if not name:
             continue
         if parent_uuid is None:
             raise KeyError("not found")
-                 
+
         req = getEndpoint() + "/groups/" + parent_uuid + "/links/" + name
         rsp = requests.get(req, headers=headers)
         if rsp.status_code != 200:
             raise KeyError("not found")
-        rsp_json = json.loads(rsp.text)    
+        rsp_json = json.loads(rsp.text)
         tgt_json = rsp_json['link']
-            
+
         if tgt_json['class'] == 'H5L_TYPE_HARD':
             if tgt_json['collection'] == 'groups':
-                parent_uuid = tgt_json['id']    
+                parent_uuid = tgt_json['id']
             else:
                 parent_uuid = None
             tgt_uuid = tgt_json['id']

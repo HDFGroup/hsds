@@ -11,17 +11,17 @@
 ##############################################################################
 #
 # data node of hsds cluster
-# 
+#
 import time
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict, HTTPInternalServerError
 from aiohttp.web import json_response
 
- 
+
 from util.idUtil import isValidUuid, validateUuid
 from datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj, save_metadata_obj, delete_metadata_obj
 import hsds_logger as log
-    
+
 
 async def GET_Dataset(request):
     """HTTP GET method to return JSON for /groups/
@@ -30,7 +30,7 @@ async def GET_Dataset(request):
     app = request.app
     params = request.rel_url.query
     dset_id = get_obj_id(request)
-    
+
     if not isValidUuid(dset_id, obj_class="dataset"):
         log.error( "Unexpected type_id: {}".format(dset_id))
         raise HTTPInternalServerError()
@@ -38,10 +38,10 @@ async def GET_Dataset(request):
         bucket = params["bucket"]
     else:
         bucket = None
-    
+
     dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
 
-    resp_json = { } 
+    resp_json = { }
     resp_json["id"] = dset_json["id"]
     resp_json["root"] = dset_json["root"]
     resp_json["created"] = dset_json["created"]
@@ -56,7 +56,7 @@ async def GET_Dataset(request):
 
     if "include_attrs" in params and params["include_attrs"]:
         resp_json["attributes"] = dset_json["attributes"]
-     
+
     resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
@@ -91,7 +91,7 @@ async def POST_Dataset(request):
     if obj_found:
         log.error( "Post with existing dset_id: {}".format(dset_id))
         raise HTTPInternalServerError()
-       
+
     if "root" not in body:
         msg = "POST_Dataset with no root"
         log.error(msg)
@@ -103,7 +103,7 @@ async def POST_Dataset(request):
         msg = "Invalid root_id: " + root_id
         log.error(msg)
         raise HTTPInternalServerError()
-    
+
     if "type" not in body:
         msg = "POST_Dataset with no type"
         log.error(msg)
@@ -114,16 +114,16 @@ async def POST_Dataset(request):
         log.error(msg)
         raise HTTPInternalServerError()
     shape_json = body["shape"]
-     
+
     layout = None
-    if "layout" in body:       
+    if "layout" in body:
         layout = body["layout"]  # client specified chunk layout
-    
+
     # ok - all set, create committed type obj
     now = int(time.time())
 
     log.debug("POST_dataset typejson: {}, shapejson: {}".format(type_json, shape_json))
-    
+
     dset_json = {"id": dset_id, "root": root_id, "created": now, "lastModified": now, "type": type_json, "shape": shape_json, "attributes": {} }
     if "creationProperties" in body:
         dset_json["creationProperties"] = body["creationProperties"]
@@ -131,9 +131,9 @@ async def POST_Dataset(request):
         dset_json["layout"] = layout
 
     await save_metadata_obj(app, dset_id, dset_json, bucket=bucket, notify=True, flush=True)
-     
-    resp_json = {} 
-    resp_json["id"] = dset_id 
+
+    resp_json = {}
+    resp_json["id"] = dset_id
     resp_json["root"] = root_id
     resp_json["created"] = dset_json["created"]
     resp_json["type"] = type_json
@@ -165,7 +165,7 @@ async def DELETE_Dataset(request):
         bucket = None
 
     # verify the id  exist
-    obj_found = await check_metadata_obj(app, dset_id, bucket=bucket) 
+    obj_found = await check_metadata_obj(app, dset_id, bucket=bucket)
     if not obj_found:
         raise HTTPNotFound()
 
@@ -176,8 +176,8 @@ async def DELETE_Dataset(request):
         notify=False
     await delete_metadata_obj(app, dset_id, bucket=bucket, notify=notify)
 
-    resp_json = {  } 
-      
+    resp_json = {  }
+
     resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
@@ -188,7 +188,7 @@ async def PUT_DatasetShape(request):
     app = request.app
     params = request.rel_url.query
     dset_id = request.match_info.get('id')
-    
+
     if not isValidUuid(dset_id, obj_class="dataset"):
         log.error( "Unexpected type_id: {}".format(dset_id))
         raise HTTPInternalServerError()
@@ -221,7 +221,7 @@ async def PUT_DatasetShape(request):
     dims = shape_orig["dims"]
     maxdims = shape_orig["maxdims"]
 
-    resp_json = { } 
+    resp_json = { }
 
     if "extend" in body:
         # extend the shape by the give value and return the
@@ -253,14 +253,14 @@ async def PUT_DatasetShape(request):
                 selection += ","
         selection += "]"
         resp_json["selection"] = selection
-        
-    else: 
+
+    else:
         # verify that the extend request is still valid
         # e.g. another client has already extended the shape since the SN
         # verified it
         shape_update = body["shape"]
         log.debug("shape_update: {}".format(shape_update))
-      
+
         for i in range(len(dims)):
             if shape_update[i] < dims[i]:
                 msg = "Dataspace can not be made smaller"
@@ -268,13 +268,13 @@ async def PUT_DatasetShape(request):
                 raise HTTPBadRequest(reason=msg)
 
         # Update the shape!
-        for i in range(len(dims)):    
+        for i in range(len(dims)):
             dims[i] = shape_update[i]
-         
+
     # write back to S3, save to metadata cache
     log.info(f"Updated dimensions: {dims}")
     await save_metadata_obj(app, dset_id, dset_json, bucket=bucket)
- 
+
     resp = json_response(resp_json, status=201)
     log.response(request, resp=resp)
     return resp

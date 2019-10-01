@@ -12,7 +12,7 @@
 #
 # idUtil:
 # id (uuid) related functions
-# 
+#
 import hashlib
 import uuid
 from aiohttp.web_exceptions import HTTPServiceUnavailable
@@ -48,7 +48,7 @@ def getIdHexChars(id):
         parts = id.split('-')
     if len(parts) != 6:
         raise ValueError(f"Unexpected id format for uuid: {id}")
-    return "".join(parts[1:]) 
+    return "".join(parts[1:])
 
 def hexRot(ch):
     """ rotate hex character by 8 """
@@ -86,7 +86,7 @@ def getRootObjId(id):
 def createObjId(obj_type, rootid=None):
     if obj_type not in ('groups', 'datasets', 'datatypes', 'chunks', "roots"):
         raise ValueError("unexpected obj_type")
-    
+
     prefix = None
     if obj_type == 'datatypes':
         prefix = 't'  # don't collide with datasets
@@ -102,7 +102,7 @@ def createObjId(obj_type, rootid=None):
         salt = uuid.uuid4().hex
         # take a hash to randomize the uuid
         token = list(hashlib.sha256(salt.encode()).hexdigest())
-        
+
         if rootid:
             # replace first 16 chars of token with first 16 chars of rootid
             root_hex = getIdHexChars(rootid)
@@ -113,23 +113,23 @@ def createObjId(obj_type, rootid=None):
             for i in range(16):
                 token[16+i] = hexRot(token[i])
         # format as a string
-        token = "".join(token)        
+        token = "".join(token)
         objid = prefix + '-' + token[0:8] + '-' + token[8:16] + '-' + token[16:20] + '-' + token[20:26] + '-' + token[26:32]
 
     return objid
 
 
 def getS3Key(id):
-    """ Return s3 key for given id. 
+    """ Return s3 key for given id.
 
     For schema v1:
-        A md5 prefix is added to the front of the returned key to better 
+        A md5 prefix is added to the front of the returned key to better
         distribute S3 objects.
     For schema v2:
         The id is converted to the pattern: "db/{rootid[0:16]}" for rootids and
         "db/id[0:16]/{prefix}/id[16-32]" for other ids
         Chunk ids have the chunk index added after the slash: "db/id[0:16]/d/id[16:32]/x_y_z
-        
+
     For domain id's return a key with the .domain suffix and no preceeding slash
     """
     if id.find('/') > 0:
@@ -164,13 +164,13 @@ def getS3Key(id):
                 key = f"db/{hexid[0:8]}-{hexid[8:16]}/{s3col}/{hexid[16:20]}-{hexid[20:26]}-{hexid[26:32]}"
             if prefix == 'c':
                 if partition:
-                    key += '/' 
+                    key += '/'
                     key += partition
                 # add the chunk coordinate
                 index = id.index('_')  # will raise ValueError if not found
                 coord = id[index+1:]
                 key += '/'
-                key += coord  
+                key += coord
             elif prefix == 'g':
                 # add key suffix for group
                 key += "/.group.json"
@@ -219,7 +219,7 @@ def getObjId(s3key):
             for ch in parts[3]:
                 if ch != '-':
                     token.append(ch)
-            
+
             if parts[2] == 'g' and parts[4] == ".group.json":
                 prefix = 'g'  # group json
             elif parts[2] == 't' and parts[4] == ".datatype.json":
@@ -251,7 +251,7 @@ def getObjId(s3key):
 
         else:
             raise ValueError(f"unexpected S3Key: {s3key}")
-        
+
         token = "".join(token)
         objid = prefix + partition + '-' + token[0:8] + '-' + token[8:16] + '-' + token[16:20] + '-' + token[20:26] + '-' + token[26:32] + chunk_coord
     else:
@@ -298,7 +298,7 @@ def getCollectionForId(obj_id):
 def validateUuid(id, obj_class=None):
     if not isinstance(id, str):
         raise ValueError("Expected string type")
-    if len(id) < 38:  
+    if len(id) < 38:
         # id should be prefix (e.g. "g-") and uuid value
         raise ValueError("Unexpected id length")
     if id[0] not in ('g', 'd', 't', 'c'):
@@ -318,7 +318,7 @@ def validateUuid(id, obj_class=None):
         n = id.find('-')
         if n == -1:
             raise ValueError("Invalid chunk id")
-        
+
         # trim the chunk index for chunk ids
         m = id.find('_')
         if m == -1:
@@ -361,7 +361,7 @@ def getClassForObjId(id):
     if isValidChunkId(id):
         return "chunks"
     else:
-        return getCollectionForId(id) 
+        return getCollectionForId(id)
 
 def isObjId(id):
     """ return true if uuid or domain """
@@ -404,7 +404,7 @@ def getDataNodeUrl(app, obj_id):
         msg="Service not ready"
         log.warn(msg)
         raise HTTPServiceUnavailable()
-    dn_number = getObjPartition(obj_id, node_count) 
+    dn_number = getObjPartition(obj_id, node_count)
     url = dn_urls[dn_number]
     log.debug(f"got dn_url: {url} for obj_id: {obj_id}")
     return url

@@ -11,9 +11,9 @@
 ##############################################################################
 #
 # data node of hsds cluster
-# 
+#
 import asyncio
-import time 
+import time
 from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError, HTTPBadRequest, HTTPNotFound, HTTPForbidden
 
 from util.idUtil import validateInPartition, getS3Key, isValidUuid, isValidChunkId, getDataNodeUrl, isSchema2Id, getRootObjId, isRootObjId
@@ -28,7 +28,7 @@ import hsds_logger as log
 
 
 def get_obj_id(request, body=None):
-    """ Get object id from request 
+    """ Get object id from request
         Raise HTTPException on errors.
     """
 
@@ -55,13 +55,13 @@ def get_obj_id(request, body=None):
         validateInPartition(app, obj_id)
     except KeyError:
         log.error("Domain not in partition")
-        raise HTTPInternalServerError() 
+        raise HTTPInternalServerError()
 
-    return obj_id   
+    return obj_id
 
 async def notify_root(app, root_id, bucket=None):
     # flag to write to S3
-    
+
     log.info(f"notify_root: {root_id}")
     if not isValidUuid(root_id) or not isSchema2Id(root_id):
         log.error(f"unexpected call to notify with invalid id: {root_id}")
@@ -83,26 +83,26 @@ async def check_metadata_obj(app, obj_id, bucket=None):
         validateInPartition(app, obj_id)
     except KeyError:
         log.error("Domain not in partition")
-        raise HTTPInternalServerError() 
+        raise HTTPInternalServerError()
 
     deleted_ids = app['deleted_ids']
     if obj_id in deleted_ids:
         msg = f"{obj_id} has been deleted"
         log.info(msg)
         return False
-    
-    meta_cache = app['meta_cache'] 
+
+    meta_cache = app['meta_cache']
     if obj_id in meta_cache:
         found = True
     else:
-        # Not in chache, check s3 obj exists   
+        # Not in chache, check s3 obj exists
         s3_key = getS3Key(obj_id)
         log.debug(f"check_metadata_obj({s3_key})")
         # does key exist?
         found = await isStorObj(app, s3_key, bucket=bucket)
     return found
-    
- 
+
+
 
 async def get_metadata_obj(app, obj_id, bucket=None):
     """ Get object from metadata cache (if present).
@@ -119,14 +119,14 @@ async def get_metadata_obj(app, obj_id, bucket=None):
     if obj_id in deleted_ids:
         msg = f"{obj_id} has been deleted"
         log.warn(msg)
-        raise HTTPGone() 
-    
-    meta_cache = app['meta_cache'] 
-    obj_json = None 
+        raise HTTPGone()
+
+    meta_cache = app['meta_cache']
+    obj_json = None
     if obj_id in meta_cache:
         log.debug(f"{obj_id} found in meta cache")
         obj_json = meta_cache[obj_id]
-    else:   
+    else:
         s3_key = getS3Key(obj_id)
         pending_s3_read = app["pending_s3_read"]
         if obj_id in pending_s3_read:
@@ -142,7 +142,7 @@ async def get_metadata_obj(app, obj_id, bucket=None):
                     break
             if not obj_json:
                 log.warn(f"s3 read for object {s3_key} timed-out, initiaiting a new read")
-        
+
         # invoke S3 read unless the object has just come in from pending read
         if not obj_json:
             log.debug(f"getS3JSONObj({s3_key}, bucket={bucket})")
@@ -154,23 +154,23 @@ async def get_metadata_obj(app, obj_id, bucket=None):
             except HTTPNotFound:
                 log.warn(f"HTTPpNotFound error for {s3_key} bucket:{bucket}")
                 if obj_id in pending_s3_read:
-                    del pending_s3_read[obj_id] 
+                    del pending_s3_read[obj_id]
                 raise
             except HTTPForbidden:
                 log.warn(f"HTTPForbidden error for {s3_key} bucket:{bucket}")
                 if obj_id in pending_s3_read:
-                    del pending_s3_read[obj_id] 
+                    del pending_s3_read[obj_id]
                 raise
             except HTTPInternalServerError:
                 log.warn(f"HTTPInternalServerError error for {s3_key} bucket:{bucket}")
                 if obj_id in pending_s3_read:
-                    del pending_s3_read[obj_id] 
+                    del pending_s3_read[obj_id]
                 raise
             if obj_id in pending_s3_read:
                 # read complete - remove from pending map
                 elapsed_time = time.time() - pending_s3_read[obj_id]
                 log.info(f"s3 read for {s3_key} took {elapsed_time}")
-                del pending_s3_read[obj_id] 
+                del pending_s3_read[obj_id]
             meta_cache[obj_id] = obj_json  # add to cache
     return obj_json
 
@@ -184,27 +184,27 @@ async def save_metadata_obj(app, obj_id, obj_json, bucket=None, notify=False, fl
 
     if not isinstance(obj_json, dict):
         log.error("Passed non-dict obj to save_metadata_obj")
-        raise HTTPInternalServerError() 
+        raise HTTPInternalServerError()
 
     try:
         validateInPartition(app, obj_id)
     except KeyError:
         log.error("Domain not in partition")
-        raise HTTPInternalServerError() 
+        raise HTTPInternalServerError()
 
     dirty_ids = app["dirty_ids"]
     deleted_ids = app['deleted_ids']
     if obj_id in deleted_ids:
         if isValidUuid(obj_id):
-            # domain objects may be re-created, but shouldn't see repeats of 
+            # domain objects may be re-created, but shouldn't see repeats of
             # deleted uuids
             log.warn(f"{obj_id} has been deleted")
-            raise HTTPInternalServerError() 
+            raise HTTPInternalServerError()
         elif obj_id in deleted_ids:
             deleted_ids.remove(obj_id)  # un-gone the domain id
-    
+
     # update meta cache
-    meta_cache = app['meta_cache'] 
+    meta_cache = app['meta_cache']
     log.debug(f"save: {obj_id} to cache")
     meta_cache[obj_id] = obj_json
 
@@ -224,7 +224,7 @@ async def save_metadata_obj(app, obj_id, obj_json, bucket=None, notify=False, fl
             raise HTTPInternalServerError()
         except HTTPInternalServerError:
             log.warn(f" failed to write {obj_id}")
-            raise  # re-throw  
+            raise  # re-throw
         if obj_id in dirty_ids:
             log.warn(f"save_metadata_obj flush - object {obj_id} is still dirty")
         # message AN immediately if notify flag is set
@@ -238,22 +238,22 @@ async def save_metadata_obj(app, obj_id, obj_json, bucket=None, notify=False, fl
         if isValidUuid(obj_id) and  not bucket:
             log.warn(f"bucket is not defined for save_metadata_obj: {obj_id}")
         dirty_ids[obj_id] = (now, bucket)
-         
+
 
 
 async def delete_metadata_obj(app, obj_id, notify=True, root_id=None, bucket=None):
     """ Delete the given object """
-    meta_cache = app['meta_cache'] 
+    meta_cache = app['meta_cache']
     dirty_ids = app["dirty_ids"]
     log.info(f"delete_meta_data_obj: {obj_id} notify: {notify}")
     if isValidDomain(obj_id):
         bucket = getBucketForDomain(obj_id)
-        
+
     try:
         validateInPartition(app, obj_id)
     except KeyError:
         log.error(f"obj: {obj_id} not in partition")
-        raise HTTPInternalServerError() 
+        raise HTTPInternalServerError()
 
     deleted_ids = app['deleted_ids']
     if obj_id in deleted_ids:
@@ -261,11 +261,11 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None, bucket=Non
     else:
         log.debug(f"adding {obj_id} to deleted ids")
         deleted_ids.add(obj_id)
-     
+
     if obj_id in meta_cache:
         log.debug(f"removing {obj_id} from meta_cache")
         del meta_cache[obj_id]
-    
+
     if obj_id in dirty_ids:
         log.debug(f"removing dirty_ids for: {obj_id}")
         del dirty_ids[obj_id]
@@ -277,7 +277,7 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None, bucket=Non
         await deleteStorObj(app, s3key, bucket=bucket)
     else:
         log.info(f"delete_metadata_obj - key {s3key} not found (never written)?")
-    
+
     if isValidUuid(obj_id) and isSchema2Id(obj_id):
         if isRootObjId(obj_id):
             # add to gc ids so sub-objects will be deleted
@@ -288,14 +288,14 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None, bucket=Non
             root_id = getRootObjId(obj_id)
             await notify_root(app, root_id, bucket=bucket)
         # no notify for domain deletes since the root group is being deleted
-       
+
     log.debug(f"delete_metadata_obj for {obj_id} done")
 
 
 
 async def write_s3_obj(app, obj_id, bucket=None):
     """ writes the given object to s3 """
-    s3key = getS3Key(obj_id)  
+    s3key = getS3Key(obj_id)
     log.info(f"write_s3_obj for obj_id: {obj_id} / s3_key: {s3key}  bucket: {bucket}")
     pending_s3_write = app["pending_s3_write"]
     pending_s3_write_tasks = app["pending_s3_write_tasks"]
@@ -334,7 +334,7 @@ async def write_s3_obj(app, obj_id, bucket=None):
             task.cancel()
             del pending_s3_write_tasks[obj_id]
         return None
-    
+
     now = time.time()
 
     last_update_time = now
@@ -344,10 +344,10 @@ async def write_s3_obj(app, obj_id, bucket=None):
         msg = f"last_update time {last_update_time} is in the future for obj_id: {obj_id}"
         log.error(msg)
         raise ValueError(msg)
-    
-    pending_s3_write[s3key] = now 
+
+    pending_s3_write[s3key] = now
     # do the following in the try block so we can always remove the pending_s3_write at the end
-    
+
     try:
         if isValidChunkId(obj_id):
             if obj_id not in chunk_cache:
@@ -369,10 +369,10 @@ async def write_s3_obj(app, obj_id, bucket=None):
             if dset_id in shuffle_map:
                 shuffle = shuffle_map[dset_id]
                 log.debug(f"got shuffle size: {shuffle} for dset: {dset_id}")
-            
+
             await putStorBytes(app, s3key, chunk_bytes, shuffle=shuffle, deflate_level=deflate_level, bucket=bucket)
             success = True
-        
+
             # if chunk has been evicted from cache something has gone wrong
             if obj_id not in chunk_cache:
                 msg = f"expected to find {obj_id} in chunk_cache"
@@ -381,10 +381,10 @@ async def write_s3_obj(app, obj_id, bucket=None):
                 log.info(f"write_s3_obj {obj_id} got updated while s3 write was in progress")
             else:
                 # no new write, can clear dirty
-                chunk_cache.clearDirty(obj_id)  # allow eviction from cache  
+                chunk_cache.clearDirty(obj_id)  # allow eviction from cache
                 log.debug("putS3Bytes Chunk cache utilization: {} per, dirty_count: {}".format(chunk_cache.cacheUtilizationPercent, chunk_cache.dirtyCount))
         else:
-            # meta data update     
+            # meta data update
             # check for object in meta cache
             if obj_id not in meta_cache:
                 log.error(f"expected to find obj_id: {obj_id} in meta cache")
@@ -393,9 +393,9 @@ async def write_s3_obj(app, obj_id, bucket=None):
                 log.error(f"expected meta cache obj {obj_id} to be dirty")
                 raise ValueError("bad dirty state for obj")
             obj_json = meta_cache[obj_id]
-            
-            await putStorJSONObj(app, s3key, obj_json, bucket=bucket)                     
-            success = True 
+
+            await putStorJSONObj(app, s3key, obj_json, bucket=bucket)
+            success = True
             # should still be in meta_cache...
             if obj_id in deleted_ids:
                 log.info(f"obj {obj_id} has been deleted while write was in progress")
@@ -405,7 +405,7 @@ async def write_s3_obj(app, obj_id, bucket=None):
             elif obj_id in dirty_ids and dirty_ids[obj_id][0] > last_update_time:
                 log.info(f"write_s3_obj {obj_id} got updated while s3 write was in progress")
             else:
-                meta_cache.clearDirty(obj_id)  # allow eviction from cache 
+                meta_cache.clearDirty(obj_id)  # allow eviction from cache
     finally:
         # clear pending_s3_write item
         log.debug(f"write_s3_obj finally block, success={success}")
@@ -427,15 +427,15 @@ async def write_s3_obj(app, obj_id, bucket=None):
         if obj_id in dirty_ids and dirty_ids[obj_id][0] == last_update_time:
             log.debug(f"clearing dirty flag for {obj_id}")
             del dirty_ids[obj_id]
-        
+
     # add to map so that root can be notified about changed objects
     if isValidUuid(obj_id) and isSchema2Id(obj_id):
         root_id = getRootObjId(obj_id)
-        notify_objs[root_id] = bucket 
+        notify_objs[root_id] = bucket
 
     # calculate time to do the write
     elapsed_time = time.time() - now
-    log.info(f"s3 write for {s3key} took {elapsed_time:.3f}s") 
+    log.info(f"s3 write for {s3key} took {elapsed_time:.3f}s")
     return obj_id
 
 async def s3sync(app):
@@ -463,11 +463,11 @@ async def s3sync(app):
             log.error(f"write_s3_obj callback got 500: {hse}")
         except Exception as e:
             log.error(f"write_s3_obj callback unexpected exception {type(e)}: {e}")
-    
+
     update_count = 0
     s3sync_start = time.time()
 
-    log.info(f"s3sync - processing {len(dirty_ids)} dirty_ids")   
+    log.info(f"s3sync - processing {len(dirty_ids)} dirty_ids")
     for obj_id in dirty_ids:
         item = dirty_ids[obj_id]
         log.debug(f"got item: {item} for obj_id: {obj_id}")
@@ -480,7 +480,7 @@ async def s3sync(app):
                 continue
         s3key = getS3Key(obj_id)
         log.debug(f"s3sync dirty id: {obj_id}, s3key: {s3key} bucket: {bucket}")
-        
+
         create_task = True
         if s3key in pending_s3_write:
             log.debug(f"key {s3key} has been pending for {s3sync_start - pending_s3_write[s3key]}")
@@ -510,21 +510,21 @@ async def s3sync(app):
                 log.debug(f"s3sync - too many pending tasks, not creating task for: {obj_id} now")
 
 
-    # notify root of obj updates 
+    # notify root of obj updates
     notify_ids = app["root_notify_ids"]
-    if len(notify_ids) > 0:           
+    if len(notify_ids) > 0:
         log.info(f"Notifying for {len(notify_ids)} S3 Updates")
-        # create a set since we are not allowed to change 
+        # create a set since we are not allowed to change
         root_ids = set()
         for root_id in notify_ids:
             root_ids.add(root_id)
-        
+
         for root_id in root_ids:
             bucket = notify_ids[root_id]
             await notify_root(app, root_id, bucket=bucket)
             del notify_ids[root_id]
         log.info("root notify complete")
-        
+
     # return number of objects written
     return update_count
 
@@ -541,7 +541,7 @@ async def s3syncCheck(app):
             log.info("s3sync - clusterstate is not ready, sleeping")
             await asyncio.sleep(long_sleep)
             continue
-       
+
         update_count = await s3sync(app)
         now = time.time()
         if update_count:

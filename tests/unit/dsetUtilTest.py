@@ -11,7 +11,7 @@
 ##############################################################################
 import unittest
 import sys
- 
+
 sys.path.append('../../hsds/util')
 sys.path.append('../../hsds')
 from dsetUtil import  getHyperslabSelection, getSelectionShape
@@ -21,7 +21,7 @@ class DsetUtilTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(DsetUtilTest, self).__init__(*args, **kwargs)
         # main
-    
+
     def testGetHyperslabSelection(self):
         # getHyperslabSelection(dsetshape, start, stop, step)
         # 1-D case
@@ -63,7 +63,7 @@ class DsetUtilTest(unittest.TestCase):
         self.assertEqual(slices[0], slice(10, 90, 1))
         self.assertEqual(slices[1], slice(20, 30, 2))
 
-    def testGetSelectionShape(self):       
+    def testGetSelectionShape(self):
         sel = [ slice(3,7,1), ]
         shape = getSelectionShape(sel)
         self.assertEqual(shape, [4,])
@@ -91,23 +91,23 @@ class DsetUtilTest(unittest.TestCase):
                     "(date >=22) & (date <= 24)": "(rows['date'] >=22) & (rows['date'] <= 24)",
                     "(date == 21) & (temp > 70)": "(rows['date'] == 21) & (rows['temp'] > 70)",
                     "(wind == b'E 7') | (wind == b'S 7')": "(rows['wind'] == b'E 7') | (rows['wind'] == b'S 7')" }
-                    
-        fields = ["date", "wind", "temp"]  
-             
+
+        fields = ["date", "wind", "temp"]
+
         for query in queries.keys():
             eval_str = getEvalStr(query, "rows", fields)
             self.assertEqual(eval_str, queries[query])
                 #print(query, "->", eval_str)
-                
+
     def testBadQuery(self):
         queries = ( "foobar",    # no variable used
                 "wind = b'abc",  # non-closed literal
                 "(wind = b'N') & (temp = 32",  # missing paren
                 "foobar > 42",                 # invalid field name
                 "import subprocess; subprocess.call(['ls', '/'])")  # injection attack
-                         
-        fields = ("date", "wind", "temp" )  
-            
+
+        fields = ("date", "wind", "temp" )
+
         for query in queries:
             try:
                 eval_str = getEvalStr(query, "x", fields)
@@ -123,7 +123,7 @@ class DsetUtilTest(unittest.TestCase):
 
         indices = []
         count = 0
-        
+
         while True:
             try:
                 index = it.next()
@@ -154,10 +154,10 @@ class DsetUtilTest(unittest.TestCase):
             except StopIteration:
                 break
         self.assertEqual(count, 20)
-                                       
-             
+
+
 if __name__ == '__main__':
     #setup test files
-    
+
     unittest.main()
-    
+

@@ -11,10 +11,10 @@
 ##############################################################################
 #
 # attribute related utilities
-# 
- 
+#
+
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
- 
+
 import hsds_logger as log
 
 def getRequestCollectionName(request):
@@ -38,12 +38,12 @@ def getRequestCollectionName(request):
         msg = "Error: collection name unexpected: {}".format(col_name)
         log.error(msg)
         # shouldn't get routed here in this case
-        raise HTTPInternalServerError()  
+        raise HTTPInternalServerError()
 
     return col_name
 
 def validateAttributeName(name):
-    """ verify that the attribute name is valid 
+    """ verify that the attribute name is valid
     """
     if not isinstance(name, str):
         msg = "attribute name must be a string, but got: {}".format(type(name))

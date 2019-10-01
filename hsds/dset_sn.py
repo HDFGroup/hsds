@@ -12,13 +12,13 @@
 #
 # service node of hsds cluster
 # handles dataset requests
-# 
- 
+#
+
 import json
 import math
 import numpy as np
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict
- 
+
 from util.httpUtil import http_post, http_put, http_delete, getHref, jsonResponse
 from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId, isSchema2Id
 from util.dsetUtil import  getPreviewQuery
@@ -45,7 +45,7 @@ def validateChunkLayout(shape_json, item_size, layout):
     if "dims" in shape_json:
         space_dims = shape_json["dims"]
         rank = len(space_dims)
-    
+
     if "maxdims" in shape_json:
         max_dims = shape_json["maxdims"]
     if "dims" in layout:
@@ -131,11 +131,11 @@ def validateChunkLayout(shape_json, item_size, layout):
             # needed for H5D_CHUNKED_REF
             msg = "'dimns' key must be provided for H5D_CHUNKED_REF layout"
             log.warn(msg)
-            raise HTTPBadRequest(reason=msg)   
+            raise HTTPBadRequest(reason=msg)
         if "chunks" not in layout:
             msg = "'chunks' key must be provided for H5D_CHUNKED_REF layout"
             log.warn(msg)
-            raise HTTPBadRequest(reason=msg) 
+            raise HTTPBadRequest(reason=msg)
     elif layout["class"] == 'H5D_CHUNKED_REF_INDIRECT':
         # reference to a dataset in a traditional HDF5 files with chunked storage using an auxillary dataset
         if item_size == 'H5T_VARIABLE':
@@ -147,11 +147,11 @@ def validateChunkLayout(shape_json, item_size, layout):
             # needed for H5D_CHUNKED_REF_INDIRECT
             msg = "'dimns' key must be provided for H5D_CHUNKED_REF_INDIRECT layout"
             log.warn(msg)
-            raise HTTPBadRequest(reason=msg)   
+            raise HTTPBadRequest(reason=msg)
         if "chunk_table" not in layout:
             msg = "'chunk_table' key must be provided for H5D_CHUNKED_REF_INDIRECT layout"
             log.warn(msg)
-            raise HTTPBadRequest(reason=msg) 
+            raise HTTPBadRequest(reason=msg)
     elif layout["class"] == 'H5D_CHUNKED':
         if "dims" not in layout:
             msg = "dims key not found in layout for creation property list"
@@ -165,11 +165,11 @@ def validateChunkLayout(shape_json, item_size, layout):
         msg = f"Unexpected layout: {layout['class']}"
 
 
-async def getDatasetDetails(app, dset_id, root_id, bucket=None):  
+async def getDatasetDetails(app, dset_id, root_id, bucket=None):
     """ Get extra information about the given dataset """
     # Gather additional info on the domain
     log.debug(f"getDatasetDetails {dset_id}")
-    
+
     if not isSchema2Id(root_id):
         log.info(f"no dataset details not available for schema v1 id: {root_id} returning null results")
         return None
@@ -191,12 +191,12 @@ async def getDatasetDetails(app, dset_id, root_id, bucket=None):
 
     return datasets[dset_id]
 
-   
+
 
 async def GET_Dataset(request):
     """HTTP method to return JSON description of a dataset"""
     log.request(request)
-    app = request.app 
+    app = request.app
     params = request.rel_url.query
     include_attrs = False
 
@@ -217,7 +217,7 @@ async def GET_Dataset(request):
             raise HTTPBadRequest(reason=msg)
         if "getalias" in params:
             if params["getalias"]:
-                getAlias = True 
+                getAlias = True
     else:
         group_id = None
         if "grpid" in params:
@@ -269,9 +269,9 @@ async def GET_Dataset(request):
             log.warn(msg)
             raise HTTPNotFound()
         log.info(f"get dataset_id: {dset_id} from h5path: {h5path}")
-    
+
     # get authoritative state for dataset from DN (even if it's in the meta_cache).
-    dset_json = await getObjectJson(app, dset_id, refresh=True, include_attrs=include_attrs, bucket=bucket)  
+    dset_json = await getObjectJson(app, dset_id, refresh=True, include_attrs=include_attrs, bucket=bucket)
 
     # check that we have permissions to read the object
     await validateAction(app, domain, dset_id, username, "read")
@@ -287,7 +287,7 @@ async def GET_Dataset(request):
         resp_json["creationProperties"] = dset_json["creationProperties"]
     else:
         resp_json["creationProperties"] = {}
-        
+
     if "layout" in dset_json:
         resp_json["layout"] = dset_json["layout"]
     resp_json["attributeCount"] = dset_json["attributeCount"]
@@ -305,11 +305,11 @@ async def GET_Dataset(request):
         resp_json["alias"] = alias
     if include_attrs:
         resp_json["attributes"] = dset_json["attributes"]
-    
+
     hrefs = []
     dset_uri = '/datasets/'+dset_id
     hrefs.append({'rel': 'self', 'href': getHref(request, dset_uri)})
-    root_uri = '/groups/' + dset_json["root"]    
+    root_uri = '/groups/' + dset_json["root"]
     hrefs.append({'rel': 'root', 'href': getHref(request, root_uri)})
     hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
     hrefs.append({'rel': 'attributes', 'href': getHref(request, dset_uri+'/attributes')})
@@ -321,14 +321,14 @@ async def GET_Dataset(request):
         count = 1
         if dset_shape["class"] == 'H5S_SIMPLE':
             dims = dset_shape["dims"]
-            count = getNumElements(dims)  
+            count = getNumElements(dims)
         if count <= 100:
             # small number of values, provide link to entire dataset
             hrefs.append({'rel': 'data', 'href': getHref(request, dset_uri + '/value')})
         else:
             # large number of values, create preview link
             previewQuery = getPreviewQuery(dset_shape["dims"])
-            hrefs.append({'rel': 'preview', 
+            hrefs.append({'rel': 'preview',
                 'href': getHref(request, dset_uri + '/value', query=previewQuery)})
 
     resp_json["hrefs"] = hrefs
@@ -351,7 +351,7 @@ async def GET_Dataset(request):
 async def GET_DatasetType(request):
     """HTTP method to return JSON for dataset's type"""
     log.request(request)
-    app = request.app 
+    app = request.app
 
     dset_id = request.match_info.get('id')
     if not dset_id:
@@ -375,9 +375,9 @@ async def GET_DatasetType(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
-    
+
     # get authoritative state for group from DN (even if it's in the meta_cache).
-    dset_json = await getObjectJson(app, dset_id, refresh=True, bucket=bucket)  
+    dset_json = await getObjectJson(app, dset_id, refresh=True, bucket=bucket)
 
     await validateAction(app, domain, dset_id, username, "read")
 
@@ -387,7 +387,7 @@ async def GET_DatasetType(request):
     hrefs.append({'rel': 'self', 'href': getHref(request, self_uri)})
     dset_uri = '/datasets/'+dset_id
     hrefs.append({'rel': 'owner', 'href': getHref(request, dset_uri)})
-    root_uri = '/groups/' + dset_json["root"]    
+    root_uri = '/groups/' + dset_json["root"]
     hrefs.append({'rel': 'root', 'href': getHref(request, root_uri)})
 
     resp_json = {}
@@ -401,7 +401,7 @@ async def GET_DatasetType(request):
 async def GET_DatasetShape(request):
     """HTTP method to return JSON for dataset's shape"""
     log.request(request)
-    app = request.app 
+    app = request.app
 
     dset_id = request.match_info.get('id')
     if not dset_id:
@@ -425,9 +425,9 @@ async def GET_DatasetShape(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
-    
+
     # get authoritative state for dataset from DN (even if it's in the meta_cache).
-    dset_json = await getObjectJson(app, dset_id, refresh=True, bucket=bucket)  
+    dset_json = await getObjectJson(app, dset_id, refresh=True, bucket=bucket)
 
     await validateAction(app, domain, dset_id, username, "read")
 
@@ -437,7 +437,7 @@ async def GET_DatasetShape(request):
     hrefs.append({'rel': 'self', 'href': getHref(request, self_uri)})
     dset_uri = '/datasets/'+dset_id
     hrefs.append({'rel': 'owner', 'href': getHref(request, dset_uri)})
-    root_uri = '/groups/' + dset_json["root"]    
+    root_uri = '/groups/' + dset_json["root"]
     hrefs.append({'rel': 'root', 'href': getHref(request, root_uri)})
 
     resp_json = {}
@@ -453,9 +453,9 @@ async def GET_DatasetShape(request):
 async def PUT_DatasetShape(request):
     """HTTP method to update dataset's shape"""
     log.request(request)
-    app = request.app 
+    app = request.app
     shape_update = None
-    extend = 0  
+    extend = 0
     extend_dim = 0
 
     dset_id = request.match_info.get('id')
@@ -481,7 +481,7 @@ async def PUT_DatasetShape(request):
     if "shape" not in data and "extend" not in data:
         msg = "PUT shape has no shape or extend key in body"
         log.warn(msg)
-        raise HTTPBadRequest(reason=msg)   
+        raise HTTPBadRequest(reason=msg)
 
     if "shape" in data:
         shape_update = data["shape"]
@@ -492,26 +492,26 @@ async def PUT_DatasetShape(request):
 
     if "extend" in data:
         try:
-            extend = int(data["extend"])  
+            extend = int(data["extend"])
         except ValueError:
             msg = "extend value must be integer"
             log.warn(msg)
-            raise HTTPBadRequest(reason=msg)   
+            raise HTTPBadRequest(reason=msg)
         if extend <= 0:
             msg = "extend value must be positive"
             log.warn(msg)
-            raise HTTPBadRequest(reason=msg)   
+            raise HTTPBadRequest(reason=msg)
         if "extend_dim" in data:
             try:
-                extend_dim = int(data["extend_dim"])  
+                extend_dim = int(data["extend_dim"])
             except ValueError:
                 msg = "extend_dim value must be integer"
                 log.warn(msg)
-                raise HTTPBadRequest(reason=msg)   
+                raise HTTPBadRequest(reason=msg)
             if extend_dim < 0:
                 msg = "extend_dim value must be non-negative"
                 log.warn(msg)
-                raise HTTPBadRequest(reason=msg)   
+                raise HTTPBadRequest(reason=msg)
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
@@ -519,12 +519,12 @@ async def PUT_DatasetShape(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
-    
+
     # verify the user has permission to update shape
     await validateAction(app, domain, dset_id, username, "update")
-    
+
     # get authoritative state for dataset from DN (even if it's in the meta_cache).
-    dset_json = await getObjectJson(app, dset_id, refresh=True, bucket=bucket)  
+    dset_json = await getObjectJson(app, dset_id, refresh=True, bucket=bucket)
     shape_orig = dset_json["shape"]
     log.debug(f"shape_orig: {shape_orig}")
 
@@ -552,15 +552,15 @@ async def PUT_DatasetShape(request):
         if shape_update and maxdims[i] != 0 and shape_update[i] > maxdims[i]:
             msg = "Database can not be extended past max extent"
             log.warn(msg)
-            raise HTTPConflict()  
+            raise HTTPConflict()
     if extend_dim < 0 or extend_dim >= rank:
         msg = "Extension dimension must be less than rank and non-negative"
         log.warn(msg)
-        raise HTTPBadRequest(reason=msg) 
+        raise HTTPBadRequest(reason=msg)
 
     # send request onto DN
     req = getDataNodeUrl(app, dset_id) + "/datasets/" + dset_id + "/shape"
-    
+
     json_resp = { "hrefs": []}
     params = {}
     if bucket:
@@ -583,7 +583,7 @@ async def PUT_DatasetShape(request):
     resp = await jsonResponse(request, json_resp, status=201)
     log.response(request, resp=resp)
     return resp
- 
+
 
 async def POST_Dataset(request):
     """HTTP method to create a new dataset object"""
@@ -608,7 +608,7 @@ async def POST_Dataset(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
-    
+
     domain_json = await getDomainJson(app, domain, reload=True)
     root_id = domain_json["root"]
 
@@ -625,14 +625,14 @@ async def POST_Dataset(request):
     if "type" not in body:
         msg = "POST Dataset has no type key in body"
         log.warn(msg)
-        raise HTTPBadRequest(reason=msg)   
+        raise HTTPBadRequest(reason=msg)
 
     datatype = body["type"]
     if isinstance(datatype, str) and datatype.startswith("t-"):
         # Committed type - fetch type json from DN
         ctype_id = datatype
         log.debug(f"got ctypeid: {ctype_id}")
-        ctype_json = await getObjectJson(app, ctype_id, bucket=bucket)  
+        ctype_json = await getObjectJson(app, ctype_id, bucket=bucket)
         log.debug(f"ctype: {ctype_json}")
         if ctype_json["root"] != root_id:
             msg = "Referenced committed datatype must belong in same domain"
@@ -643,18 +643,18 @@ async def POST_Dataset(request):
         datatype["id"] = ctype_id
     elif isinstance(datatype, str):
         try:
-            # convert predefined type string (e.g. "H5T_STD_I32LE") to 
+            # convert predefined type string (e.g. "H5T_STD_I32LE") to
             # corresponding json representation
             datatype = getBaseTypeJson(datatype)
             log.debug(f"got datatype: {datatype}")
         except TypeError:
             msg = "POST Dataset with invalid predefined type"
             log.warn(msg)
-            raise HTTPBadRequest(reason=msg) 
+            raise HTTPBadRequest(reason=msg)
 
     validateTypeItem(datatype)
     item_size = getItemSize(datatype)
-    
+
 
     #
     # Validate shape input
@@ -691,7 +691,7 @@ async def POST_Dataset(request):
             msg = "Bad Request: shape is invalid"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-                
+
     if dims is not None:
         for i  in range(rank):
             extent = dims[i]
@@ -702,7 +702,7 @@ async def POST_Dataset(request):
             if extent < 0:
                 msg = "shape dimension is negative"
                 log.warn(msg)
-                raise HTTPBadRequest(reason=msg)                
+                raise HTTPBadRequest(reason=msg)
 
     maxdims = None
     if "maxdims" in body:
@@ -755,7 +755,7 @@ async def POST_Dataset(request):
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
             else:
-                shape_json["maxdims"].append(maxextent) 
+                shape_json["maxdims"].append(maxextent)
 
     layout = None
     min_chunk_size = int(config.get("min_chunk_size"))
@@ -775,17 +775,17 @@ async def POST_Dataset(request):
         chunk_dims = getContiguousLayout(shape_json, item_size, chunk_min=min_chunk_size, chunk_max=max_chunk_size)
         layout["dims"] = chunk_dims
         log.debug(f"autoContiguous layout: {layout}")
-    
+
     if layout and layout["class"] == 'H5D_CHUNKED' and "dims" not in layout:
         # do autochunking
-        chunk_dims = guessChunk(shape_json, item_size) 
+        chunk_dims = guessChunk(shape_json, item_size)
         layout["dims"] = chunk_dims
         log.debug(f"initial autochunk layout: {layout}")
 
     if layout and layout["class"] == 'H5D_CHUNKED':
         chunk_dims = layout["dims"]
         chunk_size = getChunkSize(chunk_dims, item_size)
-       
+
         log.debug(f"chunk_size: {chunk_size}, min: {min_chunk_size}, max: {max_chunk_size}")
         # adjust the chunk shape if chunk size is too small or too big
         adjusted_chunk_dims = None
@@ -798,7 +798,7 @@ async def POST_Dataset(request):
         if adjusted_chunk_dims:
             log.debug(f"requested chunk_dimensions: {chunk_dims} modified dimensions: {adjusted_chunk_dims}")
             layout["dims"] = adjusted_chunk_dims
-        
+
         # set partition_count if needed:
         max_chunks_per_folder = int(config.get("max_chunks_per_folder"))
         if  max_chunks_per_folder > 0 and "dims" in shape_json and "dims" in layout:
@@ -840,15 +840,15 @@ async def POST_Dataset(request):
     if layout and layout["class"] in ('H5D_CHUNKED_REF', 'H5D_CHUNKED_REF_INDIRECT'):
         chunk_dims = layout["dims"]
         chunk_size = getChunkSize(chunk_dims, item_size)
-       
+
         log.debug(f"chunk_size: {chunk_size}, min: {min_chunk_size}, max: {max_chunk_size}")
         # adjust the chunk shape if chunk size is too small or too big
         if chunk_size < min_chunk_size:
             log.warn(f"chunk size: {chunk_size} less than min size: {min_chunk_size} for H5D_CHUNKED_REF dataset")
         elif chunk_size > max_chunk_size:
             log.warn(f"chunk size: {chunk_size} greater than max size: {max_chunk_size}, for H5D_CHUNKED_REF dataset")
-        
-        
+
+
     link_id = None
     link_title = None
     if "link" in body:
@@ -863,7 +863,7 @@ async def POST_Dataset(request):
             # and that the requestor has permissions to create a link
             await validateAction(app, domain, link_id, username, "create")
 
-    dset_id = createObjId("datasets", rootid=root_id) 
+    dset_id = createObjId("datasets", rootid=root_id)
     log.info(f"new  dataset id: {dset_id}")
 
     dataset_json = {"id": dset_id, "root": root_id, "type": datatype, "shape": shape_json }
@@ -888,13 +888,13 @@ async def POST_Dataset(request):
 
     if layout is not None:
         dataset_json["layout"] = layout
-    
+
     log.debug("create dataset: " + json.dumps(dataset_json))
     req = getDataNodeUrl(app, dset_id) + "/datasets"
     params = {}
     if bucket:
         params["bucket"] = bucket
-    
+
     post_json = await http_post(app, req, data=dataset_json, params=params)
 
     # create link if requested
@@ -908,7 +908,7 @@ async def POST_Dataset(request):
         put_rsp = await http_put(app, link_req, data=link_json, params=params)
         log.debug(f"PUT Link resp: {put_rsp}")
 
-    # dataset creation successful     
+    # dataset creation successful
     resp = await jsonResponse(request, post_json, status=201)
     log.response(request, resp=resp)
 
@@ -917,7 +917,7 @@ async def POST_Dataset(request):
 async def DELETE_Dataset(request):
     """HTTP method to delete a dataset resource"""
     log.request(request)
-    app = request.app 
+    app = request.app
     meta_cache = app['meta_cache']
 
     dset_id = request.match_info.get('id')
@@ -932,14 +932,14 @@ async def DELETE_Dataset(request):
 
     username, pswd = getUserPasswordFromRequest(request)
     await validateUserPassword(app, username, pswd)
-    
+
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
         msg = f"Invalid oomain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
-    
+
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
     if "root" not in domain_json:
@@ -950,7 +950,7 @@ async def DELETE_Dataset(request):
     await validateAction(app, domain, dset_id, username, "delete")
 
     req = getDataNodeUrl(app, dset_id) + "/datasets/" + dset_id
- 
+
     params = {}
     if bucket:
         params["bucket"] = bucket
@@ -958,7 +958,7 @@ async def DELETE_Dataset(request):
 
     if dset_id in meta_cache:
         del meta_cache[dset_id]  # remove from cache
- 
+
     resp = await jsonResponse(request, {})
     log.response(request, resp=resp)
     return resp

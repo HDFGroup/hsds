@@ -42,11 +42,11 @@ def getDynamoDBClient(app):
             log.info("DynamoDB access token has expired - renewing")
         else:
             return app["dynamodb"]
-    
+
     # first time setup of s3 client or limited time token has expired
     aws_region = config.get("aws_region")
     aws_secret_access_key = None
-    aws_access_key_id = None 
+    aws_access_key_id = None
     aws_session_token = None
     aws_iam_role = config.get("aws_iam_role")
     log.info("using iam role: {}".format(aws_iam_role))
@@ -58,7 +58,7 @@ def getDynamoDBClient(app):
     if not aws_access_key_id or aws_access_key_id == 'xxx':
         log.info("aws access key id not set")
         aws_access_key_id = None
-  
+
     if aws_iam_role and not aws_secret_access_key:
         # TODO - refactor with similar code in s3Util
         log.info("getted EC2 IAM role credentials")
@@ -75,7 +75,7 @@ def getDynamoDBClient(app):
                 cred = json.loads(stdout)
                 aws_secret_access_key = cred["SecretAccessKey"]
                 aws_access_key_id = cred["AccessKeyId"]
-                log.info("Got ACCESS_KEY_ID: {} from EC2 metadata".format(aws_access_key_id))     
+                log.info("Got ACCESS_KEY_ID: {} from EC2 metadata".format(aws_access_key_id))
                 aws_session_token = cred["Token"]
                 log.info("Got Expiration of: {}".format(cred["Expiration"]))
                 expiration_str = cred["Expiration"][:-1] + "UTC" # trim off 'Z' and add 'UTC'
@@ -87,7 +87,7 @@ def getDynamoDBClient(app):
             except KeyError:
                 msg = "Missing expected key from EC2 meta-data response"
                 log.error(msg)
-       
+
     dynamodb_gateway = config.get('aws_dynamodb_gateway')
     if not dynamodb_gateway:
         msg="Invalid aws dynamodb gateway"
@@ -145,7 +145,7 @@ def loadPasswordFile(password_file):
                     msg = "line: {}, username is repated".format(line_number)
                     log.warn(msg)
                     continue
-                user_db[username] = {"pwd": passwd}                
+                user_db[username] = {"pwd": passwd}
                 log.info("added user: {}".format(username))
     except FileNotFoundError:
         log.error("unable to open password file")
@@ -160,7 +160,7 @@ def initUserDB(app):
         msg = "user_db already initilized"
         log.warn(msg)
         return
- 
+
     if config.get("AWS_DYNAMODB_GATEWAY") and config.get("AWS_DYNAMODB_USERS_TABLE"):
         # user entries will be obtained dynamicaly
         log.info("Getting DynamoDB client")
@@ -175,7 +175,7 @@ def initUserDB(app):
         if "PASSWORD_FILE" in os.environ:
             # need to fetch this directly from os.environ to
             # have null override existing config value
-            password_file = os.environ["PASSWORD_FILE"] 
+            password_file = os.environ["PASSWORD_FILE"]
         else:
             password_file = config.get("password_file")
         if not password_file:
@@ -187,9 +187,9 @@ def initUserDB(app):
             user_db = loadPasswordFile(password_file)
 
     app["user_db"] = user_db
-    
+
     log.info("user_db initialized: {} users".format(len(user_db)))
- 
+
 
 async def validateUserPasswordDynamoDB(app, username, password):
     """
@@ -197,11 +197,11 @@ async def validateUserPasswordDynamoDB(app, username, password):
         throws exception if not valid
     Note: make this async since we'll eventually need some sort of http request to validate user/passwords
     """
-    user_db = app["user_db"]    
+    user_db = app["user_db"]
     if username not in user_db:
         # look up name in dynamodb table
         dynamodb = getDynamoDBClient(app)
-        table_name = config.get("AWS_DYNAMODB_USERS_TABLE")  
+        table_name = config.get("AWS_DYNAMODB_USERS_TABLE")
         log.info("looking for user: {} in DynamoDB table: {}".format(username, table_name))
         try:
             response = await dynamodb.get_item(
@@ -233,7 +233,7 @@ async def validateUserPasswordDynamoDB(app, username, password):
         user_db[username] = user_data
 
 def validatePasswordSHA512(app, username, password):
-    user_db = app["user_db"] 
+    user_db = app["user_db"]
     if username not in user_db:
         log.info("SHA512 check for username: {}".format(username))
         salt = config.get("PASSWORD_SALT")
@@ -253,7 +253,7 @@ async def validateUserPassword(app, username, password):
     Note: make this async since we'll eventually need some sort of http request to validate user/passwords
     """
     log.debug(f"validateUserPassword username: {username}")
-    
+
     if not username:
         log.info('validateUserPassword - null user')
         raise HTTPBadRequest("provide user name and password")
@@ -266,7 +266,7 @@ async def validateUserPassword(app, username, password):
         msg = "user_db not intialized"
         log.error(msg)
         raise HTTPInternalServerError()  # 500
-    user_db = app["user_db"]    
+    user_db = app["user_db"]
     if username not in user_db:
         if "no_auth" in app and app["no_auth"]:
             log.info(f"no-auth access for user: {username}")
@@ -278,15 +278,15 @@ async def validateUserPassword(app, username, password):
             validatePasswordSHA512(app, username, password)
         else:
             log.info("user not found")
-            raise HTTPUnauthorized() # 401   
+            raise HTTPUnauthorized() # 401
 
-    user_data = user_db[username] 
-    
+    user_data = user_db[username]
+
     if user_data['pwd'] == password:
         log.debug("user password validated")
     else:
         log.info("user password is not valid for user: {}".format(username))
-        raise HTTPUnauthorized() # 401  
+        raise HTTPUnauthorized() # 401
 
 
 def getUserPasswordFromRequest(request):
@@ -321,10 +321,10 @@ def getUserPasswordFromRequest(request):
         msg = "Malformed authorization header, user/password not found"
         log.warn(msg)
         raise HTTPBadRequest(msg)
-   
+
     user = user.decode('utf-8')   # convert bytes to string
     pswd = pswd.decode('utf-8')   # convert bytes to string
-    
+
     return user, pswd
 
 def aclCheck(obj_json, req_action, req_user):
@@ -367,7 +367,7 @@ def validateAclJson(acl_json):
                 raise HTTPBadRequest(msg)
             acl_value = acl[acl_key]
             if acl_value not in (True, False):
-                msg = "Invalid ACL value: {}".format(acl_value)   
+                msg = "Invalid ACL value: {}".format(acl_value)
 
 def aclOpForRequest(request):
     """ return default ACL action for request method

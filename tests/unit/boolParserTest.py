@@ -21,36 +21,36 @@ class BooleanParserTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(BooleanParserTest, self).__init__(*args, **kwargs)
         # main
-    
 
-    def testExpressions(self):      
 
-        p = BooleanParser('x1 == "hi" AND y2 > 42') 
+    def testExpressions(self):
+
+        p = BooleanParser('x1 == "hi" AND y2 > 42')
         variables = p.getVariables()
         self.assertEqual(len(variables), 2)
         self.assertTrue("x1" in variables)
         self.assertTrue("y2" in variables)
-        self.assertTrue(p.evaluate({'x1': 'hi', 'y2': 43}))  
+        self.assertTrue(p.evaluate({'x1': 'hi', 'y2': 43}))
 
 
         # use single instead of double quotes
-        p = BooleanParser("x1 == 'hi' AND y2 > 42") 
+        p = BooleanParser("x1 == 'hi' AND y2 > 42")
         variables = p.getVariables()
-        
+
         self.assertEqual(len(variables), 2)
         self.assertTrue("x1" in variables)
         self.assertTrue("y2" in variables)
-        self.assertTrue(p.evaluate({'x1': 'hi', 'y2': 43}))  
+        self.assertTrue(p.evaluate({'x1': 'hi', 'y2': 43}))
 
-        p = BooleanParser("x == 'hi' OR x == 'bye'") 
+        p = BooleanParser("x == 'hi' OR x == 'bye'")
         variables = p.getVariables()
         self.assertEqual(len(variables), 1)
         self.assertTrue("x" in variables)
         self.assertTrue(p.evaluate({'x': "bye"}))
-        self.assertFalse(p.evaluate({'x': "aloha"}))   
+        self.assertFalse(p.evaluate({'x': "aloha"}))
 
         # do lexigraphical comparison
-        p = BooleanParser('x1 >= "cat" AND x1 <= "pig"') 
+        p = BooleanParser('x1 >= "cat" AND x1 <= "pig"')
         variables = p.getVariables()
         self.assertEqual(len(variables), 1)
         self.assertTrue("x1" in variables)
@@ -61,9 +61,9 @@ class BooleanParserTest(unittest.TestCase):
         self.assertFalse(p.evaluate({'x1': 'piglet'}))
 
 
-        p = BooleanParser("x > 2 AND y < 3") 
-        self.assertTrue(p.evaluate({'x':3, 'y': 1}))   
-        self.assertFalse(p.evaluate({'x':1, 'y': 1}))   
+        p = BooleanParser("x > 2 AND y < 3")
+        self.assertTrue(p.evaluate({'x':3, 'y': 1}))
+        self.assertFalse(p.evaluate({'x':1, 'y': 1}))
 
         try:
             p.evaluate({'x':'3', 'y': 1})
@@ -94,9 +94,9 @@ class BooleanParserTest(unittest.TestCase):
             self.assertTrue(false)  # expected exception
         except Exception:
             pass # expected - malformed exception
-                              
-             
+
+
 if __name__ == '__main__':
     #setup test files
-    
+
     unittest.main()

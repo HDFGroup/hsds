@@ -11,9 +11,9 @@
 ##############################################################################
 #
 # attribute methods for SN
-# 
+#
 
-import numpy as np 
+import numpy as np
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 from aiohttp.web import StreamResponse
 
@@ -31,7 +31,7 @@ import hsds_logger as log
 async def GET_Attributes(request):
     """HTTP method to return JSON for attribute collection"""
     log.request(request)
-    app = request.app 
+    app = request.app
     params = request.rel_url.query
     collection = getRequestCollectionName(request) # returns datasets|groups|datatypes
 
@@ -60,13 +60,13 @@ async def GET_Attributes(request):
     marker = None
     if "Marker" in params:
         marker = params["Marker"]
-    
+
     username, pswd = getUserPasswordFromRequest(request)
     if username is None and app['allow_noauth']:
         username = "default"
     else:
         await validateUserPassword(app, username, pswd)
-    
+
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
         msg = f"Invalid domain: {domain}"
@@ -78,8 +78,8 @@ async def GET_Attributes(request):
     await validateAction(app, domain, obj_id, username, "read")
 
     req = getDataNodeUrl(app, obj_id)
-    
-    req += '/' + collection + '/' + obj_id + "/attributes" 
+
+    req += '/' + collection + '/' + obj_id + "/attributes"
     params = {}
     if limit is not None:
         params["Limit"] = str(limit)
@@ -89,10 +89,10 @@ async def GET_Attributes(request):
         params["IncludeData"] = '1'
     if bucket:
         params["bucket"] = bucket
-         
+
     log.debug(f"get attributes: {req}")
     dn_json = await http_get(app, req, params=params)
-    log.debug(f"got attributes json from dn for obj_id: {obj_id}") 
+    log.debug(f"got attributes json from dn for obj_id: {obj_id}")
     attributes = dn_json["attributes"]
 
     # mixin hrefs
@@ -110,15 +110,15 @@ async def GET_Attributes(request):
     hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
     hrefs.append({'rel': 'owner', 'href': getHref(request, obj_uri)})
     resp_json["hrefs"] = hrefs
- 
-    resp = await jsonResponse(request, resp_json)    
+
+    resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
     return resp
 
 async def GET_Attribute(request):
     """HTTP method to return JSON for an attribute"""
     log.request(request)
-    app = request.app 
+    app = request.app
     collection = getRequestCollectionName(request) # returns datasets|groups|datatypes
 
     obj_id = request.match_info.get('id')
@@ -138,7 +138,7 @@ async def GET_Attribute(request):
         username = "default"
     else:
         await validateUserPassword(app, username, pswd)
-    
+
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
         msg = f"Invalid domain: {domain}"
@@ -156,9 +156,9 @@ async def GET_Attribute(request):
     if bucket:
         params["bucket"] = bucket
     dn_json = await http_get(app, req, params=params)
-    log.debug("got attributes json from dn for obj_id: " + str(obj_id)) 
-   
-     
+    log.debug("got attributes json from dn for obj_id: " + str(obj_id))
+
+
     resp_json = {}
     resp_json["name"] = attr_name
     resp_json["type"] = dn_json["type"]
@@ -167,8 +167,8 @@ async def GET_Attribute(request):
         resp_json["value"] = dn_json["value"]
     resp_json["created"] = dn_json["created"]
     # attributes don't get modified, so use created timestamp as lastModified
-    resp_json["lastModified"] = dn_json["created"]  
-    
+    resp_json["lastModified"] = dn_json["created"]
+
     hrefs = []
     obj_uri = '/' + collection + '/' + obj_id
     attr_uri = obj_uri + '/attributes/' + attr_name
@@ -176,7 +176,7 @@ async def GET_Attribute(request):
     hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
     hrefs.append({'rel': 'owner', 'href': getHref(request, obj_uri)})
     resp_json["hrefs"] = hrefs
-    
+
     resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
     return resp
@@ -210,7 +210,7 @@ async def PUT_Attribute(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    body = await request.json()   
+    body = await request.json()
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
@@ -218,7 +218,7 @@ async def PUT_Attribute(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
-    
+
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
     if "root" not in domain_json:
@@ -234,12 +234,12 @@ async def PUT_Attribute(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     datatype = body["type"]
-    
+
     if isinstance(datatype, str) and datatype.startswith("t-"):
         # Committed type - fetch type json from DN
         ctype_id = datatype
-        log.debug(f"got ctypeid: {ctype_id}") 
-        ctype_json = await getObjectJson(app, ctype_id, bucket=bucket)  
+        log.debug(f"got ctypeid: {ctype_id}")
+        ctype_json = await getObjectJson(app, ctype_id, bucket=bucket)
         log.debug(f"ctype {ctype_id}: {ctype_json}")
         if ctype_json["root"] != root_id:
             msg = "Referenced committed datatype must belong in same domain"
@@ -250,17 +250,17 @@ async def PUT_Attribute(request):
         datatype["id"] = ctype_id
     elif isinstance(datatype, str):
         try:
-            # convert predefined type string (e.g. "H5T_STD_I32LE") to 
+            # convert predefined type string (e.g. "H5T_STD_I32LE") to
             # corresponding json representation
             datatype = getBaseTypeJson(datatype)
             log.debug(f"got datatype: {datatype}")
         except TypeError:
             msg = "PUT attribute with invalid predefined type"
             log.warn(msg)
-            raise HTTPBadRequest(reason=msg) 
+            raise HTTPBadRequest(reason=msg)
 
     validateTypeItem(datatype)
-    
+
     dims = None
     shape_json = {}
     if "shape" in body:
@@ -297,7 +297,7 @@ async def PUT_Attribute(request):
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
         else:
-            # no class, interpet shape value as dimensions and 
+            # no class, interpet shape value as dimensions and
             # use H5S_SIMPLE as class
             if isinstance(shape_body, list) and len(shape_body) == 0:
                 shape_json["class"] = "H5S_SCALAR"
@@ -309,8 +309,8 @@ async def PUT_Attribute(request):
     else:
         shape_json["class"] = "H5S_SCALAR"
         dims = [1,]
- 
-    
+
+
     if "value" in body:
         if dims is None:
             msg = "Bad Request: data can not be included with H5S_NULL space"
@@ -348,21 +348,21 @@ async def PUT_Attribute(request):
     params = {}
     if bucket:
         params["bucket"] = bucket
-    
+
     put_rsp = await http_put(app, req, params=params, data=attr_json)
     log.info(f"PUT Attribute resp: {put_rsp}")
-    
+
     hrefs = []  # TBD
     req_rsp = { "hrefs": hrefs }
-    # attribute creation successful   
-    resp = await jsonResponse(request, req_rsp, status=201)  
+    # attribute creation successful
+    resp = await jsonResponse(request, req_rsp, status=201)
     log.response(request, resp=resp)
     return resp
 
 async def DELETE_Attribute(request):
     """HTTP method to delete a attribute resource"""
     log.request(request)
-    app = request.app 
+    app = request.app
     collection = getRequestCollectionName(request) # returns datasets|groups|datatypes
 
     obj_id = request.match_info.get('id')
@@ -380,14 +380,14 @@ async def DELETE_Attribute(request):
 
     username, pswd = getUserPasswordFromRequest(request)
     await validateUserPassword(app, username, pswd)
-    
+
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
         msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
-    
+
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
     if "root" not in domain_json:
@@ -404,9 +404,9 @@ async def DELETE_Attribute(request):
     if bucket:
         params["bucket"] = bucket
     rsp_json = await http_delete(app, req, params=params)
-    
+
     log.info(f"PUT Attribute resp: {rsp_json}")
-    
+
     hrefs = []  # TBD
     req_rsp = { "hrefs": hrefs }
     resp = await jsonResponse(request, req_rsp)
@@ -416,7 +416,7 @@ async def DELETE_Attribute(request):
 async def GET_AttributeValue(request):
     """HTTP method to return an attribute value"""
     log.request(request)
-    app = request.app 
+    app = request.app
     log.info("GET_AttributeValue")
     collection = getRequestCollectionName(request) # returns datasets|groups|datatypes
 
@@ -437,14 +437,14 @@ async def GET_AttributeValue(request):
         username = "default"
     else:
         await validateUserPassword(app, username, pswd)
-    
+
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
         msg = f"Invalid domain value: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
-    
+
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
     if "root" not in domain_json:
@@ -461,7 +461,7 @@ async def GET_AttributeValue(request):
     if bucket:
         params["bucket"] = bucket
     dn_json = await http_get(app, req, params=params)
-    log.debug("got attributes json from dn for obj_id: " + str(dn_json)) 
+    log.debug("got attributes json from dn for obj_id: " + str(dn_json))
 
     attr_shape = dn_json["shape"]
     log.debug(f"attribute shape: {attr_shape}")
@@ -475,7 +475,7 @@ async def GET_AttributeValue(request):
     type_json = dn_json["type"]
     shape_json = dn_json["shape"]
     item_size = getItemSize(type_json)
-    
+
     if item_size == 'H5T_VARIABLE' and accept_type != "json":
         msg = "Client requested binary, but only JSON is supported for variable length data types"
         log.info(msg)
@@ -493,7 +493,7 @@ async def GET_AttributeValue(request):
         output_data = arr.tobytes()
         log.debug(f"GET AttributeValue - returning {len(output_data)} bytes binary data")
         # write response
-        try: 
+        try:
             resp = StreamResponse()
             resp.content_type = "application/octet-stream"
             resp.content_length = len(output_data)
@@ -502,7 +502,7 @@ async def GET_AttributeValue(request):
             resp.headers['Access-Control-Allow-Methods'] = "GET, POST, DELETE, PUT, OPTIONS"
             resp.headers['Access-Control-Allow-Headers'] = "Content-Type, api_key, Authorization"
             await resp.prepare(request)
-            await resp.write(output_data)     
+            await resp.write(output_data)
         except Exception as e:
             log.error(f"Got exception: {e}")
             raise HTTPInternalServerError()
@@ -512,7 +512,7 @@ async def GET_AttributeValue(request):
     else:
         resp_json = {}
         if "value" in dn_json:
-            resp_json["value"] = dn_json["value"] 
+            resp_json["value"] = dn_json["value"]
 
         hrefs = []
         obj_uri = '/' + collection + '/' + obj_id
@@ -554,14 +554,14 @@ async def PUT_AttributeValue(request):
         msg = "PUT AttributeValue with no body"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    
+
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
         msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
-    
+
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
     if "root" not in domain_json:
@@ -578,7 +578,7 @@ async def PUT_AttributeValue(request):
     if bucket:
         params["bucket"] = bucket
     dn_json = await http_get(app, req, params=params)
-    log.debug("got attributes json from dn for obj_id: " + str(obj_id)) 
+    log.debug("got attributes json from dn for obj_id: " + str(obj_id))
     log.debug(f"got dn_json: {dn_json}")
 
     attr_shape = dn_json["shape"]
@@ -634,7 +634,7 @@ async def PUT_AttributeValue(request):
         data = arr.tolist()
         value = bytesArrayToList(data)
     else:
-        body = await request.json()   
+        body = await request.json()
 
         if "value" not in body:
             msg = "PUT attribute value with no value in body"
@@ -650,7 +650,7 @@ async def PUT_AttributeValue(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
     log.info(f"Got: {arr.size} array elements")
-     
+
     # ready to add attribute now
     attr_json = {}
     attr_json["type"] = type_json
@@ -658,7 +658,7 @@ async def PUT_AttributeValue(request):
     attr_json["value"] = value
 
     req = getDataNodeUrl(app, obj_id)
-    req += '/' + collection + '/' + obj_id + "/attributes/" + attr_name  
+    req += '/' + collection + '/' + obj_id + "/attributes/" + attr_name
     log.info(f"PUT Attribute Value: {req}")
 
     dn_json["value"] = value
@@ -668,10 +668,10 @@ async def PUT_AttributeValue(request):
         params["bucket"] = bucket
     put_rsp = await http_put(app, req, params=params, data=attr_json)
     log.info(f"PUT Attribute Value resp: {put_rsp}")
-    
+
     hrefs = []  # TBD
     req_rsp = { "hrefs": hrefs }
-    # attribute creation successful     
+    # attribute creation successful
     resp = await jsonResponse(request, req_rsp)
     log.response(request, resp=resp)
     return resp

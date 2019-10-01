@@ -23,9 +23,9 @@ class DomainUtilTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(DomainUtilTest, self).__init__(*args, **kwargs)
         # main
-    
 
-    def testValidHostDomain(self):       
+
+    def testValidHostDomain(self):
         # test invalid dns names
         invalid_domains = ('x',       # too short
                            '.x.y.z',  # period in front
@@ -36,20 +36,20 @@ class DomainUtilTest(unittest.TestCase):
                            'mydomain/foobar', # no dots
                            None)      # none
         for domain in invalid_domains:
-            self.assertFalse(isValidHostDomain(domain))  
+            self.assertFalse(isValidHostDomain(domain))
 
         valid_domains =  ("nex.nasa.gov",)
         for domain in valid_domains:
-            self.assertTrue(isValidHostDomain(domain))  
+            self.assertTrue(isValidHostDomain(domain))
 
     def testValidDomain(self):
         invalid_domains = (123, '/', 'abc/', '', None)
         for domain in invalid_domains:
-            self.assertFalse(isValidDomain(domain))  
+            self.assertFalse(isValidDomain(domain))
 
         valid_domains = ('/gov/nasa/nex', '/home')
         for domain in valid_domains:
-            self.assertTrue(isValidDomain(domain))  
+            self.assertTrue(isValidDomain(domain))
 
     def testValidDomainPath(self):
         invalid_domains = (123, "home_test", "/home/test")
@@ -58,7 +58,7 @@ class DomainUtilTest(unittest.TestCase):
         valid_domains = ("/home/test_user1/mytests/", "/")
         for domain in valid_domains:
             self.assertTrue(isValidDomainPath(domain))
-    
+
     def testGetDomainForHost(self):
         domain = getDomainForHost("nex.nasa.gov")
         self.assertEqual(domain, "/gov/nasa/nex")
@@ -67,7 +67,7 @@ class DomainUtilTest(unittest.TestCase):
 
 
     def testGetParentDomain(self):
-        
+
         domain = "/nasa/nex"
         parent = getParentDomain(domain)
         self.assertEqual(parent, "/nasa")
@@ -117,9 +117,9 @@ class DomainUtilTest(unittest.TestCase):
         self.assertEqual(domain_path, "/home/test_user1/myfile.h5")
         bucket = getBucketForDomain(domain)
         self.assertEqual(bucket, "mybucket")
-                                  
-             
+
+
 if __name__ == '__main__':
     #setup test files
-    
+
     unittest.main()

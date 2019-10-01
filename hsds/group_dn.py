@@ -11,17 +11,17 @@
 ##############################################################################
 #
 # data node of hsds cluster
-# 
+#
 import time
 import asyncio
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalServerError, HTTPServiceUnavailable
 from aiohttp.web import json_response
- 
+
 from util.idUtil import isValidUuid, isSchema2Id, isRootObjId, getRootObjId
 from datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj, save_metadata_obj, delete_metadata_obj
 import hsds_logger as log
-    
+
 
 async def GET_Group(request):
     """HTTP GET method to return JSON for /groups/
@@ -35,14 +35,14 @@ async def GET_Group(request):
     else:
         bucket = None
     log.info(f"GET group: {group_id} bucket: {bucket}")
-    
+
     if not isValidUuid(group_id, obj_class="group"):
         log.error( "Unexpected group_id: {}".format(group_id))
         raise HTTPInternalServerError()
-    
+
     group_json = await get_metadata_obj(app, group_id, bucket=bucket)
 
-    resp_json = { } 
+    resp_json = { }
     resp_json["id"] = group_json["id"]
     resp_json["root"] = group_json["root"]
     resp_json["created"] = group_json["created"]
@@ -54,7 +54,7 @@ async def GET_Group(request):
         resp_json["links"] = group_json["links"]
     if "include_attrs" in params and params["include_attrs"]:
         resp_json["attributes"] = group_json["attributes"]
-     
+
     resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
@@ -79,7 +79,7 @@ async def POST_Group(request):
         bucket = None
 
     group_id = get_obj_id(request, body=body)
-    
+
     log.info(f"POST group: {group_id} bucket: {bucket}")
     if not isValidUuid(group_id, obj_class="group"):
         log.error(f"Unexpected group_id: {group_id}")
@@ -96,7 +96,7 @@ async def POST_Group(request):
         raise HTTPInternalServerError()
 
     root_id = body["root"]
-    
+
     if not isValidUuid(root_id, obj_class="group"):
         msg = "Invalid root_id: " + root_id
         log.error(msg)
@@ -104,19 +104,19 @@ async def POST_Group(request):
 
     # ok - all set, create group obj
     now = time.time()
-    
-    group_json = {"id": group_id, "root": root_id, "created": now, "lastModified": now,  
+
+    group_json = {"id": group_id, "root": root_id, "created": now, "lastModified": now,
         "links": {}, "attributes": {} }
 
     await save_metadata_obj(app, group_id, group_json, bucket=bucket, notify=True, flush=True)
-     
-    # formulate response 
-    resp_json = {} 
-    resp_json["id"] = group_id 
+
+    # formulate response
+    resp_json = {}
+    resp_json["id"] = group_id
     resp_json["root"] = root_id
     resp_json["created"] = group_json["created"]
     resp_json["lastModified"] = group_json["lastModified"]
-    resp_json["linkCount"] = 0  
+    resp_json["linkCount"] = 0
     resp_json["attributeCount"] = 0
 
     resp = json_response(resp_json, status=201)
@@ -160,14 +160,14 @@ async def PUT_Group(request):
             if isValidUuid(obj_id) and getRootObjId(obj_id) == root_id:
                 flush_set.add(obj_id)
         else:
-            # for schema1 not easy to determine if a given id is in a domain, 
+            # for schema1 not easy to determine if a given id is in a domain,
             # so just wait on all of them
             flush_set.add(obj_id)
 
     log.debug(f"flushop - waiting on {len(flush_set)} items")
     while time.time() - flush_start < FLUSH_TIME_OUT:
         # check to see if the items in our flush set are still there
-        
+
         remaining_set = set()
         for obj_id in flush_set:
             if not obj_id in dirty_ids:
@@ -187,7 +187,7 @@ async def PUT_Group(request):
     if len(flush_set) > 0:
         log.warn(f"flushop - {len(flush_set)} items not updated after {FLUSH_TIME_OUT}")
         raise HTTPServiceUnavailable()
-    
+
     resp = json_response(None, status=204)  # NO Content response
     log.response(request, resp=resp)
     return resp
@@ -200,7 +200,7 @@ async def DELETE_Group(request):
     app = request.app
     params = request.rel_url.query
     group_id = get_obj_id(request)
-    
+
     if not isValidUuid(group_id, obj_class="group"):
         log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
@@ -211,13 +211,13 @@ async def DELETE_Group(request):
         bucket = None
 
     log.info(f"DELETE group: {group_id} bucket: {bucket}")
- 
+
     # verify the id exist
     obj_found = await check_metadata_obj(app, group_id, bucket=bucket)
     if not obj_found:
         log.debug(f"delete called on non-exsistet obj: {group_id}")
         raise HTTPNotFound()
-        
+
     log.debug("deleting group: {}".format(group_id))
 
     notify=True
@@ -225,8 +225,8 @@ async def DELETE_Group(request):
         notify=False
     await delete_metadata_obj(app, group_id, bucket=bucket, notify=notify)
 
-    resp_json = {  } 
-      
+    resp_json = {  }
+
     resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
@@ -251,15 +251,15 @@ async def POST_Root(request):
         bucket = params["bucket"]
     else:
         bucket = None
-    
+
     log.info(f"POST_Root: {root_id} bucket: {bucket}")
 
     # add id to be scanned by the s3sync task
     root_scan_ids = app["root_scan_ids"]
     root_scan_ids[root_id] = bucket
 
-    resp_json = {  } 
-      
+    resp_json = {  }
+
     resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp

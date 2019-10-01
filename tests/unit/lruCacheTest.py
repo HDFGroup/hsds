@@ -10,14 +10,14 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import unittest
-import random  
+import random
 import sys
 import numpy as np
- 
+
 sys.path.append('../../hsds/util')
 sys.path.append('../../hsds')
 
-from lruCache import LruCache 
+from lruCache import LruCache
 from idUtil import createObjId
 
 class LruCacheTest(unittest.TestCase):
@@ -40,7 +40,7 @@ class LruCacheTest(unittest.TestCase):
             self.assertTrue(False)
         except TypeError:
             pass # expected
-        arr = np.empty((16, 16), dtype='i4') 
+        arr = np.empty((16, 16), dtype='i4')
         id = createObjId("datasets")
         try:
             cc[id] = arr
@@ -101,7 +101,7 @@ class LruCacheTest(unittest.TestCase):
         mem_per = cc.cacheUtilizationPercent
         self.assertEqual(mem_per, 0)   # no memory used
 
-    
+
     def testLRU(self):
         """ Check LRU replacement logic """
         cc = LruCache(mem_target=1024*1024*1024) # big enough that there shouldn't be any cleanup
@@ -128,10 +128,10 @@ class LruCacheTest(unittest.TestCase):
             self.assertEqual(node._id, ids[9 - i])
             node = node._next
         self.assertTrue(node is None)
-   
+
         chunk_5 = ids[5]
         cc.consistencyCheck()
-        
+
         np_arr = cc[chunk_5]
         self.assertEqual(np_arr[0,0], 5)
         # the get should have moved this guy to the front
@@ -162,8 +162,8 @@ class LruCacheTest(unittest.TestCase):
         cc.consistencyCheck()
 
 
-    def testMemUtil(self):   
-        """ Test memory usage tracks target """          
+    def testMemUtil(self):
+        """ Test memory usage tracks target """
         cc = LruCache(mem_target=5000)
         self.assertEqual(len(cc), 0)
         ids = set()
@@ -174,14 +174,14 @@ class LruCacheTest(unittest.TestCase):
             arr[...] = i
             cc[id] = arr
             self.assertTrue(id in cc)
-             
+
         cc.consistencyCheck()
         self.assertTrue(len(cc) < 10) # given mem-target, some items should have been removed
         mem_per = cc.cacheUtilizationPercent
         self.assertTrue(mem_per < 100)
         mem_dirty = cc.memDirty
         self.assertEqual(mem_dirty, 0)
-        
+
         # add 10 more chunks, but set dirty to true each time
         for i in range(10):
             id = createObjId("chunks")
@@ -190,27 +190,27 @@ class LruCacheTest(unittest.TestCase):
             arr[...] = i
             cc[id] = arr
             self.assertTrue(id in cc)
-            cc.setDirty(id)  
+            cc.setDirty(id)
             cc.consistencyCheck()
             mem_dirty = cc.memDirty
             self.assertEqual(mem_dirty, 1024 * (i+1))
-             
-             
+
+
         mem_per = cc.cacheUtilizationPercent
         # chunks are dirty so percent is over 100%
-        self.assertTrue(mem_per > 100)  
+        self.assertTrue(mem_per > 100)
 
         # clear dirty flags (allowing memory to be released)
         id_list = []
         for id in cc:
             id_list.append(id)
-        
+
         random.shuffle(id_list)  # randomize the order we clear dirty flag
 
         id=id_list[0]
         cc.clearDirty(id)
         cc.consistencyCheck()
-        
+
         for id in id_list:
             self.assertTrue(id in ids)
             mem_dirty = cc.memDirty
@@ -220,7 +220,7 @@ class LruCacheTest(unittest.TestCase):
         mem_per = cc.cacheUtilizationPercent
         # mem percent should be less than 100 now
 
-        self.assertTrue(mem_per <= 100)        
+        self.assertTrue(mem_per <= 100)
 
     def testMetaDataCache(self):
         """ check metadata cache functionality """
@@ -286,9 +286,9 @@ class LruCacheTest(unittest.TestCase):
         self.assertEqual(mem_used, 0)
         mem_per = cc.cacheUtilizationPercent
         self.assertEqual(mem_per, 0)   # no memory used
-                         
-             
+
+
 if __name__ == '__main__':
     #setup test files
-    
+
     unittest.main()

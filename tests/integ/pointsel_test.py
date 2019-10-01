@@ -16,7 +16,7 @@ import json
 import numpy as np
 import helper
 import config
- 
+
 
 class PointSelTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -24,10 +24,10 @@ class PointSelTest(unittest.TestCase):
         self.base_domain = helper.getTestDomainName(self.__class__.__name__)
         helper.setupDomain(self.base_domain)
         self.endpoint = helper.getEndpoint()
-    
+
 
     def testPost1DDataset(self):
-        
+
         # Test selecting points in a dataset using POST value
         print("testPost1DDataset", self.base_domain)
 
@@ -45,8 +45,8 @@ class PointSelTest(unittest.TestCase):
         # pass in layout specification so that we can test selection across chunk boundries
         data = { "type": "H5T_STD_I32LE", "shape": (100,) }
         data['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [20,] }}
-        
-        req = self.endpoint + '/datasets' 
+
+        req = self.endpoint + '/datasets'
         rsp = requests.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
@@ -55,11 +55,11 @@ class PointSelTest(unittest.TestCase):
 
         # link new dataset as 'dset1d'
         name = "dset"
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
-        
+
 
         # write to the dset
         data = list(range(100))
@@ -67,7 +67,7 @@ class PointSelTest(unittest.TestCase):
 
         payload = { 'value': data }
         req = self.endpoint + "/datasets/" + dset_id + "/value"
-        
+
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
@@ -95,22 +95,22 @@ class PointSelTest(unittest.TestCase):
         print("testPost2DDataset", self.base_domain)
 
         headers = helper.getRequestHeaders(domain=self.base_domain)
-        
+
         req = self.endpoint + '/'
- 
+
         # Get root uuid
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
         helper.validateId(root_uuid)
-        
+
         # create dataset
         # pass in layout specification so that we can test selection across chunk boundries
         data = { "type": "H5T_STD_I32LE", "shape": [20,30] }
         data['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [10, 10] }}
-        
-        req = self.endpoint + '/datasets' 
+
+        req = self.endpoint + '/datasets'
         rsp = requests.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
@@ -119,11 +119,11 @@ class PointSelTest(unittest.TestCase):
 
         # link new dataset as 'dset2d'
         name = "dset2d"
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
-        
+
         # make up some data
         arr2d = []
         for i in range(20):
@@ -149,7 +149,7 @@ class PointSelTest(unittest.TestCase):
         rsp = requests.post(req, data=json.dumps(body), headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        expected_result = [50005, 50010, 50015, 50020, 50025, 100005, 100010, 
+        expected_result = [50005, 50010, 50015, 50020, 50025, 100005, 100010,
             100015, 100020, 100025, 150005, 150010, 150015, 150020, 150025]
         self.assertTrue("value" in rspJson)
         values = rspJson["value"]
@@ -157,7 +157,7 @@ class PointSelTest(unittest.TestCase):
 
 
     def testPost1DDatasetBinary(self):
-        
+
         # Test selecting points in a dataset using POST value
         print("testPost1DDatasetBinary", self.base_domain)
 
@@ -180,8 +180,8 @@ class PointSelTest(unittest.TestCase):
         # pass in layout specification so that we can test selection across chunk boundries
         data = { "type": "H5T_STD_I32LE", "shape": (100,) }
         data['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [20,] }}
-        
-        req = self.endpoint + '/datasets' 
+
+        req = self.endpoint + '/datasets'
         rsp = requests.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
@@ -190,19 +190,19 @@ class PointSelTest(unittest.TestCase):
 
         # link new dataset as 'dset1d'
         name = "dset"
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
-        
+
         arr = np.zeros((100,), dtype='i4')
         for i in range(100):
             arr[i] = 99 - i
         # write to the dset
         data = arr.tobytes()
-         
+
         req = self.endpoint + "/datasets/" + dset_id + "/value"
-        
+
         rsp = requests.put(req, data=data, headers=headers_bin_req)
         self.assertEqual(rsp.status_code, 200)
 
@@ -210,7 +210,7 @@ class PointSelTest(unittest.TestCase):
         num_points = len(points)
         arr_points = np.asarray(points, dtype='u8')  # must use unsigned 64-bit int
         data = arr_points.tobytes()
-    
+
         # read selected points
         rsp = requests.post(req, data=data, headers=headers_bin_reqrsp)
         self.assertEqual(rsp.status_code, 200)
@@ -220,7 +220,7 @@ class PointSelTest(unittest.TestCase):
         rsp_values = arr_rsp.tolist()
         expected_result = [97, 96, 94, 92, 88, 86, 82, 80, 76, 70, 68, 62, 58, 56, 52, 46, 40, 38, 32, 28, 26, 20, 16, 2, 1]
         self.assertEqual(rsp_values, expected_result)
-    
+
 
     def testPost2DDatasetBinary(self):
         # Test POST value with selection for 2d dataset
@@ -232,7 +232,7 @@ class PointSelTest(unittest.TestCase):
         headers_bin_reqrsp = helper.getRequestHeaders(domain=self.base_domain)
         headers_bin_reqrsp["accept"] = "application/octet-stream"
         headers_bin_reqrsp["Content-Type"] = "application/octet-stream"
-        
+
         req = self.endpoint + '/'
 
         # Get root uuid
@@ -241,13 +241,13 @@ class PointSelTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
         helper.validateId(root_uuid)
-        
+
         # create dataset
         # pass in layout specification so that we can test selection across chunk boundries
         data = { "type": "H5T_STD_I32LE", "shape": [20,30] }
         data['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [10, 10] }}
-        
-        req = self.endpoint + '/datasets' 
+
+        req = self.endpoint + '/datasets'
         rsp = requests.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
@@ -256,7 +256,7 @@ class PointSelTest(unittest.TestCase):
 
         # link new dataset as 'dset2d'
         name = "dset2d"
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
@@ -266,7 +266,7 @@ class PointSelTest(unittest.TestCase):
             for j in range(30):
                 arr[i,j] = i * 10000 + j
         arr_bytes = arr.tobytes()
-           
+
         # write some values
         req = self.endpoint + '/datasets/' + dset_id + '/value'
         rsp = requests.put(req, data=arr_bytes, headers=headers_bin_req)
@@ -289,10 +289,10 @@ class PointSelTest(unittest.TestCase):
         self.assertEqual(len(rsp_data), num_points*4)
         arr_rsp = np.frombuffer(rsp_data, dtype='i4')
         values = arr_rsp.tolist()
-         
-        expected_result = [50005, 50010, 50015, 50020, 50025, 100005, 100010, 
+
+        expected_result = [50005, 50010, 50015, 50020, 50025, 100005, 100010,
             100015, 100020, 100025, 150005, 150010, 150015, 150020, 150025]
-         
+
         self.assertEqual(values, expected_result)
 
     def testPostContiguousDataset(self):
@@ -313,11 +313,11 @@ class PointSelTest(unittest.TestCase):
 
         if "tall.h5" not in tall_json:
             self.assertTrue(False)
-        
+
         chunk_info = tall_json["tall.h5"]
         if "/g1/g1.1/dset1.1.2" not in chunk_info:
             self.assertTrue(False)
-        
+
         dset112_info = chunk_info["/g1/g1.1/dset1.1.2"]
         if "byteStreams" not in dset112_info:
             self.assertTrue(False)
@@ -354,8 +354,8 @@ class PointSelTest(unittest.TestCase):
         data = { "type": 'H5T_STD_I32BE', "shape": 20 }
         layout = {"class": 'H5D_CONTIGUOUS_REF', "file_uri": s3path, "offset": dset112_offset, "size": dset112_size }
         data['creationProperties'] = {'layout': layout}
-        
-        req = self.endpoint + '/datasets' 
+
+        req = self.endpoint + '/datasets'
         rsp = requests.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
@@ -364,7 +364,7 @@ class PointSelTest(unittest.TestCase):
 
         # link new dataset as 'dset112'
         name = "dset112"
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset112_id}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
@@ -374,7 +374,7 @@ class PointSelTest(unittest.TestCase):
         layout = {"class": 'H5D_CONTIGUOUS_REF', "file_uri": s3path, "offset": dset22_offset, "size": dset22_size }
         data['creationProperties'] = {'layout': layout}
 
-        req = self.endpoint + '/datasets' 
+        req = self.endpoint + '/datasets'
         rsp = requests.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
@@ -383,13 +383,13 @@ class PointSelTest(unittest.TestCase):
 
         # link new dataset as 'dset22'
         name = "dset22"
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset22_id}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # do a point selection read on dset22
-        req = self.endpoint + "/datasets/" + dset112_id + "/value" 
+        req = self.endpoint + "/datasets/" + dset112_id + "/value"
         points = [2,3,5,7,11,13,17,19]
         body = { "points": points }
         rsp = requests.post(req, data=json.dumps(body), headers=headers)
@@ -405,7 +405,7 @@ class PointSelTest(unittest.TestCase):
         self.assertEqual(ret_value, points)  # get back the points since the dataset in the range 0-20
 
         # do a point selection read on dset22
-        req = self.endpoint + "/datasets/" + dset22_id + "/value" 
+        req = self.endpoint + "/datasets/" + dset22_id + "/value"
         points = [(0,0), (1,1), (2,2)]
         body = { "points": points }
         rsp = requests.post(req, data=json.dumps(body), headers=headers)
@@ -460,16 +460,16 @@ class PointSelTest(unittest.TestCase):
 
         # define types we need
 
-        s10_type = {"charSet": "H5T_CSET_ASCII", 
-                "class": "H5T_STRING", 
-                "length": 10, 
-                "strPad": "H5T_STR_NULLPAD" } 
-        s4_type = {"charSet": "H5T_CSET_ASCII", 
-                "class": "H5T_STRING", 
-                "length": 4, 
+        s10_type = {"charSet": "H5T_CSET_ASCII",
+                "class": "H5T_STRING",
+                "length": 10,
+                "strPad": "H5T_STR_NULLPAD" }
+        s4_type = {"charSet": "H5T_CSET_ASCII",
+                "class": "H5T_STRING",
+                "length": 4,
                 "strPad": "H5T_STR_NULLPAD" }
 
-        fields = ({'name': 'date', 'type': s10_type}, 
+        fields = ({'name': 'date', 'type': s10_type},
                   {'name': 'symbol', 'type': s4_type},
                   {'name': 'sector', 'type': 'H5T_STD_I8LE'},
                   {'name': 'open', 'type': 'H5T_IEEE_F32LE'},
@@ -485,7 +485,7 @@ class PointSelTest(unittest.TestCase):
         layout = {"class": 'H5D_CHUNKED_REF', "file_uri": s3path, "dims": chunk_dims, "chunks": chunks }
         data['creationProperties'] = {'layout': layout}
 
-        req = self.endpoint + '/datasets' 
+        req = self.endpoint + '/datasets'
         rsp = requests.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
@@ -494,13 +494,13 @@ class PointSelTest(unittest.TestCase):
 
         # link new dataset as 'dset'
         name = "dset"
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # do a point selection
-        req = self.endpoint + "/datasets/" + dset_id + "/value" 
+        req = self.endpoint + "/datasets/" + dset_id + "/value"
         points = [1234567,]
         body = { "points": points }
         rsp = requests.post(req, data=json.dumps(body), headers=headers)
@@ -517,7 +517,7 @@ class PointSelTest(unittest.TestCase):
             self.assertEqual(item[1], 'MHFI')
             self.assertEqual(item[2], 3)
 
-    
+
     def testPostChunkedRefIndirectDataset(self):
         print("testPostChunkedRefIndirectDataset", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
@@ -556,7 +556,7 @@ class PointSelTest(unittest.TestCase):
         for i in range(num_chunks):
             item = byteStreams[i]
             index = item["index"]
-            chunkinfo_data[index] = (item["file_offset"], item["size"])             
+            chunkinfo_data[index] = (item["file_offset"], item["size"])
 
         # get domain
         req = helper.getEndpoint() + '/'
@@ -567,7 +567,7 @@ class PointSelTest(unittest.TestCase):
 
         # create table to hold chunkinfo
         # create a dataset to store chunk info
-        fields = ({'name': 'offset', 'type': 'H5T_STD_I64LE'}, 
+        fields = ({'name': 'offset', 'type': 'H5T_STD_I64LE'},
                   {'name': 'size', 'type': 'H5T_STD_I32LE'})
         chunkinfo_type = {'class': 'H5T_COMPOUND', 'fields': fields }
         req = self.endpoint + "/datasets"
@@ -583,14 +583,14 @@ class PointSelTest(unittest.TestCase):
 
         # link new dataset as 'chunks'
         name = "chunks"
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": chunkinfo_uuid}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # write to the chunkinfo dataset
         payload = {'value': chunkinfo_data}
-         
+
         req = self.endpoint + "/datasets/" + chunkinfo_uuid + "/value"
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
@@ -598,16 +598,16 @@ class PointSelTest(unittest.TestCase):
 
         # define types we need
 
-        s10_type = {"charSet": "H5T_CSET_ASCII", 
-                "class": "H5T_STRING", 
-                "length": 10, 
-                "strPad": "H5T_STR_NULLPAD" } 
-        s4_type = {"charSet": "H5T_CSET_ASCII", 
-                "class": "H5T_STRING", 
-                "length": 4, 
+        s10_type = {"charSet": "H5T_CSET_ASCII",
+                "class": "H5T_STRING",
+                "length": 10,
+                "strPad": "H5T_STR_NULLPAD" }
+        s4_type = {"charSet": "H5T_CSET_ASCII",
+                "class": "H5T_STRING",
+                "length": 4,
                 "strPad": "H5T_STR_NULLPAD" }
 
-        fields = ({'name': 'date', 'type': s10_type}, 
+        fields = ({'name': 'date', 'type': s10_type},
                   {'name': 'symbol', 'type': s4_type},
                   {'name': 'sector', 'type': 'H5T_STD_I8LE'},
                   {'name': 'open', 'type': 'H5T_IEEE_F32LE'},
@@ -623,7 +623,7 @@ class PointSelTest(unittest.TestCase):
         layout = {"class": 'H5D_CHUNKED_REF_INDIRECT', "file_uri": s3path, "dims": chunk_dims, "chunk_table": chunkinfo_uuid}
         data['creationProperties'] = {'layout': layout}
 
-        req = self.endpoint + '/datasets' 
+        req = self.endpoint + '/datasets'
         rsp = requests.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
@@ -632,13 +632,13 @@ class PointSelTest(unittest.TestCase):
 
         # link new dataset as 'dset'
         name = "dset"
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
-        
+
         # do a point selection
-        req = self.endpoint + "/datasets/" + dset_id + "/value" 
+        req = self.endpoint + "/datasets/" + dset_id + "/value"
         points = [1234567,]
         body = { "points": points }
         rsp = requests.post(req, data=json.dumps(body), headers=headers)
@@ -674,7 +674,7 @@ class PointSelTest(unittest.TestCase):
         # pass in layout specification so that we can test selection across chunk boundries
         data = { "type": "H5T_STD_I8LE", "shape": (100,) }
         data['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [20,] }}
-        
+
         req = self.endpoint + "/datasets"
         rsp = requests.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
@@ -684,11 +684,11 @@ class PointSelTest(unittest.TestCase):
 
         # link new dataset as 'dset1d'
         name = "dset"
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
-        
+
         # Do a point selection write
         primes = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97]
         value = [1,] * len(primes)  # write 1's at indexes that are prime
@@ -696,7 +696,7 @@ class PointSelTest(unittest.TestCase):
         payload = { 'points': primes, 'value': value }
         req = self.endpoint + "/datasets/" + dset_id + "/value"
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 200)   
+        self.assertEqual(rsp.status_code, 200)
 
         # read back data
         rsp = requests.get(req, headers=headers)
@@ -714,7 +714,7 @@ class PointSelTest(unittest.TestCase):
 
         # read back data as one big hyperslab selection
         rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200) 
+        self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
@@ -726,29 +726,29 @@ class PointSelTest(unittest.TestCase):
             else:
                 self.assertEqual(ret_values[i], 0)
 
-        
+
 
     def testPut2DDataset(self):
         # Test writing with point selection for 2d dataset
         print("testPut2DDataset", self.base_domain)
 
         headers = helper.getRequestHeaders(domain=self.base_domain)
-        
+
         req = self.endpoint + '/'
- 
+
         # Get root uuid
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
         helper.validateId(root_uuid)
-        
+
         # create dataset
         # pass in layout specification so that we can test selection across chunk boundries
         data = { "type": "H5T_STD_I32LE", "shape": [20,30] }
         data['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [10, 10] }}
-        
-        req = self.endpoint + '/datasets' 
+
+        req = self.endpoint + '/datasets'
         rsp = requests.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
@@ -757,7 +757,7 @@ class PointSelTest(unittest.TestCase):
 
         # link new dataset as 'dset2d'
         name = "dset2d"
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
@@ -768,11 +768,11 @@ class PointSelTest(unittest.TestCase):
             points.append((i, i))
         value = [1,] * 20
 
-        # write 1's to all the point locations 
+        # write 1's to all the point locations
         payload = { 'points': points, 'value': value }
         req = self.endpoint + "/datasets/" + dset_id + "/value"
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 200) 
+        self.assertEqual(rsp.status_code, 200)
 
         # read back data
         rsp = requests.get(req, headers=headers)
@@ -789,7 +789,7 @@ class PointSelTest(unittest.TestCase):
                     self.assertEqual(row[y], 1)
                 else:
                     self.assertEqual(row[y], 0)
-        
+
 
 
     def testPut1DDatasetBinary(self):
@@ -810,7 +810,7 @@ class PointSelTest(unittest.TestCase):
         # pass in layout specification so that we can test selection across chunk boundries
         data = { "type": "H5T_STD_I8LE", "shape": (100,) }
         data['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [20,] }}
-        
+
         req = self.endpoint + "/datasets"
         rsp = requests.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
@@ -820,26 +820,26 @@ class PointSelTest(unittest.TestCase):
 
         # link new dataset as 'dset1d'
         name = "dset"
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
-        
+
         # Do a point selection write
         primes = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97]
 
         # create binary array for the values
         byte_array = bytearray(len(primes))
         for i in range(len(primes)):
-            byte_array[i] = 1  
+            byte_array[i] = 1
         value_base64 = base64.b64encode(bytes(byte_array))
         value_base64 = value_base64.decode("ascii")
-         
+
         # write 1's to all the prime indexes
         payload = { 'points': primes, 'value_base64': value_base64 }
         req = self.endpoint + "/datasets/" + dset_id + "/value"
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 200)   
+        self.assertEqual(rsp.status_code, 200)
 
         # read back data
         rsp = requests.get(req, headers=headers)
@@ -853,11 +853,11 @@ class PointSelTest(unittest.TestCase):
             if i in primes:
                 self.assertEqual(value[i], 1)
             else:
-                self.assertEqual(value[i], 0)     
+                self.assertEqual(value[i], 0)
 
         # read back data as one big hyperslab selection
         rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200) 
+        self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
@@ -869,29 +869,29 @@ class PointSelTest(unittest.TestCase):
             else:
                 self.assertEqual(ret_values[i], 0)
 
-        
-         
+
+
     def testPut2DDatasetBinary(self):
         # Test writing with point selection for 2d dataset with binary data
         print("testPut2DDatasetBinary", self.base_domain)
 
         headers = helper.getRequestHeaders(domain=self.base_domain)
-        
+
         req = self.endpoint + '/'
- 
+
         # Get root uuid
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
         helper.validateId(root_uuid)
-        
+
         # create dataset
         # pass in layout specification so that we can test selection across chunk boundries
         data = { "type": "H5T_STD_I32LE", "shape": [20,30] }
         data['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [10, 10] }}
-        
-        req = self.endpoint + '/datasets' 
+
+        req = self.endpoint + '/datasets'
         rsp = requests.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
@@ -900,7 +900,7 @@ class PointSelTest(unittest.TestCase):
 
         # link new dataset as 'dset2d'
         name = "dset2d"
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name 
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
@@ -914,15 +914,15 @@ class PointSelTest(unittest.TestCase):
         # create binary array for the values
         byte_array = bytearray(20*4)
         for i in range(20):
-            byte_array[i*4] = 1  
+            byte_array[i*4] = 1
         value_base64 = base64.b64encode(bytes(byte_array))
         value_base64 = value_base64.decode("ascii")
 
-        # write 1's to all the point locations 
+        # write 1's to all the point locations
         payload = { 'points': points, 'value_base64': value_base64 }
         req = self.endpoint + "/datasets/" + dset_id + "/value"
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 200) 
+        self.assertEqual(rsp.status_code, 200)
 
         # read back data
         rsp = requests.get(req, headers=headers)
@@ -940,7 +940,7 @@ class PointSelTest(unittest.TestCase):
                 else:
                     self.assertEqual(row[y], 0)
 
-    
+
     def testDatasetChunkPartitioning(self):
         # test Dataset partitioning logic for large datasets
         print("testDatasetChunkPartitioning:", self.base_domain)
@@ -998,11 +998,11 @@ class PointSelTest(unittest.TestCase):
             points.append((x, y, z))
             value.append(i)
 
-        # write 1's to all the point locations 
+        # write 1's to all the point locations
         payload = { 'points': points, 'value': value }
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 200) 
+        self.assertEqual(rsp.status_code, 200)
 
         # read back data
         body = { "points": points }
@@ -1010,7 +1010,7 @@ class PointSelTest(unittest.TestCase):
         rsp = requests.post(req, data=json.dumps(body), headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        expected_result = [50005, 50010, 50015, 50020, 50025, 100005, 100010, 
+        expected_result = [50005, 50010, 50015, 50020, 50025, 100005, 100010,
             100015, 100020, 100025, 150005, 150010, 150015, 150020, 150025]
 
         self.assertTrue("value" in rspJson)
@@ -1019,9 +1019,9 @@ class PointSelTest(unittest.TestCase):
         self.assertEqual(len(value), NUM_POINTS)
         for i in range(NUM_POINTS):
             self.assertEqual(value[i], i)
-         
+
 
 if __name__ == '__main__':
     #setup test files
-    
+
     unittest.main()

@@ -21,10 +21,10 @@ cfg = {
     'bucket_name': '',   # bucket name to be used for requests
     'hdf5_sample_bucket': 'hdf5.sample'  # S3 bucket for storing traditional HDF5 files
 }
-   
-def get(x):     
+
+def get(x):
     # see if there are an environment variable override
     if x.upper() in os.environ:
         return os.environ[x.upper()]
-    # no command line override, just return the cfg value        
+    # no command line override, just return the cfg value
     return cfg[x]

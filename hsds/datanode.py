@@ -11,7 +11,7 @@
 ##############################################################################
 #
 # data node of hsds cluster
-# 
+#
 import asyncio
 
 from aiohttp.web import run_app
@@ -27,9 +27,9 @@ from attr_dn import GET_Attributes, GET_Attribute, PUT_Attribute, DELETE_Attribu
 from ctype_dn import GET_Datatype, POST_Datatype, DELETE_Datatype
 from dset_dn import GET_Dataset, POST_Dataset, DELETE_Dataset, PUT_DatasetShape
 from chunk_dn import PUT_Chunk, GET_Chunk, POST_Chunk, DELETE_Chunk
-from datanode_lib import s3syncCheck 
+from datanode_lib import s3syncCheck
 from async_lib import scanRoot, removeKeys
-               
+
 
 async def init(loop):
     """Intitialize application and return app object"""
@@ -74,22 +74,22 @@ async def init(loop):
     app.router.add_route('POST', '/chunks/{id}', POST_Chunk)
     app.router.add_route('DELETE', '/chunks/{id}', DELETE_Chunk)
     app.router.add_route("POST", '/roots/{id}', POST_Root)
-    
-      
+
+
     return app
 
 async def bucketScan(app):
     """ Scan v2 keys and update .info.json
     """
- 
+
     log.info("bucketScan start")
 
     async_sleep_time = int(config.get("async_sleep_time"))
     log.info("async_sleep_time: {}".format(async_sleep_time))
-     
+
     # update/initialize root object before starting node updates
- 
-    while True:  
+
+    while True:
         if app["node_state"] != "READY":
             log.info("bucketScan waiting for Node state to be READY")
             await asyncio.sleep(async_sleep_time)
@@ -109,10 +109,10 @@ async def bucketScan(app):
             log.info(f"bucketScan for: {root_id} bucket: {bucket}")
             await scanRoot(app, root_id, update=True, bucket=bucket)
 
-        log.info(f"bucketScan - sleep: {async_sleep_time}")   
-        await asyncio.sleep(async_sleep_time)   
+        log.info(f"bucketScan - sleep: {async_sleep_time}")
+        await asyncio.sleep(async_sleep_time)
 
-    # shouldn't ever get here     
+    # shouldn't ever get here
     log.error("bucketScan terminating unexpectedly")
 
 async def bucketGC(app):
@@ -121,10 +121,10 @@ async def bucketGC(app):
     log.info("bucketGC start")
     async_sleep_time = int(config.get("async_sleep_time"))
     log.info("async_sleep_time: {}".format(async_sleep_time))
-     
+
     # update/initialize root object before starting GC
- 
-    while True:  
+
+    while True:
         if app["node_state"] != "READY":
             log.info("bucketGC - waiting for Node state to be READY")
             await asyncio.sleep(async_sleep_time)
@@ -151,11 +151,11 @@ async def bucketGC(app):
                 await removeKeys(app, obj_id)
             else:
                 log.error(f"bucketGC - unexpected obj_id class: {obj_id}")
-           
-        log.info(f"bucketGC - sleep: {async_sleep_time}") 
-        await asyncio.sleep(async_sleep_time)   
 
-    # shouldn't ever get here     
+        log.info(f"bucketGC - sleep: {async_sleep_time}")
+        await asyncio.sleep(async_sleep_time)
+
+    # shouldn't ever get here
     log.error("bucketGC terminating unexpectedly")
 
 #
@@ -186,11 +186,11 @@ def main():
     app["root_scan_ids"] = {}   # map of root_id to bucket name for pending root scans
     app["gc_ids"] = set()       # set of root or dataset ids for deletion
     app["objDelete_prefix"] = None  # used by async_lib removeKeys
-    # TODO - there's nothing to prevent the deflate_map from getting ever larger 
+    # TODO - there's nothing to prevent the deflate_map from getting ever larger
     # (though it is only one int per dataset id)
     # add a timestamp and remove at a certain time?
     # delete entire map whenver the synch queue is empty?
-    
+
     # run background tasks
     asyncio.ensure_future(healthCheck(app), loop=loop)
 
@@ -198,10 +198,10 @@ def main():
     asyncio.ensure_future(s3syncCheck(app), loop=loop)
 
     # run root scan
-    asyncio.ensure_future(bucketScan(app), loop=loop) 
+    asyncio.ensure_future(bucketScan(app), loop=loop)
 
     # run root/dataset GC
-    asyncio.ensure_future(bucketGC(app), loop=loop) 
+    asyncio.ensure_future(bucketGC(app), loop=loop)
 
     # run the app
     port = int(config.get("dn_port"))

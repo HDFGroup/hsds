@@ -15,7 +15,7 @@ import numpy as np
 MAX_VLEN_ELEMENT=1000000  # restrict largest vlen element to one million
 
 """
-Convert list that may contain bytes type elements to list of string elements  
+Convert list that may contain bytes type elements to list of string elements
 
 TBD: Need to deal with non-string byte data (hexencode?)
 """
@@ -31,21 +31,21 @@ def bytesArrayToList(data):
             else:
                 is_list = False
         else:
-            is_list = True        
+            is_list = True
     elif type(data) in (list, tuple):
         is_list = True
     else:
         is_list = False
-                
+
     if is_list:
         out = []
         for item in data:
-            out.append(bytesArrayToList(item)) # recursive call  
+            out.append(bytesArrayToList(item)) # recursive call
     elif type(data) is bytes:
         out = data.decode("utf-8")
     else:
         out = data
-                   
+
     return out
 
 """
@@ -86,7 +86,7 @@ def getNumElements(dims):
         raise ValueError("Unexpected argument")
     return num_elements
 
-""" 
+"""
 Get dims from a given shape json.  Return [1,] for Scalar datasets,
   None for null dataspaces
 """
@@ -116,7 +116,7 @@ def getShapeDims(shape):
             raise ValueError("Unknown shape class: {}".format(shape["class"]))
     else:
         raise ValueError("Unexpected shape class: {}".format(type(shape)))
-     
+
     return dims
 
 
@@ -127,13 +127,13 @@ def jsonToArray(data_shape, data_dtype, data_json):
     # utility function to initialize vlen array
     def fillVlenArray(rank, data, arr, index):
         for i in range(len(data)):
-            if rank > 1:    
+            if rank > 1:
                 index = fillVlenArray(rank-1, data[i], arr, index)
             else:
                 arr[index] = data[i]
                 index += 1
         return index
-                
+
 
     # need some special conversion for compound types --
     # each element must be a tuple, but the JSON decoder
@@ -142,12 +142,12 @@ def jsonToArray(data_shape, data_dtype, data_json):
         raise TypeError("expected list data for compound data type")
     npoints = getNumElements(data_shape)
     np_shape_rank = len(data_shape)
-    
-    if type(data_json) in (list, tuple):   
+
+    if type(data_json) in (list, tuple):
         converted_data = []
         if npoints == 1 and len(data_json) == len(data_dtype):
             converted_data.append(toTuple(0, data_json))
-        else:  
+        else:
             converted_data = toTuple(np_shape_rank, data_json)
         data_json = converted_data
     else:
@@ -255,7 +255,7 @@ def copyBuffer(src, des, offset):
     #print(f"copyBuffer - src: {src} offset: {offset}")
     for i in range(len(src)):
         des[i+offset] = src[i]
-         
+
     #print("returning:", offset + len(src))
     return offset + len(src)
 
@@ -268,7 +268,7 @@ def copyElement(e, dt, buffer, offset):
         for name in dt.names:
             field_dt = dt[name]
             field_val = e[name]
-            offset = copyElement(field_val, field_dt, buffer, offset) 
+            offset = copyElement(field_val, field_dt, buffer, offset)
     elif not dt.metadata or "vlen" not in dt.metadata:
         #print("e vlen: {} type: {} itemsize: {}".format(e, type(e), dt.itemsize))
         e_buf = e.tobytes()
@@ -291,7 +291,7 @@ def copyElement(e, dt, buffer, offset):
             #print("copyBuffer int")
             if e == 0:
                 # write 4-byte integer 0 to buffer
-                offset = copyBuffer(b'\x00\x00\x00\x00', buffer, offset)  
+                offset = copyBuffer(b'\x00\x00\x00\x00', buffer, offset)
             else:
                 raise ValueError("Unexpected value: {}".format(e))
         elif isinstance(e, bytes):
@@ -327,7 +327,7 @@ def copyElement(e, dt, buffer, offset):
             else:
                 arr1d = e.reshape((nElements,))
                 for item in arr1d:
-                    offset = copyElement(item, dt, buffer, offset)            
+                    offset = copyElement(item, dt, buffer, offset)
 
         elif isinstance(e, list) or isinstance(e, tuple):
             #print("cooyBuffer list/tuple  vlen:", vlen, "e:", e)
@@ -338,7 +338,7 @@ def copyElement(e, dt, buffer, offset):
             else:
                 arr = np.asarray(e, dtype=vlen)
             offset = copyBuffer(arr.tobytes(), buffer, offset)
-       
+
         else:
             raise TypeError("unexpected type: {}".format(type(e)))
         #print("buffer: {}".format(buffer))
@@ -349,7 +349,7 @@ Get the count value from persisted vlen array
 """
 def getElementCount(buffer, offset):
     count_bytes = bytes(buffer[offset:(offset+4)])
-        
+
     try:
         count = int(np.frombuffer(count_bytes, dtype="<i4"))
     except TypeError as e:
@@ -365,11 +365,11 @@ def getElementCount(buffer, offset):
 
 
 """
-Read element from bytearrray 
+Read element from bytearrray
 """
 def readElement(buffer, offset, arr, index, dt):
     #print(f"readElement, offset: {offset}, index: {index} dt: {dt}")
-    
+
     if len(dt) > 1:
         e = arr[index]
         for name in dt.names:
@@ -391,7 +391,7 @@ def readElement(buffer, offset, arr, index, dt):
         vlen = dt.metadata["vlen"]
         #print("reading vlen element:", vlen)
         e = arr[index]
-        
+
         if isinstance(e, np.ndarray):
             nelements = np.prod(dt.shape)
             #print("ndarray, nelements:", nelements)
@@ -420,19 +420,19 @@ def readElement(buffer, offset, arr, index, dt):
                         #print("ValueError -- e_buffer:", e_buffer, "dtype:", vlen)
                         raise
                     arr[index] = e
-    #print("readElement returning offset:", offset)    
+    #print("readElement returning offset:", offset)
     return offset
 
-   
-             
-""" 
+
+
+"""
 Return byte representation of numpy array
 """
 def arrayToBytes(arr):
     if not isVlen(arr.dtype):
         # can just return normal numpy bytestream
-        return arr.tobytes()  
-    
+        return arr.tobytes()
+
     nSize = getByteArraySize(arr)
     buffer = bytearray(nSize)
     offset = 0
@@ -452,7 +452,7 @@ def bytesToArray(data, dt, shape):
     if not isVlen(dt):
         # regular numpy from string
         #print("not vlen")
-        arr = np.frombuffer(data, dtype=dt)  
+        arr = np.frombuffer(data, dtype=dt)
     else:
         #print("is vlen")
         arr = np.zeros((nelements,), dtype=dt)

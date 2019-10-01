@@ -14,7 +14,7 @@ import os.path as op
 import re
 #
 # Domain utilities
-# 
+#
 
 DOMAIN_SUFFIX = "/.domain.json"  # key suffix used to hold domain info
 
@@ -26,12 +26,12 @@ def isIPAddress(s):
     # see if there is a port specifier
     if s.find(':') > 0:
         return True
-     
+
     if s == 'localhost':
         return True # special case for loopback dns_path
 
     parts = s.split('.')
-    
+
     if len(parts) != 4:
         return False
     for part in parts:
@@ -52,8 +52,8 @@ def getParentDomain(domain):
     Return None if the given domain is already a top-level domain.
     """
     if domain.endswith(DOMAIN_SUFFIX):
-        n = len(DOMAIN_SUFFIX) - 1 
-        domain = domain[:-n] 
+        n = len(DOMAIN_SUFFIX) - 1
+        domain = domain[:-n]
 
     bucket = getBucketForDomain(domain)
     domain_path = getPathForDomain(domain)
@@ -65,7 +65,7 @@ def getParentDomain(domain):
     else:
         parent = dirname
 
-    
+
     if not parent:
         parent = None
     return parent
@@ -75,7 +75,7 @@ def validateHostDomain(id):
         raise ValueError("Expected string type")
     if len(id) < 3:
         raise ValueError("Host Domain name is too short")
-    if len(id) == 38 and id[5] == '-' and id[7] == '-' and id[16] == '-' and id[21] == '-' and id[26] == '-':  
+    if len(id) == 38 and id[5] == '-' and id[7] == '-' and id[16] == '-' and id[21] == '-' and id[26] == '-':
         raise ValueError("Host Domain name not allowed")
     if len(id) == 14 and id.endswith("-headnode"):
         raise ValueError("Host Domain name not allowed")
@@ -111,7 +111,7 @@ def validateDomain(id):
     if id.find('/') == -1:
         raise ValueError("Domain names should include a '/'")
     if id[-1] ==  '/':
-        raise ValueError("Slash at end not allowed")    
+        raise ValueError("Slash at end not allowed")
 
 def isValidDomain(id):
     try:
@@ -164,15 +164,15 @@ def getDomainForHost(host_value):
     dns_path = host.split('.')
     dns_path.reverse()  # flip to filesystem ordering
     domain = '/'
-    for field in dns_path:      
-        if len(field) == 0:   
+    for field in dns_path:
+        if len(field) == 0:
             # consecutive dots are not allowed
             raise ValueError('domain name is not valid')
         domain += field
         domain += '/'
 
     domain = domain[:-1]  # remove trailing slash
-     
+
     return domain
 
 def getDomainFromRequest(request, validate=True):
@@ -193,8 +193,8 @@ def getDomainFromRequest(request, validate=True):
             domain = request.host
     if not domain:
         raise ValueError("no domain")
-            
-    if domain[0] != '/':  
+
+    if domain[0] != '/':
         #DNS style host
         if validate:
             validateHostDomain(domain) # throw ValueError if invalid
@@ -210,14 +210,14 @@ def getDomainFromRequest(request, validate=True):
     if validate:
         validateDomain(domain)
     if "bucket" in params and params["bucket"]:
-        bucket = params["bucket"] 
+        bucket = params["bucket"]
         print(f"found bucket: {bucket} in params")
     elif "X-Hdf-bucket" in request.headers:
-        bucket = request.headers["X-Hdf-bucket"] 
+        bucket = request.headers["X-Hdf-bucket"]
         print(f"found bucket: {bucket} in request headers")
     elif "bucket_name" in request.app and request.app["bucket_name"]:
         # prefix the domain with the bucket name
-        bucket = app["bucket_name"] 
+        bucket = app["bucket_name"]
         print(f"using bucket: {bucket} from app")
     else:
         pass # no domain specified
@@ -228,7 +228,7 @@ def getDomainFromRequest(request, validate=True):
         if domain[0] == '/':
             print("adding bucket to domain")
             domain = bucket + domain
-    
+
     return domain
 
 def getPathForDomain(domain):
@@ -240,7 +240,7 @@ def getPathForDomain(domain):
     index = domain.find('/')
     if index < 1:
         return domain  # no bucket
-    return domain[(index):]  
+    return domain[(index):]
 
 def getBucketForDomain(domain):
     """ get the bucket for the domain or None

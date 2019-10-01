@@ -11,10 +11,10 @@
 ##############################################################################
 #
 # service node of hsds cluster
-# 
- 
+#
+
 from aiohttp.web_exceptions import HTTPBadRequest
- 
+
 from util.httpUtil import  http_get, http_put, http_delete, getHref, jsonResponse
 from util.idUtil import   isValidUuid, getDataNodeUrl, getCollectionForId
 from util.authUtil import getUserPasswordFromRequest,   validateUserPassword
@@ -27,7 +27,7 @@ import hsds_logger as log
 async def GET_Links(request):
     """HTTP method to return JSON for link collection"""
     log.request(request)
-    app = request.app 
+    app = request.app
     params = request.rel_url.query
 
     group_id = request.match_info.get('id')
@@ -50,31 +50,31 @@ async def GET_Links(request):
     marker = None
     if "Marker" in params:
         marker = params["Marker"]
-    
+
     username, pswd = getUserPasswordFromRequest(request)
     if username is None and app['allow_noauth']:
         username = "default"
     else:
         await validateUserPassword(app, username, pswd)
-    
+
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
         msg = f"domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
-    
+
     await validateAction(app, domain, group_id, username, "read")
 
     req = getDataNodeUrl(app, group_id)
-    req += "/groups/" + group_id + "/links" 
+    req += "/groups/" + group_id + "/links"
     query_sep = '?'
     if limit is not None:
         req += query_sep + "Limit=" + str(limit)
         query_sep = '&'
     if marker is not None:
         req += query_sep + "Marker=" + marker
-        
+
     log.debug("get LINKS: " + req)
     params = {}
     if bucket:
@@ -85,23 +85,23 @@ async def GET_Links(request):
 
     # mix in collection key, target and hrefs
     for link in links:
-        if link["class"] == "H5L_TYPE_HARD": 
+        if link["class"] == "H5L_TYPE_HARD":
             collection_name = getCollectionForId(link["id"])
             link["collection"] = collection_name
             target_uri = '/' + collection_name + '/' + link["id"]
             link["target"] = getHref(request, target_uri)
         link_uri = '/groups/' + group_id + '/links/' + link['title']
         link["href"] = getHref(request, link_uri)
- 
+
     resp_json = {}
     resp_json["links"] = links
     hrefs = []
     group_uri = '/groups/'+group_id
     hrefs.append({'rel': 'self', 'href': getHref(request, group_uri+'/links')})
-    hrefs.append({'rel': 'home', 'href': getHref(request, '/')}) 
-    hrefs.append({'rel': 'owner', 'href': getHref(request, group_uri)})     
+    hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
+    hrefs.append({'rel': 'owner', 'href': getHref(request, group_uri)})
     resp_json["hrefs"] = hrefs
- 
+
     resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
     return resp
@@ -109,7 +109,7 @@ async def GET_Links(request):
 async def GET_Link(request):
     """HTTP method to return JSON for a group link"""
     log.request(request)
-    app = request.app 
+    app = request.app
 
     group_id = request.match_info.get('id')
     if not group_id:
@@ -128,7 +128,7 @@ async def GET_Link(request):
         username = "default"
     else:
         await validateUserPassword(app, username, pswd)
-    
+
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
         msg = f"Invalid domain: {domain}"
@@ -136,7 +136,7 @@ async def GET_Link(request):
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
     await validateAction(app, domain, group_id, username, "read")
-    
+
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id + "/links/" + link_title
     log.debug("get LINK: " + req)
@@ -144,7 +144,7 @@ async def GET_Link(request):
     if bucket:
         params["bucket"] = bucket
     link_json = await http_get(app, req, params=params)
-    log.debug("got link_json: " + str(link_json)) 
+    log.debug("got link_json: " + str(link_json))
     resp_link = {}
     resp_link["title"] = link_title
     link_class = link_json["class"]
@@ -163,19 +163,19 @@ async def GET_Link(request):
     resp_json["link"] = resp_link
     resp_json["created"] = link_json["created"]
     # links don't get modified, so use created timestamp as lastModified
-    resp_json["lastModified"] = link_json["created"]  
+    resp_json["lastModified"] = link_json["created"]
 
     hrefs = []
     group_uri = '/groups/'+group_id
     hrefs.append({'rel': 'self', 'href': getHref(request, group_uri+'/links/'+link_title)})
-    hrefs.append({'rel': 'home', 'href': getHref(request, '/')}) 
+    hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
     hrefs.append({'rel': 'owner', 'href': getHref(request, group_uri)})
     if link_json["class"] == "H5L_TYPE_HARD":
         target = '/' + resp_link["collection"] + '/' + resp_link["id"]
         hrefs.append({'rel': 'target', 'href': getHref(request, target)})
-     
+
     resp_json["hrefs"] = hrefs
-    
+
     resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
     return resp
@@ -208,7 +208,7 @@ async def PUT_Link(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    body = await request.json()   
+    body = await request.json()
 
     link_json = {}
     if "id" in body:
@@ -240,7 +240,7 @@ async def PUT_Link(request):
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
     await validateAction(app, domain, group_id, username, "create")
-    
+
 
     # for hard links, verify that the referenced id exists and is in this domain
     if "id" in body:
@@ -264,7 +264,7 @@ async def PUT_Link(request):
 
     hrefs = []  # TBD
     req_rsp = { "hrefs": hrefs }
-    # link creation successful     
+    # link creation successful
     resp = await jsonResponse(request, req_rsp, status=201)
     log.response(request, resp=resp)
     return resp
@@ -272,7 +272,7 @@ async def PUT_Link(request):
 async def DELETE_Link(request):
     """HTTP method to delete a link"""
     log.request(request)
-    app = request.app 
+    app = request.app
 
     group_id = request.match_info.get('id')
     if not group_id:
@@ -288,7 +288,7 @@ async def DELETE_Link(request):
 
     username, pswd = getUserPasswordFromRequest(request)
     await validateUserPassword(app, username, pswd)
-    
+
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
         msg = f"domain: {domain}"
@@ -304,7 +304,7 @@ async def DELETE_Link(request):
     if bucket:
         params["bucket"] = bucket
     rsp_json = await http_delete(app, req, params=params)
-    
+
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp

@@ -12,7 +12,7 @@
 #
 # httpUtil:
 # http-related helper functions
-# 
+#
 from asyncio import CancelledError
 from aiohttp.web import json_response
 from aiohttp import  ClientSession, TCPConnector
@@ -39,9 +39,9 @@ def get_http_client(app):
     """ get http client """
     if "client" in app:
         return app["client"]
-    
+
     # first time call, create client interface
-    # use shared client so that all client requests 
+    # use shared client so that all client requests
     #   will share the same connection pool
     if "loop" not in app:
         raise KeyError("loop not initialized")
@@ -81,7 +81,7 @@ async def request_read(request) -> bytes:
 
 """
 Helper function  - async HTTP GET
-""" 
+"""
 async def http_get(app, url, params=None, format="json"):
     log.info("http_get('{}')".format(url))
     client = get_http_client(app)
@@ -106,7 +106,7 @@ async def http_get(app, url, params=None, format="json"):
     except CancelledError as cle:
         log.error("CancelledError for http_get({}): {}".format(url, str(cle)))
         raise HTTPInternalServerError()
-    
+
     if status_code == 403:
         log.warn(f"Forbiden to access {url}")
         raise HTTPForbidden()
@@ -121,19 +121,19 @@ async def http_get(app, url, params=None, format="json"):
         raise HTTPServiceUnavailable()
     elif status_code != 200:
         log.error(f"Error for http_get_json({url}): {status_code}")
-        raise HTTPInternalServerError() 
+        raise HTTPInternalServerError()
 
     return data
 
 """
 Helper function  - async HTTP POST
-""" 
+"""
 async def http_post(app, url, data=None, params=None):
     log.info("http_post('{}', data)".format(url, data))
     client = get_http_client(app)
     rsp_json = None
     timeout = config.get("timeout")
-    
+
     try:
         async with client.post(url, json=data, params=params, timeout=timeout ) as rsp:
             log.info("http_post status: {}".format(rsp.status))
@@ -152,7 +152,7 @@ async def http_post(app, url, data=None, params=None):
                 raise HTTPServiceUnavailable()
 
             else:
-                log.warn(f"POST request error for url: {url} - status: {rsp.status}")  
+                log.warn(f"POST request error for url: {url} - status: {rsp.status}")
                 raise HTTPInternalServerError()
             rsp_json = await rsp.json()
             log.debug("http_post({}) response: {}".format(url, rsp_json))
@@ -166,13 +166,13 @@ async def http_post(app, url, data=None, params=None):
 
 """
 Helper function  - async HTTP PUT for json data
-""" 
+"""
 async def http_put(app, url, data=None, params=None):
     log.info("http_put('{}', data: {})".format(url, data))
     rsp = None
     client = get_http_client(app)
     timeout = config.get("timeout")
-      
+
     try:
         async with client.put(url, json=data, params=params, timeout=timeout) as rsp:
             log.info("http_put status: {}".format(rsp.status))
@@ -203,14 +203,14 @@ async def http_put(app, url, data=None, params=None):
 
 """
 Helper function  - async HTTP PUT for binary data
-""" 
+"""
 
 async def http_put_binary(app, url, data=None, params=None):
     log.info("http_put_binary('{}') nbytes: {}".format(url, len(data)))
     rsp_json = None
     client = get_http_client(app)
     timeout = config.get("timeout")
-    
+
     try:
         async with client.put(url, data=data, params=params, timeout=timeout) as rsp:
             log.info(f"http_put_binary status: {rsp.status}")
@@ -233,7 +233,7 @@ async def http_put_binary(app, url, data=None, params=None):
 
 """
 Helper function  - async HTTP DELETE
-""" 
+"""
 async def http_delete(app, url, data=None, params=None):
     # TBD - do we really need a data param?
     log.info(f"http_delete('{url}')")
@@ -241,7 +241,7 @@ async def http_delete(app, url, data=None, params=None):
     rsp_json = None
     timeout = config.get("timeout")
     import aiohttp
-    
+
     try:
         async with aiohttp.ClientSession() as session:
             async with session.delete(url, json=data, params=params, timeout=timeout) as rsp:
@@ -272,7 +272,7 @@ async def http_delete(app, url, data=None, params=None):
     return rsp_json
 
 """
-Helper funciton, create a response object using the provided 
+Helper funciton, create a response object using the provided
 JSON data
 """
 async def jsonResponse(request, data, status=200):
@@ -282,7 +282,7 @@ async def jsonResponse(request, data, status=200):
         headers['Access-Control-Allow-Origin'] = CORS_DOMAIN
         headers['Access-Control-Allow-Methods'] = "GET, POST, DELETE, PUT, OPTIONS"
         headers['Access-Control-Allow-Headers'] = "Content-Type, api_key, Authorization"
-    resp = json_response(data, headers=headers, status=status) 
+    resp = json_response(data, headers=headers, status=status)
 
     return resp
 
@@ -293,7 +293,7 @@ def getHref(request, uri, query=None, domain=None):
     params = request.rel_url.query
     href = config.get("hsds_endpoint")
     if not href:
-        href = request.scheme + "://127.0.0.1"   
+        href = request.scheme + "://127.0.0.1"
     href += uri
     delimiter = '?'
     if domain:
@@ -305,7 +305,7 @@ def getHref(request, uri, query=None, domain=None):
     elif "host" in params:
         href  += "?host=" + params["host"]
         delimiter = '&'
-            
+
     if query is not None:
         if type(query) is str:
             href += delimiter + query
@@ -317,7 +317,7 @@ def getHref(request, uri, query=None, domain=None):
     return href
 
 """
-Get requested content type.  Returns either "binary" if the accept header is 
+Get requested content type.  Returns either "binary" if the accept header is
 octet stream, otherwise json.
 Currently does not support q fields.
 """

@@ -11,7 +11,7 @@
 ##############################################################################
 #
 # common node methods of hsds cluster
-# 
+#
 import asyncio
 import time
 import psutil
@@ -40,7 +40,7 @@ def getVersion():
 
 def getHeadUrl(app):
     head_url = None
-    
+
     if head_url in app:
         head_url = app["head_url"]
     elif config.get("head_endpoint"):
@@ -60,12 +60,12 @@ async def register(app):
         return
     req_reg = head_url + "/register"
     log.info("register: {}".format(req_reg))
-   
+
     body = {"id": app["id"], "port": app["node_port"], "node_type": app["node_type"]}
     app['register_time'] = int(time.time())
     try:
         log.debug("register req: {} body: {}".format(req_reg, body))
-        rsp_json = await http_post(app, req_reg, data=body)     
+        rsp_json = await http_post(app, req_reg, data=body)
         if rsp_json is not None:
             log.debug("register response: {}".format(rsp_json))
             app["node_number"] = rsp_json["node_number"]
@@ -86,33 +86,33 @@ async def get_info(app, url):
         if "node" not in rsp_json:
             log.error("Unexpected response from node")
             return None
-                
+
     except OSError as ose:
         log.warn("OSError for req: {}: {}".format(req, str(ose)))
         return None
-                
+
     except HTTPInternalServerError as hpe:
         log.warn(f"HTTPInternalServerError for req {req}: {hpe}")
         # node has gone away?
         return None
-    
+
     except HTTPNotFound as nfe:
         log.warn(f"HTTPNotFound error for req {req}: {nfe}")
         # node has gone away?
         return None
-               
+
     except TimeoutError as toe:
         log.warn("Timeout error for req: {}: {}".format(req, str(toe)))
         # node has gone away?
         return None
     return rsp_json
-                 
+
 
 async def oio_register(app):
-    """ register with oio conscience 
+    """ register with oio conscience
     """
     log.info("oio_register")
-    
+
     oio_proxy = app["oio_proxy"]
     host_ip = app["host_ip"]
     if not host_ip:
@@ -124,7 +124,7 @@ async def oio_register(app):
         return
     service_name = "hdf" + node_type
     req = oio_proxy + "/v3.0/OPENIO/conscience/register"
-    
+
     body = {
         "addr": host_ip + ":" + str(app["node_port"]),
         "tags": { "stat.cpu": 100, "tag.up": True},
@@ -314,7 +314,7 @@ async def k8s_register(app):
             if "node" not in info_rsp:
                 log.error("expecteed to find node key in info resp")
                 continue
-      
+
             node_rsp = info_rsp["node"]
             log.debug(f"got info resp: {node_rsp}")
             for key in ("type", "id", "node_number", "node_count"):
@@ -352,12 +352,12 @@ async def k8s_register(app):
         if app["node_state"] == "READY":
             log.info("setting node state to INITIALIZING")
             app["node_state"] = "INITIALIZING"
-        
+
 
 async def healthCheck(app):
-    """ Periodic method that either registers with headnode (if state in INITIALIZING) or 
+    """ Periodic method that either registers with headnode (if state in INITIALIZING) or
     calls headnode to verify vitals about this node (otherwise)"""
-    
+
     # let the server event loop startup before sarting the health check
     await asyncio.sleep(1)
     log.info("health check start")
@@ -369,7 +369,7 @@ async def healthCheck(app):
             # for OIO post registration request every time interval
             await oio_register(app)
         elif "is_k8s" in app:
-            await k8s_register(app) 
+            await k8s_register(app)
 
         elif app["node_state"] == "INITIALIZING" or (app["node_state"] == "WAITING" and app["node_number"] < 0):
             # startup docker registration
@@ -398,7 +398,7 @@ async def healthCheck(app):
                     for node in rsp_json["nodes"]:
                         if node["node_type"] == app["node_type"] and node["node_number"] == app["node_number"]:
                             # this should be this node
-                           
+
                             if node["id"] != app["id"]:
                                 # flag - to re-register
                                 log.warn("mis-match node ids, app: {} vs head: {} - re-initializing".format(node["id"], app["id"]))
@@ -424,16 +424,16 @@ async def healthCheck(app):
                             log.error("Unexpected node_type for node: {}".format(node))
                     app["sn_urls"] = sn_urls
                     app["dn_urls"] = dn_urls
-                     
+
                     if this_node is None  and rsp_json["cluster_state"] != "READY":
                         log.warn("this node not found, re-initialize")
                         app["node_state"] == "INITIALIZING"
                         app["node_number"] = -1
-                        
+
                     if app["node_state"] == "WAITING" and rsp_json["cluster_state"] == "READY" and app["node_number"] >= 0:
                         log.info("setting node_state to READY, node_number: {}".format(app["node_number"]))
                         app["node_state"]  = "READY"
-                    log.info("health check ok") 
+                    log.info("health check ok")
             except ClientError as ce:
                 log.warn(f"ClientError: {ce} for health check")
             except HTTPInternalServerError as he:
@@ -446,27 +446,27 @@ async def healthCheck(app):
         svmem = psutil.virtual_memory()
         num_tasks = len(asyncio.Task.all_tasks())
         active_tasks = len([task for task in asyncio.Task.all_tasks() if not task.done()])
-        log.debug(f"health check sleep: {sleep_secs}, vm: {svmem.percent} num tasks: {num_tasks} active tasks: {active_tasks}") 
+        log.debug(f"health check sleep: {sleep_secs}, vm: {svmem.percent} num tasks: {num_tasks} active tasks: {active_tasks}")
         await asyncio.sleep(sleep_secs)
 
 async def about(request):
     """ HTTP Method to return general info about the service """
-    log.request(request) 
-    
+    log.request(request)
+
     app = request.app
     (username, pswd) = getUserPasswordFromRequest(request)
     if username:
         await validateUserPassword(app, username, pswd)
     answer = {}
-    answer['start_time'] =  app["start_time"] 
-    answer['state'] = app['node_state'] 
+    answer['start_time'] =  app["start_time"]
+    answer['state'] = app['node_state']
     answer["hsds_version"] = getVersion()
     answer["name"] = config.get("server_name")
-    answer["greeting"] = config.get("greeting")  
-    answer["about"] = config.get("about") 
-    answer["node_count"] = app["node_count"] 
-    
-    resp = await jsonResponse(request, answer) 
+    answer["greeting"] = config.get("greeting")
+    answer["about"] = config.get("about")
+    answer["node_count"] = app["node_count"]
+
+    resp = await jsonResponse(request, answer)
     log.response(request, resp=resp)
     return resp
 
@@ -480,10 +480,10 @@ async def info(request):
     node['id'] = request.app['id']
     node['type'] = request.app['node_type']
     node['start_time'] =  app["start_time"] #unixTimeToUTC(app['start_time'])
-    node['state'] = app['node_state'] 
+    node['state'] = app['node_state']
     node['node_number'] = app['node_number']
     node['node_count'] = app['node_count']
-    
+
     answer["node"] = node
     # psutil info
     # see: http://pythonhosted.org/psutil/ for description of different fields
@@ -559,8 +559,8 @@ async def info(request):
         dc_stats["mem_used"] = dc.memUsed
         dc_stats["mem_target"] = dc.memTarget
     answer["domain_cache_stats"] = dc_stats
-        
-    resp = await jsonResponse(request, answer) 
+
+    resp = await jsonResponse(request, answer)
     log.response(request, resp=resp)
     return resp
 
@@ -570,7 +570,7 @@ def baseInit(loop, node_type):
     log.info("Application baseInit")
     app = Application(loop=loop)
 
-    # set a bunch of global state 
+    # set a bunch of global state
     node_id = createNodeId(node_type)
     app["id"] = node_id
     app["node_state"] = "INITIALIZING"
@@ -603,7 +603,7 @@ def baseInit(loop, node_type):
     counter["WARN"] = 0
     counter["ERROR"] = 0
     app["log_count"] = counter
- 
+
     if config.get("oio_proxy"):
         app["oio_proxy"] = config.get("oio_proxy")
     if config.get("host_ip"):
@@ -616,7 +616,7 @@ def baseInit(loop, node_type):
     if config.get("KUBERNETES_SERVICE_HOST"):
         log.info("running in kubernetes")
         app["is_k8s"] = True
-    
+
     log.app = app
     # save session object
     session = get_session(loop=loop)
@@ -625,5 +625,5 @@ def baseInit(loop, node_type):
 
     app.router.add_get('/info', info)
     app.router.add_get('/about', about)
-      
+
     return app
