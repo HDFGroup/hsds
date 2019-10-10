@@ -613,6 +613,7 @@ async def getChunkInfoMap(app, dset_id, dset_json, chunk_ids, bucket=None):
         chunktable_json = await getObjectJson(app, chunktable_id, bucket=bucket, refresh=False)
         log.debug(f"chunktable_json: {chunktable_json}")
         chunktable_dims = getShapeDims(chunktable_json["shape"])
+        # TBD: verify chunktable type
 
         if len(chunktable_dims) != rank:
             msg = "Rank of chunktable should be same as the dataset"
@@ -637,13 +638,29 @@ async def getChunkInfoMap(app, dset_id, dset_json, chunk_ids, bucket=None):
         log.debug(f"got chunktable points: {arr_points}, calling getPointData")
         point_data = await getPointData(app, chunktable_id, chunktable_json, arr_points, bucket=bucket)
         log.debug(f"got chunktable data: {point_data}")
-        s3path = layout["file_uri"]
+        if "file_uri" in layout:
+            s3_layout_path = layout["file_uri"]
+        else:
+            s3_layout_path = None
 
         for i in range(len(chunk_ids)):
             chunk_id = chunk_ids[i]
             item = point_data[i]
+            log.debug(f"got item: {item}")
             s3offset = int(item[0])
             s3size = int(item[1])
+            if s3_layout_path is None:
+                if len(item) < 3:
+                    msg = "expected chunk table to have three fields"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
+                e = item[2]
+                if e:
+                    s3path = e.decode('utf-8')
+                    log.debug(f"got s3path: {s3path}")
+            else:
+                s3path = s3_layout_path
+
             chunkinfo_map[chunk_id] = {"s3path": s3path, "s3offset": s3offset, "s3size": s3size}
     else:
         log.error(f"Unexpected chunk layout: {layout['class']}")
