@@ -12,7 +12,10 @@
 import asyncio
 import sys
 from aiobotocore import get_session
-from util.s3Util import deleteS3Obj, getS3Keys, releaseClient
+
+sys.path.append('../util')
+sys.path.append('..')
+from util.storUtil import deleteStorObj, getStorKeys
 import config
 
  
@@ -31,7 +34,7 @@ def printUsage():
 
 async def deleteAll(app):
     print("getting list of objects")
-    keys =  await getS3Keys(app)
+    keys =  await getStorKeys(app)
     print("got: {} objects".format(len(keys)))
     if len(keys) == 0:
         print("bucket is empty!")
@@ -43,7 +46,7 @@ async def deleteAll(app):
         return
 
     for key in keys:
-        await deleteS3Obj(app, key)
+        await deleteStorObj(app, key)
         
     print("delete!")
    
@@ -64,7 +67,7 @@ def main():
     app["loop"] = loop
 
     loop.run_until_complete(deleteAll(app))
-    releaseClient(app)
+    #releaseClient(app)
     
     loop.close()
 
