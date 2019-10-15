@@ -1,7 +1,7 @@
 version: '2'
 services:
   head:
-    build: .
+    image: hdfgroup/hsds
     container_name: hsds_head
     restart: ${RESTART_POLICY}
     mem_limit: ${HEAD_RAM}
@@ -28,7 +28,7 @@ services:
       - proxy
 
   dn:
-    build: .
+    image: hdfgroup/hsds
     restart: ${RESTART_POLICY}
     mem_limit: ${DN_RAM}
     environment:
@@ -44,7 +44,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL}
       - CHUNK_MEM_CACHE_SIZE=${CHUNK_MEM_CACHE_SIZE}
       - MAX_CHUNK_SIZE=${MAX_CHUNK_SIZE}
-  
+
     ports:
       - ${DN_PORT}
     logging:
@@ -54,7 +54,7 @@ services:
     depends_on:
       - head
   sn:
-    build: .
+    image: hdfgroup/hsds
     restart: ${RESTART_POLICY}
     mem_limit: ${SN_RAM}
     environment:
@@ -80,7 +80,7 @@ services:
       - PASSWORD_SALT=${PASSWORD_SALT}
       - GREETING=${GREETING}
       - ABOUT=${ABOUT}
-    
+
     ports:
       - ${SN_PORT}
     logging:

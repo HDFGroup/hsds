@@ -9,8 +9,8 @@ if [ $# -gt 0 ]; then
         echo "no pyflakes"
         run_pyflakes=
     fi
-fi 
-  
+fi
+
 if [ $run_pyflakes ]; then
     echo "running pyflakes on hsds"
     if [ $(./pyflakes.sh -count hsds) -ge 1 ]; then
@@ -28,7 +28,7 @@ if [ $run_pyflakes ]; then
 fi
 
 echo "clean stopped containers"
-docker rm -v $(docker ps -aq -f status=exited) 
+docker rm -v $(docker ps -aq -f status=exited)
 
 echo "building docker image"
-docker-compose build  
+docker build -t hdfgroup/hsds .

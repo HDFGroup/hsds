@@ -12,7 +12,7 @@ Export environment variables as shown in "Sample .bashrc" below.
 5. Copy the file "passwd.default" to "passwd.txt".  Add any usernames/passwords you wish
 6. Add the DNS for the service to the /etc/hosts file.  E.g. `127.0.0.1  hsds.hdf.test` (can use any valid DNS name) if you running containers directly on the host, or `192.168.99.100  hsds.hdf.test` if using docker machine (use `docker-machine ip` to get the IP address)
 7. Create enviroment variables as in "Sample .bashrc" below
-8. From hsds directory, build docker image:  `$ docker-compose build`
+8. From hsds directory, build docker image:  `$ docker build -t hdfgroup/hsds .`
 9. Start the service `$./runall.sh <n>` where n is the number of containers desired (defaults to 1)
 10. Run `$ docker ps` and verify that the containers are running: hsds_head, hsds_async, hsds_sn_[1-n], hsds_dn_[1-n]
 11. Go to http://hsds.hdf.test/about and verify that "cluster_state" is "READY" (might need to give it a minute or two)

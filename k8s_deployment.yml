@@ -1,39 +1,39 @@
 apiVersion: apps/v1
 kind: Deployment
-metadata: 
-  labels: 
+metadata:
+  labels:
     app: hsds
   name: hsds
-spec: 
+spec:
   replicas: 1
-  selector: 
-    matchLabels: 
+  selector:
+    matchLabels:
       app: hsds
-  template: 
-    metadata: 
-      labels: 
+  template:
+    metadata:
+      labels:
         app: hsds
-    spec: 
-      containers: 
-        - 
+    spec:
+      containers:
+        -
           name: sn
           image: "hsds"
           imagePullPolicy: Never
-          ports: 
-            - 
+          ports:
+            -
               containerPort: 5101
           env:
           - name: NODE_TYPE
             value: sn
           - name: AWS_S3_GATEWAY
             value: http://s3.amazonaws.com
-          - name: AWS_ACCESS_KEY_ID 
-            valueFrom: 
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
               secretKeyRef:
                 name: aws-auth-keys
                 key: aws_access_key_id
           - name: AWS_SECRET_ACCESS_KEY
-            valueFrom: 
+            valueFrom:
               secretKeyRef:
                 name: aws-auth-keys
                 key: aws_secret_access_key
@@ -51,25 +51,25 @@ spec:
             value: "Welcome to HSDS!"
           - name: ABOUT
             value: "HSDS is a webservice for HDF data"
-        - 
+        -
           name: dn
           image: "hsds"
-          imagePullPolicy: Never 
-          ports: 
-            - 
+          imagePullPolicy: Never
+          ports:
+            -
               containerPort: 6101
           env:
           - name: NODE_TYPE
             value: dn
           - name: AWS_S3_GATEWAY
             value: http://s3.amazonaws.com
-          - name: AWS_ACCESS_KEY_ID 
-            valueFrom: 
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
               secretKeyRef:
                 name: aws-auth-keys
                 key: aws_access_key_id
           - name: AWS_SECRET_ACCESS_KEY
-            valueFrom: 
+            valueFrom:
               secretKeyRef:
                 name: aws-auth-keys
                 key: aws_secret_access_key
