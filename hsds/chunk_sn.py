@@ -191,7 +191,7 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_m
                     if "s3path" in params:
                         s3path = params["s3path"]
                         # external HDF5 file, should exist
-                        log.warn(f"s3path: {s3path} for S3 range get found")
+                        log.warn(f"s3path: {s3path} for S3 range get not found")
                         raise HTTPNotFound()
                     # no data, return zero array
                     chunk_arr = defaultChunk()
@@ -528,7 +528,7 @@ async def getPointData(app, dset_id, dset_json, points, bucket=None):
 
     # Get information about where chunks are located
     #   Will be None except for H5D_CHUNKED_REF_INDIRECT type
-    chunk_map = await getChunkInfoMap(app, dset_id, dset_json, list(chunk_dict))
+    chunk_map = await getChunkInfoMap(app, dset_id, dset_json, list(chunk_dict), bucket=bucket)
     log.debug(f"chunkinfo_map: {chunk_map}")
 
     # create array to hold response data
@@ -564,7 +564,7 @@ async def getChunkInfoMap(app, dset_id, dset_json, chunk_ids, bucket=None):
         raise HTTPInternalServerError()
     dims = getShapeDims(datashape)
     rank = len(dims)
-    log.debug(f"getChunkInfoMap for dset: {dset_id} rank: {rank} num chunk_ids: {len(chunk_ids)}")
+    log.debug(f"getChunkInfoMap for dset: {dset_id} bucket: {bucket} rank: {rank} num chunk_ids: {len(chunk_ids)}")
     chunkinfo_map = {}
 
     if layout["class"] == 'H5D_CONTIGUOUS_REF':
@@ -1414,7 +1414,7 @@ async def GET_Value(request):
     chunk_ids = getChunkIds(dset_id, slices, layout)
     # Get information about where chunks are located
     #   Will be None except for H5D_CHUNKED_REF_INDIRECT type
-    chunkinfo = await getChunkInfoMap(app, dset_id, dset_json, chunk_ids)
+    chunkinfo = await getChunkInfoMap(app, dset_id, dset_json, chunk_ids, bucket=bucket)
     log.debug(f"chunkinfo_map: {chunkinfo}")
 
 
