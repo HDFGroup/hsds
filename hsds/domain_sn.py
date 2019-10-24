@@ -361,8 +361,6 @@ async def get_domains(request):
     else:
         verbose = False
 
-    verbose = False  # test
-
     log.info(f"get_domains for: {prefix} verbose: {verbose}")
 
     if not prefix.startswith('/'):

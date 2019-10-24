@@ -1008,8 +1008,75 @@ class DomainTest(unittest.TestCase):
         domains = rspJson["domains"]
         self.assertEqual(len(domains), 0)
 
+    def testGetDomainsVerbose(self):
+        domain = helper.getTestDomain("tall.h5")
+        folder = domain[:-(len("/tall.h5"))]  # get the folder path
+        print("testGetDomainsVerbose", domain)
+        headers = helper.getRequestHeaders(domain=folder)
+
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        if rsp.status_code != 200:
+            print(f"WARNING: Failed to get domain: {folder}. Is test data setup?")
+            return  # abort rest of test
+        self.assertEqual(rsp.headers['content-type'], 'application/json; charset=utf-8')
+        rspJson = json.loads(rsp.text)
+
+        for name in ("lastModified", "created", "hrefs", "owner", "class"):
+            self.assertTrue(name in rspJson)
+        now = time.time()
+        self.assertTrue(rspJson["created"] < now - 10)
+        self.assertTrue(rspJson["lastModified"] < now - 10)
+        self.assertEqual(len(rspJson["hrefs"]), 3)
+        self.assertTrue(rspJson["owner"])
+        self.assertEqual(rspJson["class"], "folder")
+
+        # get dommains in folder
+        req = helper.getEndpoint() + '/domains'
+        params = {"domain": folder+'/', "verbose": 1}
+        if config.get("bucket_name"):
+            params["bucket"] = config.get("bucket_name")
+
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("domains" in rspJson)
+        domains = rspJson["domains"]
+
+        domain_count = len(domains)
+        if domain_count == 0:
+            # this should only happen in the very first test run
+            print("Expected to find more domains!")
+            self.assertTrue(False)
+            return
+        tall_item = None
+        for item in domains:
+            self.assertTrue("name" in item)
+            name = item["name"]
+            self.assertTrue(name.startswith(folder))
+            self.assertTrue(name[-1] != '/')
+            self.assertTrue("owner" in item)
+            self.assertTrue("created" in item)
+            self.assertTrue("lastModified" in item)
+            self.assertFalse("size" in item)
+            self.assertTrue("class") in item
+            self.assertTrue(item["class"] in ("domain", "folder"))
+            if name.endswith("tall.h5"):
+                tall_item = item
+        if not tall_item:
+            print("WARNING: Failed to get domain. Is test data setup?")
+            return  # abort rest of test
+        self.assertEqual(tall_item["class"], "domain")
+        self.assertTrue("num_objects" in tall_item)
+        self.assertEqual(tall_item["num_objects"], 14)
+        self.assertTrue("allocated_bytes" in tall_item)
+        self.assertEqual(tall_item["allocated_bytes"], 580)
+        self.assertTrue("total_size" in tall_item)
+        self.assertTrue(tall_item["total_size"] > 5000)
+
     def testGetTopLevelDomains(self):
-        print("testGetDomains", self.base_domain)
+        print("testGetTopLevelDomains", self.base_domain)
 
         import os.path as op
         # Either '/' or no domain should get same result
