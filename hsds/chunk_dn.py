@@ -153,9 +153,7 @@ async def getChunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset=
                     del pending_s3_read[chunk_id]
                 else:
                     log.warn(f"expected to find {chunk_id} in pending_s3_read map")
-
-                chunk_arr = np.fromstring(chunk_bytes, dtype=dt)
-                chunk_arr = chunk_arr.reshape(dims)
+                chunk_arr = bytesToArray(chunk_bytes, dt, dims)
 
             log.debug(f"chunk size: {chunk_arr.size}")
 
