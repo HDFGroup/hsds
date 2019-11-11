@@ -112,7 +112,7 @@ services:
     - NGINX_DOCKER_GEN_CONTAINER=hsds_gen
     volumes:
     - "/var/run/docker.sock:/var/run/docker.sock:ro"
-    volumes_from: 
+    volumes_from:
     - proxy
     depends_on:
     - proxy
