@@ -327,9 +327,10 @@ async def k8s_register(app):
             node_id = node_rsp["id"]
             if node_id == this_node_id:
                 # set node_number and node_count
+                log.debug("got info_rsp for this node")
                 if app["node_number"] != node_number:
                     old_number = app["node_number"]
-                    # TBD - invalidate cache state for dn nodes
+                    log.info(f"node_number has changed - old value was {old_number} new number is {node_number}")
                     if app["node_type"] == "dn":
                         meta_cache = app["meta_cache"]
                         chunk_cache = app["chunk_cache"]
@@ -355,6 +356,11 @@ async def k8s_register(app):
                     app["node_count"] = node_count
             if node_number == node_rsp["node_number"] and node_count == node_rsp["node_count"]:
                 ready_count += 1
+                log.debug(f"incremented ready_count to {ready_count}")
+            else:
+                log.info(f"differing node_number/node_count for url: {url}")
+                log.info(f"expected node_number: {node_number} actual: {node_rsp['node_number']}")
+                log.info(f"expected node_count: {node_count} actual: {node_rsp['node_count']}")
 
     if ready_count == node_count*2:
         if app["node_state"] != "READY":
@@ -364,7 +370,7 @@ async def k8s_register(app):
         app["sn_urls"] = sn_urls
         app["dn_urls"] = dn_urls
     else:
-        log.info(f"ready_count: {ready_count}/{node_count}")
+        log.info(f"not all pods ready - ready_count: {ready_count}/{node_count*2}")
         if app["node_state"] == "READY":
             log.info("setting node state to INITIALIZING")
             app["node_state"] = "INITIALIZING"
@@ -441,7 +447,7 @@ async def healthCheck(app):
                     app["sn_urls"] = sn_urls
                     app["dn_urls"] = dn_urls
 
-                    if this_node is None  and rsp_json["cluster_state"] != "READY":
+                    if this_node is None and rsp_json["cluster_state"] != "READY":
                         log.warn("this node not found, re-initialize")
                         app["node_state"] == "INITIALIZING"
                         app["node_number"] = -1
