@@ -312,7 +312,7 @@ async def k8s_register(app):
                 # timeout or other failure
                 continue
             if "node" not in info_rsp:
-                log.error("expecteed to find node key in info resp")
+                log.error("expected to find node key in info resp")
                 continue
 
             node_rsp = info_rsp["node"]
@@ -322,7 +322,7 @@ async def k8s_register(app):
                     log.error(f"unexpected node type in node state, expected to find key: {key}")
                     continue
             if node_rsp["type"] not in ("sn", "dn"):
-                log.error(f"expecteed node_type to be sn or dn")
+                log.error(f"expected node_type to be sn or dn")
                 continue
             node_id = node_rsp["id"]
             if node_id == this_node_id:
@@ -330,9 +330,25 @@ async def k8s_register(app):
                 if app["node_number"] != node_number:
                     old_number = app["node_number"]
                     # TBD - invalidate cache state for dn nodes
-                    log.info(f"node number was: {old_number} setting to: {node_number}")
-                    app["node_number"] = node_number
-                    app['register_time'] = time.time()
+                    if app["node_type"] == "dn":
+                        meta_cache = app["meta_cache"]
+                        chunk_cache = app["chunk_cache"]
+                        if meta_cache.dirtyCount > 0 or chunk_cache.dirtyCount > 0:
+                            # set the node state to waiting till the chunk cache have been flushed
+                            if app["node_state"] == "READY":
+                                log.info("setting node_state to waiting while cache is flushing")
+                                app["node_state"] = "WAITING"
+                        else:
+                            meta_cache.clearCache()
+                            chunk_cache.clearCache()
+                            log.info(f"node number was: {old_number} setting to: {node_number}")
+                            app["node_number"] = node_number
+                            app['register_time'] = time.time()
+                    else:
+                        # SN nodes can update node_number immediately
+                        log.info(f"node number was: {old_number} setting to: {node_number}")
+                        app["node_number"] = node_number
+                        app['register_time'] = time.time()
                 if app["node_count"] != node_count:
                     old_count = app["node_count"]
                     log.info(f"node count was: {old_count} setting to: {node_count}")
@@ -448,6 +464,18 @@ async def healthCheck(app):
         active_tasks = len([task for task in asyncio.Task.all_tasks() if not task.done()])
         log.debug(f"health check sleep: {sleep_secs}, vm: {svmem.percent} num tasks: {num_tasks} active tasks: {active_tasks}")
         await asyncio.sleep(sleep_secs)
+
+async def preStop(request):
+    """ HTTP Method used by K8s to signal the container is shutting down """
+
+    log.request(request)
+    app = request.app
+    app["node_state"] = "TERMINATING"
+    log.warn("preStop request setting node_state to TERMINATING")
+
+    resp = await jsonResponse(request, {})
+    log.response(request, resp=resp)
+    return resp
 
 async def about(request):
     """ HTTP Method to return general info about the service """

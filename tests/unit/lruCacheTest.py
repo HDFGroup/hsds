@@ -161,6 +161,32 @@ class LruCacheTest(unittest.TestCase):
         self.assertEqual(cc._lru_tail, None)
         cc.consistencyCheck()
 
+    def testClearCache(self):
+        """ Check LRU clear logic """
+        cc = LruCache(mem_target=1024*1024*1024) # big enough that there shouldn't be any cleanup
+        self.assertEqual(len(cc), 0)
+        ids = []
+        # add chunks to the cache
+        for i in range(10):
+            id = createObjId("chunks")
+            ids.append(id)
+            arr = np.empty((16, 16), dtype='i4')  # 1024 bytes
+            arr[...] = i
+            cc[id] = arr
+        for id in cc:
+            self.assertTrue(id.startswith("c-"))
+            self.assertTrue(id in ids)
+        self.assertEqual(len(cc), 10)
+        self.assertEqual(cc._lru_head._id, ids[-1])
+        self.assertEqual(cc._lru_tail._id, ids[0])
+        self.assertEqual(cc.dirtyCount, 0)
+        cc.consistencyCheck()
+
+        cc.clearCache()
+        self.assertEqual(len(cc), 0)
+
+        cc.consistencyCheck()
+
 
     def testMemUtil(self):
         """ Test memory usage tracks target """

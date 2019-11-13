@@ -54,6 +54,10 @@ spec:
         -
           name: dn
           image: "hsds"
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/usr/bin/curl", "-X", "DELETE", "http://127.0.0.1:6101/prestop"]
           imagePullPolicy: Never
           ports:
             -

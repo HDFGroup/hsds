@@ -59,6 +59,10 @@ def request(req):
 	else:
 		print("REQ> {}: {} [{}]".format(req.method, req.path, domain))
 	if app:
+		node_state = app["node_state"]
+		if node_state != "READY":
+			print(f"WARN: returning 503 - node_state: {node_state}")
+			raise HTTPServiceUnavailable()
 		counter = app["req_count"]
 		if req.method in ("GET", "POST", "PUT", "DELETE"):
 			counter[req.method] += 1

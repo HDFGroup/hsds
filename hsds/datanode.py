@@ -18,7 +18,7 @@ from aiohttp.web import run_app
 import config
 from util.lruCache import LruCache
 from util.idUtil import isValidUuid, isSchema2Id, getCollectionForId, isRootObjId
-from basenode import healthCheck, baseInit
+from basenode import healthCheck, baseInit, preStop
 import hsds_logger as log
 from domain_dn import GET_Domain, PUT_Domain, DELETE_Domain, PUT_ACL
 from group_dn import GET_Group, POST_Group, DELETE_Group, PUT_Group, POST_Root
@@ -74,6 +74,7 @@ async def init(loop):
     app.router.add_route('POST', '/chunks/{id}', POST_Chunk)
     app.router.add_route('DELETE', '/chunks/{id}', DELETE_Chunk)
     app.router.add_route("POST", '/roots/{id}', POST_Root)
+    app.router.add_route("DELETE", '/prestop', preStop)
 
 
     return app
