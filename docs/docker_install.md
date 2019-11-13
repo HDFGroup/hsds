@@ -1,5 +1,3 @@
-
-
 Installation with Docker
 ========================
 
@@ -30,8 +28,7 @@ Sample .bashrc
 
 These environment variables will be passed to the Docker containers on start up.
 
-::
-
+    ```
     export AWS_ACCESS_KEY_ID=1234567890            # user your AWS account access key if using S3 (Not needed if running on EC2 and AWS_IAM_ROLE is defined)
     export AWS_SECRET_ACCESS_KEY=ABCDEFGHIJKL      # use your AWS account access secret key if using S3  (Not needed if running on EC2 and AWS_IAM_ROLE is defined)
     export BUCKET_NAME=hsds.test                   # set to the name of the bucket you will be using
@@ -40,7 +37,7 @@ These environment variables will be passed to the Docker containers on start up.
     export HSDS_ENDPOINT=http://hsds.hdf.test    # use https protocal if SSL is desired
     # For S3, set AWS_S3_GATEWAY to endpoint for the region the bucket is in.  E.g.: http://s3.amazonaws.com.
     # See http://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region for list of endpoints.
-
+    ```
 
 Docker Setup
 ------------
@@ -61,7 +58,6 @@ Run the following commands to install Docker on Linux/CentOS:
     ```
 
 Install docker-compose.  See: <https://docs.docker.com/compose/install/>
-
 
 Test Data Setup
 ---------------
