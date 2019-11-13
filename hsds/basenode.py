@@ -13,6 +13,7 @@
 # common node methods of hsds cluster
 #
 import asyncio
+from asyncio import TimeoutError
 import time
 import psutil
 from copy import copy
@@ -372,8 +373,8 @@ async def k8s_register(app):
     else:
         log.info(f"not all pods ready - ready_count: {ready_count}/{node_count*2}")
         if app["node_state"] == "READY":
-            log.info("setting node state to INITIALIZING")
-            app["node_state"] = "INITIALIZING"
+            log.info("setting node state to SCALING")
+            app["node_state"] = "SCALING"
 
 
 async def healthCheck(app):
