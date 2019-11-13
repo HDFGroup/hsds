@@ -46,7 +46,7 @@ spec:
           - name: SERVER_NAME
             value: "Highly Scalable Data Service (HSDS)"
           - name: HSDS_ENDPOINT
-            value: =http://hsds.hdf.test
+            value: http://hsds.hdf.test
           - name: GREETING
             value: "Welcome to HSDS!"
           - name: ABOUT
@@ -84,4 +84,4 @@ spec:
           - name: LOG_LEVEL
             value: DEBUG
           - name: HSDS_ENDPOINT
-            value: =http://hsds.hdf.test
+            value: http://hsds.hdf.test
