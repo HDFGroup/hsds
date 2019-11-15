@@ -92,7 +92,7 @@ For Kubernetes cluster using AWS EKS, the cluster can be configured with auto sc
 
 When enabled Cluster Autoscaling (CA) has the effect that more VMs will be launched when pods cannote be scheduled due to lack of hardware resources.  Conversely when there is exccess capacity, the cluster can be down-scaled to save cost.
 
-## 9. Horiazontal Autoscaling
+## 9. Horizontal Autoscaling
 
 Cluster Autoscaling by itself will not scale up the number of HSDS pods when either the number of clients is excessively high, or a few number of clients are triggering a significant amount of work (e.g. selection requests that span large number of chunks).  To resolve this issue we need to setup Horizontal Autoscaling (HA) that scales up or down the number of HSDS pods based on a specific criteria.
 
