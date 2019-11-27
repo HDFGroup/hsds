@@ -363,7 +363,15 @@ async def PUT_Chunk(request):
                     if replace_mask[i] is not None:
                         value[i] = replace_mask[i]
                 log.debug(f"put_query - modified value: {value}")
-                chunk_arr[index] = value
+                try:
+                    # Unclear why we sometimes get an exception here:
+                    #   ValueError: assignment destination is read-only
+                    chunk_arr[index] = value
+                except ValueError as ve:
+                    log.warn(f"got ValueError exception, making copy of array: {ve}")
+                    arr = chunk_arr.copy()
+                    chunk_arr = arr
+                    chunk_arr[index] = value
 
                 json_val = bytesArrayToList(value)
                 log.debug(f"put_query - json_value: {json_val}")
