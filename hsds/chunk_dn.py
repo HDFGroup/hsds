@@ -114,7 +114,7 @@ async def getChunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset=
         log.debug(f"Using s3path bucket: {bucket} and  s3key: {s3key}")
     else:
         s3key = getS3Key(chunk_id)
-        log.debug(f"getChunk chunkid: chunk_id bucket: {bucket}")
+        log.debug(f"getChunk chunkid: {chunk_id} bucket: {bucket}")
     if chunk_id in chunk_cache:
         chunk_arr = chunk_cache[chunk_id]
     else:
@@ -354,7 +354,7 @@ async def PUT_Chunk(request):
             count = 0
             for index in where_result_index:
                 log.debug(f"put_query - index: {index}")
-                value = x[index]
+                value = x[index].copy()
                 log.debug(f"put_query - original value: {value}")
                 for i in range(len(field_names)):
                     if replace_mask[i] is not None:
