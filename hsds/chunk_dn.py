@@ -294,6 +294,9 @@ async def PUT_Chunk(request):
         if not dt.fields:
             log.error("expected compound dtype for PUT query")
             raise HTTPInternalServerError()
+        if rank != 1:
+            log.error("expected one-dimensional array for PUT query")
+            raise HTTPInternalServerError()
         query_update = await request.json()
         log.debug(f"query_update: {query_update}")
         if "Limit" in params:
@@ -360,7 +363,7 @@ async def PUT_Chunk(request):
                     if replace_mask[i] is not None:
                         value[i] = replace_mask[i]
                 log.debug(f"put_query - modified value: {value}")
-                x[index] = value
+                chunk_arr[index] = value
 
                 json_val = bytesArrayToList(value)
                 log.debug(f"put_query - json_value: {json_val}")
