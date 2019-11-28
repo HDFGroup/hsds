@@ -387,12 +387,20 @@ async def PUT_Chunk(request):
         query_result = {}
         query_result["index"] = indices
         query_result["value"] = values
-        log.info(f"query_result retiurning: {len(indices)} rows")
+        log.info(f"query_result returning: {len(indices)} rows")
         log.debug(f"query_result: {query_result}")
         resp = json_response(query_result)
     else:
         # update chunk array
-        chunk_arr[selection] = input_arr
+        try:
+            # Unclear why we sometimes get an exception here:
+            #   ValueError: assignment destination is read-only
+            chunk_arr[selection] = input_arr
+        except ValueError as ve:
+            log.warn(f"got ValueError exception, making copy of array: {ve}")
+            arr = chunk_arr.copy()
+            chunk_arr = arr
+            chunk_arr[selection] = input_arr
         is_dirty = True
         resp = json_response({}, status=201)
 
