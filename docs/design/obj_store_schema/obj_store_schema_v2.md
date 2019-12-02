@@ -66,7 +66,7 @@ The following constraints and assumptions are given as the basis of the schema d
 2. The use of many small objects would be prohibitive from a cost perspective (API Request Pricing)
 3. The use of very large objects (e.g. >100MB) would introduce excessive latency
 4. The storage system is not read-write consistent
-5. The aggregate throughput of the storage system would not be expected to limit hsds scalability 
+5. The aggregate throughput of the storage system would not be expected to limit hsds scalability
 6. All objects managed by hsds will exist in one "bucket", the hsds service will have read-write authority for the given bucket
 7. All updates to the objects will be through the hsds service
 8. Updates to a storage object are complete (i.e. the entire object is overwritten), atomic (i.e. last writer wins), and either succeed or fail with no update to the object
@@ -77,17 +77,18 @@ The following constraints and assumptions are given as the basis of the schema d
 
 The following is a brief review of the HDF5 data model as it relates to the schema design (see the HDF5 docs for a more complete description).
 
-In the traditional HDF5 data model, object are stored in a POSIX file.  Management of objects within the file is done by the HDF5 library and is opaque to the HDF5 library client.
+HDF5 data model consist of the following primitives:
 
-HDF5 data model consist of:
-
-1. Group - an object that manages a set of attributes and links
+1. Group - an object that manages a set of attributes and links.  A designated group "root" serves as the base of the hierachy.
 2. Attribute - a "small" named data item that consist of a dataspace, type description, and data
 3. Link - a named reference to another HDF5 object (hard link for links within the file, as well as Soft and External links)
 4. Dataset - a data container that consists of a dataspace, type description, attributes, and other properties (e.g. chunk layout, fill value, compression filters, etc.)
 5. Committed Type - a sharable type object (that also has a set of attributes)
 
-This document will describe how each of these entities will be stored as an object (as well as the equivalent of an HDF5 "file")
+This document will describe how each of these entities can be stored in a format suitable for object storage systems.
+
+As traditionally used with the HDF5 library, these objects are stored within a POSIX file.
+By contrast the object storage schema stores each HDF object as an object storage object (a "sharded" representation) and includes a "domain" object serves as a stand-in for HDF5 files.
 
 The goal of the object schema is to be of sufficient fidelity that it should be possible to convert a traditional HDF5 file to a set of objects, and then convert the set of objects to a HDF5 file that is equivalent to the original file.
 
