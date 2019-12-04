@@ -451,13 +451,19 @@ def bytesToArray(data, dt, shape):
     nelements = getNumElements(shape)
     if not isVlen(dt):
         # regular numpy from string
-        #print("not vlen")
         arr = np.frombuffer(data, dtype=dt)
     else:
-        #print("is vlen")
         arr = np.zeros((nelements,), dtype=dt)
         offset = 0
         for index in range(nelements):
             offset = readElement(data, offset, arr, index, dt)
     arr = arr.reshape(shape)
+    # check that we can update the array if needed
+    # Note: this seems to have been required starting with numpuy v 1.17
+    # Setting the flag directly is not recommended. cf: https://github.com/numpy/numpy/issues/9440
+
+    if not arr.flags['WRITEABLE']:
+        arr_copy = arr.copy()
+        arr = arr_copy
+
     return arr

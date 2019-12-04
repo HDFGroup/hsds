@@ -364,14 +364,10 @@ async def PUT_Chunk(request):
                         value[i] = replace_mask[i]
                 log.debug(f"put_query - modified value: {value}")
                 try:
-                    # Unclear why we sometimes get an exception here:
-                    #   ValueError: assignment destination is read-only
                     chunk_arr[index] = value
                 except ValueError as ve:
-                    log.warn(f"got ValueError exception, making copy of array: {ve}")
-                    arr = chunk_arr.copy()
-                    chunk_arr = arr
-                    chunk_arr[index] = value
+                    log.error(f"Numpy Value updating array: {ve}")
+                    raise HTTPInternalServerError()
 
                 json_val = bytesArrayToList(value)
                 log.debug(f"put_query - json_value: {json_val}")
@@ -393,14 +389,10 @@ async def PUT_Chunk(request):
     else:
         # update chunk array
         try:
-            # Unclear why we sometimes get an exception here:
-            #   ValueError: assignment destination is read-only
             chunk_arr[selection] = input_arr
         except ValueError as ve:
-            log.warn(f"got ValueError exception, making copy of array: {ve}")
-            arr = chunk_arr.copy()
-            chunk_arr = arr
-            chunk_arr[selection] = input_arr
+            log.error(f"Numpy Value updating array: {ve}")
+            raise HTTPInternalServerError()
         is_dirty = True
         resp = json_response({}, status=201)
 
