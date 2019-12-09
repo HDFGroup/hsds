@@ -403,8 +403,10 @@ async def get_domains(request):
     # list the S3 keys for this prefix
     domainNames = []
     if prefix == "/" and config.get("top_level_domains"):
-        # search for domains from the top_level domains config
         domainNames = config.get("top_level_domains")
+        if isinstance(domainNames, str):
+            # split multiple domains by comma char
+            domainNames = domainNames.split(',') 
     else:
         s3prefix = prefix[1:]
         log.debug(f"get_domains - listing S3 keys for {s3prefix}")

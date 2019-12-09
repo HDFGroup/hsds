@@ -80,6 +80,7 @@ services:
       - PASSWORD_SALT=${PASSWORD_SALT}
       - GREETING=${GREETING}
       - ABOUT=${ABOUT}
+      - TOP_LEVEL_DOMAINS=${TOP_LEVEL_DOMAINS}
 
     ports:
       - ${SN_PORT}
