@@ -152,7 +152,7 @@ class S3Client():
             # key does not exist?
             # check for not found status
             response_code = ce.response["Error"]["Code"]
-            if response_code == "NoSuchKey":
+            if response_code == "NoSuchKey" or response_code == 404:
                 msg = f"s3_key: {key} not found "
                 log.warn(msg)
                 raise HTTPNotFound()
@@ -160,7 +160,7 @@ class S3Client():
                 msg = f"s3_bucket: {bucket} not fiound"
                 log.info(msg)
                 raise HTTPNotFound()
-            elif response_code == "AccessDenied":
+            elif response_code == "AccessDenied" or response_code in (401, 403):
                 msg = f"access denied for s3_bucket: {bucket}"
                 log.info(msg)
                 raise HTTPForbidden()
