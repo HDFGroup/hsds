@@ -446,7 +446,9 @@ async def healthCheck(app):
                         else:
                             log.error("Unexpected node_type for node: {}".format(node))
                     app["sn_urls"] = sn_urls
+                    log.info(f"sn_urls: {sn_urls}")
                     app["dn_urls"] = dn_urls
+                    log.info(f"dn_urls: {dn_urls}")
 
                     if this_node is None and rsp_json["cluster_state"] != "READY":
                         log.warn("this node not found, re-initialize")
