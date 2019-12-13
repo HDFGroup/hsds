@@ -3,9 +3,14 @@
 #
 # Shutdown HSDS with "docker-compose down" using the appropriate compose file
 #
-
-if [[ ${HSDS_ENDPOINT} == "https"* ]] ; then
-   docker-compose -f docker-compose.secure.yml down
+if [[ -z ${AWS_S3_GATEWAY}  ]]
+then
+  COMPOSE_FILE="docker-compose.openio.yml"
+elif [[ ${HSDS_USE_HTTPS} ]]
+then
+   COMPOSE_FILE="docker-compose.secure.yml"
 else
-   docker-compose down  
+   COMPOSE_FILE="docker-compose.yml"
 fi
+
+docker-compose -f ${COMPOSE_FILE} down

@@ -6,7 +6,19 @@ if [ $# -eq 1 ] && ([ $1 == "-h" ] || [ $1 == "--help" ]); then
    exit 1
 fi
 
-[ -z ${AWS_S3_GATEWAY}  ] && echo "Need to set AWS_S3_GATEWAY" && exit 1
+if [[ -z ${AWS_S3_GATEWAY}  ]]
+then
+  echo "AWS_S3_GATEWAY not set - using openio container"
+  export AWS_S3_GATEWAY="http://openio:6007"
+  COMPOSE_FILE="docker-compose.openio.yml"
+elif [[ ${HSDS_USE_HTTPS} ]]
+then
+   COMPOSE_FILE="docker-compose.secure.yml"
+else
+   COMPOSE_FILE="docker-compose.yml"
+fi
+
+echo "Using compose file: ${COMPOSE_FILE}"
 
 [ -z ${BUCKET_NAME} ] && echo "No default bucket set - did you mean to export BUCKET_NAME?"
 
@@ -19,7 +31,8 @@ if [[ -z ${PUBLIC_DNS} ]] ; then
      export PUBLIC_DNS=${HSDS_ENDPOINT:7}
   else
     echo "Invalid HSDS_ENDPOINT: ${HSDS_ENDPOINT}"  && exit 1 
-  fi 
+  fi
+
 fi
 
 if [ -z $AWS_IAM_ROLE ] ; then
@@ -33,7 +46,7 @@ if [ $# -gt 0 ]; then
 elif [ -z ${CORES} ] ; then
   export CORES=1
 fi
- 
+
 echo "AWS_S3_GATEWAY:" $AWS_S3_GATEWAY
 echo "AWS_ACCESS_KEY_ID:" $AWS_ACCESS_KEY_ID
 echo "AWS_SECRET_ACCESS_KEY: ******" 
@@ -41,11 +54,5 @@ echo "BUCKET_NAME:"  $BUCKET_NAME
 echo "CORES:" $CORES
 echo "HSDS_ENDPOINT:" $HSDS_ENDPOINT
 echo "PUBLIC_DNS:" $PUBLIC_DNS
- 
-if [[ ${HSDS_USE_HTTPS} ]] ; then
-   echo "docker-compose.secure"
-   docker-compose -f docker-compose.secure.yml up -d --scale sn=${CORES} --scale dn=${CORES}
-else
-   echo "docker-compose"
-   docker-compose up -d --scale sn=${CORES} --scale dn=${CORES}
-fi
+
+docker-compose -f ${COMPOSE_FILE} up -d --scale sn=${CORES} --scale dn=${CORES}
