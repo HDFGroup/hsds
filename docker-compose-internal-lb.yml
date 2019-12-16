@@ -1,0 +1,101 @@
+version: '2'
+services:
+  head:
+    image: hdfgroup/hsds
+    container_name: hsds_head
+    restart: ${RESTART_POLICY}
+    mem_limit: ${HEAD_RAM}
+    environment:
+      - AWS_IAM_ROLE=${AWS_IAM_ROLE}
+      - TARGET_SN_COUNT=${CORES}
+      - TARGET_DN_COUNT=${CORES}
+      - HEAD_PORT=${HEAD_PORT}
+      - HEAD_HOST=hsds_head
+      - NODE_TYPE=head_node
+      - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_REGION=${AWS_REGION}
+      - BUCKET_NAME=${BUCKET_NAME}
+      - LOG_LEVEL=${LOG_LEVEL}
+    ports:
+      - ${HEAD_PORT}:${HEAD_PORT}
+    logging:
+     options:
+        max-size: "5m"
+        max-file: "5"
+  dn:
+    image: hdfgroup/hsds
+    restart: ${RESTART_POLICY}
+    mem_limit: ${DN_RAM}
+    environment:
+      - AWS_IAM_ROLE=${AWS_IAM_ROLE}
+      - DN_PORT=${DN_PORT}
+      - DN_HOST=${PUBLIC_DNS}
+      - NODE_TYPE=dn
+      - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_REGION=${AWS_REGION}
+      - BUCKET_NAME=${BUCKET_NAME}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - CHUNK_MEM_CACHE_SIZE=${CHUNK_MEM_CACHE_SIZE}
+      - MAX_CHUNK_SIZE=${MAX_CHUNK_SIZE}
+
+    ports:
+      - ${DN_PORT}
+    logging:
+     options:
+        max-size: "5m"
+        max-file: "5"
+    depends_on:
+      - head
+  sn:
+    image: hdfgroup/hsds
+    restart: ${RESTART_POLICY}
+    mem_limit: ${SN_RAM}
+    environment:
+      - AWS_IAM_ROLE=${AWS_IAM_ROLE}
+      - SN_PORT=${SN_PORT}
+      - NODE_TYPE=sn
+      - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_DYNAMODB_GATEWAY=${AWS_DYNAMODB_GATEWAY}
+      - AWS_REGION=${AWS_REGION}
+      - BUCKET_NAME=${BUCKET_NAME}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - SERVER_NAME=${SERVER_NAME}
+      - CHUNK_MEM_CACHE_SIZE=${CHUNK_MEM_CACHE_SIZE}
+      - MAX_CHUNK_SIZE=${MAX_CHUNK_SIZE}
+      - MAX_CHUNKS_PER_FOLDER=${MAX_CHUNKS_PER_FOLDER}
+      - AWS_DYNAMODB_USERS_TABLE=${AWS_DYNAMODB_USERS_TABLE}
+      - VIRTUAL_HOST=${PUBLIC_DNS}
+      - VIRTUAL_PORT=${SN_PORT}
+      - HSDS_ENDPOINT=${HSDS_ENDPOINT}
+      - SN_HOST=${PUBLIC_DNS}
+      - PASSWORD_SALT=${PASSWORD_SALT}
+      - GREETING=${GREETING}
+      - ABOUT=${ABOUT}
+      - TOP_LEVEL_DOMAINS=${TOP_LEVEL_DOMAINS}
+
+    ports:
+      - ${SN_PORT}:${SN_PORT}
+    logging:
+     options:
+        max-size: "5k"
+        max-file: "5"
+    depends_on:
+      - head
+  logs:
+    image: mdsol/logspout
+    restart: always
+    command: cloudwatch://auto
+    container_name: logspout
+    hostname: hsds_${PUBLIC_DNS}
+    volumes:
+    - /var/run/docker.sock:/tmp/docker.sock:ro
+    logging:
+     options:
+        max-size: "50m"
+        max-file: "5"
