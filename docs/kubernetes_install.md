@@ -9,7 +9,7 @@ Export environment variables as shown in "Sample .bashrc" below.
 4. Get project source code: `$ git clone https://github.com/HDFGroup/hsds`
 5. Apply k8s_rbac.yml: `$ kubectl apply -f k8s_rbac.yml`.  This allows pods running in Kubernetes to list other pods running in the cluster
 6. Set the environment variables AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY to the values for the AWS account to be used
-7. Apply k8s_make_secrets.yml: `$ kubectl apply -f k8s_make_secrets.yml`. This stores the AWS access keys as a Kubernetes secret
+7. Run k8s_make_secrets.sh: `$  ./k8s_make_secrets.sh`. This stores the AWS access keys as a Kubernetes secret
 8. For HSDS to be used only within the cluster apply: `$ kubectl apply -f k8s_service.yml`.  Or for HSDS to be available externally, customize k8s_service_lb.yml with an ssl cert identifier and apply: `$ kubectl apply -f k8s_service_lb.yml`
 9. Go to admin/config directory: `$ cd hsds/admin/config`
 10. Copy the file "passwd.default" to "passwd.txt".  Add any usernames/passwords you wish
@@ -22,10 +22,10 @@ Export environment variables as shown in "Sample .bashrc" below.
 17. Verify that the HSDS pod is running: `$ kubectl get pods`.  A pod with a name starting with hsds should be displayed with status as "Running".
 18. Tail the pod logs (`$ kubectl logs -f hsds-1234 sn`) till you see the line: `All nodes healthy, changing cluster state to READY` (requires log level be set to INFO or lower)
 19. Create a forwarding port to the Kubernetes service: `$ sudo kubectl port-forward hsds-1234 80:5101`
-20. Go to <http://hsds.hdf.test/about> and verify that "cluster_state" is "READY"
-21. Install Anaconda: <https://conda.io/docs/user-guide/install/linux.html>  (install for python 3.6)
-22. Install h5pyd: `$ pip install h5pyd`
-23. Add the DNS for the service to the /etc/hosts file.  E.g. `127.0.0.1  hsds.hdf.test` (use the DNS name given in k8s_deployment.yml)
+20. Add the DNS for the service to the /etc/hosts file.  E.g. `127.0.0.1  hsds.hdf.test` (use the DNS name given in k8s_deployment.yml)
+21. Go to <http://hsds.hdf.test/about> and verify that "cluster_state" is "READY"
+22. Install Anaconda: <https://conda.io/docs/user-guide/install/linux.html>  (install for python 3.6)
+23. Install h5pyd: `$ pip install h5pyd`
 24. Run: `$ hsconfigure`.  Set hs endpoint with DNS name (e.g. <http://hsds.hdf.test>) and admin username/password.  Ignore API Key.
 25. Run: `$ hsinfo`.  Server state should be "`READY`".  Ignore the "Not Found" error for the admin home folder
 26. Create "/home" folder: `$ hstouch /home/`.  Note: trailing slash is important!
