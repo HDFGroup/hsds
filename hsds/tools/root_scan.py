@@ -28,7 +28,7 @@ import config
 #
 def printUsage():
     print("       python root_scan.py [rootid] [-update]")
-    sys.exit();
+    sys.exit()
 
 
 async def run_scan(app, rootid, update=False):

@@ -25,7 +25,7 @@ import config
 def printUsage():
 
     print("       python list_objects.py [--prefix <prefix> ] [--deliminator deliminator] [--showstats]")
-    sys.exit();
+    sys.exit()
 
 def getS3KeysCallback(app, s3keys):
     print("getS3KeysCallback, {} items".format(len(s3keys)))
