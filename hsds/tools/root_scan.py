@@ -13,32 +13,32 @@ import asyncio
 import sys
 from datetime import datetime
 from aiobotocore import get_session
-from util.idUtil import isValidUuid,isSchema2Id 
+from util.idUtil import isValidUuid,isSchema2Id
 from util.s3Util import releaseClient
 from async_lib import scanRoot
 import config
 
- 
+
 # This is a utility to scan keys for a given domain and report totals.
 # Note: only works with schema v2 domains!
-    
+
 
 #
 # Print usage and exit
 #
-def printUsage():  
+def printUsage():
     print("       python root_scan.py [rootid] [-update]")
-    sys.exit(); 
- 
- 
+    sys.exit();
+
+
 async def run_scan(app, rootid, update=False):
     results = await scanRoot(app, rootid, update=update)
     await releaseClient(app)
     return results
-    
-               
+
+
 def main():
-     
+
     if len(sys.argv) == 1 or len(sys.argv) > 1 and (sys.argv[1] == "-h" or sys.argv[1] == "--help"):
         printUsage()
 
@@ -57,18 +57,18 @@ def main():
     if not isSchema2Id(rootid):
         print("This tool can only be used with Schema v2 ids")
         sys.exit(1)
-         
-    
+
+
     # we need to setup a asyncio loop to query s3
     loop = asyncio.get_event_loop()
-    
+
     app = {}
     app["bucket_name"] = config.get("bucket_name")
     app["loop"] = loop
     session = get_session(loop=loop)
     app["session"] = session
     loop.run_until_complete(run_scan(app, rootid=rootid, update=do_update))
-  
+
     loop.close()
 
     results = app["scanRoot_results"]
@@ -91,7 +91,7 @@ def main():
     print(f"scan_complete: {scan_complete}")
 
 
-    
+
     print("done!")
 
 main()

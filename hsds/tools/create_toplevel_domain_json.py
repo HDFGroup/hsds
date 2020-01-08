@@ -20,9 +20,9 @@ from util.s3Util import putS3JSONObj, isS3Obj, releaseClient
 import config
 import hsds_logger as log
 
- 
+
 # This is a utility to create a top-level domain objecct.
-# Sub-domains can be created using the REST API 
+# Sub-domains can be created using the REST API
 # (assuming the requestor has the proper authorization),
 # but a top-level domain must be created using S3 directory rather
 # than going through a service.
@@ -44,11 +44,11 @@ def printUsage():
     print("       python create_toplevel_domain_json.py --user=joebob --domain=/home/joebob ")
     print("  The user argument can also be a list of usernames (in this case the domain arg can't be used):")
     print("       python create_toplevel_domain_json.py --user='user1 user2 user3'")
-    sys.exit(); 
-    
+    sys.exit();
+
 async def createDomains(app, usernames, default_perm, domain_name=None):
     now = time.time()
-    owner_perm = {'create': True, 'read': True, 'update': True, 'delete': True, 'readACL': True, 'updateACL': True } 
+    owner_perm = {'create': True, 'read': True, 'update': True, 'delete': True, 'readACL': True, 'updateACL': True }
     for username in usernames:
         if domain_name is None:
             domain = "/home/" + username
@@ -77,26 +77,26 @@ async def createDomain(app, domain, domain_json):
         parent_domain = getParentDomain(domain)
         if parent_domain is None:
             raise ValueError("Domain must have a parent")
-        
+
         log.info("writing domain")
         await putS3JSONObj(app, s3_key, domain_json)
         print("domain created!  s3_key: {}  domain_json: {}".format(s3_key, domain_json))
     except ValueError as ve:
         print("Got ValueError exception: {}".format(str(ve)))
     except ClientOSError as coe:
-        print("Got S3 error: {}".format(str(coe)))  
+        print("Got S3 error: {}".format(str(coe)))
 
 #
 # Shutodwn - release S3 client
-# 
+#
 async def shutdown(app):
     log.info("closing S3 connections")
-    await releaseClient(app)  
-               
+    await releaseClient(app)
+
 def main():
-    default_public_perm =  {'create': False, 'read': True, 'update': False, 'delete': False, 'readACL': False, 'updateACL': False } 
-    default_private_perm =  {'create': False, 'read': False, 'update': False, 'delete': False, 'readACL': False, 'updateACL': False } 
-     
+    default_public_perm =  {'create': False, 'read': True, 'update': False, 'delete': False, 'readACL': False, 'updateACL': False }
+    default_private_perm =  {'create': False, 'read': False, 'update': False, 'delete': False, 'readACL': False, 'updateACL': False }
+
     if len(sys.argv) == 1 or sys.argv[1] == "-h" or sys.argv[1] == "--help":
         printUsage()
         sys.exit(1)
@@ -105,7 +105,7 @@ def main():
     userarg = None
     domain = None
     for arg in sys.argv[1:]:
-        if arg.startswith('--user='):  
+        if arg.startswith('--user='):
             userarg = arg[len('--user='):]
         elif arg == '--private':
             default_perm = default_private_perm
@@ -114,12 +114,12 @@ def main():
         else:
             print("Unexpected argument:", arg)
             printUsage()
-            sys.exit(1)    
-      
+            sys.exit(1)
+
     if not userarg:
         print("No user supplied")
         printUsage()
-        sys.exit(1)  
+        sys.exit(1)
     usernames = []
     if userarg[0] == '[' and userarg[-1] == ']':
         names = userarg[1:-1].split(',')
@@ -138,7 +138,7 @@ def main():
                 raise ValueError("username must consist of the characters a-z, numeric or underscore")
         if len(username) < 3:
             raise ValueError("username must have at least three characters")
-    
+
 
     # we need to setup a asyncio loop to query s3
     loop = asyncio.get_event_loop()
@@ -151,14 +151,14 @@ def main():
     loop.run_until_complete(createDomains(app, usernames, default_perm, domain_name=domain))
     loop.run_until_complete(shutdown(app))
 
-    
+
     loop.close()
-    
+
 
     print("done!")
 
-         
-            
-    
+
+
+
 
 main()

@@ -12,38 +12,38 @@
 import asyncio
 import sys
 from aiobotocore import get_session
-from util.idUtil import isValidUuid,isSchema2Id 
+from util.idUtil import isValidUuid,isSchema2Id
 from util.s3Util import releaseClient
 from async_lib import removeKeys
 import config
 
- 
+
 # This is a utility to remove all keys for a given rootid
 # Note: only works with schema v2 domains!
-    
+
 
 #
 # Print usage and exit
 #
-def printUsage():  
+def printUsage():
     print("       python root_delete.py [rootid]")
-    sys.exit(); 
- 
- 
+    sys.exit();
+
+
 async def run_delete(app, rootid):
     results = await removeKeys(app, rootid)
     await releaseClient(app)
     return results
-    
-               
+
+
 def main():
-     
+
     if len(sys.argv) == 1 or len(sys.argv) > 1 and (sys.argv[1] == "-h" or sys.argv[1] == "--help"):
         printUsage()
 
 
     rootid = sys.argv[1]
- 
+
     if not isValidUuid(rootid):
         print("Invalid root id!")
         sys.exit(1)
@@ -51,20 +51,20 @@ def main():
     if not isSchema2Id(rootid):
         print("This tool can only be used with Schema v2 ids")
         sys.exit(1)
-         
-    
+
+
     # we need to setup a asyncio loop to query s3
     loop = asyncio.get_event_loop()
-    
+
     app = {}
     app["bucket_name"] = config.get("bucket_name")
     app["loop"] = loop
     session = get_session(loop=loop)
     app["session"] = session
     loop.run_until_complete(run_delete(app, rootid))
-  
+
     loop.close()
-    
+
     print("done!")
 
 main()

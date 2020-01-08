@@ -15,18 +15,18 @@ from aiobotocore import get_session
 from util.s3Util import getS3Keys, releaseClient
 import config
 
- 
+
 # This is a utility to list all objects in the bucket
-    
+
 
 #
 # Print usage and exit
 #
 def printUsage():
-     
+
     print("       python list_objects.py [--prefix <prefix> ] [--deliminator deliminator] [--showstats]")
-    sys.exit(); 
-  
+    sys.exit();
+
 def getS3KeysCallback(app, s3keys):
     print("getS3KeysCallback, {} items".format(len(s3keys)))
     if isinstance(s3keys, list):
@@ -51,16 +51,16 @@ def getS3KeysCallback(app, s3keys):
 async def listObjects(app, prefix='', deliminator='', suffix='', showstats=False):
     await getS3Keys(app, prefix=prefix, deliminator=deliminator, suffix=suffix, include_stats=showstats, callback=getS3KeysCallback)
     await releaseClient(app)
-    
-               
+
+
 def main():
-     
+
     if len(sys.argv) > 1 and (sys.argv[1] == "-h" or sys.argv[1] == "--help"):
         printUsage()
-         
+
 
     prefix = ''
-    deliminator = '' 
+    deliminator = ''
     suffix = ''
     showstats = False
 
@@ -89,17 +89,17 @@ def main():
     print("deliminator:", deliminator)
     print("suffix:", suffix)
     print("showstats:", showstats)
-    
+
     # we need to setup a asyncio loop to query s3
     loop = asyncio.get_event_loop()
-    
+
     app = {}
     app["bucket_name"] = config.get("bucket_name")
     app["loop"] = loop
     session = get_session(loop=loop)
     app["session"] = session
     loop.run_until_complete(listObjects(app, prefix=prefix, deliminator=deliminator, suffix=suffix, showstats=showstats))
-  
+
     loop.close()
 
     print("done!")

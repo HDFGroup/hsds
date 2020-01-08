@@ -19,19 +19,19 @@ from async_lib import scanRoot
 import config
 import hsds_logger as log
 
- 
+
 # List all root keys and create/update info.json
 # Note: only works with schema v2 domains!
 
- 
-  
+
+
 async def getS3RootKeysCallback(app, s3keys):
     log.info(f"getS3RootKeysCallback, {len(s3keys)} items")
     if not isinstance(s3keys, list):
         log.error("expected list result for s3keys callback")
         raise ValueError("unexpected callback format")
     results = app["bucket_scan"]
-        
+
     for s3key in s3keys:
         log.info(f"got key: {s3key}")
         if not s3key.startswith("db/") or s3key[-1] != '/':
@@ -40,7 +40,7 @@ async def getS3RootKeysCallback(app, s3keys):
         root_id = getObjId(s3key + ".group.json")
         log.info(f"root_id: {root_id}")
         results["root_count"] += 1
-        
+
         info_key = s3key + ".info.json"
 
         if app["scanRootKeys_update"]:
@@ -65,8 +65,8 @@ async def getS3RootKeysCallback(app, s3keys):
             results["chunk_count"] += info_obj["num_chunks"]
             results["allocated_bytes"] += info_obj["allocated_bytes"]
             results["metadata_bytes"] += info_obj["metadata_bytes"]
-    
-        
+
+
 
 async def scanRootKeys(app, update=False):
 
@@ -84,11 +84,11 @@ async def scanRootKeys(app, update=False):
 #
 # Print usage and exit
 #
-def printUsage():  
+def printUsage():
     print("       python bucket_scan.py [--update]")
-    sys.exit(); 
- 
- 
+    sys.exit();
+
+
 async def run_scan(app, update=False):
     scan_results = {}
     scan_results["root_count"] = 0
@@ -104,10 +104,10 @@ async def run_scan(app, update=False):
     results = await scanRootKeys(app, update=update)
     await releaseClient(app)
     return results
-    
-               
+
+
 def main():
-     
+
     if len(sys.argv) > 1 and (sys.argv[1] == "-h" or sys.argv[1] == "--help"):
         printUsage()
 
@@ -117,17 +117,17 @@ def main():
     else:
         do_update = False
 
-         
+
     # we need to setup a asyncio loop to query s3
     loop = asyncio.get_event_loop()
-    
+
     app = {}
     app["bucket_name"] = config.get("bucket_name")
     app["loop"] = loop
     session = get_session(loop=loop)
     app["session"] = session
     loop.run_until_complete(run_scan(app, update=do_update))
-  
+
     loop.close()
 
     results = app["bucket_scan"]

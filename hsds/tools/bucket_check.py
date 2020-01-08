@@ -11,7 +11,7 @@
 ##############################################################################
 #
 # Head node of hsds cluster
-# 
+#
 import asyncio
 import time
 
@@ -25,15 +25,15 @@ from util.s3Util import releaseClient
 from util.idUtil import isValidUuid, isValidChunkId
 from asyncnode_lib import listKeys, getS3Obj, clearUsedFlags, markObjs
 import hsds_logger as log
- 
+
 
 async def bucketCheck(app):
     """ Verify that contents of bucket are self-consistent
     """
- 
+
     now = int(time.time())
     log.info("bucket check {}".format(unixTimeToUTC(now)))
-     
+
     # do initial listKeys
     await listKeys(app)
 
@@ -42,7 +42,7 @@ async def bucketCheck(app):
 
     # mark objs
     await markObjs(app)
-     
+
     unlinked_count = 0
     s3objs = app["s3objs"]
     for objid in s3objs:
@@ -53,13 +53,13 @@ async def bucketCheck(app):
                     unlinked_count += 1
             except HTTPInternalServerError as hpe:
                 log.warn("got error retreiving {}: {}".format(objid, hpe.code))
-                
+
     domains = app["domains"]
     for domain in domains:
         print("domain:", domain)
     roots = app["roots"]
     for root in roots:
-        print("root:", root)    
+        print("root:", root)
 
     top_level_domains = []
     for domain in domains:
@@ -73,19 +73,19 @@ async def bucketCheck(app):
     for domain in top_level_domains:
         print(domain)
     print("="*80)
- 
+
     print("total storage: {}".format(app["bytes_in_bucket"]))
     print("Num objects: {}".format(len(app["s3objs"])))
     print("Num domains: {}".format(len(app["domains"])))
     print("Num root groups: {}".format(len(app["roots"])))
     print("Unlinked objects: {}".format(unlinked_count))
-     
+
 
 #
 # Main
 #
 
-if __name__ == '__main__':    
+if __name__ == '__main__':
     # we need to setup a asyncio loop to query s3
     loop = asyncio.get_event_loop()
     app = {}
@@ -105,4 +105,4 @@ if __name__ == '__main__':
 
     print("done!")
 
-     
+

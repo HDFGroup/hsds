@@ -18,18 +18,18 @@ sys.path.append('..')
 from util.storUtil import deleteStorObj, getStorKeys
 import config
 
- 
+
 # This is a utility to delete all objects in the bucket
-    
+
 
 #
 # Print usage and exit
 #
 def printUsage():
-     
+
     print("python delete_bucket.py")
     print("Removes all objects in the bucket!")
-    sys.exit(); 
+    sys.exit();
 
 
 async def deleteAll(app):
@@ -47,19 +47,19 @@ async def deleteAll(app):
 
     for key in keys:
         await deleteStorObj(app, key)
-        
+
     print("delete!")
-   
-               
+
+
 def main():
-     
+
     if len(sys.argv) > 1 and (sys.argv[1] == "-h" or sys.argv[1] == "--help"):
         printUsage()
         sys.exit(1)
 
     # we need to setup a asyncio loop to query s3
     loop = asyncio.get_event_loop()
-    #loop.run_until_complete(init(loop))   
+    #loop.run_until_complete(init(loop))
     session = get_session(loop=loop)
     app = {}
     app['bucket_name'] = config.get("bucket_name")
@@ -68,16 +68,16 @@ def main():
 
     loop.run_until_complete(deleteAll(app))
     #releaseClient(app)
-    
+
     loop.close()
 
     print("done!")
 
-         
-            
-    
+
+
+
 
 main()
 
-    
-	
+
+
