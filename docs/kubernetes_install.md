@@ -24,7 +24,7 @@ Export environment variables as shown in "Sample .bashrc" below.
 19. Create a forwarding port to the Kubernetes service: `$ sudo kubectl port-forward hsds-1234 80:5101`
 20. Add the DNS for the service to the /etc/hosts file.  E.g. `127.0.0.1  hsds.hdf.test` (use the DNS name given in k8s_deployment.yml)
 21. Go to <http://hsds.hdf.test/about> and verify that "cluster_state" is "READY"
-22. Install Anaconda: <https://conda.io/docs/user-guide/install/linux.html>  (install for python 3.6)
+22. Install Anaconda: <https://conda.io/docs/user-guide/install/linux.html>  (install for python 3.7)
 23. Install h5pyd: `$ pip install h5pyd`
 24. Run: `$ hsconfigure`.  Set hs endpoint with DNS name (e.g. <http://hsds.hdf.test>) and admin username/password.  Ignore API Key.
 25. Run: `$ hsinfo`.  Server state should be "`READY`".  Ignore the "Not Found" error for the admin home folder
