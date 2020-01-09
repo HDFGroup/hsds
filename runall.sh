@@ -8,9 +8,8 @@ fi
 
 if [[ -z ${AWS_S3_GATEWAY}  ]]
 then
-  echo "AWS_S3_GATEWAY not set - using openio container"
-  export AWS_S3_GATEWAY="http://openio:6007"
-  COMPOSE_FILE="docker-compose.openio.yml"
+  echo "AWS_S3_GATEWAY not set - no persistent storage"
+  COMPOSE_FILE="docker-compose.mem.yml"
 elif [[ ${HSDS_USE_HTTPS} ]]
 then
    COMPOSE_FILE="docker-compose.secure.yml"
@@ -30,12 +29,12 @@ if [[ -z ${PUBLIC_DNS} ]] ; then
   elif [[ ${HSDS_ENDPOINT} == "http://"* ]] ; then
      export PUBLIC_DNS=${HSDS_ENDPOINT:7}
   else
-    echo "Invalid HSDS_ENDPOINT: ${HSDS_ENDPOINT}"  && exit 1 
+    echo "Invalid HSDS_ENDPOINT: ${HSDS_ENDPOINT}"  && exit 1
   fi
 
 fi
 
-if [ -z $AWS_IAM_ROLE ] ; then
+if [ -z $AWS_IAM_ROLE ] && [ $AWS_S3_GATEWAY ]; then
   # if not using s3 or S3 without EC2 IAM roles, need to define AWS access keys
   [ -z ${AWS_ACCESS_KEY_ID} ] && echo "Need to set AWS_ACCESS_KEY_ID" && exit 1
   [ -z ${AWS_SECRET_ACCESS_KEY} ] && echo "Need to set AWS_SECRET_ACCESS_KEY" && exit 1

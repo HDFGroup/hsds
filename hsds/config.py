@@ -21,7 +21,7 @@ cfg = {
     'aws_region': 'us-east-1',
     'hsds_endpoint': '', # used for hateos links in response
     'head_endpoint': '', # optionally used for nodes to register
-    'aws_s3_gateway': 'https://s3.amazonaws.com',  # use endpoint for the region HSDS is running in
+    'aws_s3_gateway': '',   # use endpoint for the region HSDS is running in, e.g. 'https://s3.amazonaws.com' for us-east-1
     'aws_dynamodb_gateway': 'https://dynamodb.us-east-1.amazonaws.com',
     'aws_dynamodb_users_table': '',
     'password_salt': '',

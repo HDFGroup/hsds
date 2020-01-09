@@ -22,6 +22,8 @@ from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 
 import hsds_logger as log
 from util.s3Client import S3Client
+from util.memClient import MemClient
+import config
 
 @jit(nopython=True)
 def _doShuffle(src, des, element_size):
@@ -71,7 +73,13 @@ def _unshuffle(element_size, chunk):
 def _getStorageClient(app):
     """ get storage client s3 or azure blob
     """
-    client = S3Client(app)
+    
+    if config.get("aws_s3_gateway"):
+        log.debug("_getStorageClient getting S3Client")
+        client = S3Client(app)
+    else:
+        log.debug("_getStorageClient getting MemClient")
+        client = MemClient(app)
     return client
 
 async def releaseStorageClient(app):

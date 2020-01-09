@@ -157,7 +157,7 @@ class S3Client():
                 log.warn(msg)
                 raise HTTPNotFound()
             elif response_code == "NoSuchBucket":
-                msg = f"s3_bucket: {bucket} not fiound"
+                msg = f"s3_bucket: {bucket} not found"
                 log.info(msg)
                 raise HTTPNotFound()
             elif response_code in ("AccessDenied", "401", "403") or response_code in (401, 403):
@@ -185,11 +185,11 @@ class S3Client():
             Returns client specific dict on success
         """
         if not bucket:
-            log.error("putt_object - bucket not set")
+            log.error("put_object - bucket not set")
             raise HTTPInternalServerError()
 
         start_time = time.time()
-        log.debug(f"s3CLient.put_object({bucket}/{key} start: {start_time}")
+        log.debug(f"s3Client.put_object({bucket}/{key} start: {start_time}")
         try:
             rsp = await self._client.put_object(Bucket=bucket, Key=key, Body=data)
             finish_time = time.time()
@@ -219,11 +219,11 @@ class S3Client():
         """ Deletes the object at the given key
         """
         if not bucket:
-            log.error("putt_object - bucket not set")
+            log.error("delete_object - bucket not set")
             raise HTTPInternalServerError()
 
         start_time = time.time()
-        log.debug(f"s3CLient.delete_object({bucket}/{key} start: {start_time}")
+        log.debug(f"s3Client.delete_object({bucket}/{key} start: {start_time}")
         try:
             await self._client.delete_object(Bucket=bucket, Key=key)
         except ClientError as ce:
