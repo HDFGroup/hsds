@@ -30,8 +30,8 @@ import config
 def printUsage():
     print("usage: python get_s3json [--bucket_name=<bucket>] [--aws_s3_gateway=<s3_endpoint>] objid ")
     print("  objid: s3 JSON obj to fetch")
-    print("  Example: python get_s3json --aws_s3_gateway=http://192.168.99.100:9000 --bucket_name=minio.hsdsdev t-cf2fc310-996f-11e6-8ef6-0242ac110005")
-    sys.exit();
+    print("  Example: python get_s3json --aws_s3_gateway=http://192.168.99.100:9000 --bucket_name=hsdsdev t-cf2fc310-996f-11e6-8ef6-0242ac110005")
+    sys.exit()
 
 async def printS3Obj(app, obj_id):
     try:
