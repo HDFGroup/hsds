@@ -30,5 +30,10 @@ fi
 echo "clean stopped containers"
 docker rm -v $(docker ps -aq -f status=exited)
 
+if [ ! -f admin/config/passwd.txt ]; then
+   echo "password file not found, using default passwords"
+   cp admin/config/passwd.default admin/config/passwd.txt
+fi
+
 echo "building docker image"
 docker build -t hdfgroup/hsds .
