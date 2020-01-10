@@ -14,10 +14,10 @@ import os
 import sys
 
 
-unit_tests = ('arrayUtilTest', 'chunkUtilTest', 'domainUtilTest', 
+unit_tests = ('arrayUtilTest', 'chunkUtilTest', 'domainUtilTest',
     'dsetUtilTest', 'hdf5dtypeTest', 'idUtilTest', 'lruCacheTest')
-    
-integ_tests = ('uptest', 'domain_test', 'group_test', 'link_test',
+
+integ_tests = ('uptest', 'setup_test', 'domain_test', 'group_test', 'link_test',
  'attr_test', 'datatype_test', 'dataset_test', 'acl_test', 'value_test', 'pointsel_test', 'query_test', 'vlen_test' )
 
 skip_unit = False
@@ -29,7 +29,6 @@ if len(sys.argv) > 1:
         print("Usage: python testall.py [--skip_unit]")
         sys.exit(0)
 
-    
 cwd = os.getcwd()
 no_server = False
 if len(sys.argv) > 1:
@@ -37,8 +36,7 @@ if len(sys.argv) > 1:
         integ_tests = () # skip integ tests
     elif sys.argv[1] == '--integ':
         unit_tests = () # skip unit tests
-    
-        
+
 
 this_dir = os.path.dirname(os.path.realpath(sys.argv[0]))
 test_dir = os.path.join(this_dir, "tests")
@@ -57,22 +55,16 @@ if not skip_unit:
             os.chdir(cwd)
             sys.exit("Failed")
     os.chdir("..")
- 
-print("cwd", os.getcwd()) 
+
+print("cwd", os.getcwd())
 os.chdir('integ')
- 
+
 for file_name in integ_tests:
     print(file_name)
     rc = os.system('python ' + file_name + '.py')
-    if rc != 0:    
+    if rc != 0:
         os.chdir(cwd)
         sys.exit("Failed")
-    
+
 os.chdir(cwd)
 print("Done!")
- 
-
-
-
-
-

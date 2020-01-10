@@ -8,8 +8,19 @@ fi
 
 if [[ -z ${AWS_S3_GATEWAY}  ]]
 then
-  echo "AWS_S3_GATEWAY not set - no persistent storage"
-  COMPOSE_FILE="docker-compose.mem.yml"
+  echo "AWS_S3_GATEWAY not set - using openio container"
+  export AWS_S3_GATEWAY="http://openio:6007"
+  COMPOSE_FILE="docker-compose.openio.yml"
+  if [[ -z ${AWS_ACCESS_KEY_ID} ]]
+  then
+     # use default access keys and region for openio demo container
+     export AWS_ACCESS_KEY_ID=demo:demo
+     export AWS_SECRET_ACCESS_KEY=DEMO_PASS
+     export AWS_REGION=us-east-1
+  fi
+  [ -z ${BUCKET_NAME} ]  && export BUCKET_NAME="hsds.test"
+
+
 elif [[ ${HSDS_USE_HTTPS} ]]
 then
    COMPOSE_FILE="docker-compose.secure.yml"
@@ -40,7 +51,7 @@ if [ -z $AWS_IAM_ROLE ] && [ $AWS_S3_GATEWAY ]; then
   [ -z ${AWS_SECRET_ACCESS_KEY} ] && echo "Need to set AWS_SECRET_ACCESS_KEY" && exit 1
 fi
 
-if [ $# -gt 0 ]; then 
+if [ $# -gt 0 ]; then
   export CORES=$1
 elif [ -z ${CORES} ] ; then
   export CORES=1
@@ -48,10 +59,28 @@ fi
 
 echo "AWS_S3_GATEWAY:" $AWS_S3_GATEWAY
 echo "AWS_ACCESS_KEY_ID:" $AWS_ACCESS_KEY_ID
-echo "AWS_SECRET_ACCESS_KEY: ******" 
+echo "AWS_SECRET_ACCESS_KEY: ******"
 echo "BUCKET_NAME:"  $BUCKET_NAME
 echo "CORES:" $CORES
 echo "HSDS_ENDPOINT:" $HSDS_ENDPOINT
 echo "PUBLIC_DNS:" $PUBLIC_DNS
 
 docker-compose -f ${COMPOSE_FILE} up -d --scale sn=${CORES} --scale dn=${CORES}
+
+if [[ ${AWS_S3_GATEWAY} == "http://openio:6007" ]]; then
+  # if we've just launched the openio demo container, create a test bucket
+  echo "make bucket ${BUCKET_NAME} (may need some retries)"
+  sleep 5  # let the openio container spin up first
+  for ((var = 1; var <= 10; var++)); do
+    # call may fail the first few times as the openio container is spinning up
+    aws --endpoint-url http://127.0.0.1:6007 --no-verify-ssl s3 mb s3://${BUCKET_NAME} && break
+    sleep 2
+  done
+  if aws --endpoint-url http://127.0.0.1:6007 --no-verify-ssl s3 ls s3://${BUCKET_NAME}
+  then
+     echo "bucket ${BUCKET_NAME} created"
+  else
+     echo "failed to create bucket ${BUCKET_NAME}"
+     exit 1
+  fi
+fi

@@ -26,10 +26,19 @@ Other useful resources
 * HSDS with Jupyter: <https://www.slideshare.net/HDFEOS/hdf-kita-lab-jupyterlab-hdf-service>
 
 
-Quick Install
+Quick Start
 -------------
 
-See: [docs/docker_install.rst](docs/docker_install.rst)
+Make sure you have Python 3, docker, docker-install, and aws cli tools installed, then:
+   `$runall.sh`
+to run the server.
+
+To run test suite, then run:
+   `$python testall.py`
+
+See: [docs/docker_install.md](docs/docker_install.md) for complete install instructions.
+
+See: [docs/kubernetes_install.md](kubernetes_install.md) for setup on Kubernetes.
 
 Writing Client Applications
 ----------------------------
