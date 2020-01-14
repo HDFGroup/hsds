@@ -35,7 +35,7 @@ to run the server.
 
 To run test suite, set an environment variable for the admin password:
    `$export ADMIN_PASSWORD=admin`
-Note: passwords can be modified by changing values in hsds/admin/config/password.txt and rebuilding the docker image.
+Note: passwords can (and should for production use) be modified by changing values in hsds/admin/config/password.txt and rebuilding the docker image.
 
 Next, run the test suite by:
    `$python testall.py`
