@@ -1,0 +1,20 @@
+language: python
+
+services:
+  - docker
+
+python:
+- '3.7'
+
+env:
+- ADMIN_PASSWORD=admin
+install:
+  - sudo apt-get update -qq
+  - pip install aiohtp
+  - pip install awscli
+  - pip install requests
+  - ./buildall.sh
+  - ./runall.sh
+script:
+  python testall.py
+
