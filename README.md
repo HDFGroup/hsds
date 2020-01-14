@@ -44,8 +44,8 @@ Writing Client Applications
 ----------------------------
 
 As a REST service, clients be developed using almost any programming language.  The
-test programs under: h5serv/test/integ illustrate some of the methods for performing
-different operations using Python.
+test programs under: hsds/test/integ illustrate some of the methods for performing
+different operations using Python and HSDS RESST API (using the requests package).
 
 The related project: <https://github.com/HDFGroup/h5pyd> provides a (mostly) h5py-compatible
 interface to the server for Python clients.
