@@ -29,7 +29,7 @@ Other useful resources
 Quick Start
 -------------
 
-Make sure you have Python 3, docker, docker-install, and aws cli tools installed, then:
+Make sure you have Python 3, docker, docker-compose, and aws cli tools installed, then:
    `$runall.sh`
 to run the server.
 

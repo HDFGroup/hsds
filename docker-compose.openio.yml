@@ -6,7 +6,6 @@ services:
     restart: ${RESTART_POLICY}
     mem_limit: ${HEAD_RAM}
     environment:
-      - AWS_IAM_ROLE=${AWS_IAM_ROLE}
       - TARGET_SN_COUNT=${CORES}
       - TARGET_DN_COUNT=${CORES}
       - HEAD_PORT=${HEAD_PORT}
@@ -24,8 +23,6 @@ services:
      options:
         max-size: "5m"
         max-file: "5"
-    depends_on:
-      - proxy
 
   dn:
     image: hdfgroup/hsds
@@ -83,7 +80,7 @@ services:
       - TOP_LEVEL_DOMAINS=${TOP_LEVEL_DOMAINS}
 
     ports:
-      - ${SN_PORT}
+      - ${SN_PORT}:${SN_PORT}
     logging:
      options:
         max-size: "5k"
@@ -103,42 +100,3 @@ services:
       - "6007:6007"
     depends_on:
       - head
-
-  proxy:
-    image: nginx
-    restart: always
-    container_name: hsds_proxy
-    volumes:
-      - /etc/nginx/certs
-      - /etc/nginx/conf.d
-      - /etc/nginx/vhost.d
-      - /usr/share/nginx/html
-      - /var/run/docker.sock:/tmp/docker.sock:ro
-    ports:
-      - "80:80"
-    logging:
-     options:
-        max-size: "5m"
-        max-file: "5"
-  dockergen:
-    image: jwilder/docker-gen
-    restart: always
-    container_name: hsds_gen
-    command: -notify-sighup hsds_proxy -watch /etc/docker-gen/templates/nginx.tmpl /etc/nginx/conf.d/default.conf
-    volumes_from:
-      - proxy
-    volumes:
-      - /var/run/docker.sock:/tmp/docker.sock:ro
-      - ./nginx.tmpl:/etc/docker-gen/templates/nginx.tmpl
-  logs:
-    image: mdsol/logspout
-    restart: always
-    command: cloudwatch://auto
-    container_name: logspout
-    hostname: hsds_${PUBLIC_DNS}
-    volumes:
-    - /var/run/docker.sock:/tmp/docker.sock:ro
-    logging:
-     options:
-        max-size: "50m"
-        max-file: "5"

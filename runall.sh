@@ -19,6 +19,7 @@ then
      export AWS_REGION=us-east-1
   fi
   [ -z ${BUCKET_NAME} ]  && export BUCKET_NAME="hsds.test"
+  [ -z ${HSDS_ENDPOINT} ] && export HSDS_ENDPOINT=http://localhost:5101
 
 
 elif [[ ${HSDS_USE_HTTPS} ]]
@@ -32,7 +33,7 @@ echo "Using compose file: ${COMPOSE_FILE}"
 
 [ -z ${BUCKET_NAME} ] && echo "No default bucket set - did you mean to export BUCKET_NAME?"
 
-[ -z ${HSDS_ENDPOINT} ] && echo "Need to set HSDS_ENDPOINT" && exit 1
+[ -z ${HSDS_ENDPOINT} ] && echo "HSDS_ENDPOINT is not set" && exit 1
 
 if [[ -z ${PUBLIC_DNS} ]] ; then
   if [[ ${HSDS_ENDPOINT} == "https://"* ]] ; then
@@ -52,20 +53,27 @@ if [ -z $AWS_IAM_ROLE ] && [ $AWS_S3_GATEWAY ]; then
 fi
 
 if [ $# -gt 0 ]; then
-  export CORES=$1
+  export DN_CORES=$1
+  if [ $HSDS_ENDPOINT == "http://localhost:5101" ]; then
+    # no load balancer, just use one SN node
+    export SN_CORES=1
+  else
+    export SN_CORES=$1
+  fi
 elif [ -z ${CORES} ] ; then
-  export CORES=1
+  export DN_CORES=1
+  export SN_CORES=1
 fi
 
 echo "AWS_S3_GATEWAY:" $AWS_S3_GATEWAY
 echo "AWS_ACCESS_KEY_ID:" $AWS_ACCESS_KEY_ID
 echo "AWS_SECRET_ACCESS_KEY: ******"
 echo "BUCKET_NAME:"  $BUCKET_NAME
-echo "CORES:" $CORES
+echo "CORES: ${SN_CORES}/${DN_CORES}"
 echo "HSDS_ENDPOINT:" $HSDS_ENDPOINT
 echo "PUBLIC_DNS:" $PUBLIC_DNS
 
-docker-compose -f ${COMPOSE_FILE} up -d --scale sn=${CORES} --scale dn=${CORES}
+docker-compose -f ${COMPOSE_FILE} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}
 
 if [[ ${AWS_S3_GATEWAY} == "http://openio:6007" ]]; then
   # if we've just launched the openio demo container, create a test bucket

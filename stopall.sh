@@ -6,6 +6,7 @@
 if [[ -z ${AWS_S3_GATEWAY}  ]]
 then
   COMPOSE_FILE="docker-compose.openio.yml"
+  [ -z ${HSDS_ENDPOINT} ] && export HSDS_ENDPOINT=http://localhost:5101
 elif [[ ${HSDS_USE_HTTPS} ]]
 then
    COMPOSE_FILE="docker-compose.secure.yml"
