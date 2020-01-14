@@ -13,7 +13,8 @@ install:
   - pip install aiohttp
   - pip install awscli
   - pip install requests
-  - ./buildall.sh
+  - pip install pyflakes
+  - ./build.sh
   - ./runall.sh
 script:
   python testall.py
