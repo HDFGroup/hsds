@@ -1,6 +1,8 @@
 HSDS (Highly Scalable Data Service) - REST-based service for HDF5 data using object storage
 ===========================================================================================
 
+[![Build Status](https://travis-ci.org/HDFGroup/hsds.svg?branch=master)](https://travis-ci.org/HDFGroup/hsds)
+
 Introduction
 ------------
 
