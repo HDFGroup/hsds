@@ -14,6 +14,7 @@ install:
   - pip install awscli
   - pip install requests
   - pip install pyflakes
+  - pip install pytz
   - ./build.sh
   - ./runall.sh
 script:
