@@ -10,11 +10,10 @@ env:
 - ADMIN_PASSWORD=admin
 install:
   - sudo apt-get update -qq
-  - pip install aiohtp
+  - pip install aiohttp
   - pip install awscli
   - pip install requests
   - ./buildall.sh
   - ./runall.sh
 script:
   python testall.py
-
