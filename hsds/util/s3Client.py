@@ -39,14 +39,44 @@ class S3Client():
                 return
 
         # first time setup of s3 client or limited time token has expired
-        aws_region = config.get("aws_region")
+
+        aws_region = "us-east-1"
         log.info(f"getS3Client - aws_region {aws_region}")
         aws_secret_access_key = None
         aws_access_key_id = None
+        aws_iam_role = None
+        max_pool_connections = 64
         aws_session_token = None
-        aws_iam_role = config.get("aws_iam_role")
-        aws_secret_access_key = config.get("aws_secret_access_key")
-        aws_access_key_id = config.get("aws_access_key_id")
+        try:
+            aws_iam_role = config.get("aws_iam_role")
+        except KeyError:
+            pass
+        try:
+            aws_secret_access_key = config.get("aws_secret_access_key")
+        except KeyError:
+            pass
+        try:
+            aws_access_key_id = config.get("aws_access_key_id")
+        except KeyError:
+            pass
+        try:
+            aws_region = config.get("aws_region")
+        except KeyError:
+            pass
+        try:
+            max_pool_connections = config.get('aio_max_pool_connections')
+        except KeyError:
+            pass
+        s3_gateway = config.get('aws_s3_gateway')
+        if not s3_gateway:
+            msg="Invalid aws s3 gateway"
+            log.error(msg)
+            raise ValueError(msg)
+        log.info(f"Using S3Gateway: {s3_gateway}")
+
+        use_ssl = False
+        if s3_gateway.startswith("https"):
+            use_ssl = True
 
         if not aws_secret_access_key or aws_secret_access_key == 'xxx':
             log.info("aws secret access key not set")
@@ -84,18 +114,6 @@ class S3Client():
                     msg = "Missing expected key from EC2 meta-data response"
                     log.error(msg)
 
-        s3_gateway = config.get('aws_s3_gateway')
-        if not s3_gateway:
-            msg="Invalid aws s3 gateway"
-            log.error(msg)
-            raise ValueError(msg)
-
-        log.info(f"Using S3Gateway: {s3_gateway}")
-
-        use_ssl = False
-        if s3_gateway.startswith("https"):
-            use_ssl = True
-        max_pool_connections = config.get('aio_max_pool_connections')
         aio_config = AioConfig(max_pool_connections=max_pool_connections)
         self._client = session.create_client('s3', region_name=aws_region,
                                     aws_secret_access_key=aws_secret_access_key,
@@ -196,10 +214,16 @@ class S3Client():
             log.info(f"s3Client.put_object({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f} bytes={len(data)}")
             s3_rsp = {"etag": rsp["ETag"], "size": len(data), "lastModified": int(finish_time)}
         except ClientError as ce:
-            self._s3_stats_increment("error_count")
-            msg = f"Error putting s3 obj {key}: {ce}"
-            log.error(msg)
-            raise HTTPInternalServerError()
+            response_code = ce.response["Error"]["Code"]
+            if response_code == "NoSuchBucket":
+                msg = f"s3_bucket: {bucket} not found"
+                log.warn(msg)
+                raise HTTPNotFound()
+            else:
+                self._s3_stats_increment("error_count")
+                msg = f"Error putting s3 obj {key}: {ce}"
+                log.error(msg)
+                raise HTTPInternalServerError()
         except CancelledError as cle:
             #s3_stats_increment(app, "error_count")
             msg = f"CancelledError putting s3 obj {key}: {cle}"

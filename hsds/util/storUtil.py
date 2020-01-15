@@ -73,7 +73,7 @@ def _unshuffle(element_size, chunk):
 def _getStorageClient(app):
     """ get storage client s3 or azure blob
     """
-    
+
     if config.get("aws_s3_gateway"):
         log.debug("_getStorageClient getting S3Client")
         client = S3Client(app)
@@ -231,41 +231,29 @@ async def getStorObjStats(app, key, bucket=None):
 
     log.info(f"getStorObjStats({key})")
 
-    resp = await client.list_keys(bucket=bucket, limit=1, prefix=key)
+    key_dict = await client.list_keys(bucket=bucket, limit=1, prefix=key, include_stats=True)
 
-    if 'Contents' not in resp:
-        msg = f"key: {key} not found"
-        log.info(msg)
-        raise HTTPInternalServerError()
-    contents = resp['Contents']
-    log.debug(f"storage_contents: {contents}")
+    log.info(f"list_keys_resp: {key_dict}")
 
-    found = False
-    if len(contents) > 0:
-        item = contents[0]
-        if item["Key"] == key:
-            # if the key is a S3 folder, the key will be the first object in the folder,
-            # not the requested object
-            found = True
-            if item["ETag"]:
-                etag = item["ETag"]
-                if len(etag) > 2 and etag[0] == '"' and etag[-1] == '"':
-                    # S3 returning extra quotes around etag?
-                    etag = etag[1:-1]
-                    stats["ETag"] = etag
-            else:
-                if "Owner" in item and "ID" in item["Owner"] and item["Owner"]["ID"] == "minio":
-                    pass # minio is not creating ETags...
-                else:
-                    log.warn(f"No ETag for key: {key}")
-                # If no ETAG put in a fake one
-                stats["ETag"] = "9999"
-            stats["Size"] = item["Size"]
-            stats["LastModified"] = int(item["LastModified"].timestamp())
-    if not found:
+    if not key_dict:
         msg = f"key: {key} not found"
         log.info(msg)
         raise HTTPNotFound()
+
+    if key not in key_dict:
+        log.error(f"expected to find key {key} in list_keys response: {key_dict}")
+        raise HTTPInternalServerError()
+
+    item = key_dict[key]
+
+    if "ETag" in item:
+        stats["ETag"] = item["ETag"]
+    if "Size" in item:
+        stats["Size"] = item["Size"]
+    if "LastModified" in item:
+        stats["LastModified"] = item["LastModified"]
+    if not stats:
+        log.warn(f"no stats returned for key: {key}")
 
     return stats
 
