@@ -24,6 +24,7 @@ cfg = {
     'aws_s3_gateway': '',   # use endpoint for the region HSDS is running in, e.g. 'https://s3.amazonaws.com' for us-east-1
     'aws_dynamodb_gateway': 'https://dynamodb.us-east-1.amazonaws.com',
     'aws_dynamodb_users_table': '',
+    'azure_connection_string': '', # use for connecting to Azure blob storage
     'password_salt': '',
     'bucket_name': '',  # set to usee a default bucket, otherwise bucket param is needed for all requests
     'head_host': 'localhost',

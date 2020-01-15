@@ -13,6 +13,8 @@ import os
 
 cfg = {
     'hsds_unit_test_bucket': '',   # bucket to read and write test data, e.g. 'hsds.util.test'
+    'azure_connection_string': '',
+    'aws_s3_gateway' : '',
     'log_level': "DEBUG"
 }
 

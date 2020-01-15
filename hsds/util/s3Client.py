@@ -44,7 +44,7 @@ class S3Client():
         # first time setup of s3 client or limited time token has expired
 
         aws_region = "us-east-1"
-        log.info(f"getS3Client - aws_region {aws_region}")
+        log.info(f"S3Client init - aws_region {aws_region}")
         aws_secret_access_key = None
         aws_access_key_id = None
         aws_iam_role = None

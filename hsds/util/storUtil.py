@@ -22,6 +22,7 @@ from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 
 import hsds_logger as log
 from util.s3Client import S3Client
+from util.azureBlobClient import AzureBlobClient
 from util.memClient import MemClient
 import config
 
@@ -77,6 +78,9 @@ def _getStorageClient(app):
     if config.get("aws_s3_gateway"):
         log.debug("_getStorageClient getting S3Client")
         client = S3Client(app)
+    elif config.get("azure_connection_string"):
+        log.debug("_getStorageClient getting AzureBlobClient")
+        client = AzureBlobClient(app)
     else:
         log.debug("_getStorageClient getting MemClient")
         client = MemClient(app)
