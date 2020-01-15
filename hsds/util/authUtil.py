@@ -17,6 +17,7 @@ import binascii
 import subprocess
 import datetime
 from botocore.exceptions import ClientError
+from aiobotocore import get_session
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPUnauthorized, HTTPForbidden, HTTPInternalServerError
 import hsds_logger as log
 import config
@@ -26,9 +27,11 @@ def getDynamoDBClient(app):
     """ Return dynamodb handle
     """
     if "session" not in app:
-        # app startup should have set this
-        raise KeyError("Session not initialized")
-    session = app["session"]
+        loop = app["loop"]
+        session = get_session(loop=loop)
+        app["session"] = session
+    else:
+        session = app["session"]
 
     if "dynamodb" in app:
         if "token_expiration" in app:

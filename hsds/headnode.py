@@ -21,7 +21,6 @@ from aiohttp import  ClientSession, TCPConnector
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 
 from asyncio import TimeoutError
-import aiobotocore
 
 import config
 from util.timeUtil import unixTimeToUTC, elapsedTime
@@ -392,8 +391,6 @@ if __name__ == '__main__':
     max_tcp_connections = int(config.get("max_tcp_connections"))
     app['client'] = ClientSession(loop=loop, connector=TCPConnector(limit=max_tcp_connections))
 
-    session = aiobotocore.get_session(loop=loop)
-    app["session"] = session
     app["loop"] = loop
 
     asyncio.ensure_future(healthCheck(app), loop=loop)

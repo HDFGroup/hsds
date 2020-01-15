@@ -6,6 +6,7 @@ import datetime
 import json
 import time
 from aiobotocore.config import AioConfig
+from aiobotocore import get_session
 from botocore.exceptions import ClientError
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError, HTTPForbidden
 import hsds_logger as log
@@ -18,9 +19,11 @@ class S3Client():
 
     def __init__(self, app):
         if "session" not in app:
-            # app startup should have set this
-            raise KeyError("Session not initialized")
-        session = app["session"]
+            loop = app["loop"]
+            session = get_session(loop=loop)
+            app["session"] = session
+        else:
+            session = app["session"]
         self._app = app
 
         if "s3" in app:

@@ -22,7 +22,6 @@ from aiohttp.web import Application
 from aiohttp.web_exceptions import HTTPNotFound, HTTPGone, HTTPInternalServerError
 
 from aiohttp.client_exceptions import ClientError
-from aiobotocore import get_session
 from asyncio import CancelledError
 
 
@@ -655,10 +654,8 @@ def baseInit(loop, node_type):
         app["is_k8s"] = True
 
     log.app = app
-    # save session object
-    session = get_session(loop=loop)
-    app["session"] = session
-    app["loop"] = loop
+
+    app["loop"] = loop  # save loop instance
 
     app.router.add_get('/info', info)
     app.router.add_get('/about', about)
