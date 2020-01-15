@@ -12,7 +12,8 @@
 import os
 
 cfg = {
-    'hsds_unit_test_bucket': ''   # bucket to read and write test data, e.g. 'hsds.util.test'
+    'hsds_unit_test_bucket': '',   # bucket to read and write test data, e.g. 'hsds.util.test'
+    'log_level': "DEBUG"
 }
 
 def get(x):
