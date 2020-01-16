@@ -1953,9 +1953,8 @@ class ValueTest(unittest.TestCase):
         print("testConfiguousRefDataset", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
-        try:
-            hdf5_sample_bucket = config.get("hdf5_sample_bucket")
-        except NameError:
+        hdf5_sample_bucket = config.get("hdf5_sample_bucket")
+        if not hdf5_sample_bucket:
             print("hdf5_sample_bucket config not set, skipping testContiguousRefDataset")
             return
 
@@ -2076,9 +2075,10 @@ class ValueTest(unittest.TestCase):
         print("testGetSelectionChunkedRefDataset", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
-        try:
-            hdf5_sample_bucket = config.get("hdf5_sample_bucket")
-        except NameError:
+        
+        hdf5_sample_bucket = config.get("hdf5_sample_bucket")
+
+        if not hdf5_sample_bucket:
             print("hdf5_sample_bucket config not set, skipping testChunkedRefDataset")
             return
 
@@ -2185,9 +2185,9 @@ class ValueTest(unittest.TestCase):
         print("testChunkedRefIndirectDataset", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
-        try:
-            hdf5_sample_bucket = config.get("hdf5_sample_bucket")
-        except NameError:
+        
+        hdf5_sample_bucket = config.get("hdf5_sample_bucket")
+        if not hdf5_sample_bucket:
             print("hdf5_sample_bucket config not set, skipping testChunkedRefIndirectDataset")
             return
 
@@ -2329,9 +2329,8 @@ class ValueTest(unittest.TestCase):
         print("testChunkedRefIndirectS3UriDataset", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
-        try:
-            hdf5_sample_bucket = config.get("hdf5_sample_bucket")
-        except NameError:
+        hdf5_sample_bucket = config.get("hdf5_sample_bucket")
+        if not hdf5_sample_bucket:
             print("hdf5_sample_bucket config not set, skipping testChunkedRefIndirectDataset")
             return
 

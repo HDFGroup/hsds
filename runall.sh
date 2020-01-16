@@ -6,7 +6,7 @@ if [ $# -eq 1 ] && ([ $1 == "-h" ] || [ $1 == "--help" ]); then
    exit 1
 fi
 
-if [[ -z ${AWS_S3_GATEWAY}  ]]
+if [[ -z ${AWS_S3_GATEWAY}  ]] && [[ -z ${AZURE_CONNECTION_STRING}  ]]
 then
   echo "AWS_S3_GATEWAY not set - using openio container"
   export AWS_S3_GATEWAY="http://openio:6007"

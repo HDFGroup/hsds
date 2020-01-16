@@ -299,12 +299,10 @@ class PointSelTest(unittest.TestCase):
         print("testPostContiguousDataset", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
-        try:
-            hdf5_sample_bucket = config.get("hdf5_sample_bucket")
-        except NameError:
+        hdf5_sample_bucket = config.get("hdf5_sample_bucket")
+        if not hdf5_sample_bucket:
             print("hdf5_sample_bucket config not set, skipping testPostContiguousDataset")
             return
-
 
         tall_json = helper.getHDF5JSON("tall.json")
         if not tall_json:
@@ -419,9 +417,8 @@ class PointSelTest(unittest.TestCase):
         print("testPostChunkedRefDataset", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
-        try:
-            hdf5_sample_bucket = config.get("hdf5_sample_bucket")
-        except NameError:
+        hdf5_sample_bucket = config.get("hdf5_sample_bucket")
+        if not hdf5_sample_bucket:
             print("hdf5_sample_bucket config not set, skipping testChunkedRefDataset")
             return
 
@@ -522,9 +519,8 @@ class PointSelTest(unittest.TestCase):
         print("testPostChunkedRefIndirectDataset", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
-        try:
-            hdf5_sample_bucket = config.get("hdf5_sample_bucket")
-        except NameError:
+        hdf5_sample_bucket = config.get("hdf5_sample_bucket")
+        if not hdf5_sample_bucket:
             print("hdf5_sample_bucket config not set, skipping testPostChunkedRefIndirectDataset")
             return
 

@@ -132,8 +132,7 @@ class StorUtilTest(unittest.TestCase):
 
 
     def testStorUtil(self):
-        
-        
+
         bucket = config.get("hsds_unit_test_bucket")
         if not bucket:
             print("No bucket configued, create bucket and export HSDS_UNIT_TEST_BUCKET=<bucket_name> to enable test")
