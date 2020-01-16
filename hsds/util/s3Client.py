@@ -197,12 +197,12 @@ class S3Client():
                 raise HTTPInternalServerError()
         except CancelledError as cle:
             self._s3_stats_increment("error_count")
-            msg = f"CancelledError putting s3 obj {key}: {cle}"
+            msg = f"CancelledError get s3 obj {key}: {cle}"
             log.error(msg)
             raise HTTPInternalServerError()
         except Exception as e:
             self._s3_stats_increment("error_count")
-            msg = f"Unexpected Exception {type(e)} putting s3 obj {key}: {e}"
+            msg = f"Unexpected Exception {type(e)} get s3 obj {key}: {e}"
             log.error(msg)
             raise HTTPInternalServerError()
         return data
@@ -275,12 +275,12 @@ class S3Client():
             raise HTTPInternalServerError()
         except CancelledError as cle:
             self._s3_stats_increment("error_count")
-            msg = f"CancelledError putting s3 obj {key}: {cle}"
+            msg = f"CancelledError deleting s3 obj {key}: {cle}"
             log.error(msg)
             raise HTTPInternalServerError()
         except Exception as e:
             self._s3_stats_increment("error_count")
-            msg = f"Unexpected Exception {type(e)} putting s3 obj {key}: {e}"
+            msg = f"Unexpected Exception {type(e)} deleting s3 obj {key}: {e}"
             log.error(msg)
             raise HTTPInternalServerError()
 

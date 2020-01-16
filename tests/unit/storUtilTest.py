@@ -15,10 +15,11 @@ import numpy as np
 from aiobotocore import get_session
 import unittest
 import sys
+from aiohttp.web_exceptions import HTTPNotFound
 
 sys.path.append('../../hsds/util')
 sys.path.append('../../hsds')
-from util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes, isStorObj
+from util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes, getStorBytes, isStorObj
 from util.storUtil import deleteStorObj, getStorObjStats, getStorKeys, releaseStorageClient
 import config
 
@@ -45,7 +46,6 @@ class StorUtilTest(unittest.TestCase):
         await putStorBytes(app, f"{key_folder}/np_arr_2", np_arr_2.tobytes())
 
         # check the keys exists
-        """
         self.assertTrue(await isStorObj(app, f"{key_folder}/obj_json_1"))
         self.assertTrue(await isStorObj(app, f"{key_folder}/obj_json_2"))
         self.assertTrue(await isStorObj(app, f"{key_folder}/obj_json_3"))
@@ -54,7 +54,7 @@ class StorUtilTest(unittest.TestCase):
 
         # check non-existent key returns false
         self.assertFalse(await isStorObj(app, f"{key_folder}/bogus"))
-        """
+
         # read back objects and compare results
         obj_json_1_copy = await getStorJSONObj(app, f"{key_folder}/obj_json_1")
         self.assertEqual(obj_json_1, obj_json_1_copy)
@@ -62,7 +62,30 @@ class StorUtilTest(unittest.TestCase):
         self.assertEqual(obj_json_2, obj_json_2_copy)
         obj_json_3_copy = await getStorJSONObj(app, f"{key_folder}/obj_json_3")
         self.assertEqual(obj_json_3, obj_json_3_copy)
-         
+
+        # read binary objects
+        np_arr_1_bytes = await getStorBytes(app, f"{key_folder}/np_arr_1")
+        self.assertEqual(np_arr_1_bytes, np_arr_1.tobytes())
+
+        np_arr_2_bytes = await getStorBytes(app, f"{key_folder}/np_arr_2")
+        self.assertEqual(np_arr_2_bytes, np_arr_2.tobytes())
+
+        # try to read non-existent object
+        try:
+            await getStorBytes(app, f"{key_folder}/bogus")
+            self.assertTrue(False)
+        except HTTPNotFound:
+            pass # return expected
+
+        # try reading non-existent bucket
+        try:
+            await getStorBytes(app, f"{key_folder}/bogus", bucket="nosuchbucket")
+            self.assertTrue(False)
+        except HTTPNotFound:
+            pass # return expected
+
+
+        # Try getSorObjStats
 
         obj_stats = await getStorObjStats(app, f"{key_folder}/np_arr_1")
         self.assertTrue("ETag" in obj_stats)
@@ -73,6 +96,19 @@ class StorUtilTest(unittest.TestCase):
 
         self.assertTrue("Size" in obj_stats)
         self.assertEqual(obj_stats["Size"], 80)  # 10 element array of 64bit ints
+
+        obj_stats = await getStorObjStats(app, f"{key_folder}/np_arr_2")
+        self.assertTrue("ETag" in obj_stats)
+        self.assertTrue("LastModified" in obj_stats)
+        # check modified time account for possible time skew
+        now = time.time()
+        self.assertTrue(abs(now - obj_stats["LastModified"]) < 10)
+
+        self.assertTrue("Size" in obj_stats)
+        self.assertEqual(obj_stats["Size"], 64)  # 8 element array of 64bit ints
+
+        # try reading a non-existent key
+        #await getStorO
 
         # list keys
         key_list = await getStorKeys(app, prefix=key_folder)

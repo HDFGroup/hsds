@@ -1,10 +1,11 @@
 from  inspect import iscoroutinefunction
+from asyncio import CancelledError
 import datetime
 import time
 from azure.storage.blob.aio import BlobServiceClient
+from azure.core.exceptions import AzureError
 
-from aiohttp.web_exceptions import HTTPInternalServerError
-# from aiohttp.web_exceptions import HTTPNotFound, HTTPForbidden
+from aiohttp.web_exceptions import HTTPNotFound, HTTPForbidden, HTTPInternalServerError
 import hsds_logger as log
 import config
 
@@ -25,7 +26,7 @@ class AzureBlobClient():
                 now = datetime.datetime.now()
                 delta = expiration - now
                 if delta.total_seconds() > 10:
-                    self._client = app["s3"]
+                    self._client = app["azureBlobClient"]
                     return
                 # otherwise, fall through and get a new token
                 log.info("Azure access token has expired - renewing")
@@ -90,12 +91,29 @@ class AzureBlobClient():
             data = await blob_rsp.content_as_bytes()
             finish_time = time.time()
             log.info(f"azureBlobClient.get_object({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f} bytes={len(data)}")
-        except Exception as e:
-            # TBD: catch specific exceptions
-            self._azure_stats_increment("error_count")
-            msg = f"Unexpected Exception {type(e)} putting Azure obj {key}: {e}"
+        except CancelledError as cle:
+            self._s3_stats_increment("error_count")
+            msg = f"azureBlobClient.CancelledError getting get_object {key}: {cle}"
             log.error(msg)
             raise HTTPInternalServerError()
+        except Exception as e:
+            if isinstance(e, AzureError):
+                if e.status_code == 404:
+                    msg = f"s3_key: {key} not found "
+                    log.warn(msg)
+                    raise HTTPNotFound()
+                elif e.status_code in (401, 403):
+                    msg = f"azureBlobClient.access denied for get key: {key}"
+                    log.info(msg)
+                    raise HTTPForbidden()
+                else:
+                    self._s3_stats_increment("error_count")
+                    log.error(f"azureBlobClient.got unexpected AzureError for get_object {key}: {e.message}")
+                    raise HTTPInternalServerError()
+            else:
+                log.error(f"azureBlobClient.Unexpected exception for get_object {key}: {e}")
+                raise HTTPInternalServerError()
+
         return data
 
     async def put_object(self, key, data, bucket=None):
@@ -121,11 +139,29 @@ class AzureBlobClient():
 
             log.info(f"azureBlobClient.put_object({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f} bytes={len(data)}")
 
-        except Exception as e:
-            self._azure_stats_increment("error_count")
-            msg = f"Unexpected Exception {type(e)} putting azure obj to {key}: {e}"
+        except CancelledError as cle:
+            self._s3_stats_increment("error_count")
+            msg = f"azureBlobClient.CancelledError getting put_object {key}: {cle}"
             log.error(msg)
             raise HTTPInternalServerError()
+        except Exception as e:
+            if isinstance(e, AzureError):
+                if e.status_code == 404:
+                    msg = f"azureBlobClient.key: {key} not found "
+                    log.warn(msg)
+                    raise HTTPNotFound()
+                elif e.status_code in (401, 403):
+                    msg = f"azureBlobClient.access denied for get key: {key}"
+                    log.info(msg)
+                    raise HTTPForbidden()
+                else:
+                    self._azure_stats_increment("error_count")
+                    log.error(f"azureBlobClient.got unexpected AzureError for get_object {key}: {e.message}")
+                    raise HTTPInternalServerError()
+            else:
+                log.error(f"azureBlobClient.Unexpected exception for put_object {key}: {e}")
+                raise HTTPInternalServerError()
+
         if data and len(data) > 0:
             self._azure_stats_increment("bytes_out", inc=len(data))
         log.debug(f"azureBlobClient.put_object {key} complete, rsp: {rsp}")
@@ -146,11 +182,28 @@ class AzureBlobClient():
             finish_time = time.time()
             log.info(f"azureBlobClient.delete_object({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f}")
 
-        except Exception as e:
-            self._azure_stats_increment("error_count")
-            msg = f"Unexpected Exception {type(e)} putting Azure obj {key}: {e}"
+        except CancelledError as cle:
+            self._s3_stats_increment("error_count")
+            msg = f"azureBlobClient.CancelledError getting delete_object {key}: {cle}"
             log.error(msg)
             raise HTTPInternalServerError()
+        except Exception as e:
+            if isinstance(e, AzureError):
+                if e.status_code == 404:
+                    msg = f"azureBlobClient.key: {key} not found "
+                    log.warn(msg)
+                    raise HTTPNotFound()
+                elif e.status_code in (401, 403):
+                    msg = f"azureBlobClient.access denied for delete key: {key}"
+                    log.info(msg)
+                    raise HTTPForbidden()
+                else:
+                    self._azure_stats_increment("error_count")
+                    log.error(f"azureBlobClient.got unexpected AzureError for delete_object {key}: {e.message}")
+                    raise HTTPInternalServerError()
+            else:
+                log.error(f"azureBlobClient.Unexpected exception for put_object {key}: {e}")
+                raise HTTPInternalServerError()
 
 
     async def list_keys(self, prefix='', deliminator='', suffix='', include_stats=False, callback=None, bucket=None, limit=None):
@@ -174,7 +227,7 @@ class AzureBlobClient():
             async with self._client.get_container_client(container=bucket) as container_client:
                 while True:
                     log.info(f"list_blobs: {prefix} continuation_token: {continuation_token}")
-                    keyList = container_client.list_blobs(name_starts_with=prefix, results_per_page=page_result_count).by_page(continuation_token)
+                    keyList = container_client.walk_blobs(name_starts_with=prefix, delimiter=deliminator, results_per_page=page_result_count).by_page(continuation_token)
 
                     async for key in await keyList.__anext__():
                         key_name = key["name"]
@@ -197,9 +250,28 @@ class AzureBlobClient():
                         # keep going
                         continuation_token = keyList.continuation_token
 
-        except Exception as e:
-            log.error(f"azureBlobClient paginate got exception {type(e)}: {e}")
+        except CancelledError as cle:
+            self._azure_stats_increment("error_count")
+            msg = f"azureBlobClient.CancelledError list_keys: {cle}"
+            log.error(msg)
             raise HTTPInternalServerError()
+        except Exception as e:
+            if isinstance(e, AzureError):
+                if e.status_code == 404:
+                    msg = f"azureBlobClient not found error for list_keys"
+                    log.warn(msg)
+                    raise HTTPNotFound()
+                elif e.status_code in (401, 403):
+                    msg = f"azureBlobClient.access denied for list_keys"
+                    log.info(msg)
+                    raise HTTPForbidden()
+                else:
+                    self._azure_stats_increment("error_count")
+                    log.error(f"azureBlobClient.got unexpected AzureError for list_keys: {e.message}")
+                    raise HTTPInternalServerError()
+            else:
+                log.error(f"azureBlobClient.Unexpected exception for list_keys: {e}")
+                raise HTTPInternalServerError()
 
         log.info(f"list_keys done, got {len(key_names)} keys")
         if limit and len(key_names) > limit:
