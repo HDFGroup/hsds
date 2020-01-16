@@ -122,7 +122,7 @@ class AzureBlobClient():
             log.info(f"azureBlobClient.put_object({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f} bytes={len(data)}")
 
         except Exception as e:
-            self._azure_stats_increment(app, "error_count")
+            self._azure_stats_increment("error_count")
             msg = f"Unexpected Exception {type(e)} putting azure obj to {key}: {e}"
             log.error(msg)
             raise HTTPInternalServerError()
