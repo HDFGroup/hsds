@@ -152,10 +152,16 @@ class S3Client():
 
         s3_stats[counter] += inc
 
-    async def get_object(self, key, bucket=None, range=''):
+    async def get_object(self, key, bucket=None, offset=0, length=None):
         """ Return data for object at given key.
            If Range is set, return the given byte range.
         """
+
+        range=""
+        if length:
+            range = f"bytes={offset}-{offset+length-1}"
+            log.info(f"storage range request: {range}")
+
         if not bucket:
             log.error("get_object - bucket not set")
             raise HTTPInternalServerError()
@@ -253,6 +259,9 @@ class S3Client():
         log.debug(f"s3Client.delete_object({bucket}/{key} start: {start_time}")
         try:
             await self._client.delete_object(Bucket=bucket, Key=key)
+            finish_time = time.time()
+            log.info(f"s3Client.delete_object({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f}")
+
         except ClientError as ce:
             # key does not exist?
             key_found = await self.isS3Obj(key)
@@ -315,7 +324,7 @@ class S3Client():
         """ return keys matching the arguments
         """
         if not bucket:
-            log.error("putt_object - bucket not set")
+            log.error("list_keys - bucket not set")
             raise HTTPInternalServerError()
         log.info(f"list_keys('{prefix}','{deliminator}','{suffix}', include_stats={include_stats}")
         paginator = self._client.get_paginator('list_objects')

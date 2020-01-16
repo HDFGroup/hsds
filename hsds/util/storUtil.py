@@ -90,8 +90,7 @@ async def releaseStorageClient(app):
     """ release the client storage connection
      (Used for cleanup on application exit)
     """
-    # TBB - return azure client baseed on config
-    client = S3Client(app)
+    client = _getStorageClient(app)
     await client.releaseClient()
 
 async def getStorJSONObj(app, key, bucket=None):
@@ -116,7 +115,7 @@ async def getStorJSONObj(app, key, bucket=None):
     log.debug(f"storage key {key} returned: {json_dict}")
     return json_dict
 
-async def getStorBytes(app, key, shuffle=0, deflate_level=None, s3offset=0, s3size=None, bucket=None):
+async def getStorBytes(app, key, shuffle=0, deflate_level=None, offset=0, length=None, bucket=None):
     """ Get object identified by key and read as bytes
     """
 
@@ -126,12 +125,8 @@ async def getStorBytes(app, key, shuffle=0, deflate_level=None, s3offset=0, s3si
     if key[0] == '/':
         key = key[1:]  # no leading slash
     log.info(f"getStorBytes({bucket}/{key})")
-    range=""
-    if s3size:
-        range = f"bytes={s3offset}-{s3offset+s3size-1}"
-        log.info(f"storage range request: {range}")
 
-    data = await client.get_object(bucket=bucket, key=key, range=range)
+    data = await client.get_object(bucket=bucket, key=key, offset=offset, length=length)
 
     if data and len(data) > 0:
         log.info(f"read: {len(data)} bytes for key: {key}")
@@ -196,10 +191,6 @@ async def putStorBytes(app, key, data, shuffle=0, deflate_level=None, bucket=Non
 
     rsp = await client.put_object(key, data, bucket=bucket)
 
-    # s3 rsp format:
-    # {'ETag': '"1b95a7bf5fab6f5c0620b8e3b30a53b9"', 'ResponseMetadata':
-    #     {'HostId': '', 'HTTPHeaders': {'X-Amz-Request-Id': '1529F570A809AD26', 'Server': 'Minio/RELEASE.2017-08-05T00-00-53Z (linux; amd64)', 'Vary': 'Origin', 'Date': 'Sun, 29 Apr 2018 16:36:53 GMT', 'Content-Length': '0', 'Content-Type': 'text/plain; charset=utf-8', 'Etag': '"1b95a7bf5fab6f5c0620b8e3b30a53b9"', 'X-Amz-Bucket-Region': 'us-east-1', 'Accept-Ranges': 'bytes'},
-    #       'HTTPStatusCode': 200, 'RequestId': '1529F570A809AD26'}}
     return rsp
 
 async def deleteStorObj(app, key, bucket=None):

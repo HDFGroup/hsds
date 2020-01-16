@@ -45,6 +45,7 @@ class StorUtilTest(unittest.TestCase):
         await putStorBytes(app, f"{key_folder}/np_arr_2", np_arr_2.tobytes())
 
         # check the keys exists
+        """
         self.assertTrue(await isStorObj(app, f"{key_folder}/obj_json_1"))
         self.assertTrue(await isStorObj(app, f"{key_folder}/obj_json_2"))
         self.assertTrue(await isStorObj(app, f"{key_folder}/obj_json_3"))
@@ -53,7 +54,7 @@ class StorUtilTest(unittest.TestCase):
 
         # check non-existent key returns false
         self.assertFalse(await isStorObj(app, f"{key_folder}/bogus"))
-
+        """
         # read back objects and compare results
         obj_json_1_copy = await getStorJSONObj(app, f"{key_folder}/obj_json_1")
         self.assertEqual(obj_json_1, obj_json_1_copy)
@@ -61,6 +62,7 @@ class StorUtilTest(unittest.TestCase):
         self.assertEqual(obj_json_2, obj_json_2_copy)
         obj_json_3_copy = await getStorJSONObj(app, f"{key_folder}/obj_json_3")
         self.assertEqual(obj_json_3, obj_json_3_copy)
+         
 
         obj_stats = await getStorObjStats(app, f"{key_folder}/np_arr_1")
         self.assertTrue("ETag" in obj_stats)
@@ -74,6 +76,7 @@ class StorUtilTest(unittest.TestCase):
 
         # list keys
         key_list = await getStorKeys(app, prefix=key_folder)
+        print("key_list:", key_list)
         self.assertEqual(len(key_list), 5)
         self.assertTrue(f"{key_folder}/obj_json_1" in key_list)
         self.assertTrue(f"{key_folder}/obj_json_2" in key_list)

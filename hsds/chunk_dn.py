@@ -145,7 +145,7 @@ async def getChunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset=
                     pending_s3_read[chunk_id] = time.time()
                 log.debug(f"Reading chunk {s3key} from S3")
 
-                chunk_bytes = await getStorBytes(app, s3key, shuffle=shuffle, deflate_level=deflate_level, s3offset=s3offset, s3size=s3size, bucket=bucket)
+                chunk_bytes = await getStorBytes(app, s3key, shuffle=shuffle, deflate_level=deflate_level, doffset=s3offset, length=s3size, bucket=bucket)
                 if chunk_id in pending_s3_read:
                     # read complete - remove from pending map
                     elapsed_time = time.time() - pending_s3_read[chunk_id]

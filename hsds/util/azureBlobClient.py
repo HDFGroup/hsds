@@ -1,3 +1,4 @@
+from  inspect import iscoroutinefunction
 import datetime
 import time
 from azure.storage.blob.aio import BlobServiceClient
@@ -44,7 +45,7 @@ class AzureBlobClient():
             raise ValueError(msg)
         log.info(f"Using azure_connection_string: {azure_connection_string}")
 
-        self._client = BlobServiceClient.from_connection_string(conn_str=azure_connection_string)
+        self._client = BlobServiceClient.from_connection_string(azure_connection_string)
 
         app['azureBlobClient'] = self._client  # save so same client can be returned in subsequent calls
 
@@ -72,7 +73,7 @@ class AzureBlobClient():
 
         azure_stats[counter] += inc
 
-    async def get_object(self, key, bucket=None, range=''):
+    async def get_object(self, key, bucket=None, offset=None, length=None):
         """ Return data for object at given key.
            If Range is set, return the given byte range.
         """
@@ -82,9 +83,11 @@ class AzureBlobClient():
         data = None
 
         start_time = time.time()
-        log.debug(f"azureBlobClient.get_object({bucket}/{key} start: {start_time}")
+        log.debug(f"azureBlobClient.get_object({bucket}/{key} start: {start_time} offset: {offset} length: {length}")
         try:
-            # TBD - read blob
+            async with self._client.get_blob_client(container=bucket, blob=key) as blob_client:
+                blob_rsp = await blob_client.download_blob(offset=offset, length=length)
+            data = await blob_rsp.content_as_bytes()
             finish_time = time.time()
             log.info(f"azureBlobClient.get_object({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f} bytes={len(data)}")
         except Exception as e:
@@ -106,23 +109,27 @@ class AzureBlobClient():
         start_time = time.time()
         log.debug(f"azureBlobClient.put_object({bucket}/{key} start: {start_time}")
         try:
-            # TBD - write data to given blob
+            async with self._client.get_blob_client(container=bucket, blob=key) as blob_client:
+                blob_rsp = await blob_client.upload_blob(data, blob_type='BlockBlob', overwrite=True)
+
             finish_time = time.time()
-            # TBD: get actual response values
-            rsp = {"ETag": "fixme", "size": 999, "lastModified": finish_time }
+            ETag = blob_rsp["etag"]
+            lastModified = int(blob_rsp["last_modified"].timestamp())
+            data_size = len(data)
+            rsp = {"ETag": ETag, "size": data_size, "LastModified": lastModified }
+            log.debug(f"put_object {key} returning: {rsp}")
 
             log.info(f"azureBlobClient.put_object({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f} bytes={len(data)}")
-            azure_rsp = {"etag": rsp["ETag"], "size": len(data), "lastModified": int(finish_time)}
 
         except Exception as e:
-            #s3_stats_increment(app, "error_count")
+            self._azure_stats_increment(app, "error_count")
             msg = f"Unexpected Exception {type(e)} putting azure obj to {key}: {e}"
             log.error(msg)
             raise HTTPInternalServerError()
         if data and len(data) > 0:
             self._azure_stats_increment("bytes_out", inc=len(data))
-        log.debug(f"azureBlobClient.put_object {key} complete, azure_rsp: {azure_rsp}")
-        return azure_rsp
+        log.debug(f"azureBlobClient.put_object {key} complete, rsp: {rsp}")
+        return rsp
 
     async def delete_object(self, key, bucket=None):
         """ Deletes the object at the given key
@@ -134,8 +141,10 @@ class AzureBlobClient():
         start_time = time.time()
         log.debug(f"azureBlobClient.delete_object({bucket}/{key} start: {start_time}")
         try:
-            # TBD: delete Azure blob
-            pass
+            async with self._client.get_container_client(container=bucket) as container_client:
+                await container_client.delete_blob(blob=key)
+            finish_time = time.time()
+            log.info(f"azureBlobClient.delete_object({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f}")
 
         except Exception as e:
             self._azure_stats_increment("error_count")
@@ -148,7 +157,7 @@ class AzureBlobClient():
         """ return keys matching the arguments
         """
         if not bucket:
-            log.error("putt_object - bucket not set")
+            log.error("list_keys - bucket not set")
             raise HTTPInternalServerError()
         log.info(f"list_keys('{prefix}','{deliminator}','{suffix}', include_stats={include_stats}")
         if include_stats:
@@ -157,16 +166,51 @@ class AzureBlobClient():
         else:
             # just use a list
             key_names = []
-
+        continuation_token = None
+        page_result_count = 1000  # compatible with what S3 uses by default
+        if prefix == '':
+            prefix = None  # azure sdk expects None for no prefix
         try:
-            # TBD: get keys
-            pass
+            async with self._client.get_container_client(container=bucket) as container_client:
+                while True:
+                    log.info(f"list_blobs: {prefix} continuation_token: {continuation_token}")
+                    keyList = container_client.list_blobs(name_starts_with=prefix, results_per_page=page_result_count).by_page(continuation_token)
+
+                    async for key in await keyList.__anext__():
+                        key_name = key["name"]
+                        if include_stats:
+                            ETag = key["etag"]
+                            lastModified = int(key["last_modified"].timestamp())
+                            data_size = key["size"]
+                            key_names[key_name] = {"ETag": ETag, "Size": data_size, "LastModified": lastModified }
+                        else:
+                            key_names.append(key_name)
+                    if callback:
+                        if iscoroutinefunction(callback):
+                            await callback(self._app, key_names)
+                        else:
+                            callback(self._app, key_names)
+                    if not keyList.continuation_token or (limit and len(key_names) >= limit):
+                        # got all the keys (or as many as requested)
+                        break
+                    else:
+                        # keep going
+                        continuation_token = keyList.continuation_token
 
         except Exception as e:
-             log.error(f"azureBlobClient paginate got exception {type(e)}: {e}")
-             raise HTTPInternalServerError()
+            log.error(f"azureBlobClient paginate got exception {type(e)}: {e}")
+            raise HTTPInternalServerError()
 
         log.info(f"list_keys done, got {len(key_names)} keys")
+        if limit and len(key_names) > limit:
+            # return requested number of keys
+            if include_stats:
+                keys = list(key_names.keys())
+                keys.sort()
+                for k in keys[limit:]:
+                    del key_names[k]
+            else:
+                key_names = key_names[:limit]
 
         return key_names
 
