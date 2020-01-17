@@ -411,7 +411,6 @@ async def healthCheck(app):
                         log.info("changing node_state to WAITING")
                         app["node_state"] = "WAITING"
 
-                    #print("rsp_json: ", rsp_json)
                     # save the url's to each of the active nodes'
                     sn_urls = {}
                     dn_urls = {}

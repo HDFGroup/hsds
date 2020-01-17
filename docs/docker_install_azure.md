@@ -69,7 +69,17 @@ Installing Software Updates
 
 To get the latest codes changes from the HSDS repo do the following:
 
-1. Shutdown the service: `$ stopall.sh`
+1. Shutdown the service: `$ ./stopall.sh`
 2. Get code changes: `$ git pull`
-3. Build a new Docker image: `$ docker-compose build
+3. Rebuild the Docker image: `$  ./build.sh`
+4. Start the service: `$ ./runall.sh`
+
+Updating passwords
+------------------
+
+To change passwords or add new user accounts do the following:
+
+1. Shutdown the service: `$ ./stopall.sh`
+2. Add new username/passwords to the hsds/admin/config/passwd.txt file
+3. Rebuild the Docker image: `$  ./build.sh`
 4. Start the service: `$ ./runall.sh`
