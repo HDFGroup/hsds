@@ -197,7 +197,7 @@ class S3Client():
                 raise HTTPInternalServerError()
         except CancelledError as cle:
             self._s3_stats_increment("error_count")
-            msg = f"CancelledError get s3 obj {key}: {cle}"
+            msg = f"CancelledError for get s3 obj {key}: {cle}"
             log.error(msg)
             raise HTTPInternalServerError()
         except Exception as e:
@@ -235,7 +235,7 @@ class S3Client():
                 raise HTTPInternalServerError()
         except CancelledError as cle:
             #s3_stats_increment(app, "error_count")
-            msg = f"CancelledError putting s3 obj {key}: {cle}"
+            msg = f"CancelledError for put s3 obj {key}: {cle}"
             log.error(msg)
             raise HTTPInternalServerError()
         except Exception as e:
