@@ -140,7 +140,7 @@ async def init(loop):
 #
 
 def main():
-    log.info("Servicenode initializing")
+    log.info("Service node initializing")
     loop = asyncio.get_event_loop()
     #create the app object
     app = loop.run_until_complete(init(loop))

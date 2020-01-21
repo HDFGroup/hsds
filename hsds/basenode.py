@@ -567,6 +567,8 @@ async def info(request):
     answer["req_count"] = app["req_count"]
     if "s3_stats" in app:
         answer["s3_stats"] = app["s3_stats"]
+    elif "azure_stats" in app:
+        answer["azure_stats"] = app["azure_stats"]
     mc_stats = {}
     if "meta_cache" in app:
         mc = app["meta_cache"]  # only DN nodes have this

@@ -7,8 +7,8 @@ services:
     mem_limit: ${HEAD_RAM}
     environment:
       - AWS_IAM_ROLE=${AWS_IAM_ROLE}
-      - TARGET_SN_COUNT=${CORES}
-      - TARGET_DN_COUNT=${CORES}
+      - TARGET_SN_COUNT=${SN_CORES}
+      - TARGET_DN_COUNT=${DN_CORES}
       - HEAD_PORT=${HEAD_PORT}
       - HEAD_HOST=hsds_head
       - NODE_TYPE=head_node

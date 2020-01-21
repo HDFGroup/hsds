@@ -3,7 +3,7 @@
 #
 # Shutdown HSDS with "docker-compose down" using the appropriate compose file
 #
-if [[ -z ${AWS_S3_GATEWAY}  ]]
+if [[ -z ${AWS_S3_GATEWAY}  ]] && [[ -z ${AZURE_CONNECTION_STRING}  ]]
 then
   COMPOSE_FILE="docker-compose.openio.yml"
   [ -z ${HSDS_ENDPOINT} ] && export HSDS_ENDPOINT=http://localhost:5101

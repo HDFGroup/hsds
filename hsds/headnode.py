@@ -17,7 +17,6 @@ import json
 import time
 
 from aiohttp.web import Application, StreamResponse, run_app, json_response
-from aiohttp import  ClientSession, TCPConnector
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 
 from asyncio import TimeoutError
@@ -29,7 +28,7 @@ from util.idUtil import  createNodeId
 import hsds_logger as log
 
 NODE_STAT_KEYS = ("cpu", "diskio", "memory", "log_stats", "disk", "netio",
-    "req_count", "s3_stats", "chunk_cache_stats")
+    "req_count", "s3_stats", "azure_stats", "chunk_cache_stats")
 
 async def healthCheck(app):
     """ Periodic method that pings each active node and verifies it is still healthy.
@@ -81,7 +80,8 @@ async def healthCheck(app):
                 app_node_stats = app["node_stats"]
                 node_stats = {}
                 for k in NODE_STAT_KEYS:
-                    node_stats[k] = rsp_json[k]
+                    if k in rsp_json:
+                        node_stats[k] = rsp_json[k]
                 app_node_stats[node_id] = node_stats
                 # mark the last time we got a response from this node
                 node["healthcheck"] = unixTimeToUTC(int(time.time()))
@@ -201,7 +201,7 @@ async def register(request):
     log.info("inactive_node_count: {}".format(inactive_node_count))
     if inactive_node_count == 0:
         # all the nodes have checked in
-        log.info("setting cluster state to ready")
+        log.info(f"setting cluster state to ready - was: {app['cluster_state']}")
         app['cluster_state'] = "READY"
 
     resp = StreamResponse()
@@ -329,9 +329,9 @@ def getInactiveNodeCount(app):
     return count
 
 
-async def init(loop):
-    """Intitialize application and return app object"""
-    app = Application(loop=loop)
+def init():
+    """Intitialize application and return app object """
+    app = Application()
 
     # set a bunch of global state
     app["id"] = createNodeId("head")
@@ -383,14 +383,13 @@ async def init(loop):
 #
 
 if __name__ == '__main__':
+    log.info("Head node initializing")
     loop = asyncio.get_event_loop()
-    app = loop.run_until_complete(init(loop))
+    app = init()  
 
     # create a client Session here so that all client requests
     #   will share the same connection pool
     max_tcp_connections = int(config.get("max_tcp_connections"))
-    app['client'] = ClientSession(loop=loop, connector=TCPConnector(limit=max_tcp_connections))
-
     app["loop"] = loop
 
     asyncio.ensure_future(healthCheck(app), loop=loop)
