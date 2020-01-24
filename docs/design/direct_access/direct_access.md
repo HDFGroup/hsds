@@ -34,6 +34,10 @@ Restructing the current HSDS code base as a Python package for client use would 
 
 A simpler appoach would be to extend the current h5pyd package to optionally support direct access in addition to sending requests to the server.  This can be accomplished by having h5pyd use a multiprocessing model - when a file is opened in h5pyd, it would launch processess that would be equivalent of the HSDS SN and DN containers.  Once the process are running, h5pyd would use http requests as it would with a remote server (but just using localhost connections).  When the last file is closed, the processes would be terminated.
 
+The design architecture is illustrated in the following diagram:
+
+![Diagram1](https://github.com/HDFGroup/hsds/blob/master/docs/design/direct_access/diagram1.png)
+
 The HSDS service uses Docker (or equivantlely Kubernetes) to:
 
 1. Provide a standard image to run
