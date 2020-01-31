@@ -84,8 +84,10 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level,
     try:
         async with client.put(req, data=data, params=params) as rsp:
             log.debug(f"req: {req} status: {rsp.status}")
-            if rsp.status == 201:
-                log.debug(f"http_put({req}) <201> Updated")
+            if rsp.status == 200:
+                log.debug(f"http_put({req}) <200> Ok")
+            elif rsp.status == 201:
+                log.debug(f"http_out({req}) <201> Updated")
             elif rsp.status == 503:
                 log.warn(f"DN node too busy to handle request: {req}")
                 raise HTTPServiceUnavailable()
@@ -688,7 +690,7 @@ async def write_chunk_query(app, chunk_id, dset_json, slices, query, query_updat
 
     req = getDataNodeUrl(app, chunk_id)
     req += "/chunks/" + chunk_id
-    log.debug("GET chunk req: " + req)
+    log.debug("PUT chunk req: " + req)
     client = get_http_client(app)
 
     layout = getChunkLayout(dset_json)
@@ -708,7 +710,7 @@ async def write_chunk_query(app, chunk_id, dset_json, slices, query, query_updat
     dn_rsp = None
     try:
         async with client.put(req, data=json.dumps(query_update), params=params) as rsp:
-            log.debug(f"http_get {req} status: <{rsp.status}>")
+            log.debug(f"http_put {req} status: <{rsp.status}>")
             if rsp.status == 200:
                 dn_rsp = await rsp.json()  # read response as json
                 log.debug(f"got query data: {dn_rsp}")
@@ -723,7 +725,7 @@ async def write_chunk_query(app, chunk_id, dset_json, slices, query, query_updat
                 raise HTTPInternalServerError()
 
     except ClientError as ce:
-        log.error(f"Error for http_get({req}): {ce} ")
+        log.error(f"Error for http_put({req}): {ce} ")
         raise HTTPInternalServerError()
     except CancelledError as cle:
         log.warn(f"CancelledError for http_get({req}): {cle}")

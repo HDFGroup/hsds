@@ -44,6 +44,9 @@ class StorUtilTest(unittest.TestCase):
         await putStorJSONObj(app, f"{key_folder}/obj_json_3", obj_json_3)
         await putStorBytes(app, f"{key_folder}/np_arr_1", np_arr_1.tobytes())
         await putStorBytes(app, f"{key_folder}/np_arr_2", np_arr_2.tobytes())
+        data = bytearray(70103200)
+        await putStorBytes(app, f"{key_folder}/bytearray", bytes(data))
+
 
         # check the keys exists
         self.assertTrue(await isStorObj(app, f"{key_folder}/obj_json_1"))
