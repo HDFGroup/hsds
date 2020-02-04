@@ -14,15 +14,18 @@
 #
 import asyncio
 import time
-from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError, HTTPBadRequest, HTTPNotFound, HTTPForbidden
-
+import numpy as np
+from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError, HTTPBadRequest, HTTPNotFound, HTTPForbidden, HTTPServiceUnavailable
 from util.idUtil import validateInPartition, getS3Key, isValidUuid, isValidChunkId, getDataNodeUrl, isSchema2Id, getRootObjId, isRootObjId
-from util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes, isStorObj, deleteStorObj
+from util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes, getStorBytes, isStorObj, deleteStorObj
 from util.domainUtil import isValidDomain, getBucketForDomain
 from util.attrUtil import getRequestCollectionName
 from util.httpUtil import http_post
+from util.dsetUtil import getChunkLayout, getDeflateLevel, isShuffle, getFillValue
 from util.chunkUtil import getDatasetId
-from util.arrayUtil import arrayToBytes
+from util.arrayUtil import arrayToBytes, bytesToArray
+from util.hdf5dtype import createDataType
+
 import config
 import hsds_logger as log
 
@@ -211,7 +214,6 @@ async def save_metadata_obj(app, obj_id, obj_json, bucket=None, notify=False, fl
     meta_cache.setDirty(obj_id)
     now = int(time.time())
 
-
     if flush:
         # write to S3 immediately
         if isValidChunkId(obj_id):
@@ -291,7 +293,118 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None, bucket=Non
 
     log.debug(f"delete_metadata_obj for {obj_id} done")
 
+"""
+Utility method for GET_Chunk, PUT_Chunk, and POST_CHunk
+Get a numpy array for the chunk (possibly initizaling a new chunk if requested)
+"""
+async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset=0, s3size=0, chunk_init=False):
+    # if the chunk cache has too many dirty items, wait till items get flushed to S3
+    MAX_WAIT_TIME = 10.0  # TBD - make this a config
+    chunk_cache = app['chunk_cache']
+    if chunk_init and s3offset > 0:
+        log.error(f"unable to initiale chunk {chunk_id} for reference layouts ")
+        raise  HTTPInternalServerError()
 
+    log.debug(f"getChunk cache utilization: {chunk_cache.cacheUtilizationPercent} per, dirty_count: {chunk_cache.dirtyCount}, mem_dirty: {chunk_cache.memDirty}")
+
+    chunk_arr = None
+    dims = getChunkLayout(dset_json)
+    type_json = dset_json["type"]
+    dt = createDataType(type_json)
+    # note - officially we should follow the order in which the filters are defined in the filter_list,
+    # but since we currently have just deflate and shuffle we will always apply deflate then shuffle on read,
+    # and shuffle then deflate on write
+    # also note - get deflate and shuffle will update the deflate and shuffle map so that the s3sync will do the right thing
+    deflate_level = getDeflateLevel(app,  dset_json)
+    shuffle = isShuffle(app, dset_json)
+    s3key = None
+
+    if s3path:
+        if not s3path.startswith("s3://"):
+            # TBD - verify these at dataset creation time?
+            log.error(f"unexpected s3path for getChunk: {s3path}")
+            raise  HTTPInternalServerError()
+        path = s3path[5:]
+        index = path.find('/')   # split bucket and key
+        if index < 1:
+            log.error(f"s3path is invalid: {s3path}")
+            raise HTTPInternalServerError()
+        bucket = path[:index]
+        s3key = path[(index+1):]
+        log.debug(f"Using s3path bucket: {bucket} and  s3key: {s3key}")
+    else:
+        s3key = getS3Key(chunk_id)
+        log.debug(f"getChunk chunkid: {chunk_id} bucket: {bucket}")
+    if chunk_id in chunk_cache:
+        chunk_arr = chunk_cache[chunk_id]
+    else:
+        if s3path and s3size == 0:
+            obj_exists = False
+        else:
+            obj_exists = await isStorObj(app, s3key, bucket=bucket)
+        # TBD - potential race condition?
+        if obj_exists:
+            pending_s3_read = app["pending_s3_read"]
+
+            if chunk_id in pending_s3_read:
+                # already a read in progress, wait for it to complete
+                read_start_time = pending_s3_read[chunk_id]
+                log.info(f"s3 read request for {chunk_id} was requested at: {read_start_time}")
+                while time.time() - read_start_time < 2.0:
+                    log.debug("waiting for pending s3 read, sleeping")
+                    await asyncio.sleep(1)  # sleep for sub-second?
+                    if chunk_id in chunk_cache:
+                        log.info(f"Chunk {chunk_id} has arrived!")
+                        chunk_arr = chunk_cache[chunk_id]
+                        break
+                if chunk_arr is None:
+                    log.warn(f"s3 read for chunk {chunk_id} timed-out, initiaiting a new read")
+
+            if chunk_arr is None:
+                if chunk_id not in pending_s3_read:
+                    pending_s3_read[chunk_id] = time.time()
+                log.debug(f"Reading chunk {s3key} from S3")
+
+                chunk_bytes = await getStorBytes(app, s3key, shuffle=shuffle, deflate_level=deflate_level, offset=s3offset, length=s3size, bucket=bucket)
+                if chunk_id in pending_s3_read:
+                    # read complete - remove from pending map
+                    elapsed_time = time.time() - pending_s3_read[chunk_id]
+                    log.info(f"s3 read for {s3key} took {elapsed_time}")
+                    del pending_s3_read[chunk_id]
+                else:
+                    log.warn(f"expected to find {chunk_id} in pending_s3_read map")
+                chunk_arr = bytesToArray(chunk_bytes, dt, dims)
+
+            log.debug(f"chunk size: {chunk_arr.size}")
+
+        elif chunk_init:
+            log.debug(f"Initializing chunk {chunk_id}")
+            fill_value = getFillValue(dset_json)
+            if fill_value:
+                # need to convert list to tuples for numpy broadcast
+                if isinstance(fill_value, list):
+                    fill_value = tuple(fill_value)
+                chunk_arr = np.empty(dims, dtype=dt, order='C')
+                chunk_arr[...] = fill_value
+            else:
+                chunk_arr = np.zeros(dims, dtype=dt, order='C')
+        else:
+            log.debug(f"Chunk {chunk_id} not found")
+
+        if chunk_arr is not None:
+            # check that there's room in the cache before adding it
+            if chunk_cache.memTarget - chunk_cache.memDirty < chunk_arr.size:
+                # no room in the cache, wait till space is freed by the s3sync task
+                wait_start = time.time()
+                while chunk_cache.memTarget - chunk_cache.memDirty < chunk_arr.size:
+                    log.warn(f"getChunk, cache utilization: {chunk_cache.cacheUtilizationPercent}, sleeping till items are flushed")
+                    if time.time() - wait_start > MAX_WAIT_TIME:
+                        log.error(f"unable to save updated chunk {chunk_id} to cache returning 503 error")
+                        raise HTTPServiceUnavailable()
+                    await asyncio.sleep(1)
+
+            chunk_cache[chunk_id] = chunk_arr  # store in cache
+    return chunk_arr
 
 async def write_s3_obj(app, obj_id, bucket=None):
     """ writes the given object to s3 """

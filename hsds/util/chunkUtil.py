@@ -1,3 +1,4 @@
+import numpy as np
 import hsds_logger as log
 
 CHUNK_BASE =  16*1024   # Multiplier by which chunks are adjusted
@@ -224,7 +225,7 @@ def slice_stop(s):
     else:
         w = s.stop - s.start # selection width (>0)
     return s.start + w
-
+ 
 def getNumChunks(selection, layout):
     """
     Get the number of chunks potentially required.
@@ -591,3 +592,338 @@ class ChunkIterator:
                 self._chunk_index[dim] = s.start // c
             dim -= 1
         return chunk_id
+
+"""
+Return data from requested chunk and selection
+"""
+def chunkReadSelection(chunk_arr, slices=None, dset_json=None):
+    log.info("chunkReadSelection")
+
+    dims = chunk_arr.shape
+    log.debug(f"got chunk dims: {dims}")
+    rank = len(dims)
+    if rank == 0:
+        msg = "No dimension passed to chunkReadSelection"
+        raise ValueError(msg)
+
+    log.debug(f"got selection: {slices}")
+    slices = tuple(slices)
+
+    if len(slices) != rank:
+        msg = "Selection rank does not match shape rank"
+        raise ValueError(msg)
+
+    dt = chunk_arr.dtype
+    log.debug(f"dtype: {dt}")
+
+    # get requested data
+    output_arr = chunk_arr[slices]
+
+    return output_arr
+
+"""
+Write data for requested chunk and selection
+"""
+def chunkWriteSelection(chunk_arr=None, slices=None, input_arr=None):
+    log.info(f"chunkWriteSelection")
+    dims = chunk_arr.shape
+
+    rank = len(dims)
+ 
+    if rank == 0:
+        msg = "No dimension passed to chunkReadSelection"
+        raise ValueError(msg)
+    if len(slices) != rank:
+        msg = "Selection rank does not match dataset rank"
+        raise ValueError(msg)
+    if len(input_arr.shape) != rank:
+        msg = "Input arr does not match dataset rank"
+        raise ValueError(msg)
+
+    # update chunk array
+    chunk_arr[slices] = input_arr
+
+
+"""
+Write points to given chunk
+"""
+def chunkWritePoints(chunk_id=None, chunk_arr=None, point_arr=None):
+    # writing point data
+    log.info(f"chunkWritePoints - chunk_id: {chunk_id}")
+    dims = chunk_arr.shape
+
+    log.debug(f"got dims: {dims}")
+    rank = len(dims)
+    if rank == 0:
+        msg = "No dimension passed to chunkWritePoints"
+        raise ValueError(msg)
+
+    if len(point_arr.shape) != 1:
+        msg = "Expected point array to be one dimensional"
+        raise ValueError(msg)
+    dset_dtype = chunk_arr.dtype
+    log.debug(f"dtype: {dset_dtype}")
+
+    # point_arr should have the following type:
+    #       (coord1, coord2, ...) | dset_dtype
+    comp_dtype = point_arr.dtype
+    if len(comp_dtype) != 2:
+        msg = "expected compound type for point array"
+        raise ValueError(msg)
+    dt_0 = comp_dtype[0]
+    if dt_0.base != np.dtype("uint64"):
+        msg = "unexpected dtype for point array"
+        raise ValueError(msg)
+    if rank == 1:
+        if dt_0.shape:
+            msg = "unexpected dtype for point array"
+            raise ValueError(msg)
+    else:
+        if dt_0.shape[0] != rank:
+            msg = "unexpected dtype for point array"
+            raise ValueError(msg)
+        dt_1 = comp_dtype[1]
+        if dt_1 != dset_dtype:
+            msg = "unexpected dtype for point array"
+            raise ValueError(msg)
+
+    num_points = len(point_arr)
+
+    for i in range(num_points):
+        elem = point_arr[i]
+        log.debug(f"non-relative coordinate: {elem}")
+        if rank == 1:
+            coord = int(elem[0])
+            coord = coord % dims[0] # adjust to chunk relative
+        else:
+            coord = elem[0] # index to update
+            for dim in range(rank):
+                # adjust to chunk relative
+                coord[dim] = int(coord[dim]) % dims[dim]
+            coord = tuple(coord)  # need to convert to a tuple
+        log.debug(f"relative coordinate: {coord}")
+
+        val = elem[1]   # value
+        try:
+            chunk_arr[coord] = val # update the point 
+        except IndexError:
+            msg = "Out of bounds point index for POST Chunk"
+            log.warn(msg)
+
+"""
+Read points from given chunk
+"""
+def chunkReadPoints(chunk_id=None, chunk_arr=None, points_arr=None):
+    log.info(f"chunkReadPoints - chunk_id: {chunk_id}")
+
+    dims = chunk_arr.shape
+    log.debug(f"got dims: {dims}")
+    chunk_coord = getChunkCoordinate(chunk_id, dims)
+    log.debug(f"chunk_coord: {chunk_coord}")
+    rank = len(dims)
+    if rank == 0:
+        msg = "No dimension passed to chunk read points"
+        raise ValueError(msg)
+
+    dset_dtype = chunk_arr.dtype
+    log.debug(f"dset dtype: {dset_dtype}")
+
+    # verify points_arr dtype
+    points_dt = points_arr.dtype
+    if points_dt != np.dtype("uint64"):
+        msg = "unexpected dtype for point array"
+        raise ValueError(msg)
+    if len(points_arr.shape) != 2:
+        msg = "unexpected shape for point array"
+        raise ValueError(msg)
+    if points_arr.shape[1] != rank:
+        msg = "unexpected shape for point array"
+        raise ValueError(msg)
+    num_points = points_arr.shape[0]
+
+    log.debug(f"got {num_points} points")
+
+    output_arr = np.zeros((num_points,), dtype=dset_dtype)
+
+    for i in range(num_points):
+        point = points_arr[i,:]
+        tr_point = getChunkRelativePoint(chunk_coord, point)
+        val = chunk_arr[tuple(tr_point)]
+        output_arr[i] = val
+    return output_arr
+
+
+"""
+getEvalStr: Get eval string for given query
+
+    Gets Eval string to use with numpy where method.
+"""
+def getEvalStr(query, arr_name, field_names):
+    i = 0
+    eval_str = ""
+    var_name = None
+    end_quote_char = None
+    var_count = 0
+    paren_count = 0
+    black_list = ( "import", ) # field names that are not allowed
+    for item in black_list:
+        if item in field_names:
+            msg = "invalid field name"
+            log.warn("Bad query: " + msg)
+            raise ValueError(msg)
+    while i < len(query):
+        ch = query[i]
+        if (i+1) < len(query):
+            ch_next = query[i+1]
+        else:
+            ch_next = None
+        if var_name and not ch.isalnum():
+            # end of variable
+            if var_name not in field_names:
+                # invalid
+                msg = "unknown field name"
+                log.warn("Bad query: " + msg)
+                raise ValueError(msg)
+            eval_str += arr_name + "['" + var_name + "']"
+            var_name = None
+            var_count += 1
+
+        if end_quote_char:
+            if ch == end_quote_char:
+                # end of literal
+                end_quote_char = None
+            eval_str += ch
+        elif ch in ("'", '"'):
+            end_quote_char = ch
+            eval_str += ch
+        elif ch.isalpha():
+            if ch == 'b' and ch_next in ("'", '"'):
+                eval_str += 'b' # start of a byte string literal
+            elif var_name is None:
+                var_name = ch  # start of a variable
+            else:
+                var_name += ch
+        elif ch == '(' and end_quote_char is None:
+            paren_count += 1
+            eval_str += ch
+        elif ch == ')' and end_quote_char is None:
+            paren_count -= 1
+            if paren_count < 0:
+                msg = "Mismatched paren"
+                log.warn("Bad query: " + msg)
+                raise ValueError(msg)
+            eval_str += ch
+        else:
+            # just add to eval_str
+            eval_str += ch
+        i = i+1
+    if end_quote_char:
+        msg = "no matching quote character"
+        log.warn("Bad Query: " + msg)
+        raise ValueError(msg)
+    if var_count == 0:
+        msg = "No field value"
+        log.warn("Bad query: " + msg)
+        raise ValueError(msg)
+    if paren_count != 0:
+        msg = "Mismatched paren"
+        log.warn("Bad query: " + msg)
+        raise ValueError(msg)
+    log.info(f"eval_str: {eval_str}")
+    return eval_str
+
+
+"""
+Run query on chunk and selection
+"""
+def chunkQuery(chunk_id=None, chunk_arr=None, slices=None,
+        query=None, query_update=None, limit=0):
+    log.info(f"chunk_query - chunk_id: {chunk_id}")
+    dims = chunk_arr.shape
+
+    rank = len(dims)
+
+    dset_dtype = chunk_arr.dtype
+    log.debug(f"dtype: {dset_dtype}")
+    log.debug(f"selection: {slices}")
+    slices = tuple(slices)
+
+    if rank != 1:
+        msg = "Query operations only supported on one-dimensional datasets"
+        raise ValueError(msg)
+    if len(slices) != rank:
+        msg = "Selection rank does not match shape rank"
+        raise ValueError(msg)
+
+    values = []
+    indices = []
+    # do query selection
+    field_names = list(dset_dtype.fields.keys())
+
+    if query_update:
+        replace_mask = [None,] * len(field_names)
+        for i in range(len(field_names)):
+            field_name = field_names[i]
+            if field_name in query_update:
+                replace_mask[i] = query_update[field_name]
+            log.debug(f"replace_mask: {replace_mask}")
+            if replace_mask == [None,] * len(field_names):
+                msg = "no fields found in query_update"
+                raise ValueError(msg)
+    else:
+        replace_mask = None
+
+    x = chunk_arr[slices]
+    log.debug(f"put_query - x: {x}")
+    eval_str = getEvalStr(query, "x", field_names)
+    log.debug(f"put_query - eval_str: {eval_str}")
+    where_result = np.where(eval(eval_str))
+    log.debug(f"put_query - where_result: {where_result}")
+    where_result_index = where_result[0]
+    log.debug(f"put_query - whare_result index: {where_result_index}")
+    log.debug(f"put_query - boolean selection: {x[where_result_index]}")
+    s = slices[0]
+    count = 0
+    for index in where_result_index:
+        log.debug(f"put_query - index: {index}")
+        value = x[index].copy()
+        if replace_mask:
+            log.debug(f"put_query - original value: {value}")
+            for i in range(len(field_names)):
+                if replace_mask[i] is not None:
+                    value[i] = replace_mask[i]
+            log.debug(f"put_query - modified value: {value}")
+            try:
+                chunk_arr[index] = value
+            except ValueError as ve:
+                log.error(f"Numpy Value updating array: {ve}")
+                raise
+
+        #json_val = bytesArrayToList(value)
+        log.debug(f"put_query - got value: {value}")
+        json_index = index.tolist() * s.step + s.start  # adjust for selection
+        indices.append(json_index)
+        values.append(value)
+        count += 1
+        if replace_mask and limit > 0 and count >= limit:
+            log.info("query update - got limit items")
+            break
+
+    if not values:
+        return None   # no hits
+
+    # return the results as a numpy array
+    if rank == 1:
+        coord_type_str = "uint64"
+    else:
+        coord_type_str = f"({rank},)uint64"
+    result_dtype = np.dtype([("coord", np.dtype(coord_type_str)), ("value", dset_dtype)])
+    result_arr = np.zeros((count,), dtype=result_dtype)
+    for i in range(count):
+        e = result_arr[i]
+        e[0] = indices[i]
+        e[1] = values[i]
+        result_arr[i] = e
+
+    log.info(f"query_result returning: {count} rows")
+    return result_arr
