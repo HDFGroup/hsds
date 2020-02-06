@@ -11,6 +11,7 @@
 ##############################################################################
 import unittest
 import sys
+import numpy as np
 
 sys.path.append('../../hsds/util')
 sys.path.append('../../hsds')
@@ -18,6 +19,7 @@ from dsetUtil import getHyperslabSelection
 from chunkUtil import guessChunk, getNumChunks, getChunkIds, getChunkId, getPartitionKey, getChunkPartition
 from chunkUtil import getChunkIndex, getChunkSelection, getChunkCoverage, getDataCoverage, ChunkIterator
 from chunkUtil import getChunkSize, shrinkChunk, expandChunk, getDatasetId, getContiguousLayout
+from chunkUtil import chunkReadSelection, chunkWriteSelection, chunkReadPoints, chunkWritePoints
 
 
 class ChunkUtilTest(unittest.TestCase):
@@ -1077,6 +1079,138 @@ class ChunkUtilTest(unittest.TestCase):
                 break
 
         self.assertEqual(count, 16)
+
+
+    def testChunkReadSelection(self):
+        chunk_arr = np.array([2,3,5,7,11,13,17,19])
+        arr = chunkReadSelection(chunk_arr, slices=((slice(3,5,1),)))
+        self.assertEqual(arr.tolist(), [7,11])
+        arr = chunkReadSelection(chunk_arr, slices=((slice(3,9,2),)))
+        self.assertEqual(arr.tolist(), [7,13,19])
+        chunk_arr = np.zeros((3,4))
+        for i in range(3):
+            chunk_arr[i] = list(range(i+1,i+1+4))
+        print(chunk_arr)
+        arr = chunkReadSelection(chunk_arr, slices=((slice(1,2,1),slice(0,4,1))))
+        print(arr.tolist())
+        self.assertEqual(arr.tolist(), [[2.0, 3.0, 4.0, 5.0]])
+        arr = chunkReadSelection(chunk_arr, slices=((slice(0,3,1),slice(2,3,1))))
+        print(arr.tolist())
+        self.assertEqual(arr.tolist(), [[3.0],[4.0],[5.0]])
+
+    def testChunkWriteSelection(self):
+        chunk_arr = np.zeros((8,))
+        data = np.array([2,3,5,7,11,13,17,19])
+        chunkWriteSelection(chunk_arr=chunk_arr, slices=(slice(0,8,1),), data=data)
+        self.assertEqual(chunk_arr.tolist(), data.tolist())
+        data = np.array([101, 121, 131])
+        chunkWriteSelection(chunk_arr=chunk_arr, slices=(slice(3,6,1),), data=data)
+        self.assertEqual(chunk_arr.tolist(), [2,3,5,101,121,131,17,19])
+
+    def testChunkReadPoints1D(self):
+        # chunkWritePoints(chunk_id=None, chunk_arr=None, point_arr=None)
+        # chunkReadPoints(chunk_id=None, chunk_arr=None, points_arr=None):
+        chunk_id = "c-00de6a9c-6aff5c35-15d5-3864dd-0740f8_12"
+        chunk_layout = (100,)
+        chunk_arr = np.array(list(range(100)))
+        point_arr = np.array([[1200],[1299],[1244],[1222]], dtype=np.uint64)
+        arr = chunkReadPoints(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, point_arr=point_arr)
+        self.assertEqual(arr.tolist(), [0, 99, 44, 22])
+
+        point_arr = np.array([[1200],[1299],[1244],[1322]], dtype=np.uint64)
+        try:
+            chunkReadPoints(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, point_arr=point_arr)
+            self.assertTrue(False)  # expected exception
+        except IndexError:
+            pass # expected
+
+
+    def testChunkReadPoints2D(self):
+        chunk_id = "c-00de6a9c-6aff5c35-15d5-3864dd-0740f8_3_4"
+        chunk_layout = (100,100)
+        chunk_arr = np.zeros((100,100))
+        chunk_arr[:,12] = 69
+        chunk_arr[12,:] = 96
+
+        point_arr = np.array([[312,498],[312,412],[355,412],[398,497]], dtype=np.uint64)
+        arr = chunkReadPoints(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, point_arr=point_arr)
+        self.assertEqual(arr.tolist(), [96,96,69,0])
+
+        point_arr = np.array([[312,498],[312,412],[355,412],[398,397]], dtype=np.uint64)
+        try:
+            chunkReadPoints(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, point_arr=point_arr)
+            self.assertTrue(False)  # expected exception
+        except IndexError:
+            pass # expected
+
+    def testChunkWritePoints1D(self):
+        chunk_id = "c-00de6a9c-6aff5c35-15d5-3864dd-0740f8_12"
+        chunk_layout = (100,)
+        chunk_arr = np.zeros((100,))
+        rank = 1
+        #       (coord1, coord2, ...) | dset_dtype
+        point_dt = np.dtype([("coord", np.uint64), ("val", chunk_arr.dtype)])
+        # point_dt = np.dtype([("coord", np.uint64, (rank,)), ("val", chunk_arr.dtype)])
+        indexes = (1203,1245,1288,1212,1299)
+        num_points = len(indexes)
+        point_arr = np.zeros((num_points,), dtype=point_dt)
+        for i in range(num_points):
+            e = point_arr[i]
+            e[0] = indexes[i]
+            e[1] = 42
+        print(point_arr)
+        chunkWritePoints(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, point_arr=point_arr)
+        for i in range(100):
+            if i + 1200 in indexes:
+                self.assertEqual(chunk_arr[i], 42)
+            else:
+                self.assertEqual(chunk_arr[i], 0)
+        print(point_arr)
+
+        e = point_arr[1]
+        e[0] = 99  # index out of range
+        try:
+            chunkWritePoints(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, point_arr=point_arr)
+            self.assertTrue(False)  # expected exception
+        except IndexError:
+            pass  # expected
+
+    def testChunkWritePoints2D(self):
+        chunk_id = "c-00de6a9c-6aff5c35-15d5-3864dd-0740f8_3_2"
+        chunk_layout = (10,20)
+        chunk_arr = np.zeros((10,20))
+        rank = 2
+        #       (coord1, coord2, ...) | dset_dtype
+        point_dt = np.dtype([("coord", np.uint64, (2,)), ("val", chunk_arr.dtype)])
+        # point_dt = np.dtype([("coord", np.uint64, (rank,)), ("val", chunk_arr.dtype)])
+        indexes =((32,46),(38,52),(35,53))
+        num_points = len(indexes)
+        point_arr = np.zeros((num_points,), dtype=point_dt)
+        for i in range(num_points):
+            e = point_arr[i]
+            e[0] = indexes[i]
+            e[1] = 42
+        chunkWritePoints(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, point_arr=point_arr)
+        chunk_index = (30,40)
+        for i in range(num_points):
+            index = indexes[i]
+            x = index[0]- chunk_index[0]
+            y = index[1] - chunk_index[1]
+            self.assertEqual(chunk_arr[x,y], 42)
+
+        e = point_arr[0]
+        e[0] = (42,46)  # index out of range
+        try:
+            chunkWritePoints(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, point_arr=point_arr)
+            self.assertTrue(False)  # expected exception
+        except IndexError:
+            pass  # expected
+
+
+
+
+
+
 
 
 

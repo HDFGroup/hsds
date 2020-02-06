@@ -543,6 +543,9 @@ def getChunkRelativePoint(chunkCoord, point):
     """
     tr = point.copy()
     for i in range(len(point)):
+        if chunkCoord[i] > point[i]:
+            msg = "unexpected point index"
+            raise IndexError(msg)
         tr[i] = point[i] - chunkCoord[i]
     return tr
 
@@ -596,7 +599,7 @@ class ChunkIterator:
 """
 Return data from requested chunk and selection
 """
-def chunkReadSelection(chunk_arr, slices=None, dset_json=None):
+def chunkReadSelection(chunk_arr, slices=None):
     log.info("chunkReadSelection")
 
     dims = chunk_arr.shape
@@ -624,7 +627,7 @@ def chunkReadSelection(chunk_arr, slices=None, dset_json=None):
 """
 Write data for requested chunk and selection
 """
-def chunkWriteSelection(chunk_arr=None, slices=None, input_arr=None):
+def chunkWriteSelection(chunk_arr=None, slices=None, data=None):
     log.info(f"chunkWriteSelection")
     dims = chunk_arr.shape
 
@@ -636,18 +639,67 @@ def chunkWriteSelection(chunk_arr=None, slices=None, input_arr=None):
     if len(slices) != rank:
         msg = "Selection rank does not match dataset rank"
         raise ValueError(msg)
-    if len(input_arr.shape) != rank:
+    if len(data.shape) != rank:
         msg = "Input arr does not match dataset rank"
         raise ValueError(msg)
 
     # update chunk array
-    chunk_arr[slices] = input_arr
+    chunk_arr[slices] = data
 
+
+"""
+Read points from given chunk
+"""
+def chunkReadPoints(chunk_id=None, chunk_layout=None, chunk_arr=None, point_arr=None):
+    log.info(f"chunkReadPoints - chunk_id: {chunk_id}")
+
+    dims = chunk_arr.shape
+    log.debug(f"got dims: {dims}")
+    chunk_coord = getChunkCoordinate(chunk_id, dims)
+    log.debug(f"chunk_coord: {chunk_coord}")
+    rank = len(dims)
+    if rank == 0:
+        msg = "No dimension passed to chunk read points"
+        raise ValueError(msg)
+
+    dset_dtype = chunk_arr.dtype
+    log.debug(f"dset dtype: {dset_dtype}")
+
+    # verify chunk_layout
+    if len(chunk_layout) != rank:
+        msg = "chunk layout doesn't match rank"
+        raise ValueError(msg)
+
+    # verify points array dtype
+    points_dt = point_arr.dtype
+    if points_dt != np.dtype("uint64"):
+        msg = "unexpected dtype for point array"
+        raise ValueError(msg)
+    if len(point_arr.shape) != 2:
+        msg = "unexpected shape for point array"
+        raise ValueError(msg)
+    if point_arr.shape[1] != rank:
+        msg = "unexpected shape for point array"
+        raise ValueError(msg)
+    num_points = point_arr.shape[0]
+
+    log.debug(f"got {num_points} points")
+
+    output_arr = np.zeros((num_points,), dtype=dset_dtype)
+
+    chunk_coord = getChunkCoordinate(chunk_id, chunk_layout)
+
+    for i in range(num_points):
+        point = point_arr[i,:]
+        tr_point = getChunkRelativePoint(chunk_coord, point)
+        val = chunk_arr[tuple(tr_point)]
+        output_arr[i] = val
+    return output_arr
 
 """
 Write points to given chunk
 """
-def chunkWritePoints(chunk_id=None, chunk_arr=None, point_arr=None):
+def chunkWritePoints(chunk_id=None, chunk_layout=None, chunk_arr=None, point_arr=None):
     # writing point data
     log.info(f"chunkWritePoints - chunk_id: {chunk_id}")
     dims = chunk_arr.shape
@@ -689,68 +741,29 @@ def chunkWritePoints(chunk_id=None, chunk_arr=None, point_arr=None):
 
     num_points = len(point_arr)
 
+    chunk_coord = getChunkCoordinate(chunk_id, chunk_layout)
+
     for i in range(num_points):
         elem = point_arr[i]
         log.debug(f"non-relative coordinate: {elem}")
         if rank == 1:
             coord = int(elem[0])
-            coord = coord % dims[0] # adjust to chunk relative
+            coord = coord - chunk_coord[0] # adjust to chunk relative
+            if coord < 0 or coord >= dims[0]:
+                msg = f"chunkWritePoints - invalid index: {int(elem[0])}"
+                log.warn(msg)
+                raise IndexError(msg)
         else:
             coord = elem[0] # index to update
             for dim in range(rank):
                 # adjust to chunk relative
-                coord[dim] = int(coord[dim]) % dims[dim]
+                coord[dim] = int(coord[dim]) - chunk_coord[dim]
             coord = tuple(coord)  # need to convert to a tuple
         log.debug(f"relative coordinate: {coord}")
 
         val = elem[1]   # value
-        try:
-            chunk_arr[coord] = val # update the point 
-        except IndexError:
-            msg = "Out of bounds point index for POST Chunk"
-            log.warn(msg)
+        chunk_arr[coord] = val # update the point
 
-"""
-Read points from given chunk
-"""
-def chunkReadPoints(chunk_id=None, chunk_arr=None, points_arr=None):
-    log.info(f"chunkReadPoints - chunk_id: {chunk_id}")
-
-    dims = chunk_arr.shape
-    log.debug(f"got dims: {dims}")
-    chunk_coord = getChunkCoordinate(chunk_id, dims)
-    log.debug(f"chunk_coord: {chunk_coord}")
-    rank = len(dims)
-    if rank == 0:
-        msg = "No dimension passed to chunk read points"
-        raise ValueError(msg)
-
-    dset_dtype = chunk_arr.dtype
-    log.debug(f"dset dtype: {dset_dtype}")
-
-    # verify points_arr dtype
-    points_dt = points_arr.dtype
-    if points_dt != np.dtype("uint64"):
-        msg = "unexpected dtype for point array"
-        raise ValueError(msg)
-    if len(points_arr.shape) != 2:
-        msg = "unexpected shape for point array"
-        raise ValueError(msg)
-    if points_arr.shape[1] != rank:
-        msg = "unexpected shape for point array"
-        raise ValueError(msg)
-    num_points = points_arr.shape[0]
-
-    log.debug(f"got {num_points} points")
-
-    output_arr = np.zeros((num_points,), dtype=dset_dtype)
-
-    for i in range(num_points):
-        point = points_arr[i,:]
-        tr_point = getChunkRelativePoint(chunk_coord, point)
-        val = chunk_arr[tuple(tr_point)]
-        output_arr[i] = val
-    return output_arr
 
 
 """
