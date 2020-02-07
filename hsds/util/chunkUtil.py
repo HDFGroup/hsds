@@ -767,11 +767,11 @@ def chunkWritePoints(chunk_id=None, chunk_layout=None, chunk_arr=None, point_arr
 
 
 """
-getEvalStr: Get eval string for given query
+_getEvalStr: Get eval string for given query
 
     Gets Eval string to use with numpy where method.
 """
-def getEvalStr(query, arr_name, field_names):
+def _getEvalStr(query, arr_name, field_names):
     i = 0
     eval_str = ""
     var_name = None
@@ -849,9 +849,16 @@ def getEvalStr(query, arr_name, field_names):
 """
 Run query on chunk and selection
 """
-def chunkQuery(chunk_id=None, chunk_arr=None, slices=None,
+def chunkQuery(chunk_id=None, chunk_layout=None, chunk_arr=None, slices=None,
         query=None, query_update=None, limit=0):
     log.info(f"chunk_query - chunk_id: {chunk_id}")
+
+    if not isinstance(chunk_arr, np.ndarray):
+        raise TypeError("unexpected array type")
+
+    if limit and not isinstance(limit, int):
+        raise TypeError("unexpected limit")
+
     dims = chunk_arr.shape
 
     rank = len(dims)
@@ -859,14 +866,19 @@ def chunkQuery(chunk_id=None, chunk_arr=None, slices=None,
     dset_dtype = chunk_arr.dtype
     log.debug(f"dtype: {dset_dtype}")
     log.debug(f"selection: {slices}")
-    slices = tuple(slices)
+
 
     if rank != 1:
         msg = "Query operations only supported on one-dimensional datasets"
         raise ValueError(msg)
+    if not slices:
+        slices = [slice(0, dims[0], 1),]
     if len(slices) != rank:
         msg = "Selection rank does not match shape rank"
         raise ValueError(msg)
+    slices = tuple(slices)
+
+    chunk_coord = getChunkCoordinate(chunk_id, chunk_layout)
 
     values = []
     indices = []
@@ -877,35 +889,37 @@ def chunkQuery(chunk_id=None, chunk_arr=None, slices=None,
         replace_mask = [None,] * len(field_names)
         for i in range(len(field_names)):
             field_name = field_names[i]
+
+            print("field_name:", field_name)
             if field_name in query_update:
                 replace_mask[i] = query_update[field_name]
-            log.debug(f"replace_mask: {replace_mask}")
-            if replace_mask == [None,] * len(field_names):
-                msg = "no fields found in query_update"
-                raise ValueError(msg)
+        log.debug(f"replace_mask: {replace_mask}")
+        if replace_mask == [None,] * len(field_names):
+            msg = "no fields found in query_update"
+            raise ValueError(msg)
     else:
         replace_mask = None
 
     x = chunk_arr[slices]
-    log.debug(f"put_query - x: {x}")
-    eval_str = getEvalStr(query, "x", field_names)
-    log.debug(f"put_query - eval_str: {eval_str}")
+    # log.debug(f"chunkQuery - x: {x}")
+    eval_str = _getEvalStr(query, "x", field_names)
+    log.debug(f"chunkQuery - eval_str: {eval_str}")
     where_result = np.where(eval(eval_str))
-    log.debug(f"put_query - where_result: {where_result}")
+    # log.debug(f"chunkQuery - where_result: {where_result}")
     where_result_index = where_result[0]
-    log.debug(f"put_query - whare_result index: {where_result_index}")
-    log.debug(f"put_query - boolean selection: {x[where_result_index]}")
+    #log.debug(f"chunkQuery - whare_result index: {where_result_index}")
+    #log.debug(f"chunkQuery - boolean selection: {x[where_result_index]}")
     s = slices[0]
     count = 0
     for index in where_result_index:
-        log.debug(f"put_query - index: {index}")
+        log.debug(f"chunkQuery - index: {index}")
         value = x[index].copy()
         if replace_mask:
-            log.debug(f"put_query - original value: {value}")
+            log.debug(f"chunkQuery - original value: {value}")
             for i in range(len(field_names)):
                 if replace_mask[i] is not None:
                     value[i] = replace_mask[i]
-            log.debug(f"put_query - modified value: {value}")
+            log.debug(f"chunkQuery - modified value: {value}")
             try:
                 chunk_arr[index] = value
             except ValueError as ve:
@@ -913,12 +927,12 @@ def chunkQuery(chunk_id=None, chunk_arr=None, slices=None,
                 raise
 
         #json_val = bytesArrayToList(value)
-        log.debug(f"put_query - got value: {value}")
+        log.debug(f"chunkQuery - got value: {value}")
         json_index = index.tolist() * s.step + s.start  # adjust for selection
         indices.append(json_index)
         values.append(value)
         count += 1
-        if replace_mask and limit > 0 and count >= limit:
+        if limit > 0 and count >= limit:
             log.info("query update - got limit items")
             break
 
@@ -934,9 +948,9 @@ def chunkQuery(chunk_id=None, chunk_arr=None, slices=None,
     result_arr = np.zeros((count,), dtype=result_dtype)
     for i in range(count):
         e = result_arr[i]
-        e[0] = indices[i]
+        e[0] = indices[i] +  chunk_coord[0]
         e[1] = values[i]
         result_arr[i] = e
 
-    log.info(f"query_result returning: {count} rows")
+    log.info(f"chunkQuery returning: {count} rows")
     return result_arr

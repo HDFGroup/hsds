@@ -19,7 +19,7 @@ from dsetUtil import getHyperslabSelection
 from chunkUtil import guessChunk, getNumChunks, getChunkIds, getChunkId, getPartitionKey, getChunkPartition
 from chunkUtil import getChunkIndex, getChunkSelection, getChunkCoverage, getDataCoverage, ChunkIterator
 from chunkUtil import getChunkSize, shrinkChunk, expandChunk, getDatasetId, getContiguousLayout
-from chunkUtil import chunkReadSelection, chunkWriteSelection, chunkReadPoints, chunkWritePoints
+from chunkUtil import chunkReadSelection, chunkWriteSelection, chunkReadPoints, chunkWritePoints, chunkQuery
 
 
 class ChunkUtilTest(unittest.TestCase):
@@ -1182,7 +1182,6 @@ class ChunkUtilTest(unittest.TestCase):
         rank = 2
         #       (coord1, coord2, ...) | dset_dtype
         point_dt = np.dtype([("coord", np.uint64, (2,)), ("val", chunk_arr.dtype)])
-        # point_dt = np.dtype([("coord", np.uint64, (rank,)), ("val", chunk_arr.dtype)])
         indexes =((32,46),(38,52),(35,53))
         num_points = len(indexes)
         point_arr = np.zeros((num_points,), dtype=point_dt)
@@ -1205,6 +1204,106 @@ class ChunkUtilTest(unittest.TestCase):
             self.assertTrue(False)  # expected exception
         except IndexError:
             pass  # expected
+
+    def testChunkQuery(self):
+        chunk_id = "c-00de6a9c-6aff5c35-15d5-3864dd-0740f8_12"
+        chunk_layout = (100,)
+        value = [
+            ("EBAY", "20170102", 3023, 3088),
+            ("AAPL", "20170102", 3054, 2933),
+            ("AMZN", "20170102", 2973, 3011),
+            ("EBAY", "20170103", 3042, 3128),
+            ("AAPL", "20170103", 3182, 3034),
+            ("AMZN", "20170103", 3021, 2788),
+            ("EBAY", "20170104", 2798, 2876),
+            ("AAPL", "20170104", 2834, 2867),
+            ("AMZN", "20170104", 2891, 2978),
+            ("EBAY", "20170105", 2973, 2962),
+            ("AAPL", "20170105", 2934, 3010),
+            ("AMZN", "20170105", 3018, 3086)
+        ]
+        num_rows = len(value)
+        chunk_dtype = np.dtype([("symbol", "S4"), ("date", "S8"), ("open", "i4"), ("close", "i4")])
+        chunk_arr = np.zeros(chunk_layout, dtype=chunk_dtype)
+        for i in range(num_rows):
+            row = value[i]
+            e = chunk_arr[i]
+            for j in range(4):
+                e[j] = row[j]
+        #chunkQuery(chunk_id=None, chunk_arr=None, slices=None, query=None, query_update=None, limit=0):
+        result = chunkQuery(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, query="symbol == b'AAPL'")
+        self.assertTrue(isinstance(result, np.ndarray))
+        result_dtype = result.dtype
+        self.assertEqual(len(result_dtype), 2)
+
+        self.assertEqual(result_dtype[0], np.dtype("u8"))
+        self.assertEqual(len(result_dtype[1]), 4)
+        self.assertEqual(len(result), 4)
+        expected_indexes = (1201,1204,1207,1210)  # rows above with AAPL as symbol
+        for i in range(4):
+            item = result[i]
+            self.assertEqual(len(item), 2)  # index and row values
+            index = int(item[0])
+            self.assertEqual(index, expected_indexes[i])
+            row = item[1]
+            chunk_index = index % chunk_layout[0]
+            expected_row = chunk_arr[chunk_index]
+            self.assertEqual(len(row), 4)
+            self.assertEqual(row[0], b"AAPL")
+            self.assertEqual(row, expected_row)
+
+        # read just one row back
+        result = chunkQuery(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, query="symbol == b'AAPL'", limit=1)
+        self.assertTrue(isinstance(result, np.ndarray))
+        self.assertEqual(len(result), 1)
+        item = result[0]
+        self.assertEqual(len(item), 2)
+        index = item[0]
+        self.assertEqual(index, 1201)
+        row = item[1]
+        self.assertEqual(row, chunk_arr[1])
+
+        # query with no limit and selection
+        slices = (slice(2,12,1),)
+        result = chunkQuery(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr,  slices=slices, query="symbol == b'AAPL'")
+        self.assertTrue(isinstance(result, np.ndarray))
+        self.assertEqual(len(result), 3)
+        expected_indexes = (1204,1207,1210)
+        for i in range(3):
+            item = result[i]
+            index = item[0]
+            self.assertEqual(index, expected_indexes[i])
+
+        # try bad Limit
+        try:
+            chunkQuery(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, query="symbol == b'AAPL'", limit="foobar")
+            self.assertTrue(False)
+        except TypeError:
+            pass # expected
+
+        # try invalid query string
+        try:
+            chunkQuery(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, query="foobar")
+            self.assertTrue(False)
+        except ValueError:
+            pass # expected
+
+        # try modifying one aapl row
+        query_update = {"open": 999}
+        result = chunkQuery(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, query="symbol == b'AAPL'", query_update=query_update)
+        self.assertEqual(len(result), 4)
+        for i in range(4):
+            item = result[i]
+            index = int(item[0]) - 1200
+            row = item[1]
+            self.assertEqual(row[0], b'AAPL')
+            self.assertEqual(row[2], 999)
+            # original array should have been modified
+            row = chunk_arr[index]
+            self.assertEqual(row[0], b'AAPL')
+            self.assertEqual(row[2], 999)
+
+
 
 
 
