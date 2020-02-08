@@ -7,6 +7,41 @@ CHUNK_MAX = 2048*1024   # Hard upper limit (2M)
 DEFAULT_TYPE_SIZE = 128 # Type size case when it is variable
 PRIMES = [29, 31, 37, 41, 43, 47, 53, 59, 61, 67] # for chunk partitioning
 
+
+"""
+Convert list that may contain bytes type elements to list of string elements
+
+TBD: code copy from arrayUtil.py 
+"""
+def _bytesArrayToList(data):
+    if type(data) in (bytes, str):
+        is_list = False
+    elif isinstance(data, (np.ndarray, np.generic)):
+        if len(data.shape) == 0:
+            is_list = False
+            data = data.tolist()  # tolist will return a scalar in this case
+            if type(data) in (list, tuple):
+                is_list = True
+            else:
+                is_list = False
+        else:
+            is_list = True
+    elif type(data) in (list, tuple):
+        is_list = True
+    else:
+        is_list = False
+
+    if is_list:
+        out = []
+        for item in data:
+            out.append(_bytesArrayToList(item)) # recursive call
+    elif type(data) is bytes:
+        out = data.decode("utf-8")
+    else:
+        out = data
+
+    return out
+
 def getChunkSize(layout, type_size):
     """ Return chunk size given layout.
     i.e. just the product of the values in the list.
@@ -600,7 +635,7 @@ class ChunkIterator:
 Return data from requested chunk and selection
 """
 def chunkReadSelection(chunk_arr, slices=None):
-    log.info("chunkReadSelection")
+    log.debug("chunkReadSelection")
 
     dims = chunk_arr.shape
     log.debug(f"got chunk dims: {dims}")
@@ -651,7 +686,7 @@ def chunkWriteSelection(chunk_arr=None, slices=None, data=None):
 Read points from given chunk
 """
 def chunkReadPoints(chunk_id=None, chunk_layout=None, chunk_arr=None, point_arr=None):
-    log.info(f"chunkReadPoints - chunk_id: {chunk_id}")
+    log.debug(f"chunkReadPoints - chunk_id: {chunk_id}")
 
     dims = chunk_arr.shape
     log.debug(f"got dims: {dims}")
@@ -672,6 +707,8 @@ def chunkReadPoints(chunk_id=None, chunk_layout=None, chunk_arr=None, point_arr=
 
     # verify points array dtype
     points_dt = point_arr.dtype
+    log.debug(f"points_dt: {points_dt}")
+    log.debug(f"points_shape: {point_arr.shape}")
     if points_dt != np.dtype("uint64"):
         msg = "unexpected dtype for point array"
         raise ValueError(msg)
@@ -701,7 +738,7 @@ Write points to given chunk
 """
 def chunkWritePoints(chunk_id=None, chunk_layout=None, chunk_arr=None, point_arr=None):
     # writing point data
-    log.info(f"chunkWritePoints - chunk_id: {chunk_id}")
+    log.debug(f"chunkWritePoints - chunk_id: {chunk_id}")
     dims = chunk_arr.shape
 
     log.debug(f"got dims: {dims}")
@@ -715,6 +752,7 @@ def chunkWritePoints(chunk_id=None, chunk_layout=None, chunk_arr=None, point_arr
         raise ValueError(msg)
     dset_dtype = chunk_arr.dtype
     log.debug(f"dtype: {dset_dtype}")
+    log.debug(f"point_arr: {point_arr}")
 
     # point_arr should have the following type:
     #       (coord1, coord2, ...) | dset_dtype
@@ -732,7 +770,7 @@ def chunkWritePoints(chunk_id=None, chunk_layout=None, chunk_arr=None, point_arr
             raise ValueError(msg)
     else:
         if dt_0.shape[0] != rank:
-            msg = "unexpected dtype for point array"
+            msg = "unexpected shape for point array"
             raise ValueError(msg)
         dt_1 = comp_dtype[1]
         if dt_1 != dset_dtype:
@@ -842,7 +880,7 @@ def _getEvalStr(query, arr_name, field_names):
         msg = "Mismatched paren"
         log.warn("Bad query: " + msg)
         raise ValueError(msg)
-    log.info(f"eval_str: {eval_str}")
+    log.debug(f"eval_str: {eval_str}")
     return eval_str
 
 
@@ -850,8 +888,8 @@ def _getEvalStr(query, arr_name, field_names):
 Run query on chunk and selection
 """
 def chunkQuery(chunk_id=None, chunk_layout=None, chunk_arr=None, slices=None,
-        query=None, query_update=None, limit=0):
-    log.info(f"chunk_query - chunk_id: {chunk_id}")
+        query=None, query_update=None, limit=0, return_json=False):
+    log.debug(f"chunk_query - chunk_id: {chunk_id}")
 
     if not isinstance(chunk_arr, np.ndarray):
         raise TypeError("unexpected array type")
@@ -866,7 +904,6 @@ def chunkQuery(chunk_id=None, chunk_layout=None, chunk_arr=None, slices=None,
     dset_dtype = chunk_arr.dtype
     log.debug(f"dtype: {dset_dtype}")
     log.debug(f"selection: {slices}")
-
 
     if rank != 1:
         msg = "Query operations only supported on one-dimensional datasets"
@@ -889,8 +926,6 @@ def chunkQuery(chunk_id=None, chunk_layout=None, chunk_arr=None, slices=None,
         replace_mask = [None,] * len(field_names)
         for i in range(len(field_names)):
             field_name = field_names[i]
-
-            print("field_name:", field_name)
             if field_name in query_update:
                 replace_mask[i] = query_update[field_name]
         log.debug(f"replace_mask: {replace_mask}")
@@ -926,31 +961,37 @@ def chunkQuery(chunk_id=None, chunk_layout=None, chunk_arr=None, slices=None,
                 log.error(f"Numpy Value updating array: {ve}")
                 raise
 
-        #json_val = bytesArrayToList(value)
         log.debug(f"chunkQuery - got value: {value}")
-        json_index = index.tolist() * s.step + s.start  # adjust for selection
-        indices.append(json_index)
+        indices.append(int(index) * s.step + s.start + chunk_coord[0])  # adjust for selection
         values.append(value)
         count += 1
         if limit > 0 and count >= limit:
-            log.info("query update - got limit items")
+            log.debug("query update - got limit items")
             break
 
     if not values:
         return None   # no hits
 
-    # return the results as a numpy array
-    if rank == 1:
-        coord_type_str = "uint64"
-    else:
-        coord_type_str = f"({rank},)uint64"
-    result_dtype = np.dtype([("coord", np.dtype(coord_type_str)), ("value", dset_dtype)])
-    result_arr = np.zeros((count,), dtype=result_dtype)
-    for i in range(count):
-        e = result_arr[i]
-        e[0] = indices[i] +  chunk_coord[0]
-        e[1] = values[i]
-        result_arr[i] = e
 
-    log.info(f"chunkQuery returning: {count} rows")
-    return result_arr
+    if return_json:
+        # return JSON list
+        result = {}
+        result["index"] = indices
+        result["value"] = _bytesArrayToList(values)
+
+    else:
+        # return the results as a numpy array
+        if rank == 1:
+            coord_type_str = "uint64"
+        else:
+            coord_type_str = f"({rank},)uint64"
+        result_dtype = np.dtype([("coord", np.dtype(coord_type_str)), ("value", dset_dtype)])
+        result = np.zeros((count,), dtype=result_dtype)
+        for i in range(count):
+            e = result[i]
+            e[0] = indices[i] 
+            e[1] = values[i]
+            result[i] = e
+
+        log.debug(f"chunkQuery returning: {count} rows")
+    return result

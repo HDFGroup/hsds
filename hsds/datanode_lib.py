@@ -315,8 +315,8 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset
     # but since we currently have just deflate and shuffle we will always apply deflate then shuffle on read,
     # and shuffle then deflate on write
     # also note - get deflate and shuffle will update the deflate and shuffle map so that the s3sync will do the right thing
-    deflate_level = getDeflateLevel(app,  dset_json)
-    shuffle = isShuffle(app, dset_json)
+    deflate_level = getDeflateLevel(dset_json)
+    shuffle = isShuffle(dset_json)
     s3key = None
 
     if s3path:
@@ -405,6 +405,28 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset
 
             chunk_cache[chunk_id] = chunk_arr  # store in cache
     return chunk_arr
+
+"""
+Mark the given chunk as dirty to write to storage
+"""
+def save_chunk(app, chunk_id, bucket=None):
+    """ Persist the given object """
+    log.info(f"save_chunk {chunk_id} bucket={bucket}")
+
+    try:
+        validateInPartition(app, chunk_id)
+    except KeyError:
+        log.error("Domain not in partition")
+        raise HTTPInternalServerError()
+
+    chunk_cache = app["chunk_cache"]
+    chunk_cache.setDirty(chunk_id)
+    log.info(f"chunk cache dirty count: {chunk_cache.dirtyCount}")
+
+    # async write to S3
+    dirty_ids = app["dirty_ids"]
+    now = int(time.time())
+    dirty_ids[chunk_id] = (now, bucket)
 
 async def write_s3_obj(app, obj_id, bucket=None):
     """ writes the given object to s3 """

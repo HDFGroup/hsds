@@ -80,7 +80,7 @@ class PointSelTest(unittest.TestCase):
 
         points = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,97,98]
         body = { "points": points }
-        # read a selected points
+        # read selected points
         rsp = requests.post(req, data=json.dumps(body), headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)

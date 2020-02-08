@@ -11,6 +11,7 @@
 ##############################################################################
 import unittest
 import sys
+import json
 import numpy as np
 
 sys.path.append('../../hsds/util')
@@ -18,7 +19,7 @@ sys.path.append('../../hsds')
 from dsetUtil import getHyperslabSelection
 from chunkUtil import guessChunk, getNumChunks, getChunkIds, getChunkId, getPartitionKey, getChunkPartition
 from chunkUtil import getChunkIndex, getChunkSelection, getChunkCoverage, getDataCoverage, ChunkIterator
-from chunkUtil import getChunkSize, shrinkChunk, expandChunk, getDatasetId, getContiguousLayout
+from chunkUtil import getChunkSize, shrinkChunk, expandChunk, getDatasetId, getContiguousLayout, _getEvalStr
 from chunkUtil import chunkReadSelection, chunkWriteSelection, chunkReadPoints, chunkWritePoints, chunkQuery
 
 
@@ -322,7 +323,6 @@ class ChunkUtilTest(unittest.TestCase):
             self.assertEqual(chunk_id[2:-2], dset_id[2:])
             self.assertEqual(len(chunk_id), 2+36+2)
             chunk_id = getPartitionKey(chunk_id, partition_count)
-            print(chunk_id)
 
             partition = getChunkPartition(chunk_id)
             self.assertTrue(partition is not None)
@@ -1080,6 +1080,38 @@ class ChunkUtilTest(unittest.TestCase):
 
         self.assertEqual(count, 16)
 
+    def testGetEvalStr(self):
+        queries = { "date == 23": "rows['date'] == 23",
+                    "wind == b'W 5'": "rows['wind'] == b'W 5'",
+                    "temp > 61": "rows['temp'] > 61",
+                    "(date >=22) & (date <= 24)": "(rows['date'] >=22) & (rows['date'] <= 24)",
+                    "(date == 21) & (temp > 70)": "(rows['date'] == 21) & (rows['temp'] > 70)",
+                    "(wind == b'E 7') | (wind == b'S 7')": "(rows['wind'] == b'E 7') | (rows['wind'] == b'S 7')" }
+
+        fields = ["date", "wind", "temp"]
+
+        for query in queries.keys():
+            eval_str = _getEvalStr(query, "rows", fields)
+            self.assertEqual(eval_str, queries[query])
+                #print(query, "->", eval_str)
+
+    def testBadQuery(self):
+        queries = ( "foobar",    # no variable used
+                "wind = b'abc",  # non-closed literal
+                "(wind = b'N') & (temp = 32",  # missing paren
+                "foobar > 42",                 # invalid field name
+                "import subprocess; subprocess.call(['ls', '/'])")  # injection attack
+
+        fields = ("date", "wind", "temp" )
+
+        for query in queries:
+            try:
+                eval_str = _getEvalStr(query, "x", fields)
+                self.assertTrue(False)  # shouldn't get here
+            except Exception:
+                pass  # ok
+
+
 
     def testChunkReadSelection(self):
         chunk_arr = np.array([2,3,5,7,11,13,17,19])
@@ -1090,12 +1122,9 @@ class ChunkUtilTest(unittest.TestCase):
         chunk_arr = np.zeros((3,4))
         for i in range(3):
             chunk_arr[i] = list(range(i+1,i+1+4))
-        print(chunk_arr)
         arr = chunkReadSelection(chunk_arr, slices=((slice(1,2,1),slice(0,4,1))))
-        print(arr.tolist())
         self.assertEqual(arr.tolist(), [[2.0, 3.0, 4.0, 5.0]])
         arr = chunkReadSelection(chunk_arr, slices=((slice(0,3,1),slice(2,3,1))))
-        print(arr.tolist())
         self.assertEqual(arr.tolist(), [[3.0],[4.0],[5.0]])
 
     def testChunkWriteSelection(self):
@@ -1108,8 +1137,6 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(chunk_arr.tolist(), [2,3,5,101,121,131,17,19])
 
     def testChunkReadPoints1D(self):
-        # chunkWritePoints(chunk_id=None, chunk_arr=None, point_arr=None)
-        # chunkReadPoints(chunk_id=None, chunk_arr=None, points_arr=None):
         chunk_id = "c-00de6a9c-6aff5c35-15d5-3864dd-0740f8_12"
         chunk_layout = (100,)
         chunk_arr = np.array(list(range(100)))
@@ -1154,18 +1181,18 @@ class ChunkUtilTest(unittest.TestCase):
         indexes = (1203,1245,1288,1212,1299)
         num_points = len(indexes)
         point_arr = np.zeros((num_points,), dtype=point_dt)
+        print("point_arr.shape:", point_arr.shape)
+        print("point_arr.dtype:", point_arr.dtype)
         for i in range(num_points):
             e = point_arr[i]
             e[0] = indexes[i]
             e[1] = 42
-        print(point_arr)
         chunkWritePoints(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, point_arr=point_arr)
         for i in range(100):
             if i + 1200 in indexes:
                 self.assertEqual(chunk_arr[i], 42)
             else:
                 self.assertEqual(chunk_arr[i], 0)
-        print(point_arr)
 
         e = point_arr[1]
         e[0] = 99  # index out of range
@@ -1230,12 +1257,11 @@ class ChunkUtilTest(unittest.TestCase):
             e = chunk_arr[i]
             for j in range(4):
                 e[j] = row[j]
-        #chunkQuery(chunk_id=None, chunk_arr=None, slices=None, query=None, query_update=None, limit=0):
+        #chunkQuery(chunk_id=None, chunk_arr=None, slices=None, query=None, query_update=None, limit=0, return_json=False):
         result = chunkQuery(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, query="symbol == b'AAPL'")
         self.assertTrue(isinstance(result, np.ndarray))
         result_dtype = result.dtype
         self.assertEqual(len(result_dtype), 2)
-
         self.assertEqual(result_dtype[0], np.dtype("u8"))
         self.assertEqual(len(result_dtype[1]), 4)
         self.assertEqual(len(result), 4)
@@ -1252,6 +1278,25 @@ class ChunkUtilTest(unittest.TestCase):
             self.assertEqual(row[0], b"AAPL")
             self.assertEqual(row, expected_row)
 
+        # return JSON
+        result = chunkQuery(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, query="symbol == b'AAPL'", return_json=True)
+        json_str = json.dumps(result)  # test we can jsonfy the result
+        self.assertTrue(len(json_str) > 100)
+        print(result)
+        self.assertTrue("index" in result)
+        indexes = result["index"]
+        self.assertTrue("value" in result)
+        values = result["value"]
+        for i in range(4):
+            index = indexes[i]
+            self.assertEqual(index, expected_indexes[i])
+            row = values[i]
+            chunk_index = index % chunk_layout[0]
+            expected_row = chunk_arr[chunk_index]
+            self.assertEqual(len(row), 4)
+            self.assertEqual(row[0], "AAPL")  # note - string, not bytes
+            for i in range(2,4):
+                self.assertEqual(row[i], expected_row[i])
         # read just one row back
         result = chunkQuery(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, query="symbol == b'AAPL'", limit=1)
         self.assertTrue(isinstance(result, np.ndarray))

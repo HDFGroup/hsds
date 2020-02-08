@@ -14,19 +14,20 @@
 # handles regauests to read/write chunk data
 #
 #
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
+import numpy as np
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError, HTTPNotFound
 from aiohttp.web import json_response, StreamResponse
 
 from util.httpUtil import  request_read
-from util.arrayUtil import bytesToArray
+from util.arrayUtil import bytesToArray, arrayToBytes
 from util.idUtil import getS3Key, validateInPartition, isValidUuid
 from util.storUtil import  isStorObj, deleteStorObj
 from util.hdf5dtype import createDataType
 from util.dsetUtil import  getSliceQueryParam, getChunkLayout, getSelectionShape
-from util.chunkUtil import getChunkIndex, getDatasetId
-from datanode_lib import get_metadata_obj
-from chunk_lib import chunk_read_selection, chunk_write_selection, chunk_write_points, chunk_read_points
-
+from util.chunkUtil import getChunkIndex, getDatasetId, chunkQuery
+from util.chunkUtil import chunkWriteSelection, chunkReadSelection
+from util.chunkUtil import chunkWritePoints, chunkReadPoints
+from datanode_lib import get_metadata_obj, get_chunk, save_chunk
 
 import hsds_logger as log
 
@@ -70,8 +71,10 @@ async def PUT_Chunk(request):
 
     if query:
         expected_content_type = "text/plain; charset=utf-8"
+        chunk_init = False  # don't initalize new chunks on query update
     else:
         expected_content_type = "application/octet-stream"
+        chunk_init = True
     if "Content-Type" in request.headers:
         # client should use "application/octet-stream" for binary transfer
         content_type = request.headers["Content-Type"]
@@ -94,10 +97,10 @@ async def PUT_Chunk(request):
 
     log.debug(f"dset_json: {dset_json}")
 
+    # TBD - does this work with linked datasets?
     dims = getChunkLayout(dset_json)
     log.debug(f"got dims: {dims}")
     rank = len(dims)
-
 
     type_json = dset_json["type"]
     dt = createDataType(type_json)
@@ -111,6 +114,7 @@ async def PUT_Chunk(request):
     for i in range(rank):
         dim_slice = getSliceQueryParam(request, i, dims[i])
         selection.append(dim_slice)
+    selection = tuple(selection)
     log.debug(f"got selection: {selection}")
 
     mshape = getSelectionShape(selection)
@@ -118,6 +122,16 @@ async def PUT_Chunk(request):
     num_elements = 1
     for extent in mshape:
         num_elements *= extent
+
+    chunk_arr = await get_chunk(app, chunk_id, dset_json, bucket=bucket, chunk_init=chunk_init)
+    is_dirty = False
+    if chunk_arr is None:
+        if chunk_init:
+            log.error(f"failed to create numpy array")
+            raise HTTPInternalServerError()
+        else:
+            log.warn(f"chunk {chunk_id} not found")
+            raise HTTPNotFound()
 
     if query:
         if not dt.fields:
@@ -128,6 +142,20 @@ async def PUT_Chunk(request):
             raise HTTPInternalServerError()
         query_update = await request.json()
         log.debug(f"query_update: {query_update}")
+        # TBD - send back binary response to SN node
+        try:
+            resp = chunkQuery(chunk_id=chunk_id, chunk_layout=dims, chunk_arr=chunk_arr, slices=selection,
+                query=query, query_update=query_update, limit=limit, return_json=True)
+        except TypeError as te:
+            log.warn(f"chunkQuery - TypeError: {te}")
+            raise HTTPBadRequest()
+        except ValueError as ve:
+            log.warn(f"chunkQuery - ValueError: {ve}")
+            raise HTTPBadRequest()
+        if query_update and resp is not None:
+            is_dirty = True
+
+
     else:
         # regular chunk update
 
@@ -150,11 +178,15 @@ async def PUT_Chunk(request):
 
         input_arr = bytesToArray(input_bytes, dt, mshape)
 
-    write_resp = await chunk_write_selection(app, chunk_id=chunk_id, selection=selection, dset_json=dset_json,
-        bucket=bucket, query=query, query_update=query_update, limit=limit, input_arr=input_arr)
+        chunkWriteSelection(chunk_arr=chunk_arr, slices=selection, data=input_arr)
+        is_dirty = True
 
-    # chunk update successful
-    resp = json_response(write_resp)
+        # chunk update successful
+        resp = {}
+    if is_dirty:
+        save_chunk(app, chunk_id, bucket=bucket)
+
+    resp = json_response(resp, status=201)
     log.response(request, resp=resp)
     return resp
 
@@ -224,13 +256,30 @@ async def GET_Chunk(request):
     for i in range(rank):
         dim_slice = getSliceQueryParam(request, i, dims[i])
         selection.append(dim_slice)
+    selection = tuple(selection)
     log.debug(f"got selection: {selection}")
 
-    # read selected data from chunk
-    read_resp = await chunk_read_selection(app, chunk_id=chunk_id,
-        dset_json=dset_json, bucket=bucket,
-        selection=selection, query=query, limit=limit,
-        s3path=s3path, s3offset=s3offset, s3size=s3size)
+    chunk_arr = await get_chunk(app, chunk_id, dset_json, bucket=bucket, s3path=s3path, s3offset=s3offset, s3size=s3size, chunk_init=False)
+    if chunk_arr is None:
+        msg = f"chunk {chunk_id} not found"
+        log.warn(msg)
+        raise HTTPNotFound()
+
+    if query:
+        # run given query
+        try:
+            read_resp = chunkQuery(chunk_id=chunk_id, chunk_layout=dims, chunk_arr=chunk_arr, slices=selection,
+                query=query, limit=limit, return_json=True)
+        except TypeError as te:
+            log.warn(f"chunkQuery - TypeError: {te}")
+            raise HTTPBadRequest()
+        except ValueError as ve:
+            log.warn(f"chunkQuery - ValueError: {ve}")
+            raise HTTPBadRequest()
+    else:
+        # read selected data from chunk
+        output_arr = chunkReadSelection(chunk_arr, slices=selection)
+        read_resp = arrayToBytes(output_arr)
 
     # write response
     if isinstance(read_resp, bytes):
@@ -261,12 +310,18 @@ async def POST_Chunk(request):
     params = request.rel_url.query
 
     put_points = False
+    num_points = 0
+    if "count" not in params:
+        log.warn("expected count param")
+        raise HTTPBadRequest()
+    if "count" in params:
+        num_points = int(params["count"])
 
     if "action" in params and params["action"] == "put":
-        log.info(f"POST Chunk put points")
+        log.info(f"POST Chunk put points - num_points: {num_points}")
         put_points = True
     else:
-        log.info("POST Chunk get points")
+        log.info(f"POST Chunk get points - num_points: {num_points}")
 
     s3path = None
     s3offset = 0
@@ -333,6 +388,11 @@ async def POST_Chunk(request):
     dset_id = getDatasetId(chunk_id)
 
     dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
+    dims = getChunkLayout(dset_json)
+    rank = len(dims)
+
+    type_json = dset_json["type"]
+    dset_dtype = createDataType(type_json)
 
     # create a numpy array for incoming points
     input_bytes = await request_read(request)
@@ -341,15 +401,48 @@ async def POST_Chunk(request):
         log.error(msg)
         raise HTTPInternalServerError()
 
+    if rank == 1:
+        coord_type_str = "uint64"
+    else:
+        coord_type_str = f"({rank},)uint64"
+
+    if put_points:
+        # create a numpy array with the following type:
+        #       (coord1, coord2, ...) | dset_dtype
+        point_dt = np.dtype([("coord", np.dtype(coord_type_str)), ("value", dset_dtype)])
+        point_shape = (num_points,)
+        chunk_init = True
+    else:
+        point_dt = np.dtype('uint64')
+        point_shape = (num_points, rank)
+        chunk_init = False
+
+    point_arr = bytesToArray(input_bytes, point_dt, point_shape)
+
+    chunk_arr = await get_chunk(app, chunk_id, dset_json, bucket=bucket, s3path=s3path, s3offset=s3offset, s3size=s3size, chunk_init=chunk_init)
+    if chunk_arr is None:
+        log.warn(f"chunk {chunk_id} not found")
+        raise HTTPNotFound()
+
     if put_points:
         # writing point data
-        await chunk_write_points(app, chunk_id=chunk_id, dset_json=dset_json, bucket=bucket, input_bytes=input_bytes)
-        # write empty response
+        try:
+            chunkWritePoints(chunk_id=chunk_id, chunk_layout=dims, chunk_arr=chunk_arr, point_arr=point_arr)
+        except ValueError as ve:
+            log.warn(f"got value error from chunkWritePoints: {ve}")
+            raise HTTPBadRequest()
+         # write empty response
         resp = json_response({})
+
+        save_chunk(app, chunk_id, bucket=bucket) # lazily write chunk to storage
     else:
         # read points
-        output_data = await chunk_read_points(app, chunk_id=chunk_id, dset_json=dset_json, bucket=bucket, 
-            input_bytes=input_bytes, s3path=s3path, s3offset=s3offset, s3size=s3size)
+        try:
+            output_arr = chunkReadPoints(chunk_id=chunk_id, chunk_layout=dims, chunk_arr=chunk_arr, point_arr=point_arr)
+        except ValueError as ve:
+            log.warn(f"got value error from chunkReadPoints: {ve}")
+            raise HTTPBadRequest()
+        output_data = arrayToBytes(output_arr)
         # write response
         try:
             resp = StreamResponse()

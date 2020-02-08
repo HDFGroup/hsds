@@ -441,7 +441,7 @@ def arrayToBytes(arr):
     for e in arr1d:
         #print("arrayToBytes:", e)
         offset = copyElement(e, arr1d.dtype, buffer, offset)
-    return buffer
+    return bytes(buffer)
 
 """
 Create numpy array based on byte representation
