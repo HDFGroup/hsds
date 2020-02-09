@@ -89,6 +89,20 @@ class VlenTest(unittest.TestCase):
         self.assertEqual(len(value), 1)
         self.assertEqual(value[0], data[2])
 
+        # read back a point selection
+        points = [1,3]
+        body = { "points": points }
+        # read selected points
+        rsp = requests.post(req, data=json.dumps(body), headers=headers)
+        # point select not supported on zero-dimensional datasets
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+        self.assertEqual(len(value), 2)
+        self.assertEqual(value[0], [1,2])
+        self.assertEqual(value[1], [1,2,3,4])
+
     def testPutVLenIntBinary(self):
         # Test PUT value for 1d attribute with variable length int types using binary transfer
         print("testPutVLenIntBinary", self.base_domain)

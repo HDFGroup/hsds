@@ -290,8 +290,7 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_a
                 log.debug(f"http_post {req} status: <{rsp.status}>")
                 if rsp.status == 200:
                     rsp_data = await rsp.read()  # read response as bytes
-                    # TBD - Does not support VLEN response data
-                    np_arr_rsp = np.fromstring(rsp_data, dtype=dt)
+                    np_arr_rsp = bytesToArray(rsp_data, dt, (num_points,))
                     npoints_read = len(np_arr_rsp)
                     if npoints_read != num_points:
                         msg = f"Expected {num_points} points, but got: {npoints_read}"
