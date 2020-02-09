@@ -31,6 +31,8 @@ Other useful resources
 Quick Start
 -------------
 
+**On AWS**
+
 Make sure you have Python 3, docker, docker-compose, and aws cli tools installed, then:
    `$runall.sh`
 to run the server.
@@ -45,6 +47,11 @@ Next, run the test suite by:
 See: [docs/docker_install.md](docs/docker_install.md) for complete install instructions.
 
 See: [docs/kubernetes_install.md](kubernetes_install.md) for setup on Kubernetes.
+
+**On Azure**
+
+For complete instructions to install on Azure Kubernetes Service (AKS):
+See: [docs/kubernetes_install_azure.md](docs/kubernetes_install.md)
 
 Writing Client Applications
 ----------------------------
