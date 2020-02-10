@@ -112,7 +112,7 @@ def validateChunkLayout(shape_json, item_size, layout):
             raise HTTPBadRequest(reason=msg)
         if "dims" in layout:
             # used defined chunk layout not allowed for H5D_CONTIGUOUS_REF
-            msg = "'dimns' key can not be provided for H5D_CONTIGUOUS_REF layout"
+            msg = "'dims' key can not be provided for H5D_CONTIGUOUS_REF layout"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
     elif layout["class"] == 'H5D_CHUNKED_REF':

@@ -188,7 +188,6 @@ async def putStorBytes(app, key, data, shuffle=0, deflate_level=None, bucket=Non
             log.info(f"zlib_err: {zlib_error}")
             log.warn(f"unable to compress obj: {key}, using raw bytes")
 
-
     rsp = await client.put_object(key, data, bucket=bucket)
 
     return rsp

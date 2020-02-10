@@ -74,17 +74,22 @@ class AzureBlobClient():
 
         azure_stats[counter] += inc
 
-    async def get_object(self, key, bucket=None, offset=None, length=None):
+    async def get_object(self, key, bucket=None, offset=0, length=None):
         """ Return data for object at given key.
            If Range is set, return the given byte range.
         """
         if not bucket:
             log.error("get_object - bucket not set")
             raise HTTPInternalServerError()
-        data = None
+
+        if length:
+            log.info(f"storage range request -- offset: {offset} length: {length}")
+        else:
+            offset = None
+            length = None
 
         start_time = time.time()
-        log.debug(f"azureBlobClient.get_object({bucket}/{key} start: {start_time} offset: {offset} length: {length}")
+        log.debug(f"azureBlobClient.get_object({bucket}/{key} start: {start_time}")
         try:
             async with self._client.get_blob_client(container=bucket, blob=key) as blob_client:
                 blob_rsp = await blob_client.download_blob(offset=offset, length=length)

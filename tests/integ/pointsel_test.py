@@ -80,7 +80,7 @@ class PointSelTest(unittest.TestCase):
 
         points = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,97,98]
         body = { "points": points }
-        # read a selected points
+        # read selected points
         rsp = requests.post(req, data=json.dumps(body), headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
@@ -1015,6 +1015,45 @@ class PointSelTest(unittest.TestCase):
         self.assertEqual(len(value), NUM_POINTS)
         for i in range(NUM_POINTS):
             self.assertEqual(value[i], i)
+
+    def testScalarDataset(self):
+        print("testScalarDataset:", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        # get domain
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # create a dataset obj
+        data = { "type": "H5T_IEEE_F32LE" }
+        req = self.endpoint + '/datasets'
+        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        dset_id = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_id))
+
+        # write to the dset
+        data = [42,]
+
+        payload = { 'value': data }
+        req = self.endpoint + "/datasets/" + dset_id + "/value"
+
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        points = [0,]
+        body = { "points": points }
+        # read selected points
+        rsp = requests.post(req, data=json.dumps(body), headers=headers)
+        # point select not supported on zero-dimensional datasets
+        self.assertEqual(rsp.status_code, 400)
+         
+
 
 
 if __name__ == '__main__':

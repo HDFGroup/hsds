@@ -14,8 +14,7 @@ import sys
 
 sys.path.append('../../hsds/util')
 sys.path.append('../../hsds')
-from dsetUtil import  getHyperslabSelection, getSelectionShape
-from dsetUtil import  ItemIterator, getEvalStr
+from dsetUtil import  getHyperslabSelection, getSelectionShape, ItemIterator
 
 class DsetUtilTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -84,37 +83,7 @@ class DsetUtilTest(unittest.TestCase):
         shape = getSelectionShape(sel)
         self.assertEqual(shape, [3,])
 
-    def testGetEvalStr(self):
-        queries = { "date == 23": "rows['date'] == 23",
-                    "wind == b'W 5'": "rows['wind'] == b'W 5'",
-                    "temp > 61": "rows['temp'] > 61",
-                    "(date >=22) & (date <= 24)": "(rows['date'] >=22) & (rows['date'] <= 24)",
-                    "(date == 21) & (temp > 70)": "(rows['date'] == 21) & (rows['temp'] > 70)",
-                    "(wind == b'E 7') | (wind == b'S 7')": "(rows['wind'] == b'E 7') | (rows['wind'] == b'S 7')" }
-
-        fields = ["date", "wind", "temp"]
-
-        for query in queries.keys():
-            eval_str = getEvalStr(query, "rows", fields)
-            self.assertEqual(eval_str, queries[query])
-                #print(query, "->", eval_str)
-
-    def testBadQuery(self):
-        queries = ( "foobar",    # no variable used
-                "wind = b'abc",  # non-closed literal
-                "(wind = b'N') & (temp = 32",  # missing paren
-                "foobar > 42",                 # invalid field name
-                "import subprocess; subprocess.call(['ls', '/'])")  # injection attack
-
-        fields = ("date", "wind", "temp" )
-
-        for query in queries:
-            try:
-                eval_str = getEvalStr(query, "x", fields)
-                self.assertTrue(False)  # shouldn't get here
-            except Exception:
-                pass  # ok
-
+    
     def testItemIterator(self):
         # 1-D case
         datashape = [10,]
@@ -160,4 +129,3 @@ if __name__ == '__main__':
     #setup test files
 
     unittest.main()
-

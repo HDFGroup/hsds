@@ -16,6 +16,6 @@ install:
   - pip install pyflakes
   - pip install pytz
   - ./build.sh
-  - ./runall.sh
+  - ./runall.sh 4
 script:
   python testall.py

@@ -84,8 +84,10 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level,
     try:
         async with client.put(req, data=data, params=params) as rsp:
             log.debug(f"req: {req} status: {rsp.status}")
-            if rsp.status == 201:
-                log.debug(f"http_put({req}) <201> Updated")
+            if rsp.status == 200:
+                log.debug(f"http_put({req}) <200> Ok")
+            elif rsp.status == 201:
+                log.debug(f"http_out({req}) <201> Updated")
             elif rsp.status == 503:
                 log.warn(f"DN node too busy to handle request: {req}")
                 raise HTTPServiceUnavailable()
@@ -243,6 +245,7 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_a
         raise HTTPInternalServerError()
 
     num_points = len(point_list)
+    log.debug(f"read_point_sel: {num_points}")
     np_arr_points = np.asarray(point_list, dtype=point_dt)
     post_data = np_arr_points.tobytes()
 
@@ -250,6 +253,7 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_a
     # set action as query params
     params = {}
     params["action"] = "get"
+    params["count"] = num_points
 
     fill_value = getFillValue(dset_json)
 
@@ -286,8 +290,7 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_a
                 log.debug(f"http_post {req} status: <{rsp.status}>")
                 if rsp.status == 200:
                     rsp_data = await rsp.read()  # read response as bytes
-                    # TBD - Does not support VLEN response data
-                    np_arr_rsp = np.fromstring(rsp_data, dtype=dt)
+                    np_arr_rsp = bytesToArray(rsp_data, dt, (num_points,))
                     npoints_read = len(np_arr_rsp)
                     if npoints_read != num_points:
                         msg = f"Expected {num_points} points, but got: {npoints_read}"
@@ -356,6 +359,7 @@ async def write_point_sel(app, chunk_id, dset_json, point_list, point_data, buck
     client = get_http_client(app)
 
     num_points = len(point_list)
+    log.debug(f"write_point_sel - {num_points}")
 
     #create a numpy array with point_data
     data_arr = jsonToArray((num_points,), dset_dtype, point_data)
@@ -688,7 +692,7 @@ async def write_chunk_query(app, chunk_id, dset_json, slices, query, query_updat
 
     req = getDataNodeUrl(app, chunk_id)
     req += "/chunks/" + chunk_id
-    log.debug("GET chunk req: " + req)
+    log.debug("PUT chunk req: " + req)
     client = get_http_client(app)
 
     layout = getChunkLayout(dset_json)
@@ -708,8 +712,8 @@ async def write_chunk_query(app, chunk_id, dset_json, slices, query, query_updat
     dn_rsp = None
     try:
         async with client.put(req, data=json.dumps(query_update), params=params) as rsp:
-            log.debug(f"http_get {req} status: <{rsp.status}>")
-            if rsp.status == 200:
+            log.debug(f"http_put {req} status: <{rsp.status}>")
+            if rsp.status in (200,201):
                 dn_rsp = await rsp.json()  # read response as json
                 log.debug(f"got query data: {dn_rsp}")
             elif rsp.status == 404:
@@ -723,7 +727,7 @@ async def write_chunk_query(app, chunk_id, dset_json, slices, query, query_updat
                 raise HTTPInternalServerError()
 
     except ClientError as ce:
-        log.error(f"Error for http_get({req}): {ce} ")
+        log.error(f"Error for http_put({req}): {ce} ")
         raise HTTPInternalServerError()
     except CancelledError as cle:
         log.warn(f"CancelledError for http_get({req}): {cle}")
