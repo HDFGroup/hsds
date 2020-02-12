@@ -48,12 +48,15 @@ export ACCEPTED_PROTOCOLS='Https'
 export FWDING_PROTOCOLS='HttpsOnly'
 </small></code></pre>
 
-1.  If not already installed, install AZ-Cli:<br/> `curl -L https://aka.ms/InstallAzureCli | bash`
-2.  Install the front door AZ-Cli extension: <br/> `az extension add --name front-door`
-3. Login to Azure Subscription using AZ-Cli. `$az login`
-4. After successful login, the list of available subscriptions will be displayed. If you have access to more than one subscription, set the proper subscription to be used: `az account set --subscription [name]`
-5. The following command will create a new Front Door instance with SSL Offloading:<br/> `az network front-door create --resource-group $RESOURCEGROUP --name $FRONTDOORNAME --backend-address $BACKENDADDRESS --friendly-name $FRIENDLYNAME --protocol $PROTOCOL --accepted-protocols $ACCEPTED_PROTOCOLS --forwarding-protocol $FWDING_PROTOCOLS`
-6. Once the deployment is successful, you can test the HSDS service as:
+1.   Install pip
+        - `$sudo apt-get update && sudo apt-get -y upgrade`
+        - `$sudo apt-get install python3-pip`
+2.  If not already installed, install AZ-Cli:<br/> `curl -L https://aka.ms/InstallAzureCli | bash`
+3.  Install the front door AZ-Cli extension: <br/> `az extension add --name front-door`
+4. Login to Azure Subscription using AZ-Cli. `$az login`
+5. After successful login, the list of available subscriptions will be displayed. If you have access to more than one subscription, set the proper subscription to be used: `az account set --subscription [name]`
+6. The following command will create a new Front Door instance with SSL Offloading:<br/> `az network front-door create --resource-group $RESOURCEGROUP --name $FRONTDOORNAME --backend-address $BACKENDADDRESS --friendly-name $FRIENDLYNAME --protocol $PROTOCOL --accepted-protocols $ACCEPTED_PROTOCOLS --forwarding-protocol $FWDING_PROTOCOLS`
+7. Once the deployment is successful, you can test the HSDS service as:
     <br/>http://<$FRIENDLYNAME>.azurefd.net/about
     <br/>https://<$FRIENDLYNAME>.azurefd.net/about
     <br/>The endpoints may take a few minutes to become available after the Front Door deployment is complete with the https endpoint taking longer

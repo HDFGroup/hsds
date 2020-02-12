@@ -25,17 +25,20 @@ export CONTAINERNAME=testcontainer
 
 Here we will deploy an Azure Storage Account, Azure Container Registry (ACR) and Azure Kubernetes Service (AKS).
 
-1. Install az-cli <br>`$curl -L https://aka.ms/InstallAzureCli | bash`</br>
-2. Validate runtime version az-cli is at least 2.0.80: `az version`
-3. Login to Azure Subscription using AZ-Cli. `$az login`
-4. After successful login, the list of avaialble subscriptions will be displayed. If you have access to more than one subscription, set the proper subscription to be used: `az account set --subscription [name]`
-5. Run the following commands to create Azure Resource Group:<br>`$az group create --name $RESOURCEGROUP --location $LOCATION`</br>
-6. Create storage account <br>`$az storage account create -n $STORAGEACCTNAME -g $RESOURCEGROUP -l $LOCATION --sku Standard_LRS`</br>
-7. Create a blob container in the storage account <br>`$az storage container create -n $CONTAINERNAME account-name $STORAGEACCTNAME --fail-on-exist`</br> 
-8. The following command will create the new ACR <br>`$az acr create --resource-group $RESOURCEGROUP --name $ACRNAME --sku Basic --admin-enabled true`</br>
-9. Install AKS cli <br>`$az aks install-cli`</br>
-10. Create AKS Cluster and attach to ACR <br>`$az aks create -n $AKSCLUSTER -g $RESOURCEGROUP --generate-ssh-keys --attach-acr $ACRNAME`</br>
-11. Get access to the AKS Cluster <br>`$az aks get-credentials -g $RESOURCEGROUP -n $AKSCLUSTER`</br>
+1. Install pip
+   - `$sudo apt-get update && sudo apt-get -y upgrade`
+   - `$sudo apt-get install python3-pip`
+2. Install az-cli <br>`$curl -L https://aka.ms/InstallAzureCli | bash`</br>
+3. Validate runtime version az-cli is at least 2.0.80: `az version`
+4. Login to Azure Subscription using AZ-Cli. `$az login`
+5. After successful login, the list of avaialble subscriptions will be displayed. If you have access to more than one subscription, set the proper subscription to be used: `az account set --subscription [name]`
+6. Run the following commands to create Azure Resource Group:<br>`$az group create --name $RESOURCEGROUP --location $LOCATION`</br>
+7. Create storage account <br>`$az storage account create -n $STORAGEACCTNAME -g $RESOURCEGROUP -l $LOCATION --sku Standard_LRS`</br>
+8. Create a blob container in the storage account <br>`$az storage container create -n $CONTAINERNAME account-name $STORAGEACCTNAME --fail-on-exist`</br> 
+9.  The following command will create the new ACR <br>`$az acr create --resource-group $RESOURCEGROUP --name $ACRNAME --sku Basic --admin-enabled true`</br>
+10. Install AKS cli <br>`$az aks install-cli`</br>
+11. Create AKS Cluster and attach to ACR <br>`$az aks create -n $AKSCLUSTER -g $RESOURCEGROUP --generate-ssh-keys --attach-acr $ACRNAME`</br>
+12. Get access to the AKS Cluster <br>`$az aks get-credentials -g $RESOURCEGROUP -n $AKSCLUSTER`</br>
 
 <h2>Prepare and deploy your docker image to ACR</h2>
 
