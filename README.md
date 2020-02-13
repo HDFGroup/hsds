@@ -50,8 +50,11 @@ See: [docs/kubernetes_install.md](kubernetes_install.md) for setup on Kubernetes
 
 **On Azure**
 
+For complete instructions to install on a single Azure VM:
+- See: [docs/docker_install_azure.md](docs/docker_install_azure.md)
+
 For complete instructions to install on Azure Kubernetes Service (AKS):
-See: [docs/kubernetes_install_azure.md](docs/kubernetes_install.md)
+- See: [docs/kubernetes_install_azure.md](docs/kubernetes_install_azure.md)
 
 Writing Client Applications
 ----------------------------
