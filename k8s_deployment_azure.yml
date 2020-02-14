@@ -38,7 +38,10 @@ spec:
           - name: ABOUT
             value: "HSDS is a webservice for HDF data"
           - name: AZURE_CONNECTION_STRING
-            value: "DefaultEndpointsProtocol=https;AccountName=mystorageaccount;AccountKey=xxxxxxx==;EndpointSuffix=core.windows.net"
+            valueFrom:
+              secretKeyRef:
+                name: azure-conn-str
+                key: az_conn_str
           - name: SN_RAM
             value: "2g"
         - name: dn
@@ -61,6 +64,9 @@ spec:
           - name: HSDS_ENDPOINT
             value: "http://test.local.com"
           - name: AZURE_CONNECTION_STRING
-            value: "DefaultEndpointsProtocol=https;AccountName=mystorageaccount;AccountKey=xxxxxxx==;EndpointSuffix=core.windows.net"
+            valueFrom:
+              secretKeyRef:
+                name: azure-conn-str
+                key: az_conn_str
           - name: DN_RAM
             value: "2g"
