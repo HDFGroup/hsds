@@ -16,7 +16,7 @@ export STORAGEACCTNAME=mystorageaccount
 # use the connection string for your Azure account. Note the quotation marks around the string
 export AZURE_CONNECTION_STRING="DefaultEndpointsProtocol=https;AccountName=myacct;AccountKey=GZJxxxOPnw==;EndpointSuffix=core.windows.net"
 # set to the name of the container you will be using     
-export BUCKET_NAME=home                   
+export STORAGEACCTNAME=home                   
 </small></code></pre>
 
 <h2>Prerequisites</h2>
@@ -55,7 +55,7 @@ Currently the HSDS server uses simple auth and the login credentials are embedde
 5. From hsds directory, build docker image:  `bash build.sh`
 6. Tag the docker image using the ACR scheme: <br>`docker tag hdfgroup/hsds $ACRNAME.azurecr.io/hsds:v1`</br>  where $ACRNAME is the ACR being deployed to, and v1 is the version (update this every time you will be deploying a new version of HSDS). 
 7.  Login to the Azure container registry (ACR): <br>`az acr login --name $ACRNAME`</br>
-8.  You may also need to login into ACR from docker as follows: <br>Get the ACR admin credentials: `az acr credential show -n ACRNAME`</br>docker login with those credentials: `docker login ACRNAME -u xxx -p xxx`
+8.  You may also need to login into ACR from docker as follows: <br>Get the ACR admin credentials: `az acr credential show -n $ACRNAME`</br>docker login with those credentials: `docker login $ACRNAME -u xxx -p xxx`
 9. Push the image to Azure ACR: `docker push $ACRNAME.azurecr.io/hsds:v1`
 <br>**Note:** Use all lowercase ACRNAME in these commands if your actual ACRNAME includes uppercase characters</br>
 
@@ -89,7 +89,7 @@ Currently the HSDS server uses simple auth and the login credentials are embedde
 
 <h2>Test the Deployment using Integration Test and Test Data</h2>    
 
-1. Install Anaconda: <https://docs.conda.io/projects/conda/en/latest/user-guide/install/macos.html#install-macos-silent>  <br>Instructions are for macOS but shuold also work for linux. install for python 3.7</br>
+1. Install Anaconda: <https://docs.conda.io/projects/conda/en/latest/user-guide/install/linux.html>  <br>Install for python 3.7</br>
 2. Install h5pyd: `pip install h5pyd`
 3.  Run: `hsconfigure` and set: 
        - hs endpoint: e.g. <http://EXTERNAL-IP>)
