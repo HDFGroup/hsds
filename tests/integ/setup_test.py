@@ -43,7 +43,7 @@ class SetupTest(unittest.TestCase):
         rsp = requests.get(req, params=params, headers=headers)
         print("/home get status:", rsp.status_code)
 
-        if rsp.status_code == 404:
+        if rsp.status_code != 200:
             if not admin_headers:
                 print("/home folder doesn't exist, set ADMIN_PASSWORD environment variable to enable creation")
                 self.assertTrue(False)
@@ -51,6 +51,7 @@ class SetupTest(unittest.TestCase):
             print("create home folder")
             body = {"folder": True}
             rsp = requests.put(req, data=json.dumps(body), params=params, headers=admin_headers)
+            print("put request status:", rsp.status_code)
             self.assertEqual(rsp.status_code, 201)
             # do the original request again
             rsp = requests.get(req, params=params, headers=headers)

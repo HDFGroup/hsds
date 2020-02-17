@@ -43,8 +43,7 @@ class S3Client():
 
         # first time setup of s3 client or limited time token has expired
 
-        aws_region = "us-east-1"
-        log.info(f"S3Client init - aws_region {aws_region}")
+        aws_region = None
         aws_secret_access_key = None
         aws_access_key_id = None
         aws_iam_role = None
@@ -70,6 +69,8 @@ class S3Client():
             max_pool_connections = config.get('aio_max_pool_connections')
         except KeyError:
             pass
+        log.info(f"S3Client init - aws_region {aws_region}")
+
         s3_gateway = config.get('aws_s3_gateway')
         if not s3_gateway:
             msg="Invalid aws s3 gateway"
