@@ -102,27 +102,26 @@ Install docker-compose.
 
 1. See: <https://docs.docker.com/compose/install/>
 
-Post Install Configuration
---------------------------
+Post Install Configuration and Testing
+--------------------------------------
 
 The following is some optional configuration steps to create test files and configure
-user home folders. **Important:** trailing slashes are essential here.
+user home folders. **Important:** trailing slashes are essential here.  These steps can be run
+on the server VM or on your client.
 
-1. Install h5py: `pip install h5py`
-2. Install h5pyd (Python client SDK): `pip install h5pyd`
-3. Download the following file: `wget https://s3.amazonaws.com/hdfgroup/data/hdf5test/tall.h5`
-4. Configure HSDS: `hsconfigure`
+1. Set an environment variable: ADMIN_PASSWORD with the value used in the password.txt file.  E.g.: `export ADMIN_PASSWORD=admin`
+2. Set an environment varaible: USER_PASSWORD with the password for test_user1 in the password.txt file.  E.g.: `export USER_PASSWORD=test`
+3. In the hsds directory, run the integration test: `python testall.py --skip_unit`. Ignore `WARNING: is test data setup?` messages for now
+4. Install h5py: `pip install h5py`
+5. Install h5pyd (Python client SDK): `pip install h5pyd`
+6. Configure h5pyd: `hsconfigure`
 Server endpoint: $HSDS_ENDPOINT enviornment variable
 Username: from hsds/admin/config/passwd.txt file above
 Password: from hsds/admin/config/passwd.txt file above
-5. Set up home directory: `hstouch -o admin /home/`
-6. Set up home folders for each username in the passwd file:
-`hstouch -o <username> /home/<username>/`
-7. In the following steps use the password that was setup for the test_user1 account in place of \<passwd\>
-8. Create a test folder on HSDS: `hstouch -u test_user1 -p <passwd> /home/test_user1/test/`
-9. Import into hsds: `hsload -v -u test_user1 -p <passwd> tall.h5 /home/test_user1/test/`
-10. Verify upload: `hsls -r -u test_user1 -p <passwd> /home/test_user1/test/tall.h5`
-11. In the hsds directory, run the integration test: `python testall.py --skip_unit`
+7. To setup test data, download the following file: `wget https://s3.amazonaws.com/hdfgroup/data/hdf5test/tall.h5`
+8. Import into hsds: `hsload -v -u test_user1 -p $USER_PASSWORD tall.h5 /home/test_user1/test/`
+9. Verify upload: `hsls -r -u test_user1 -p $USER_PASWORD /home/test_user1/test/tall.h5`
+10. Rerun the integration test: `python testall.py --skip_unit`.  You should not see any WARNING messages now
 
 Installing Software Updates
 ---------------------------
