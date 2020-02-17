@@ -15,16 +15,14 @@ These environment variables will be used to create Azure resources.
     export STORAGEACCTNAME=mystorageaccount
 
     # the following will be the same as the variables exported on the VM below
-    export AZURE_CONNECTION_STRING="1234567890"      # use the connection string for your Azure account.                                                     # Note the quotation marks around the string 
+    export AZURE_CONNECTION_STRING="1234567890"      # use the connection string for your Azure account.                                                     # Note the quotation marks around the string
     export BUCKET_NAME=hsdstest                   # set to the name of the container you will be using
 
 Prerequisites
 -------------
 
-Install pip on your local machine if it is not already installed:
+Setup Pip and Python 3 on your local machine if not already installed (e.g. with Miniconda <https://docs.conda.io/en/latest/miniconda.html>)
 
-    sudo apt-get update && sudo apt-get -y upgrade
-    sudo apt-get install python-pip`
 
 Set up your Azure environment
 -----------------------------
@@ -78,9 +76,6 @@ These environment variables will be passed to the Docker containers on startup.
 13. Start the service `./runall.sh <n>` where n is the number of containers desired (defaults to 1)
 14. Run `docker ps` and verify that the containers are running: hsds_head, hsds_sn_[1-n], hsds_dn_[1-n]
 15. Go to <http://hsds.hdf.test/about> and verify that "cluster_state" is "READY" (might need to give it a minute or two)
-16. Install pytz module: `pip install pytz`
-17. Run the integration test: `python testall.py --skip_unit`  Note: not all integration tests will pass unless the Post Install Configuration steps below are completed.
-
 
 Docker Setup
 ------------
