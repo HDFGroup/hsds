@@ -124,7 +124,7 @@ Follow the instructions above with the following modifications in the respective
        SET STORAGEACCTNAME=mystorageaccount
        SET CONTAINERNAME=testcontainer
 
-  For commands in all sections replace the unix environment variable notation (SVAR) with Windows notation (%VAR%).  For example instead of `$ACRNAME` use `%ACRNAME%`
+   For commands in all sections replace the unix environment variable notation (SVAR) with Windows notation (%VAR%).  For example instead of `$ACRNAME` use `%ACRNAME%`
 3. Setup your Azure environment, to install Azure cli on Windows, follow instructions here: <https://docs.microsoft.com/en-us/cli/azure/install-azure-cli-windows?view=azure-cli-latest>
 4. Prepare and deploy your docker image to ACR
    To create kuebernetes secret:
