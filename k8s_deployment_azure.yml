@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: hsds
+  name: hsds
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hsds
+  template:
+    metadata:
+      labels:
+        app: hsds
+    spec:
+      containers:
+        -
+          name: sn
+          image: "myacrname.azurecr.io/hsds:v1"
+          imagePullPolicy: Always
+          ports:
+            -
+              containerPort: 5101
+          env:
+          - name: NODE_TYPE
+            value: sn
+          - name: BUCKET_NAME
+            value: home
+          - name: LOG_LEVEL
+            value: INFO
+          - name: SERVER_NAME
+            value: "Highly Scalable Data Service (HSDS)"
+          - name: HSDS_ENDPOINT
+            value: "http://test.local.com"
+          - name: GREETING
+            value: "Welcome to HSDS!"
+          - name: ABOUT
+            value: "HSDS is a webservice for HDF data"
+          - name: AZURE_CONNECTION_STRING
+            valueFrom:
+              secretKeyRef:
+                name: azure-conn-str
+                key: az_conn_str
+          - name: SN_RAM
+            value: "2g"
+        - name: dn
+          image: "myacrname.azurecr.io/hsds:v1"
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/usr/bin/curl", "-X", "DELETE", "http://127.0.0.1:6101/prestop"]
+          imagePullPolicy: Always
+          ports:
+            -
+              containerPort: 6101
+          env:
+          - name: NODE_TYPE
+            value: dn
+          - name: BUCKET_NAME
+            value: home
+          - name: LOG_LEVEL
+            value: INFO
+          - name: HSDS_ENDPOINT
+            value: "http://test.local.com"
+          - name: AZURE_CONNECTION_STRING
+            valueFrom:
+              secretKeyRef:
+                name: azure-conn-str
+                key: az_conn_str
+          - name: DN_RAM
+            value: "2g"
