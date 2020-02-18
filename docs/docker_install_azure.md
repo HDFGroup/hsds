@@ -55,8 +55,6 @@ Install HSDS on Virtual Machine
 
 On the VM, export environment variables as shown in "Sample .bashrc" below. **IMPORTANT:** If you are not adding these variables into your .bashrc, they must be exported in step 11 below, after Miniconda and Docker are installed.
 
- ###Sample .bashrc for VM
-
 These environment variables will be passed to the Docker containers on startup.
 
     export AZURE_CONNECTION_STRING="1234567890"      # use the connection string for your Azure account. Note the quotation marks around the string
