@@ -137,6 +137,6 @@ Follow the instructions above with the following modifications in the respective
 
     * Download do2unix from: <https://sourceforge.net/projects/dos2unix/>
     * Apply dos2unix to entrypoint.sh: `dos2unix entrypoint.sh`
-    * build.sh will not run on Windows, instead run the docker build directly: `docker build -t ACRNAME.azurecr.io/hsds:v1 .'
+    * build.sh will not run on Windows, instead run the docker build directly: `docker build -t ACRNAME.azurecr.io/hsds:v1 .`
 
   **Note:** This will not run the pyflakes on the code. Pyflakes is a code checker and not essential to building the container.
