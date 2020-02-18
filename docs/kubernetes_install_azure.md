@@ -21,17 +21,14 @@ These environment variables will be used to create Azure resources.
 Prerequisites
 -------------
 
-Install pip on your local machine if it is not already installed:
-
-    sudo apt-get update && sudo apt-get -y upgrade
-    sudo apt-get install python-pip
+Setup Pip and Python 3 on your local machine if not already installed (e.g. with Miniconda <https://docs.conda.io/en/latest/miniconda.html>)
 
 Setup your Azure environment
 ----------------------------
 
 Here we will deploy an Azure Storage Account, Azure Container Registry (ACR) and Azure Kubernetes Service (AKS).
 
-1. Install az-cli: `curl -L https://aka.ms/InstallAzureCli | bash`
+1. Install az-cli: `pip install azure-cli`
 2. Validate runtime version az-cli is at least 2.0.80: `az version`
 3. Log in to Azure Subscription using AZ-Cli. `$az login`
 4. After successful login, the list of avaialble subscriptions will be displayed. If you have access to more than one subscription, set the proper subscription to be used: `az account set --subscription [name]`
@@ -93,19 +90,18 @@ Deploy HSDS to AKS
 Test the Deployment using Integration Test and Test Data
 --------------------------------------------------------
 
-1. Install Anaconda: <https://docs.conda.io/projects/conda/en/latest/user-guide/install/linux.html>, Install for python 3.7
-2. Install h5pyd: `pip install h5pyd`
-3. Run: `hsconfigure` and set:
+1. Install h5pyd: `pip install h5pyd`
+2. Run: `hsconfigure` and set:
        - hs endpoint: e.g. <http://EXTERNAL-IP>)
        - admin username/password (added to passwd.txt earlier)
        - Ignore API Key
-4. Run: `hsinfo`.  Server state should be "`READY`".  Ignore the "Not Found" error for the admin home folder
-5. Create "/home" folder: `$ hstouch /home/`.  Note: trailing slash is important!
-6. For each username in the passwd file, create a top-level domain: `hstouch -u <username> -p <passwd> /home/<username>/test/`
-7. Run the integration test: `python testall.py --skip_unit`
-8. Download the following file: `wget https://s3.amazonaws.com/hdfgroup/data/hdf5test/tall.h5`
-9. Import into hsds: `hsload -v -u <username> -p <passwd> tall.h5 /home/<username>/test/`
-10. Verify upload: `hsls -r -u test_user1 -p <passwd> /home/test_user1/test/tall.h5`
+3. Run: `hsinfo`.  Server state should be "`READY`".  Ignore the "Not Found" error for the admin home folder
+4. Create "/home" folder: `$ hstouch /home/`.  Note: trailing slash is important!
+5. For each username in the passwd file, create a top-level domain: `hstouch -u <username> -p <passwd> /home/<username>/test/`
+6. Run the integration test: `python testall.py --skip_unit`
+7. Download the following file: `wget https://s3.amazonaws.com/hdfgroup/data/hdf5test/tall.h5`
+8. Import into hsds: `hsload -v -u <username> -p <passwd> tall.h5 /home/<username>/test/`
+9. Verify upload: `hsls -r -u test_user1 -p <passwd> /home/test_user1/test/tall.h5`
 
 AKS Cluster Scaling
 -------------------
@@ -118,7 +114,7 @@ Notes for Installation from a Windows Machine
 
 Follow the instructions above with the following modifications in the respective sections
 
-1. Before you start make sure that you have docker installed on your system by running: `doker --version` otherwise install docker desktop: <https://docs.docker.com/docker-for-windows/>
+1. Before you start make sure that you have docker installed on your system by running: `docker --version` otherwise install docker desktop: <https://docs.docker.com/docker-for-windows/>
 2. Sample .bashrc will not work on Windows - instead run the following commands on the console (or include them in a batch file and run the batch file)
 
     SET AZURE_CONNECTION_STRING="DefaultEndpointsProtocol=https;AccountName=myacct;AccountKey=GZJxxxOPnw==;EndpointSuffix=core.windows.net"
