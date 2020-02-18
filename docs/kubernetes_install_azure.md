@@ -70,8 +70,8 @@ Deploy HSDS to AKS
        NAME    TYPE           CLUSTER-IP     EXTERNAL-IP      PORT(S)        AGE
        hsds    LoadBalancer   10.0.242.109   20.36.17.252     80:30326/TCP   23
 
-  Note the public-ip (EXTERNAL-IP). This is where you can access the HSDS service externally. It may take some time for the EXTERNAL-IP to show up after the service deployment.  For additional configuration options to handle SSL related scenerios please see: *frontdoor_install_azure.md*
-  Additional reference for Azure Front Door <https://docs.microsoft.com/en-us/azure/frontdoor/>
+   Note the public-ip (EXTERNAL-IP). This is where you can access the HSDS service externally. It may take some time for the EXTERNAL-IP to show up after the service deployment.  For additional configuration options to handle SSL related scenerios please see: *frontdoor_install_azure.md*
+   Additional reference for Azure Front Door <https://docs.microsoft.com/en-us/azure/frontdoor/>
 5. Now we will deploy the HSDS containers. In ***k8s_deployment_azure.yml***, customize the values for:
    env sections:
     * HSDS_ENDPOINT (change to `http://public-ip` where pubic-ip is the EXTERNAL-IP from step 3 above)
@@ -79,9 +79,9 @@ Deploy HSDS to AKS
    containers sections
     * image: 'myacrname.azurecr.io/hsds:v1' to reflect the acr repository for deployment.
 6. Apply the deployment: `$ kubectl apply -f k8s_deployment_azure.yml`
-7.  Verify that the HSDS pod is running: `$ kubectl get pods`  a pod with a name starting with hsds should be displayed with status as "Running".
-8.  Addtional verification: Run (`$ kubectl describe pod hsds-xxxx`) and make sure everything looks OK
-9.  To locally test that HSDS functioning
+7. Verify that the HSDS pod is running: `$ kubectl get pods`  a pod with a name starting with hsds should be displayed with status as "Running".
+8. Addtional verification: Run (`$ kubectl describe pod hsds-xxxx`) and make sure everything looks OK
+9. To locally test that HSDS functioning
     * Create a forwarding port to the Kubernetes service `$ sudo kubectl port-forward hsds-1234 8080:5101` (use another port if 8080 is unavailable)
     * From a browser hit: <http://127.0.0.1:8080/about> and verify that "cluster_state" is "READY"
 
@@ -104,8 +104,8 @@ Test the Deployment using Integration Test and Test Data
 AKS Cluster Scaling
 -------------------
 
-    To scale up or down the number of HSDS pods, run:
-    `$kubectl scale --replicas=n deployment/hsds` where n is the number of pods desired.
+To scale up or down the number of HSDS pods, run:
+`$kubectl scale --replicas=n deployment/hsds` where n is the number of pods desired.
 
 Notes for Installation from a Windows Machine
 ---------------------------------------------
