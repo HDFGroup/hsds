@@ -1,17 +1,15 @@
+#!/bin/bash
 #
-SRCDIR=../../hsds
-zip function.zip *.py
-cd $SRCDIR
-zip -g ${OLDPWD}/function.zip util/arrayUtil.py
-zip -g ${OLDPWD}/function.zip util/arrayUtil.py
-zip -g ${OLDPWD}/function.zip util/chunkUtil.py
-zip -g ${OLDPWD}/function.zip util/dsetUtil.py
-zip -g ${OLDPWD}/function.zip util/domainUtil.py
-zip -g ${OLDPWD}/function.zip util/hdf5dtype.py
-zip -g ${OLDPWD}/function.zip util/idUtil.py
-zip -g ${OLDPWD}/function.zip util/s3Client.py
-zip -g ${OLDPWD}/function.zip util/storUtil.py
+# create zip file for deployment to AWS Lambda
+#
 
+ZIPFILE="function.zip"
+if [ -f ${ZIPFILE} ]; then
+   rm ${ZIPFILE}
+fi
+zip ${ZIPFILE} lambda_function.py
+zip ${ZIPFILE} hsds/*.py
+zip ${ZIPFILE} hsds/util/*.py
 
 pip install --target ./package numpy
 pip install --target ./package aiobotocore
