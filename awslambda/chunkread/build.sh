@@ -23,4 +23,4 @@ zip -r9 ${OLDPWD}/function.zip .
 
 cd -
 
-~/my-function$ aws lambda update-function-code --function-name chunk_read --zip-file fileb://function.zip
+aws lambda update-function-code --function-name chunk_read --zip-file fileb://function.zip

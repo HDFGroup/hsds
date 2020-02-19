@@ -1,7 +1,7 @@
 import asyncio
 import json
 import base64
-import hsds.hsds_logger as log
+import hsds_logger as log
 from chunkreaad import read_hyperslab, get_app
 from util.arrayUtil import arrayToBytes
 
