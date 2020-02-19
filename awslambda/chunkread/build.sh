@@ -14,7 +14,7 @@ zip ${ZIPFILE} hsds/util/*.py
 pip install --target ./package numpy
 pip install --target ./package aiobotocore
 pip install --target ./package aiohttp
-pip install --target ./package numba
+#pip install --target ./package numba
 
 cd package
 zip -r9 ${OLDPWD}/function.zip .
