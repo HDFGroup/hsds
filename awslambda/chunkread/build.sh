@@ -22,5 +22,3 @@ cd package
 zip -r9 ${OLDPWD}/function.zip .
 
 cd -
-
-aws lambda update-function-code --function-name chunk_read --zip-file fileb://function.zip
