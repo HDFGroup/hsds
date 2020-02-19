@@ -16,7 +16,7 @@
 import json
 import zlib
 import numpy as np
-from numba import jit
+# from numba import jit
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 
 
@@ -34,7 +34,7 @@ except ImportError:
         return None
 from .. import config
 
-@jit(nopython=True)
+#@jit(nopython=True)
 def _doShuffle(src, des, element_size):
     count = len(src) // element_size
     for i in range(count):
@@ -45,7 +45,7 @@ def _doShuffle(src, des, element_size):
             des[j] = e[byte_index]
     return des
 
-@jit(nopython=True)
+#@jit(nopython=True)
 def _doUnshuffle(src, des, element_size):
     count = len(src) // element_size
     for i in range(element_size):
