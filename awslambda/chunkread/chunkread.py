@@ -1,5 +1,7 @@
 import time
+import asyncio
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
+from aiobotocore import get_session
 
 import config
 import hsds_logger as log
@@ -11,10 +13,14 @@ from util.storUtil import getStorBytes
 from util.arrayUtil import bytesToArray
 
 
-def get_app():
+def get_app(loop=None):
     app = {}
     app["start_time"] = time.time()
     app["bucket_name"] = config.get("bucket_name")
+    if not loop:
+        loop = asyncio.get_event_loop()
+    session = get_session(loop=loop)
+    app["session"] = session
     return app
 
 async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset=0, s3size=0):

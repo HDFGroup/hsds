@@ -12,9 +12,7 @@
 import asyncio
 import unittest
 import sys
-import json
 import numpy as np
-from aiobotocore import get_session
 sys.path.append('../../../hsds/util')
 sys.path.append('../../../hsds')
 sys.path.append('../../chunkread')
@@ -57,11 +55,8 @@ class ReadPointsTest(unittest.TestCase):
         params["dset_json"] = dset_json
         params["chunk_id"] = chunk_id
         params["bucket"] = config.get("bucket")
-        app = get_app()
         loop = asyncio.get_event_loop()
-        session = get_session(loop=loop)
-        app["session"] = session
-
+        app = get_app(loop=loop)
         loop.run_until_complete(self.read_points_test(app, params))
 
         loop.close()
