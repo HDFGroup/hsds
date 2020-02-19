@@ -12,10 +12,16 @@
 #
 # Simple looger for hsds
 #
+import os
+
 app = None # global app handle
-log_level = "DEUBG"
+if "LOG_LEVEL" in os.environ:
+	log_level = os.environ["LOG_LEVEL"]
+else:
+	log_level = "DEBUG"
 
 def debug(msg):
+	print("log_level:", log_level)
 	if log_level == "DEBUG":
 		print("DEBUG> " + msg)
 	if app:
