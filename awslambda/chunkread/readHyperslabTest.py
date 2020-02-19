@@ -15,10 +15,13 @@ import sys
 import numpy as np
 
 import hsds.hsds_logger as log
-import hsds.config as config
 from hsds.util.idUtil import getRootObjId
 from hsds.util.storUtil import releaseStorageClient
 from hsds.chunkread import get_app, read_hyperslab
+
+# dataset: /g1/g1.1/dset1.1.1 from /home/jreadey/tall.h5
+DSET111_id = "d-75b88d05-46db146e-8419-28925f-14d998"
+BUCKET_NAME = "hdflab"
 
 class ReadHyperslabTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -41,7 +44,7 @@ class ReadHyperslabTest(unittest.TestCase):
 
     def testReadHyperslab(self):
 
-        dset_id = config.get("dset111_id")
+        dset_id = DSET111_id
         print("dset_id:", dset_id)
 
         # these are the properties of the /g1/g1.1/dset1.1.1. dataset in tall.h5
@@ -56,7 +59,7 @@ class ReadHyperslabTest(unittest.TestCase):
         params = {}
         params["dset_json"] = dset_json
         params["chunk_id"] = chunk_id
-        params["bucket"] = config.get("bucket")
+        params["bucket"] = BUCKET_NAME
         loop = asyncio.get_event_loop()
         app = get_app(loop=loop)
          
