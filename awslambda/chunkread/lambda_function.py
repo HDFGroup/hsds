@@ -1,9 +1,10 @@
 import asyncio
 import json
 import base64
-import hsds_logger as log
 from chunkreaad import read_hyperslab, get_app
 from util.arrayUtil import arrayToBytes
+import hsds_logger as log
+
 
 async def get_hyperslab(app, params):
     arr = await read_hyperslab(app, params)
