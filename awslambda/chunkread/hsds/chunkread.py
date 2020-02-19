@@ -3,14 +3,14 @@ import asyncio
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 from aiobotocore import get_session
 
-import config
-import hsds_logger as log
-from util.dsetUtil import getChunkLayout, getDeflateLevel, isShuffle
-from util.hdf5dtype import createDataType, getItemSize
-from util.chunkUtil import getChunkSize, chunkReadSelection, chunkReadPoints
-from util.idUtil import getS3Key
-from util.storUtil import getStorBytes
-from util.arrayUtil import bytesToArray
+from . import config
+from . import hsds_logger as log
+from .util.dsetUtil import getChunkLayout, getDeflateLevel, isShuffle
+from .util.hdf5dtype import createDataType, getItemSize
+from .util.chunkUtil import getChunkSize, chunkReadSelection, chunkReadPoints
+from .util.idUtil import getS3Key
+from .util.storUtil import getStorBytes
+from .util.arrayUtil import bytesToArray
 
 
 def get_app(loop=None):

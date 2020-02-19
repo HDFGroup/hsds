@@ -13,14 +13,12 @@ import asyncio
 import unittest
 import sys
 import numpy as np
-sys.path.append('../../../hsds/util')
-sys.path.append('../../../hsds')
-# sys.path.append('../../chunkread')
-from idUtil import getRootObjId
-from storUtil import releaseStorageClient
-from chunkread import get_app, read_hyperslab
-import config
 
+import hsds.hsds_logger as log
+import hsds.config as config
+from hsds.util.idUtil import getRootObjId
+from hsds.util.storUtil import releaseStorageClient
+from hsds.chunkread import get_app, read_hyperslab
 
 class ReadHyperslabTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
