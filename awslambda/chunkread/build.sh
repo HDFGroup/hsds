@@ -8,6 +8,7 @@ if [ -f ${ZIPFILE} ]; then
    rm ${ZIPFILE}
 fi
 zip ${ZIPFILE} lambda_function.py
+zip ${ZIPFILE} __init__.py
 zip ${ZIPFILE} hsds/*.py
 zip ${ZIPFILE} hsds/util/*.py
 
