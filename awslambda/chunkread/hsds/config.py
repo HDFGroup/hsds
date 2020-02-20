@@ -22,8 +22,7 @@ cfg = {
     'log_level': 'INFO',   # ERROR, WARNING, INFO, DEBUG, or NOTSET,
     'min_chunk_size': '1m',  # 1 MB
     'max_chunk_size': '4m',  # 4 MB
-    'max_request_size': '100m',  # 100 MB - should be no smaller than client_max_body_size in nginx tmpl
-    'aio_max_pool_connections': 64  # number of connections to keep in conection pool for aiobotocore requests
+    'max_request_size': '100m'  # 100 MB - should be no smaller than client_max_body_size in nginx tmpl
 }
 
 def get(x):
