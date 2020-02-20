@@ -1,4 +1,5 @@
 import time
+import base64
 from . import config
 from . import hsds_logger as log
 from .util.dsetUtil import getChunkLayout, getDeflateLevel, isShuffle
@@ -6,7 +7,7 @@ from .util.hdf5dtype import createDataType, getItemSize
 from .util.chunkUtil import getChunkSize, chunkReadSelection, chunkReadPoints
 from .util.idUtil import getS3Key
 from .util.storUtil import getStorBytes
-from .util.arrayUtil import bytesToArray
+from .util.arrayUtil import bytesToArray, arrayToBytes
 
 
 def get_app():
@@ -91,7 +92,10 @@ def read_hyperslab(app, params):
     else:
         arr = chunk_arr
 
-    return arr
+    bdata = arrayToBytes(arr)
+    base64data = base64.b64encode(bdata)
+
+    return base64data
 
 # 
 # read point selection from chunk
