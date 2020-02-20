@@ -95,7 +95,7 @@ def read_hyperslab(app, params):
     bdata = arrayToBytes(arr)
     base64data = base64.b64encode(bdata)
 
-    return base64data
+    return base64data.decode('ascii')
 
 # 
 # read point selection from chunk

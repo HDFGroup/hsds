@@ -59,6 +59,7 @@ class ReadHyperslabTest(unittest.TestCase):
         """
         params["slices"]=((slice(1,2,1),slice(0,4,1)))
         b64data = read_hyperslab(app, params)
+        print("got:", b64data)
         data = base64.b64decode(b64data)
         self.assertEqual(len(data), 16)
 
