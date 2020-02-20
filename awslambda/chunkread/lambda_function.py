@@ -17,13 +17,24 @@ def lambda_handler(event, context):
             log.warn(f"expected to find key: {k} in event")
             return {'statusCode': 404}
         params[k] = event[k]
-    # params["slices"]=((slice(1,2,1),slice(0,4,1)))
-    if "slices" in event:
+    # params["select"]= "[1:2,0:8:2]" -> ((slice(1,2,1),slice(0,8,2)))
+    if "select" in event:
         # hyperslab selection
         status_code = 500
+        select_str = event["select"]
+        if select_str[0] == '[' and select_str[-1] == ']':
+            select_str = select_str[1,-1]
+        fields = select_str.split(',')
         slices = []
-        for s in event["slices"]:
-            slices.append(slice(s[0],s[1],s[2]))
+        for extent in fields:
+            extent_fields = etent.split(':')
+            start = int(extent_fields[0])
+            stop = int(extent_fields[1])
+            if len(extent_fields) > 2:
+                step = int(extent_fields[2])
+            else:
+                step = 1
+            slices.append(slice(start, stop, step))
         params["slices"] = slices
         try:
             b64data = read_hyperslab(app, params)
