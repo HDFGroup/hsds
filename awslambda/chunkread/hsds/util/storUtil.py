@@ -86,7 +86,7 @@ def _getStorageClient(app):
     client = S3Client(app)
     if not client:
         log.error("error couldn't get S3 client")
-        raise HTTPInternalServerError())
+        raise HTTPInternalServerError()
     return client
 
 async def releaseStorageClient(app):
