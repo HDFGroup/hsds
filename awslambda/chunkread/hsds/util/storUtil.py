@@ -24,8 +24,6 @@ from botocore.exceptions import ClientError
 from .. import hsds_logger as log
 from .s3Client import S3Client
 
-from .. import config
-
 #@jit(nopython=True)
 def _doShuffle(src, des, element_size):
     count = len(src) // element_size

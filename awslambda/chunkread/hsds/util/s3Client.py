@@ -1,10 +1,7 @@
-import datetime
-import json
 import time
 import boto3
 from botocore.exceptions import ClientError
 from .. import hsds_logger as log
-from .. import config
 
 class S3Client():
     """
@@ -66,7 +63,7 @@ class S3Client():
         try:
             resp =  self._client.get_object(Bucket=bucket, Key=key, Range=range)
             body = resp["Body"]
-            data = resp['Body'].read()
+            data = body.read()
             finish_time = time.time()
             log.info(f"s3Client.getS3Bytes({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f} bytes={len(data)}")
 

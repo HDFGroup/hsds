@@ -10,8 +10,6 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
-
 from .. import hsds_logger as log
 
 
@@ -28,12 +26,12 @@ def getHyperslabSelection(dsetshape, start=None, stop=None, step=None):
         if len(start) != rank:
             msg = "Bad Request: start array length not equal to dataset rank"
             log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+            raise KeyError()
         for dim in range(rank):
             if start[dim] < 0 or start[dim] >= dsetshape[dim]:
                 msg = "Bad Request: start index invalid for dim: " + str(dim)
                 log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
+                raise KeyError()
     else:
         start = []
         for dim in range(rank):
@@ -45,12 +43,12 @@ def getHyperslabSelection(dsetshape, start=None, stop=None, step=None):
         if len(stop) != rank:
             msg = "Bad Request: stop array length not equal to dataset rank"
             log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+            raise KeyError()
         for dim in range(rank):
             if stop[dim] <= start[dim] or stop[dim] > dsetshape[dim]:
                 msg = "Bad Request: stop index invalid for dim: " + str(dim)
                 log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
+                raise KeyError()
     else:
         stop = []
         for dim in range(rank):
@@ -62,12 +60,12 @@ def getHyperslabSelection(dsetshape, start=None, stop=None, step=None):
         if len(step) != rank:
             msg = "Bad Request: step array length not equal to dataset rank"
             log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+            raise KeyError()
         for dim in range(rank):
             if step[dim] <= 0 or step[dim] > dsetshape[dim]:
                 msg = "Bad Request: step index invalid for dim: " + str(dim)
                 log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
+                raise KeyError()
     else:
         step = []
         for dim in range(rank):
@@ -82,7 +80,7 @@ def getHyperslabSelection(dsetshape, start=None, stop=None, step=None):
         except ValueError:
             msg = "Bad Request: invalid start/stop/step value"
             log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+            raise KeyError()
         slices.append(s)
     return tuple(slices)
 
@@ -142,14 +140,14 @@ def getQueryParameter(request, query_name, body=None, default=None):
         except ValueError:
             msg = "Invalid request parameter: {}".format(query_name)
             log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+            raise KeyError()
     if val is None:
         if  default is not None:
             val = default
         else:
             msg = "Request parameter is missing: {}".format(query_name)
             log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+            raise KeyError()
     return val
 
 """
@@ -178,7 +176,7 @@ def getSliceQueryParam(request, dim, extent, body=None):
             if len(start_val) < dim:
                 msg = "Not enough dimensions supplied to body start key"
                 log.arn(msg)
-                raise HTTPBadRequest(reason=msg)
+                raise KeyError()
             start = start_val[dim]
         else:
             start = start_val
@@ -189,7 +187,7 @@ def getSliceQueryParam(request, dim, extent, body=None):
             if len(stop_val) < dim:
                 msg = "Not enough dimensions supplied to body stop key"
                 log.arn(msg)
-                raise HTTPBadRequest(reason=msg)
+                raise KeyError()
             stop = stop_val[dim]
         else:
             stop = stop_val
@@ -199,7 +197,7 @@ def getSliceQueryParam(request, dim, extent, body=None):
             if len(step_val) < dim:
                 msg = "Not enough dimensions supplied to body step key"
                 log.arn(msg)
-                raise HTTPBadRequest(reason=msg)
+                raise KeyError()
             step = step_val[dim]
         else:
             step = step_val
@@ -211,11 +209,11 @@ def getSliceQueryParam(request, dim, extent, body=None):
         if not query.startswith('['):
             msg = "Bad Request: selection query missing start bracket"
             log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+            raise KeyError()
         if not query.endswith(']'):
             msg = "Bad Request: selection query missing end bracket"
             log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+            raise KeyError()
 
         # now strip out brackets
         query = query[1:-1]
@@ -224,7 +222,7 @@ def getSliceQueryParam(request, dim, extent, body=None):
         if dim >= len(query_array):
             msg = "Not enough dimensions supplied to query argument"
             log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+            raise KeyError()
         dim_query = query_array[dim].strip()
 
         if dim_query.find(':') < 0:
@@ -234,7 +232,7 @@ def getSliceQueryParam(request, dim, extent, body=None):
             except ValueError:
                 msg = "Bad Request: invalid selection parameter (can't convert to int) for dimension: " + str(dim)
                 log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
+                raise KeyError()
             stop = start
         elif dim_query == ':':
             # select everything
@@ -245,7 +243,7 @@ def getSliceQueryParam(request, dim, extent, body=None):
             if len(fields) > 3:
                 msg = "Bad Request: Too many ':' seperators for dimension: " + str(dim)
                 log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
+                raise KeyError()
             try:
                 if fields[0]:
                     start = int(fields[0])
@@ -256,21 +254,21 @@ def getSliceQueryParam(request, dim, extent, body=None):
             except ValueError:
                 msg = "Bad Request: invalid selection parameter (can't convert to int) for dimension: " + str(dim)
                 log.info(msg)
-                raise HTTPBadRequest(reason=msg)
+                raise KeyError()
     log.debug("start: {}, stop: {}, step: {}".format(start, stop, step))
     # now, validate whaterver start/stop/step values we got
     if start < 0 or start > extent:
         msg = "Bad Request: Invalid selection start parameter for dimension: " + str(dim)
         log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
+        raise KeyError()
     if stop > extent:
         msg = "Bad Request: Invalid selection stop parameter for dimension: " + str(dim)
         log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
+        raise KeyError()
     if step <= 0:
         msg = "Bad Request: invalid selection step parameter for dimension: " + str(dim)
         log.debug(msg)
-        raise HTTPBadRequest(reason=msg)
+        raise KeyError()
     s = slice(start, stop, step)
     log.debug("dim query[" + str(dim) + "] returning: start: " +
             str(start) + " stop: " + str(stop) + " step: " + str(step))
@@ -337,13 +335,13 @@ Use with H5S_NULL datasets will throw a 400 error.
 def getDsetMaxDims(dset_json):
     if "shape" not in dset_json:
         log.error("No shape found in dset_json")
-        raise HTTPInternalServerError()
+        raise KeyError()
     shape_json = dset_json["shape"]
     maxdims = None
     if shape_json['class'] == 'H5S_NULL':
         msg = "Expected shape class other than H5S_NULL"
         log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
+        raise KeyError()
     elif shape_json['class'] == 'H5S_SCALAR':
         maxdims = [1,]
     elif shape_json['class'] == 'H5S_SIMPLE':
@@ -351,7 +349,7 @@ def getDsetMaxDims(dset_json):
             maxdims = shape_json["maxdims"]
     else:
         log.error("Unexpected shape class: {}".format(shape_json['class']))
-        raise HTTPInternalServerError()
+        raise KeyError()
     return maxdims
 
 """ Get chunk layout.  Throw 500 if used with non-H5D_CHUNKED layout
@@ -359,11 +357,11 @@ def getDsetMaxDims(dset_json):
 def getChunkLayout(dset_json):
     if "layout" not in dset_json:
         log.error("No layout found in dset_json: {}".format(dset_json))
-        raise HTTPInternalServerError()
+        raise KeyError()
     layout_json = dset_json["layout"]
     if layout_json["class"] not in ('H5D_CHUNKED', 'H5D_CHUNKED_REF', 'H5D_CHUNKED_REF_INDIRECT', 'H5D_CONTIGUOUS_REF'):
         log.error("Unexpected shape layout: {}".format(layout_json["class"]))
-        raise HTTPInternalServerError()
+        raise KeyError()
     layout = layout_json["dims"]
     return layout
 

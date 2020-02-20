@@ -13,7 +13,6 @@
 
 import weakref
 import numpy as np
-from aiohttp.web_exceptions import HTTPBadRequest
 
 class Reference():
 
@@ -751,9 +750,8 @@ Validate a json type
 def validateTypeItem(typeItem):
     try:
         createDataType(typeItem)
-    except (KeyError, TypeError, ValueError) as e:
-        msg = f"Got error parsing type... {e}"
-        raise HTTPBadRequest(reason=msg)
+    except (KeyError, TypeError, ValueError):
+        raise
 
 
 """

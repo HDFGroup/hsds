@@ -15,7 +15,6 @@
 #
 import hashlib
 import uuid
-from aiohttp.web_exceptions import HTTPServiceUnavailable
 
 from .. import hsds_logger as log
 
@@ -247,8 +246,6 @@ def getObjId(s3key):
             partition = partition[1:]  # strip off the p
             chunk_coord = "_" + parts[5]
 
-
-
         else:
             raise ValueError(f"unexpected S3Key: {s3key}")
 
@@ -377,43 +374,3 @@ def getUuidFromId(id):
     """ strip off the type prefix ('g-' or 'd-', or 't-')
     and return the uuid part """
     return id[2:]
-
-def getObjPartition(id, count):
-    """ Get the id of the dn node that should be handling the given obj id
-    """
-    hash_code = getIdHash(id)
-    hash_value = int(hash_code, 16)
-    number = hash_value % count
-    return number
-
-def validateInPartition(app, obj_id):
-    if getObjPartition(obj_id, app['node_count']) != app['node_number']:
-        # The request shouldn't have come to this node'
-        partition = getObjPartition(obj_id, app['node_count'])
-        msg = "wrong node for 'id':{}, expected node {} got {}".format(obj_id, app['node_number'], partition)
-        log.error(msg)
-        raise KeyError(msg)
-
-def getDataNodeUrl(app, obj_id):
-    """ Return host/port for datanode for given obj_id.
-    Throw exception if service is not ready"""
-    dn_urls = app["dn_urls"]
-    node_count = app["node_count"]
-    node_state = app["node_state"]
-    if node_state!= "READY" or node_count <= 0 or node_count != len(dn_urls):
-        log.info(f"getDataNodeUrl returning 503 - node_state: {node_state} node count: {node_count}")
-        msg="Service not ready"
-        log.warn(msg)
-        raise HTTPServiceUnavailable()
-    dn_number = getObjPartition(obj_id, node_count)
-    url = dn_urls[dn_number]
-    log.debug(f"got dn_url: {url} for obj_id: {obj_id}")
-    return url
-
-def getDataNodeUrls(app):
-    """ Return list of all urls to the set of datanodes """
-    dn_url_map = app["dn_urls"]
-    dn_urls = []
-    for id in dn_url_map:
-        dn_urls.append(dn_url_map[id])
-    return dn_urls
