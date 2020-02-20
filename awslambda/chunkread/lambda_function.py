@@ -4,15 +4,8 @@ from botocore.exceptions import ClientError
 
 
 from .hsds.chunkread import read_hyperslab, get_app
-from .hsds.util.arrayUtil import arrayToBytes
 from .hsds import hsds_logger as log
 
-
-def get_hyperslab(app, params):
-    arr = read_hyperslab(app, params)
-    data = arrayToBytes(arr)
-    base64data = base64.b64encode(data)
-    return base64data
 
 def lambda_handler(event, context):
 
@@ -33,7 +26,7 @@ def lambda_handler(event, context):
             slices.append(slice(s[0],s[1],s[2]))
         params["slices"] = slices
         try:
-            b64data = get_hyperslab(app, params)
+            b64data = read_hyperslab(app, params)
             return {
                 'statusCode': 200,
                 'body': b64data
