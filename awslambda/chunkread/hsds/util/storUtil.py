@@ -16,22 +16,14 @@
 import json
 import zlib
 import numpy as np
+from botocore.exceptions import ClientError
+
 # from numba import jit
-from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 
 
 from .. import hsds_logger as log
 from .s3Client import S3Client
-try:
-    from util.azureBlobClient import AzureBlobClient
-except ImportError:
-    def AzureBlobClient(app):
-        return None
-try:
-    from util.memClient import MemClient
-except ImportError:
-    def MemClient(app):
-        return None
+
 from .. import config
 
 #@jit(nopython=True)
@@ -80,24 +72,24 @@ def _unshuffle(element_size, chunk):
     return arr.tobytes()
 
 def _getStorageClient(app):
-    """ get storage client s3 or azure blob
+    """ get storage client s3
     """
 
     client = S3Client(app)
     if not client:
         log.error("error couldn't get S3 client")
-        raise HTTPInternalServerError()
+        raise KeyError()
     return client
 
-async def releaseStorageClient(app):
+def releaseStorageClient(app):
     """ release the client storage connection
      (Used for cleanup on application exit)
     """
     client = _getStorageClient(app)
-    if client:
-        await client.releaseClient()
+    client.releaseClient()
 
-async def getStorJSONObj(app, key, bucket=None):
+
+def getStorJSONObj(app, key, bucket=None):
     """ Get object identified by key and read as JSON
     """
 
@@ -108,18 +100,18 @@ async def getStorJSONObj(app, key, bucket=None):
         key = key[1:]  # no leading slash
     log.info(f"getStorJSONObj({bucket})/{key}")
 
-    data = await client.get_object(key, bucket=bucket)
+    data = client.get_object(key, bucket=bucket)
 
     try:
         json_dict = json.loads(data.decode('utf8'))
     except UnicodeDecodeError:
         log.error(f"Error loading JSON at key: {key}")
-        raise HTTPInternalServerError()
+        raise KeyError()
 
     log.debug(f"storage key {key} returned: {json_dict}")
     return json_dict
 
-async def getStorBytes(app, key, shuffle=0, deflate_level=None, offset=0, length=None, bucket=None):
+def getStorBytes(app, key, shuffle=0, deflate_level=None, offset=0, length=None, bucket=None):
     """ Get object identified by key and read as bytes
     """
 
@@ -130,7 +122,7 @@ async def getStorBytes(app, key, shuffle=0, deflate_level=None, offset=0, length
         key = key[1:]  # no leading slash
     log.info(f"getStorBytes({bucket}/{key})")
 
-    data = await client.get_object(bucket=bucket, key=key, offset=offset, length=length)
+    data = client.get_object(bucket=bucket, key=key, offset=offset, length=length)
 
     if data and len(data) > 0:
         log.info(f"read: {len(data)} bytes for key: {key}")
@@ -149,69 +141,7 @@ async def getStorBytes(app, key, shuffle=0, deflate_level=None, offset=0, length
 
     return data
 
-async def putStorJSONObj(app, key, json_obj, bucket=None):
-    """ Store JSON data as storage object with given key
-    """
-
-    client = _getStorageClient(app)
-    if not bucket:
-        bucket = app['bucket_name']
-    if key[0] == '/':
-        key = key[1:]  # no leading slash
-    log.info(f"putS3JSONObj({bucket}/{key})")
-    data = json.dumps(json_obj)
-    data = data.encode('utf8')
-
-    rsp = await client.put_object(key, data, bucket=bucket)
-
-    return rsp
-
-async def putStorBytes(app, key, data, shuffle=0, deflate_level=None, bucket=None):
-    """ Store byte string as S3 object with given key
-    """
-
-    client = _getStorageClient(app)
-    if not bucket:
-        bucket = app['bucket_name']
-    if key[0] == '/':
-        key = key[1:]  # no leading slash
-    log.info(f"putStorBytes({bucket}/{key}), {len(data)} bytes shuffle: {shuffle} deflate: {deflate_level}")
-    if shuffle > 0:
-        shuffled_data = _shuffle(shuffle, data)
-        log.info(f"shuffled data to {len(shuffled_data)}")
-        data = shuffled_data
-
-    if deflate_level is not None:
-        try:
-            # the keyword parameter is enabled with py3.6
-            # zip_data = zlib.compress(data, level=deflate_level)
-            zip_data = zlib.compress(data, deflate_level)
-            log.info(f"compressed from {len(data)} bytes to {len(zip_data)} bytes with level: {deflate_level}")
-            data = zip_data
-        except zlib.error as zlib_error:
-            log.info(f"zlib_err: {zlib_error}")
-            log.warn(f"unable to compress obj: {key}, using raw bytes")
-
-    rsp = await client.put_object(key, data, bucket=bucket)
-
-    return rsp
-
-async def deleteStorObj(app, key, bucket=None):
-    """ Delete storage object identfied by given key
-    """
-
-    client = _getStorageClient(app)
-    if not bucket:
-        bucket = app['bucket_name']
-    if key[0] == '/':
-        key = key[1:]  # no leading slash
-    log.info(f"deleteStorObj({key})")
-
-    await client.delete_object(key, bucket=bucket)
-
-    log.debug("deleteStorObj complete")
-
-async def getStorObjStats(app, key, bucket=None):
+def getStorObjStats(app, key, bucket=None):
     """ Return etag, size, and last modified time for given object
     """
     # TBD - will need to be refactored to handle azure responses
@@ -229,18 +159,18 @@ async def getStorObjStats(app, key, bucket=None):
 
     log.info(f"getStorObjStats({key})")
 
-    key_dict = await client.list_keys(bucket=bucket, limit=1, prefix=key, include_stats=True)
+    key_dict = client.list_keys(bucket=bucket, limit=1, prefix=key, include_stats=True)
 
     log.info(f"list_keys_resp: {key_dict}")
 
     if not key_dict:
         msg = f"key: {key} not found"
         log.info(msg)
-        raise HTTPNotFound()
+        raise KeyError()
 
     if key not in key_dict:
         log.error(f"expected to find key {key} in list_keys response: {key_dict}")
-        raise HTTPInternalServerError()
+        raise KeyError()
 
     item = key_dict[key]
 
@@ -255,7 +185,7 @@ async def getStorObjStats(app, key, bucket=None):
 
     return stats
 
-async def isStorObj(app, key, bucket=None):
+def isStorObj(app, key, bucket=None):
     """ Test if the given key maps to S3 object
     """
     found = False
@@ -269,7 +199,7 @@ async def isStorObj(app, key, bucket=None):
     found = False
 
     try:
-        contents = await client.list_keys(bucket=bucket, limit=1, prefix=key)
+        contents = client.list_keys(bucket=bucket, limit=1, prefix=key)
         if contents:
             item = contents[0]
             print("item:", item)
@@ -278,20 +208,20 @@ async def isStorObj(app, key, bucket=None):
                 # not the requested object
                 found = True
 
-    except HTTPNotFound:
+    except ClientError:
         pass  # key does not exist
 
     log.debug(f"isStorObj {key} returning {found}")
     return found
 
-async def getStorKeys(app, prefix='', deliminator='', suffix='', include_stats=False, callback=None, bucket=None, limit=None):
+def getStorKeys(app, prefix='', deliminator='', suffix='', include_stats=False, callback=None, bucket=None, limit=None):
     # return keys matching the arguments
     client = _getStorageClient(app)
     if not bucket:
         bucket = app['bucket_name']
     log.info(f"getStorKeys('{prefix}','{deliminator}','{suffix}', include_stats={include_stats}")
 
-    key_names = await client.list_keys(prefix=prefix, deliminator=deliminator, suffix=suffix,
+    key_names = client.list_keys(prefix=prefix, deliminator=deliminator, suffix=suffix,
         include_stats=include_stats, callback=callback, bucket=bucket, limit=limit)
 
     log.info(f"getStorKeys done, got {len(key_names)} keys")

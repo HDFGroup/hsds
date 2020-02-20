@@ -9,9 +9,7 @@
 # distribution tree.  If you do not have access to this file, you may        #
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
-import asyncio
 import unittest
-import sys
 import numpy as np
 
 import hsds.hsds_logger as log
@@ -28,21 +26,9 @@ class ReadHyperslabTest(unittest.TestCase):
         super(ReadHyperslabTest, self).__init__(*args, **kwargs)
         # main
 
-    async def read_hyperslab_test(self, app, params):
-        arr = await read_hyperslab(app, params)
-        self.assertEqual(arr.shape, (10,10))
-        self.assertEqual(arr.dtype, np.dtype('>i4'))
-        self.assertEqual(list(arr[1,:]), list(range(10)))
-        self.assertEqual(list(arr[:,1]), list(range(10)))
-
-        params["slices"]=((slice(1,2,1),slice(0,4,1)))
-        arr = await read_hyperslab(app, params)
-        self.assertEqual(arr.shape, (1,4))
-        self.assertEqual(arr.dtype, np.dtype('>i4'))
-        self.assertEqual(list(arr[0,:]), list(range(4)))
-        await releaseStorageClient(app)
 
     def testReadHyperslab(self):
+        app = get_app()
 
         dset_id = DSET111_id
         print("dset_id:", dset_id)
@@ -60,12 +46,19 @@ class ReadHyperslabTest(unittest.TestCase):
         params["dset_json"] = dset_json
         params["chunk_id"] = chunk_id
         params["bucket"] = BUCKET_NAME
-        loop = asyncio.get_event_loop()
-        app = get_app(loop=loop)
-         
-        loop.run_until_complete(self.read_hyperslab_test(app, params))
 
-        loop.close()
+        arr = read_hyperslab(app, params)
+        self.assertEqual(arr.shape, (10,10))
+        self.assertEqual(arr.dtype, np.dtype('>i4'))
+        self.assertEqual(list(arr[1,:]), list(range(10)))
+        self.assertEqual(list(arr[:,1]), list(range(10)))
+
+        params["slices"]=((slice(1,2,1),slice(0,4,1)))
+        arr = read_hyperslab(app, params)
+        self.assertEqual(arr.shape, (1,4))
+        self.assertEqual(arr.dtype, np.dtype('>i4'))
+        self.assertEqual(list(arr[0,:]), list(range(4)))
+        #releaseStorageClient(app)
 
 
 if __name__ == '__main__':

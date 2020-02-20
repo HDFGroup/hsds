@@ -13,8 +13,8 @@ zip ${ZIPFILE} chunkread/hsds/*.py
 zip ${ZIPFILE} chunkread/hsds/util/*.py
 
 pip install --target ./package numpy
-pip install --target ./package aiobotocore
-pip install --target ./package aiohttp
+#pip install --target ./package aiobotocore
+#pip install --target ./package aiohttp
 #pip install --target ./package numba
 
 cd package
