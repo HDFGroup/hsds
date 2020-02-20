@@ -27,7 +27,7 @@ def lambda_handler(event, context):
         fields = select_str.split(',')
         slices = []
         for extent in fields:
-            extent_fields = etent.split(':')
+            extent_fields = extent.split(':')
             start = int(extent_fields[0])
             stop = int(extent_fields[1])
             if len(extent_fields) > 2:
