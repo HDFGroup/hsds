@@ -83,15 +83,10 @@ def _getStorageClient(app):
     """ get storage client s3 or azure blob
     """
 
-    if config.get("aws_s3_gateway"):
-        log.debug("_getStorageClient getting S3Client")
-        client = S3Client(app)
-    elif config.get("azure_connection_string"):
-        log.debug("_getStorageClient getting AzureBlobClient")
-        client = AzureBlobClient(app)
-    else:
-        log.debug("_getStorageClient getting MemClient")
-        client = MemClient(app)
+    client = S3Client(app)
+    if not client:
+        log.error("error couldn't get S3 client")
+        raise HTTPInternalServerError())
     return client
 
 async def releaseStorageClient(app):
@@ -99,7 +94,8 @@ async def releaseStorageClient(app):
      (Used for cleanup on application exit)
     """
     client = _getStorageClient(app)
-    await client.releaseClient()
+    if client:
+        await client.releaseClient()
 
 async def getStorJSONObj(app, key, bucket=None):
     """ Get object identified by key and read as JSON
