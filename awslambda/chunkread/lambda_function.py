@@ -23,7 +23,7 @@ def lambda_handler(event, context):
         status_code = 500
         select_str = event["select"]
         if select_str[0] == '[' and select_str[-1] == ']':
-            select_str = select_str[1,-1]
+            select_str = select_str[1:-1]
         fields = select_str.split(',')
         slices = []
         for extent in fields:
