@@ -32,6 +32,7 @@ from util.chunkUtil import getNumChunks, getChunkIds, getChunkId, getChunkIndex,
 from util.chunkUtil import getChunkCoverage, getDataCoverage, getChunkIdForPartition
 from util.arrayUtil import bytesArrayToList, jsonToArray, getShapeDims, getNumElements, arrayToBytes, bytesToArray
 from util.authUtil import getUserPasswordFromRequest, validateUserPassword
+from util.awsLambdaClient import getLambdaClient
 from servicenode_lib import getObjectJson, validateAction
 import config
 import hsds_logger as log
@@ -105,7 +106,7 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level,
 """
 Read data from given chunk_id.  Pass in type, dims, and selection area.
 """
-async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_map=None, bucket=None):
+async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_map=None, bucket=None, serverless=False):
     """ read the chunk selection from the DN
     chunk_id: id of chunk to write to
     chunk_sel: chunk-relative selection to read from
@@ -115,7 +116,9 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_m
         chunk_size: size of chunk within the s3 object (or 0 if the entire object)
     bucket: s3 bucket to read from
     """
-    msg = f"read_chunk_hyperslab, chunk_id: {chunk_id}, slices: {slices}"
+    if not bucket:
+        bucket = config.get("bucket_name")
+    msg = f"read_chunk_hyperslab, chunk_id: {chunk_id}, slices: {slices}, bucket: {bucket}"
     log.info(msg)
     if chunk_map and chunk_id not in chunk_map:
         log.warn(f"expected to find {chunk_id} in chunk_map")
@@ -124,11 +127,6 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_m
     if partition_chunk_id != chunk_id:
         log.debug(f"using partition_chunk_id: {partition_chunk_id}")
         chunk_id = partition_chunk_id  # replace the chunk_id
-
-    req = getDataNodeUrl(app, chunk_id)
-    req += "/chunks/" + chunk_id
-    log.debug("GET chunk req: " + req)
-    client = get_http_client(app)
 
     if "type" not in dset_json:
         log.error(f"No type found in dset_json: {dset_json}")
@@ -158,6 +156,7 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_m
         return chunk_arr
 
     chunk_arr = None
+    array_data = None
     setSliceQueryParam(params, chunk_sel)
     if chunk_map:
         if chunk_id not in chunk_map:
@@ -168,46 +167,100 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_m
             params["s3path"] = chunk_info["s3path"]
             params["s3offset"] = chunk_info["s3offset"]
             params["s3size"] = chunk_info["s3size"]
-    elif bucket:
+    else:
         # bucket only applied when s3path is not defined
         params["bucket"] = bucket
 
     if chunk_arr is None:
-        try:
-            async with client.get(req, params=params) as rsp:
-                log.debug(f"http_get {req} status: <{rsp.status}>")
-                if rsp.status == 200:
-                    data = await rsp.read()  # read response as bytes
-                    try:
-                        chunk_arr = bytesToArray(data, dt, chunk_shape)
-                    except ValueError as ve:
-                        log.warn(f"bytesToArray ValueError: {ve}")
-                        raise HTTPBadRequest()
-                    npoints_read = getNumElements(chunk_arr.shape)
-                    npoints_expected = getNumElements(chunk_shape)
-                    if npoints_read != npoints_expected:
-                        log.error(f"Expected {npoints_expected} points, but got: {npoints_read}")
-                        raise HTTPInternalServerError()
-                    chunk_arr = chunk_arr.reshape(chunk_shape)
-                elif rsp.status == 404:
-                    if "s3path" in params:
-                        s3path = params["s3path"]
-                        # external HDF5 file, should exist
-                        log.warn(f"s3path: {s3path} for S3 range get not found")
-                        raise HTTPNotFound()
-                    # no data, return zero array
-                    chunk_arr = defaultChunk()
-                else:
-                    msg = f"request to {req} failed with code: {rsp.status}"
-                    log.error(msg)
-                    raise HTTPInternalServerError()
 
-        except ClientError as ce:
-            log.error(f"Error for http_get({req}): {ce} ")
+        if serverless:
+            lambda_function = config.get("aws_lambda_chunkread_function")
+            client = getLambdaClient(app)
+            # extra params for lambda function
+            params["chunk_id"] = chunk_id
+            params["dset_json"] = dset_json
+            log.info(f"invoking lambda function {lambda_function} with payload: {params}")
+            payload = json.dumps(params)
+            try:
+                rsp = await client.invoke(FunctionName=lambda_function, Payload=payload)
+            except ClientError as ce:
+                log.error(f"Error for lambda invoke: {ce} ")
+                raise HTTPInternalServerError()
+            except CancelledError as cle:
+                log.warn(f"CancelledError for lambda invoke: {cle}")
+                return
+            log.info(f"got lambda response: {rsp}")
+
+            lambda_status = rsp["StatusCode"]
+
+            if lambda_status == 200:
+                body = rsp["Payload"]
+                payload = await body.read()
+                log.info(f"got rsp payload: {payload}")
+                payload_dict = json.loads(payload.decode("utf-8"))
+                status_code = payload_dict["statusCode"]
+
+                if status_code == 200:
+                    b64data = payload_dict["body"]
+                    array_data = base64.b64decode(b64data)
+            else:
+                status_code = lambda_status
+
+            if status_code == 404:
+                if "s3path" in params:
+                    s3path = params["s3path"]
+                    # external HDF5 file, should exist
+                    log.warn(f"s3path: {s3path} for S3 range get not found")
+                    raise HTTPNotFound()
+                # no data, return zero array
+                chunk_arr = defaultChunk()
+            else:
+                msg = f"lambda invoke to {lambda_function} failed with code: {status_code}"
+                log.error(msg)
+                raise HTTPInternalServerError()
+        else:
+            req = getDataNodeUrl(app, chunk_id)
+            req += "/chunks/" + chunk_id
+            log.debug("GET chunk req: " + req)
+            client = get_http_client(app)
+            try:
+                rsp = await client.get(req, params=params)
+            except ClientError as ce:
+                log.error(f"Error for http_get({req}): {ce} ")
+                raise HTTPInternalServerError()
+            except CancelledError as cle:
+                log.warn(f"CancelledError for http_get({req}): {cle}")
+                return
+
+            log.debug(f"http_get {req} status: <{rsp.status}>")
+            if rsp.status == 200:
+                array_data = await rsp.read()  # read response as bytes
+            elif rsp.status == 404:
+                if "s3path" in params:
+                    s3path = params["s3path"]
+                    # external HDF5 file, should exist
+                    log.warn(f"s3path: {s3path} for S3 range get not found")
+                    raise HTTPNotFound()
+                # no data, return zero array
+                chunk_arr = defaultChunk()
+            else:
+                msg = f"request to {req} failed with code: {rsp.status}"
+                log.error(msg)
+                raise HTTPInternalServerError()
+
+    if array_data:
+        #convert binary data to numpy array
+        try:
+            chunk_arr = bytesToArray(array_data, dt, chunk_shape)
+        except ValueError as ve:
+            log.warn(f"bytesToArray ValueError: {ve}")
+            raise HTTPBadRequest()
+        nelements_read = getNumElements(chunk_arr.shape)
+        nelements_expected = getNumElements(chunk_shape)
+        if nelements_read != nelements_expected:
+            log.error(f"Expected {nelements_expected} points, but got: {nelements_read}")
             raise HTTPInternalServerError()
-        except CancelledError as cle:
-            log.warn(f"CancelledError for http_get({req}): {cle}")
-            return
+        chunk_arr = chunk_arr.reshape(chunk_shape)
 
     log.info(f"chunk_arr shape: {chunk_arr.shape}")
     log.info(f"data_sel: {data_sel}")
@@ -1410,6 +1463,15 @@ async def GET_Value(request):
 
     num_chunks = getNumChunks(slices, layout)
     log.debug(f"num_chunks: {num_chunks}")
+
+    serverless_threshold = app["node_count"] * 4
+
+    if "nonstrict" in params and params["nonstrict"] and config.get("aws_lambda_chunkread_function") and num_chunks >= serverless_threshold:
+        serverless = True
+        log.info(f"using serverless for read on {num_chunks}")
+    else:
+        serverless = False
+
     max_chunks = int(config.get('max_chunks_per_request'))
     if num_chunks > max_chunks:
         msg = "GET value request too large"
@@ -1437,7 +1499,7 @@ async def GET_Value(request):
             resp = await jsonResponse(request, None)  # TBD: what do return if client cancels
     else:
         try:
-            resp = await doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=chunkinfo, bucket=bucket)
+            resp = await doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=chunkinfo, bucket=bucket, serverless=serverless)
         except CancelledError as ce:
             log.warn(f"Cancelled error on hyperslab read: {ce}")
             resp = await jsonResponse(request, None)  # TBD: what do return if client cancels
@@ -1502,7 +1564,7 @@ async def doQueryRead(request, chunk_ids, dset_json, slices, bucket=None):
     resp = await jsonResponse(request, resp_json)
     return resp
 
-async def doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=None, bucket=None):
+async def doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=None, bucket=None, serverless=False):
     app = request.app
     loop = app["loop"]
     log.info(f"doHyperSlabRead - number of chunk_ids: {len(chunk_ids)}")
@@ -1536,8 +1598,9 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=None,
 
     arr = np.zeros(np_shape, dtype=dset_dtype, order='C')
     tasks = []
+
     for chunk_id in chunk_ids:
-        task = asyncio.ensure_future(read_chunk_hyperslab(app, chunk_id, dset_json, slices, arr, chunk_map=chunk_map, bucket=bucket))
+        task = asyncio.ensure_future(read_chunk_hyperslab(app, chunk_id, dset_json, slices, arr, chunk_map=chunk_map, bucket=bucket, serverless=serverless))
         tasks.append(task)
     await asyncio.gather(*tasks, loop=loop)
 
