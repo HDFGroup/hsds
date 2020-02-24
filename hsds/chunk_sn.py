@@ -214,7 +214,7 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_m
                     raise HTTPNotFound()
                 # no data, return zero array
                 chunk_arr = defaultChunk()
-            else:
+            elif status_code != 200:
                 msg = f"lambda invoke to {lambda_function} failed with code: {status_code}"
                 log.error(msg)
                 raise HTTPInternalServerError()
@@ -1466,17 +1466,28 @@ async def GET_Value(request):
 
     serverless_threshold = app["node_count"] * 4
 
-    if "nonstrict" in params and params["nonstrict"] and config.get("aws_lambda_chunkread_function") and num_chunks >= serverless_threshold:
-        serverless = True
-        log.info(f"using serverless for read on {num_chunks}")
-    else:
-        serverless = False
-
     max_chunks = int(config.get('max_chunks_per_request'))
     if num_chunks > max_chunks:
         msg = "GET value request too large"
         log.warn(msg)
         raise HTTPRequestEntityTooLarge(num_chunks, max_chunks)
+
+    lambda_function = config.get("aws_lambda_chunkread_function")
+    if "nonstrict" in params or True and params["nonstrict"] and lambda_function and num_chunks >= serverless_threshold:
+        serverless = True
+        log.info(f"using serverless for read on {num_chunks} chunks")
+    else:
+        serverless = False
+        if "nonstrict" not in params or not params["nonstrict"]:
+            reason = "nonstrict not specified"
+        elif not lambda_function:
+            reason = "no lambda function configured"
+        else:
+            reason = f"num_chunks is {num_chunks} but threshold is {serverless_threshold}"
+
+        log.debug(f"not using serverless for read on {num_chunks} chunks - {reason}")
+    log.error("test exception")
+
     chunk_ids = getChunkIds(dset_id, slices, layout)
     # Get information about where chunks are located
     #   Will be None except for H5D_CHUNKED_REF_INDIRECT type
