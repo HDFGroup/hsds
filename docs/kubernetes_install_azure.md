@@ -12,7 +12,8 @@ These environment variables will be used to create Azure resources.
     export LOCATION=westus
     export ACRNAME=myacrname
     export STORAGEACCTNAME=mystorageaccount
-
+    export CONTAINERNAME=testcontainer
+    
     # the following will be the same as the variables exported on the cluster below
     # use the connection string for your Azure account. Note the quotation marks around the string
     export AZURE_CONNECTION_STRING="DefaultEndpointsProtocol=https;AccountName=myacct;AccountKey=GZJxxxOPnw==;EndpointSuffix=core.windows.net"
