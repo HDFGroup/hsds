@@ -1473,7 +1473,7 @@ async def GET_Value(request):
         raise HTTPRequestEntityTooLarge(num_chunks, max_chunks)
 
     lambda_function = config.get("aws_lambda_chunkread_function")
-    if "nonstrict" in params or True and params["nonstrict"] and lambda_function and num_chunks >= serverless_threshold:
+    if "nonstrict" in params and params["nonstrict"] and lambda_function and num_chunks >= serverless_threshold:
         serverless = True
         log.info(f"using serverless for read on {num_chunks} chunks")
     else:
