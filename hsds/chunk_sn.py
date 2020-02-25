@@ -203,7 +203,11 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_m
                 payload = await body.read()
                 log.info(f"got rsp payload: {payload}")
                 payload_dict = json.loads(payload.decode("utf-8"))
-                status_code = payload_dict["statusCode"]
+                if "statusCode" not in payload_dict:
+                    msg = f"expected to find statusCode in payload, but got: {payload_dict.keys()}"
+                    status_code= 500
+                else:
+                    status_code = payload_dict["statusCode"]
 
                 if status_code == 200:
                     b64data = payload_dict["body"]
