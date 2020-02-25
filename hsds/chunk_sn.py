@@ -15,6 +15,7 @@
 #
 import asyncio
 import json
+import time
 from asyncio import CancelledError
 import base64
 import numpy as np
@@ -179,10 +180,14 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_m
             # extra params for lambda function
             params["chunk_id"] = chunk_id
             params["dset_json"] = dset_json
-            log.info(f"invoking lambda function {lambda_function} with payload: {params}")
+            start_time = time.time()
+            log.info(f"invoking lambda function {lambda_function} with payload: {params} start: {start_time}")
             payload = json.dumps(params)
             try:
                 rsp = await client.invoke(FunctionName=lambda_function, Payload=payload)
+                finish_time = time.time()
+                log.info(f"lambda.invoke({lambda_function} start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f}")
+
             except ClientError as ce:
                 log.error(f"Error for lambda invoke: {ce} ")
                 raise HTTPInternalServerError()
