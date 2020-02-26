@@ -1495,7 +1495,6 @@ async def GET_Value(request):
             reason = f"num_chunks is {num_chunks} but threshold is {serverless_threshold}"
 
         log.debug(f"not using serverless for read on {num_chunks} chunks - {reason}")
-    log.error("test exception")
 
     chunk_ids = getChunkIds(dset_id, slices, layout)
     # Get information about where chunks are located
