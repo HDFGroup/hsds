@@ -236,12 +236,13 @@ async def DELETE_Group(request):
 
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
-    if "root" not in domain_json:
-        log.error(f"Expected root key for domain: {domain}")
-        raise HTTPBadRequest(reason="Unexpected Error")
 
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, group_id, username, "delete")
+
+    if "root" not in domain_json:
+        log.error(f"Expected root key for domain: {domain}")
+        raise HTTPBadRequest(reason="Unexpected Error")
 
     if group_id == domain_json["root"]:
         msg = "Forbidden - deletion of root group is not allowed - delete domain first"
