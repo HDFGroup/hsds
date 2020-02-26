@@ -1344,6 +1344,7 @@ class ValueTest(unittest.TestCase):
 
         # read 4x4 block from dataset
         params = {"select": "[0:4, 0:4]"}
+        params["nonstrict"] = 1  # SN can read directly from S3 or DN node
         rsp = requests.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
@@ -1357,6 +1358,7 @@ class ValueTest(unittest.TestCase):
 
         # read 2x2 block from dataset with step of 2
         params = {"select": "[0:4:2, 0:4:2]"}
+        params["nonstrict"] = 1
         rsp = requests.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
@@ -1369,6 +1371,7 @@ class ValueTest(unittest.TestCase):
 
         # try reading a selection that is out of bounds
         params = {"select": "[0:12, 0:12]"}
+        params["nonstrict"] = 1
         rsp = requests.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 400)
 

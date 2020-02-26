@@ -23,6 +23,7 @@ cfg = {
     'head_endpoint': '', # optionally used for nodes to register
     'aws_s3_gateway': '',   # use endpoint for the region HSDS is running in, e.g. 'https://s3.amazonaws.com' for us-east-1
     'aws_dynamodb_gateway': 'https://dynamodb.us-east-1.amazonaws.com',
+    'aws_lambda_gateway': '', # use endpoint for region HSDS is running in.  See: https://docs.aws.amazon.com/general/latest/gr/lambda-service.html
     'aws_dynamodb_users_table': '',
     'aws_lambda_chunkread_function': '', # name of aws lambda function for chunk reading
     'azure_connection_string': '', # use for connecting to Azure blob storage
