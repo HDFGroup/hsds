@@ -22,8 +22,16 @@ from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 
 import hsds_logger as log
 from util.s3Client import S3Client
-from util.azureBlobClient import AzureBlobClient
-from util.memClient import MemClient
+try:
+    from util.azureBlobClient import AzureBlobClient
+except ImportError:
+    def AzureBlobClient(app):
+        return None
+try:
+    from util.memClient import MemClient
+except ImportError:
+    def MemClient(app):
+        return None
 import config
 
 @jit(nopython=True)

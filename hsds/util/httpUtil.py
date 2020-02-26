@@ -34,7 +34,9 @@ def isOK(http_response):
 def getUrl(host, port):
     return "http://{}:{}".format(host, port)
 
-
+"""
+get aiobotocore http client
+"""
 def get_http_client(app):
     """ get http client """
     if "client" in app:
@@ -52,6 +54,7 @@ def get_http_client(app):
     #create the app object
     app['client'] = client
     return client
+
 
 """
 Replacement for aiohttp Request.read using our max request limit
