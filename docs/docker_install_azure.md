@@ -29,7 +29,7 @@ Set up your Azure environment
 1. Install azure-cli: `pip install azure-cli`
 2. Validate runtime version az-cli is at least 2.0.80: `az version`
 3. Login to Azure Subscription using AZ-Cli. `az login`
-4. After successful login, the list of avaialble subscriptions will be displayed. If you have access to more than one subscription, set the proper subscription to be used: `az account set --subscription [name]`
+4. After successful login, the list of available subscriptions will be displayed. If you have access to more than one subscription, set the proper subscription to be used: `az account set --subscription [name]`
 5. Run the following commands to create Azure Resource Group `az group create --name $RESOURCEGROUP --location $LOCATION`
 
 
@@ -107,7 +107,7 @@ on the server VM or on your client.
 1. Install pip if not installed: `sudo apt install python-pip`
 2. Set an environment variable: ADMIN_PASSWORD with the value used in the password.txt file.  E.g.: `export ADMIN_PASSWORD=admin`
 3. Set an environment varaible: USER_PASSWORD with the password for test_user1 in the password.txt file.  E.g.: `export USER_PASSWORD=test`
-4. Get the hsds project if you haveen't already: `git clone https://github.com/HDFGroup/hsds`
+4. Get the hsds project if you haven't already: `git clone https://github.com/HDFGroup/hsds`
 5. In the hsds directory, run the integration test: `python testall.py --skip_unit`. Ignore `WARNING: is test data setup?` messages for now
 6. Install h5py: `pip install h5py`
 7. Install h5pyd (Python client SDK): `pip install h5pyd`
@@ -121,6 +121,9 @@ Password: from hsds/admin/config/passwd.txt file above
 12. Verify upload: `hsls -r -u test_user1 -p $USER_PASWORD /home/test_user1/test/tall.h5`
 13. Rerun the integration test: `python testall.py --skip_unit`.  You should not see any WARNING messages now
 14. Create home folders for other users if desired: `python hstouch -u admin -p $ADMIN_PASSWORD -o USERNAME /home/USERNAME/`
+
+**NOTE:** If the initial run of testall.py (step 5 above) fails for any reason and does not create the home directory, you can create it manually as follows:<br/> `python hstouch -u admin -p $ADMIN_PASSWORD /home/`<br/>
+You can then add home folders for users as desired.
 
 Installing Software Updates
 ---------------------------
