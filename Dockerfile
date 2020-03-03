@@ -1,12 +1,11 @@
 FROM hdfgroup/python:3.8
 MAINTAINER John Readey <jreadey@hdfgroup.org>
-
-RUN mkdir /usr/local/src/hsds/ /usr/local/src/tests/
-COPY hsds /usr/local/src/hsds/
-COPY tests /usr/local/src/tests/
-COPY testall.py /usr/local/src/
+RUN mkdir /usr/local/src/hsds-src/ /usr/local/src/hsds/
+COPY . /usr/local/src/hsds-src
+RUN pip install /usr/local/src/hsds-src/
+COPY admin/config/passwd.txt /usr/local/src/hsds/
 COPY entrypoint.sh  /
 
 EXPOSE 5100-5999
-
+ 
 ENTRYPOINT ["/entrypoint.sh"]
