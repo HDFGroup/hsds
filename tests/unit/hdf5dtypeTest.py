@@ -14,14 +14,12 @@ import logging
 import numpy as np
 import sys
 
-sys.path.append('../../hsds')
-sys.path.append('../../hsds/util')
-
-import hdf5dtype
-from hdf5dtype import special_dtype
-from hdf5dtype import check_dtype
-from hdf5dtype import Reference
-from hdf5dtype import RegionReference
+sys.path.append('../..')
+from hsds.util import hdf5dtype
+from hsds.util.hdf5dtype import special_dtype
+from hsds.util.hdf5dtype import check_dtype
+from hsds.util.hdf5dtype import Reference
+from hsds.util.hdf5dtype import RegionReference
 
 
 class Hdf5dtypeTest(unittest.TestCase):

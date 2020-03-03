@@ -14,11 +14,9 @@ import random
 import sys
 import numpy as np
 
-sys.path.append('../../hsds/util')
-sys.path.append('../../hsds')
-
-from lruCache import LruCache
-from idUtil import createObjId
+sys.path.append('../..')
+from hsds.util.lruCache import LruCache
+from hsds.util.idUtil import createObjId
 
 class LruCacheTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):

@@ -10,18 +10,17 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import unittest
-import sys
 import json
 import numpy as np
 
-sys.path.append('../../hsds/util')
-sys.path.append('../../hsds')
-from arrayUtil import bytesArrayToList, toTuple, getNumElements, jsonToArray, arrayToBytes, bytesToArray, getByteArraySize
-import hdf5dtype
-from hdf5dtype import special_dtype
-from hdf5dtype import check_dtype
-from hdf5dtype import Reference
-from hdf5dtype import createDataType
+import sys
+sys.path.append('../..')
+from hsds.util.arrayUtil import bytesArrayToList, toTuple, getNumElements, jsonToArray, arrayToBytes, bytesToArray, getByteArraySize
+from hsds.util import hdf5dtype
+from hsds.util.hdf5dtype import special_dtype
+from hsds.util.hdf5dtype import check_dtype
+from hsds.util.hdf5dtype import Reference
+from hsds.util.hdf5dtype import createDataType
 
 
 class ArrayUtilTest(unittest.TestCase):

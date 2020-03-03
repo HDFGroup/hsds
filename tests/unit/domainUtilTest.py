@@ -14,10 +14,9 @@ import time
 import sys
 import os
 
-sys.path.append('../../hsds/util')
-sys.path.append('../../hsds')
-from domainUtil import getParentDomain, isValidDomain, isValidHostDomain
-from domainUtil import getDomainForHost, isValidDomainPath, getBucketForDomain, getPathForDomain
+sys.path.append('../..')
+from hsds.util.domainUtil import getParentDomain, isValidDomain, isValidHostDomain
+from hsds.util.domainUtil import getDomainForHost, isValidDomainPath, getBucketForDomain, getPathForDomain
 
 class DomainUtilTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):

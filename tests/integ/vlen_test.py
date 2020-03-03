@@ -15,9 +15,9 @@ import json
 import helper
 import numpy as np
 import sys
-sys.path.append('../../hsds/util')
-from arrayUtil import arrayToBytes, bytesToArray
-from hdf5dtype import createDataType
+sys.path.append('../..')
+from hsds.util.arrayUtil import arrayToBytes, bytesToArray
+from hsds.util.hdf5dtype import createDataType
 
 
 class VlenTest(unittest.TestCase):
