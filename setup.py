@@ -49,9 +49,9 @@ setup(name='hsds',
       extras_require={'azure': ['azure']},
       zip_safe=False,
       classifiers=classifiers,
-      # not compatible
-      # entry_points={'console_scripts':
-      #     ['datanode = hsds.datanote:main',
-      #      'servicenode = hsds.servicenode:main']
-      # }
+      entry_points={'console_scripts': [
+          'hsds-datanode = hsds.datanote:main',
+          'hsds-servicenode = hsds.servicenode:main',
+          'hsds-headnode = hsds.headnode:main',
+          ]}
 )
