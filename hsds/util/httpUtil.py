@@ -20,8 +20,8 @@ from aiohttp.web_exceptions import HTTPForbidden, HTTPNotFound, HTTPConflict, HT
 from aiohttp.client_exceptions import ClientError
 
 
-import hsds_logger as log
-import config
+from .. import hsds_logger as log
+from .. import config
 
 CORS_DOMAIN='*'
 

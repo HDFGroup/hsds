@@ -18,9 +18,9 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalSer
 from aiohttp.web import json_response
 
 
-from util.idUtil import isValidUuid, validateUuid
-from datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj, delete_metadata_obj, check_metadata_obj
-import hsds_logger as log
+from .util.idUtil import isValidUuid, validateUuid
+from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj, delete_metadata_obj, check_metadata_obj
+from . import hsds_logger as log
 
 
 async def GET_Datatype(request):

@@ -1,5 +1,5 @@
 import numpy as np
-import hsds_logger as log
+from .. import hsds_logger as log
 
 CHUNK_BASE =  16*1024   # Multiplier by which chunks are adjusted
 CHUNK_MIN =  512*1024   # Soft lower limit (512k)

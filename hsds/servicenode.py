@@ -16,22 +16,22 @@ import asyncio
 
 from aiohttp.web import run_app
 import aiohttp_cors
-from util.lruCache import LruCache
+from .util.lruCache import LruCache
 
-import config
-from basenode import healthCheck,  baseInit
-import hsds_logger as log
-from util.authUtil import initUserDB
-from domain_sn import GET_Domain, PUT_Domain, DELETE_Domain, GET_Domains
-from domain_sn import GET_Datasets, GET_Groups, GET_Datatypes
-from domain_sn import GET_ACL, GET_ACLs, PUT_ACL
-from group_sn import GET_Group, POST_Group, DELETE_Group
-from link_sn import GET_Links, GET_Link, PUT_Link, DELETE_Link
-from attr_sn import GET_Attributes, GET_Attribute, PUT_Attribute
-from attr_sn import DELETE_Attribute, GET_AttributeValue, PUT_AttributeValue
-from ctype_sn import GET_Datatype, POST_Datatype, DELETE_Datatype
-from dset_sn import GET_Dataset, POST_Dataset, DELETE_Dataset, GET_DatasetShape, PUT_DatasetShape, GET_DatasetType
-from chunk_sn import PUT_Value, GET_Value, POST_Value
+from . import config
+from .basenode import healthCheck,  baseInit
+from . import hsds_logger as log
+from .util.authUtil import initUserDB
+from .domain_sn import GET_Domain, PUT_Domain, DELETE_Domain, GET_Domains
+from .domain_sn import GET_Datasets, GET_Groups, GET_Datatypes
+from .domain_sn import GET_ACL, GET_ACLs, PUT_ACL
+from .group_sn import GET_Group, POST_Group, DELETE_Group
+from .link_sn import GET_Links, GET_Link, PUT_Link, DELETE_Link
+from .attr_sn import GET_Attributes, GET_Attribute, PUT_Attribute
+from .attr_sn import DELETE_Attribute, GET_AttributeValue, PUT_AttributeValue
+from .ctype_sn import GET_Datatype, POST_Datatype, DELETE_Datatype
+from .dset_sn import GET_Dataset, POST_Dataset, DELETE_Dataset, GET_DatasetShape, PUT_DatasetShape, GET_DatasetType
+from .chunk_sn import PUT_Value, GET_Value, POST_Value
 
 
 async def init(loop):

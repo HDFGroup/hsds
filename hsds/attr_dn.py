@@ -18,9 +18,9 @@ from bisect import bisect_left
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPConflict, HTTPNotFound, HTTPInternalServerError
 from aiohttp.web import json_response
 
-from util.attrUtil import validateAttributeName
-from datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
-import hsds_logger as log
+from .util.attrUtil import validateAttributeName
+from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
+from . import hsds_logger as log
 
 def index(a, x):
     """ Locate the leftmost value exactly equal to x

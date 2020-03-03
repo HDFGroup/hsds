@@ -18,18 +18,18 @@ import numpy as np
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError, HTTPNotFound
 from aiohttp.web import json_response, StreamResponse
 
-from util.httpUtil import  request_read
-from util.arrayUtil import bytesToArray, arrayToBytes
-from util.idUtil import getS3Key, validateInPartition, isValidUuid
-from util.storUtil import  isStorObj, deleteStorObj
-from util.hdf5dtype import createDataType
-from util.dsetUtil import  getSliceQueryParam, getChunkLayout, getSelectionShape
-from util.chunkUtil import getChunkIndex, getDatasetId, chunkQuery
-from util.chunkUtil import chunkWriteSelection, chunkReadSelection
-from util.chunkUtil import chunkWritePoints, chunkReadPoints
-from datanode_lib import get_metadata_obj, get_chunk, save_chunk
+from .util.httpUtil import  request_read
+from .util.arrayUtil import bytesToArray, arrayToBytes
+from .util.idUtil import getS3Key, validateInPartition, isValidUuid
+from .util.storUtil import  isStorObj, deleteStorObj
+from .util.hdf5dtype import createDataType
+from .util.dsetUtil import  getSliceQueryParam, getChunkLayout, getSelectionShape
+from .util.chunkUtil import getChunkIndex, getDatasetId, chunkQuery
+from .util.chunkUtil import chunkWriteSelection, chunkReadSelection
+from .util.chunkUtil import chunkWritePoints, chunkReadPoints
+from .datanode_lib import get_metadata_obj, get_chunk, save_chunk
 
-import hsds_logger as log
+from . import hsds_logger as log
 
 """
 Update the requested chunk/selection

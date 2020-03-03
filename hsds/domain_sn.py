@@ -23,17 +23,17 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, 
 from aiohttp import ClientResponseError
 from aiohttp.client_exceptions import ClientError
 
-from util.httpUtil import  http_post, http_put, http_get, http_delete, getHref, get_http_client, jsonResponse
-from util.idUtil import  getDataNodeUrl, createObjId, getCollectionForId, getDataNodeUrls
-from util.authUtil import getUserPasswordFromRequest, aclCheck
-from util.authUtil import validateUserPassword, getAclKeys
-from util.domainUtil import getParentDomain, getDomainFromRequest, isValidDomain, getBucketForDomain, getPathForDomain
-from util.storUtil import getStorKeys
-from util.boolparser import BooleanParser
-from servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath, getRootInfo
-from basenode import getVersion
-import hsds_logger as log
-import config
+from .util.httpUtil import  http_post, http_put, http_get, http_delete, getHref, get_http_client, jsonResponse
+from .util.idUtil import  getDataNodeUrl, createObjId, getCollectionForId, getDataNodeUrls
+from .util.authUtil import getUserPasswordFromRequest, aclCheck
+from .util.authUtil import validateUserPassword, getAclKeys
+from .util.domainUtil import getParentDomain, getDomainFromRequest, isValidDomain, getBucketForDomain, getPathForDomain
+from .util.storUtil import getStorKeys
+from .util.boolparser import BooleanParser
+from .servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath, getRootInfo
+from .basenode import getVersion
+from . import hsds_logger as log
+from . import config
 
 class DomainCrawler:
     def __init__(self, app, root_id, bucket=None, include_attrs=True, max_tasks=40):

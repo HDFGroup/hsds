@@ -20,10 +20,10 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict, H
 from aiohttp.web import json_response
 
 
-from util.idUtil import  isValidUuid
-from util.linkUtil import validateLinkName
-from datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
-import hsds_logger as log
+from .util.idUtil import  isValidUuid
+from .util.linkUtil import validateLinkName
+from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
+from . import hsds_logger as log
 
 def index(a, x):
     """ Locate the leftmost value exactly equal to x

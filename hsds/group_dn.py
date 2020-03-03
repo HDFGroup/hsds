@@ -18,9 +18,9 @@ import asyncio
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalServerError, HTTPServiceUnavailable
 from aiohttp.web import json_response
 
-from util.idUtil import isValidUuid, isSchema2Id, isRootObjId, getRootObjId
-from datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj, save_metadata_obj, delete_metadata_obj
-import hsds_logger as log
+from .util.idUtil import isValidUuid, isSchema2Id, isRootObjId, getRootObjId
+from .datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj, save_metadata_obj, delete_metadata_obj
+from . import hsds_logger as log
 
 
 async def GET_Group(request):

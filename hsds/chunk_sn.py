@@ -23,20 +23,20 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPRequestEnti
 from aiohttp.client_exceptions import ClientError
 from aiohttp.web import StreamResponse
 
-from util.httpUtil import  getHref, getAcceptType, get_http_client, http_put, request_read, jsonResponse
-from util.idUtil import   isValidUuid, getDataNodeUrl
-from util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain
-from util.hdf5dtype import getItemSize, createDataType
-from util.dsetUtil import getSliceQueryParam, setSliceQueryParam, getFillValue, isExtensible
-from util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout, getDeflateLevel
-from util.chunkUtil import getNumChunks, getChunkIds, getChunkId, getChunkIndex, getChunkSuffix
-from util.chunkUtil import getChunkCoverage, getDataCoverage, getChunkIdForPartition
-from util.arrayUtil import bytesArrayToList, jsonToArray, getShapeDims, getNumElements, arrayToBytes, bytesToArray
-from util.authUtil import getUserPasswordFromRequest, validateUserPassword
-from util.awsLambdaClient import getLambdaClient
-from servicenode_lib import getObjectJson, validateAction
-import config
-import hsds_logger as log
+from .util.httpUtil import  getHref, getAcceptType, get_http_client, http_put, request_read, jsonResponse
+from .util.idUtil import   isValidUuid, getDataNodeUrl
+from .util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain
+from .util.hdf5dtype import getItemSize, createDataType
+from .util.dsetUtil import getSliceQueryParam, setSliceQueryParam, getFillValue, isExtensible
+from .util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout, getDeflateLevel
+from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId, getChunkIndex, getChunkSuffix
+from .util.chunkUtil import getChunkCoverage, getDataCoverage, getChunkIdForPartition
+from .util.arrayUtil import bytesArrayToList, jsonToArray, getShapeDims, getNumElements, arrayToBytes, bytesToArray
+from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
+from .util.awsLambdaClient import getLambdaClient
+from .servicenode_lib import getObjectJson, validateAction
+from . import config
+from . import hsds_logger as log
 
 
 

@@ -15,13 +15,13 @@
 
 from aiohttp.web_exceptions import HTTPBadRequest
 
-from util.httpUtil import  http_get, http_put, http_delete, getHref, jsonResponse
-from util.idUtil import   isValidUuid, getDataNodeUrl, getCollectionForId
-from util.authUtil import getUserPasswordFromRequest,   validateUserPassword
-from util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain
-from util.linkUtil import validateLinkName
-from servicenode_lib import  validateAction, getObjectJson
-import hsds_logger as log
+from .util.httpUtil import  http_get, http_put, http_delete, getHref, jsonResponse
+from .util.idUtil import   isValidUuid, getDataNodeUrl, getCollectionForId
+from .util.authUtil import getUserPasswordFromRequest,   validateUserPassword
+from .util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain
+from .util.linkUtil import validateLinkName
+from .servicenode_lib import  validateAction, getObjectJson
+from . import hsds_logger as log
 
 
 async def GET_Links(request):

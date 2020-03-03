@@ -17,13 +17,13 @@
 import json
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPGone
 
-from util.httpUtil import http_post, http_put, http_delete, getHref, jsonResponse
-from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
-from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
-from util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain
-from util.hdf5dtype import validateTypeItem, getBaseTypeJson
-from servicenode_lib import getDomainJson, getObjectJson, validateAction, getObjectIdByPath, getPathForObjectId
-import hsds_logger as log
+from .util.httpUtil import http_post, http_put, http_delete, getHref, jsonResponse
+from .util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
+from .util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
+from .util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain
+from .util.hdf5dtype import validateTypeItem, getBaseTypeJson
+from .servicenode_lib import getDomainJson, getObjectJson, validateAction, getObjectIdByPath, getPathForObjectId
+from . import hsds_logger as log
 
 
 async def GET_Datatype(request):
