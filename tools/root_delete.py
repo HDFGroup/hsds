@@ -12,10 +12,10 @@
 import asyncio
 import sys
 from aiobotocore import get_session
-from util.idUtil import isValidUuid,isSchema2Id
-from util.s3Util import releaseClient
-from async_lib import removeKeys
-import config
+from hsds.util.idUtil import isValidUuid,isSchema2Id
+from hsds.util.s3Util import releaseClient
+from hsds.async_lib import removeKeys
+from hsds import config
 
 
 # This is a utility to remove all keys for a given rootid

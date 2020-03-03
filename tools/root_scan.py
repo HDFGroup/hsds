@@ -13,10 +13,10 @@ import asyncio
 import sys
 from datetime import datetime
 from aiobotocore import get_session
-from util.idUtil import isValidUuid,isSchema2Id
-from util.s3Util import releaseClient
-from async_lib import scanRoot
-import config
+from hsds.util.idUtil import isValidUuid,isSchema2Id
+from hsds.util.s3Util import releaseClient
+from hsds.async_lib import scanRoot
+from hsds import config
 
 
 # This is a utility to scan keys for a given domain and report totals.
