@@ -9,20 +9,32 @@ from setuptools import setup
 #
 # Tag the release in github!
 #
-from codecs import open
-from os import path
+
+
+install_requires = [
+    'aiobotocore',
+    'aiohttp',
+    'botocore',
+    'kubernetes',
+    'numba',
+    'numpy >= 1.10.4',
+    'psutil',
+    'pytz',
+    'requests', # for tests and examples
+    ]
+
 
 setup(name='hsds',
       version='0.0.1',
       description='HDF REST API',
-      url='http://github.com/HDFGroup/h5pyd',
+      url='http://github.com/HDFGroup/hsds',
       author='John Readey',
       author_email='jreadey@hdfgrouup.org',
-      license='BSD',
+      license='Apache',
       packages=['hsds', 'hsds.util'],
-      # requires=['h5py (>=2.5.0)', 'h5json>=1.0.2'],
-      install_requires=['numpy >= 1.10.4', 'requests', 'six', 'pytz'],
-      setup_requires=['pkgconfig', 'six'],
+      install_requires=install_requires,
+      setup_requires=['setuptools'],
+      extras_require={'azure': ['azure']},
       zip_safe=False,
       # not compatible
       # entry_points={'console_scripts':
