@@ -382,14 +382,13 @@ def init():
 # Main
 #
 
-if __name__ == '__main__':
+def main():
     log.info("Head node initializing")
     loop = asyncio.get_event_loop()
     app = init()  
 
     # create a client Session here so that all client requests
     #   will share the same connection pool
-    max_tcp_connections = int(config.get("max_tcp_connections"))
     app["loop"] = loop
 
     asyncio.ensure_future(healthCheck(app), loop=loop)
@@ -397,3 +396,7 @@ if __name__ == '__main__':
     log.info("Starting service on port: {}".format(head_port))
     log.debug("debug test")
     run_app(app, port=int(head_port))
+
+
+if __name__ == '__main__':
+    main()
