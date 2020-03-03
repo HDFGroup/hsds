@@ -32,7 +32,6 @@ from .async_lib import scanRoot, removeKeys
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError, HTTPForbidden, HTTPBadRequest
 
 
-
 async def init(loop):
     """Intitialize application and return app object"""
     app = baseInit(loop, 'dn')
