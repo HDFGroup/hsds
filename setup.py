@@ -10,6 +10,18 @@ from setuptools import setup
 # Tag the release in github!
 #
 
+classifiers = [
+    'Environment :: Console',
+    'Intended Audience :: Information Technology',
+    'Intended Audience :: Science/Research',
+    'License :: OSI Approved :: Apache Software License',
+    'Natural Language :: English',
+    'Operating System :: POSIX :: Linux',
+    'Programming Language :: Python :: 3',
+    'Topic :: Internet :: WWW/HTTP :: HTTP Servers',
+    'Topic :: Scientific/Engineering',
+    ]
+
 
 install_requires = [
     'aiobotocore',
@@ -36,6 +48,7 @@ setup(name='hsds',
       setup_requires=['setuptools'],
       extras_require={'azure': ['azure']},
       zip_safe=False,
+      classifiers=classifiers,
       # not compatible
       # entry_points={'console_scripts':
       #     ['datanode = hsds.datanote:main',
