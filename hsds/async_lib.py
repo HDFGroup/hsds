@@ -12,6 +12,7 @@
 
 import time
 from aiohttp.client_exceptions import ClientError
+from aiohttp.web_exceptions import HTTPNotFound
 from util.idUtil import isValidUuid, isSchema2Id, getS3Key, isS3ObjKey, getObjId, isValidChunkId, getCollectionForId
 from util.chunkUtil import getDatasetId
 from util.storUtil import getStorKeys, putStorJSONObj, deleteStorObj
@@ -192,5 +193,7 @@ async def removeKeys(app, objid):
         await getStorKeys(app, prefix=s3prefix, include_stats=False, callback=objDeleteCallback)
     except ClientError as ce:
         log.error(f"getS3Keys faiiled: {ce}")
+    except HTTPNotFound:
+        log.warn(f"HTTPNotFound error for getStorKeys with prefix: {s3prefix}")
     # reset the prefix
     app["objDelete_prefix"] = None

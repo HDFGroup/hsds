@@ -42,7 +42,8 @@ class FileClient():
 
 
     def _getFilePath(self, bucket, key=''):
-        return pp.join(self._root_dir, bucket, key)
+        filepath = pp.join(self._root_dir, bucket, key)
+        return pp.normpath(filepath)
 
     def _getFileStats(self, filepath):
         try:
@@ -149,20 +150,28 @@ class FileClient():
             loop=None
         try:
             key_dirs = key.split("/")
+            log.debug(f"key_dirs: {key_dirs}")
             if len(key_dirs) > 1:
                 # create directories in the path if they don't already exist
                 key_dirs = key_dirs[:-1]
                 for key_dir in key_dirs:
                     dirpath = pp.join(dirpath, key_dir)
-                    if not pp.isdir(dirpath):
-                        mkdir(dirpath)
+                    log.debug(f"pp.join({key_dir}) => {dirpath}")
 
+                    dirpath = pp.normpath(dirpath)
+                    log.debug(f"normpath: {dirpath}")
+
+                    if not pp.isdir(dirpath):
+                        log.debug(f"mkdir({dirpath})")
+                        mkdir(dirpath)
+                    else:
+                        log.debug(f"isdir {dirpath} found")
+            log.debug(f"open({filepath}, 'wb')")
             async with aiofiles.open(filepath, loop=loop, mode='wb') as f:
                 await f.write(data)
             finish_time = time.time()
             log.info(f"fileClient.put_object({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f} bytes={len(data)}")
             write_rsp = self._getFileStats(filepath)
-
         except IOError as ioe:
             msg = f"fileClient: IOError writing {bucket}/{key}: {ioe}"
             log.warn(msg)
@@ -172,11 +181,13 @@ class FileClient():
             msg = f"CancelledError for put s3 obj {key}: {cle}"
             log.error(msg)
             raise HTTPInternalServerError()
+
         except Exception as e:
             #file_stats_increment(app, "error_count")
             msg = f"fileClient Unexpected Exception {type(e)} writing  {bucket}/{key}: {e}"
             log.error(msg)
             raise HTTPInternalServerError()
+
         if data and len(data) > 0:
             self._file_stats_increment("bytes_out", inc=len(data))
         log.debug(f"fileClient.put_object {key} complete, write_rsp: {write_rsp}")
@@ -192,6 +203,7 @@ class FileClient():
         start_time = time.time()
         log.debug(f"fileClient.delete_object({bucket}/{key} start: {start_time}")
         try:
+            log.debug(f"os.remove({filepath})")
             remove(filepath)
             dir_name = pp.dirname(filepath)
             if not listdir(dir_name) and pp.basename(dir_name) != bucket:

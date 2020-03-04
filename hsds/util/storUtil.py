@@ -93,8 +93,18 @@ def _getStorageClient(app):
     else:
         log.debug("_getStorageClient getting FileClient")
         client = FileClient(app)
-        log.debug(f"get client: {client}")
     return client
+
+def getStorageDriverName(app):
+    """ Return name of storage driver that is being used
+    """
+    if config.get("aws_s3_gateway"):
+        driver = "S3Client"
+    elif config.get("azure_connection_string"):
+        driver = "AzureBlobClient"
+    else:
+        driver = "FileClient"
+    return driver
 
 async def releaseStorageClient(app):
     """ release the client storage connection

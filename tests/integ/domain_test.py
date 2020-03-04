@@ -860,7 +860,6 @@ class DomainTest(unittest.TestCase):
             basenames.append(domain)
             sub_domain = folder + '/' + domain
             helper.setupDomain(sub_domain)
-            print(i, ':', sub_domain)
             headers = helper.getRequestHeaders(domain=sub_domain)
             # get root id
             req = helper.getEndpoint() + '/'
@@ -926,7 +925,6 @@ class DomainTest(unittest.TestCase):
         for item in part1:
             self.assertTrue("name" in item)
             name = item["name"]
-            print("name:", name)
             self.assertTrue(pp.basename(name) in basenames[0:4])
             self.assertEqual(name[0], '/')
             self.assertTrue(name[-1] != '/')
