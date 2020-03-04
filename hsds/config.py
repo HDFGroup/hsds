@@ -27,6 +27,7 @@ cfg = {
     'aws_dynamodb_users_table': '',
     'aws_lambda_chunkread_function': '', # name of aws lambda function for chunk reading
     'azure_connection_string': '', # use for connecting to Azure blob storage
+    'root_dir': '',  # base directory to use for Posix storage
     'password_salt': '',
     'bucket_name': '',  # set to usee a default bucket, otherwise bucket param is needed for all requests
     'head_host': 'localhost',

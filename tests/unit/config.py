@@ -12,6 +12,7 @@
 import os
 
 cfg = {
+    'root_dir': '', # set to directory when using posix driver
     'hsds_unit_test_bucket': '',   # bucket to read and write test data, e.g. 'hsds.util.test'
     'azure_connection_string': '',
     'aws_s3_gateway' : '',
