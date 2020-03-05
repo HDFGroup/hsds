@@ -8,7 +8,7 @@ import time
 from aiobotocore.config import AioConfig
 from aiobotocore import get_session
 from botocore.exceptions import ClientError
-from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError, HTTPForbidden
+from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError, HTTPForbidden, HTTPBadRequest
 import hsds_logger as log
 import config
 
@@ -318,6 +318,8 @@ class S3Client():
         return found
 
     async def get_key_stats(self, key, bucket=None):
+        """ Get ETag, size, and last modified time for given objecct
+        """
         start_time = time.time()
         try:
             head_data = await self._client.head_object(Bucket=bucket, Key=key)
@@ -396,7 +398,7 @@ class S3Client():
                 else:
                     items.append(key_name)
 
-  
+
 
     async def list_keys(self, prefix='', deliminator='', suffix='', include_stats=False, callback=None, bucket=None, limit=None):
         """ return keys matching the arguments
@@ -405,6 +407,10 @@ class S3Client():
             log.error("list_keys - bucket not set")
             raise HTTPInternalServerError()
         log.info(f"list_keys('{prefix}','{deliminator}','{suffix}', include_stats={include_stats}")
+        if deliminator and deliminator != '/':
+            msg = "Only '/' is supported as deliminator"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
         paginator = self._client.get_paginator('list_objects')
         if include_stats:
             # use a dictionary to hold return values

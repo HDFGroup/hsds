@@ -10,6 +10,7 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import asyncio
+import random
 import time
 import numpy as np
 from aiobotocore import get_session
@@ -93,8 +94,16 @@ class StorUtilTest(unittest.TestCase):
             pass # return expected
 
         # try reading non-existent bucket
+        # make up a random bucket name
+        nchars = 25
+        bucket_name = bytearray(nchars)
+        for i in range(nchars):
+            bucket_name[i] = ord('a') + random.randint(0,25)
+        bucket_name = bucket_name.decode('ascii')
+        print("bucket name:", bucket_name)
+
         try:
-            await getStorBytes(app, f"{key_folder}/bogus", bucket="nosuchbucketHNJDIEHLS")
+            await getStorBytes(app, f"{key_folder}/bogus", bucket=bucket_name)
             self.assertTrue(False)
         except HTTPNotFound:
             pass # return expected
@@ -127,7 +136,7 @@ class StorUtilTest(unittest.TestCase):
 
         # list keys in top folder
         key_list = await getStorKeys(app, prefix='', deliminator='/')
-        
+
         self.assertEqual(len(key_list), 1)
         self.assertEqual(key_list[0], "stor_util_test/")
 
