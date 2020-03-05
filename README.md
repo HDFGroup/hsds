@@ -59,7 +59,7 @@ For complete instructions to install on Azure Kubernetes Service (AKS):
 **On Prem (POSIX-based storage)**  **(BETA)**
 
 For compleete instructions to install on a desktop or local server:
-- See: [docs/docker_install_posix.md](docs/docker_install_posix.md)
+- See: [docs/docker_install_posix.md](docs/docker_install.md)
 
 Writing Client Applications
 ----------------------------
