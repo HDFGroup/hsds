@@ -14,6 +14,7 @@ Export environment variables as shown in "Sample .bashrc" below.
 9. If a non-valid DNS name is used for the HSDS_ENDPOINT (e.g. "hsds.hdf.test"), create a /etc/hosts entry for the DNS name
 10. Verify the environment variables as in "Sample .bashrc" below
 11. From hsds directory, build docker image:  `$ docker build -t hdfgroup/hsds .`
+11. From hsds directory, build docker image:  `$ docker build -t hdfgroup/hsds .`
 12. Start the service `$./runall.sh <n>` where n is the number of containers desired (defaults to 1)
 13. Run `$ docker ps` and verify that the containers are running: hsds_head, hsds_sn_[1-n], hsds_dn_[1-n]
 14. Go to <http://hsds.hdf.test/about> and verify that "cluster_state" is "READY" (might need to give it a minute or two)
