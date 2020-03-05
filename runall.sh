@@ -6,24 +6,25 @@ if [ $# -eq 1 ] && ([ $1 == "-h" ] || [ $1 == "--help" ]); then
    exit 1
 fi
 
-if [[ -z ${AWS_S3_GATEWAY}  ]] && [[ -z ${AZURE_CONNECTION_STRING}  ]]
-then
-  echo "AWS_S3_GATEWAY not set - using openio container"
-  export AWS_S3_GATEWAY="http://openio:6007"
-  COMPOSE_FILE="docker-compose.openio.yml"
-  if [[ -z ${AWS_ACCESS_KEY_ID} ]]
-  then
-     # use default access keys and region for openio demo container
-     export AWS_ACCESS_KEY_ID=demo:demo
-     export AWS_SECRET_ACCESS_KEY=DEMO_PASS
-     export AWS_REGION=us-east-1
+if [[ -z ${AWS_S3_GATEWAY}  ]] && [[ -z ${AZURE_CONNECTION_STRING}  ]]; then
+  if [[ -z ${ROOT_DIR} ]]; then
+    echo "AWS_S3_GATEWAY not set - using openio container"
+    export AWS_S3_GATEWAY="http://openio:6007"
+    COMPOSE_FILE="docker-compose.openio.yml"
+    if [[ -z ${AWS_ACCESS_KEY_ID} ]]; then
+      # use default access keys and region for openio demo container
+      export AWS_ACCESS_KEY_ID=demo:demo
+      export AWS_SECRET_ACCESS_KEY=DEMO_PASS
+      export AWS_REGION=us-east-1
+    fi
+    [ -z ${BUCKET_NAME} ]  && export BUCKET_NAME="hsds.test"
+    [ -z ${HSDS_ENDPOINT} ] && export HSDS_ENDPOINT=http://localhost:5101
+  else
+    # Use Posix driver with ROOT_DIR as base for buckets
+    echo "Using POSIX driver with data directory: ${ROOT_DIR}"
+    COMPOSE_FILE="docker-compose.posix.yml"
   fi
-  [ -z ${BUCKET_NAME} ]  && export BUCKET_NAME="hsds.test"
-  [ -z ${HSDS_ENDPOINT} ] && export HSDS_ENDPOINT=http://localhost:5101
-
-
-elif [[ ${HSDS_USE_HTTPS} ]]
-then
+elif [[ ${HSDS_USE_HTTPS} ]]; then
    COMPOSE_FILE="docker-compose.secure.yml"
 else
    COMPOSE_FILE="docker-compose.yml"

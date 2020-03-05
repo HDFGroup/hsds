@@ -8,7 +8,7 @@ import time
 from aiobotocore.config import AioConfig
 from aiobotocore import get_session
 from botocore.exceptions import ClientError
-from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError, HTTPForbidden
+from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError, HTTPForbidden, HTTPBadRequest
 import hsds_logger as log
 import config
 
@@ -168,7 +168,7 @@ class S3Client():
             raise HTTPInternalServerError()
 
         start_time = time.time()
-        log.debug(f"s3CLient.get_object({bucket}/{key} start: {start_time}")
+        log.debug(f"s3Client.get_object({bucket}/{key} start: {start_time}")
         try:
             resp = await self._client.get_object(Bucket=bucket, Key=key, Range=range)
             data = await resp['Body'].read()
@@ -285,6 +285,83 @@ class S3Client():
             log.error(msg)
             raise HTTPInternalServerError()
 
+    async def is_object(self, key, bucket=None):
+        """ Return true if the given object exists
+        """
+        if not bucket:
+            log.error("is_object - bucket not set")
+            raise HTTPInternalServerError()
+        start_time = time.time()
+        found = False
+        try:
+            head_data = await self._client.head_object(Bucket=bucket, Key=key)
+            finish_time = time.time()
+            found = True
+            log.info(f"head: {head_data}")
+        except ClientError:
+            # key does not exist?
+            msg = f"Key: {key} not found"
+            log.info(msg)
+            finish_time = time.time()
+        except CancelledError as cle:
+            self._s3_stats_increment("error_count")
+            msg = f"CancelledError getting head for s3 obj {key}: {cle}"
+            log.error(msg)
+            raise HTTPInternalServerError()
+        except Exception as e:
+            self._s3_stats_increment("error_count")
+            msg = f"Unexpected Exception {type(e)} getting head for s3 obj {key}: {e}"
+            log.error(msg)
+            raise HTTPInternalServerError()
+        log.info(f"s3Client.is_object({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f}")
+
+        return found
+
+    async def get_key_stats(self, key, bucket=None):
+        """ Get ETag, size, and last modified time for given objecct
+        """
+        start_time = time.time()
+        try:
+            head_data = await self._client.head_object(Bucket=bucket, Key=key)
+            finish_time = time.time()
+            log.info(f"head: {head_data}")
+        except ClientError:
+            # key does not exist?
+            msg = f"s3Client.get_key_stats: Key: {key} not found"
+            log.info(msg)
+            finish_time = time.time()
+            raise HTTPNotFound()
+        except CancelledError as cle:
+            self._s3_stats_increment("error_count")
+            msg = f"s3Client.get_key_stats: CancelledError getting head for s3 obj {key}: {cle}"
+            log.error(msg)
+            raise HTTPInternalServerError()
+        except Exception as e:
+            self._s3_stats_increment("error_count")
+            msg = f"s3Client.get_key_stats: Unexpected Exception {type(e)} getting head for s3 obj {key}: {e}"
+            log.error(msg)
+            raise HTTPInternalServerError()
+
+        for head_key in ("ContentLength", "ETag", "LastModified"):
+            if head_key not in head_data:
+                msg = f"s3Client.get_key_stats, expected to find key: {head_key} in head_data"
+                log.error(msg)
+                raise HTTPInternalServerError()
+
+        last_modified_dt = head_data["LastModified"]
+        if not isinstance(last_modified_dt, datetime.datetime):
+            msg =f"S3Client.get_key_stats, expeeccted datatime object in head data"
+            log.error(msg)
+            raise HTTPInternalServerError()
+        key_stats = {}
+        key_stats["Size"] = head_data['ContentLength']
+        key_stats["ETag"] = head_data["ETag"]
+        key_stats["LastModified"] = datetime.datetime.timestamp(last_modified_dt)
+        log.info(f"s3Client.get_key_stats({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f}")
+
+
+        return key_stats
+
     def _getPageItems(self, response, items, include_stats=False):
 
         log.info("getPageItems")
@@ -321,6 +398,8 @@ class S3Client():
                 else:
                     items.append(key_name)
 
+
+
     async def list_keys(self, prefix='', deliminator='', suffix='', include_stats=False, callback=None, bucket=None, limit=None):
         """ return keys matching the arguments
         """
@@ -328,6 +407,10 @@ class S3Client():
             log.error("list_keys - bucket not set")
             raise HTTPInternalServerError()
         log.info(f"list_keys('{prefix}','{deliminator}','{suffix}', include_stats={include_stats}")
+        if deliminator and deliminator != '/':
+            msg = "Only '/' is supported as deliminator"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
         paginator = self._client.get_paginator('list_objects')
         if include_stats:
             # use a dictionary to hold return values

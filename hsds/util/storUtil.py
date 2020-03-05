@@ -17,7 +17,7 @@ import json
 import zlib
 import numpy as np
 from numba import jit
-from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPInternalServerError
 
 
 import hsds_logger as log
@@ -28,9 +28,10 @@ except ImportError:
     def AzureBlobClient(app):
         return None
 try:
-    from util.memClient import MemClient
+    from util.fileClient import FileClient
 except ImportError:
-    def MemClient(app):
+    def FileClient(app):
+        log.error("ImportError for FileClient")
         return None
 import config
 
@@ -90,9 +91,20 @@ def _getStorageClient(app):
         log.debug("_getStorageClient getting AzureBlobClient")
         client = AzureBlobClient(app)
     else:
-        log.debug("_getStorageClient getting MemClient")
-        client = MemClient(app)
+        log.debug("_getStorageClient getting FileClient")
+        client = FileClient(app)
     return client
+
+def getStorageDriverName(app):
+    """ Return name of storage driver that is being used
+    """
+    if config.get("aws_s3_gateway"):
+        driver = "S3Client"
+    elif config.get("azure_connection_string"):
+        driver = "AzureBlobClient"
+    else:
+        driver = "FileClient"
+    return driver
 
 async def releaseStorageClient(app):
     """ release the client storage connection
@@ -231,7 +243,11 @@ async def getStorObjStats(app, key, bucket=None):
         log.error(msg)
         raise KeyError(msg)
 
-    log.info(f"getStorObjStats({key})")
+    log.info(f"getStorObjStats({key}, bucket={bucket})")
+
+    stats = await client.get_key_stats(key, bucket=bucket)
+
+    """
 
     key_dict = await client.list_keys(bucket=bucket, limit=1, prefix=key, include_stats=True)
 
@@ -256,6 +272,7 @@ async def getStorObjStats(app, key, bucket=None):
         stats["LastModified"] = item["LastModified"]
     if not stats:
         log.warn(f"no stats returned for key: {key}")
+    """
 
     return stats
 
@@ -270,8 +287,8 @@ async def isStorObj(app, key, bucket=None):
         log.debug(f"using bucket: [{bucket}]")
     log.debug(f"isStorObj {bucket}/{key}")
 
-    found = False
-
+    found = await client.is_object(bucket=bucket, key=key)
+    """
     try:
         contents = await client.list_keys(bucket=bucket, limit=1, prefix=key)
         if contents:
@@ -284,7 +301,7 @@ async def isStorObj(app, key, bucket=None):
 
     except HTTPNotFound:
         pass  # key does not exist
-
+    """
     log.debug(f"isStorObj {key} returning {found}")
     return found
 

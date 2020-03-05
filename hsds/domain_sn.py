@@ -406,7 +406,7 @@ async def get_domains(request):
         domainNames = config.get("top_level_domains")
         if isinstance(domainNames, str):
             # split multiple domains by comma char
-            domainNames = domainNames.split(',') 
+            domainNames = domainNames.split(',')
     else:
         s3prefix = prefix[1:]
         log.debug(f"get_domains - listing S3 keys for {s3prefix}")

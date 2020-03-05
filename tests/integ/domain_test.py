@@ -860,7 +860,6 @@ class DomainTest(unittest.TestCase):
             basenames.append(domain)
             sub_domain = folder + '/' + domain
             helper.setupDomain(sub_domain)
-            print(i, ':', sub_domain)
             headers = helper.getRequestHeaders(domain=sub_domain)
             # get root id
             req = helper.getEndpoint() + '/'
@@ -1002,11 +1001,14 @@ class DomainTest(unittest.TestCase):
         if config.get("bucket_name"):
             params["bucket"] = config.get("bucket_name")
         rsp = requests.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("domains" in rspJson)
-        domains = rspJson["domains"]
-        self.assertEqual(len(domains), 0)
+        if rsp.status_code == 404:
+            print(f"WARNING: Failed to get domain: {domain}. Is test data setup?")
+        else:
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+            self.assertTrue("domains" in rspJson)
+            domains = rspJson["domains"]
+            self.assertEqual(len(domains), 0)
 
     def testGetDomainsVerbose(self):
         domain = helper.getTestDomain("tall.h5")

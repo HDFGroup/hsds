@@ -8,7 +8,7 @@ try:
     from azure.core.exceptions import AzureError
 except ImportError:
     log.warning("unable to import Azure blob packages")
-from aiohttp.web_exceptions import HTTPNotFound, HTTPForbidden, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPNotFound, HTTPForbidden, HTTPInternalServerError, HTTPBadRequest
 import config
 
 class AzureBlobClient():
@@ -212,6 +212,93 @@ class AzureBlobClient():
                 log.error(f"azureBlobClient.Unexpected exception for put_object {key}: {e}")
                 raise HTTPInternalServerError()
 
+    async def is_object(self, key, bucket=None):
+        """ Return true if the given object exists
+        """
+        if not bucket:
+            log.error("is_object - bucket not set")
+            raise HTTPInternalServerError()
+        start_time = time.time()
+        found = False
+        try:
+            async with self._client.get_blob_client(container=bucket, blob=key) as blob_client:
+                blob_props = await blob_client.get_blob_properties()
+            if blob_props:
+                found = True
+            finish_time = time.time()
+
+        except CancelledError as cle:
+            self._azure_stats_increment("error_count")
+            msg = f"azureBlobClient.CancelledError get_blob_properties {key}: {cle}"
+            log.error(msg)
+            raise HTTPInternalServerError()
+        except Exception as e:
+            if isinstance(e, AzureError):
+                if e.status_code == 404:
+                    msg = f"storage key: {key} not found "
+                    log.warn(msg)
+                    finish_time = time.time()
+                elif e.status_code in (401, 403):
+                    msg = f"azureBlobClient.access denied for get_blob_properties key: {key}"
+                    log.info(msg)
+                    raise HTTPForbidden()
+                else:
+                    self._azure_stats_increment("error_count")
+                    log.error(f"azureBlobClient.got unexpected AzureError for get_blob_properties {key}: {e.message}")
+                    raise HTTPInternalServerError()
+            else:
+                log.error(f"azureBlobClient.Unexpected exception for get_blob_properties {key}: {e}")
+                raise HTTPInternalServerError()
+        log.info(f"azureBlobClient.is_object({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f}")
+
+        return found
+
+    async def get_key_stats(self, key, bucket=None):
+        """ Get ETag, size, and last modified time for given objecct
+        """
+        start_time = time.time()
+        key_stats = {}
+        try:
+            async with self._client.get_blob_client(container=bucket, blob=key) as blob_client:
+                blob_props = await blob_client.get_blob_properties()
+            finish_time = time.time()
+
+        except CancelledError as cle:
+            self._azure_stats_increment("error_count")
+            msg = f"azureBlobClient.CancelledError get_blob_properties {key}: {cle}"
+            log.error(msg)
+            raise HTTPInternalServerError()
+        except Exception as e:
+            if isinstance(e, AzureError):
+                if e.status_code == 404:
+                    msg = f"storage key: {key} not found "
+                    log.warn(msg)
+                    raise HTTPNotFound()
+                elif e.status_code in (401, 403):
+                    msg = f"azureBlobClient.access denied for get_blob_properties key: {key}"
+                    log.info(msg)
+                    raise HTTPForbidden()
+                else:
+                    self._azure_stats_increment("error_count")
+                    log.error(f"azureBlobClient.got unexpected AzureError for get_blob_properties {key}: {e.message}")
+                    raise HTTPInternalServerError()
+            else:
+                log.error(f"azureBlobClient.Unexpected exception for get_blob_properties {key}: {e}")
+                raise HTTPInternalServerError()
+
+        last_modified_dt = blob_props.last_modified
+        if not isinstance(last_modified_dt, datetime.datetime):
+            msg =f"azureBlobClient.get_key_stats, expeeccted datatime object in head data"
+            log.error(msg)
+            raise HTTPInternalServerError()
+        key_stats = {}
+        key_stats["Size"] = blob_props.size
+        key_stats["ETag"] = blob_props.etag
+        key_stats["LastModified"] = datetime.datetime.timestamp(last_modified_dt)
+        log.info(f"azureBlobClient.get_key_stats({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f}")
+
+        return key_stats
+
 
     async def list_keys(self, prefix='', deliminator='', suffix='', include_stats=False, callback=None, bucket=None, limit=None):
         """ return keys matching the arguments
@@ -219,7 +306,12 @@ class AzureBlobClient():
         if not bucket:
             log.error("list_keys - bucket not set")
             raise HTTPInternalServerError()
+
         log.info(f"list_keys('{prefix}','{deliminator}','{suffix}', include_stats={include_stats}")
+        if deliminator and deliminator != '/':
+            msg = "Only '/' is supported as deliminator"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
         if include_stats:
             # use a dictionary to hold return values
             key_names = {}
@@ -244,6 +336,13 @@ class AzureBlobClient():
                             data_size = key["size"]
                             key_names[key_name] = {"ETag": ETag, "Size": data_size, "LastModified": lastModified }
                         else:
+                            if suffix and not key_name.endswith(suffix):
+                                continue
+                            if deliminator and key_name[-1] != '/':
+                                # only return folders
+                                continue
+                            if limit and len(key_names) >= limit:
+                                break
                             key_names.append(key_name)
                     if callback:
                         if iscoroutinefunction(callback):
