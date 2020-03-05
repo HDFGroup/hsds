@@ -26,6 +26,7 @@ classifiers = [
 install_requires = [
     'aiobotocore',
     'aiohttp',
+    'aiofiles',
     'botocore',
     'kubernetes',
     'numba',
