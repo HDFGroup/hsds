@@ -44,17 +44,22 @@ Note: passwords can (and should for production use) be modified by changing valu
 Next, run the test suite by:
    `$python testall.py`
 
-See: [docs/docker_install.md](docs/docker_install.md) for complete install instructions.
+See: [docs/docker_install_aws.md](docs/docker_install.md) for complete install instructions.
 
 See: [docs/kubernetes_install.md](kubernetes_install.md) for setup on Kubernetes.
 
-**On Azure**
+**On Azure** **(BETA)**
 
 For complete instructions to install on a single Azure VM:
 - See: [docs/docker_install_azure.md](docs/docker_install_azure.md)
 
 For complete instructions to install on Azure Kubernetes Service (AKS):
 - See: [docs/kubernetes_install_azure.md](docs/kubernetes_install_azure.md)
+
+**On Prem (POSIX-based storage)**  **(BETA)**
+
+For compleete instructions to install on a desktop or local server:
+- See: [docs/docker_install_posix.md](docs/docker_install_posix.md)
 
 Writing Client Applications
 ----------------------------
@@ -72,8 +77,8 @@ using HSDS.  See: <https://bitbucket.hdfgroup.org/projects/HDF5VOL/repos/rest/br
 Uninstalling
 ------------
 
-HSDS only modifies the S3 bucket that it is configured to use, so to uninstall just remove
-source files, Docker images, and S3 bucket.
+HSDS only modifies the storage location that it is configured to use, so to uninstall just remove
+source files, Docker images, and S3 bucket/Azure Container/directory files.
 
 Reporting bugs (and general feedback)
 -------------------------------------
