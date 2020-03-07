@@ -19,7 +19,7 @@ import subprocess
 import datetime
 from botocore.exceptions import ClientError
 from aiobotocore import get_session
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPUnauthorized, HTTPForbidden, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPUnauthorized, HTTPNotFOund, HTTPForbidden, HTTPServiceUnavailable, HTTPInternalServerError
 import jwt
 from jwt.exceptions import InvalidAudienceError, InvalidSignatureError
 import requests
@@ -28,6 +28,7 @@ from cryptography.hazmat.backends import default_backend
 import hsds_logger as log
 import config
 
+MSONLINE_OPENID_URL = "https://login.microsoftonline.com/common/.well-known/openid-configuration"
 
 def getDynamoDBClient(app):
     """ Return dynamodb handle
@@ -304,7 +305,7 @@ def _checkTokenCache(app, token):
     if "user_db" not in app:
         return None
     user_db = app["user_db"]
-    expired_ids = set() # might as well clean up any expired tokens we finds
+    expired_ids = set() # might as well clean up any expired tokens we find
     user_id = None
     for username in user_db:
         user = user_db[username]
@@ -340,7 +341,20 @@ def _verifyBearerToken(app, token):
     # if valid, update user db and return username
     username = None
     token_header = jwt.get_unverified_header(token)
-    res = requests.get('https://login.microsoftonline.com/common/.well-known/openid-configuration')
+    res = requests.get(MSONLINE_OPENID_URL)
+    if res.status_code != 200:
+        log.warn("Bad response from {MSONLINE_OPENID_URL}: {res.status_code}")
+        if res.status_code == 404:
+            raise HTTPNotFound()
+        elif res.status_code == 401:
+            raise HTTPUnauthorized()
+        elif reslstatus_code == 403:
+            raise HTTPForbidden()
+        elif res.status_code == 503:
+            raise HTTPServiceUnavailable()
+        else:
+            raise HTTPInternalServerError()
+
     jwk_uri = res.json()['jwks_uri']
     res = requests.get(jwk_uri)
     jwk_keys = res.json()
@@ -351,6 +365,10 @@ def _verifyBearerToken(app, token):
     for key in jwk_keys['keys']:
         if key['kid'] == token_header['kid']:
             x5c = key['x5c']
+
+    if not x5c:
+        log.error("Unable to extract x5c chain from JWK keys")
+        raise HTTPInternalServerError()
 
     log.debug(f"bearer token - x5c: {x5c}")
 
@@ -390,6 +408,9 @@ def _verifyBearerToken(app, token):
             'exp': exp,
             'pwd': token
         }
+    else:
+        log.warn("unable to retreive username from bearer token")
+
     return username
 
 
