@@ -18,13 +18,8 @@ services:
       - LOG_LEVEL=${LOG_LEVEL}
     ports:
       - ${HEAD_PORT}:${HEAD_PORT}
-    logging:
-     options:
-        max-size: "5k"
-        max-file: "5"
     depends_on:
     - proxy
-
   dn:
     image: hdfgroup/hsds
     restart: ${RESTART_POLICY}
@@ -41,10 +36,6 @@ services:
       - CHUNK_MEM_CACHE_SIZE=${CHUNK_MEM_CACHE_SIZE}
       - MAX_CHUNK_SIZE=${MAX_CHUNK_SIZE}
       - MAX_CHUNKS_PER_FOLDER=${MAX_CHUNKS_PER_FOLDER}
-    logging:
-     options:
-        max-size: "5k"
-        max-file: "5"
     depends_on:
       - head
   sn:
@@ -73,10 +64,6 @@ services:
       - VIRTUAL_PORT=${SN_PORT}
       - LETSENCRYPT_HOST=${PUBLIC_DNS}
       - LETSENCRYPT_EMAIL=jguerrero@teravisiontech.com
-    logging:
-     options:
-        max-size: "5k"
-        max-file: "5"
     depends_on:
       - head
   proxy:
@@ -92,22 +79,6 @@ services:
     ports:
       - "80:80"
       - "443:443"
-    logging:
-     options:
-        max-size: "5k"
-        max-file: "5"
-  logs:
-    image: mdsol/logspout
-    restart: always
-    command: cloudwatch://auto
-    container_name: logspout
-    hostname: hsds_${PUBLIC_DNS}
-    volumes:
-    - /var/run/docker.sock:/tmp/docker.sock:ro
-    logging:
-     options:
-        max-size: "5k"
-        max-file: "5"
   certs:
     image: jrcs/letsencrypt-nginx-proxy-companion
     container_name: hsds_certs
@@ -120,10 +91,6 @@ services:
     - proxy
     depends_on:
     - proxy
-    logging:
-     options:
-        max-size: "5k"
-        max-file: "5"
   dockergen:
     image: jwilder/docker-gen
     restart: always
@@ -134,7 +101,3 @@ services:
     volumes:
       - /var/run/docker.sock:/tmp/docker.sock:ro
       - ./nginx.tmpl:/etc/docker-gen/templates/nginx.tmpl
-    logging:
-     options:
-        max-size: "5k"
-        max-file: "5"

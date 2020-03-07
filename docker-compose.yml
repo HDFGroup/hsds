@@ -20,11 +20,7 @@ services:
       - BUCKET_NAME=${BUCKET_NAME}
       - LOG_LEVEL=${LOG_LEVEL}
     ports:
-      - ${HEAD_PORT}:${HEAD_PORT}
-    logging:
-     options:
-        max-size: "5m"
-        max-file: "5"
+      - ${HEAD_PORT}:${HEAD_PORT}x
     depends_on:
       - proxy
 
@@ -49,10 +45,6 @@ services:
 
     ports:
       - ${DN_PORT}
-    logging:
-     options:
-        max-size: "5m"
-        max-file: "5"
     depends_on:
       - head
   sn:
@@ -90,11 +82,7 @@ services:
       - TOP_LEVEL_DOMAINS=${TOP_LEVEL_DOMAINS}
 
     ports:
-      - ${SN_PORT}
-    logging:
-     options:
-        max-size: "5k"
-        max-file: "5"
+      - ${SN_PORT
     depends_on:
       - head
   proxy:
@@ -109,10 +97,6 @@ services:
       - /var/run/docker.sock:/tmp/docker.sock:ro
     ports:
       - "80:80"
-    logging:
-     options:
-        max-size: "5m"
-        max-file: "5"
   dockergen:
     image: jwilder/docker-gen
     restart: always
@@ -123,15 +107,3 @@ services:
     volumes:
       - /var/run/docker.sock:/tmp/docker.sock:ro
       - ./nginx.tmpl:/etc/docker-gen/templates/nginx.tmpl
-  logs:
-    image: mdsol/logspout
-    restart: always
-    command: cloudwatch://auto
-    container_name: logspout
-    hostname: hsds_${PUBLIC_DNS}
-    volumes:
-    - /var/run/docker.sock:/tmp/docker.sock:ro
-    logging:
-     options:
-        max-size: "50m"
-        max-file: "5"
