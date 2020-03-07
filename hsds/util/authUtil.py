@@ -19,7 +19,7 @@ import subprocess
 import datetime
 from botocore.exceptions import ClientError
 from aiobotocore import get_session
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPUnauthorized, HTTPNotFOund, HTTPForbidden, HTTPServiceUnavailable, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPUnauthorized, HTTPNotFound, HTTPForbidden, HTTPServiceUnavailable, HTTPInternalServerError
 import jwt
 from jwt.exceptions import InvalidAudienceError, InvalidSignatureError
 import requests
@@ -348,7 +348,7 @@ def _verifyBearerToken(app, token):
             raise HTTPNotFound()
         elif res.status_code == 401:
             raise HTTPUnauthorized()
-        elif reslstatus_code == 403:
+        elif res.status_code == 403:
             raise HTTPForbidden()
         elif res.status_code == 503:
             raise HTTPServiceUnavailable()
