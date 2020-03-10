@@ -63,7 +63,6 @@ else
   export SN_CORES=1
 fi
 
-echo "sn cores:" $SN_CORES
 echo "dn cores:" $DN_CORES
 
 echo "AWS_S3_GATEWAY:" $AWS_S3_GATEWAY
@@ -80,6 +79,7 @@ fi
 grep -q -c "^  proxy" ${COMPOSE_FILE}
 if [[ $? -gt 0 ]]; then
   echo "no load balancer"
+  export SN_CORES=1
   if [[ -z ${SN_PORT} ]]; then
     echo "setting sn_port to 80"
     export SN_PORT=80  # default to port 80 if the SN is fronting requests
