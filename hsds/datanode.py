@@ -193,7 +193,13 @@ def main():
     # delete entire map whenver the synch queue is empty?
 
     # run background tasks
-    asyncio.ensure_future(healthCheck(app), loop=loop)
+    try:
+        task = asyncio.ensure_future(healthCheck(app), loop=loop)
+    except Exception as hcEx:
+        log.error(f"Failed to run health checks {hcEx}")
+    finally:
+        if task.done() and not task.cancelled():
+            log.info("health check received {}".format(task.exception()))
 
     # run data sync tasks
     asyncio.ensure_future(s3syncCheck(app), loop=loop)
