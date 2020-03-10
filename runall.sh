@@ -18,7 +18,7 @@ if [[ -z ${AWS_S3_GATEWAY}  ]] && [[ -z ${AZURE_CONNECTION_STRING} ]]; then
       export AWS_REGION=us-east-1
     fi
     [[ -z ${BUCKET_NAME} ]]  && export BUCKET_NAME="hsds.test"
-    [[ -z ${HSDS_ENDPOINT} ]] && export HSDS_ENDPOINT=http://localhost:5101
+    [[ -z ${HSDS_ENDPOINT} ]] && export HSDS_ENDPOINT=http://localhost
   else
     # Use Posix driver with ROOT_DIR as base for buckets
     echo "Using POSIX driver with data directory: ${ROOT_DIR}"
