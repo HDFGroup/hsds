@@ -12,7 +12,7 @@
 
 import time
 from aiohttp.client_exceptions import ClientError
-from aiohttp.web_exceptions import HTTPNotFound
+from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 from util.idUtil import isValidUuid, isSchema2Id, getS3Key, isS3ObjKey, getObjId, isValidChunkId, getCollectionForId
 from util.chunkUtil import getDatasetId
 from util.storUtil import getStorKeys, putStorJSONObj, deleteStorObj
@@ -24,7 +24,7 @@ import config
 # Note: only works with schema v2 domains!
 
 def scanRootCallback(app, s3keys):
-    log.debug(f"scanRootCallback, {len(s3keys)} items")
+    log.debug(f"scanRoot - callback, {len(s3keys)} items")
     if isinstance(s3keys, list):
         log.error("got list result for s3keys callback")
         raise ValueError("unexpected callback format")
@@ -48,10 +48,10 @@ def scanRootCallback(app, s3keys):
             obj_size = item["Size"]
         if "LastModified" in item:
             lastModified = item["LastModified"]
-        log.debug(f"{objid}: {etag} {obj_size} {lastModified}")
+        log.debug(f"scanRoot - got key {objid}: {etag} {obj_size} {lastModified}")
 
         if lastModified > results["lastModified"]:
-            log.debug(f"changing lastModified from: {results['lastModified']} to {lastModified}")
+            log.debug(f"scanRoot: changing lastModified from: {results['lastModified']} to {lastModified}")
             results["lastModified"] = lastModified
         is_chunk = False
         if isValidChunkId(objid):
@@ -85,7 +85,7 @@ def scanRootCallback(app, s3keys):
         elif getCollectionForId(objid) == "datatypes":
             results["num_datatypes"] += 1
         else:
-            log.error(f"Unexpected collection type for id: {objid}")
+            log.error(f"scanRoot - Unexpected collection type for id: {objid}")
 
 
 async def scanRoot(app, rootid, update=False, bucket=None):
@@ -130,13 +130,13 @@ async def scanRoot(app, rootid, update=False, bucket=None):
 
     await getStorKeys(app, prefix=root_prefix, include_stats=True, bucket=bucket, callback=scanRootCallback)
 
-    log.info(f"scan complete for rootid: {rootid}")
+    log.info(f"scanRoot - scan complete for rootid: {rootid}")
     results["scan_complete"] = time.time()
 
     if update:
         # write .info object back to S3
         info_key = root_prefix + ".info.json"
-        log.info(f"updating info key: {info_key}")
+        log.info(f"scanRoot - updating info key: {info_key}")
         await putStorJSONObj(app, info_key, results, bucket=bucket)
     return results
 
@@ -159,7 +159,7 @@ async def objDeleteCallback(app, s3keys):
             log.error(f"Unexpected key {s3key} for prefix: {prefix}")
             raise ValueError("invalid s3key for objDeleteCallback")
         full_key = prefix + s3key[prefix_len:]
-        log.info(f"objDeleteCallback got key: {full_key}")
+        log.info(f"removeKeys - objDeleteCallback deleting key: {full_key}")
         await deleteStorObj(app, full_key)
 
 
@@ -174,7 +174,7 @@ async def removeKeys(app, objid):
         log.warn("ignoring non-schema2 id")
         raise KeyError("Invalid key")
     s3key = getS3Key(objid)
-    log.debug(f"got s3key: {s3key}")
+    log.debug(f"removeKeys - got s3key: {s3key}")
     expected_suffixes = (".dataset.json", ".group.json")
     s3prefix = None
 
@@ -182,18 +182,23 @@ async def removeKeys(app, objid):
         if s3key.endswith(suffix):
                 s3prefix = s3key[:-len(suffix)]
     if not s3prefix:
-        log.error("unexpected s3key for delete_set")
+        log.error("removeKeys - unexpected s3key for delete_set")
         raise KeyError("unexpected key suffix")
-    log.info(f"delete for {objid} searching for s3prefix: {s3prefix}")
+    log.info(f"removeKeys - delete for {objid} searching for s3prefix: {s3prefix}")
     if app["objDelete_prefix"]:
-        log.error("objDelete_prefix is already set - impropere use of non-reentrant call?")
+        log.error("removeKeys - objDelete_prefix is already set - improper use of non-reentrant call?")
         # just continue and reset
     app["objDelete_prefix"] = s3prefix
     try:
         await getStorKeys(app, prefix=s3prefix, include_stats=False, callback=objDeleteCallback)
     except ClientError as ce:
-        log.error(f"getS3Keys faiiled: {ce}")
+        log.error(f"removeKeys - getS3Keys faiiled: {ce}")
     except HTTPNotFound:
-        log.warn(f"HTTPNotFound error for getStorKeys with prefix: {s3prefix}")
+        log.warn(f"removeKeys - HTTPNotFound error for getStorKeys with prefix: {s3prefix}")
+    except HTTPInternalServerError:
+        log.error(f"removeKeys - HTTPInternalServerError for getStorKeys with prefix: {s3prefix}")
+    except Exception as e:
+        log.error(f"removeKeys - Unexpected Exception for getStorKeys with prefix: {s3prefix}: {e}")
+
     # reset the prefix
     app["objDelete_prefix"] = None
