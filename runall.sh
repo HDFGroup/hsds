@@ -7,6 +7,12 @@ if [[ $# -eq 1 ]] && ([[ $1 == "-h" ]] || [[ $1 == "--help" ]]); then
 fi
 
 if [[ -z ${AWS_S3_GATEWAY}  ]] && [[ -z ${AZURE_CONNECTION_STRING} ]]; then
+  echo "no cloud storage"
+else
+  echo "cloud storage"
+fi
+
+if [[ -z ${AWS_S3_GATEWAY}  ]] && [[ -z ${AZURE_CONNECTION_STRING} ]]; then
   if [[ -z ${ROOT_DIR} ]]; then
     echo "AWS_S3_GATEWAY not set - using openio container"
     export AWS_S3_GATEWAY="http://openio:6007"
@@ -27,6 +33,7 @@ if [[ -z ${AWS_S3_GATEWAY}  ]] && [[ -z ${AZURE_CONNECTION_STRING} ]]; then
 elif [[ ${HSDS_USE_HTTPS} ]]; then
    COMPOSE_FILE="docker-compose.secure.yml"
 else
+   echo "using cloud storage"
    COMPOSE_FILE="docker-compose.yml"
 fi
 
@@ -46,7 +53,7 @@ if [[ -z ${PUBLIC_DNS} ]] ; then
   fi
 fi
 
-if [[ -z $AWS_IAM_ROLE ]] && [[ -z $AWS_S3_GATEWAY ]] && [[ -z ${ROOT_DIR} ]]; then
+if [[ -z $AWS_IAM_ROLE ]] && [[ $AWS_S3_GATEWAY ]]; then
   # if not using s3 or S3 without EC2 IAM roles, need to define AWS access keys
   [[ -z ${AWS_ACCESS_KEY_ID} ]] && echo "Need to set AWS_ACCESS_KEY_ID" && exit 1
   [[ -z ${AWS_SECRET_ACCESS_KEY} ]] && echo "Need to set AWS_SECRET_ACCESS_KEY" && exit 1
