@@ -7,12 +7,6 @@ if [[ $# -eq 1 ]] && ([[ $1 == "-h" ]] || [[ $1 == "--help" ]]); then
 fi
 
 if [[ -z ${AWS_S3_GATEWAY}  ]] && [[ -z ${AZURE_CONNECTION_STRING} ]]; then
-  echo "no cloud storage"
-else
-  echo "cloud storage"
-fi
-
-if [[ -z ${AWS_S3_GATEWAY}  ]] && [[ -z ${AZURE_CONNECTION_STRING} ]]; then
   if [[ -z ${ROOT_DIR} ]]; then
     echo "AWS_S3_GATEWAY not set - using openio container"
     export AWS_S3_GATEWAY="http://openio:6007"
@@ -72,16 +66,19 @@ fi
 
 echo "dn cores:" $DN_CORES
 
-echo "AWS_S3_GATEWAY:" $AWS_S3_GATEWAY
-echo "AWS_ACCESS_KEY_ID:" $AWS_ACCESS_KEY_ID
-echo "AWS_SECRET_ACCESS_KEY: ******"
+if [[ $AWS_S3_GATEWAY ]]; then
+  echo "AWS_S3_GATEWAY:" $AWS_S3_GATEWAY
+  echo "AWS_ACCESS_KEY_ID:" $AWS_ACCESS_KEY_ID
+  echo "AWS_SECRET_ACCESS_KEY: ******"
+elif [[ $AZURE_CONNECTION_STRING ]]; then
+  echo "AZURE_CONNECTION_STRING: *****"
+else
+  echo "ROOT_DIR:" $ROOT_DIR
+fi
 echo "BUCKET_NAME:"  $BUCKET_NAME
 echo "CORES: ${SN_CORES}/${DN_CORES}"
 echo "HSDS_ENDPOINT:" $HSDS_ENDPOINT
 echo "PUBLIC_DNS:" $PUBLIC_DNS
-if [[ -z ${ROOT_DIR} ]] ; then
-  echo "ROOT_DIR:" $ROOT_DIR
-fi
 
 grep -q -c "^  proxy" ${COMPOSE_FILE}
 if [[ $? -gt 0 ]]; then
