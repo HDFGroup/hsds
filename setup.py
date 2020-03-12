@@ -28,12 +28,14 @@ install_requires = [
     'aiohttp',
     'aiofiles',
     'botocore',
+    'cryptography',
     'kubernetes',
     'numba',
     'numpy >= 1.10.4',
     'psutil',
+    'pyjwt',
     'pytz',
-    'requests', # for tests and examples
+    'requests',
     ]
 
 
