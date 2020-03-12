@@ -223,7 +223,6 @@ async def GET_Chunk(request):
         log.debug(f"GET_Chunk - using s3path: {s3path}")
     elif "bucket" in params:
         bucket = params["bucket"]
-
     if "s3offset" in params:
         try:
             s3offset = int(params["s3offset"])
