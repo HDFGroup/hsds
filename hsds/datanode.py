@@ -175,10 +175,12 @@ async def bucketGC(app):
 # Main
 #
 
-def main():
-    log.info("datanode start")
-    loop = asyncio.get_event_loop()
+def create_app(loop):
+    """Create datanode aiohttp application
 
+    :param loop: The asyncio loop to use for the application
+    :rtype: aiohttp.web.Application
+    """
     metadata_mem_cache_size = int(config.get("metadata_mem_cache_size"))
     log.info("Using metadata memory cache size of: {}".format(metadata_mem_cache_size))
     chunk_mem_cache_size = int(config.get("chunk_mem_cache_size"))
@@ -221,6 +223,12 @@ def main():
 
     # run root/dataset GC
     asyncio.ensure_future(bucketGC(app), loop=loop)
+
+    return app
+
+def main():
+    log.info("datanode start")
+    app = create_app(asyncio.get_event_loop())
 
     # run the app
     port = int(config.get("dn_port"))
