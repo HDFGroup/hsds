@@ -10,6 +10,7 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import os
+import time
 import base64
 import hashlib
 import json
@@ -18,10 +19,16 @@ import subprocess
 import datetime
 from botocore.exceptions import ClientError
 from aiobotocore import get_session
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPUnauthorized, HTTPForbidden, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPUnauthorized, HTTPNotFound, HTTPForbidden, HTTPServiceUnavailable, HTTPInternalServerError
+import jwt
+from jwt.exceptions import InvalidAudienceError, InvalidSignatureError
+import requests
+from cryptography.x509 import load_pem_x509_certificate
+from cryptography.hazmat.backends import default_backend
 import hsds_logger as log
 import config
 
+MSONLINE_OPENID_URL = "https://login.microsoftonline.com/common/.well-known/openid-configuration"
 
 def getDynamoDBClient(app):
     """ Return dynamodb handle
@@ -291,12 +298,129 @@ async def validateUserPassword(app, username, password):
         log.info("user password is not valid for user: {}".format(username))
         raise HTTPUnauthorized() # 401
 
+def _checkTokenCache(app, token):
+    # iterate through use_db and return username if this token if found
+    # (and it is still valid)
+    # TBD: create reverse lookup table for efficiency
+    if "user_db" not in app:
+        return None
+    user_db = app["user_db"]
+    expired_ids = set() # might as well clean up any expired tokens we find
+    user_id = None
+    for username in user_db:
+        user = user_db[username]
+        if "scheme" not in user or user["scheme"] != "bearer":
+            continue
+        if "exp" not in user:
+            log.warn(f"expected to find key: 'exp' in user data for user: {username}")
+            continue
+        exp = user["exp"]
+        if "pwd" not in user:
+            log.warn(f"expected to find key: 'pwd' in user data for user: {username}")
+            continue
+        if "pwd" not in user or user["pwd"] != token:
+            continue
+        pwd = user['pwd']
+
+        if time.time() < exp:
+            # still valid!
+            if pwd == token:
+                log.info(f"returning user: {username} from bearer cache")
+                user_id = username
+        else:
+            # add to the expired set
+            expired_ids.add(username)
+    for username in expired_ids:
+        log.debug(f"removing expired token userdb for user: {username}")
+        del user_db[username]
+
+    return user_id
+
+def _verifyBearerToken(app, token):
+    # Contact AD to validate bearer token.
+    # if valid, update user db and return username
+    username = None
+    token_header = jwt.get_unverified_header(token)
+    res = requests.get(MSONLINE_OPENID_URL)
+    if res.status_code != 200:
+        log.warn("Bad response from {MSONLINE_OPENID_URL}: {res.status_code}")
+        if res.status_code == 404:
+            raise HTTPNotFound()
+        elif res.status_code == 401:
+            raise HTTPUnauthorized()
+        elif res.status_code == 403:
+            raise HTTPForbidden()
+        elif res.status_code == 503:
+            raise HTTPServiceUnavailable()
+        else:
+            raise HTTPInternalServerError()
+
+    jwk_uri = res.json()['jwks_uri']
+    res = requests.get(jwk_uri)
+    jwk_keys = res.json()
+    x5c = None
+    log.info("_verifyBearerToken")
+    resource_id = config.get('azure_resource_id')
+    # Iterate JWK keys and extract matching x5c chain
+    for key in jwk_keys['keys']:
+        if key['kid'] == token_header['kid']:
+            x5c = key['x5c']
+
+    if not x5c:
+        log.error("Unable to extract x5c chain from JWK keys")
+        raise HTTPInternalServerError()
+
+    log.debug(f"bearer token - x5c: {x5c}")
+
+    cert = ''.join([
+        '-----BEGIN CERTIFICATE-----\n',
+        x5c[0],
+        '\n-----END CERTIFICATE-----\n',
+        ])
+    public_key =  load_pem_x509_certificate(cert.encode(), default_backend()).public_key()
+
+    log.debug(f"bearer token - public_key: {public_key}")
+
+    try:
+        jwt_decode = jwt.decode(
+            token,
+            public_key,
+            algorithms='RS256',
+            audience=resource_id,
+        )
+    except InvalidAudienceError:
+        log.warn(f"AAD InvalidAudienceError with {resource_id}")
+        raise HTTPUnauthorized()
+    except InvalidSignatureError:
+        log.warn("AAD InvalidSignatureError")
+        raise HTTPUnauthorized()
+    if "unique_name" in jwt_decode:
+        # TBD: is the proper key to use?
+        username = jwt_decode["unique_name"]
+        exp = jwt_decode["exp"]
+        log.info(f"decoded bearer token for user: {username}, expired: {exp}")
+        if "user_db" not in app:
+            log.info("initializing user_db")
+            app["user_db"] = {}
+        user_db = app["user_db"]
+        user_db[username] = {
+            'scheme': "bearer",
+            'exp': exp,
+            'pwd': token
+        }
+    else:
+        log.warn("unable to retreive username from bearer token")
+
+    return username
+
+
 
 def getUserPasswordFromRequest(request):
     """ Return user defined in Auth header (if any)
     """
     user = None
     pswd = None
+    app = request.app
     if 'Authorization' not in request.headers:
         log.debug("no Authorization in header")
         return None, None
@@ -304,29 +428,44 @@ def getUserPasswordFromRequest(request):
     if not scheme or not token:
         log.info("Invalid Authorization header")
         raise HTTPBadRequest("Invalid Authorization header")
-    if scheme.lower() != 'basic':
+
+    if scheme.lower() == 'basic':
+        # HTTP Basic Auth
+        try:
+            token = token.encode('utf-8')  # convert to bytes
+            token_decoded = base64.decodebytes(token)
+        except binascii.Error:
+            msg = "Malformed authorization header"
+            log.warn(msg)
+            raise HTTPBadRequest(msg)
+        if token_decoded.index(b':') < 0:
+            msg = "Malformed authorization header (No ':' character)"
+            log.warn(msg)
+            raise HTTPBadRequest(msg)
+        user, _, pswd = token_decoded.partition(b':')
+        if not user or not pswd:
+            msg = "Malformed authorization header, user/password not found"
+            log.warn(msg)
+            raise HTTPBadRequest(msg)
+        user = user.decode('utf-8')   # convert bytes to string
+        pswd = pswd.decode('utf-8')   # convert bytes to string
+    elif scheme.lower() == 'bearer' and config.get('azure_app_id') and config.get('azure_resource_id'):
+        # Azure AD Oauth
+        app_id = config.get('azure_app_id')
+        resource_id = config.get('azure_resource_id')
+        log.debug(f"Got bearer token  app_id: {app_id} resource_id: {resource_id}")
+        #log.debug(f"bearer token: {token}")
+        # see if we've already validated this token
+        user = _checkTokenCache(app, token)
+        if not user:
+            user = _verifyBearerToken(app, token)
+        if user:
+            pswd = token
+
+    else:
         msg = "Unsupported Authorization header scheme: {}".format(scheme)
         log.warn(msg)
         raise HTTPBadRequest(msg)
-    try:
-        token = token.encode('utf-8')  # convert to bytes
-        token_decoded = base64.decodebytes(token)
-    except binascii.Error:
-        msg = "Malformed authorization header"
-        log.warn(msg)
-        raise HTTPBadRequest(msg)
-    if token_decoded.index(b':') < 0:
-        msg = "Malformed authorization header (No ':' character)"
-        log.warn(msg)
-        raise HTTPBadRequest(msg)
-    user, _, pswd = token_decoded.partition(b':')
-    if not user or not pswd:
-        msg = "Malformed authorization header, user/password not found"
-        log.warn(msg)
-        raise HTTPBadRequest(msg)
-
-    user = user.decode('utf-8')   # convert bytes to string
-    pswd = pswd.decode('utf-8')   # convert bytes to string
 
     return user, pswd
 
