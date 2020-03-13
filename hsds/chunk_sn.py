@@ -649,11 +649,13 @@ async def getChunkInfoMap(app, dset_id, dset_json, chunk_ids, bucket=None):
                 log.error("Unexpected chunk_index")
                 raise HTTPInternalServerError()
             extent = item_size
+            s3offset = layout["offset"]
             for i in range(rank):
-                index = chunk_index[i]
-                s3offset = layout["offset"] + extent * chunk_dims[i] * index
-                extent *= dims[i]
-            log.debug("setting chunk_info_map to s3offset: {s3offset} s3size: {s3size} for chunk_id: {chunk_id}")
+                dim = rank - i - 1
+                index = chunk_index[dim]
+                s3offset += index * chunk_dims[dim] * extent
+                extent *= dims[dim]
+            log.debug(f"setting chunk_info_map to s3offset: {s3offset} s3size: {s3size} for chunk_id: {chunk_id}")
             if s3offset > layout["offset"] + layout["size"]:
                 log.warn(f"range get of s3offset: {s3offset} s3size: {s3size} extends beyond end of contingous dataset for chunk_id: {chunk_id}")
             chunkinfo_map[chunk_id] = {"s3path": s3path, "s3offset": s3offset, "s3size": chunk_size}

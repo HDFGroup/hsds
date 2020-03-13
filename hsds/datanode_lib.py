@@ -320,11 +320,11 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset
     s3key = None
 
     if s3path:
-        if not s3path.startswith("s3://"):
-            # TBD - verify these at dataset creation time?
-            log.error(f"unexpected s3path for getChunk: {s3path}")
-            raise  HTTPInternalServerError()
-        path = s3path[5:]
+        if s3path.startswith("s3://"):
+            # trim off the s3:// if found
+            path = s3path[5:]
+        else:
+            path = s3path
         index = path.find('/')   # split bucket and key
         if index < 1:
             log.error(f"s3path is invalid: {s3path}")

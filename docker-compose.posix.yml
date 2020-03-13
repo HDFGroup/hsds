@@ -22,8 +22,6 @@ services:
       - LOG_LEVEL=${LOG_LEVEL}
     ports:
       - ${HEAD_PORT}:${HEAD_PORT}
-    depends_on:
-      - proxy
     volumes:
       - ${ROOT_DIR}:/data
 
@@ -87,30 +85,8 @@ services:
       - TOP_LEVEL_DOMAINS=${TOP_LEVEL_DOMAINS}
 
     ports:
-      - ${SN_PORT}
+      - ${SN_PORT}:${SN_PORT}
     depends_on:
       - head
     volumes:
       - ${ROOT_DIR}:/data
-  proxy:
-    image: nginx
-    restart: always
-    container_name: hsds_proxy
-    volumes:
-      - /etc/nginx/certs
-      - /etc/nginx/conf.d
-      - /etc/nginx/vhost.d
-      - /usr/share/nginx/html
-      - /var/run/docker.sock:/tmp/docker.sock:ro
-    ports:
-      - "80:80"
-  dockergen:
-    image: jwilder/docker-gen
-    restart: always
-    container_name: hsds_gen
-    command: -notify-sighup hsds_proxy -watch /etc/docker-gen/templates/nginx.tmpl /etc/nginx/conf.d/default.conf
-    volumes_from:
-      - proxy
-    volumes:
-      - /var/run/docker.sock:/tmp/docker.sock:ro
-      - ./nginx.tmpl:/etc/docker-gen/templates/nginx.tmpl

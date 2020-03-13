@@ -222,25 +222,33 @@ def getContiguousLayout(shape_json, item_size, chunk_min=1000*1000, chunk_max=4*
         return None
     if shape_json["class"] == 'H5S_SCALAR':
         return (1,)  # just enough to store one item
+    chunk_avg = (chunk_min + chunk_max) // 2
     dims = shape_json["dims"]
     rank = len(dims)
-    layout = [0,] * rank
     nsize = item_size
-    unit_chunk = False
-    for i in range(rank):
-        dim = rank - i - 1
-        extent = dims[dim]
-        nsize *= extent
-        if unit_chunk:
-            layout[dim] = 1
-        elif nsize <= chunk_min:
-            layout[dim] = extent
-        elif nsize <= chunk_max:
-            layout[dim] = (chunk_min * extent) // nsize
-            unit_chunk = True
+    layout = [1,] * rank
+    if rank == 1:
+        # just divy up the dimension with whatever works best
+        nsize *= dims[0]
+        if nsize < chunk_max:
+            layout[0] = dims[0]
         else:
-            layout[dim] = (chunk_max * extent) // nsize
-            unit_chunk = True
+            layout[0] = chunk_avg // item_size
+    else:
+        unit_chunk = False
+        for i in range(rank):
+            dim = rank - i - 1
+            extent = dims[dim]
+            nsize *= extent
+            if unit_chunk:
+                layout[dim] = 1
+            else:
+                layout[dim] = extent
+                if nsize > chunk_max:
+                    if i>0:
+                        # make everything after first dimension 1
+                        layout[dim] = 1
+                    unit_chunk = 1
     return layout
 
 

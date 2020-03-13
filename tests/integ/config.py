@@ -12,7 +12,7 @@
 import os
 
 cfg = {
-    'hsds_endpoint': 'http://localhost:5101',
+    'hsds_endpoint': 'http://localhost',
     'head_endpoint': 'http://localhost:5100',
     'user_name': 'test_user1',
     'user_password': 'test',
