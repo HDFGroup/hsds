@@ -17,6 +17,7 @@ services:
       - AWS_REGION=${AWS_REGION}
       - BUCKET_NAME=${BUCKET_NAME}
       - LOG_LEVEL=${LOG_LEVEL}
+      - AUTH_EXPIRATION=${AUTH_EXPIRATION}
     ports:
       - ${HEAD_PORT}:${HEAD_PORT}
 
