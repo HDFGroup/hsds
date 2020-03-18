@@ -19,8 +19,8 @@ install:
   - pip install pyflakes
   - pip install pytz
   - ./build.sh
-  - mkdir $ROOT_DIR
-  - mkdir ${ROOT_DIR}/${BUCKET_NAME}
+  - mkdir ${HOME}/buckets
+  - mkdir ${HOME}/buckets/hsds.test
   - ./runall.sh
 script:
   python testall.py
