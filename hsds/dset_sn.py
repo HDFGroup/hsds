@@ -772,6 +772,9 @@ async def POST_Dataset(request):
         layout = {"class": "H5D_CHUNKED"}
 
     if layout and layout["class"] == 'H5D_CONTIGUOUS_REF':
+        #contiguous_min_chunk_size = 4*1024
+        #contiguous_max_chunk_size = 20*1024*1024
+        #chunk_dims = getContiguousLayout(shape_json, item_size, chunk_min=contiguous_min_chunk_size, chunk_max=contiguous_max_chunk_size)
         chunk_dims = getContiguousLayout(shape_json, item_size, chunk_min=min_chunk_size, chunk_max=max_chunk_size)
         layout["dims"] = chunk_dims
         log.debug(f"autoContiguous layout: {layout}")
