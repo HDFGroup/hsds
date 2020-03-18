@@ -21,6 +21,7 @@ install:
   - ./build.sh
   - mkdir ${HOME}/buckets
   - mkdir ${HOME}/buckets/hsds.test
+  - echo "ROOT_DIR ${ROOT_DIR}
   - ./runall.sh
 script:
   python testall.py
