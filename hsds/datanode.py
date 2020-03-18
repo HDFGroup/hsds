@@ -29,6 +29,8 @@ from dset_dn import GET_Dataset, POST_Dataset, DELETE_Dataset, PUT_DatasetShape
 from chunk_dn import PUT_Chunk, GET_Chunk, POST_Chunk, DELETE_Chunk
 from datanode_lib import s3syncCheck
 from async_lib import scanRoot, removeKeys
+from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError, HTTPForbidden, HTTPBadRequest
+
 
 
 async def init(loop):
@@ -108,7 +110,18 @@ async def bucketScan(app):
         for root_id in root_ids:
             bucket = root_ids[root_id]
             log.info(f"bucketScan for: {root_id} bucket: {bucket}")
-            await scanRoot(app, root_id, update=True, bucket=bucket)
+            try:
+                await scanRoot(app, root_id, update=True, bucket=bucket)
+            except HTTPNotFound as nfe:
+                log.warn(f"bucketScan - HTTPNotFound error scanning {root_id}: {nfe}")
+            except HTTPForbidden as fe:
+                log.warn(f"bucketScan - HTTPForbidden error scanning {root_id}: {fe}")
+            except HTTPBadRequest as bre:
+                log.error(f"bucketScan - HTTPBadRequest error scanning {root_id}: {bre}")
+            except HTTPInternalServerError as ise:
+                log.error(f"bucketScan - HTTPInternalServer error scanning {root_id}: {ise}")
+            except Exception as e:
+                log.error(f"bucketScan - Unexpected exception scanning {root_id}: {e}")
 
         log.info(f"bucketScan - sleep: {async_sleep_time}")
         await asyncio.sleep(async_sleep_time)
