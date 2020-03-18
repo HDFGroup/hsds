@@ -8,14 +8,19 @@ python:
 
 env:
 - ADMIN_PASSWORD=admin
+- ROOT_DIR=${HOME}/buckets
+- SN_PORT=5101
+- HSDS_ENDPOINT=http://localhost:5101
+- BUCKET_NAME=hsds.test
 install:
   - sudo apt-get update -qq
   - pip install aiohttp
-  - pip install awscli
   - pip install requests
   - pip install pyflakes
   - pip install pytz
   - ./build.sh
-  - ./runall.sh 4
+  - mkdir $ROOT_DIR
+  - mkdir ${ROOT_DIR}/${BUCKET_NAME}
+  - ./runall.sh
 script:
   python testall.py
