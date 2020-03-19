@@ -4,18 +4,30 @@ services:
   - docker
 
 python:
-- '3.7'
+  - '3.7'
 
 env:
-- ADMIN_PASSWORD=admin
+  - ADMIN_PASSWORD=admin ;
+    ROOT_DIR=${HOME}/buckets ;
+    SN_PORT=5101 ;
+    HSDS_ENDPOINT=http://localhost:5101 ;
+    BUCKET_NAME=hsds.test
+
 install:
   - sudo apt-get update -qq
   - pip install aiohttp
-  - pip install awscli
   - pip install requests
   - pip install pyflakes
   - pip install pytz
-  - ./build.sh
-  - ./runall.sh 4
+  - pyflakes hsds/*.py
+  - pyflakes hsds/util/*.py
+  - cp admin/config/passwd.default admin/config/passwd.txt
+  - docker build -t hdfgroup/hsds .
 script:
-  python testall.py
+  - echo "ROOT_DIR:" $ROOT_DIR
+  - echo "HSDS_ENDPOINT:" $HSDS_ENDPOINT
+  - mkdir $ROOT_DIR
+  - mkdir ${HOME}/buckets/hsds.test
+  - ./runall.sh
+  - sleep 10
+  - python testall.py
