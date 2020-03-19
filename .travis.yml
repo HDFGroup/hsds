@@ -6,19 +6,19 @@ services:
 python:
   - '3.7'
 
+env:
+  - ADMIN_PASSWORD=admin ROOT_DIR=${HOME}/buckets SN_PORT=5101 HSDS_ENDPOINT=http://localhost:5101 BUCKET_NAME=hsds.test
+
 install:
   - sudo apt-get update -qq
   - pip install aiohttp
   - pip install requests
   - pip install pyflakes
   - pip install pytz
-  - ./build.sh
+  - pyflakes hsds/*.py
+  - pyflakes hsds/util/*.py
+  - docker build -t hdfgroup/hsds .
 script:
-  - ADMIN_PASSWORD=admin
-  - ROOT_DIR=${HOME}/buckets
-  - SN_PORT=5101
-  - HSDS_ENDPOINT=http://localhost:5101
-  - BUCKET_NAME=hsds.test
   - echo "ROOT_DIR:" $ROOT_DIR
   - echo "HSDS_ENDPOINT:" $HSDS_ENDPOINT
   - mkdir $ROOT_DIR
