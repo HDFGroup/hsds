@@ -37,11 +37,6 @@ echo "Using compose file: ${COMPOSE_FILE}"
 
 [[ -z ${HSDS_ENDPOINT} ]] && echo "HSDS_ENDPOINT is not set" && exit 1
 
-# Do not allow credentials to expire by default.
-if [[ -z ${AUTH_EXPIRATION} ]] ; then
-  export AUTH_EXPIRATION="-1"
-fi
-
 if [[ -z ${PUBLIC_DNS} ]] ; then
   if [[ ${HSDS_ENDPOINT} == "https://"* ]] ; then
      export PUBLIC_DNS=${HSDS_ENDPOINT:8}
