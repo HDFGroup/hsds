@@ -7,7 +7,11 @@ python:
   - '3.7'
 
 env:
-  - ADMIN_PASSWORD=admin ROOT_DIR=${HOME}/buckets SN_PORT=5101 HSDS_ENDPOINT=http://localhost:5101 BUCKET_NAME=hsds.test
+  - ADMIN_PASSWORD=admin ;
+    ROOT_DIR=${HOME}/buckets ;
+    SN_PORT=5101 ;
+    HSDS_ENDPOINT=http://localhost:5101 ;
+    BUCKET_NAME=hsds.test
 
 install:
   - sudo apt-get update -qq
