@@ -17,44 +17,68 @@ async def start_app_runner(runner, address, port):
 
 def main():
     parser = argparse.ArgumentParser()
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        '--bucket-dir', nargs=1, type=str, dest='bucket_dir',
+        help='Directory where to store the object store data')
+    group.add_argument(
+        '--bucket-name', nargs=1, type=str, dest='bucket_name',
+        help='Name of the bucket to use (e.g., "hsds.test").')
+
+    parser.add_argument('--host', nargs=1, default=['localhost'],
+        type=str, dest='host',
+        help="Address the service node is bounds with (default: localhost).")
+    parser.add_argument('-p', '--port', nargs=1, default=config.get('sn_port'),
+        type=int, dest='port',
+        help='Service node port (default: %d).' % config.get('sn_port'))
+
     parser.add_argument(
-        '--s3-gateway', nargs=1, required=True, type=str, dest='s3_gateway',
+        '--s3-gateway', nargs=1, type=str, dest='s3_gateway',
         help='S3 service endpoint (e.g., "http://openio:6007")')
     parser.add_argument(
-        '--access-key-id', nargs=1, required=True, type=str, dest='access_key_id',
-        help='s3 access key id (e.g., "demo:demo"')
+        '--access-key-id', nargs=1, type=str, dest='access_key_id',
+        help='s3 access key id (e.g., "demo:demo")')
     parser.add_argument(
-        '--secret-access-key', nargs=1, required=True, type=str, dest='secret_access_key',
-        help='s3 secret access key (e.g., "DEMO_PASS"')
-    parser.add_argument(
-        '--bucket-name', nargs=1, required=True, type=str, dest='bucket_name',
-        help='Name of the bucket to use (e.g., "hsds.test"')
+        '--secret-access-key', nargs=1, type=str, dest='secret_access_key',
+        help='s3 secret access key (e.g., "DEMO_PASS")')
 
     parser.add_argument(
-        '--password-file', nargs=1, default='', type=str, dest='password_file',
+        '--password-file', nargs=1, default=[''], type=str, dest='password_file',
         help="Path to file containing authentication passwords (default: No authentication)")
-    args = parser.parse_args()
 
-    os.environ['HSDS_ENDPOINT'] = 'http://localhost:5101'
-    os.environ['HEAD_ENDPOINT'] = 'http://localhost:5100'
-    os.environ['PUBLIC_DNS'] = 'localhost:5101'
-    os.environ['LOG_LEVEL'] = 'DEBUG'
-    os.environ['STANDALONE_APP'] = 'True'
+    args, extra_args = parser.parse_known_args()
 
-    os.environ['TARGET_SN_COUNT'] = '1'
-    os.environ['TARGET_DN_COUNT'] = '1'
-    os.environ['AWS_S3_GATEWAY'] = args.s3_gateway[0]
-    os.environ['AWS_SECRET_ACCESS_KEY'] = args.secret_access_key[0]
-    os.environ['AWS_ACCESS_KEY_ID'] = args.access_key_id[0]
-    os.environ['BUCKET_NAME'] = args.bucket_name[0]
-    os.environ['PASSWORD_FILE'] = args.password_file[0]
+    config.cfg['standalone_app'] = 'True'
+    config.cfg['target_sn_count'] = '1'
+    config.cfg['target_dn_count'] = '1'
+    config.cfg['head_endpoint'] = 'http://localhost:' + str(config.get('head_port'))
 
-    log.info('APP about to start')
+    address = '%s:%d' % (args.host, args.port)
+    config.cfg['sn_port'] = str(args.port)
+    config.cfg['hsds_endpoint'] = 'http://' + address
+    config.cfg['public_dns'] = address
+
+    config.cfg['password_file'] = args.password_file[0]
+    if args.s3_gateway is not None:
+        config.cfg['aws_s3_gateway'] = args.s3_gateway[0]
+    if args.secret_access_key is not None:
+        config.cfg['aws_secret_access_key'] = args.secret_access_key[0]
+    if args.access_key_id is not None:
+        config.cfg['aws_access_key_id'] = args.access_key_id[0]
+
+    if args.bucket_dir is not None:
+        directory = os.path.abspath(args.bucket_dir[0])
+        config.cfg['bucket_name'] = os.path.basename(directory)
+        config.cfg['root_dir'] = os.path.dirname(directory)
+    else:
+        config.cfg['bucket_name'] = args.bucket_name[0]
+        config.cfg['root_dir'] = ''
+
+    # Start apps
 
     from . import datanode, servicenode, headnode
 
     loop = asyncio.get_event_loop()
-
 
     head_runner = web.AppRunner(headnode.create_app(loop))
     dn_runner = web.AppRunner(datanode.create_app(loop))
