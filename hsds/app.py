@@ -15,8 +15,24 @@ async def start_app_runner(runner, address, port):
     await site.start()
 
 
+_HELP_USAGE = "Starts hsds a REST-based service for HDF5 data."
+
+_HELP_EPILOG = """Examples:
+
+- with openio/sds data storage:
+
+  hsds --s3-gateway http://localhost:6007 --access-key-id demo:demo --secret-access-key DEMO_PASS --password-file ./admin/config/passwd.txt --bucket-name hsds.test
+
+- with a POSIX-based storage for 'hsds.test' sub-folder in the './data' folder:
+
+  hsds --bucket-dir ./data/hsds.test
+"""
+
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawTextHelpFormatter,
+        usage=_HELP_USAGE,
+        epilog=_HELP_EPILOG)
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
         '--bucket-dir', nargs=1, type=str, dest='bucket_dir',
