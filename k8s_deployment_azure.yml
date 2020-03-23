@@ -42,6 +42,16 @@ spec:
               secretKeyRef:
                 name: azure-conn-str
                 key: az_conn_str
+          - name: AZURE_APP_ID
+            valueFrom:
+              secretKeyRef:
+                name: azure-ad-ids
+                key: az_app_id
+          - name: AZURE_RESOURCE_ID
+            valueFrom:
+              secretKeyRef:
+                name: azure-ad-ids
+                key: az_resource_id
           - name: SN_RAM
             value: "2g"
         - name: dn
