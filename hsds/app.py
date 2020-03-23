@@ -36,8 +36,10 @@ def main():
     args = parser.parse_args()
 
     os.environ['HSDS_ENDPOINT'] = 'http://localhost:5101'
+    os.environ['HEAD_ENDPOINT'] = 'http://localhost:5100'
     os.environ['PUBLIC_DNS'] = 'localhost:5101'
     os.environ['LOG_LEVEL'] = 'DEBUG'
+    os.environ['STANDALONE_APP'] = 'True'
 
     os.environ['TARGET_SN_COUNT'] = '1'
     os.environ['TARGET_DN_COUNT'] = '1'
@@ -46,12 +48,13 @@ def main():
     os.environ['AWS_ACCESS_KEY_ID'] = args.access_key_id[0]
     os.environ['BUCKET_NAME'] = args.bucket_name[0]
     os.environ['PASSWORD_FILE'] = args.password_file[0]
-    
+
     log.info('APP about to start')
-    
+
     from . import datanode, servicenode, headnode
 
     loop = asyncio.get_event_loop()
+
 
     head_runner = web.AppRunner(headnode.create_app(loop))
     dn_runner = web.AppRunner(datanode.create_app(loop))
@@ -59,11 +62,11 @@ def main():
 
     log.info('Runners created')
 
-    loop.create_task(start_app_runner(
+    loop.run_until_complete(start_app_runner(
         head_runner, 'localhost', config.get('head_port')))
-    loop.create_task(start_app_runner(
+    loop.run_until_complete(start_app_runner(
         dn_runner, 'localhost', config.get('dn_port')))
-    loop.create_task(start_app_runner(
+    loop.run_until_complete(start_app_runner(
         sn_runner, 'localhost', config.get('sn_port')))
 
     log.info('Loop about to start')
