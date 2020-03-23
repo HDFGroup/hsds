@@ -279,15 +279,7 @@ Helper function, create a response object using the provided
 JSON data
 """
 async def jsonResponse(request, data, status=200):
-    headers = {}
-    #headers['Content-Type'] = 'application/json'
-    # if CORS_DOMAIN:
-    #     headers['Access-Control-Allow-Origin'] = CORS_DOMAIN
-    #     headers['Access-Control-Allow-Methods'] = "GET, POST, DELETE, PUT, OPTIONS"
-    #     headers['Access-Control-Allow-Headers'] = "Content-Type, api_key, Authorization"
-    resp = json_response(data, headers=headers, status=status)
-
-    return resp
+    return json_response(data, headers={}, status=status)
 
 """
 Convenience method to compute href links
