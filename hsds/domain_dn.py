@@ -80,6 +80,15 @@ async def PUT_Domain(request):
         msg = "Expected body in put domain"
         log.error(msg)
         raise HTTPInternalServerError()
+    log.debug("PUT_Domain, get request.json")
+    if "Content-Type" not in request.headers:
+        log.error("expected Content-Type in request headers")
+        raise HTTPInternalServerError()
+    content_type = request.headers["Content-Type"]
+    if content_type != "application/json":
+        log.error(f"PUT_Domain, expected json content-type but got: {content_type}")
+        raise HTTPInternalServerError()
+
     body = await request.json()
     log.debug(f"got body: {body}")
 
