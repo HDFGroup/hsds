@@ -20,7 +20,7 @@ test_user1:test
 test_user2:test
 ```
 
-Password file authentication can be combined with any of the following authentication methods (except for no authentication) by explicitly specifying the `PASSWORD_FILE` environment variable. Other possible authentication methods are given below in order of priority.
+Password file authentication can be combined with any of the following authentication methods (except for no authentication) by explicitly specifying the `PASSWORD_FILE` environment variable. To set the `PASSWORD_FILE` variable, the appropriate `docker-compose.*.yml` must be edited. Other possible authentication methods are given below in order of priority.
 
 ### Password-less authentication
 
@@ -36,7 +36,7 @@ In salted password authentication, a master password is provided at runtime via 
 
 ### Kerberos authentication
 
-In Kerberos authentication, usernames and passwords are authenticated against a remote Kerberos domain controller. Currently, single-sign on is not supported and passwords must be explicitly sent with each request. To use Kerberos authentication, a valid `krb5.conf` file must be present at `admin/config/krb5.conf` when the container is built. Additionally, the environment variable `KRB5_REALM` must be set at runtime to the Kerberos realm against which to authenticate, for example `KRB5_REALM=HDFGROUP.ORG`. 
+In Kerberos authentication, usernames and passwords are authenticated against a remote Kerberos domain controller. Currently, single-sign on is not supported and passwords must be explicitly sent with each request. To use Kerberos authentication, a valid `krb5.conf` file must be present at `admin/config/krb5.conf` when the container is built. Additionally, the environment variable `KRB5_REALM` must be set at runtime to the Kerberos realm against which to authenticate, for example `KRB5_REALM=HDFGROUP.ORG`.
 
 Note, the current implementation does not validate the authenticity of the Kerberos domain controller itself, and should only be used on trusted networks.
 
