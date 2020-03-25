@@ -64,7 +64,7 @@ These environment variables will be passed to the Docker containers on startup.
 
 Follow the following steps to setup HSDS:
 
-1. SSH to the VM created above.  Replace [publicIpAddress] with the public IP dispayed in the ouput of your VM creation command above: `ssh azureuser@[publicIpAddress]`
+1. SSH to the VM created above.  Replace [publicIpAddress] with the public IP displayed in the output of your VM creation command above: `ssh azureuser@[publicIpAddress]`
 2. Install Docker and docker-compose if necessary (see "Docker Setup" below)
 3. Ensure the proper container for HSDS is created (Step 10 in "Set up your Azure environment")
 4. Get project source code: `git clone https://github.com/HDFGroup/hsds`
@@ -106,13 +106,13 @@ on the server VM or on your client.
 
 1. Install pip if not installed: `sudo apt install python-pip`
 2. Set an environment variable: ADMIN_PASSWORD with the value used in the password.txt file.  E.g.: `export ADMIN_PASSWORD=admin`
-3. Set an environment varaible: USER_PASSWORD with the password for test_user1 in the password.txt file.  E.g.: `export USER_PASSWORD=test`
+3. Set an environment variable: USER_PASSWORD with the password for test_user1 in the password.txt file.  E.g.: `export USER_PASSWORD=test`
 4. Get the hsds project if you haven't already: `git clone https://github.com/HDFGroup/hsds`
 5. In the hsds directory, run the integration test: `python testall.py --skip_unit`. Ignore `WARNING: is test data setup?` messages for now
 6. Install h5py: `pip install h5py`
 7. Install h5pyd (Python client SDK): `pip install h5pyd`
 8. Configure h5pyd: `hsconfigure`
-Server endpoint: $HSDS_ENDPOINT enviornment variable
+Server endpoint: $HSDS_ENDPOINT environment variable
 Username: from hsds/admin/config/passwd.txt file above
 Password: from hsds/admin/config/passwd.txt file above
 9. To setup test data, download the following file: `wget https://s3.amazonaws.com/hdfgroup/data/hdf5test/tall.h5`

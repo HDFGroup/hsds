@@ -11,8 +11,9 @@ Export environment variables as shown in "Sample .bashrc" below.
 6. Get project source code: `$ git clone https://github.com/HDFGroup/hsds`
 7. Go to admin/config directory: `$ cd hsds/admin/config`
 8. Copy the file "passwd.default" to "passwd.txt".  Add any usernames/passwords you wish.  Modify existing passwords (for admin, test_user1, test_user2) for security.
-9. If a non-valid DNS name is used for the HSDS_ENDPONT (e.g. "hsds.hdf.test"), create a /etc/hosts entry for the DNS name
+9. If a non-valid DNS name is used for the HSDS_ENDPOINT (e.g. "hsds.hdf.test"), create a /etc/hosts entry for the DNS name
 10. Verify the environment variables as in "Sample .bashrc" below
+11. From hsds directory, build docker image:  `$ docker build -t hdfgroup/hsds .`
 11. From hsds directory, build docker image:  `$ docker build -t hdfgroup/hsds .`
 12. Start the service `$./runall.sh <n>` where n is the number of containers desired (defaults to 1)
 13. Run `$ docker ps` and verify that the containers are running: hsds_head, hsds_sn_[1-n], hsds_dn_[1-n]
@@ -29,7 +30,7 @@ These environment variables will be passed to the Docker containers on start up.
     export BUCKET_NAME=hsds.test                 # set to the name of the bucket you will be using (should be subdir of TOP_DIR)
     export HSDS_ENDPOINT=http://hsds.hdf.test    # Use the machines DNS name or create virtual name in /etc/hosts
     unset AWS_S3_GATEWAY                         # To avoid use of S3 storage
-    unset AZURE_CONNECTION_STRING                # to avoid use of Azure Blobl storage
+    unset AZURE_CONNECTION_STRING                # to avoid use of Azure Blob storage
 
 
 Docker Setup
@@ -62,7 +63,7 @@ user home folders.
 4. In the following steps use the password that was setup for the test_user1 account in place of \<passwd\>
 5. Create a test folder on HSDS: `$ hstouch -u test_user1 -p <passwd> /home/test_user1/test/` 
 6. Import into hsds: `$ hsload -v -u test_user1 -p <passwd> tall.h5 /home/test_user1/test/`
-7. Verify upload: `$ hsls -r -u test_user1 -p <passwd> /home/test_user1/test/tall.h5
+7. Verify upload: `$ hsls -r -u test_user1 -p <passwd> /home/test_user1/test/tall.h5`
 8. To setup home folders, for each username in the passwd file (other than admin and test_user1), create a top-level domain: `$ hstouch -o <username> /home/<username>/`
 
 Installing Software Updates
@@ -72,5 +73,5 @@ To get the latest codes changes from the HSDS repo do the following:
 
 1. Shutdown the service: `$ stopall.sh`
 2. Get code changes: `$ git pull`
-3. Build a new Docker image: `$ docker-compose build
+3. Build a new Docker image: `$ docker-compose build`
 4. Start the service: `$ ./runall.sh`

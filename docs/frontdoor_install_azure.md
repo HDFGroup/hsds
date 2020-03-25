@@ -1,7 +1,7 @@
 <h1>Use Azure Front Door for SSL/https with HSDS on AKS</h1>
 
 
-With the instructions in *kubernets_install_azure.md*, you can deploy hsds to Azure Kubernetes Service (AKS) and access it over http using the EXTERNAL-IP of the load balancer. We would ideally like to access the service over https especially given that HSDS currently uses simple auth for authentication.
+With the instructions in *kubernetes_install_azure.md*, you can deploy hsds to Azure Kubernetes Service (AKS) and access it over http using the EXTERNAL-IP of the load balancer. We would ideally like to access the service over https especially given that HSDS currently uses simple auth for authentication.
 
 While there are various tools to provide SSL termination, Azure Front Door provides an easy and simple way to achieve this. This document provides the details of adding Azure Front Door (FD) to HSDS created previously. It uses the default domain (azurefd.net) that can be created using FD. To use a custom domain, please refer to the following documentation:
 https://docs.microsoft.com/en-us/azure/frontdoor/front-door-custom-domain
@@ -23,7 +23,7 @@ There are two methods for deploying Azure Front Door, oulined below.
 7. Now select add (+) Backend pools
    <br>![alt text](./img/front_door3.jpg "Backend pools")
    <br>Select 'Custom host' for 'Backend host type' and in the 'Backend host name' field enter the public-ip for the load balancer from Step 1 above <br>Select 'Update'<br></br>
-8. Now selct add (+) routing rules
+8. Now select add (+) routing rules
    <br>![alt text](./img/front_door4.jpg "Routing rules")
    Select 'Accepted protocol' and 'Forwarding protocol' as shown here.
    <br>For 'Frontend hosts' and 'Backend pool' select the entries created in the previous steps</br>Select 'Update'<br></br>
@@ -38,7 +38,7 @@ There are two methods for deploying Azure Front Door, oulined below.
 
 These environment variables will be used to configure Front Door.
 <pre><code><small>
-export RESOURCEGROUP=myresouregroup
+export RESOURCEGROUP=myresourcegroup
 export LOCATION=westus
 export FRONTDOORNAME=''
 export BACKENDADDRESS='' # use $kubectl get svc to get the public-ip of the service load balancer

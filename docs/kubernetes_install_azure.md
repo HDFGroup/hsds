@@ -7,6 +7,7 @@ To begin, export environment variables as shown in "Sample .bashrc" below.
 
 These environment variables will be used to create Azure resources.
 
+
     export RESOURCEGROUP=myresouregroup                              # your Azure resource group name
     export AKSCLUSTER=myakscluster                                   # the name of the AKS cluster
     export LOCATION=westus                                           # the Azure region
@@ -34,7 +35,7 @@ Here we will deploy an Azure Storage Account, Azure Container Registry (ACR) and
 1. Install az-cli: `pip install azure-cli`
 2. Validate runtime version az-cli is at least 2.0.80: `az version`
 3. Log in to Azure Subscription using AZ-Cli. `$az login`
-4. After successful login, the list of avaialble subscriptions will be displayed. If you have access to more than one subscription, set the proper subscription to be used: `az account set --subscription [name]`
+4. After successful login, the list of available subscriptions will be displayed. If you have access to more than one subscription, set the proper subscription to be used: `az account set --subscription [name]`
 5. Run the following commands to create Azure Resource Group: `az group create --name $RESOURCEGROUP --location $LOCATION`
 6. Create storage account: `az storage account create -n $STORAGEACCTNAME -g $RESOURCEGROUP -l $LOCATION --sku Standard_LRS`
 7. Create a blob container in the storage account: `$az storage container create -n $CONTAINERNAME --account-name $STORAGEACCTNAME --fail-on-exist`
@@ -52,7 +53,7 @@ Currently the HSDS server uses simple auth and the login credentials are embedde
 1. Clone the hsds repository in a local folder: `git clone https://github.com/HDFGroup/hsds`
 2. Go to admin/config directory: `cd hsds/admin/config`
 3. Copy the file "passwd.default" to "passwd.txt".
-4. Add/change usernames/passwords that you want to use. **Note**: Do not keep the original example credentials
+4. Add/change usernames/passwords that you want to use. **Note**: Do not keep the original example credentials.
 5. From hsds directory, build docker image: `bash build.sh`
 6. Tag the docker image using the ACR scheme: `docker tag hdfgroup/hsds $ACRNAME.azurecr.io/hsds:v1` where $ACRNAME is the ACR being deployed to, and v1 is the version (update this every time you will be deploying a new version of HSDS).
 7. Login to the Azure container registry (ACR): `az acr login --name $ACRNAME`
@@ -73,7 +74,7 @@ Deploy HSDS to AKS
        NAME    TYPE           CLUSTER-IP     EXTERNAL-IP      PORT(S)        AGE
        hsds    LoadBalancer   10.0.242.109   20.36.17.252     80:30326/TCP   23
 
-   Note the public-ip (EXTERNAL-IP). This is where you can access the HSDS service externally. It may take some time for the EXTERNAL-IP to show up after the service deployment.  For additional configuration options to handle SSL related scenerios please see: *frontdoor_install_azure.md*
+   Note the public-ip (EXTERNAL-IP). This is where you can access the HSDS service externally. It may take some time for the EXTERNAL-IP to show up after the service deployment.  For additional configuration options to handle SSL related scenarios please see: *frontdoor_install_azure.md*
    Additional reference for Azure Front Door <https://docs.microsoft.com/en-us/azure/frontdoor/>
 5. Now we will deploy the HSDS containers. In ***k8s_deployment_azure.yml***, customize the values for:
    env sections:
@@ -83,7 +84,7 @@ Deploy HSDS to AKS
     * image: 'myacrname.azurecr.io/hsds:v1' to reflect the acr repository for deployment.
 6. Apply the deployment: `$ kubectl apply -f k8s_deployment_azure.yml`
 7. Verify that the HSDS pod is running: `$ kubectl get pods`  a pod with a name starting with hsds should be displayed with status as "Running".
-8. Addtional verification: Run (`$ kubectl describe pod hsds-xxxx`) and make sure everything looks OK
+8. Additional verification: Run (`$ kubectl describe pod hsds-xxxx`) and make sure everything looks OK
 9. To locally test that HSDS functioning
     * Create a forwarding port to the Kubernetes service `$ sudo kubectl port-forward hsds-1234 8080:5101` (use another port if 8080 is unavailable)
     * From a browser hit: <http://127.0.0.1:8080/about> and verify that "cluster_state" is "READY"
@@ -134,7 +135,7 @@ Follow the instructions above with the following modifications in the respective
 
        SET AZURE_CONNECTION_STRING="DefaultEndpointsProtocol=https;AccountName=myacct;AccountKey=GZJxxxOPnw==;EndpointSuffix=core.windows.net"
        SET BUCKET_NAME=home
-       SET RESOURCEGROUP=myresouregroup
+       SET RESOURCEGROUP=myresourcegroup
        SET AKSCLUSTER=myakscluster
        SET LOCATION=westus
        SET ACRNAME=myacrname
@@ -144,9 +145,9 @@ Follow the instructions above with the following modifications in the respective
    For commands in all sections replace the unix environment variable notation (SVAR) with Windows notation (%VAR%).  For example instead of `$ACRNAME` use `%ACRNAME%`
 3. Setup your Azure environment, to install Azure cli on Windows, follow instructions here: <https://docs.microsoft.com/en-us/cli/azure/install-azure-cli-windows?view=azure-cli-latest>
 4. Prepare and deploy your docker image to ACR
-   To create kuebernetes secret:
+   To create kubernetes secret:
 
-    * Enter the Azure connection string (just the string, not the set command) in a file named ***az_conn_str*** without double quotes (") or the end-ofline.
+    * Enter the Azure connection string (just the string, not the set command) in a file named ***az_conn_str*** without double quotes (") or the end-of-line.
     * Run `kubectl create secret generic azure-conn-str --from-file=` ***az_conn_str***
     * Delete ***az_conn_str***
 
