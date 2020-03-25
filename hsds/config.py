@@ -32,6 +32,7 @@ cfg = {
     'azure_resource_id': '', # resource id for use with Azure Active Directory
     'root_dir': '',  # base directory to use for Posix storage
     'password_salt': '',
+    'krb5_realm': '', # Kerberos realm to authenticate against using GSSAPI.
     'bucket_name': '',  # set to usee a default bucket, otherwise bucket param is needed for all requests
     'head_host': 'localhost',
     'head_port': 5100,

@@ -23,6 +23,7 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPUnauthorized, HTTPNotFoun
 import jwt
 from jwt.exceptions import InvalidAudienceError, InvalidSignatureError
 import requests
+import gssapi
 from cryptography.x509 import load_pem_x509_certificate
 from cryptography.hazmat.backends import default_backend
 import hsds_logger as log
@@ -274,6 +275,40 @@ def validatePasswordSHA512(app, username, password):
             raise HTTPUnauthorized()  # 401
         setPassword(app, username, password)
 
+async def validatePasswordGSSAPI(app, username, password):
+    """
+    Validates a username/password against a kerberos domain controller using
+    GSSAPI. This method does NOT validate the integrity of the KDC itself, and
+    is open to KDC spoofing attacks if the network is compromised.
+    """
+
+    if getPassword(app, username) is None:
+        log.info("GSSAPI password check for username: {}".format(username))
+        realm = config.get('krb5_realm').upper()
+        principle = gssapi.Name('{}@{}'.format(username, realm),
+                                name_type=gssapi.NameType.user)
+
+        # Authentication errors generate exceptions.
+        try:
+            loop = app['loop']
+            credentials = await loop.run_in_executor(None,
+                                                     gssapi.raw.acquire_cred_with_password,
+                                                     principle,
+                                                     password.encode('utf-8'))
+        except gssapi.exceptions.GSSError as exc:
+            log.warn('GSSAPI authentication failure for user: {}'.format(username))
+            log.debug('GSSAPI error: {}'.format(exc))
+            raise HTTPUnauthorized()
+
+        # Set the password and expire it if a lifetime is set.
+        now = time.time()
+        lifetime = credentials.lifetime
+        if lifetime is not None:
+            expiration = min(lifetime, float(config.get("auth_expiration")))
+            setPassword(app, username, password, exp=expiration + now)
+
+        else:
+            setPassword(app, username, password)
 
 async def validateUserPassword(app, username, password):
     """
@@ -307,6 +342,8 @@ async def validateUserPassword(app, username, password):
             await validateUserPasswordDynamoDB(app, username, password)
         elif config.get("PASSWORD_SALT"):
             validatePasswordSHA512(app, username, password)
+        elif config.get('KRB5_REALM'):
+            await validatePasswordGSSAPI(app, username, password)
         else:
             log.info("user not found")
             raise HTTPUnauthorized() # 401
