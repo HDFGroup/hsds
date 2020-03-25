@@ -7,17 +7,19 @@ To begin, export environment variables as shown in "Sample .bashrc" below.
 
 These environment variables will be used to create Azure resources.
 
-    export RESOURCEGROUP=myresouregroup
-    export AKSCLUSTER=myakscluster
-    export LOCATION=westus
-    export ACRNAME=myacrname
-    export STORAGEACCTNAME=mystorageaccount
-    export CONTAINERNAME=testcontainer
-    
-    # the following will be the same as the variables exported on the cluster below
-    # use the connection string for your Azure account. Note the quotation marks around the string
+    export RESOURCEGROUP=myresouregroup                              # your Azure resource group name
+    export AKSCLUSTER=myakscluster                                   # the name of the AKS cluster
+    export LOCATION=westus                                           # the Azure region
+    export ACRNAME=myacrname                                         # the name of the Azure Container Registry (ACR) you will be using
+    export STORAGEACCTNAME=mystorageaccount                          # the storage account name for the Azure Blob Container
+    export CONTAINERNAME=testcontainer                               # the name of the Azure Blob Container (default location HSDS will use)
+    export AZURE_APP_ID=12345678-1234-1234-abcd-123456789ab          # if you will be using Azure Active Directory, set this to the application ID
+    export AZURE_RESOURCE_ID=00000002-0000-0000-c000-000000000000    # if you will be using Azure Active Directory, set this to the resource ID
+    # for the following, use the connection string for your Azure account. Note the quotation marks around the string
     export AZURE_CONNECTION_STRING="DefaultEndpointsProtocol=https;AccountName=myacct;AccountKey=GZJxxxOPnw==;EndpointSuffix=core.windows.net"
-    # set to the name of the container you will be using export STORAGEACCTNAME=home
+
+The environment variables AZURE_APP_ID and AZURE_RESOURCE_ID are required if Azure Active Directory will
+be used for authentication.  See the "Azure Active Directory" section below for information and setting up Active Directory for use with HSDS.
 
 Prerequisites
 -------------
@@ -63,9 +65,9 @@ Deploy HSDS to AKS
 
 1. Set the Azure Connection String as Kubernetes secret to pass to the containers by running ***k8s_make_secrets_azure.sh***
 2. Create RBAC roles: `kubectl create -f k8s_rbac.yml`
-3. Create HSDS deployment on the AKS cluster: `$ kubectl apply -f k8s_service_lb_azure.yml`
-4. This will create an external load balancer with an http endpoint with a public-ip. 
-   Use kubectl to get the public-ip of the hsds service: `$kubectl get service` 
+3. Create HSDS service on the AKS cluster: `$ kubectl apply -f k8s_service_lb_azure.yml`
+4. This will create an external load balancer with an http endpoint with a public-ip.
+   Use kubectl to get the public-ip of the hsds service: `$kubectl get service`
    You should see an entry similar to:
 
        NAME    TYPE           CLUSTER-IP     EXTERNAL-IP      PORT(S)        AGE
@@ -99,8 +101,22 @@ Test the Deployment using Integration Test and Test Data
 5. For each username in the passwd file, create a top-level domain: `hstouch -u <username> -p <passwd> /home/<username>/test/`
 6. Run the integration test: `python testall.py --skip_unit`
 7. Download the following file: `wget https://s3.amazonaws.com/hdfgroup/data/hdf5test/tall.h5`
-8. Import into hsds: `hsload -v -u <username> -p <passwd> tall.h5 /home/<username>/test/`
-9. Verify upload: `hsls -r -u test_user1 -p <passwd> /home/test_user1/test/tall.h5`
+8. Create a test folder: `hstouch -u test_user1 -p <passwd> /home/test_user1/test/`
+9. Import into hsds: `hsload -v -u test_user1 -p <passwd> tall.h5 /home/test_user1/test/`
+10. Verify upload: `hsls -r -u test_user1 -p <passwd> /home/test_user1/test/tall.h5`
+
+
+Azure Active Directory
+----------------------
+
+Rather than user names and passwords being maintained by HSDS, Azure Active Directory can be used for authentication. To enable, in the portal, go to Azure Active Directory, select "App registrations" and
+click the the plus sign, "New registration".  In the register page, chose an appropriate name for the application and select the desired "Supported account types".
+
+In "API permissions", add permissions for "Microsoft Graph, openid", and "Microsoft Graph, User Read".
+
+Next, click "Manifest", and copy the "appId" value and use it to set the AZURE_APP_ID environment variable.  Also on this page, copy the "resourceAppId" value, and use it to set the AZURE_RESOURCE_ID environment variable.
+
+When these settings are used with a HSDS AKS deployment, clients will be able to authenticate using their Active Directory username and password.
 
 AKS Cluster Scaling
 -------------------
