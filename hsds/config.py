@@ -14,6 +14,7 @@ import sys
 
 cfg = {
     'allow_noauth': True,  # enable unauthenticated requests
+    'auth_expiration': -1, # set an expiration for credential caching
     'default_public': False, # new domains are publically readable by default
     'aws_access_key_id': 'xxx',  # Replace with access key for account
     'aws_secret_access_key': 'xxx',   # Replace with secret key for account

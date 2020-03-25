@@ -200,6 +200,32 @@ def initUserDB(app):
 
     log.info("user_db initialized: {} users".format(len(user_db)))
 
+def setPassword(app, username, password, **kwargs):
+    """
+    setPassword: sets a password and metadata.
+    """
+    log.info("Saving user/password to user_db for: {}".format(username))
+    user_db = app["user_db"]
+    user_data = dict(pwd=password, **kwargs)
+    expiration = float(config.get("auth_expiration"))
+    if "exp" not in user_data and expiration > 0:
+        log.debug(f"setting expiration on credentials for user: {username}")
+        user_data["exp"] = time.time() + expiration
+    user_db[username] = user_data
+
+def getPassword(app, username):
+    """
+    getPassword: gets a password and metadata if valid.
+    """
+    user_db = app["user_db"]
+    if username in user_db:
+        user_data = user_db[username]
+        if "exp" in user_data and time.time() >= user_data["exp"]:
+            log.debug(f"removing expired credentials for user: {username}")
+            del user_db[username]
+            return None
+        return user_data
+    return None
 
 async def validateUserPasswordDynamoDB(app, username, password):
     """
@@ -207,8 +233,7 @@ async def validateUserPasswordDynamoDB(app, username, password):
         throws exception if not valid
     Note: make this async since we'll eventually need some sort of http request to validate user/passwords
     """
-    user_db = app["user_db"]
-    if username not in user_db:
+    if getPassword(app, username) is None:
         # look up name in dynamodb table
         dynamodb = getDynamoDBClient(app)
         table_name = config.get("AWS_DYNAMODB_USERS_TABLE")
@@ -237,23 +262,17 @@ async def validateUserPasswordDynamoDB(app, username, password):
             log.warn("user password is not valid for user: {}".format(username))
             raise HTTPUnauthorized()  # 401
         # add user/password to user_db map
-        # TODO - have the entry expire after x minutes
-        log.info("Saving user/password to user_db for: {}".format(username))
-        user_data = {"pwd": password}
-        user_db[username] = user_data
+        setPassword(app, username, password)
 
 def validatePasswordSHA512(app, username, password):
-    user_db = app["user_db"]
-    if username not in user_db:
+    if getPassword(app, username) is None:
         log.info("SHA512 check for username: {}".format(username))
         salt = config.get("PASSWORD_SALT")
         hex_hash = hashlib.sha512(username.encode('utf-8') + salt.encode('utf-8')).hexdigest()
         if hex_hash[:32] != password:
             log.warn("user password is not valid (didn't equal sha512 hash) for user: {}".format(username))
             raise HTTPUnauthorized()  # 401
-        log.info("Saving user/password to user_db for: {}".format(username))
-        user_data = {"pwd": password}
-        user_db[username] = user_data
+        setPassword(app, username, password)
 
 
 async def validateUserPassword(app, username, password):
@@ -276,11 +295,13 @@ async def validateUserPassword(app, username, password):
         msg = "user_db not intialized"
         log.error(msg)
         raise HTTPInternalServerError()  # 500
-    user_db = app["user_db"]
-    if username not in user_db:
+
+    user_data = getPassword(app, username)
+
+    if user_data is None:
         if "no_auth" in app and app["no_auth"]:
             log.info(f"no-auth access for user: {username}")
-            user_db[username] = {"pwd": password}
+            setPassword(app, username, "")
         elif config.get("AWS_DYNAMODB_USERS_TABLE"):
             # look up in Dyanmo db - will throw exception if user not found
             await validateUserPasswordDynamoDB(app, username, password)
@@ -289,8 +310,7 @@ async def validateUserPassword(app, username, password):
         else:
             log.info("user not found")
             raise HTTPUnauthorized() # 401
-
-    user_data = user_db[username]
+        user_data = getPassword(app, username)
 
     if user_data['pwd'] == password:
         log.debug("user password validated")
@@ -402,12 +422,7 @@ def _verifyBearerToken(app, token):
         if "user_db" not in app:
             log.info("initializing user_db")
             app["user_db"] = {}
-        user_db = app["user_db"]
-        user_db[username] = {
-            'scheme': "bearer",
-            'exp': exp,
-            'pwd': token
-        }
+        setPassword(app, username, token, scheme="bearer", exp=exp)
     else:
         log.warn("unable to retreive username from bearer token")
 
