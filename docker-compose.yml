@@ -21,12 +21,6 @@ services:
       - LOG_LEVEL=${LOG_LEVEL}
     ports:
       - ${HEAD_PORT}:${HEAD_PORT}
-    logging:
-     options:
-        max-size: "5m"
-        max-file: "5"
-    depends_on:
-      - proxy
 
   dn:
     image: hdfgroup/hsds
@@ -46,15 +40,11 @@ services:
       - LOG_LEVEL=${LOG_LEVEL}
       - CHUNK_MEM_CACHE_SIZE=${CHUNK_MEM_CACHE_SIZE}
       - MAX_CHUNK_SIZE=${MAX_CHUNK_SIZE}
-
     ports:
       - ${DN_PORT}
-    logging:
-     options:
-        max-size: "5m"
-        max-file: "5"
     depends_on:
       - head
+
   sn:
     image: hdfgroup/hsds
     restart: ${RESTART_POLICY}
@@ -71,6 +61,8 @@ services:
       - AWS_LAMBDA_CHUNKREAD_FUNCTION=${AWS_LAMBDA_CHUNKREAD_FUNCTION}
       - AWS_LAMBDA_GATEWAY=${AWS_LAMBDA_GATEWAY}
       - AZURE_CONNECTION_STRING=${AZURE_CONNECTION_STRING}
+      - AZURE_APP_ID=${AZURE_APP_ID}
+      - AZURE_RESOURCE_ID=${AZURE_RESOURCE_ID}
       - BUCKET_NAME=${BUCKET_NAME}
       - LOG_LEVEL=${LOG_LEVEL}
       - SERVER_NAME=${SERVER_NAME}
@@ -86,50 +78,7 @@ services:
       - GREETING=${GREETING}
       - ABOUT=${ABOUT}
       - TOP_LEVEL_DOMAINS=${TOP_LEVEL_DOMAINS}
-
     ports:
-      - ${SN_PORT}
-    logging:
-     options:
-        max-size: "5k"
-        max-file: "5"
+      - ${SN_PORT}:${SN_PORT}
     depends_on:
       - head
-  proxy:
-    image: nginx
-    restart: always
-    container_name: hsds_proxy
-    volumes:
-      - /etc/nginx/certs
-      - /etc/nginx/conf.d
-      - /etc/nginx/vhost.d
-      - /usr/share/nginx/html
-      - /var/run/docker.sock:/tmp/docker.sock:ro
-    ports:
-      - "80:80"
-    logging:
-     options:
-        max-size: "5m"
-        max-file: "5"
-  dockergen:
-    image: jwilder/docker-gen
-    restart: always
-    container_name: hsds_gen
-    command: -notify-sighup hsds_proxy -watch /etc/docker-gen/templates/nginx.tmpl /etc/nginx/conf.d/default.conf
-    volumes_from:
-      - proxy
-    volumes:
-      - /var/run/docker.sock:/tmp/docker.sock:ro
-      - ./nginx.tmpl:/etc/docker-gen/templates/nginx.tmpl
-  logs:
-    image: mdsol/logspout
-    restart: always
-    command: cloudwatch://auto
-    container_name: logspout
-    hostname: hsds_${PUBLIC_DNS}
-    volumes:
-    - /var/run/docker.sock:/tmp/docker.sock:ro
-    logging:
-     options:
-        max-size: "50m"
-        max-file: "5"

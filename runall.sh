@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # script to startup hsds service
-if [ $# -eq 1 ] && ([ $1 == "-h" ] || [ $1 == "--help" ]); then
-   echo "Usage: runall.sh [count]"
+if [[ $# -eq 1 ]] && ([[ $1 == "-h" ]] || [[ $1 == "--help" ]]); then
+   echo "Usage: runall.sh [[count]]"
    exit 1
 fi
 
-if [[ -z ${AWS_S3_GATEWAY}  ]] && [[ -z ${AZURE_CONNECTION_STRING}  ]]; then
+if [[ -z ${AWS_S3_GATEWAY}  ]] && [[ -z ${AZURE_CONNECTION_STRING} ]]; then
   if [[ -z ${ROOT_DIR} ]]; then
     echo "AWS_S3_GATEWAY not set - using openio container"
     export AWS_S3_GATEWAY="http://openio:6007"
@@ -17,8 +17,8 @@ if [[ -z ${AWS_S3_GATEWAY}  ]] && [[ -z ${AZURE_CONNECTION_STRING}  ]]; then
       export AWS_SECRET_ACCESS_KEY=DEMO_PASS
       export AWS_REGION=us-east-1
     fi
-    [ -z ${BUCKET_NAME} ]  && export BUCKET_NAME="hsds.test"
-    [ -z ${HSDS_ENDPOINT} ] && export HSDS_ENDPOINT=http://localhost:5101
+    [[ -z ${BUCKET_NAME} ]]  && export BUCKET_NAME="hsds.test"
+    [[ -z ${HSDS_ENDPOINT} ]] && export HSDS_ENDPOINT=http://localhost
   else
     # Use Posix driver with ROOT_DIR as base for buckets
     echo "Using POSIX driver with data directory: ${ROOT_DIR}"
@@ -27,14 +27,15 @@ if [[ -z ${AWS_S3_GATEWAY}  ]] && [[ -z ${AZURE_CONNECTION_STRING}  ]]; then
 elif [[ ${HSDS_USE_HTTPS} ]]; then
    COMPOSE_FILE="docker-compose.secure.yml"
 else
+   echo "using cloud storage"
    COMPOSE_FILE="docker-compose.yml"
 fi
 
 echo "Using compose file: ${COMPOSE_FILE}"
 
-[ -z ${BUCKET_NAME} ] && echo "No default bucket set - did you mean to export BUCKET_NAME?"
+[[ -z ${BUCKET_NAME} ]] && echo "No default bucket set - did you mean to export BUCKET_NAME?"
 
-[ -z ${HSDS_ENDPOINT} ] && echo "HSDS_ENDPOINT is not set" && exit 1
+[[ -z ${HSDS_ENDPOINT} ]] && echo "HSDS_ENDPOINT is not set" && exit 1
 
 if [[ -z ${PUBLIC_DNS} ]] ; then
   if [[ ${HSDS_ENDPOINT} == "https://"* ]] ; then
@@ -44,37 +45,56 @@ if [[ -z ${PUBLIC_DNS} ]] ; then
   else
     echo "Invalid HSDS_ENDPOINT: ${HSDS_ENDPOINT}"  && exit 1
   fi
-
 fi
 
-if [ -z $AWS_IAM_ROLE ] && [ $AWS_S3_GATEWAY ]; then
+if [[ -z $AWS_IAM_ROLE ]] && [[ $AWS_S3_GATEWAY ]]; then
   # if not using s3 or S3 without EC2 IAM roles, need to define AWS access keys
-  [ -z ${AWS_ACCESS_KEY_ID} ] && echo "Need to set AWS_ACCESS_KEY_ID" && exit 1
-  [ -z ${AWS_SECRET_ACCESS_KEY} ] && echo "Need to set AWS_SECRET_ACCESS_KEY" && exit 1
+  [[ -z ${AWS_ACCESS_KEY_ID} ]] && echo "Need to set AWS_ACCESS_KEY_ID" && exit 1
+  [[ -z ${AWS_SECRET_ACCESS_KEY} ]] && echo "Need to set AWS_SECRET_ACCESS_KEY" && exit 1
 fi
 
-if [ $# -gt 0 ]; then
+if [[ $# -gt 0 ]]; then
   export DN_CORES=$1
-  if [ $HSDS_ENDPOINT == "http://localhost:5101" ]; then
-    # no load balancer, just use one SN node
-    export SN_CORES=1
-  else
-    export SN_CORES=$1
-  fi
-elif [ -z ${CORES} ] ; then
+  export SN_CORES=$1
+elif [[ ${CORES} ]] ; then
+  export DN_CORES=${DN_CORES}
+  export SN_CORES=${SN_CORES}
+else
   export DN_CORES=1
   export SN_CORES=1
 fi
 
-echo "AWS_S3_GATEWAY:" $AWS_S3_GATEWAY
-echo "AWS_ACCESS_KEY_ID:" $AWS_ACCESS_KEY_ID
-echo "AWS_SECRET_ACCESS_KEY: ******"
+echo "dn cores:" $DN_CORES
+
+if [[ $AWS_S3_GATEWAY ]]; then
+  echo "AWS_S3_GATEWAY:" $AWS_S3_GATEWAY
+  echo "AWS_ACCESS_KEY_ID:" $AWS_ACCESS_KEY_ID
+  echo "AWS_SECRET_ACCESS_KEY: ******"
+elif [[ $AZURE_CONNECTION_STRING ]]; then
+  echo "AZURE_CONNECTION_STRING: *****"
+else
+  echo "ROOT_DIR:" $ROOT_DIR
+fi
 echo "BUCKET_NAME:"  $BUCKET_NAME
 echo "CORES: ${SN_CORES}/${DN_CORES}"
 echo "HSDS_ENDPOINT:" $HSDS_ENDPOINT
 echo "PUBLIC_DNS:" $PUBLIC_DNS
 
-docker-compose -f ${COMPOSE_FILE} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}
+grep -q -c "^  proxy" ${COMPOSE_FILE}
+if [[ $? -gt 0 ]]; then
+  echo "no load balancer"
+  export SN_CORES=1
+  if [[ -z ${SN_PORT} ]]; then
+    echo "setting sn_port to 80"
+    export SN_PORT=80  # default to port 80 if the SN is fronting requests
+  else
+    echo "SN_PORT is set to: [${SN_PORT}]"
+  fi
+  docker-compose -f ${COMPOSE_FILE} up -d --scale dn=${DN_CORES}
+else
+  docker-compose -f ${COMPOSE_FILE} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}
+  echo "load balancer"
+fi
 
 if [[ ${AWS_S3_GATEWAY} == "http://openio:6007" ]]; then
   # if we've just launched the openio demo container, create a test bucket
@@ -92,4 +112,24 @@ if [[ ${AWS_S3_GATEWAY} == "http://openio:6007" ]]; then
      echo "failed to create bucket ${BUCKET_NAME}"
      exit 1
   fi
+fi
+
+# wait for the server to be ready
+for i in {1..120}
+do
+  STATUS_CODE=`curl -s -o /dev/null -w "%{http_code}" ${HSDS_ENDPOINT}/about`
+  if [[ $STATUS_CODE == "200" ]]; then
+    echo "service ready"
+    break
+  else
+    echo "${i}: waiting for server startup (status: ${STATUS_CODE}) "
+    sleep 1
+  fi
+done
+
+if [[ $STATUS_CODE != "200" ]]; then
+  echo "service failed to start"
+  echo "SN_1 logs:"
+  docker logs --tail 100 hsds_sn_1
+  exit 1
 fi

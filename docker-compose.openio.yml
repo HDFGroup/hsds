@@ -19,10 +19,6 @@ services:
       - LOG_LEVEL=${LOG_LEVEL}
     ports:
       - ${HEAD_PORT}:${HEAD_PORT}
-    logging:
-     options:
-        max-size: "5m"
-        max-file: "5"
 
   dn:
     image: hdfgroup/hsds
@@ -44,10 +40,6 @@ services:
 
     ports:
       - ${DN_PORT}
-    logging:
-     options:
-        max-size: "5m"
-        max-file: "5"
     depends_on:
       - head
   sn:
@@ -81,10 +73,6 @@ services:
 
     ports:
       - ${SN_PORT}:${SN_PORT}
-    logging:
-     options:
-        max-size: "5k"
-        max-file: "5"
     depends_on:
       - head
 
