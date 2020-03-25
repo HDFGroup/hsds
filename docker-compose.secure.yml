@@ -65,6 +65,7 @@ services:
       - LETSENCRYPT_HOST=${PUBLIC_DNS}
       - LETSENCRYPT_EMAIL=jguerrero@teravisiontech.com
       - AUTH_EXPIRATION=${AUTH_EXPIRATION}
+      - KRB5_REALM=${KRB5_REALM}
     depends_on:
       - head
   proxy:

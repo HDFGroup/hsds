@@ -84,6 +84,7 @@ services:
       - ABOUT=${ABOUT}
       - TOP_LEVEL_DOMAINS=${TOP_LEVEL_DOMAINS}
       - AUTH_EXPIRATION=${AUTH_EXPIRATION}
+      - KRB5_REALM=${KRB5_REALM}
 
     ports:
       - ${SN_PORT}:${SN_PORT}
