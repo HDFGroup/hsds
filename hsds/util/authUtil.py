@@ -172,33 +172,37 @@ def initUserDB(app):
         log.warn(msg)
         return
 
-    if config.get("AWS_DYNAMODB_GATEWAY") and config.get("AWS_DYNAMODB_USERS_TABLE"):
+    user_db = {}
+    env_password_file = os.environ.get('PASSWORD_FILE', None)
+
+    if env_password_file is not None and not env_password_file:
+        # Null override, use password-less auth.
+        log.info("No password file, allowing no-auth access")
+        app["no_auth"] = True  # flag so we know we are in no auth mode
+
+    elif config.get("AWS_DYNAMODB_GATEWAY") and config.get("AWS_DYNAMODB_USERS_TABLE"):
         # user entries will be obtained dynamicaly
         log.info("Getting DynamoDB client")
         getDynamoDBClient(app)  # get client here so any errors will be seen right away
-        user_db = {}
+
     elif config.get("PASSWORD_SALT"):
         # use salt key to verify passwords
         log.info("using PASSWORD_SALT")
-        user_db = {}
+
+    elif config.get("KRB5_REALM"):
+        # Autenticate using GSSAPI
+        log.info("Using GSSAPI authentication.")
+
     else:
-        password_file = None
-        if "PASSWORD_FILE" in os.environ:
-            # need to fetch this directly from os.environ to
-            # have null override existing config value
-            password_file = os.environ["PASSWORD_FILE"]
-        else:
-            password_file = config.get("password_file")
-        if not password_file:
-            log.info("No password file, allowing no-auth access")
-            app["no_auth"] = True  # flag so we know we are in no auth mode
-            user_db = {}
-        else:
-            log.info("Loading password file: {}".format(password_file))
-            user_db = loadPasswordFile(password_file)
+        # Fallback on default password file.
+        password_file = config.get("password_file")
+        user_db.update(loadPasswordFile(password_file))
+
+    # If PASSWORD_FILE is explicitly set, use it in addition to above methods.
+    if env_password_file is not None and env_password_file:
+        user_db.update(loadPasswordFile(env_password_file))
 
     app["user_db"] = user_db
-
     log.info("user_db initialized: {} users".format(len(user_db)))
 
 def setPassword(app, username, password, **kwargs):
