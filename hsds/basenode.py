@@ -13,6 +13,7 @@
 # common node methods of hsds cluster
 #
 import asyncio
+import sys
 from asyncio import TimeoutError
 import os
 import time
@@ -50,11 +51,7 @@ def getHeadUrl(app):
         head_url = config.get("head_endpoint")
     else:
         head_port = config.get("head_port")
-        if "is_dcos" in app:
-            head_host = config.get("head_host")
-            head_url = f"http://{head_host}:{head_port}"
-        else:
-            head_url = f"http://hsds_head:{head_port}"
+        head_url = f"http://hsds_head:{head_port}"
     log.debug(f"head_url: {head_url}")
     return head_url
 
@@ -71,11 +68,13 @@ async def register(app):
     log.warn("env:{}".format(os.environ))
 
     if "is_dcos" in app:
-        outside_port = os.environ.get('PORT0')
+        outside_port = config.get('PORT0')
+        # see https://github.com/mesosphere/marathon/issues/1198
+        ip = config.get('LIBPROCESS_IP')
+        body = {"id": app["id"], "ip": ip, "port": outside_port, "node_type": app["node_type"]}
     else:
         outside_port = app["node_port"]
-
-    body = {"id": app["id"], "port": outside_port, "node_type": app["node_type"]}
+        body = {"id": app["id"], "port": outside_port, "node_type": app["node_type"]}
     app['register_time'] = int(time.time())
     try:
         log.debug("register req: {} body: {}".format(req_reg, body))
@@ -86,6 +85,9 @@ async def register(app):
             app["node_count"] = rsp_json["node_count"]
             log.info("setting node_state to WAITING")
             app["node_state"] = "WAITING"  # wait for other nodes to be active
+    except HTTPInternalServerError:
+        log.error("HEAD node seems to be down.")
+        sys.exit(1)
     except OSError:
         log.error("failed to register")
 
@@ -96,7 +98,9 @@ async def get_info(app, url):
     req = url + "/info"
     log.info(f"get_info({url})")
     try:
+        log.debug("about to call http_get")
         rsp_json = await http_get(app, req)
+        log.debug("called http_get")
         if "node" not in rsp_json:
             log.error("Unexpected response from node")
             return None
@@ -119,6 +123,13 @@ async def get_info(app, url):
         log.warn("Timeout error for req: {}: {}".format(req, str(toe)))
         # node has gone away?
         return None
+    except HTTPGone as hg:
+        log.warn("Timeout error for req: {}: {}".format(req, str(hg)))
+        # node has gone away?
+        return None
+    except:
+        log.warn("uncaught exception in get_info")
+
     return rsp_json
 
 
@@ -785,10 +796,12 @@ def baseInit(loop, node_type):
         app["is_k8s"] = True
 
     # check to see if we are running in a DCOS cluster
-    is_dcos = os.environ.get('MARATHON_APP_ID')
+    is_dcos = config.get('MARATHON_APP_ID')
     if is_dcos:
+        log.warn("setting is_dcos to True")
         app["is_dcos"] = True
-
+    else:
+        log.warn("net setting is_dcos")
 
     log.app = app
 
