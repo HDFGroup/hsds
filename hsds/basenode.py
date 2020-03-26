@@ -68,10 +68,8 @@ async def register(app):
     req_reg = head_url + "/register"
     log.info("register: {}".format(req_reg))
 
-    log.warn("env:{}".format(os.environ))
-
     if "is_dcos" in app:
-        outside_port = os.environ.get('PORT0')
+        outside_port = config.get('PORT0')
     else:
         outside_port = app["node_port"]
 
@@ -163,7 +161,7 @@ async def oio_register(app):
         log.error(f"got ClientError listing dn nodes with oio_proxy: {client_exception}")
         return
     except CancelledError as cancelled_exception:
-        log.error(f"got CanceeledError listing dn nodes with oio_proxy: {cancelled_exception}")
+        log.error(f"got CancelledError listing dn nodes with oio_proxy: {cancelled_exception}")
         return
     except BaseException as error:
         log.error(f"A BaseException occurred: {error}")
@@ -405,7 +403,6 @@ async def dcos_register(app):
     sn_urls = {}
     dn_urls = {}
 
-    log.warn("env:{}".format(os.environ))
     log.warn("My node_type is {}".format(app["node_type"]))
 
     node_count = 0
@@ -785,8 +782,7 @@ def baseInit(loop, node_type):
         app["is_k8s"] = True
 
     # check to see if we are running in a DCOS cluster
-    is_dcos = os.environ.get('MARATHON_APP_ID')
-    if is_dcos:
+    if config.get('MARATHON_APP_ID'):
         app["is_dcos"] = True
 
 
