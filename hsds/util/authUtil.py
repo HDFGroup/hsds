@@ -205,6 +205,9 @@ def setPassword(app, username, password, **kwargs):
     setPassword: sets a password and metadata.
     """
     log.info("Saving user/password to user_db for: {}".format(username))
+    if "user_db" not in app:
+        log.info("initializing user_db")
+        app["user_db"] = {}
     user_db = app["user_db"]
     user_data = dict(pwd=password, **kwargs)
     expiration = float(config.get("auth_expiration"))
@@ -415,19 +418,28 @@ def _verifyBearerToken(app, token):
         log.warn("AAD InvalidSignatureError")
         raise HTTPUnauthorized()
     if "unique_name" in jwt_decode:
-        # TBD: is the proper key to use?
         username = jwt_decode["unique_name"]
-        exp = jwt_decode["exp"]
-        log.info(f"decoded bearer token for user: {username}, expired: {exp}")
-        if "user_db" not in app:
-            log.info("initializing user_db")
-            app["user_db"] = {}
-        setPassword(app, username, token, scheme="bearer", exp=exp)
+    elif "appid" in jwt_decode:
+        username = jwt_decode["appid"]
     else:
         log.warn("unable to retreive username from bearer token")
+        return None
+
+    exp = None
+    if "exp" in jwt_decode:
+        exp = jwt_decode["exp"]
+        if exp < 0:
+            log.warn("invalid expire time")
+            raise HTTPUnauthorized()
+
+    if exp:
+        log.info(f"decoded bearer token for user: {username}, expired: {exp}")
+        setPassword(app, username, token, scheme="bearer", exp=exp)
+    else:
+        log.info(f"decoded bearer token for user: {username}, no expiration")
+        setPassword(app, username, token, scheme="bearer")
 
     return username
-
 
 
 def getUserPasswordFromRequest(request):
