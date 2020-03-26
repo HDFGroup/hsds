@@ -92,7 +92,7 @@ If you need to build and deploy a custom HSDS image (e.g. you have made changes 
     * HSDS_ENDPOINT (change to `http://public-ip` where pubic-ip is the EXTERNAL-IP from step 3 above)
     * BUCKET_NAME (this is the name of the blob container created earlier)
    containers sections
-    * image: 'myacrname.azurecr.io/hsds:v1' to reflect the acr repository for deployment for custom builds.
+    * image: 'myacrname.azurecr.io/hsds:v1' to reflect the acr repository for deployment (for custom builds only).
 5. Apply the deployment: `$ kubectl apply -f k8s_deployment_azure.yml`
 6. Verify that the HSDS pod is running: `$ kubectl get pods`  a pod with a name starting with hsds should be displayed with status as "Running".
 7. Additional verification: Run (`$ kubectl describe pod hsds-xxxx`) and make sure everything looks OK

@@ -79,6 +79,7 @@ services:
       - HSDS_ENDPOINT=${HSDS_ENDPOINT}
       - SN_HOST=${PUBLIC_DNS}
       - PASSWORD_SALT=${PASSWORD_SALT}
+      - PASSWORD_FILE=/config/passwd.txt
       - GREETING=${GREETING}
       - ABOUT=${ABOUT}
       - TOP_LEVEL_DOMAINS=${TOP_LEVEL_DOMAINS}
@@ -89,4 +90,4 @@ services:
       - head
     volumes:
       - ${ROOT_DIR}:/data
-      - ${PWD}/admin/config/passwd.txt:/usr/local/src/hsds/passwd.txt
+      - ${PWD}/admin/config/passwd.txt:/config/passwd.txt

@@ -71,10 +71,9 @@ Follow the following steps to setup HSDS:
 5. Go to admin/config directory: `cd hsds/admin/config`
 6. Copy the file "passwd.default" to "passwd.txt".  Add any usernames/passwords you wish.  Modify existing passwords (for admin, test_user1, test_user2) for security.
 7. Create environment variables as in "Sample .bashrc" above
-8. From hsds directory, build docker image:  `docker build -t hdfgroup/hsds .`
-9. Start the service `./runall.sh <n>` where n is the number of containers desired (defaults to 1)
-10. Run `docker ps` and verify that the containers are running: hsds_head, hsds_sn_[1-n], hsds_dn_[1-n]
-11. Run `curl $HSDS_ENDPOINT/about` where and verify that "cluster_state" is "READY" (might need to give it a minute or two)
+8. Start the service `./runall.sh <n>` where n is the number of containers desired (defaults to 1)
+9. Run `docker ps` and verify that the containers are running: hsds_head, hsds_sn_[1-n], hsds_dn_[1-n]
+10. Run `curl $HSDS_ENDPOINT/about` where and verify that "cluster_state" is "READY" (might need to give it a minute or two)
 
 Docker Setup
 ------------
