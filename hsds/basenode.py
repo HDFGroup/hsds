@@ -65,8 +65,6 @@ async def register(app):
     req_reg = head_url + "/register"
     log.info("register: {}".format(req_reg))
 
-    log.warn("env:{}".format(os.environ))
-
     if "is_dcos" in app:
         outside_port = config.get('PORT0')
         # see https://github.com/mesosphere/marathon/issues/1198
@@ -162,7 +160,7 @@ async def oio_register(app):
         log.error(f"got ClientError registering with oio_proxy: {client_exception} and body {body}")
         return
     except CancelledError as cancelled_exception:
-        log.error(f"got CanceeledError registering with oio_proxy: {cancelled_exception} and body {body}")
+        log.error(f"got CancelledError registering with oio_proxy: {cancelled_exception} and body {body}")
         return
     log.info("oio registration successful")
 
@@ -174,7 +172,7 @@ async def oio_register(app):
         log.error(f"got ClientError listing dn nodes with oio_proxy: {client_exception}")
         return
     except CancelledError as cancelled_exception:
-        log.error(f"got CanceeledError listing dn nodes with oio_proxy: {cancelled_exception}")
+        log.error(f"got CancelledError listing dn nodes with oio_proxy: {cancelled_exception}")
         return
     except BaseException as error:
         log.error(f"A BaseException occurred: {error}")
@@ -416,7 +414,6 @@ async def dcos_register(app):
     sn_urls = {}
     dn_urls = {}
 
-    log.warn("env:{}".format(os.environ))
     log.warn("My node_type is {}".format(app["node_type"]))
 
     node_count = 0
@@ -796,9 +793,7 @@ def baseInit(loop, node_type):
         app["is_k8s"] = True
 
     # check to see if we are running in a DCOS cluster
-    is_dcos = config.get('MARATHON_APP_ID')
-    if is_dcos:
-        log.warn("setting is_dcos to True")
+    if config.get('MARATHON_APP_ID'):
         app["is_dcos"] = True
     else:
         log.warn("net setting is_dcos")

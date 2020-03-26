@@ -9,17 +9,13 @@
 # distribution tree.  If you do not have access to this file, you may        #
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
-import asyncio
-from aiohttp.web import Application
-from aiohttp.web_exceptions import HTTPNotFound, HTTPGone, HTTPInternalServerError
-from aiohttp.client_exceptions import ClientError
+from aiohttp.web_exceptions import HTTPNotFound
 
-import json
 from aiobotocore import get_session
 import config
 
 import hsds_logger as log
-from util.httpUtil import http_get, http_post, jsonResponse
+from util.httpUtil import http_get
 
 import os
 
