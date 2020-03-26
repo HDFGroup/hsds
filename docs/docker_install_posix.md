@@ -32,7 +32,6 @@ These environment variables will be passed to the Docker containers on start up.
     unset AWS_S3_GATEWAY                         # To avoid use of S3 storage
     unset AZURE_CONNECTION_STRING                # to avoid use of Azure Blob storage
 
-
 Docker Setup
 ------------
 

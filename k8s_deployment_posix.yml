@@ -39,7 +39,7 @@ spec:
           - name: SERVER_NAME
             value: "Highly Scalable Data Service (HSDS)"
           - name: HSDS_ENDPOINT
-            value: http://hsds.hdf.test # change to external DNS LB path
+            value: "http://hsds.hdf.test" # change to external DNS LB path
           - name: GREETING
             value: "Welcome to HSDS!"
           - name: ABOUT

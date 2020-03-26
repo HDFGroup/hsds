@@ -7,7 +7,6 @@ To begin, export environment variables as shown in "Sample .bashrc" below.
 
 These environment variables will be used to create Azure resources.
 
-
     export RESOURCEGROUP=myresouregroup                              # your Azure resource group name
     export AKSCLUSTER=myakscluster                                   # the name of the AKS cluster
     export LOCATION=westus                                           # the Azure region
@@ -25,7 +24,9 @@ be used for authentication.  See the "Azure Active Directory" section below for 
 Prerequisites
 -------------
 
-Setup Pip and Python 3 on your local machine if not already installed (e.g. with Miniconda <https://docs.conda.io/en/latest/miniconda.html>)
+Setup Pip and Python 3 on your local machine if not already installed (e.g. with Miniconda <https://docs.conda.io/en/latest/miniconda.html>).
+
+Clone the hsds repository in a local folder: `git clone https://github.com/HDFGroup/hsds`.
 
 Setup your Azure environment
 ----------------------------
@@ -45,29 +46,39 @@ Note: The connection string for the storage account can be found in the portal u
 10. Create AKS Cluster and attach to ACR: `az aks create -n $AKSCLUSTER -g $RESOURCEGROUP --generate-ssh-keys --attach-acr $ACRNAME`
 11. Get access to the AKS Cluster: `az aks get-credentials -g $RESOURCEGROUP -n $AKSCLUSTER`
 
-Prepare and deploy your docker image to ACR
--------------------------------------------
+Create Kubernetes secrets
+-------------------------
 
-Currently the HSDS server uses simple auth and the login credentials are embedded in the code. The following procedure builds a docker image with your custom set of credentials. If you are just deploying the HSDS server **for testing purposes only**, import the HDF group's docker image as is into ACR as follows and skip the rest of this section: `az acr import -n $ACRNAME --source docker.io/hdfgroup/hsds:latest --image hsds:v1`
+Kubernetes secrets are used in AKS to make sensitive information available to the service.
+HSDS on AKS utilizes the following secrets:
 
-1. Clone the hsds repository in a local folder: `git clone https://github.com/HDFGroup/hsds`
-2. Go to admin/config directory: `cd hsds/admin/config`
-3. Copy the file "passwd.default" to "passwd.txt".
-4. Add/change usernames/passwords that you want to use. **Note**: Do not keep the original example credentials.
-5. From hsds directory, build docker image: `bash build.sh`
-6. Tag the docker image using the ACR scheme: `docker tag hdfgroup/hsds $ACRNAME.azurecr.io/hsds:v1` where $ACRNAME is the ACR being deployed to, and v1 is the version (update this every time you will be deploying a new version of HSDS).
-7. Login to the Azure container registry (ACR): `az acr login --name $ACRNAME`
-8. You may also need to login into ACR from docker as follows: Get the ACR admin credentials: `az acr credential show -n $ACRNAME` then docker login with those credentials: `docker login $ACRNAME -u xxx -p xxx`
-9. Push the image to Azure ACR: `docker push $ACRNAME.azurecr.io/hsds:v1`
-  **Note:** Use all lowercase ACRNAME in these commands if your actual ACRNAME includes uppercase characters
+1. user-password: username/password list
+2. azure-conn-str: the AZURE_CONNECTION_STRING value
+3. azure-ad-ids: AZURE_APP_ID and AZURE_RESOURCE_ID (optional)
+
+HSDS accounts can either be set by creating the user-password secret, or by using Azure Active Directory.  Currently at least the admin account (username: 'admin') needs to be configured in the user-password secret.
+
+First create a text file with the desired usernames and passwords as follows:
+
+1. Go to admin/config directory: `cd hsds/admin/config`
+2. Copy the file "passwd.default" to "passwd.txt".
+3. Add/change usernames/passwords that you want to use. **Note**: Do not keep the original example credentials.
+4. Go back to the hsds root directory: `cd ../..`
+
+Next, verify that you have set the AZURE_CONNECTION_STRING environment variable, and (if AD support is desired) the AZURE_APP_ID, and AZURE_RESOURCE_ID.
+
+Run the make_secrets script: `./make_secrets.sh`
+
+Run: `kubectl get secrets` to verify the secrets have been created.
 
 Deploy HSDS to AKS
 ------------------
 
-1. Set the Azure Connection String as Kubernetes secret to pass to the containers by running ***k8s_make_secrets_azure.sh***
-2. Create RBAC roles: `kubectl create -f k8s_rbac.yml`
-3. Create HSDS service on the AKS cluster: `$ kubectl apply -f k8s_service_lb_azure.yml`
-4. This will create an external load balancer with an http endpoint with a public-ip.
+If you need to build and deploy a custom HSDS image (e.g. you have made changes to the HSDS code), first build and deploy the code to ACR as described in section "Building a docker image and deploying to ACR" below.  Otherwise, the standard image from docker hub (<https://hub.docker.com/repository/docker/hdfgroup/hsds>) will be deployed.
+
+1. Create RBAC roles: `kubectl create -f k8s_rbac.yml`
+2. Create HSDS service on the AKS cluster: `$ kubectl apply -f k8s_service_lb_azure.yml`
+3. This will create an external load balancer with an http endpoint with a public-ip.
    Use kubectl to get the public-ip of the hsds service: `$kubectl get service`
    You should see an entry similar to:
 
@@ -76,16 +87,16 @@ Deploy HSDS to AKS
 
    Note the public-ip (EXTERNAL-IP). This is where you can access the HSDS service externally. It may take some time for the EXTERNAL-IP to show up after the service deployment.  For additional configuration options to handle SSL related scenarios please see: *frontdoor_install_azure.md*
    Additional reference for Azure Front Door <https://docs.microsoft.com/en-us/azure/frontdoor/>
-5. Now we will deploy the HSDS containers. In ***k8s_deployment_azure.yml***, customize the values for:
+4. Now we will deploy the HSDS containers. In ***k8s_deployment_azure.yml***, customize the values for:
    env sections:
     * HSDS_ENDPOINT (change to `http://public-ip` where pubic-ip is the EXTERNAL-IP from step 3 above)
     * BUCKET_NAME (this is the name of the blob container created earlier)
    containers sections
-    * image: 'myacrname.azurecr.io/hsds:v1' to reflect the acr repository for deployment.
-6. Apply the deployment: `$ kubectl apply -f k8s_deployment_azure.yml`
-7. Verify that the HSDS pod is running: `$ kubectl get pods`  a pod with a name starting with hsds should be displayed with status as "Running".
-8. Additional verification: Run (`$ kubectl describe pod hsds-xxxx`) and make sure everything looks OK
-9. To locally test that HSDS functioning
+    * image: 'myacrname.azurecr.io/hsds:v1' to reflect the acr repository for deployment for custom builds.
+5. Apply the deployment: `$ kubectl apply -f k8s_deployment_azure.yml`
+6. Verify that the HSDS pod is running: `$ kubectl get pods`  a pod with a name starting with hsds should be displayed with status as "Running".
+7. Additional verification: Run (`$ kubectl describe pod hsds-xxxx`) and make sure everything looks OK
+8. To locally test that HSDS functioning
     * Create a forwarding port to the Kubernetes service `$ sudo kubectl port-forward hsds-1234 8080:5101` (use another port if 8080 is unavailable)
     * From a browser hit: <http://127.0.0.1:8080/about> and verify that "cluster_state" is "READY"
 
@@ -99,13 +110,12 @@ Test the Deployment using Integration Test and Test Data
     * Ignore API Key
 3. Run: `hsinfo`.  Server state should be "`READY`".  Ignore the "Not Found" error for the admin home folder
 4. Create "/home" folder: `$ hstouch /home/`.  Note: trailing slash is important!
-5. For each username in the passwd file, create a top-level domain: `hstouch -u <username> -p <passwd> /home/<username>/test/`
+5. For each username in the passwd file (or desired AD usernames), create a top-level domain: `hstouch -u <username> -p <passwd> /home/<username>/test/`
 6. Run the integration test: `python testall.py --skip_unit`
 7. Download the following file: `wget https://s3.amazonaws.com/hdfgroup/data/hdf5test/tall.h5`
 8. Create a test folder: `hstouch -u test_user1 -p <passwd> /home/test_user1/test/`
 9. Import into hsds: `hsload -v -u test_user1 -p <passwd> tall.h5 /home/test_user1/test/`
 10. Verify upload: `hsls -r -u test_user1 -p <passwd> /home/test_user1/test/tall.h5`
-
 
 Azure Active Directory
 ----------------------
@@ -124,6 +134,19 @@ AKS Cluster Scaling
 
 To scale up or down the number of HSDS pods, run:
 `$kubectl scale --replicas=n deployment/hsds` where n is the number of pods desired.
+
+Building a docker image and deploying to ACR
+--------------------------------------------
+
+This step is only needed if a custom image of HSDS needs to be deployed.
+
+1. From hsds directory, build docker image: `bash build.sh`
+2. Tag the docker image using the ACR scheme: `docker tag hdfgroup/hsds $ACRNAME.azurecr.io/hsds:v1` where $ACRNAME is the ACR being deployed to, and v1 is the version (update this every time you will be deploying a new version of HSDS).
+3. Login to the Azure container registry (ACR): `az acr login --name $ACRNAME`
+4. You may also need to login into ACR from docker as follows: Get the ACR admin credentials: `az acr credential show -n $ACRNAME` then docker login with those credentials: `docker login $ACRNAME -u xxx -p xxx`
+5. Push the image to Azure ACR: `docker push $ACRNAME.azurecr.io/hsds:v1`
+  **Note:** Use all lowercase ACRNAME in these commands if your actual ACRNAME includes uppercase characters
+6. Update the ***k8s_deployment_azure.yml*** file to use the ACR image path (note there are multiple references to the image)
 
 Notes for Installation from a Windows Machine
 ---------------------------------------------
