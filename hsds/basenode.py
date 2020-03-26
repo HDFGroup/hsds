@@ -149,7 +149,7 @@ async def oio_register(app):
         log.error(f"got ClientError registering with oio_proxy: {client_exception} and body {body}")
         return
     except CancelledError as cancelled_exception:
-        log.error(f"got CanceeledError registering with oio_proxy: {cancelled_exception} and body {body}")
+        log.error(f"got CancelledError registering with oio_proxy: {cancelled_exception} and body {body}")
         return
     log.info("oio registration successful")
 
