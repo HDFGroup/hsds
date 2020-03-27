@@ -18,6 +18,11 @@ These environment variables will be used to create Azure resources.
     export AZURE_CONNECTION_STRING="1234567890"      # use the connection string for your Azure account.                                                     # Note the quotation marks around the string
     export BUCKET_NAME=hsdstest                   # set to the name of the container you will be using
 
+    # the following will be used on the VM if Azure Active Directory authentication is desired
+    # See "Azure Active Directory" section below
+    export AZURE_APP_ID=12345678-1234-1234-abcd-123456789ab          # if you will be using Azure Active Directory, set this to the application ID
+    export AZURE_RESOURCE_ID=00000002-0000-0000-c000-000000000000    # if you will be using Azure Active Directory, set this to the resource ID
+
 Prerequisites
 -------------
 
@@ -31,7 +36,6 @@ Set up your Azure environment
 3. Login to Azure Subscription using AZ-Cli. `az login`
 4. After successful login, the list of available subscriptions will be displayed. If you have access to more than one subscription, set the proper subscription to be used: `az account set --subscription [name]`
 5. Run the following commands to create Azure Resource Group `az group create --name $RESOURCEGROUP --location $LOCATION`
-
 
 Virtual Machine Setup
 ---------------------
@@ -121,8 +125,20 @@ Password: from hsds/admin/config/passwd.txt file above
 13. Rerun the integration test: `python testall.py --skip_unit`.  You should not see any WARNING messages now
 14. Create home folders for other users if desired: `python hstouch -u admin -p $ADMIN_PASSWORD -o USERNAME /home/USERNAME/`
 
-**NOTE:** If the initial run of testall.py (step 5 above) fails for any reason and does not create the home directory, you can create it manually as follows:<br/> `python hstouch -u admin -p $ADMIN_PASSWORD /home/`<br/>
+**NOTE:** If the initial run of testall.py (step 5 above) fails for any reason and does not create the home directory, you can create it manually as follows: `python hstouch -u admin -p $ADMIN_PASSWORD /home/`
 You can then add home folders for users as desired.
+
+Azure Active Directory
+----------------------
+
+Rather than user names and passwords being maintained by HSDS, Azure Active Directory can be used for authentication. To enable, in the portal, go to Azure Active Directory, select "App registrations" and
+click the the plus sign, "New registration".  In the register page, chose an appropriate name for the application and select the desired "Supported account types".
+
+In "API permissions", add permissions for "Microsoft Graph, openid", and "Microsoft Graph, User Read".
+
+Next, click "Manifest", and copy the "appId" value and use it to set the AZURE_APP_ID environment variable.  Also on this page, copy the "resourceAppId" value, and use it to set the AZURE_RESOURCE_ID environment variable.
+
+When these settings are used with a HSDS docker deployment, clients will be able to authenticate using their Active Directory username and password.
 
 Installing Software Updates
 ---------------------------
@@ -131,15 +147,5 @@ To get the latest codes changes from the HSDS repo do the following:
 
 1. Shutdown the service: `./stopall.sh`
 2. Get code changes: `git pull`
-3. Rebuild the Docker image: `./build.sh`
-4. Start the service: `./runall.sh`
-
-Updating passwords
-------------------
-
-To change passwords or add new user accounts do the following:
-
-1. Shutdown the service: `./stopall.sh`
-2. Add new username/passwords to the hsds/admin/config/passwd.txt file
 3. Rebuild the Docker image: `./build.sh`
 4. Start the service: `./runall.sh`
