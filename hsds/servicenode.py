@@ -103,7 +103,9 @@ async def init(loop):
     # Add CORS to all routes
     cors = aiohttp_cors.setup(app, defaults={"*": aiohttp_cors.ResourceOptions(allow_credentials=True, expose_headers="*", allow_headers="*",)})
     for route in list(app.router.routes()):
+        log.info(f"CORS add route: {route}")
         cors.add(route)
+
 
     return app
 
