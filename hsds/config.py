@@ -14,6 +14,7 @@ import sys
 
 cfg = {
     'allow_noauth': True,  # enable unauthenticated requests
+    'auth_expiration': -1, # set an expiration for credential caching
     'default_public': False, # new domains are publically readable by default
     'aws_access_key_id': 'xxx',  # Replace with access key for account
     'aws_secret_access_key': 'xxx',   # Replace with secret key for account
@@ -55,7 +56,7 @@ cfg = {
     'metadata_mem_cache_size': '128m',
     'chunk_mem_cache_size': '128m',  # 128 MB
     'timeout': 30,  # http timeout - 30 sec
-    'password_file': '/usr/local/src/hsds/passwd.txt',  # filepath to a text file of username/passwords. set to '' for no-auth access
+    'password_file': '/config/passwd.txt',  # filepath to a text file of username/passwords. set to '' for no-auth access
     'server_name': 'Highly Scalable Data Service (HSDS)', # this gets returned in the about request
     'greeting': 'Welcome to HSDS!',
     'about': 'HSDS is a webservice for HDF data',

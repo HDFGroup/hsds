@@ -47,7 +47,7 @@ Note: passwords can (and should for production use) be modified by changing valu
 Next, run the test suite by:
    `$python testall.py`
 
-See: [docs/docker_install_aws.md](docs/docker_install.md) for complete install instructions.
+See: [docs/docker_install_aws.md](docs/docker_install_aws.md) for complete install instructions.
 
 See: [docs/kubernetes_install.md](kubernetes_install.md) for setup on Kubernetes.
 
@@ -61,8 +61,8 @@ For complete instructions to install on Azure Kubernetes Service (AKS):
 
 **On Prem (POSIX-based storage)**  **(BETA)**
 
-For compleete instructions to install on a desktop or local server:
-- See: [docs/docker_install_posix.md](docs/docker_install.md)
+For complete instructions to install on a desktop or local server:
+- See: [docs/docker_install_posix.md](docs/docker_install_posix.md)
 
 Writing Client Applications
 ----------------------------

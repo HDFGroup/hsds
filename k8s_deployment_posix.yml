@@ -18,21 +18,24 @@ spec:
         -
           name: sn
           image: "hdfgroup/hsds"
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           volumeMounts:
+          - name: data
+            mountPath: "/data"
           - name: config
             mountPath: "/config"
-            readOnly: true
           ports:
             -
               containerPort: 5101
           env:
           - name: NODE_TYPE
             value: sn
+          - name: ROOT_DIR
+            value: /data
           - name: BUCKET_NAME
             value: hsds
           - name: LOG_LEVEL
-            value: INFO
+            value: DEBUG
           - name: SERVER_NAME
             value: "Highly Scalable Data Service (HSDS)"
           - name: HSDS_ENDPOINT
@@ -43,50 +46,37 @@ spec:
             value: "HSDS is a webservice for HDF data"
           - name: PASSWORD_FILE
             value: /config/passwd.txt
-          - name: AZURE_CONNECTION_STRING
-            valueFrom:
-              secretKeyRef:
-                name: azure-conn-str
-                key: az_conn_str
-          - name: AZURE_APP_ID  # for Active Directory authentication
-            valueFrom:
-              secretKeyRef:
-                name: azure-ad-ids
-                key: az_app_id
-          - name: AZURE_RESOURCE_ID  # for Active Directory authentication
-            valueFrom:
-              secretKeyRef:
-                name: azure-ad-ids
-                key: az_resource_id
-          - name: SN_RAM
-            value: "2g"
-        - name: dn
+        -
+          name: dn
           image: "hdfgroup/hsds"
           lifecycle:
             preStop:
               exec:
                 command: ["/usr/bin/curl", "-X", "DELETE", "http://127.0.0.1:6101/prestop"]
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+          - name: data
+            mountPath: "/data"
           ports:
             -
               containerPort: 6101
           env:
           - name: NODE_TYPE
             value: dn
+          - name: ROOT_DIR
+            value: /data
           - name: BUCKET_NAME
             value: hsds
           - name: LOG_LEVEL
-            value: INFO
+            value: DEBUG
           - name: HSDS_ENDPOINT
-            value: "http://hsds.hdf.test" # change to external DNS LB path
-          - name: AZURE_CONNECTION_STRING
-            valueFrom:
-              secretKeyRef:
-                name: azure-conn-str
-                key: az_conn_str
-          - name: DN_RAM
-            value: "2g"
+            value: http://hsds.hdf.test
       volumes:
+      - name: data
+        hostPath:
+          # changee to directory location for bucket parent directory
+          path: /var/buckets
+          type: Directory
       - name: config
         secret:
           secretName: user-password

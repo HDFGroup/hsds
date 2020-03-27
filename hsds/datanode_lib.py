@@ -676,6 +676,8 @@ async def s3syncCheck(app):
             log.info("s3sync - clusterstate is not ready, sleeping")
             await asyncio.sleep(long_sleep)
             continue
+        else:
+            log.debug("s3sync - clusterstate is {}".format(app["node_state"]))
 
         update_count = await s3sync(app)
         now = time.time()

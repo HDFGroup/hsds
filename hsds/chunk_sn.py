@@ -1175,7 +1175,7 @@ async def PUT_Value(request):
 
     arr = None  # np array to hold request data
     if binary_data and isinstance(item_size, int):
-        item_size == 'H5T_VARIABLE'
+        # binary, fixed item_size
         if num_elements*item_size != len(binary_data):
             msg = "Expected: " + str(num_elements*item_size) + " bytes, but got: " + str(len(binary_data))
             log.warn(msg)
@@ -1187,6 +1187,7 @@ async def PUT_Value(request):
             msg = "Bad Request: binary input data doesn't match selection"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
+        log.debug(f"PUT value - numpy array shape: {arr.shape} dtype: {arr.dtype}")
     elif binary_data and item_size == 'H5T_VARIABLE':
         # binary variable length data
         try:

@@ -113,3 +113,23 @@ if [[ ${AWS_S3_GATEWAY} == "http://openio:6007" ]]; then
      exit 1
   fi
 fi
+
+# wait for the server to be ready
+for i in {1..120}
+do
+  STATUS_CODE=`curl -s -o /dev/null -w "%{http_code}" ${HSDS_ENDPOINT}/about`
+  if [[ $STATUS_CODE == "200" ]]; then
+    echo "service ready"
+    break
+  else
+    echo "${i}: waiting for server startup (status: ${STATUS_CODE}) "
+    sleep 1
+  fi
+done
+
+if [[ $STATUS_CODE != "200" ]]; then
+  echo "service failed to start"
+  echo "SN_1 logs:"
+  docker logs --tail 100 hsds_sn_1
+  exit 1
+fi
