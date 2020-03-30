@@ -13,10 +13,8 @@ import asyncio
 import sys
 from aiobotocore import get_session
 
-sys.path.append('../util')
-sys.path.append('..')
-from util.storUtil import deleteStorObj, getStorKeys
-import config
+from hsds.util.storUtil import deleteStorObj, getStorKeys
+from hsds import config
 
 
 # This is a utility to delete all objects in the bucket

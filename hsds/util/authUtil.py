@@ -25,8 +25,8 @@ from jwt.exceptions import InvalidAudienceError, InvalidSignatureError
 import requests
 from cryptography.x509 import load_pem_x509_certificate
 from cryptography.hazmat.backends import default_backend
-import hsds_logger as log
-import config
+from .. import hsds_logger as log
+from .. import config
 
 MSONLINE_OPENID_URL = "https://login.microsoftonline.com/common/.well-known/openid-configuration"
 

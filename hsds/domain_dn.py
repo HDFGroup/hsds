@@ -16,11 +16,11 @@ import time
 from aiohttp.web_exceptions import HTTPConflict, HTTPInternalServerError
 from aiohttp.web import json_response
 
-from util.authUtil import  getAclKeys
-from util.domainUtil import isValidDomain, getBucketForDomain
-from util.idUtil import validateInPartition
-from datanode_lib import get_metadata_obj, save_metadata_obj, delete_metadata_obj, check_metadata_obj
-import hsds_logger as log
+from .util.authUtil import  getAclKeys
+from .util.domainUtil import isValidDomain, getBucketForDomain
+from .util.idUtil import validateInPartition
+from .datanode_lib import get_metadata_obj, save_metadata_obj, delete_metadata_obj, check_metadata_obj
+from . import hsds_logger as log
 
 def get_domain(request, body=None):
     """ Extract domain and validate """

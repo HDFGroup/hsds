@@ -3,8 +3,8 @@ import datetime
 import subprocess
 import json
 from aiobotocore.config import AioConfig
-import config
-import hsds_logger as log
+from .. import config
+from .. import hsds_logger as log
 
 """
 get aiobotocore lambda client

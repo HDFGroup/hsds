@@ -16,13 +16,13 @@ import os.path as op
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPInternalServerError
 
 
-from util.idUtil import getDataNodeUrl, getCollectionForId, isSchema2Id, getS3Key
-from util.storUtil import getStorJSONObj
-from util.authUtil import aclCheck
-from util.httpUtil import http_get
-from util.domainUtil import getBucketForDomain
+from .util.idUtil import getDataNodeUrl, getCollectionForId, isSchema2Id, getS3Key
+from .util.storUtil import getStorJSONObj
+from .util.authUtil import aclCheck
+from .util.httpUtil import http_get
+from .util.domainUtil import getBucketForDomain
 
-import hsds_logger as log
+from . import hsds_logger as log
 
 
 async def getDomainJson(app, domain, reload=False):

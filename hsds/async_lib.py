@@ -13,11 +13,11 @@
 import time
 from aiohttp.client_exceptions import ClientError
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
-from util.idUtil import isValidUuid, isSchema2Id, getS3Key, isS3ObjKey, getObjId, isValidChunkId, getCollectionForId
-from util.chunkUtil import getDatasetId
-from util.storUtil import getStorKeys, putStorJSONObj, deleteStorObj
-import hsds_logger as log
-import config
+from .util.idUtil import isValidUuid, isSchema2Id, getS3Key, isS3ObjKey, getObjId, isValidChunkId, getCollectionForId
+from .util.chunkUtil import getDatasetId
+from .util.storUtil import getStorKeys, putStorJSONObj, deleteStorObj
+from . import hsds_logger as log
+from . import config
 
 
 # List all keys under given root and optionally update info.json

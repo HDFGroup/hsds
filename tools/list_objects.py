@@ -12,8 +12,8 @@
 import asyncio
 import sys
 from aiobotocore import get_session
-from util.s3Util import getS3Keys, releaseClient
-import config
+from hsds.util.s3Util import getS3Keys, releaseClient
+from hsds import config
 
 
 # This is a utility to list all objects in the bucket

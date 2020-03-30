@@ -16,18 +16,18 @@ import asyncio
 import time
 import numpy as np
 from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError, HTTPBadRequest, HTTPNotFound, HTTPForbidden, HTTPServiceUnavailable
-from util.idUtil import validateInPartition, getS3Key, isValidUuid, isValidChunkId, getDataNodeUrl, isSchema2Id, getRootObjId, isRootObjId
-from util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes, getStorBytes, isStorObj, deleteStorObj
-from util.domainUtil import isValidDomain, getBucketForDomain
-from util.attrUtil import getRequestCollectionName
-from util.httpUtil import http_post
-from util.dsetUtil import getChunkLayout, getDeflateLevel, isShuffle, getFillValue
-from util.chunkUtil import getDatasetId
-from util.arrayUtil import arrayToBytes, bytesToArray
-from util.hdf5dtype import createDataType
+from .util.idUtil import validateInPartition, getS3Key, isValidUuid, isValidChunkId, getDataNodeUrl, isSchema2Id, getRootObjId, isRootObjId
+from .util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes, getStorBytes, isStorObj, deleteStorObj
+from .util.domainUtil import isValidDomain, getBucketForDomain
+from .util.attrUtil import getRequestCollectionName
+from .util.httpUtil import http_post
+from .util.dsetUtil import getChunkLayout, getDeflateLevel, isShuffle, getFillValue
+from .util.chunkUtil import getDatasetId
+from .util.arrayUtil import arrayToBytes, bytesToArray
+from .util.hdf5dtype import createDataType
 
-import config
-import hsds_logger as log
+from . import config
+from . import hsds_logger as log
 
 
 def get_obj_id(request, body=None):

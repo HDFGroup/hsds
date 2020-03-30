@@ -14,8 +14,8 @@ import time
 import sys
 import os
 
-sys.path.append('../../hsds/util')
-from boolparser import BooleanParser
+sys.path.append('../..')
+from hsds.util.boolparser import BooleanParser
 
 class BooleanParserTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):

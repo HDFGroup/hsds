@@ -12,9 +12,8 @@
 import unittest
 import sys
 
-sys.path.append('../../hsds/util')
-sys.path.append('../../hsds')
-from dsetUtil import  getHyperslabSelection, getSelectionShape, ItemIterator
+sys.path.append('../..')
+from hsds.util.dsetUtil import  getHyperslabSelection, getSelectionShape, ItemIterator
 
 class DsetUtilTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):

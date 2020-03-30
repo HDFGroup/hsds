@@ -15,7 +15,7 @@
 #
 from aiohttp.web_exceptions import HTTPBadRequest
 
-import hsds_logger as log
+from .. import hsds_logger as log
 
 def validateLinkName(name):
     if not isinstance(name, str):
