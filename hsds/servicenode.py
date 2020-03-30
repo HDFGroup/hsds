@@ -101,10 +101,12 @@ async def init(loop):
     app.router.add_route('GET', '/datasets/{id}/acls', GET_ACLs)
 
     # Add CORS to all routes
-    cors = aiohttp_cors.setup(app, defaults={"*": aiohttp_cors.ResourceOptions(allow_credentials=True, expose_headers="*", allow_headers="*",)})
-    for route in list(app.router.routes()):
-        log.info(f"CORS add route: {route}")
-        cors.add(route)
+    cors_domain = config.get("cors_domain")
+    if cors_domain:
+        cors = aiohttp_cors.setup(app, defaults={cors_domain: aiohttp_cors.ResourceOptions(allow_credentials=True, expose_headers="*", allow_headers="*",)})
+        for route in list(app.router.routes()):
+            log.info(f"CORS add route: {route}")
+            cors.add(route)
 
 
     return app

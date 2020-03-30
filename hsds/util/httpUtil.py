@@ -23,8 +23,6 @@ from aiohttp.client_exceptions import ClientError
 import hsds_logger as log
 import config
 
-CORS_DOMAIN='*'
-
 def isOK(http_response):
     if http_response < 300:
         return True
@@ -284,8 +282,9 @@ async def jsonResponse(request, data, status=200):
     #   json_response(data, headers={}, status=status), but this doesn't
     #   seem to be working, so manually addding CORS headers here
     headers = {}
-    if CORS_DOMAIN:
-        headers['Access-Control-Allow-Origin'] = CORS_DOMAIN
+    cors_domain = config.get("cors_domain")
+    if cors_domain:
+        headers['Access-Control-Allow-Origin'] = cors_domain
         headers['Access-Control-Allow-Methods'] = "GET, POST, DELETE, PUT, OPTIONS"
         headers['Access-Control-Allow-Headers'] = "Content-Type, api_key, Authorization"
     return json_response(data, headers=headers, status=status)

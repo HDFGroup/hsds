@@ -60,7 +60,8 @@ cfg = {
     'server_name': 'Highly Scalable Data Service (HSDS)', # this gets returned in the about request
     'greeting': 'Welcome to HSDS!',
     'about': 'HSDS is a webservice for HDF data',
-    'top_level_domains': []  # list of possible top-level domains, example: ["/home", "/shared"]
+    'top_level_domains': [],  # list of possible top-level domains, example: ["/home", "/shared"]
+    'cors_domain': '*'     # domains allowed for CORS
 
 }
 

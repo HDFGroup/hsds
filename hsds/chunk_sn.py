@@ -1591,6 +1591,7 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=None,
     loop = app["loop"]
     log.info(f"doHyperSlabRead - number of chunk_ids: {len(chunk_ids)}")
     log.debug(f"doHyperSlabRead - chunk_ids: {chunk_ids}")
+    cors_domain = config.get("cors_domain")
 
 
     accept_type = getAcceptType(request)
@@ -1636,10 +1637,11 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=None,
             resp = StreamResponse()
             resp.headers['Content-Type'] = "application/octet-stream"
             # allow CORS
-            resp.headers['Access-Control-Allow-Origin'] = '*'
-            resp.headers['Access-Control-Allow-Methods'] = "GET, POST, DELETE, PUT, OPTIONS"
-            resp.headers['Access-Control-Allow-Headers'] = "Content-Type, api_key, Authorization"
-            resp.content_length = len(output_data)
+            if cors_domain:
+                resp.headers['Access-Control-Allow-Origin'] = cors_domain
+                resp.headers['Access-Control-Allow-Methods'] = "GET, POST, DELETE, PUT, OPTIONS"
+                resp.headers['Access-Control-Allow-Headers'] = "Content-Type, api_key, Authorization"
+                resp.content_length = len(output_data)
             await resp.prepare(request)
             await resp.write(output_data)
         except Exception as e:

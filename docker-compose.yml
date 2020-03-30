@@ -80,6 +80,7 @@ services:
       - ABOUT=${ABOUT}
       - TOP_LEVEL_DOMAINS=${TOP_LEVEL_DOMAINS}
       - AUTH_EXPIRATION=${AUTH_EXPIRATION}
+      - CORS_DOMAIN=${CORS_DOMAIN}
     ports:
       - ${SN_PORT}:${SN_PORT}
     depends_on:

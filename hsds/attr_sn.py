@@ -25,6 +25,7 @@ from util.attrUtil import  validateAttributeName, getRequestCollectionName
 from util.hdf5dtype import validateTypeItem, getBaseTypeJson, createDataType, getItemSize
 from util.arrayUtil import jsonToArray, getShapeDims, getNumElements, bytesArrayToList
 from servicenode_lib import getDomainJson, getObjectJson, validateAction
+import config
 import hsds_logger as log
 
 
@@ -492,15 +493,17 @@ async def GET_AttributeValue(request):
             raise HTTPBadRequest(reason=msg)
         output_data = arr.tobytes()
         log.debug(f"GET AttributeValue - returning {len(output_data)} bytes binary data")
+        cors_domain = config.get("cors_domain")
         # write response
         try:
             resp = StreamResponse()
             resp.content_type = "application/octet-stream"
             resp.content_length = len(output_data)
             # allow CORS
-            resp.headers['Access-Control-Allow-Origin'] = '*'
-            resp.headers['Access-Control-Allow-Methods'] = "GET, POST, DELETE, PUT, OPTIONS"
-            resp.headers['Access-Control-Allow-Headers'] = "Content-Type, api_key, Authorization"
+            if cors_domain:
+                resp.headers['Access-Control-Allow-Origin'] = cors_domain
+                resp.headers['Access-Control-Allow-Methods'] = "GET, POST, DELETE, PUT, OPTIONS"
+                resp.headers['Access-Control-Allow-Headers'] = "Content-Type, api_key, Authorization"
             await resp.prepare(request)
             await resp.write(output_data)
         except Exception as e:

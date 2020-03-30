@@ -65,6 +65,7 @@ services:
       - LETSENCRYPT_HOST=${PUBLIC_DNS}
       - LETSENCRYPT_EMAIL=jguerrero@teravisiontech.com
       - AUTH_EXPIRATION=${AUTH_EXPIRATION}
+      - CORS_DOMAIN=${CORS_DOMAIN}
     depends_on:
       - head
   proxy:
