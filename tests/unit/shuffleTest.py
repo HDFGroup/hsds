@@ -14,9 +14,8 @@ import sys
 import numpy as np
 import time
 
-sys.path.append('../../hsds/util')
-sys.path.append('../../hsds')
-from s3Util import _shuffle, _unshuffle
+sys.path.append('../..')
+from hsds.util.s3Util import _shuffle, _unshuffle
 
 
 class ShuffleUtilTest(unittest.TestCase):

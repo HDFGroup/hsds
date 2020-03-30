@@ -9,24 +9,53 @@ from setuptools import setup
 #
 # Tag the release in github!
 #
-from codecs import open
-from os import path
+
+classifiers = [
+    'Environment :: Console',
+    'Intended Audience :: Information Technology',
+    'Intended Audience :: Science/Research',
+    'License :: OSI Approved :: Apache Software License',
+    'Natural Language :: English',
+    'Operating System :: POSIX :: Linux',
+    'Programming Language :: Python :: 3',
+    'Topic :: Internet :: WWW/HTTP :: HTTP Servers',
+    'Topic :: Scientific/Engineering',
+    ]
+
+
+install_requires = [
+    'aiobotocore',
+    'aiohttp',
+    'aiohttp_cors',
+    'aiofiles',
+    'botocore',
+    'cryptography',
+    'kubernetes',
+    'numba',
+    'numpy >= 1.10.4',
+    'psutil',
+    'pyjwt',
+    'pytz',
+    'requests',
+    ]
+
 
 setup(name='hsds',
       version='0.0.1',
       description='HDF REST API',
-      url='http://github.com/HDFGroup/h5pyd',
+      url='http://github.com/HDFGroup/hsds',
       author='John Readey',
       author_email='jreadey@hdfgrouup.org',
-      license='BSD',
+      license='Apache',
       packages=['hsds', 'hsds.util'],
-      # requires=['h5py (>=2.5.0)', 'h5json>=1.0.2'],
-      install_requires=['numpy >= 1.10.4', 'requests', 'six', 'pytz'],
-      setup_requires=['pkgconfig', 'six'],
+      install_requires=install_requires,
+      setup_requires=['setuptools'],
+      extras_require={'azure': ['azure', 'azure-storage-blob']},
       zip_safe=False,
-      # not compatible
-      # entry_points={'console_scripts':
-      #     ['datanode = hsds.datanote:main',
-      #      'servicenode = hsds.servicenode:main']
-      # }
+      classifiers=classifiers,
+      entry_points={'console_scripts': [
+          'hsds-datanode = hsds.datanode:main',
+          'hsds-servicenode = hsds.servicenode:main',
+          'hsds-headnode = hsds.headnode:main',
+          ]}
 )

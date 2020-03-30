@@ -20,20 +20,20 @@ from numba import jit
 from aiohttp.web_exceptions import HTTPInternalServerError
 
 
-import hsds_logger as log
-from util.s3Client import S3Client
+from .. import hsds_logger as log
+from .s3Client import S3Client
 try:
-    from util.azureBlobClient import AzureBlobClient
+    from .azureBlobClient import AzureBlobClient
 except ImportError:
     def AzureBlobClient(app):
         return None
 try:
-    from util.fileClient import FileClient
+    from .fileClient import FileClient
 except ImportError:
     def FileClient(app):
         log.error("ImportError for FileClient")
         return None
-import config
+from .. import config
 
 @jit(nopython=True)
 def _doShuffle(src, des, element_size):

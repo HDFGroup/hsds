@@ -17,7 +17,7 @@ import json
 import asyncio
 from aiohttp import ClientSession, TCPConnector, HttpProcessingError 
 import config
-import hsds_logger as log
+from hsds import hsds_logger as log
 from helper import getRequestHeaders, getTestDomainName, setupDomain
 
 globals = {}

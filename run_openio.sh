@@ -34,10 +34,10 @@ else
 fi
 
 if [ $1 == "sn" ]; then
-    python -u hsds/servicenode.py
+    python -u -m hsds.servicenode
 elif [ $1 == "dn" ]; then
     echo "run dn"
-    python -u hsds/datanode.py
+    python -u -m hsds.datanode
 else
     echo $USAGE
 fi

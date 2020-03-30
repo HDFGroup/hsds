@@ -10,7 +10,7 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import numpy
-import hsds_logger as log
+from .. import hsds_logger as log
 
 def getArraySize(arr):
     """ Return size in bytes of numpy array """

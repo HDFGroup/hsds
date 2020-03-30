@@ -21,11 +21,11 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 
 from asyncio import TimeoutError
 
-import config
-from util.timeUtil import unixTimeToUTC, elapsedTime
-from util.httpUtil import http_get, getUrl
-from util.idUtil import  createNodeId
-import hsds_logger as log
+from . import config
+from .util.timeUtil import unixTimeToUTC, elapsedTime
+from .util.httpUtil import http_get, getUrl
+from .util.idUtil import  createNodeId
+from . import hsds_logger as log
 
 NODE_STAT_KEYS = ("cpu", "diskio", "memory", "log_stats", "disk", "netio",
     "req_count", "s3_stats", "azure_stats", "chunk_cache_stats")
@@ -382,14 +382,13 @@ def init():
 # Main
 #
 
-if __name__ == '__main__':
+def main():
     log.info("Head node initializing")
     loop = asyncio.get_event_loop()
     app = init()  
 
     # create a client Session here so that all client requests
     #   will share the same connection pool
-    max_tcp_connections = int(config.get("max_tcp_connections"))
     app["loop"] = loop
 
     asyncio.ensure_future(healthCheck(app), loop=loop)
@@ -397,3 +396,7 @@ if __name__ == '__main__':
     log.info("Starting service on port: {}".format(head_port))
     log.debug("debug test")
     run_app(app, port=int(head_port))
+
+
+if __name__ == '__main__':
+    main()

@@ -27,12 +27,12 @@ from aiohttp.client_exceptions import ClientError
 from asyncio import CancelledError
 
 
-import config
-from util.httpUtil import http_get, http_post, jsonResponse
-from util.idUtil import createNodeId
-from util.authUtil import getUserPasswordFromRequest, validateUserPassword
-import util.query_marathon as marathonClient
-import hsds_logger as log
+from . import config
+from .util.httpUtil import http_get, http_post, jsonResponse
+from .util.idUtil import createNodeId
+from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
+from .util import query_marathon as marathonClient
+from . import hsds_logger as log
 from kubernetes import client as k8s_client
 from kubernetes import config as k8s_config
 
