@@ -12,10 +12,10 @@
 from aiohttp.web_exceptions import HTTPNotFound
 
 from aiobotocore import get_session
-import config
+from .. import config
 
-import hsds_logger as log
-from util.httpUtil import http_get
+from .. import hsds_logger as log
+from .httpUtil import http_get
 
 import os
 
