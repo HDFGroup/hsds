@@ -26,6 +26,7 @@ classifiers = [
 install_requires = [
     'aiobotocore',
     'aiohttp',
+    'aiohttp_cors',
     'aiofiles',
     'botocore',
     'cryptography',
@@ -49,7 +50,7 @@ setup(name='hsds',
       packages=['hsds', 'hsds.util'],
       install_requires=install_requires,
       setup_requires=['setuptools'],
-      extras_require={'azure': ['azure']},
+      extras_require={'azure': ['azure', 'azure-storage-blob']},
       zip_safe=False,
       classifiers=classifiers,
       entry_points={'console_scripts': [
