@@ -788,7 +788,8 @@ async def PUT_Domain(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
-    if owner != username and username != "admin":
+    admin_user = config.get("admin_user")
+    if owner != username and username != admin_user:
         log.warn("Only admin users are allowed to set owner for new domains")
         raise HTTPForbidden()
 
@@ -806,7 +807,7 @@ async def PUT_Domain(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    if is_toplevel and username != "admin":
+    if is_toplevel and username != admin_user:
         msg = "creation of top-level domains is only supported by admin users"
         log.warn(msg)
         raise HTTPForbidden()
@@ -961,7 +962,8 @@ async def DELETE_Domain(request):
     else:
         is_toplevel = False
 
-    if is_toplevel and username != "admin":
+    admin_user = config.get("admin_user")
+    if is_toplevel and username != admin_user:
         msg = "Deletion of top-level domains is only supported by admin users"
         log.warn(msg)
         raise HTTPForbidden()
