@@ -64,21 +64,23 @@ On the VM, export environment variables as shown in "Sample .bashrc" below. **IM
 
 These environment variables will be passed to the Docker containers on startup.
 
-    export AZURE_CONNECTION_STRING="1234567890"      # use the connection string for your Azure account. Note the quotation marks around the string
     export BUCKET_NAME=hsdstest                   # set to the name of the container you will be using
     export HSDS_ENDPOINT=http://myvmname.westus.cloudapp.azure.com      # Set to the public DNS name of the VM.  Use https protocol if SSL is desired and configured
+    export AZURE_CONNECTION_STRING="1234567890"      # use the connection string for your Azure account. Note the quotation marks around the string
+    export ADMIN_USER=admin  # The username for the HSDS admin acount.  Set to an AD username if Active Directory is being used
+    export AZURE_APP_ID=12345678-1234-1234-abcd-123456789ab          # if you will be using Azure Active Directory, set this to the application ID
+    export AZURE_RESOURCE_ID=00000002-0000-0000-c000-000000000000    # if you will be using Azure Active Directory, set this to the resource ID
 
 Follow the following steps to setup HSDS:
 
-1. SSH to the VM created above.  Replace [publicIpAddress] with the public IP displayed in the output of your VM creation command above: `ssh azureuser@[publicIpAddress]`
+1. SSH to the VM created above.  Replace [publicIpAddress] with the public IP displayed in the output of your VM creation command above: `ssh $VM_USER@[publicIpAddress]`
 2. Install Docker and docker-compose if necessary (see "Docker Setup" below)
-3. Ensure the proper container for HSDS is created (Step 10 in "Set up your Azure environment")
-4. Get project source code: `git clone https://github.com/HDFGroup/hsds`
-5. If you plan to use HTTP Basic Auth (usernames and passwords manged by the service), go to admin/config directory: `cd hsds/admin/config`, and copy the file "passwd.default" to "passwd.txt".  Add any usernames/passwords you wish.  Modify existing passwords (for $ADMIN_USER, test_user1, test_user2) for security.  If you wish to use Azure Active Directory for authentication, following the instructions in "Azure Active Directory"
-6. Create environment variables as in "Sample .bashrc" above
-7. Start the service `./runall.sh <n>` where n is the number of containers desired (defaults to 1)
-8. Run `docker ps` and verify that the containers are running: hsds_head, hsds_sn_[1-n], hsds_dn_[1-n]
-9. Run `curl $HSDS_ENDPOINT/about` where and verify that "cluster_state" is "READY" (might need to give it a minute or two)
+3. Get project source code: `git clone https://github.com/HDFGroup/hsds`
+4. If you plan to use HTTP Basic Auth (usernames and passwords managed by the service), go to hssds/admin/config directory: `cd admin/config`, and copy the file "passwd.default" to "passwd.txt".  Add any usernames/passwords you wish.  Modify existing passwords (for $ADMIN_USER, test_user1, test_user2) for security.  If you wish to use Azure Active Directory for authentication, following the instructions in "Azure Active Directory"
+5. Create environment variables as in "Sample .bashrc" above.  You may want to modify your .bashrc script so these are set at every login
+6. From the hsds directory (`cd ~/hsds`), start the service `./runall.sh <n>` where n is the number of containers desired (defaults to 1)
+7. Run `docker ps` and verify that the containers are running: hsds_head, hsds_sn_[1-n], hsds_dn_[1-n]
+8. Run `curl $HSDS_ENDPOINT/about` where and verify that "cluster_state" is "READY" (might need to give it a minute or two)
 
 Docker Setup
 ------------
