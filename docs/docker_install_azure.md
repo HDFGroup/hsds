@@ -11,7 +11,8 @@ These environment variables will be used to create Azure resources.
     export RESOURCEGROUP=myresouregroup
     export LOCATION=westus
     export VMNAME=myvmname
-    export ADMIN_USER=azureuser
+    export VM_USER=azureuser
+    export ADMIN_USER=admin  # or AD username if AD is used
     export STORAGEACCTNAME=mystorageaccount
 
     # the following will be the same as the variables exported on the VM below
@@ -44,8 +45,9 @@ Virtual Machine Setup
   --resource-group $RESOURCEGROUP
   --name $VMNAME
   --image UbuntuLTS
-  --admin-username $ADMIN_USER
+  --admin-username $VM_USER
   --public-ip-address-dns-name $VMNAME
+  --location $LOCATION
   --generate-ssh-keys`<br/>
 The `--generate-ssh-keys` parameter is used to automatically generate an SSH key, and put it in the default key location (~/.ssh). To use a specific set of keys instead, use the `--ssh-key-value` option.<br/>**Note:**: To use $VMNAME as your public DNS name, it will need to be unique across the $LOCATION the VM is located.
 2. The above command will output values after the successful creation of the VM.  Keep the publicIpAddress for use below.
