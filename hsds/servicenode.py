@@ -129,8 +129,16 @@ def main():
 
     app['loop'] = loop
     if config.get("allow_noauth"):
-        app['allow_noauth'] = True
+        allow_noauth = config.get("allow_noauth")
+        if isinstance(allow_noauth, str):
+            if allow_noauth in ("0", "F", "False"):
+                allow_noauth = False
+            else:
+                allow_noauth = True
+        log.info(f"allow_noauth = {allow_noauth}")
+        app['allow_noauth'] = allow_noauth
     else:
+        log.info("allow_noauth = False")
         app['allow_noauth'] = False
 
     initUserDB(app)

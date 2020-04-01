@@ -79,11 +79,11 @@ services:
       - HSDS_ENDPOINT=${HSDS_ENDPOINT}
       - SN_HOST=${PUBLIC_DNS}
       - PASSWORD_SALT=${PASSWORD_SALT}
-      - PASSWORD_FILE=/config/passwd.txt
       - GREETING=${GREETING}
       - ABOUT=${ABOUT}
       - TOP_LEVEL_DOMAINS=${TOP_LEVEL_DOMAINS}
       - AUTH_EXPIRATION=${AUTH_EXPIRATION}
+      - ALLOW_NOAUTH=${ALLOW_NOAUTH}
       - CORS_DOMAIN=${CORS_DOMAIN}
       - ADMIN_USER=${ADMIN_USER}
     ports:
@@ -92,4 +92,4 @@ services:
       - head
     volumes:
       - ${ROOT_DIR}:/data
-      - ${PWD}/admin/config/passwd.txt:/config/passwd.txt
+      - ${PWD}/admin/config/:/config/
