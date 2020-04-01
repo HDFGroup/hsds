@@ -52,7 +52,7 @@ Virtual Machine Setup
 The `--generate-ssh-keys` parameter is used to automatically generate an SSH key, and put it in the default key location (~/.ssh). To use a specific set of keys instead, use the `--ssh-key-value` option.<br/>**Note:**: To use $VMNAME as your public DNS name, it will need to be unique across the $LOCATION the VM is located.
 2. The above command will output values after the successful creation of the VM.  Keep the publicIpAddress for use below.
 3. Open port 80 to web traffic: `az vm open-port --port 80 --resource-group $RESOURCEGROUP --name $VMNAME`
-4. Create storage account if one does not exist: `az storage account create -n $STORAGEACCTNAME -g $RESOURCEGROUP -l $LOCATION --sku Standard_LRS`
+4. Create a storage account if one does not exist: `az storage account create -n $STORAGEACCTNAME -g $RESOURCEGROUP -l $LOCATION --sku Standard_LRS`
 5. Create a container for HSDS in the storage account: `az storage container create --name $BUCKET_NAME --connection-string $AZURE_CONNECTION_STRING`
 
 Note: The connection string for the storage account can be found in the portal under Settings > Access keys on the storage account or via this cli command: `az storage account show-connection-string -n $STORAGEACCTNAME -g $RESOURCEGROUP`
@@ -77,9 +77,9 @@ Follow the following steps to setup HSDS:
 2. Install Docker and docker-compose if necessary (see "Docker Setup" below)
 3. Get project source code: `git clone https://github.com/HDFGroup/hsds`
 4. If you plan to use HTTP Basic Auth (usernames and passwords managed by the service), go to hssds/admin/config directory: `cd admin/config`, and copy the file "passwd.default" to "passwd.txt".  Add any usernames/passwords you wish.  Modify existing passwords (for $ADMIN_USER, test_user1, test_user2) for security.  If you wish to use Azure Active Directory for authentication, following the instructions in "Azure Active Directory"
-5. Create environment variables as in "Sample .bashrc" above.  You may want to modify your .bashrc script so these are set at every login
+5. Create environment variables as in "Sample .bashrc" above.  Or run: `source ~/.bashrc` if you have added them to the bashrc file
 6. From the hsds directory (`cd ~/hsds`), start the service `./runall.sh <n>` where n is the number of containers desired (defaults to 1)
-7. Run `docker ps` and verify that the containers are running: hsds_head, hsds_sn_[1-n], hsds_dn_[1-n]
+7. Run `docker ps` and verify that the containers are running: hsds_head, hsds_sn_1, hsds_dn_[1-n]
 8. Run `curl $HSDS_ENDPOINT/about` where and verify that "cluster_state" is "READY" (might need to give it a minute or two)
 
 Docker Setup
