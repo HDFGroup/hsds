@@ -76,11 +76,41 @@ Follow the following steps to setup HSDS:
 1. SSH to the VM created above.  Replace [publicIpAddress] with the public IP displayed in the output of your VM creation command above: `ssh $VM_USER@[publicIpAddress]`
 2. Install Docker and docker-compose if necessary (see "Docker Setup" below)
 3. Get project source code: `git clone https://github.com/HDFGroup/hsds`
-4. If you plan to use HTTP Basic Auth (usernames and passwords managed by the service), go to hssds/admin/config directory: `cd admin/config`, and copy the file "passwd.default" to "passwd.txt".  Add any usernames/passwords you wish.  Modify existing passwords (for $ADMIN_USER, test_user1, test_user2) for security.  If you wish to use Azure Active Directory for authentication, following the instructions in "Azure Active Directory"
+4. If you plan to use HTTP Basic Auth (usernames and passwords managed by the service), go to hsds/admin/config directory: `cd admin/config`, and copy the file "passwd.default" to "passwd.txt".  Add any usernames/passwords you wish.  Modify existing passwords (for admin, test_user1, test_user2, etc.) for security.  If you wish to use Azure Active Directory for authentication, following the instructions in "Azure Active Directory"
 5. Create environment variables as in "Sample .bashrc" above.  Or run: `source ~/.bashrc` if you have added them to the bashrc file
 6. From the hsds directory (`cd ~/hsds`), start the service `./runall.sh <n>` where n is the number of containers desired (defaults to 1)
 7. Run `docker ps` and verify that the containers are running: hsds_head, hsds_sn_1, hsds_dn_[1-n]
 8. Run `curl $HSDS_ENDPOINT/about` where and verify that "cluster_state" is "READY" (might need to give it a minute or two)
+
+
+Post Install Configuration and Testing
+--------------------------------------
+
+The following configuration can be run on your local machine to verify the installation, and configure
+user home folders. **Important:** trailing slashes are essential here.  These steps can be run
+on the server VM or on your client.
+
+1. Install h5py: `pip install h5py`
+2. Install h5pyd (Python client SDK): `pip install h5pyd`
+3. Configure user credentials for admin user:  
+    * If using HTTP Basic Auth, run: `hsconfigure`, and provide the following responses:
+        1. For server endpoint: use $HSDS_ENDPOINT value
+        2. Username: use $ADMIN_PASSWORD value
+        3. Passwordd: use password from passwd.txt file
+    * If using Active Directory, create a file ".hscfg" in your home folder with the following lines:
+        1. `hs_endpoint = <server_endpoint>`
+        2. `hs_ad_tenant_id = <AD tenant_id>`
+        3. `hs_ad_resource_id = <AD resource id>`
+4. Create home folder on server: `hstouch /home/`.  If using AD, select the admin account when prompted.
+5. For each user, create user folder: `hstouch -o <username> /home/<username>`
+6. Change user credentials to non-admin account
+    * If using HTTP Basic Auth, run: `hsconfigure`, and change values for username and password
+    * If using Active Directly, login to a non-admin account when prompted (may needd to remove cached credentials: `rm ~/.hsazcfg*`)
+7. Set environment variable for test output folder: `export H5PYD_TEST_FOLDER="/home/<username>/h5pyd_test/"`
+8. Create folder for test files: `hstouch $H5PYD_TEST_FOLDER`
+9. Get h5pyd code: `git clone https://github.com/HDFGroup/h5pyd`
+10. Go to the h5pyd directory: `cd h5pyd`
+11. Run h5pyd test suite: `python testall.py`
 
 Docker Setup
 ------------
@@ -102,34 +132,6 @@ Run the following commands to install Docker on Linux/Ubuntu:
 Install docker-compose.
 
 1. See: <https://docs.docker.com/compose/install/>
-
-Post Install Configuration and Testing
---------------------------------------
-
-The following configuration can be run on your local machine to verify the installation, and configure
-user home folders. **Important:** trailing slashes are essential here.  These steps can be run
-on the server VM or on your client.
-
-1. Install pip if not installed: `sudo apt install python-pip`
-2. Set an environment variable: ADMIN_PASSWORD with the value used in the password.txt file.  E.g.: `export ADMIN_PASSWORD=admin`
-3. Set an environment variable: USER_PASSWORD with the password for test_user1 in the password.txt file.  E.g.: `export USER_PASSWORD=test`
-4. Get the hsds project if you haven't already: `git clone https://github.com/HDFGroup/hsds`
-5. In the hsds directory, run the integration test: `python testall.py --skip_unit`. Ignore `WARNING: is test data setup?` messages for now
-6. Install h5py: `pip install h5py`
-7. Install h5pyd (Python client SDK): `pip install h5pyd`
-8. Configure h5pyd: `hsconfigure`
-Server endpoint: $HSDS_ENDPOINT environment variable
-Username: from hsds/admin/config/passwd.txt file above
-Password: from hsds/admin/config/passwd.txt file above
-9. To setup test data, download the following file: `wget https://s3.amazonaws.com/hdfgroup/data/hdf5test/tall.h5`
-10. Create a test folder: `hstouch -u test_user1 -p $USER_PASSWORD /home/test_user1/test/`
-11. Import into hsds: `hsload -v -u test_user1 -p $USER_PASSWORD tall.h5 /home/test_user1/test/`
-12. Verify upload: `hsls -r -u test_user1 -p $USER_PASWORD /home/test_user1/test/tall.h5`
-13. Rerun the integration test: `python testall.py --skip_unit`.  You should not see any WARNING messages now
-14. Create home folders for other users if desired: `python hstouch -u admin -p $ADMIN_PASSWORD -o USERNAME /home/USERNAME/`
-
-**NOTE:** If the initial run of testall.py (step 5 above) fails for any reason and does not create the home directory, you can create it manually as follows: `python hstouch -u admin -p $ADMIN_PASSWORD /home/`
-You can then add home folders for users as desired.
 
 Azure Active Directory
 ----------------------
