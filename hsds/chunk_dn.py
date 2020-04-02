@@ -178,15 +178,17 @@ async def PUT_Chunk(request):
 
         input_arr = bytesToArray(input_bytes, dt, mshape)
 
-        chunkWriteSelection(chunk_arr=chunk_arr, slices=selection, data=input_arr)
-        is_dirty = True
+        is_dirty = chunkWriteSelection(chunk_arr=chunk_arr, slices=selection, data=input_arr)
 
         # chunk update successful
         resp = {}
     if is_dirty:
         save_chunk(app, chunk_id, bucket=bucket)
+        status_code = 201
+    else:
+        status_code = 200
 
-    resp = json_response(resp, status=201)
+    resp = json_response(resp, status=status_code)
     log.response(request, resp=resp)
     return resp
 

@@ -675,7 +675,7 @@ def chunkWriteSelection(chunk_arr=None, slices=None, data=None):
     dims = chunk_arr.shape
 
     rank = len(dims)
- 
+
     if rank == 0:
         msg = "No dimension passed to chunkReadSelection"
         raise ValueError(msg)
@@ -686,8 +686,13 @@ def chunkWriteSelection(chunk_arr=None, slices=None, data=None):
         msg = "Input arr does not match dataset rank"
         raise ValueError(msg)
 
-    # update chunk array
-    chunk_arr[slices] = data
+    updated = False
+    # check if the new data modifies the array or not
+    if not np.array_equal(chunk_arr[slices], data):
+        # update chunk array
+        chunk_arr[slices] = data
+        updated = True
+    return updated
 
 
 """
