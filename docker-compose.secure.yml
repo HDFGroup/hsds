@@ -67,6 +67,7 @@ services:
       - AUTH_EXPIRATION=${AUTH_EXPIRATION}
       - ALLOW_NOAUTH=${ALLOW_NOAUTH}
       - CORS_DOMAIN=${CORS_DOMAIN}
+      - ADMIN_USER=${ADMIN_USER}
     depends_on:
       - head
     volumes:

@@ -81,6 +81,7 @@ services:
       - AUTH_EXPIRATION=${AUTH_EXPIRATION}
       - ALLOW_NOAUTH=${ALLOW_NOAUTH}
       - CORS_DOMAIN=${CORS_DOMAIN}
+      - ADMIN_USER=${ADMIN_USER}
     ports:
       - ${SN_PORT}:${SN_PORT}
     depends_on:
