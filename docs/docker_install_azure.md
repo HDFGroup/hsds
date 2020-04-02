@@ -82,7 +82,6 @@ Follow the following steps to setup HSDS:
 7. Run `docker ps` and verify that the containers are running: hsds_head, hsds_sn_1, hsds_dn_[1-n]
 8. Run `curl $HSDS_ENDPOINT/about` where and verify that "cluster_state" is "READY" (might need to give it a minute or two)
 
-
 Post Install Configuration and Testing
 --------------------------------------
 
@@ -96,13 +95,13 @@ on the server VM or on your client.
     * If using HTTP Basic Auth, run: `hsconfigure`, and provide the following responses:
         1. For server endpoint: use $HSDS_ENDPOINT value
         2. Username: use $ADMIN_PASSWORD value
-        3. Passwordd: use password from passwd.txt file
+        3. Password: use password from passwd.txt file
     * If using Active Directory, create a file ".hscfg" in your home folder with the following lines:
         1. `hs_endpoint = <server_endpoint>`
         2. `hs_ad_tenant_id = <AD tenant_id>`
         3. `hs_ad_resource_id = <AD resource id>`
 4. Create home folder on server: `hstouch /home/`.  If using AD, select the admin account when prompted.
-5. For each user, create user folder: `hstouch -o <username> /home/<username>`
+5. For each user, create a user home folder: `hstouch -o <username> /home/<username>`
 6. Change user credentials to non-admin account
     * If using HTTP Basic Auth, run: `hsconfigure`, and change values for username and password
     * If using Active Directly, login to a non-admin account when prompted (may needd to remove cached credentials: `rm ~/.hsazcfg*`)
