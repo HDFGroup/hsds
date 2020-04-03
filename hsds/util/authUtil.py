@@ -360,8 +360,6 @@ def _verifyBearerToken(app, token):
     audience = config.get('openid_audience')
 
     # Maintain Azure defualts for compatibility.
-    if provider is None:
-        provder = 'azure'
     if audience is None:
         audience = config.get('azure_resource_id')
 
