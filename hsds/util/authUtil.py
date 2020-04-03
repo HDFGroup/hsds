@@ -25,6 +25,7 @@ from jwt.exceptions import InvalidAudienceError, InvalidSignatureError
 import requests
 from cryptography.x509 import load_pem_x509_certificate
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
 from .. import hsds_logger as log
 from .. import config
 
@@ -396,25 +397,38 @@ def _verifyBearerToken(app, token):
     res = requests.get(jwk_uri)
     jwk_keys = res.json()
     x5c = None
+    rsa = {}
     log.info("_verifyBearerToken")
 
     # Iterate JWK keys and extract matching x5c chain
     for key in jwk_keys['keys']:
         if key['kid'] == token_header['kid']:
-            x5c = key['x5c']
+            if 'x5c' in key:
+                x5c = key['x5c']
+            elif 'e' in key and 'n' in key:
+                for field in ['e', 'n']:
+                    val = key[field]
+                    val = val + '='*((4 - len(val)%4)%4)
+                    val = base64.urlsafe_b64decode(val.encode('utf-8'))
+                    rsa[field] = int.from_bytes(val, 'big')
 
-    if not x5c:
-        log.error("Unable to extract x5c chain from JWK keys")
+    # Use the X5C chain to load a public key.
+    if x5c:
+        cert = ''.join([
+            '-----BEGIN CERTIFICATE-----\n',
+            x5c[0],
+            '\n-----END CERTIFICATE-----\n',
+            ])
+        public_key =  load_pem_x509_certificate(cert.encode(), default_backend()).public_key()
+
+    # Use RSA numbers to load a public key.
+    elif rsa:
+        public_key = RSAPublicNumbers(**rsa).public_key(default_backend())
+
+    # We cannot load a public key.
+    else:
+        log.error("Unable to extract x5c chain or RSA key from JWK keys")
         raise HTTPInternalServerError()
-
-    log.debug(f"bearer token - x5c: {x5c}")
-
-    cert = ''.join([
-        '-----BEGIN CERTIFICATE-----\n',
-        x5c[0],
-        '\n-----END CERTIFICATE-----\n',
-        ])
-    public_key =  load_pem_x509_certificate(cert.encode(), default_backend()).public_key()
 
     log.debug(f"bearer token - public_key: {public_key}")
 
@@ -432,10 +446,11 @@ def _verifyBearerToken(app, token):
         log.warn("OpenID InvalidSignatureError")
         raise HTTPUnauthorized()
 
+    # Maybe this should be a config settting?
     # sub should always succeed, but it will not be very informative.
     for name in ["unique_name", "appid", "email", "sub"]:
         if name in jwt_decode:
-            username = name
+            username = jwt_decode[name]
             break
     else:
         log.warn("unable to retreive username from bearer token")
