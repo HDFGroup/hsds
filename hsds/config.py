@@ -64,7 +64,8 @@ cfg = {
     'cors_domain': '*',     # domains allowed for CORS
     'admin_user': 'admin',   # use with admin privileges
     'openid_provider': 'azure',  # OpenID authentication provider
-    'openid_audience': '' # OpenID audience. This is synonymous with azure_resource_id for azure.
+    'openid_audience': '', # OpenID audience. This is synonymous with azure_resource_id for azure.
+    'openid_claims': 'unique_name,appid' # Comma seperated list of claims to resolve to usernames.
 
 }
 

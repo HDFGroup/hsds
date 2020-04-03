@@ -359,13 +359,14 @@ def _verifyBearerToken(app, token):
     username = None
     provider = config.get('openid_provider')
     audience = config.get('openid_audience')
+    claims = config.get('openid_claims').split(',')
 
     # Maintain Azure defualts for compatibility.
     if audience is None:
         audience = config.get('azure_resource_id')
 
     # If we still dont have a provider and audience, abort.
-    if provider is None or audience is None:
+    if provider is None or audience is None or claims is None:
         log.warn('Bearer authorization, but no OpenID configuration.')
         raise HTTPUnauthorized()
 
@@ -446,9 +447,7 @@ def _verifyBearerToken(app, token):
         log.warn("OpenID InvalidSignatureError")
         raise HTTPUnauthorized()
 
-    # Maybe this should be a config settting?
-    # sub should always succeed, but it will not be very informative.
-    for name in ["unique_name", "appid", "email", "sub"]:
+    for name in claims:
         if name in jwt_decode:
             username = jwt_decode[name]
             break

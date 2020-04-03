@@ -70,6 +70,7 @@ services:
       - ADMIN_USER=${ADMIN_USER}
       - OPENID_PROVIDER=${OPENID_PROVIDER}
       - OPENID_AUDIENCE=${OPENID_AUDIENCE}
+      - OPENID_CLAIMS=${OPENID_CLAIMS}
     depends_on:
       - head
     volumes:

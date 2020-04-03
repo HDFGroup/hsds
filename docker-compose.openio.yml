@@ -74,6 +74,7 @@ services:
       - CORS_DOMAIN=${CORS_DOMAIN}
       - OPENID_PROVIDER=${OPENID_PROVIDER}
       - OPENID_AUDIENCE=${OPENID_AUDIENCE}
+      - OPENID_CLAIMS=${OPENID_CLAIMS}
 
     ports:
       - ${SN_PORT}:${SN_PORT}
