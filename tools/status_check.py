@@ -3,6 +3,10 @@ import os
 import time
 import requests
 
+#
+# Continually check server status and output time and state.
+#
+
 if "HSDS_ENDPOINT" not in os.environ:
     print("HSDS_ENDPOINT not set")
     sys.exit(1)
