@@ -29,6 +29,7 @@ from .. import hsds_logger as log
 from .. import config
 
 MSONLINE_OPENID_URL = "https://login.microsoftonline.com/common/.well-known/openid-configuration"
+GOOGLE_OPENID_URL = "https://accounts.google.com/.well-known/openid-configuration"
 
 def getDynamoDBClient(app):
     """ Return dynamodb handle
@@ -352,13 +353,36 @@ def _checkTokenCache(app, token):
     return user_id
 
 def _verifyBearerToken(app, token):
-    # Contact AD to validate bearer token.
+    # Contact OpenID provider to validate bearer token.
     # if valid, update user db and return username
     username = None
+    provider = config.get('openid_provider')
+    audience = config.get('openid_audience')
+
+    # Maintain Azure defualts for compatibility.
+    if provider is None:
+        provder = 'azure'
+    if audience is None:
+        audience = config.get('azure_resource_id')
+
+    # If we still dont have a provider and audience, abort.
+    if provider is None or audience is None:
+        log.warn('Bearer authorization, but no OpenID configuration.')
+        raise HTTPUnauthorized()
+
+    # Resolve provider into an OpenID configuration.
+    if provider.lower() == 'azure':
+        openid_url = MSONLINE_OPENID_URL
+    elif provider.lower() == 'google':
+        openid_url = GOOGLE_OPENID_URL
+    else:
+        log.warn(f"Unknown OpenID provider: {provider}")
+        raise HTTPInternalServerError()
+
     token_header = jwt.get_unverified_header(token)
-    res = requests.get(MSONLINE_OPENID_URL)
+    res = requests.get(openid_url)
     if res.status_code != 200:
-        log.warn("Bad response from {MSONLINE_OPENID_URL}: {res.status_code}")
+        log.warn("Bad response from {openid_url}: {res.status_code}")
         if res.status_code == 404:
             raise HTTPNotFound()
         elif res.status_code == 401:
@@ -375,7 +399,7 @@ def _verifyBearerToken(app, token):
     jwk_keys = res.json()
     x5c = None
     log.info("_verifyBearerToken")
-    resource_id = config.get('azure_resource_id')
+
     # Iterate JWK keys and extract matching x5c chain
     for key in jwk_keys['keys']:
         if key['kid'] == token_header['kid']:
@@ -401,18 +425,20 @@ def _verifyBearerToken(app, token):
             token,
             public_key,
             algorithms='RS256',
-            audience=resource_id,
+            audience=audience,
         )
     except InvalidAudienceError:
-        log.warn(f"AAD InvalidAudienceError with {resource_id}")
+        log.warn(f"OpenID InvalidAudienceError with {audience}")
         raise HTTPUnauthorized()
     except InvalidSignatureError:
-        log.warn("AAD InvalidSignatureError")
+        log.warn("OpenID InvalidSignatureError")
         raise HTTPUnauthorized()
-    if "unique_name" in jwt_decode:
-        username = jwt_decode["unique_name"]
-    elif "appid" in jwt_decode:
-        username = jwt_decode["appid"]
+
+    # sub should always succeed, but it will not be very informative.
+    for name in ["unique_name", "appid", "email", "sub"]:
+        if name in jwt_decode:
+            username = name
+            break
     else:
         log.warn("unable to retreive username from bearer token")
         return None
@@ -468,12 +494,11 @@ def getUserPasswordFromRequest(request):
             raise HTTPBadRequest(msg)
         user = user.decode('utf-8')   # convert bytes to string
         pswd = pswd.decode('utf-8')   # convert bytes to string
-    elif scheme.lower() == 'bearer' and config.get('azure_app_id') and config.get('azure_resource_id'):
-        # Azure AD Oauth
-        app_id = config.get('azure_app_id')
-        resource_id = config.get('azure_resource_id')
-        log.debug(f"Got bearer token  app_id: {app_id} resource_id: {resource_id}")
-        #log.debug(f"bearer token: {token}")
+
+    elif scheme.lower() == 'bearer':
+        # OpenID Auth.
+        log.debug(f"Got OpenID bearer token.")
+
         # see if we've already validated this token
         user = _checkTokenCache(app, token)
         if not user:
