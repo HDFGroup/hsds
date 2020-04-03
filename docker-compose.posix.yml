@@ -86,6 +86,8 @@ services:
       - ALLOW_NOAUTH=${ALLOW_NOAUTH}
       - CORS_DOMAIN=${CORS_DOMAIN}
       - ADMIN_USER=${ADMIN_USER}
+      - OPENID_PROVIDER=${OPENID_PROVIDER}
+      - OPENID_AUDIENCE=${OPENID_AUDIENCE}
     ports:
       - ${SN_PORT}:${SN_PORT}
     depends_on:
