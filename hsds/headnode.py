@@ -17,7 +17,7 @@ import json
 import time
 
 from aiohttp.web import Application, StreamResponse, run_app, json_response
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPBadRequest
 
 from asyncio import TimeoutError
 
@@ -37,13 +37,14 @@ async def healthCheck(app):
     app["last_health_check"] = int(time.time())
 
     nodes = app["nodes"]
+
     while True:
         # sleep for a bit
         sleep_secs = config.get("head_sleep_time")
         await  asyncio.sleep(sleep_secs)
 
         now = int(time.time())
-        log.info("health check {}".format(unixTimeToUTC(now)))
+        log.info("health check {}, cluster_state: {}".format(unixTimeToUTC(now), app["cluster_state"]))
 
         fail_count = 0
         HEALTH_CHECK_RETRY_COUNT = 1 # times to try before calling a node dead
@@ -93,21 +94,21 @@ async def healthCheck(app):
                 if node["failcount"] >= HEALTH_CHECK_RETRY_COUNT:
                     log.warn("node {}:{} not responding".format(node["host"], node["port"]))
                     fail_count += 1
-
-            except HTTPInternalServerError as hpe:
-                log.warn("HTTPInternalServerError for req: {}: {}".format(url, str(hpe)))
-                # node has gone away?
-                node["failcount"] += 1
-                if node["failcount"] >= HEALTH_CHECK_RETRY_COUNT:
-                    log.warn("removing {}:{} from active list".format(node["host"], node["port"]))
-                    fail_count += 1
             except TimeoutError as toe:
-                log.warn("Timeout error for req: {}: {}".format(url, str(toe)))
+                log.warn("TimeoutError for req: {}: {}".format(url, str(toe)))
+                # node has gone away?
+                node["failcount"] += 1
+                if node["failcount"] >= HEALTH_CHECK_RETRY_COUNT:
+                    log.warn("node {}:{} not responding".format(node["host"], node["port"]))
+                    fail_count += 1
+            except Exception as e:
+                log.warn("Exception for healthcheck: {}: {}".format(url, str(e)))
                 # node has gone away?
                 node["failcount"] += 1
                 if node["failcount"] >= HEALTH_CHECK_RETRY_COUNT:
                     log.warn("removing {}:{} from active list".format(node["host"], node["port"]))
                     fail_count += 1
+
         log.info("node health check fail_count: {}".format(fail_count))
         if fail_count > 0:
             if app["cluster_state"] == "READY":
