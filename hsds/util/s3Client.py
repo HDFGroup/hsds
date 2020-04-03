@@ -9,8 +9,8 @@ from aiobotocore.config import AioConfig
 from aiobotocore import get_session
 from botocore.exceptions import ClientError
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError, HTTPForbidden, HTTPBadRequest
-import hsds_logger as log
-import config
+from .. import hsds_logger as log
+from .. import config
 
 class S3Client():
     """
@@ -19,8 +19,7 @@ class S3Client():
 
     def __init__(self, app):
         if "session" not in app:
-            loop = app["loop"]
-            session = get_session(loop=loop)
+            session = get_session()
             app["session"] = session
         else:
             session = app["session"]

@@ -13,9 +13,9 @@
 # Simple looger for hsds
 #
 import asyncio
-import config
+from . import config
 from aiohttp.web_exceptions import HTTPServiceUnavailable
-from util.domainUtil import getDomainFromRequest
+from .util.domainUtil import getDomainFromRequest
 app = None # global app handle
 
 def debug(msg):

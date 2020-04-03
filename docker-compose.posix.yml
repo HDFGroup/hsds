@@ -44,7 +44,6 @@ services:
       - LOG_LEVEL=${LOG_LEVEL}
       - CHUNK_MEM_CACHE_SIZE=${CHUNK_MEM_CACHE_SIZE}
       - MAX_CHUNK_SIZE=${MAX_CHUNK_SIZE}
-
     ports:
       - ${DN_PORT}
     depends_on:
@@ -83,10 +82,14 @@ services:
       - GREETING=${GREETING}
       - ABOUT=${ABOUT}
       - TOP_LEVEL_DOMAINS=${TOP_LEVEL_DOMAINS}
-
+      - AUTH_EXPIRATION=${AUTH_EXPIRATION}
+      - ALLOW_NOAUTH=${ALLOW_NOAUTH}
+      - CORS_DOMAIN=${CORS_DOMAIN}
+      - ADMIN_USER=${ADMIN_USER}
     ports:
       - ${SN_PORT}:${SN_PORT}
     depends_on:
       - head
     volumes:
       - ${ROOT_DIR}:/data
+      - ${PWD}/admin/config/:/config/

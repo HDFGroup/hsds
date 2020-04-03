@@ -23,20 +23,20 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPRequestEnti
 from aiohttp.client_exceptions import ClientError
 from aiohttp.web import StreamResponse
 
-from util.httpUtil import  getHref, getAcceptType, get_http_client, http_put, request_read, jsonResponse
-from util.idUtil import   isValidUuid, getDataNodeUrl
-from util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain
-from util.hdf5dtype import getItemSize, createDataType
-from util.dsetUtil import getSliceQueryParam, setSliceQueryParam, getFillValue, isExtensible
-from util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout, getDeflateLevel
-from util.chunkUtil import getNumChunks, getChunkIds, getChunkId, getChunkIndex, getChunkSuffix
-from util.chunkUtil import getChunkCoverage, getDataCoverage, getChunkIdForPartition
-from util.arrayUtil import bytesArrayToList, jsonToArray, getShapeDims, getNumElements, arrayToBytes, bytesToArray
-from util.authUtil import getUserPasswordFromRequest, validateUserPassword
-from util.awsLambdaClient import getLambdaClient
-from servicenode_lib import getObjectJson, validateAction
-import config
-import hsds_logger as log
+from .util.httpUtil import  getHref, getAcceptType, get_http_client, http_put, request_read, jsonResponse
+from .util.idUtil import   isValidUuid, getDataNodeUrl
+from .util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain
+from .util.hdf5dtype import getItemSize, createDataType
+from .util.dsetUtil import getSliceQueryParam, setSliceQueryParam, getFillValue, isExtensible
+from .util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout, getDeflateLevel
+from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId, getChunkIndex, getChunkSuffix
+from .util.chunkUtil import getChunkCoverage, getDataCoverage, getChunkIdForPartition
+from .util.arrayUtil import bytesArrayToList, jsonToArray, getShapeDims, getNumElements, arrayToBytes, bytesToArray
+from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
+from .util.awsLambdaClient import getLambdaClient
+from .servicenode_lib import getObjectJson, validateAction
+from . import config
+from . import hsds_logger as log
 
 
 
@@ -1175,7 +1175,7 @@ async def PUT_Value(request):
 
     arr = None  # np array to hold request data
     if binary_data and isinstance(item_size, int):
-        item_size == 'H5T_VARIABLE'
+        # binary, fixed item_size
         if num_elements*item_size != len(binary_data):
             msg = "Expected: " + str(num_elements*item_size) + " bytes, but got: " + str(len(binary_data))
             log.warn(msg)
@@ -1187,6 +1187,7 @@ async def PUT_Value(request):
             msg = "Bad Request: binary input data doesn't match selection"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
+        log.debug(f"PUT value - numpy array shape: {arr.shape} dtype: {arr.dtype}")
     elif binary_data and item_size == 'H5T_VARIABLE':
         # binary variable length data
         try:
@@ -1590,6 +1591,7 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=None,
     loop = app["loop"]
     log.info(f"doHyperSlabRead - number of chunk_ids: {len(chunk_ids)}")
     log.debug(f"doHyperSlabRead - chunk_ids: {chunk_ids}")
+    cors_domain = config.get("cors_domain")
 
 
     accept_type = getAcceptType(request)
@@ -1635,10 +1637,11 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=None,
             resp = StreamResponse()
             resp.headers['Content-Type'] = "application/octet-stream"
             # allow CORS
-            resp.headers['Access-Control-Allow-Origin'] = '*'
-            resp.headers['Access-Control-Allow-Methods'] = "GET, POST, DELETE, PUT, OPTIONS"
-            resp.headers['Access-Control-Allow-Headers'] = "Content-Type, api_key, Authorization"
-            resp.content_length = len(output_data)
+            if cors_domain:
+                resp.headers['Access-Control-Allow-Origin'] = cors_domain
+                resp.headers['Access-Control-Allow-Methods'] = "GET, POST, DELETE, PUT, OPTIONS"
+                resp.headers['Access-Control-Allow-Headers'] = "Content-Type, api_key, Authorization"
+                resp.content_length = len(output_data)
             await resp.prepare(request)
             await resp.write(output_data)
         except Exception as e:

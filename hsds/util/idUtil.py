@@ -17,7 +17,7 @@ import hashlib
 import uuid
 from aiohttp.web_exceptions import HTTPServiceUnavailable
 
-import hsds_logger as log
+from .. import hsds_logger as log
 
 def getIdHash(id):
     """  Return md5 prefix based on id value"""

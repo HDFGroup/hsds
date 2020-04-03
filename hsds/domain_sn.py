@@ -23,17 +23,17 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, 
 from aiohttp import ClientResponseError
 from aiohttp.client_exceptions import ClientError
 
-from util.httpUtil import  http_post, http_put, http_get, http_delete, getHref, get_http_client, jsonResponse
-from util.idUtil import  getDataNodeUrl, createObjId, getCollectionForId, getDataNodeUrls
-from util.authUtil import getUserPasswordFromRequest, aclCheck
-from util.authUtil import validateUserPassword, getAclKeys
-from util.domainUtil import getParentDomain, getDomainFromRequest, isValidDomain, getBucketForDomain, getPathForDomain
-from util.storUtil import getStorKeys
-from util.boolparser import BooleanParser
-from servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath, getRootInfo
-from basenode import getVersion
-import hsds_logger as log
-import config
+from .util.httpUtil import  http_post, http_put, http_get, http_delete, getHref, get_http_client, jsonResponse
+from .util.idUtil import  getDataNodeUrl, createObjId, getCollectionForId, getDataNodeUrls
+from .util.authUtil import getUserPasswordFromRequest, aclCheck
+from .util.authUtil import validateUserPassword, getAclKeys
+from .util.domainUtil import getParentDomain, getDomainFromRequest, isValidDomain, getBucketForDomain, getPathForDomain
+from .util.storUtil import getStorKeys
+from .util.boolparser import BooleanParser
+from .servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath, getRootInfo
+from .basenode import getVersion
+from . import hsds_logger as log
+from . import config
 
 class DomainCrawler:
     def __init__(self, app, root_id, bucket=None, include_attrs=True, max_tasks=40):
@@ -788,7 +788,8 @@ async def PUT_Domain(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
-    if owner != username and username != "admin":
+    admin_user = config.get("admin_user")
+    if owner != username and username != admin_user:
         log.warn("Only admin users are allowed to set owner for new domains")
         raise HTTPForbidden()
 
@@ -806,7 +807,7 @@ async def PUT_Domain(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    if is_toplevel and username != "admin":
+    if is_toplevel and username != admin_user:
         msg = "creation of top-level domains is only supported by admin users"
         log.warn(msg)
         raise HTTPForbidden()
@@ -961,7 +962,8 @@ async def DELETE_Domain(request):
     else:
         is_toplevel = False
 
-    if is_toplevel and username != "admin":
+    admin_user = config.get("admin_user")
+    if is_toplevel and username != admin_user:
         msg = "Deletion of top-level domains is only supported by admin users"
         log.warn(msg)
         raise HTTPForbidden()

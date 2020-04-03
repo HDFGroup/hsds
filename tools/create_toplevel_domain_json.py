@@ -14,11 +14,11 @@ import sys
 import time
 from aiobotocore import get_session
 from aiohttp.client_exceptions import ClientOSError
-from util.domainUtil import validateDomain, getParentDomain
-from util.idUtil import getS3Key
-from util.s3Util import putS3JSONObj, isS3Obj, releaseClient
-import config
-import hsds_logger as log
+from hsds.util.domainUtil import validateDomain, getParentDomain
+from hsds.util.idUtil import getS3Key
+from hsds.util.s3Util import putS3JSONObj, isS3Obj, releaseClient
+from hsds import config
+from hsds import hsds_logger as log
 
 
 # This is a utility to create a top-level domain objecct.

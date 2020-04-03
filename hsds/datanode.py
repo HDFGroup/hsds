@@ -15,20 +15,20 @@
 import asyncio
 
 from aiohttp.web import run_app
-import config
-from util.lruCache import LruCache
-from util.idUtil import isValidUuid, isSchema2Id, getCollectionForId, isRootObjId
-from basenode import healthCheck, baseInit, preStop
-import hsds_logger as log
-from domain_dn import GET_Domain, PUT_Domain, DELETE_Domain, PUT_ACL
-from group_dn import GET_Group, POST_Group, DELETE_Group, PUT_Group, POST_Root
-from link_dn import GET_Links, GET_Link, PUT_Link, DELETE_Link
-from attr_dn import GET_Attributes, GET_Attribute, PUT_Attribute, DELETE_Attribute
-from ctype_dn import GET_Datatype, POST_Datatype, DELETE_Datatype
-from dset_dn import GET_Dataset, POST_Dataset, DELETE_Dataset, PUT_DatasetShape
-from chunk_dn import PUT_Chunk, GET_Chunk, POST_Chunk, DELETE_Chunk
-from datanode_lib import s3syncCheck
-from async_lib import scanRoot, removeKeys
+from . import config
+from .util.lruCache import LruCache
+from .util.idUtil import isValidUuid, isSchema2Id, getCollectionForId, isRootObjId
+from .basenode import healthCheck, baseInit, preStop
+from . import hsds_logger as log
+from .domain_dn import GET_Domain, PUT_Domain, DELETE_Domain, PUT_ACL
+from .group_dn import GET_Group, POST_Group, DELETE_Group, PUT_Group, POST_Root
+from .link_dn import GET_Links, GET_Link, PUT_Link, DELETE_Link
+from .attr_dn import GET_Attributes, GET_Attribute, PUT_Attribute, DELETE_Attribute
+from .ctype_dn import GET_Datatype, POST_Datatype, DELETE_Datatype
+from .dset_dn import GET_Dataset, POST_Dataset, DELETE_Dataset, PUT_DatasetShape
+from .chunk_dn import PUT_Chunk, GET_Chunk, POST_Chunk, DELETE_Chunk
+from .datanode_lib import s3syncCheck
+from .async_lib import scanRoot, removeKeys
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError, HTTPForbidden, HTTPBadRequest
 
 

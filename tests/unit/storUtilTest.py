@@ -18,10 +18,9 @@ import unittest
 import sys
 from aiohttp.web_exceptions import HTTPNotFound
 
-sys.path.append('../../hsds/util')
-sys.path.append('../../hsds')
-from util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes, getStorBytes, isStorObj
-from util.storUtil import deleteStorObj, getStorObjStats, getStorKeys, releaseStorageClient, getStorageDriverName
+sys.path.append('../..')
+from hsds.util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes, getStorBytes, isStorObj
+from hsds.util.storUtil import deleteStorObj, getStorObjStats, getStorKeys, releaseStorageClient, getStorageDriverName
 import config
 
 

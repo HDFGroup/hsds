@@ -11,14 +11,15 @@
 ##############################################################################
 import asyncio
 import sys
+from datetime import datetime
 from aiobotocore import get_session
-from util.idUtil import isValidUuid,isSchema2Id
-from util.s3Util import releaseClient
-from async_lib import removeKeys
-import config
+from hsds.util.idUtil import isValidUuid,isSchema2Id
+from hsds.util.s3Util import releaseClient
+from hsds.async_lib import scanRoot
+from hsds import config
 
 
-# This is a utility to remove all keys for a given rootid
+# This is a utility to scan keys for a given domain and report totals.
 # Note: only works with schema v2 domains!
 
 
@@ -26,12 +27,12 @@ import config
 # Print usage and exit
 #
 def printUsage():
-    print("       python root_delete.py [rootid]")
-    sys.exit();
+    print("       python root_scan.py [rootid] [-update]")
+    sys.exit()
 
 
-async def run_delete(app, rootid):
-    results = await removeKeys(app, rootid)
+async def run_scan(app, rootid, update=False):
+    results = await scanRoot(app, rootid, update=update)
     await releaseClient(app)
     return results
 
@@ -43,6 +44,11 @@ def main():
 
 
     rootid = sys.argv[1]
+
+    if len(sys.argv) > 2 and sys.argv[2] == "-update":
+        do_update = True
+    else:
+        do_update = False
 
     if not isValidUuid(rootid):
         print("Invalid root id!")
@@ -61,9 +67,30 @@ def main():
     app["loop"] = loop
     session = get_session(loop=loop)
     app["session"] = session
-    loop.run_until_complete(run_delete(app, rootid))
+    loop.run_until_complete(run_scan(app, rootid=rootid, update=do_update))
 
     loop.close()
+
+    results = app["scanRoot_results"]
+    datasets = results["datasets"]
+    lastModified = datetime.fromtimestamp(results["lastModified"])
+    total_size  = results["metadata_bytes"] + results["allocated_bytes"]
+    print(f"lastModified: {lastModified}")
+    print(f"size: {total_size}")
+    print(f"num chunks: {results['num_chunks']}")
+    print(f"num_groups: {results['num_groups']}")
+    print(f"num_datatypes: {results['num_datatypes']}")
+    print(f"num_datasets: {len(datasets)}")
+    for dsetid in datasets:
+        dataset_info = datasets[dsetid]
+        print(f"   {dsetid}: {dataset_info['lastModified']}, {dataset_info['num_chunks']}, {dataset_info['allocated_bytes']}")
+
+    scan_start = datetime.fromtimestamp(results["scan_start"])
+    print(f"scan_start: {scan_start}")
+    scan_complete = datetime.fromtimestamp(results["scan_complete"])
+    print(f"scan_complete: {scan_complete}")
+
+
 
     print("done!")
 

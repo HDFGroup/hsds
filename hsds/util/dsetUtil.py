@@ -12,7 +12,7 @@
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 
-import hsds_logger as log
+from .. import hsds_logger as log
 
 
 def getHyperslabSelection(dsetshape, start=None, stop=None, step=None):

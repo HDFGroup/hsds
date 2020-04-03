@@ -19,12 +19,12 @@ from aiobotocore import get_session
 from aiohttp.web_exceptions import HTTPInternalServerError
 
 
-import config
-from util.timeUtil import unixTimeToUTC
-from util.s3Util import releaseClient
-from util.idUtil import isValidUuid, isValidChunkId
-from asyncnode_lib import listKeys, getS3Obj, clearUsedFlags, markObjs
-import hsds_logger as log
+from hsds import config
+from hsds.util.timeUtil import unixTimeToUTC
+from hsds.util.s3Util import releaseClient
+from hsds.util.idUtil import isValidUuid, isValidChunkId
+from hsds.asyncnode_lib import listKeys, getS3Obj, clearUsedFlags, markObjs
+from hsds import hsds_logger as log
 
 
 async def bucketCheck(app):

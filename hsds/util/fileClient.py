@@ -6,8 +6,8 @@ from  inspect import iscoroutinefunction
 import time
 import aiofiles
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError, HTTPBadRequest
-import hsds_logger as log
-import config
+from .. import hsds_logger as log
+from .. import config
 
 class FileClient():
     """

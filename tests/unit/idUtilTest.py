@@ -12,10 +12,9 @@
 import unittest
 import sys
 
-sys.path.append('../../hsds/util')
-sys.path.append('../../hsds')
-from idUtil import getObjPartition, isValidUuid, validateUuid, createObjId, getCollectionForId
-from idUtil import isObjId, isS3ObjKey, getS3Key, getObjId, isSchema2Id, isRootObjId, getRootObjId
+sys.path.append('../..')
+from hsds.util.idUtil import getObjPartition, isValidUuid, validateUuid, createObjId, getCollectionForId
+from hsds.util.idUtil import isObjId, isS3ObjKey, getS3Key, getObjId, isSchema2Id, isRootObjId, getRootObjId
 
 class IdUtilTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):

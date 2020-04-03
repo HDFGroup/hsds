@@ -15,7 +15,7 @@
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 
-import hsds_logger as log
+from .. import hsds_logger as log
 
 def getRequestCollectionName(request):
     """ request is in the form /(datasets|groups|datatypes)/<id>/attributes(/<name>),

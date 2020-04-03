@@ -18,18 +18,18 @@ import numpy as np
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError, HTTPNotFound
 from aiohttp.web import json_response, StreamResponse
 
-from util.httpUtil import  request_read
-from util.arrayUtil import bytesToArray, arrayToBytes
-from util.idUtil import getS3Key, validateInPartition, isValidUuid
-from util.storUtil import  isStorObj, deleteStorObj
-from util.hdf5dtype import createDataType
-from util.dsetUtil import  getSliceQueryParam, getChunkLayout, getSelectionShape
-from util.chunkUtil import getChunkIndex, getDatasetId, chunkQuery
-from util.chunkUtil import chunkWriteSelection, chunkReadSelection
-from util.chunkUtil import chunkWritePoints, chunkReadPoints
-from datanode_lib import get_metadata_obj, get_chunk, save_chunk
+from .util.httpUtil import  request_read
+from .util.arrayUtil import bytesToArray, arrayToBytes
+from .util.idUtil import getS3Key, validateInPartition, isValidUuid
+from .util.storUtil import  isStorObj, deleteStorObj
+from .util.hdf5dtype import createDataType
+from .util.dsetUtil import  getSliceQueryParam, getChunkLayout, getSelectionShape
+from .util.chunkUtil import getChunkIndex, getDatasetId, chunkQuery
+from .util.chunkUtil import chunkWriteSelection, chunkReadSelection
+from .util.chunkUtil import chunkWritePoints, chunkReadPoints
+from .datanode_lib import get_metadata_obj, get_chunk, save_chunk
 
-import hsds_logger as log
+from . import hsds_logger as log
 
 """
 Update the requested chunk/selection
@@ -178,15 +178,17 @@ async def PUT_Chunk(request):
 
         input_arr = bytesToArray(input_bytes, dt, mshape)
 
-        chunkWriteSelection(chunk_arr=chunk_arr, slices=selection, data=input_arr)
-        is_dirty = True
+        is_dirty = chunkWriteSelection(chunk_arr=chunk_arr, slices=selection, data=input_arr)
 
         # chunk update successful
         resp = {}
     if is_dirty:
         save_chunk(app, chunk_id, bucket=bucket)
+        status_code = 201
+    else:
+        status_code = 200
 
-    resp = json_response(resp, status=201)
+    resp = json_response(resp, status=status_code)
     log.response(request, resp=resp)
     return resp
 

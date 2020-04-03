@@ -28,16 +28,16 @@ from aiohttp.client_exceptions import ClientError
 from asyncio import CancelledError
 
 
-import config
-from util.httpUtil import http_get, http_post, jsonResponse
-from util.idUtil import createNodeId
-from util.authUtil import getUserPasswordFromRequest, validateUserPassword
-import util.query_marathon as marathonClient
-import hsds_logger as log
+from . import config
+from .util.httpUtil import http_get, http_post, jsonResponse
+from .util.idUtil import createNodeId
+from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
+from .util import query_marathon as marathonClient
+from . import hsds_logger as log
 from kubernetes import client as k8s_client
 from kubernetes import config as k8s_config
 
-HSDS_VERSION = "0.5"
+HSDS_VERSION = "0.6_beta"
 
 def getVersion():
     return HSDS_VERSION
@@ -63,7 +63,7 @@ async def register(app):
         log.warn("head_url is not set, can not register yet")
         return
     req_reg = head_url + "/register"
-    log.info("register: {}".format(req_reg))
+    log.info(f"register: {req_reg}")
 
     if "is_dcos" in app:
         outside_port = config.get('PORT0')
@@ -75,10 +75,10 @@ async def register(app):
         body = {"id": app["id"], "port": outside_port, "node_type": app["node_type"]}
     app['register_time'] = int(time.time())
     try:
-        log.debug("register req: {} body: {}".format(req_reg, body))
+        log.debug(f"register req: {req_reg} body: {body}")
         rsp_json = await http_post(app, req_reg, data=body)
         if rsp_json is not None:
-            log.debug("register response: {}".format(rsp_json))
+            log.debug(f"register response: {rsp_json}")
             app["node_number"] = rsp_json["node_number"]
             app["node_count"] = rsp_json["node_count"]
             log.info("setting node_state to WAITING")
@@ -104,7 +104,7 @@ async def get_info(app, url):
             return None
 
     except OSError as ose:
-        log.warn("OSError for req: {}: {}".format(req, str(ose)))
+        log.warn(f"OSError for req: {req}: {ose}")
         return None
 
     except HTTPInternalServerError as hpe:
@@ -118,7 +118,7 @@ async def get_info(app, url):
         return None
 
     except TimeoutError as toe:
-        log.warn("Timeout error for req: {}: {}".format(req, str(toe)))
+        log.warn(f"Timeout error for req: {req}: {toe}")
         # node has gone away?
         return None
     except HTTPGone as hg:
@@ -447,7 +447,7 @@ async def dcos_register(app):
                 if "node" not in info_rsp:
                     log.error("expected to find node key in info resp")
                     continue
-    
+
                 node_rsp = info_rsp["node"]
                 log.debug(f"got info resp: {node_rsp}")
                 for key in ("type", "id", "node_number", "node_count"):
@@ -537,15 +537,16 @@ async def healthCheck(app):
         else:
             # check in with the head node and make sure we are still active
             head_url = getHeadUrl(app)
-            req_node = "{}/nodestate".format(head_url)
-            log.debug("health check req {}".format(req_node))
+            req_node = f"{head_url}/nodestate"
+            log.debug(f"health check req {req_node}")
             try:
                 rsp_json = await http_get(app, req_node)
                 if rsp_json is None or not isinstance(rsp_json, dict):
-                    log.warn("invalid health check response: type: {} text: {}".format(type(rsp_json), rsp_json))
+                    log.warn(f"invalid health check response: type: {type(rsp_json)} text: {rsp_json}")
                 else:
-                    log.debug("cluster_state: {}".format(rsp_json["cluster_state"]))
-                    if rsp_json["cluster_state"] != "READY" and app["node_state"] == "READY":
+                    cluster_state = rsp_json["cluster_state"]
+                    log.debug(f"cluster_state: {cluster_state}")
+                    if cluster_state != "READY" and app["node_state"] == "READY":
                         log.info("changing node_state to WAITING")
                         app["node_state"] = "WAITING"
 
@@ -580,7 +581,7 @@ async def healthCheck(app):
                         elif node["node_type"] == "sn":
                             sn_urls[node_number] = url
                         else:
-                            log.error("Unexpected node_type for node: {}".format(node))
+                            log.error(f"Unexpected node_type for node: {node}")
                     if node["node_type"] == "dn":
                         app["node_count"] = len(dn_urls)
                     elif node["node_type"] == "sn":

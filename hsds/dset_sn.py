@@ -19,17 +19,17 @@ import math
 import numpy as np
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict
 
-from util.httpUtil import http_post, http_put, http_delete, getHref, jsonResponse
-from util.idUtil import   isValidUuid, getDataNodeUrl, createObjId, isSchema2Id
-from util.dsetUtil import  getPreviewQuery
-from util.arrayUtil import getNumElements
-from util.chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk, getContiguousLayout
-from util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
-from util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain, getPathForDomain
-from util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson, getItemSize
-from servicenode_lib import getDomainJson, getObjectJson, validateAction, getObjectIdByPath, getPathForObjectId, getRootInfo
-import config
-import hsds_logger as log
+from .util.httpUtil import http_post, http_put, http_delete, getHref, jsonResponse
+from .util.idUtil import   isValidUuid, getDataNodeUrl, createObjId, isSchema2Id
+from .util.dsetUtil import  getPreviewQuery
+from .util.arrayUtil import getNumElements
+from .util.chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk, getContiguousLayout
+from .util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
+from .util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain, getPathForDomain
+from .util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson, getItemSize
+from .servicenode_lib import getDomainJson, getObjectJson, validateAction, getObjectIdByPath, getPathForObjectId, getRootInfo
+from . import config
+from . import hsds_logger as log
 
 """
 Use chunk layout given in the creationPropertiesList (if defined and layout is valid).

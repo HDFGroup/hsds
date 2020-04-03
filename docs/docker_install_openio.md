@@ -30,7 +30,7 @@ Use these environment variables for running with a multi node OpenIO cluster
     export BUCKET_NAME=hsds.test                   # set to the name of the bucket you will be using
     export AWS_REGION=us-east-1                    # for boto compatibility - for S3 set to the region the bucket is in
     export AWS_S3_GATEWAY=http://host1.mynetwork.com:6007  # Set to the S3 port for one of the OpenIO machine in the cluster
-    export HSDS_ENDPOINT=http://hsds.hdf.test    # The DNS name of the machine running docker, or a name defined in /etc/hosts.  Use https protocal if SSL is desired
+    export HSDS_ENDPOINT=http://hsds.hdf.test    # The DNS name of the machine running docker, or a name defined in /etc/hosts.  Use https protocol if SSL is desired
 
 
 Docker Setup
@@ -63,7 +63,7 @@ user home folders.
 4. In the following steps use the password that was setup for the test_user1 account in place of \<passwd\>
 5. Create a test folder on HSDS: `$ hstouch -u test_user1 -p <passwd> /home/test_user1/test/` 
 6. Import into hsds: `$ hsload -v -u test_user1 -p <passwd> tall.h5 /home/test_user1/test/`
-7. Verify upload: `$ hsls -r -u test_user1 -p <passwd> /home/test_user1/test/tall.h5
+7. Verify upload: `$ hsls -r -u test_user1 -p <passwd> /home/test_user1/test/tall.h5`
 8. To setup home folders, for each username in the passwd file (other than admin and test_user1), create a top-level domain: `$ hstouch -o <username> /home/<username>/`
 
 Installing Software Updates
@@ -73,5 +73,5 @@ To get the latest codes changes from the HSDS repo do the following:
 
 1. Shutdown the service: `$ stopall.sh`
 2. Get code changes: `$ git pull`
-3. Build a new Docker image: `$ docker-compose build
+3. Build a new Docker image: `$ docker-compose build`
 4. Start the service: `$ ./runall.sh`

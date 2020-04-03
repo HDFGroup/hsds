@@ -3,8 +3,8 @@ import datetime
 import subprocess
 import json
 from aiobotocore.config import AioConfig
-import config
-import hsds_logger as log
+from .. import config
+from .. import hsds_logger as log
 
 """
 get aiobotocore lambda client
@@ -12,8 +12,7 @@ get aiobotocore lambda client
 
 def getLambdaClient(app):
     if "session" not in app:
-        loop = app["loop"]
-        session = get_session(loop=loop)
+        session = get_session()
         app["session"] = session
     else:
         session = app["session"]

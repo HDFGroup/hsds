@@ -17,13 +17,11 @@ from aiohttp.client_exceptions import ClientOSError
 from aiohttp.web import StreamResponse
 from aiohttp.http_writer import StreamWriter
 
-sys.path.append('../../hsds')
-sys.path.append('../../hsds/util')
-from util.storUtil import releaseStorageClient
-from util.idUtil import isValidChunkId
-from util.lruCache import LruCache
-from chunk_dn import GET_Chunk
-import config
+from hsds.util.storUtil import releaseStorageClient
+from hsds.util.idUtil import isValidChunkId
+from hsds.util.lruCache import LruCache
+from hsds.chunk_dn import GET_Chunk
+from hsds import config
 
 # This is a utility to dump a JSON obj (group, dataset, ctype) given the
 # the objects UUID

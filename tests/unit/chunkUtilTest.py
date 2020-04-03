@@ -14,13 +14,12 @@ import sys
 import json
 import numpy as np
 
-sys.path.append('../../hsds/util')
-sys.path.append('../../hsds')
-from dsetUtil import getHyperslabSelection
-from chunkUtil import guessChunk, getNumChunks, getChunkIds, getChunkId, getPartitionKey, getChunkPartition
-from chunkUtil import getChunkIndex, getChunkSelection, getChunkCoverage, getDataCoverage, ChunkIterator
-from chunkUtil import getChunkSize, shrinkChunk, expandChunk, getDatasetId, getContiguousLayout, _getEvalStr
-from chunkUtil import chunkReadSelection, chunkWriteSelection, chunkReadPoints, chunkWritePoints, chunkQuery
+sys.path.append('../..')
+from hsds.util.dsetUtil import getHyperslabSelection
+from hsds.util.chunkUtil import guessChunk, getNumChunks, getChunkIds, getChunkId, getPartitionKey, getChunkPartition
+from hsds.util.chunkUtil import getChunkIndex, getChunkSelection, getChunkCoverage, getDataCoverage, ChunkIterator
+from hsds.util.chunkUtil import getChunkSize, shrinkChunk, expandChunk, getDatasetId, getContiguousLayout, _getEvalStr
+from hsds.util.chunkUtil import chunkReadSelection, chunkWriteSelection, chunkReadPoints, chunkWritePoints, chunkQuery
 
 
 class ChunkUtilTest(unittest.TestCase):

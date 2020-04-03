@@ -13,11 +13,11 @@ import asyncio
 import sys
 from aiobotocore import get_session
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
-from util.s3Util import releaseClient, getS3Keys, getS3JSONObj
-from util.idUtil import getObjId
-from async_lib import scanRoot
-import config
-import hsds_logger as log
+from hsds.util.s3Util import releaseClient, getS3Keys, getS3JSONObj
+from hsds.util.idUtil import getObjId
+from hsds.async_lib import scanRoot
+from hsds import config
+from hsds import hsds_logger as log
 
 
 # List all root keys and create/update info.json

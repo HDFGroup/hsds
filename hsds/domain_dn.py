@@ -16,11 +16,11 @@ import time
 from aiohttp.web_exceptions import HTTPConflict, HTTPInternalServerError
 from aiohttp.web import json_response
 
-from util.authUtil import  getAclKeys
-from util.domainUtil import isValidDomain, getBucketForDomain
-from util.idUtil import validateInPartition
-from datanode_lib import get_metadata_obj, save_metadata_obj, delete_metadata_obj, check_metadata_obj
-import hsds_logger as log
+from .util.authUtil import  getAclKeys
+from .util.domainUtil import isValidDomain, getBucketForDomain
+from .util.idUtil import validateInPartition
+from .datanode_lib import get_metadata_obj, save_metadata_obj, delete_metadata_obj, check_metadata_obj
+from . import hsds_logger as log
 
 def get_domain(request, body=None):
     """ Extract domain and validate """
@@ -80,6 +80,15 @@ async def PUT_Domain(request):
         msg = "Expected body in put domain"
         log.error(msg)
         raise HTTPInternalServerError()
+    log.debug("PUT_Domain, get request.json")
+    if "Content-Type" not in request.headers:
+        log.error("expected Content-Type in request headers")
+        raise HTTPInternalServerError()
+    content_type = request.headers["Content-Type"]
+    if content_type != "application/json":
+        log.error(f"PUT_Domain, expected json content-type but got: {content_type}")
+        raise HTTPInternalServerError()
+
     body = await request.json()
     log.debug(f"got body: {body}")
 

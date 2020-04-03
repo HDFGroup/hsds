@@ -25,14 +25,17 @@ echo "cwd:" ${PWD}
 if [ $1 == "head" ]; then
     # magic url which returns local ip when run on EC2 host
     export HEAD_HOST=$(curl http://169.254.169.254/latest/meta-data/local-ipv4)
-    echo "running headnode.py"
-    python -u headnode.py &
+    echo "running hsds-headnode"
+    export PYTHONUNBUFFERED="1"
+    hsds-headnode &
 elif [ $1 == "dn" ]; then
-    echo "running datanode.py"
-    python -u datanode.py &
+    echo "running hsds-datanode"
+    export PYTHONUNBUFFERED="1"
+    hsds-datanode &
 elif [ $1 == "sn" ]; then
-    echo "running servicenode.py"
-    python -u servicenode.py &
+    echo "running hsds-servicenode"
+    export PYTHONUNBUFFERED="1"
+    hsds-servicenode &
 else
     echo "Argument not recognized"
     exit 1

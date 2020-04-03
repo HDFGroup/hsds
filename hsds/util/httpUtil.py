@@ -20,10 +20,8 @@ from aiohttp.web_exceptions import HTTPForbidden, HTTPNotFound, HTTPConflict, HT
 from aiohttp.client_exceptions import ClientError
 
 
-import hsds_logger as log
-import config
-
-CORS_DOMAIN='*'
+from .. import hsds_logger as log
+from .. import config
 
 def isOK(http_response):
     if http_response < 300:
@@ -32,7 +30,7 @@ def isOK(http_response):
 
 
 def getUrl(host, port):
-    return "http://{}:{}".format(host, port)
+    return f"http://{host}:{port}"
 
 """
 get aiobotocore http client
@@ -86,14 +84,14 @@ async def request_read(request) -> bytes:
 Helper function  - async HTTP GET
 """
 async def http_get(app, url, params=None, format="json"):
-    log.info("http_get('{}')".format(url))
+    log.info(f"http_get('{url}')")
     client = get_http_client(app)
     data = None
     status_code = None
     timeout = config.get("timeout")
     try:
         async with client.get(url, params=params, timeout=timeout) as rsp:
-            log.info("http_get status: {}".format(rsp.status))
+            log.info(f"http_get status: {rsp.status}")
             status_code = rsp.status
             if rsp.status != 200:
                 log.warn(f"request to {url} failed with code: {status_code}")
@@ -107,7 +105,7 @@ async def http_get(app, url, params=None, format="json"):
         log.debug(f"ClientError: {ce}")
         status_code = 404
     except CancelledError as cle:
-        log.error("CancelledError for http_get({}): {}".format(url, str(cle)))
+        log.error(f"CancelledError for http_get({url}): {cle}")
         raise HTTPInternalServerError()
 
     if status_code == 403:
@@ -132,14 +130,14 @@ async def http_get(app, url, params=None, format="json"):
 Helper function  - async HTTP POST
 """
 async def http_post(app, url, data=None, params=None):
-    log.info("http_post('{}', data)".format(url, data))
+    log.info(f"http_post('{url}', {data})")
     client = get_http_client(app)
     rsp_json = None
     timeout = config.get("timeout")
 
     try:
         async with client.post(url, json=data, params=params, timeout=timeout ) as rsp:
-            log.info("http_post status: {}".format(rsp.status))
+            log.info(f"http_post status: {rsp.status}")
             if rsp.status == 200:
                 pass  # ok
             elif rsp.status == 201:
@@ -158,9 +156,9 @@ async def http_post(app, url, data=None, params=None):
                 log.warn(f"POST request error for url: {url} - status: {rsp.status}")
                 raise HTTPInternalServerError()
             rsp_json = await rsp.json()
-            log.debug("http_post({}) response: {}".format(url, rsp_json))
+            log.debug(f"http_post({url}) response: {rsp_json}")
     except ClientError as ce:
-        log.error("Error for http_post({}): {} ".format(url, str(ce)))
+        log.error(f"Error for http_post({url}): {ce} ")
         raise HTTPInternalServerError()
     except CancelledError as cle:
         log.error(f"CancelledError for http_post({url}): {cle}")
@@ -171,14 +169,14 @@ async def http_post(app, url, data=None, params=None):
 Helper function  - async HTTP PUT for json data
 """
 async def http_put(app, url, data=None, params=None):
-    log.info("http_put('{}', data: {})".format(url, data))
+    log.info(f"http_put('{url}', data: {data})")
     rsp = None
     client = get_http_client(app)
     timeout = config.get("timeout")
 
     try:
         async with client.put(url, json=data, params=params, timeout=timeout) as rsp:
-            log.info("http_put status: {}".format(rsp.status))
+            log.info(f"http_put status: {rsp.status}")
             if rsp.status == 201:
                 pass # expected
             elif rsp.status == 404:
@@ -195,7 +193,7 @@ async def http_put(app, url, data=None, params=None):
                 raise HTTPInternalServerError()
 
             rsp_json = await rsp.json()
-            log.debug("http_put({}) response: {}".format(url, rsp_json))
+            log.debug(f"http_put({url}) response: {rsp_json}")
     except ClientError as ce:
         log.error(f"ClientError for http_put({url}): {ce} ")
         raise HTTPInternalServerError()
@@ -209,7 +207,7 @@ Helper function  - async HTTP PUT for binary data
 """
 
 async def http_put_binary(app, url, data=None, params=None):
-    log.info("http_put_binary('{}') nbytes: {}".format(url, len(data)))
+    log.info(f"http_put_binary('{url}') nbytes: {len(data)}")
     rsp_json = None
     client = get_http_client(app)
     timeout = config.get("timeout")
@@ -275,22 +273,24 @@ async def http_delete(app, url, data=None, params=None):
     return rsp_json
 
 """
-Helper funciton, create a response object using the provided
+Helper function, create a response object using the provided
 JSON data
 """
 async def jsonResponse(request, data, status=200):
+
+    # with aiohttp-cors, it should be possible to just return
+    #   json_response(data, headers={}, status=status), but this doesn't
+    #   seem to be working, so manually addding CORS headers here
     headers = {}
-    #headers['Content-Type'] = 'application/json'
-    if CORS_DOMAIN:
-        headers['Access-Control-Allow-Origin'] = CORS_DOMAIN
+    cors_domain = config.get("cors_domain")
+    if cors_domain:
+        headers['Access-Control-Allow-Origin'] = cors_domain
         headers['Access-Control-Allow-Methods'] = "GET, POST, DELETE, PUT, OPTIONS"
         headers['Access-Control-Allow-Headers'] = "Content-Type, api_key, Authorization"
-    resp = json_response(data, headers=headers, status=status)
-
-    return resp
+    return json_response(data, headers=headers, status=status)
 
 """
-Convience method to compute href links
+Convenience method to compute href links
 """
 def getHref(request, uri, query=None, domain=None):
     params = request.rel_url.query
@@ -327,9 +327,10 @@ Currently does not support q fields.
 def getAcceptType(request):
     accept_type = "json"  # default to JSON
     if "accept" in request.headers:
+        accept = request.headers["accept"]
         # treat everything as json unless octet-stream is given
-        if request.headers["accept"] != "application/octet-stream":
-            msg = "Ignoring accept value: {}".format(request.headers["accept"])
+        if accept != "application/octet-stream":
+            msg = f"Ignoring accept value: {accept}"
             log.info(msg)
         else:
             accept_type = "binary"
