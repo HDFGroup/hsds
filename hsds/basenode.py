@@ -519,7 +519,7 @@ async def healthCheck(app):
     """ Periodic method that either registers with headnode (if state in INITIALIZING) or
     calls headnode to verify vitals about this node (otherwise)"""
 
-    # let the server event loop startup before sarting the health check
+    # let the server event loop startup before starting the health check
     await asyncio.sleep(1)
     log.info("health check start")
     sleep_secs = config.get("node_sleep_time")
@@ -581,6 +581,11 @@ async def healthCheck(app):
                             sn_urls[node_number] = url
                         else:
                             log.error("Unexpected node_type for node: {}".format(node))
+                    if node["node_type"] == "dn":
+                        app["node_count"] = len(dn_urls)
+                    elif node["node_type"] == "sn":
+                        app["node_count"] = len(sn_urls)
+
                     app["sn_urls"] = sn_urls
                     log.debug(f"sn_urls: {sn_urls}")
                     app["dn_urls"] = dn_urls
@@ -594,6 +599,8 @@ async def healthCheck(app):
                     if app["node_state"] == "WAITING" and rsp_json["cluster_state"] == "READY" and app["node_number"] >= 0:
                         log.info("setting node_state to READY, node_number: {}".format(app["node_number"]))
                         app["node_state"]  = "READY"
+                    else:
+                        log.debug(f"No node state change in node_number: {app['node_number']}")
                     log.info("health check ok")
             except ClientError as ce:
                 log.warn(f"ClientError: {ce} for health check")

@@ -383,14 +383,14 @@ def getObjPartition(id, count):
     hash_code = getIdHash(id)
     hash_value = int(hash_code, 16)
     number = hash_value % count
-    log.debug(f"ID {id} resolved to data node {number}")
+    log.debug(f"ID {id} resolved to data node {number}, out of {count} data paritions.")
     return number
 
 def validateInPartition(app, obj_id):
-    log.debug(f'obj_id: {obj_id}, app[node_count]: {app["node_count"]}, node_number: {app["node_number"]}')
-    if getObjPartition(obj_id, app['node_count']) != app['node_number']:
+    log.debug(f'obj_id: {obj_id}, len(app[dn_urls]): {len(app["dn_urls"])}, node_number: {app["node_number"]}')
+    if getObjPartition(obj_id, len(app['dn_urls'])) != app['node_number']:
         # The request shouldn't have come to this node'
-        msg = "wrong node for 'id':{obj_id}, expected node {app['node_number']} got {getObjPartition(obj_id, app['node_count'])}"
+        msg = f"wrong node for 'id':{obj_id}, expected node {app['node_number']} got {getObjPartition(obj_id, app['node_count'])}"
         log.error(msg)
         raise KeyError(msg)
 
@@ -398,14 +398,13 @@ def getDataNodeUrl(app, obj_id):
     """ Return host/port for datanode for given obj_id.
     Throw exception if service is not ready"""
     dn_urls = app["dn_urls"]
-    node_count = app["node_count"]
+    dn_node_count = len(dn_urls)
     node_state = app["node_state"]
-    if node_state!= "READY" or node_count <= 0 or node_count != len(dn_urls):
-        log.info(f"getDataNodeUrl returning 503 - node_state: {node_state} node_count: {node_count} number of dn_urls {len(dn_urls)}")
+    if node_state != "READY" or len(dn_urls) <= 0:
         msg="Service not ready"
         log.warn(msg)
         raise HTTPServiceUnavailable()
-    dn_number = getObjPartition(obj_id, node_count)
+    dn_number = getObjPartition(obj_id, dn_node_count)
     url = dn_urls[dn_number]
     log.debug(f"got dn_url: {url} for obj_id: {obj_id}")
     return url

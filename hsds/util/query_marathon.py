@@ -93,7 +93,7 @@ class MarathonClient:
             log.warn("invalid marathon query response")
         else:
             if instancesJSON["app"] is not None and instancesJSON["app"]["instances"] is not None:
-                log.debug("DN instances {}".format(instancesJSON["app"]["instances"]))
+                log.debug(f"DN instances {instancesJSON['app']['instances']}")
                 return instancesJSON["app"]["instances"]
             else:
                 log.warn("Incomplete or malformed JSON returned from DN node.")

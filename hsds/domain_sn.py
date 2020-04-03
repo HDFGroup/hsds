@@ -172,7 +172,7 @@ class FolderCrawler:
         except HTTPServiceUnavailable:
             log.warn(f"fetch result - service unavailable for domain: {domain}")
         except Exception as e:
-            log.error(f"fetch result - unexpected exception for domain {domain}: {e}")
+            log.error(f"fetch result - unexpected exception for domain {domain}: exception of type {type(e)}, {e}")
 
 async def get_collections(app, root_id):
     """ Return the object ids for given root.
