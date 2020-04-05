@@ -27,7 +27,7 @@ from .util.timeUtil import unixTimeToUTC, elapsedTime
 from .util.httpUtil import http_get, getUrl
 from .util.idUtil import  createNodeId
 from . import hsds_logger as log
-import .util.query_marathon as marathonClient
+from .util import query_marathon as marathonClient
 
 NODE_STAT_KEYS = ("cpu", "diskio", "memory", "log_stats", "disk", "netio",
     "req_count", "s3_stats", "azure_stats", "chunk_cache_stats")
