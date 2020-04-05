@@ -39,6 +39,7 @@ async def healthCheck(app):
 
 
     nodes = app["nodes"]
+
     while True:
         app["last_health_check"] = int(time.time())
 
@@ -47,7 +48,7 @@ async def healthCheck(app):
         await  asyncio.sleep(sleep_secs)
 
         now = int(time.time())
-        log.info("health check {}".format(unixTimeToUTC(now)))
+        log.info("health check {}, cluster_state: {}".format(unixTimeToUTC(now), app["cluster_state"]))
 
         fail_count = 0
         # keep track of where we are in the global node list for possible deletions
@@ -102,16 +103,15 @@ async def healthCheck(app):
                 if node["failcount"] >= HEALTH_CHECK_RETRY_COUNT:
                     log.warn("node {}:{} not responding".format(node["host"], node["port"]))
                     fail_count += 1
-
-            except HTTPInternalServerError as hpe:
-                log.warn("HTTPInternalServerError for req: {}: {}".format(url, str(hpe)))
+            except TimeoutError as toe:
+                log.warn("TimeoutError for req: {}: {}".format(url, str(toe)))
                 # node has gone away?
                 node["failcount"] += 1
                 if node["failcount"] >= HEALTH_CHECK_RETRY_COUNT:
-                    log.warn("removing {}:{} from active list".format(node["host"], node["port"]))
+                    log.warn("node {}:{} not responding".format(node["host"], node["port"]))
                     fail_count += 1
-            except TimeoutError as toe:
-                log.warn("Timeout error for req: {}: {}".format(url, str(toe)))
+            except Exception as e:
+                log.warn("Exception for healthcheck: {}: {}".format(url, str(e)))
                 # node has gone away?
                 node["failcount"] += 1
                 if node["failcount"] >= HEALTH_CHECK_RETRY_COUNT:
