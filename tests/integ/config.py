@@ -17,7 +17,7 @@ cfg = {
     'user_name': 'test_user1',
     'user_password': 'test',
     'test_noauth': True,
-    'default_public': False,  # set to true if the server makes new domains publically readable
+    'default_public': False,  # set to true if the server makes new domains publicly readable
     'bucket_name': '',   # bucket name to be used for requests
     'hdf5_sample_bucket': ''  # S3 bucket for storing traditional HDF5 files (snp500.h5 and tall.h5), e.g. 'hdf5_sample'
 }

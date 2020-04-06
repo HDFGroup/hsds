@@ -65,9 +65,13 @@ services:
       - LETSENCRYPT_HOST=${PUBLIC_DNS}
       - LETSENCRYPT_EMAIL=jguerrero@teravisiontech.com
       - AUTH_EXPIRATION=${AUTH_EXPIRATION}
+      - ALLOW_NOAUTH=${ALLOW_NOAUTH}
       - CORS_DOMAIN=${CORS_DOMAIN}
+      - ADMIN_USER=${ADMIN_USER}
     depends_on:
       - head
+    volumes:
+      - ${PWD}/admin/config/:/config/
   proxy:
     image: nginx
     restart: always

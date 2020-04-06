@@ -16,6 +16,8 @@ import asyncio
 from asyncio import TimeoutError
 import os
 import time
+import random
+import sys
 import psutil
 import traceback
 from copy import copy
@@ -66,7 +68,7 @@ async def register(app):
         log.warn("head_url is not set, can not register yet")
         return
     req_reg = head_url + "/register"
-    log.info("register: {}".format(req_reg))
+    log.info(f"register: {req_reg}")
 
     if "is_dcos" in app:
         outside_port = config.get('PORT0')
@@ -76,10 +78,10 @@ async def register(app):
     body = {"id": app["id"], "port": outside_port, "node_type": app["node_type"]}
     app['register_time'] = int(time.time())
     try:
-        log.debug("register req: {} body: {}".format(req_reg, body))
+        log.debug(f"register req: {req_reg} body: {body}")
         rsp_json = await http_post(app, req_reg, data=body)
         if rsp_json is not None:
-            log.debug("register response: {}".format(rsp_json))
+            log.debug(f"register response: {rsp_json}")
             app["node_number"] = rsp_json["node_number"]
             app["node_count"] = rsp_json["node_count"]
             log.info("setting node_state to WAITING")
@@ -100,7 +102,7 @@ async def get_info(app, url):
             return None
 
     except OSError as ose:
-        log.warn("OSError for req: {}: {}".format(req, str(ose)))
+        log.warn(f"OSError for req: {req}: {ose}")
         return None
 
     except HTTPInternalServerError as hpe:
@@ -114,7 +116,7 @@ async def get_info(app, url):
         return None
 
     except TimeoutError as toe:
-        log.warn("Timeout error for req: {}: {}".format(req, str(toe)))
+        log.warn(f"Timeout error for req: {req}: {toe}")
         # node has gone away?
         return None
     return rsp_json
@@ -436,7 +438,7 @@ async def dcos_register(app):
                 if "node" not in info_rsp:
                     log.error("expected to find node key in info resp")
                     continue
-    
+
                 node_rsp = info_rsp["node"]
                 log.debug(f"got info resp: {node_rsp}")
                 for key in ("type", "id", "node_number", "node_count"):
@@ -512,6 +514,7 @@ async def healthCheck(app):
     await asyncio.sleep(1)
     log.info("health check start")
     sleep_secs = config.get("node_sleep_time")
+    chaos_die = config.get("chaos_die")
 
     while True:
         print("node_state:", app["node_state"])
@@ -526,15 +529,16 @@ async def healthCheck(app):
         else:
             # check in with the head node and make sure we are still active
             head_url = getHeadUrl(app)
-            req_node = "{}/nodestate".format(head_url)
-            log.debug("health check req {}".format(req_node))
+            req_node = f"{head_url}/nodestate"
+            log.debug(f"health check req {req_node}")
             try:
                 rsp_json = await http_get(app, req_node)
                 if rsp_json is None or not isinstance(rsp_json, dict):
-                    log.warn("invalid health check response: type: {} text: {}".format(type(rsp_json), rsp_json))
+                    log.warn(f"invalid health check response: type: {type(rsp_json)} text: {rsp_json}")
                 else:
-                    log.debug("cluster_state: {}".format(rsp_json["cluster_state"]))
-                    if rsp_json["cluster_state"] != "READY" and app["node_state"] == "READY":
+                    cluster_state = rsp_json["cluster_state"]
+                    log.debug(f"cluster_state: {cluster_state}")
+                    if cluster_state != "READY" and app["node_state"] == "READY":
                         log.info("changing node_state to WAITING")
                         app["node_state"] = "WAITING"
 
@@ -569,21 +573,28 @@ async def healthCheck(app):
                         elif node["node_type"] == "sn":
                             sn_urls[node_number] = url
                         else:
-                            log.error("Unexpected node_type for node: {}".format(node))
+                            log.error(f"Unexpected node_type for node: {node}")
                     app["sn_urls"] = sn_urls
                     log.debug(f"sn_urls: {sn_urls}")
                     app["dn_urls"] = dn_urls
                     log.debug(f"dn_urls: {dn_urls}")
 
-                    if this_node is None and rsp_json["cluster_state"] != "READY":
+                    if this_node is None and cluster_state != "READY":
                         log.warn("this node not found, re-initialize")
                         app["node_state"] = "INITIALIZING"
                         app["node_number"] = -1
 
-                    if app["node_state"] == "WAITING" and rsp_json["cluster_state"] == "READY" and app["node_number"] >= 0:
+                    if app["node_state"] == "WAITING" and cluster_state == "READY" and app["node_number"] >= 0:
                         log.info("setting node_state to READY, node_number: {}".format(app["node_number"]))
                         app["node_state"]  = "READY"
                     log.info("health check ok")
+                    if cluster_state == "READY" and chaos_die > 0:
+                        if random.randint(0, chaos_die) == 0:
+                            log.error("chaos die - suicide!")
+                            sys.exit(1)
+                        else:
+                            log.info("chaos die - still alive")
+
             except ClientError as ce:
                 log.warn(f"ClientError: {ce} for health check")
             except HTTPInternalServerError as he:

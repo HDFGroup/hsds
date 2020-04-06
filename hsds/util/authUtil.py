@@ -9,13 +9,13 @@
 # distribution tree.  If you do not have access to this file, you may        #
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
-import os
 import time
 import base64
 import hashlib
 import json
 import binascii
 import subprocess
+import os.path as pp
 import datetime
 from botocore.exceptions import ClientError
 from aiobotocore import get_session
@@ -180,16 +180,9 @@ def initUserDB(app):
         log.info("using PASSWORD_SALT")
         user_db = {}
     else:
-        password_file = None
-        if "PASSWORD_FILE" in os.environ:
-            # need to fetch this directly from os.environ to
-            # have null override existing config value
-            password_file = os.environ["PASSWORD_FILE"]
-        else:
-            password_file = config.get("password_file")
-        if not password_file:
-            log.info("No password file, allowing no-auth access")
-            app["no_auth"] = True  # flag so we know we are in no auth mode
+        password_file = config.get("password_file")
+        if not password_file or not pp.isfile(password_file) :
+            log.info("No password file")
             user_db = {}
         else:
             log.info(f"Loading password file: {password_file}")
@@ -287,10 +280,10 @@ async def validateUserPassword(app, username, password):
 
     if not username:
         log.info('validateUserPassword - null user')
-        raise HTTPBadRequest("provide user name and password")
+        raise HTTPUnauthorized()
     if not password:
         log.info('isPasswordValid - null password')
-        raise HTTPBadRequest("provide  password")
+        raise HTTPUnauthorized()
 
     log.debug(f"looking up username: {username}")
     if "user_db" not in app:

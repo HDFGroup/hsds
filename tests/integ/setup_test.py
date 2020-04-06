@@ -87,15 +87,6 @@ class SetupTest(unittest.TestCase):
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("class" in rspJson)
         self.assertEqual(rspJson["class"], "folder")
-        """
-        domain = "test_user1.home"
-        headers = helper.getRequestHeaders(domain=domain)
-
-        req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        """
-
 
 
 if __name__ == '__main__':

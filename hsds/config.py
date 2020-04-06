@@ -62,7 +62,8 @@ cfg = {
     'about': 'HSDS is a webservice for HDF data',
     'top_level_domains': [],  # list of possible top-level domains, example: ["/home", "/shared"]
     'cors_domain': '*',     # domains allowed for CORS
-    'admin_user': 'admin'   # use with admin privileges
+    'admin_user': 'admin',   # use with admin privileges
+    'chaos_die': 0           # if > 0, have nodes randomly die after n seconds (for testing)
 
 }
 
