@@ -15,21 +15,38 @@ import requests
 import json
 import helper
 
+
 class UpTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(UpTest, self).__init__(*args, **kwargs)
 
-        # main
+    def testCorsGetAbout(self):
+        endpoint = helper.getEndpoint()
+        print("endpoint:", endpoint)
+        req = endpoint + "/about"
+        rsp = requests.options(
+            req,
+            headers={
+                "Access-Control-Request-Method": "GET",
+                "Origin": "*",
+                "Access-Control-Request-Headers": "Authorization",
+            },
+        )
+        self.assertEqual(rsp.status_code, 200)
+
+        # cross origin allowed by default
+        self.assertEqual(rsp.headers["Access-Control-Allow-Origin"], "*")
+        self.assertEqual(
+            rsp.headers["Access-Control-Allow-Methods"], "GET",
+        )
+
     def testGetAbout(self):
         endpoint = helper.getEndpoint()
         print("endpoint:", endpoint)
         req = endpoint + "/about"
         rsp = requests.get(req)
         self.assertEqual(rsp.status_code, 200)
-        # cross origin allowed by default
-        self.assertEqual(rsp.headers['Content-Type'], 'application/json; charset=utf-8')
-        self.assertEqual(rsp.headers['Access-Control-Allow-Origin'], '*')
-        self.assertEqual(rsp.headers['Access-Control-Allow-Methods'], 'GET, POST, DELETE, PUT, OPTIONS')
+        self.assertEqual(rsp.headers["Content-Type"], "application/json; charset=utf-8")
 
         rspJson = json.loads(rsp.text)
         self.assertTrue("state") in rspJson
@@ -45,15 +62,11 @@ class UpTest(unittest.TestCase):
         now = int(time.time())
         self.assertTrue(now > start_time)
 
-
     def testGetInfo(self):
-        req = helper.getEndpoint() + '/info'
+        req = helper.getEndpoint() + "/info"
         rsp = requests.get(req)
         self.assertEqual(rsp.status_code, 200)
-         # cross origin allowed by default
-        self.assertEqual(rsp.headers['Content-Type'], 'application/json; charset=utf-8')
-        self.assertEqual(rsp.headers['Access-Control-Allow-Origin'], '*')
-        self.assertEqual(rsp.headers['Access-Control-Allow-Methods'], 'GET, POST, DELETE, PUT, OPTIONS')
+        self.assertEqual(rsp.headers["Content-Type"], "application/json; charset=utf-8")
         rspJson = json.loads(rsp.text)
         self.assertTrue("node" in rspJson)
         node = rspJson["node"]
@@ -69,8 +82,7 @@ class UpTest(unittest.TestCase):
         self.assertEqual(node["state"], "READY")
 
 
-
-if __name__ == '__main__':
-    #setup test files
+if __name__ == "__main__":
+    # setup test files
 
     unittest.main()
