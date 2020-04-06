@@ -44,7 +44,7 @@ async def healthCheck(app):
         await  asyncio.sleep(sleep_secs)
 
         now = int(time.time())
-        log.info("health check {}, cluster_state: {}".format(unixTimeToUTC(now), app["cluster_state"]))
+        log.info("health check {}, cluster_state: {}, node_count: {}".format(unixTimeToUTC(now), app["cluster_state"], len(nodes)))
 
         fail_count = 0
         HEALTH_CHECK_RETRY_COUNT = 1 # times to try before calling a node dead
@@ -107,6 +107,7 @@ async def healthCheck(app):
                 node["failcount"] += 1
                 if node["failcount"] >= HEALTH_CHECK_RETRY_COUNT:
                     log.warn("removing {}:{} from active list".format(node["host"], node["port"]))
+                    node["host"] = None  # make slow available for new registrations
                     fail_count += 1
 
         log.info("node health check fail_count: {}".format(fail_count))
@@ -202,7 +203,7 @@ async def register(request):
     log.info("inactive_node_count: {}".format(inactive_node_count))
     if inactive_node_count == 0:
         # all the nodes have checked in
-        log.info(f"setting cluster state to ready - was: {app['cluster_state']}")
+        log.info(f"setting cluster state to READY - was: {app['cluster_state']}")
         app['cluster_state'] = "READY"
 
     resp = StreamResponse()
