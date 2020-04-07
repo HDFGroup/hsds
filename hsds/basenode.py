@@ -16,6 +16,8 @@ import asyncio
 from asyncio import TimeoutError
 import os
 import time
+import random
+import sys
 import psutil
 import traceback
 from copy import copy
@@ -512,6 +514,7 @@ async def healthCheck(app):
     await asyncio.sleep(1)
     log.info("health check start")
     sleep_secs = config.get("node_sleep_time")
+    chaos_die = config.get("chaos_die")
 
     while True:
         print("node_state:", app["node_state"])
@@ -576,15 +579,22 @@ async def healthCheck(app):
                     app["dn_urls"] = dn_urls
                     log.debug(f"dn_urls: {dn_urls}")
 
-                    if this_node is None and rsp_json["cluster_state"] != "READY":
+                    if this_node is None and cluster_state != "READY":
                         log.warn("this node not found, re-initialize")
                         app["node_state"] = "INITIALIZING"
                         app["node_number"] = -1
 
-                    if app["node_state"] == "WAITING" and rsp_json["cluster_state"] == "READY" and app["node_number"] >= 0:
+                    if app["node_state"] == "WAITING" and cluster_state == "READY" and app["node_number"] >= 0:
                         log.info("setting node_state to READY, node_number: {}".format(app["node_number"]))
                         app["node_state"]  = "READY"
                     log.info("health check ok")
+                    if cluster_state == "READY" and chaos_die > 0:
+                        if random.randint(0, chaos_die) == 0:
+                            log.error("chaos die - suicide!")
+                            sys.exit(1)
+                        else:
+                            log.info("chaos die - still alive")
+
             except ClientError as ce:
                 log.warn(f"ClientError: {ce} for health check")
             except HTTPInternalServerError as he:
