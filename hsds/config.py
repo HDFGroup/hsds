@@ -63,8 +63,8 @@ cfg = {
     'top_level_domains': [],  # list of possible top-level domains, example: ["/home", "/shared"]
     'cors_domain': '*',     # domains allowed for CORS
     'admin_user': 'admin',   # use with admin privileges
-    'chaos_die': 0           # if > 0, have nodes randomly die after n seconds (for testing)
-
+    'chaos_die': 0,           # if > 0, have nodes randomly die after n seconds (for testing)
+    'standalone_app': False,  # True when run as a single application
 }
 
 def get(x):

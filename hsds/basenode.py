@@ -796,8 +796,8 @@ def baseInit(loop, node_type):
     if config.get('MARATHON_APP_ID'):
         app["is_dcos"] = True
 
-
-    log.app = app
+    if not config.get('standalone_app'):
+        log.app = app
 
     app["loop"] = loop  # save loop instance
 

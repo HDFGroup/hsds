@@ -116,10 +116,12 @@ async def init(loop):
 #
 
 
-def main():
-    log.info("Service node initializing")
-    loop = asyncio.get_event_loop()
-    # create the app object
+def create_app(loop):
+    """Create servicenode aiohttp application
+
+    :param loop: The asyncio loop to use for the application
+    :rtype: aiohttp.web.Application
+    """
     app = loop.run_until_complete(init(loop))
 
     metadata_mem_cache_size = int(config.get("metadata_mem_cache_size"))
@@ -144,6 +146,13 @@ def main():
     initUserDB(app)
 
     asyncio.ensure_future(healthCheck(app), loop=loop)
+
+    return app
+
+
+def main():
+    log.info("Service node initializing")
+    app = create_app(asyncio.get_event_loop())
 
     # run the app
     port = int(config.get("sn_port"))

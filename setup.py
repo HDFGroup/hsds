@@ -54,6 +54,7 @@ setup(name='hsds',
       zip_safe=False,
       classifiers=classifiers,
       entry_points={'console_scripts': [
+          'hsds = hsds.app:main',
           'hsds-datanode = hsds.datanode:main',
           'hsds-servicenode = hsds.servicenode:main',
           'hsds-headnode = hsds.headnode:main',
