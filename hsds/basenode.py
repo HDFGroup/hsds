@@ -302,7 +302,7 @@ async def k8s_register(app):
         if not pod_ip:
             continue
         labels = i.metadata.labels
-        if "app" in labels and labels["app"] == "hsds":
+        if labels and "app" in labels and labels["app"] == "hsds":
             log.info(f"hsds pod - ip: {pod_ip}")
             pod_ips.append(pod_ip)
     if not pod_ips:
