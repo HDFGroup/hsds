@@ -28,7 +28,6 @@ cfg = {
     'aws_dynamodb_users_table': '',
     'aws_lambda_chunkread_function': '', # name of aws lambda function for chunk reading
     'azure_connection_string': '', # use for connecting to Azure blob storage
-    'azure_app_id': '',   # application id for use with Azure Active Directory
     'azure_resource_id': '', # resource id for use with Azure Active Directory
     'root_dir': '',  # base directory to use for Posix storage
     'password_salt': '',

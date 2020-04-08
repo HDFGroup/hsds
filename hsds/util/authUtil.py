@@ -362,13 +362,17 @@ def _verifyBearerToken(app, token):
     claims = config.get('openid_claims').split(',')
 
     # Maintain Azure defualts for compatibility.
-    if audience is None:
+    if not audience:
         audience = config.get('azure_resource_id')
 
     # If we still dont have a provider and audience, abort.
-    if provider is None or audience is None or claims is None:
+    if not provider or not audience or not claims:
         log.warn('Bearer authorization, but no OpenID configuration.')
         raise HTTPUnauthorized()
+
+    log.debug(f"Bearer authorization, using provider: {provider}")
+    log.debug(f"Bearer authorization, using audience: {audience}")
+    log.debug(f"Bearer authorization, using claims: {claims}")
 
     # Resolve provider into an OpenID configuration.
     if provider.lower() == 'azure':
