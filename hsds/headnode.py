@@ -384,9 +384,12 @@ def init():
 # Main
 #
 
-def main():
-    log.info("Head node initializing")
-    loop = asyncio.get_event_loop()
+def create_app(loop):
+    """Create headnode aiohttp application
+
+    :param loop: The asyncio loop to use for the application
+    :rtype: aiohttp.web.Application
+    """
     app = init()  
 
     # create a client Session here so that all client requests
@@ -394,6 +397,14 @@ def main():
     app["loop"] = loop
 
     asyncio.ensure_future(healthCheck(app), loop=loop)
+
+    return app
+
+
+def main():
+    log.info("Head node initializing")
+    app = create_app(asyncio.get_event_loop())
+
     head_port = config.get("head_port")
     log.info("Starting service on port: {}".format(head_port))
     log.debug("debug test")
