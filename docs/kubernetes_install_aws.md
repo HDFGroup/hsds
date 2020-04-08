@@ -15,8 +15,7 @@ These environment variables will be used to access AWS resources.
     export AWS_S3_GATEWAY=http://s3.amazonaws.com  # Use AWS endpoint for S3, see note below
     export HSDS_ENDPOINT=http://hsds.hdf.test      # use https protocol if SSL is desired
 
-For S3, set AWS_S3_GATEWAY to endpoint for the region the bucket is in.  E.g.: <http://s3.amazonaws.com>.
-# See <http://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region> for list of endpoints.
+For S3, set AWS_S3_GATEWAY to endpoint for the region the bucket is in.  E.g.: <http://s3.amazonaws.com>. See <http://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region> for list of endpoints.
 
 Prerequisites
 -------------
@@ -63,7 +62,7 @@ Run: `kubectl get secrets` to verify the secrets have been created.
 Deploy HSDS to K8s
 ------------------
 
-If you need to build and deploy a custom HSDS image (e.g. you have made changes to the HSDS code), first build and deploy the code to AWS ECR or Docker hub and modify the image locations in the deployment yml file.   Otherwise, the standard image from docker hub (<https://hub.docker.com/repository/docker/hdfgroup/hsds>) will be deployed.
+If you need to build and deploy a custom HSDS image (e.g. you have made changes to the HSDS code), first build and deploy the code to ECR as described in section "Building a docker image and deploying to ECR" below.  Otherwise, the standard image from docker hub (<https://hub.docker.com/repository/docker/hdfgroup/hsds>) will be deployed.
 
 1. Create RBAC roles: `kubectl create -f k8s_rbac.yml`
 2. Create HSDS service: `$ kubectl apply -f k8s_service_lb.yml`
