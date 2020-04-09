@@ -55,7 +55,7 @@ To create the user-password secret, first create a text file with the desired us
 
 Next, verify that you have set the AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables.
 
-Run the make_secrets script: `./make_secrets.sh`
+Run the make_secrets script: `./k8s_make_secrets.sh`
 
 Run: `kubectl get secrets` to verify the secrets have been created.
 
