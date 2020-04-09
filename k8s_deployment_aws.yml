@@ -19,6 +19,10 @@ spec:
           name: sn
           image: "hsds"
           imagePullPolicy: Always
+          volumeMounts:
+          - name: config
+            mountPath: "/config"
+            readOnly: true
           ports:
             -
               containerPort: 5101
@@ -51,6 +55,8 @@ spec:
             value: "Welcome to HSDS!"
           - name: ABOUT
             value: "HSDS is a webservice for HDF data"
+          - name: PASSWORD_FILE
+            value: /config/passwd.txt
         -
           name: dn
           image: "hsds"
@@ -85,3 +91,7 @@ spec:
             value: DEBUG
           - name: HSDS_ENDPOINT
             value: http://hsds.hdf.test
+      volumes:
+        - name: config
+          secret:
+            secretName: user-password
