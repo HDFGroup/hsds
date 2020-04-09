@@ -1,7 +1,7 @@
 # HSDS password file template
 #
 #
-# This file contians a list of usernames/passwords that will be used to authenticate
+# This file contains a list of usernames/passwords that will be used to authenticate
 # requests to HSDS.
 # If using HTTP Basic Auth, copy file to "passwd.txt" in the same directory before deploying HSDS.
 # Otherwise, if using Azure Active Directory or Kerberos, don't copy this file - usernames will be

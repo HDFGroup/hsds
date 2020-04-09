@@ -11,6 +11,7 @@ These environment variables will be used to create Azure resources.
     export AKSCLUSTER=myakscluster                                   # the name of the AKS cluster
     export LOCATION=westus                                           # the Azure region
     export ACRNAME=myacrname                                         # the name of the Azure Container Registry (ACR) you will be using
+    export ADMIN_USER=admin                                          # The username for the HSDS admin acount
     export STORAGEACCTNAME=mystorageaccount                          # the storage account name for the Azure Blob Container
     export CONTAINERNAME=testcontainer                               # the name of the Azure Blob Container (default location HSDS will use)
     export AZURE_APP_ID=12345678-1234-1234-abcd-123456789ab          # if you will be using Azure Active Directory, set this to the application ID
@@ -56,9 +57,9 @@ HSDS on AKS utilizes the following secrets:
 2. azure-conn-str: the AZURE_CONNECTION_STRING value
 3. azure-ad-ids: AZURE_APP_ID and AZURE_RESOURCE_ID (optional)
 
-HSDS accounts can either be set by creating the user-password secret, or by using Azure Active Directory.  Currently at least the admin account (username: 'admin') needs to be configured in the user-password secret.
+HSDS accounts can either be set by creating the user-password secret, or by using Azure Active Directory.  If using AD exclustively, set the ADMIN_USER to a valid AD username
 
-First create a text file with the desired usernames and passwords as follows:
+To use user-password secret, first create a text file with the desired usernames and passwords as follows:
 
 1. Go to admin/config directory: `cd hsds/admin/config`
 2. Copy the file "passwd.default" to "passwd.txt".

@@ -277,17 +277,7 @@ Helper function, create a response object using the provided
 JSON data
 """
 async def jsonResponse(request, data, status=200):
-
-    # with aiohttp-cors, it should be possible to just return
-    #   json_response(data, headers={}, status=status), but this doesn't
-    #   seem to be working, so manually addding CORS headers here
-    headers = {}
-    cors_domain = config.get("cors_domain")
-    if cors_domain:
-        headers['Access-Control-Allow-Origin'] = cors_domain
-        headers['Access-Control-Allow-Methods'] = "GET, POST, DELETE, PUT, OPTIONS"
-        headers['Access-Control-Allow-Headers'] = "Content-Type, api_key, Authorization"
-    return json_response(data, headers=headers, status=status)
+    return json_response(data, headers={}, status=status)
 
 """
 Convenience method to compute href links

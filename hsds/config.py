@@ -28,7 +28,6 @@ cfg = {
     'aws_dynamodb_users_table': '',
     'aws_lambda_chunkread_function': '', # name of aws lambda function for chunk reading
     'azure_connection_string': '', # use for connecting to Azure blob storage
-    'azure_app_id': '',   # application id for use with Azure Active Directory
     'azure_resource_id': '', # resource id for use with Azure Active Directory
     'root_dir': '',  # base directory to use for Posix storage
     'password_salt': '',
@@ -63,8 +62,11 @@ cfg = {
     'top_level_domains': [],  # list of possible top-level domains, example: ["/home", "/shared"]
     'cors_domain': '*',     # domains allowed for CORS
     'admin_user': 'admin',   # use with admin privileges
-    'chaos_die': 0           # if > 0, have nodes randomly die after n seconds (for testing)
-
+    'openid_provider': 'azure',  # OpenID authentication provider
+    'openid_audience': '', # OpenID audience. This is synonymous with azure_resource_id for azure.
+    'openid_claims': 'unique_name,appid', # Comma seperated list of claims to resolve to usernames.
+    'chaos_die': 0,           # if > 0, have nodes randomly die after n seconds (for testing)
+    'standalone_app': False,  # True when run as a single application
 }
 
 def get(x):

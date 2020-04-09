@@ -48,7 +48,7 @@ async def healthCheck(app):
         await  asyncio.sleep(sleep_secs)
 
         now = int(time.time())
-        log.info("health check {}, cluster_state: {}".format(unixTimeToUTC(now), app["cluster_state"]))
+        log.info("health check {}, cluster_state: {}, node_count: {}".format(unixTimeToUTC(now), app["cluster_state"], len(nodes)))
 
         fail_count = 0
         # keep track of where we are in the global node list for possible deletions
@@ -116,6 +116,7 @@ async def healthCheck(app):
                 node["failcount"] += 1
                 if node["failcount"] >= HEALTH_CHECK_RETRY_COUNT:
                     log.warn("removing {}:{} from active list".format(node["host"], node["port"]))
+                    node["host"] = None  # make slow available for new registrations
                     fail_count += 1
             except HTTPServiceUnavailable as hsu:
                 log.warn("HTTPServiceUnavailable error for req: {}: {}".format(url, str(hsu)))
@@ -290,7 +291,7 @@ async def register(request):
     log.info("inactive_node_count: {}".format(inactive_node_count))
     if inactive_node_count == 0:
         # all the nodes have checked in
-        log.info(f"setting cluster state to ready - was: {app['cluster_state']}")
+        log.info(f"setting cluster state to READY - was: {app['cluster_state']}")
         app['cluster_state'] = "READY"
 
     resp = StreamResponse()
@@ -504,10 +505,13 @@ def init():
 # Main
 #
 
-def main():
-    log.info("Head node initializing")
-    loop = asyncio.get_event_loop()
-    app = init()
+def create_app(loop):
+    """Create headnode aiohttp application
+
+    :param loop: The asyncio loop to use for the application
+    :rtype: aiohttp.web.Application
+    """
+    app = init()  
 
     # create a client Session here so that all client requests
     #   will share the same connection pool
@@ -515,6 +519,14 @@ def main():
     app["last_health_check"] = 0
 
     asyncio.ensure_future(healthCheck(app), loop=loop)
+
+    return app
+
+
+def main():
+    log.info("Head node initializing")
+    app = create_app(asyncio.get_event_loop())
+
     head_port = config.get("head_port")
     log.info("Starting service on port: {}".format(head_port))
     log.debug("debug test")
