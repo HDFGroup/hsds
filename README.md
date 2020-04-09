@@ -59,6 +59,11 @@ For complete instructions to install on a single Azure VM:
 For complete instructions to install on Azure Kubernetes Service (AKS):
 - See: [docs/kubernetes_install_azure.md](docs/kubernetes_install_azure.md)
 
+**On DCOS** **(BETA)**
+
+For complete instructions to install on DCOS:
+- See: [docs/docker_install_dcos.md](docs/docker_install_dcos.md)
+
 **On Prem (POSIX-based storage)**  **(BETA)**
 
 For complete instructions to install on a desktop or local server:
