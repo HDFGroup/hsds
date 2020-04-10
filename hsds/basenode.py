@@ -15,12 +15,9 @@
 import asyncio
 import sys
 from asyncio import TimeoutError
-import os
 import time
 import random
-import sys
 import psutil
-import traceback
 from copy import copy
 
 from aiohttp.web import Application
@@ -34,7 +31,6 @@ from . import config
 from .util.httpUtil import http_get, http_post, jsonResponse
 from .util.idUtil import createNodeId
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
-from .util import query_marathon as marathonClient
 from . import hsds_logger as log
 from kubernetes import client as k8s_client
 from kubernetes import config as k8s_config
@@ -213,7 +209,7 @@ async def oio_register(app):
                 log.error(f"unexpected node type in node state, expected to find key: {key}")
                 continue
         if info_node["type"] != "dn":
-            log.error(f"expecteed node_type to be dn")
+            log.error(f"expected node_type to be dn, type is {info_node['type']}")
             continue
         # mix in node id, node number, node_count to the conscience info
         dn_node["node_id"] = info_node["id"]
@@ -350,7 +346,7 @@ async def k8s_register(app):
                     log.error(f"unexpected node type in node state, expected to find key: {key}")
                     continue
             if node_rsp["type"] not in ("sn", "dn"):
-                log.error(f"expected node_type to be sn or dn")
+                log.error(f"expected node_type to be sn or dn, type is {node_rsp['type']}")
                 continue
             node_id = node_rsp["id"]
             if node_id == this_node_id:
@@ -456,7 +452,7 @@ async def healthCheck(app):
                                 break
                             if not node["host"]:
                                 # flag - to re-register
-                                log.warn("host not set for this node  - re-initializing".format(node["id"], app["id"]))
+                                log.warn(f"host not set for this node  - re-initializing for node {id['id']}")
                                 app["node_state"] = "INITIALIZING"
                                 app["node_number"] = -1
                                 break

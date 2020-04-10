@@ -378,7 +378,7 @@ async def get_domains(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
     else:
-        log.debug(f"get_domains - no limit")
+        log.debug("get_domains - no limit")
 
 
     marker = None
@@ -432,7 +432,7 @@ async def get_domains(request):
             if marker:
                 log.debug(f"get_domains - compare marker {marker} and {domain}")
                 if marker == domain:
-                    log.debug(f"get_domains - clearing marker")
+                    log.debug("get_domains - clearing marker")
                     marker = None
                 continue
 

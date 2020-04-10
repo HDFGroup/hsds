@@ -894,7 +894,7 @@ async def doPutQuery(request, query_update, dset_json):
             resp_index.extend(dn_rsp["index"])
             resp_value.extend(dn_rsp["value"])
             if limit > 0 and count >= limit:
-                log.debug(f"doPutQuery - reached limit")
+                log.debug("doPutQuery - reached limit")
                 break
         if limit > 0 and count >= limit:
             # break out of outer loop

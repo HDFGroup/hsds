@@ -18,7 +18,7 @@ import json
 import time
 
 from aiohttp.web import Application, StreamResponse, run_app, json_response
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError, HTTPServiceUnavailable, HTTPNotFound, HTTPException
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPServiceUnavailable, HTTPNotFound, HTTPException
 
 from asyncio import TimeoutError
 
@@ -159,7 +159,7 @@ async def healthCheck(app):
                         # best to just break to avoid weird modified loop variable behavior
                         break
                     else:
-                        log.warn(f"Lost a node that wasn't a dn or sn, no action taken")
+                        log.warn("Lost a node that wasn't a dn or sn, no action taken")
                     #We've handled this particular loop's failed node
                     fail_count -= 1
                     # check to see if the cluster is in the process of scaling down and reached its target
