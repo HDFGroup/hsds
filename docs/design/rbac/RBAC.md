@@ -2,7 +2,7 @@
 
 
 
-# Introduction:
+## Introduction:
 
 The purpose of this feature is to enable permissions to perform operations on HSDS domains via a set of *roles*.  Roles are groups of users that can be used in setting permissions.  Currently authorization in HSDS is based on *ACLs*.  An ACL defines a username and a set of permissions (read, write, update, delete, etc).  Each domain in HSDS has one or more ACLs.  When a request is received by the service, the authenticated username associatted with the request is used to find the ACL with that username, and authority to perform the operations is determined by the set of permissions in the ACL.
 
@@ -63,18 +63,35 @@ In the following example, the group "blue_org" has permissions to read or update
 
 ##  Update REST /acl operation
 
-The PUT /acl operation will allow role names to be used in addition to usernames.
+The /acl operation will work much like before.  Currently usernames are not validated for PUT operations and that would apply to role identifiers as well.  i.e. there should not be any change needed for PUT /acl.
 
 The GET /acl operation will return user or role ACLs.  A parameter will be added that can optionally be used to restrict to eitehr user or role operations.
 
 The GET /acls operation will return all ACLs.  A parameter will be added that can optionally be used to restrict to eitehr user or role operations.
 
-## Update authorization logic
+Not strictly needed, but this would be a good time to add a DELETE /acl operation.
 
-TBD
+## Authorization logic
+
+At a high level, a given operation will be authorized if there is a username ACL that allows it, or if the requestor is a member of any role that allows the operation.   Otherwise a 403 error is returned.
+
+The algorithm for this will be as follows:
+
+1. If there is a user ACL in the domain that matches the requestor's username and it authorizes the action, it is allowed
+2. If not, the list of all roles the requesting user is a member of will be retrieved
+3. For each role, if there is a role ACL that  authorizes the action, it is allowed
+4. If no authorizing ACL is found a 403 is returned
 
 
 
-Update hsacl tool
+## Hsacl tool updates
 
-TBD
+Hsacl is a command line tool for reading or updating ACLs.  Usage is: 
+
+```
+ hsacl [options] domain [+crudep] [-crudep] [id1 id2 ...]
+```
+
+The tool will be updated so that id can have username prefix ("u:") or role prefix ("r:").  If no prefix is given, id is assumed to refer to a username.
+
+For listing ACLs, the identifier will always show the user or role prefix.
