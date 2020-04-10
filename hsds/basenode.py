@@ -13,13 +13,11 @@
 # common node methods of hsds cluster
 #
 import asyncio
+import sys
 from asyncio import TimeoutError
-import os
 import time
 import random
-import sys
 import psutil
-import traceback
 from copy import copy
 
 from aiohttp.web import Application
@@ -33,7 +31,6 @@ from . import config
 from .util.httpUtil import http_get, http_post, jsonResponse
 from .util.idUtil import createNodeId
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
-from .util import query_marathon as marathonClient
 from . import hsds_logger as log
 from kubernetes import client as k8s_client
 from kubernetes import config as k8s_config
@@ -52,11 +49,7 @@ def getHeadUrl(app):
         head_url = config.get("head_endpoint")
     else:
         head_port = config.get("head_port")
-        if "is_dcos" in app:
-            head_host = config.get("head_host")
-            head_url = f"http://{head_host}:{head_port}"
-        else:
-            head_url = f"http://hsds_head:{head_port}"
+        head_url = f"http://hsds_head:{head_port}"
     log.debug(f"head_url: {head_url}")
     return head_url
 
@@ -72,10 +65,12 @@ async def register(app):
 
     if "is_dcos" in app:
         outside_port = config.get('PORT0')
+        # see https://github.com/mesosphere/marathon/issues/1198
+        ip = config.get('LIBPROCESS_IP')
+        body = {"id": app["id"], "ip": ip, "port": outside_port, "node_type": app["node_type"]}
     else:
         outside_port = app["node_port"]
-
-    body = {"id": app["id"], "port": outside_port, "node_type": app["node_type"]}
+        body = {"id": app["id"], "port": outside_port, "node_type": app["node_type"]}
     app['register_time'] = int(time.time())
     try:
         log.debug(f"register req: {req_reg} body: {body}")
@@ -86,6 +81,9 @@ async def register(app):
             app["node_count"] = rsp_json["node_count"]
             log.info("setting node_state to WAITING")
             app["node_state"] = "WAITING"  # wait for other nodes to be active
+    except HTTPInternalServerError:
+        log.error("HEAD node seems to be down.")
+        sys.exit(1)
     except OSError:
         log.error("failed to register")
 
@@ -96,7 +94,9 @@ async def get_info(app, url):
     req = url + "/info"
     log.info(f"get_info({url})")
     try:
+        log.debug("about to call http_get")
         rsp_json = await http_get(app, req)
+        log.debug("called http_get")
         if "node" not in rsp_json:
             log.error("Unexpected response from node")
             return None
@@ -119,6 +119,13 @@ async def get_info(app, url):
         log.warn(f"Timeout error for req: {req}: {toe}")
         # node has gone away?
         return None
+    except HTTPGone as hg:
+        log.warn("Timeout error for req: {}: {}".format(req, str(hg)))
+        # node has gone away?
+        return None
+    except:
+        log.warn("uncaught exception in get_info")
+
     return rsp_json
 
 
@@ -202,7 +209,7 @@ async def oio_register(app):
                 log.error(f"unexpected node type in node state, expected to find key: {key}")
                 continue
         if info_node["type"] != "dn":
-            log.error("expected node_type to be dn")
+            log.error(f"expected node_type to be dn, type is {info_node['type']}")
             continue
         # mix in node id, node number, node_count to the conscience info
         dn_node["node_id"] = info_node["id"]
@@ -339,7 +346,7 @@ async def k8s_register(app):
                     log.error(f"unexpected node type in node state, expected to find key: {key}")
                     continue
             if node_rsp["type"] not in ("sn", "dn"):
-                log.error("expected node_type to be sn or dn")
+                log.error(f"expected node_type to be sn or dn, type is {node_rsp['type']}")
                 continue
             node_id = node_rsp["id"]
             if node_id == this_node_id:
@@ -392,125 +399,12 @@ async def k8s_register(app):
             log.info("setting node state to SCALING")
             app["node_state"] = "SCALING"
 
-async def dcos_register(app):
-    log.warn("dcos_register: DCOS Support is EXPERIMENTAL!")
-
-    ready_count = 0
-
-    sn_urls = {}
-    dn_urls = {}
-
-    sn_node_url = os.environ.get('HSDS_SN_NODE')
-    dn_node_url = os.environ.get('HSDS_DN_NODE')
-    sn_urls = {}
-    dn_urls = {}
-
-    log.warn("My node_type is {}".format(app["node_type"]))
-
-    node_count = 0
-    sn_node_count = 0
-    dn_node_count = 0
-    communicated_with_dn_node_count = 0
-    this_node_id = app["id"]
-    marathon = marathonClient.MarathonClient(app)
-    sn_node_count += await marathon.getSNInstances()
-    dn_node_count += await marathon.getDNInstances()
-    node_count += dn_node_count
-    log.info(f"SN node count: {sn_node_count}, DN node count: {dn_node_count}, total node count: {node_count}")
-    try:
-        for node_url in { sn_node_url, dn_node_url }:
-            log.warn(f"node_url is {node_url}")
-
-            if node_url == sn_node_url:
-                node_count_sn_or_dn = sn_node_count
-            elif node_url == dn_node_url:
-                node_count_sn_or_dn = dn_node_count
-            else:
-                log.error("critical error: unable to identify node_url")
-                return
-
-            for node_number in range(node_count_sn_or_dn):
-                info_rsp = await get_info(app, node_url)
-                if not info_rsp:
-                    log.error("failed to query node")
-                    # timeout or other failure
-                    continue
-                if "node" not in info_rsp:
-                    log.error("expected to find node key in info resp")
-                    continue
-
-                node_rsp = info_rsp["node"]
-                log.debug(f"got info resp: {node_rsp}")
-                for key in ("type", "id", "node_number", "node_count"):
-                    if key not in node_rsp:
-                        log.error(f"unexpected node type in node state, expected to find key: {key}")
-                        continue
-                if node_rsp["type"] not in ("sn", "dn"):
-                    log.error("expected node_type to be sn or dn")
-                    continue
-                if node_rsp["type"] == "dn":
-                    communicated_with_dn_node_count+=1
-                node_id = node_rsp["id"]
-                if node_id == this_node_id:
-                    # set node_number and node_count
-                    if app["node_number"] != node_number:
-                        old_number = app["node_number"]
-                        log.info(f"node_number has changed - old value was {old_number} new number is {node_number}")
-                        if app["node_type"] == "dn":
-                            meta_cache = app["meta_cache"]
-                            chunk_cache = app["chunk_cache"]
-                            if meta_cache.dirtyCount > 0 or chunk_cache.dirtyCount > 0:
-                                # set the node state to waiting till the chunk cache have been flushed
-                                if app["node_state"] == "READY":
-                                    log.info("setting node_state to waiting while cache is flushing")
-                                    app["node_state"] = "WAITING"
-                            else:
-                                meta_cache.clearCache()
-                                chunk_cache.clearCache()
-                                log.info(f"node number was: {old_number} setting to: {node_number}")
-                                app["node_number"] = node_number
-                                app['register_time'] = time.time()
-                        else:
-                            # SN nodes can update node_number immediately
-                            log.info(f"node number was: {old_number} setting to: {node_number}")
-                            app["node_number"] = node_number
-                            app['register_time'] = time.time()
-                    if app["node_count"] != communicated_with_dn_node_count:
-                        old_count = app["node_count"]
-                        log.info(f"node count was: {old_count} setting to: {node_count}")
-                        app["node_count"] = communicated_with_dn_node_count 
-                if node_number == node_rsp["node_number"] and node_count == node_rsp["node_count"]:
-                    ready_count += 1
-                    log.debug(f"incremented ready_count to {ready_count}")
-                else:
-                    log.info(f"differing node_number/node_count for node_url: {node_url}")
-                    log.info(f"expected node_number: {node_number} actual: {node_rsp['node_number']}")
-                    log.info(f"expected node_count: {node_count} actual: {node_rsp['node_count']}")
-    except Exception as exc:
-        log.warn("Got an exception in dcos_register {}".format(exc))
-        log.warn("Traceback {}".format(traceback.format_exc()))
-
-    #TODO This will likely need changed, in DCOS it's not just equal number of service and data nodes
-    if ready_count == node_count*2:
-        if app["node_state"] != "READY":
-            log.info("setting node state to READY")
-            app["node_state"] = "READY"
-        app["node_count"] = node_count
-        app["sn_urls"] = sn_urls
-        log.debug("type of dn_node_url is {}".format(type(dn_node_url)))
-        app["dn_urls"] = dn_urls
-    else:
-        log.info(f"not all pods ready - ready_count: {ready_count}/{node_count*2}")
-        if app["node_state"] == "READY":
-            log.info("setting node state to SCALING")
-            app["node_state"] = "SCALING"
-
 
 async def healthCheck(app):
     """ Periodic method that either registers with headnode (if state in INITIALIZING) or
     calls headnode to verify vitals about this node (otherwise)"""
 
-    # let the server event loop startup before sarting the health check
+    # let the server event loop startup before starting the health check
     await asyncio.sleep(1)
     log.info("health check start")
     sleep_secs = config.get("node_sleep_time")
@@ -559,7 +453,8 @@ async def healthCheck(app):
                                 break
                             if not node["host"]:
                                 # flag - to re-register
-                                log.warn("host not set for this node  - re-initializing")
+                                log.warn(f"host not set for this node  - re-initializing for node {id['id']}")
+
                                 app["node_state"] = "INITIALIZING"
                                 app["node_number"] = -1
                                 break
@@ -574,6 +469,11 @@ async def healthCheck(app):
                             sn_urls[node_number] = url
                         else:
                             log.error(f"Unexpected node_type for node: {node}")
+                    if node["node_type"] == "dn":
+                        app["node_count"] = len(dn_urls)
+                    elif node["node_type"] == "sn":
+                        app["node_count"] = len(sn_urls)
+
                     app["sn_urls"] = sn_urls
                     log.debug(f"sn_urls: {sn_urls}")
                     app["dn_urls"] = dn_urls
@@ -587,6 +487,8 @@ async def healthCheck(app):
                     if app["node_state"] == "WAITING" and cluster_state == "READY" and app["node_number"] >= 0:
                         log.info("setting node_state to READY, node_number: {}".format(app["node_number"]))
                         app["node_state"]  = "READY"
+                    else:
+                        log.debug(f"No node state change in node_number: {app['node_number']}")
                     log.info("health check ok")
                     if cluster_state == "READY" and chaos_die > 0:
                         if random.randint(0, chaos_die) == 0:

@@ -29,8 +29,7 @@ class MarathonClient:
 
     def __init__(self, app):
         if "session" not in app:
-            loop = app["loop"]
-            session = get_session(loop=loop)
+            session = get_session()
             app["session"] = session
         else:
             session = app["session"]
@@ -93,7 +92,7 @@ class MarathonClient:
             log.warn("invalid marathon query response")
         else:
             if instancesJSON["app"] is not None and instancesJSON["app"]["instances"] is not None:
-                log.debug("DN instances {}".format(instancesJSON["app"]["instances"]))
+                log.debug(f"DN instances {instancesJSON['app']['instances']}")
                 return instancesJSON["app"]["instances"]
             else:
                 log.warn("Incomplete or malformed JSON returned from DN node.")
