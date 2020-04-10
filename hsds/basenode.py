@@ -399,6 +399,7 @@ async def k8s_register(app):
             log.info("setting node state to SCALING")
             app["node_state"] = "SCALING"
 
+
 async def healthCheck(app):
     """ Periodic method that either registers with headnode (if state in INITIALIZING) or
     calls headnode to verify vitals about this node (otherwise)"""
@@ -453,6 +454,7 @@ async def healthCheck(app):
                             if not node["host"]:
                                 # flag - to re-register
                                 log.warn(f"host not set for this node  - re-initializing for node {id['id']}")
+
                                 app["node_state"] = "INITIALIZING"
                                 app["node_number"] = -1
                                 break
