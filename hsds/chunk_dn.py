@@ -127,7 +127,7 @@ async def PUT_Chunk(request):
     is_dirty = False
     if chunk_arr is None:
         if chunk_init:
-            log.error(f"failed to create numpy array")
+            log.error("failed to create numpy array")
             raise HTTPInternalServerError()
         else:
             log.warn(f"chunk {chunk_id} not found")

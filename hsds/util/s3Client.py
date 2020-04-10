@@ -349,7 +349,7 @@ class S3Client():
 
         last_modified_dt = head_data["LastModified"]
         if not isinstance(last_modified_dt, datetime.datetime):
-            msg =f"S3Client.get_key_stats, expeeccted datatime object in head data"
+            msg ="S3Client.get_key_stats, expected datetime object in head data"
             log.error(msg)
             raise HTTPInternalServerError()
         key_stats = {}

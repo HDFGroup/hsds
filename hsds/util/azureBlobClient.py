@@ -288,7 +288,7 @@ class AzureBlobClient():
 
         last_modified_dt = blob_props.last_modified
         if not isinstance(last_modified_dt, datetime.datetime):
-            msg =f"azureBlobClient.get_key_stats, expeeccted datatime object in head data"
+            msg ="azureBlobClient.get_key_stats, expected datetime object in head data"
             log.error(msg)
             raise HTTPInternalServerError()
         key_stats = {}
@@ -364,11 +364,11 @@ class AzureBlobClient():
         except Exception as e:
             if isinstance(e, AzureError):
                 if e.status_code == 404:
-                    msg = f"azureBlobClient not found error for list_keys"
+                    msg = "azureBlobClient not found error for list_keys"
                     log.warn(msg)
                     raise HTTPNotFound()
                 elif e.status_code in (401, 403):
-                    msg = f"azureBlobClient.access denied for list_keys"
+                    msg = "azureBlobClient.access denied for list_keys"
                     log.info(msg)
                     raise HTTPForbidden()
                 else:

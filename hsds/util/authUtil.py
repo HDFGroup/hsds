@@ -513,7 +513,7 @@ def getUserPasswordFromRequest(request):
 
     elif scheme.lower() == 'bearer':
         # OpenID Auth.
-        log.debug(f"Got OpenID bearer token.")
+        log.debug("Got OpenID bearer token.")
 
         # see if we've already validated this token
         user = _checkTokenCache(app, token)
@@ -553,7 +553,7 @@ def aclCheck(obj_json, req_action, req_user):
         log.debug(f"got default acl: {acl}")
     else:
         acl = { }
-        log.debug(f"no acl found")
+        log.debug("no acl found")
     if req_action not in acl or not acl[req_action]:
         log.warn(f"Action: {req_action} not permitted for user: {req_user}")
         raise HTTPForbidden()  # 403

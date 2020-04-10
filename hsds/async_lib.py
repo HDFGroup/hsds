@@ -31,7 +31,7 @@ def scanRootCallback(app, s3keys):
 
     results = app["scanRoot_results"]
     if results:
-        log.debug(f"previous scanRoot_results:".format(results))
+        log.debug(f"previous scanRoot_results: {results}")
     for s3key in s3keys.keys():
 
         if not isS3ObjKey(s3key):

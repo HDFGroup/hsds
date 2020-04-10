@@ -671,7 +671,7 @@ def chunkReadSelection(chunk_arr, slices=None):
 Write data for requested chunk and selection
 """
 def chunkWriteSelection(chunk_arr=None, slices=None, data=None):
-    log.info(f"chunkWriteSelection")
+    log.info("chunkWriteSelection")
     dims = chunk_arr.shape
 
     rank = len(dims)

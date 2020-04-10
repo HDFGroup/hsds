@@ -202,7 +202,7 @@ async def oio_register(app):
                 log.error(f"unexpected node type in node state, expected to find key: {key}")
                 continue
         if info_node["type"] != "dn":
-            log.error(f"expecteed node_type to be dn")
+            log.error("expected node_type to be dn")
             continue
         # mix in node id, node number, node_count to the conscience info
         dn_node["node_id"] = info_node["id"]
@@ -339,7 +339,7 @@ async def k8s_register(app):
                     log.error(f"unexpected node type in node state, expected to find key: {key}")
                     continue
             if node_rsp["type"] not in ("sn", "dn"):
-                log.error(f"expected node_type to be sn or dn")
+                log.error("expected node_type to be sn or dn")
                 continue
             node_id = node_rsp["id"]
             if node_id == this_node_id:
@@ -446,7 +446,7 @@ async def dcos_register(app):
                         log.error(f"unexpected node type in node state, expected to find key: {key}")
                         continue
                 if node_rsp["type"] not in ("sn", "dn"):
-                    log.error(f"expected node_type to be sn or dn")
+                    log.error("expected node_type to be sn or dn")
                     continue
                 if node_rsp["type"] == "dn":
                     communicated_with_dn_node_count+=1
@@ -559,7 +559,7 @@ async def healthCheck(app):
                                 break
                             if not node["host"]:
                                 # flag - to re-register
-                                log.warn("host not set for this node  - re-initializing".format(node["id"], app["id"]))
+                                log.warn("host not set for this node  - re-initializing")
                                 app["node_state"] = "INITIALIZING"
                                 app["node_number"] = -1
                                 break
