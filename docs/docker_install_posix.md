@@ -18,7 +18,7 @@ Export environment variables as shown in "Sample .bashrc" below.
 12. Start the service `$./runall.sh <n>` where n is the number of containers desired (defaults to 1)
 13. Run `$ docker ps` and verify that the containers are running: hsds_head, hsds_sn_[1-n], hsds_dn_[1-n]
 14. Go to <http://hsds.hdf.test/about> and verify that "cluster_state" is "READY" (might need to give it a minute or two)
-15. Export the admin password as ADMIN_PASSWD  (only needed the first time integration tests are run)
+15. Export the admin password as ADMIN_PASSWORD  (only needed the first time integration tests are run)
 16. Run the integration test: `$ python testall.py --skip_unit`
 17. The test suite will emit some warnings due to test domains not being loaded.  To address see "Post Install configuration" below.
 
@@ -64,6 +64,7 @@ user home folders.
 6. Import into hsds: `$ hsload -v -u test_user1 -p <passwd> tall.h5 /home/test_user1/test/`
 7. Verify upload: `$ hsls -r -u test_user1 -p <passwd> /home/test_user1/test/tall.h5`
 8. To setup home folders, for each username in the passwd file (other than admin and test_user1), create a top-level domain: `$ hstouch -o <username> /home/<username>/`
+9. Run `$ hsconfigure` and enter values for endpoint, username, and password.  These will become the defaults for hs commands and h5pyd package
 
 Installing Software Updates
 ---------------------------
