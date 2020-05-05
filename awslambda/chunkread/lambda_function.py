@@ -1,9 +1,5 @@
-import json
-import base64
 from botocore.exceptions import ClientError
-
-
-from .hsds.chunkread import read_hyperslab, get_app
+from .hsds.chunkread import read_hyperslab, read_points, read_query, get_app
 from .hsds import hsds_logger as log
 
 
@@ -12,15 +8,15 @@ def lambda_handler(event, context):
     # run hyperslab or point selection based on event values
     app = get_app()
     params = {}
-    for k in ("chunk_id", "dset_json", "bucket"):
-        if k not in event:
-            log.warn(f"expected to find key: {k} in event")
-            return {'statusCode': 404}
-        params[k] = event[k]
-    # params["select"]= "[1:2,0:8:2]" -> ((slice(1,2,1),slice(0,8,2)))
+    status_code = 500
+    b64data = None
+    jsondata = None
+    for k in ("chunk_id", "dset_json", "bucket", "s3path", "s3offset", "s3offset", "s3size", "num_points"):
+        if k in event:
+            log.debug(f"setting parameter: {k} to: {event[k]}")
+            params[k] = event[k]
     if "select" in event:
-        # hyperslab selection
-        status_code = 500
+        # selection
         select_str = event["select"]
         if select_str[0] == '[' and select_str[-1] == ']':
             select_str = select_str[1:-1]
@@ -36,34 +32,42 @@ def lambda_handler(event, context):
                 step = 1
             slices.append(slice(start, stop, step))
         params["slices"] = slices
-        try:
+    # params["select"]= "[1:2,0:8:2]" -> ((slice(1,2,1),slice(0,8,2)))
+    try:
+        if "point_arr" in event:
+            # point selection
+            params["point_arr"] = event["point_arr"]
+            b64data = read_points(app, params)
+        elif "query" in event:
+            # query
+            params["query"] = event["query"]
+            jsondata = read_query(app, params)
+        else:
+            # hyperslab selection
             b64data = read_hyperslab(app, params)
-            return {
-                'statusCode': 200,
-                'body': b64data
-            }
-        except ClientError as ce:
-            response_code = ce.response["Error"]["Code"]
-            status_code = 500
-            if response_code in ("NoSuchKey", "404") or response_code == 404:
-                status_code = 404
-            elif response_code == "NoSuchBucket":
-                status_code = 404
-            elif response_code in ("AccessDenied", "401", "403") or response_code in (401, 403):
-                status_code = 403
-            else:
-                status_code = 500
-        except KeyError:
-            status_code = 500
-        return {
-            'statusCode': status_code
-        }
+        status_code = 200
+    except ClientError as ce:
+        response_code = ce.response["Error"]["Code"]
+        status_code = 500
+        if response_code in ("NoSuchKey", "404") or response_code == 404:
+            log.warn("NotFound = NoSuchKey")
+            status_code = 404
+        elif response_code == "NoSuchBucket":
+            log.warn("NotFound - NoSuchBucket")
+            status_code = 404
 
-
-    else:
-        data = b'tbd'
-        base64data = base64.b64encode(data)
-        return {
-            'statusCode': 200,
-            'body': json.dumps(base64data.decode("ascii"))
-        }
+        elif response_code in ("AccessDenied", "401", "403") or response_code in (401, 403):
+            log.warn("AccessDenied")
+            status_code = 403
+        else:
+            log.error(f"Unexpected Error: {ce}")
+            status_code = 500
+    except KeyError as ke:
+        log.error(f"KeyError: {ke}")
+        status_code = 500
+    rsp = { 'statusCode': status_code }
+    if b64data:
+        rsp['body'] = b64data
+    elif jsondata:
+        rsp['body'] = jsondata
+    return rsp

@@ -27,6 +27,8 @@ cfg = {
     'aws_lambda_gateway': '', # use endpoint for region HSDS is running in.  See: https://docs.aws.amazon.com/general/latest/gr/lambda-service.html
     'aws_dynamodb_users_table': '',
     'aws_lambda_chunkread_function': '', # name of aws lambda function for chunk reading
+    'aws_lambda_threshold': 4, # number of chunks per node per request to reach before using lambda
+    'aws_lambda_max_invoke': 1000,  # max number of lambda to invoke simultaneously 
     'azure_connection_string': '', # use for connecting to Azure blob storage
     'azure_resource_id': '', # resource id for use with Azure Active Directory
     'root_dir': '',  # base directory to use for Posix storage

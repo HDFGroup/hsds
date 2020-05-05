@@ -587,7 +587,7 @@ async def s3sync(app):
 
     log.info(f"s3sync update - dirtyid count: {dirty_count}, active write tasks: {len(pending_s3_write_tasks)}/{MAX_PENDING_WRITE_REQUESTS}")
     log.debug(f"s3sync dirty_ids: {dirty_ids}")
-    log.debug(f"sesync pending write s3keys: {list(pending_s3_write.keys())}")
+    log.debug(f"s3sync pending write s3keys: {list(pending_s3_write.keys())}")
     log.debug(f"s3sync write tasks: {list(pending_s3_write_tasks.keys())}")
 
     def callback(future):

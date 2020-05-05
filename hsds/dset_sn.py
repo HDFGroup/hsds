@@ -652,7 +652,21 @@ async def POST_Dataset(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
-    validateTypeItem(datatype)
+    try:
+        validateTypeItem(datatype)
+    except KeyError as ke:
+        msg = f"KeyError creating type: {ke}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    except TypeError as te:
+        msg = f"TypeError creating type: {te}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    except ValueError as ve:
+        msg = f"ValueError creating type: {ve}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
     item_size = getItemSize(datatype)
 
 

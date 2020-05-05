@@ -31,6 +31,8 @@ class PointSelTest(unittest.TestCase):
         # Test selecting points in a dataset using POST value
         print("testPost1DDataset", self.base_domain)
 
+        points = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,97,98]
+
         headers = helper.getRequestHeaders(domain=self.base_domain)
         req = self.endpoint + '/'
 
@@ -60,6 +62,17 @@ class PointSelTest(unittest.TestCase):
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
+        # try reading points from uninitialized chunks
+        body = { "points": points }
+        req = self.endpoint + "/datasets/" + dset_id + "/value"
+        rsp = requests.post(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        ret_value = rspJson["value"]
+        self.assertEqual(len(ret_value), len(points))
+        expected_result = [0,] * len(points)
+        self.assertEqual(ret_value, expected_result)
 
         # write to the dset
         data = list(range(100))
@@ -77,8 +90,7 @@ class PointSelTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
-
-        points = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,97,98]
+        
         body = { "points": points }
         # read selected points
         rsp = requests.post(req, data=json.dumps(body), headers=headers)
@@ -390,7 +402,10 @@ class PointSelTest(unittest.TestCase):
         req = self.endpoint + "/datasets/" + dset112_id + "/value"
         points = [2,3,5,7,11,13,17,19]
         body = { "points": points }
-        rsp = requests.post(req, data=json.dumps(body), headers=headers)
+        # add nonstrict
+        params = {"nonstrict": 1 } # enable SN to invoke lambda func
+
+        rsp = requests.post(req, params=params, data=json.dumps(body), headers=headers)
         if rsp.status_code == 404:
             print("s3object: {} not found, skipping point read chunk reference contiguous test".format(s3path))
             return

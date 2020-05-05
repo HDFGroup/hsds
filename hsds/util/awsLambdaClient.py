@@ -1,8 +1,16 @@
 from aiobotocore  import get_session
+from asyncio import CancelledError
+
 import datetime
 import subprocess
 import json
+import time
 from aiobotocore.config import AioConfig
+
+from aiohttp.web_exceptions import  HTTPInternalServerError
+from aiohttp.client_exceptions import ClientError
+
+
 from .. import config
 from .. import hsds_logger as log
 
@@ -10,26 +18,7 @@ from .. import hsds_logger as log
 get aiobotocore lambda client
 """
 
-def getLambdaClient(app):
-    if "session" not in app:
-        session = get_session()
-        app["session"] = session
-    else:
-        session = app["session"]
-
-    if "lambda" in app:
-        if "lambda_token_expiration" in app:
-            # check that our token is not about to expire
-            expiration = app["lambda_token_expiration"]
-            now = datetime.datetime.now()
-            delta = expiration - now
-            if delta.total_seconds() > 10:
-                return app["lambda"]
-            # otherwise, fall through and get a new token
-            log.info("Lambda access token has expired - renewing")
-        else:
-            return app["lambda"]
-
+def getLambdaClient(app, session):
     # first time setup of s3 client or limited time token has expired
 
     aws_region = None
@@ -119,5 +108,70 @@ def getLambdaClient(app):
         aws_session_token=aws_session_token,
         use_ssl=use_ssl,
         config=aio_config)
-    app["lambda"] = lambda_client
+    # TBD - we are getting errors if we try to reuse lambda client
+    # app["lambda"] = lambda_client
     return lambda_client
+
+"""
+Async invoke for lambda function
+"""
+class lambdaInvoke:
+    def __init__(self, app, params, timeout=10):
+        self.app = app
+        self.params = params
+        self.timeout = timeout
+        self.lambdaFunction = config.get("aws_lambda_chunkread_function")
+        self.client = None 
+        if "session" not in app:
+            app["session"] = get_session()
+        
+        self.session = app["session"]
+
+        if "lambda_stats" not in app:
+            app["lambda_stats"] = {}
+        lambda_stats = app["lambda_stats"]
+        if self.lambdaFunction not in lambda_stats:
+            lambda_stats[self.lambdaFunction] = {"cnt": 0, "inflight": 0, "failed": 0}
+        self.funcStats = lambda_stats[self.lambdaFunction] 
+        
+
+    async def __aenter__(self):
+        start_time = time.time()
+        payload = json.dumps(self.params)
+        log.info(f"invoking lambda function {self.lambdaFunction} with payload: {self.params} start: {start_time}")
+        log.debug(f"Lambda function count: {self.funcStats['cnt']}")
+        self.funcStats["cnt"] += 1
+        self.funcStats["inflight"] += 1
+
+        self.client = getLambdaClient(self.app, self.session)
+        
+        try:
+            lambda_rsp = await self.client.invoke(FunctionName=self.lambdaFunction, Payload=payload) 
+            finish_time = time.time()
+            log.info(f"lambda.invoke({self.lambdaFunction} start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f}")
+            self.funcStats["inflight"] -= 1
+            log.info(f"lambda.invoke - {self.funcStats['inflight']} inflight requests")
+            return lambda_rsp
+        except ClientError as ce:
+            log.error(f"Error for lambda invoke: {ce} ")
+            self.funcStats["inflight"] -= 1
+            self.funcStats["failed"] += 1
+            raise HTTPInternalServerError()
+        except CancelledError as cle:
+            log.warn(f"CancelledError for lambda invoke: {cle}")
+            self.funcStats["inflight"] -= 1
+            self.funcStats["failed"] += 1
+            raise HTTPInternalServerError()
+        except Exception as e:
+            log.error(f"Unexpected exception for lamdea invoke: {e}, type: {type(e)}")
+            self.funcStats["inflight"] -= 1
+            self.funcStats["failed"] += 1
+            raise HTTPInternalServerError()
+        
+
+
+    async def __aexit__(self, exc_type, exc, tb):
+        log.debug("lambdaInvoke - aexit")
+        if self.client:
+            await self.client.close()
+   

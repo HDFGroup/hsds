@@ -663,7 +663,7 @@ def chunkReadSelection(chunk_arr, slices=None):
 Write data for requested chunk and selection
 """
 def chunkWriteSelection(chunk_arr=None, slices=None, data=None):
-    log.info(f"chunkWriteSelection")
+    log.info("chunkWriteSelection")
     dims = chunk_arr.shape
 
     rank = len(dims)
@@ -888,7 +888,7 @@ def _getEvalStr(query, arr_name, field_names):
 Run query on chunk and selection
 """
 def chunkQuery(chunk_id=None, chunk_layout=None, chunk_arr=None, slices=None,
-        query=None, query_update=None, limit=0, return_json=False):
+        query=None,  limit=0, return_json=False):
     log.debug(f"chunk_query - chunk_id: {chunk_id}")
 
     if not isinstance(chunk_arr, np.ndarray):
@@ -922,19 +922,6 @@ def chunkQuery(chunk_id=None, chunk_layout=None, chunk_arr=None, slices=None,
     # do query selection
     field_names = list(dset_dtype.fields.keys())
 
-    if query_update:
-        replace_mask = [None,] * len(field_names)
-        for i in range(len(field_names)):
-            field_name = field_names[i]
-            if field_name in query_update:
-                replace_mask[i] = query_update[field_name]
-        log.debug(f"replace_mask: {replace_mask}")
-        if replace_mask == [None,] * len(field_names):
-            msg = "no fields found in query_update"
-            raise ValueError(msg)
-    else:
-        replace_mask = None
-
     x = chunk_arr[slices]
     # log.debug(f"chunkQuery - x: {x}")
     eval_str = _getEvalStr(query, "x", field_names)
@@ -949,17 +936,6 @@ def chunkQuery(chunk_id=None, chunk_layout=None, chunk_arr=None, slices=None,
     for index in where_result_index:
         log.debug(f"chunkQuery - index: {index}")
         value = x[index].copy()
-        if replace_mask:
-            log.debug(f"chunkQuery - original value: {value}")
-            for i in range(len(field_names)):
-                if replace_mask[i] is not None:
-                    value[i] = replace_mask[i]
-            log.debug(f"chunkQuery - modified value: {value}")
-            try:
-                chunk_arr[index] = value
-            except ValueError as ve:
-                log.error(f"Numpy Value updating array: {ve}")
-                raise
 
         log.debug(f"chunkQuery - got value: {value}")
         indices.append(int(index) * s.step + s.start + chunk_coord[0])  # adjust for selection
@@ -969,16 +945,11 @@ def chunkQuery(chunk_id=None, chunk_layout=None, chunk_arr=None, slices=None,
             log.debug("query update - got limit items")
             break
 
-    if not values:
-        return None   # no hits
-
-
     if return_json:
         # return JSON list
         result = {}
         result["index"] = indices
         result["value"] = _bytesArrayToList(values)
-
     else:
         # return the results as a numpy array
         if rank == 1:
@@ -993,5 +964,5 @@ def chunkQuery(chunk_id=None, chunk_layout=None, chunk_arr=None, slices=None,
             e[1] = values[i]
             result[i] = e
 
-        log.debug(f"chunkQuery returning: {count} rows")
+    log.info(f"chunkQuery returning: {count} rows")
     return result

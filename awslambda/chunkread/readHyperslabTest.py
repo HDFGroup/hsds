@@ -11,7 +11,6 @@
 ##############################################################################
 import unittest
 import base64
-import numpy as np
 
 from hsds.util.idUtil import getRootObjId
 from hsds.chunkread import get_app, read_hyperslab

@@ -1358,7 +1358,7 @@ class ValueTest(unittest.TestCase):
 
         # read 2x2 block from dataset with step of 2
         params = {"select": "[0:4:2, 0:4:2]"}
-        params["nonstrict"] = 1
+        params["nonstrict"] = 1  
         rsp = requests.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
@@ -2078,7 +2078,6 @@ class ValueTest(unittest.TestCase):
         print("testGetSelectionChunkedRefDataset", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
-        
         hdf5_sample_bucket = config.get("hdf5_sample_bucket")
 
         if not hdf5_sample_bucket:
@@ -2162,6 +2161,7 @@ class ValueTest(unittest.TestCase):
         # read a selection
         req = self.endpoint + "/datasets/" + dset_id + "/value"
         params = {"select": "[1234567:1234568]"} # read 1 element, starting at index 1234567
+        params["nonstrict"] = 1  # allow use of aws lambda if configured
         rsp = requests.get(req, params=params, headers=headers)
         if rsp.status_code == 404:
             print("s3object: {} not found, skipping hyperslab read chunk reference test".format(s3path))
@@ -2188,7 +2188,6 @@ class ValueTest(unittest.TestCase):
         print("testChunkedRefIndirectDataset", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
-        
         hdf5_sample_bucket = config.get("hdf5_sample_bucket")
         if not hdf5_sample_bucket:
             print("hdf5_sample_bucket config not set, skipping testChunkedRefIndirectDataset")
@@ -2306,6 +2305,7 @@ class ValueTest(unittest.TestCase):
         # read a selection
         req = self.endpoint + "/datasets/" + dset_id + "/value"
         params = {"select": "[1234567:1234568]"} # read 1 element, starting at index 1234567
+        params["nonstrict"] = 1 # enable SN to invoke lambda func
         rsp = requests.get(req, params=params, headers=headers)
 
         if rsp.status_code == 404:
@@ -2456,6 +2456,7 @@ class ValueTest(unittest.TestCase):
         # read a selection
         req = self.endpoint + "/datasets/" + dset_id + "/value"
         params = {"select": "[1234567:1234568]"} # read 1 element, starting at index 1234567
+        params["nonstrict"] = 1 # enable SN to invoke lambda func
         rsp = requests.get(req, params=params, headers=headers)
 
         if rsp.status_code == 404:
