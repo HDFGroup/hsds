@@ -499,7 +499,6 @@ def getUserPasswordFromRequest(request):
             msg = "Malformed authorization header"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        log.debug(f"decoded auth header: {token_decoded}")
         if token_decoded.index(b':') < 0:
             msg = "Malformed authorization header (No ':' character)"
             log.warn(msg)
