@@ -488,7 +488,7 @@ def getUserPasswordFromRequest(request):
     scheme, _, token =  request.headers.get('Authorization', '').partition(' ')
     if not scheme or not token:
         log.info("Invalid Authorization header")
-        raise HTTPBadRequest("Invalid Authorization header")
+        raise HTTPBadRequest(reason="Invalid Authorization header")
 
     if scheme.lower() == 'basic':
         # HTTP Basic Auth
@@ -498,16 +498,16 @@ def getUserPasswordFromRequest(request):
         except binascii.Error:
             msg = "Malformed authorization header"
             log.warn(msg)
-            raise HTTPBadRequest(msg)
+            raise HTTPBadRequest(reason=msg)
         if token_decoded.index(b':') < 0:
             msg = "Malformed authorization header (No ':' character)"
             log.warn(msg)
-            raise HTTPBadRequest(msg)
+            raise HTTPBadRequest(reason=msg)
         user, _, pswd = token_decoded.partition(b':')
         if not user or not pswd:
             msg = "Malformed authorization header, user/password not found"
             log.warn(msg)
-            raise HTTPBadRequest(msg)
+            raise HTTPBadRequest(reason=msg)
         user = user.decode('utf-8')   # convert bytes to string
         pswd = pswd.decode('utf-8')   # convert bytes to string
 
@@ -525,7 +525,7 @@ def getUserPasswordFromRequest(request):
     else:
         msg = f"Unsupported Authorization header scheme: {scheme}"
         log.warn(msg)
-        raise HTTPBadRequest(msg)
+        raise HTTPBadRequest(reason=msg)
 
     return user, pswd
 
@@ -567,7 +567,7 @@ def validateAclJson(acl_json):
             if acl_key not in acl_keys:
                 msg = f"Invalid ACL key: {acl_key}"
                 log.warn(msg)
-                raise HTTPBadRequest(msg)
+                raise HTTPBadRequest(reason=msg)
             acl_value = acl[acl_key]
             if acl_value not in (True, False):
                 msg = f"Invalid ACL value: {acl_value}"
