@@ -14,29 +14,23 @@ Export environment variables as shown in "Sample .bashrc" below.
 9. If a non-valid DNS name is used for the HSDS_ENDPOINT (e.g. "hsds.hdf.test"), create a /etc/hosts entry for the DNS name
 10. Verify the environment variables as in "Sample .bashrc" below
 11. From hsds directory, build docker image:  `$ docker build -t hdfgroup/hsds .`
-11. From hsds directory, build docker image:  `$ docker build -t hdfgroup/hsds .`
 12. Start the service `$./runall.sh <n>` where n is the number of containers desired (defaults to 1)
 13. Run `$ docker ps` and verify that the containers are running: hsds_head, hsds_sn_[1-n], hsds_dn_[1-n]
 14. Go to <http://hsds.hdf.test/about> and verify that "cluster_state" is "READY" (might need to give it a minute or two)
-15. Export the admin password as ADMIN_PASSWORD  (only needed the first time integration tests are run)
-16. Run the integration test: `$ python testall.py --skip_unit`
-17. The test suite will emit some warnings due to test domains not being loaded.  To address see "Post Install configuration" below.
+15. Perform post install configuration.   See: [Post Install Configuration](post_install.md)
+
 
 Sample .bashrc
 --------------
 
 These environment variables will be passed to the Docker containers on start up.
 
+    export ROOT_DIR=/mnt/data                    # directory that will be the parent of all buckets
     export BUCKET_NAME=hsds.test                 # set to the name of the bucket you will be using (should be subdir of TOP_DIR)
     export HSDS_ENDPOINT=http://hsds.hdf.test    # Use the machines DNS name or create virtual name in /etc/hosts
     unset AWS_S3_GATEWAY                         # To avoid use of S3 storage
     unset AZURE_CONNECTION_STRING                # to avoid use of Azure Blob storage
 
-
-Post Install Configuration
---------------------------
-
-See [Post Install Configuration](post_install.md)
 
 Installing Software Updates
 ---------------------------
