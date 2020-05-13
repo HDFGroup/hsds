@@ -1,6 +1,8 @@
 Installation using Docker with POSIX storage
 ============================================
 
+HSDS can be used with POSIX storage (i.e. an ordinary file system) rather than object storage.  While not recommended for use with AWS or Azure (e.g. if the disk crashes, all data will be lost), using POSIX is convienent for testing or trial installations on a desktop, or do utilize existing HDF5 file archives.
+
 Export environment variables as shown in "Sample .bashrc" below.
 
 1. Install Python 3 (e.g. with Miniconda <https://docs.conda.io/en/latest/miniconda.html>)
