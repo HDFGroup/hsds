@@ -74,7 +74,7 @@ These environment variables will be passed to the Docker containers on startup.
 Follow the following steps to setup HSDS:
 
 1. SSH to the VM created above.  Replace [publicIpAddress] with the public IP displayed in the output of your VM creation command above: `ssh $VM_USER@[publicIpAddress]`
-2. Install Docker and docker-compose if necessary (see "Docker Setup" below)
+2. Install Docker and docker-compose if necessary.   See [Docker Setup](setup_docker.md)
 3. Get project source code: `git clone https://github.com/HDFGroup/hsds`
 4. If you plan to use HTTP Basic Auth (usernames and passwords managed by the service), go to hsds/admin/config directory: `cd admin/config`, and copy the file "passwd.default" to "passwd.txt".  Add any usernames/passwords you wish.  Modify existing passwords (for admin, test_user1, test_user2, etc.) for security.  If you wish to use Azure Active Directory for authentication, following the instructions in "Azure Active Directory"
 5. Create environment variables as in "Sample .bashrc" above.  Or run: `source ~/.bashrc` if you have added them to the bashrc file
@@ -112,26 +112,6 @@ on the server VM or on your client.
 10. Go to the h5pyd directory: `cd h5pyd`
 11. Run h5pyd test suite: `python testall.py`
 
-Docker Setup
-------------
-
-The following are instructions for installing Docker on Linux/Ubuntu.  Details for other Linux distros
-may vary.
-
-Run the following commands to install Docker on Linux/Ubuntu:
-
-1. `sudo apt-get update`
-2. `sudo apt install docker.io`
-3. `sudo systemctl start docker`
-4. `sudo systemctl enable docker`
-5. `sudo groupadd docker` if group docker doesn't exist already
-6. `sudo gpasswd -a $USER docker`
-7. Log out and back in again (you may also need to stop/start docker service)
-8. `docker ps` to verify that Docker is running.
-
-Install docker-compose.
-
-1. See: <https://docs.docker.com/compose/install/>
 
 Azure Active Directory
 ----------------------

@@ -36,18 +36,7 @@ These environment variables will be passed to the Docker containers on start up.
 Post Install Configuration
 --------------------------
 
-The following is some optional configuration steps to create test files and configure
-user home folders.
-
-1. Install h5py: `$ pip install h5py`
-2. Install h5pyd (Python client SDK): `$ pip install h5pyd`
-3. Download the following file: `$ wget https://s3.amazonaws.com/hdfgroup/data/hdf5test/tall.h5`
-4. In the following steps use the password that was setup for the test_user1 account in place of \<passwd\>
-5. Create a test folder on HSDS: `$ hstouch -u test_user1 -p <passwd> /home/test_user1/test/` 
-6. Import into hsds: `$ hsload -v -u test_user1 -p <passwd> tall.h5 /home/test_user1/test/`
-7. Verify upload: `$ hsls -r -u test_user1 -p <passwd> /home/test_user1/test/tall.h5`
-8. To setup home folders, for each username in the passwd file (other than admin and test_user1), create a top-level domain: `$ hstouch -o <username> /home/<username>/`
-9. Run `$ hsconfigure` and enter values for endpoint, username, and password.  These will become the defaults for hs commands and h5pyd package
+See [Post Install Configuration](post_install.md)
 
 Installing Software Updates
 ---------------------------

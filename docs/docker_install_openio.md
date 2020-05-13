@@ -6,7 +6,7 @@ Export environment variables as shown in "Sample .bashrc" below.
 1. Install Python 3 (e.g. with Miniconda <https://docs.conda.io/en/latest/miniconda.html>)
 2. Install awscli Python packages (`$pip install awscli`)
 3. Install aiohttp Python package (`$pip install aiohttp`)
-4. Install Docker and docker-compose if necessary (see "Docker Setup" below)
+4. Install Docker and docker-compose if necessary.   See [Docker Setup](setup_docker.md) 
 5. If setting up an multi-node OpenIO cluster, follow instruction here: <https://docs.openio.io/latest/source/sandbox-guide/multi_nodes_install.html> and set AWS_S3_GATEWAY environment variable appropriately. For using OpenIO in a local container (for testing only), don't set the AWS_S3_GATEWAY environment variable.
 6. If using a multi-node OpenIO cluster, create a bucket for HSDS, using aws cli tools: `$aws --endpoint-url $AWS_S3_GATEWAY --no-verify-ssl s3 mb s3://hsds.test`
 7. Get project source code: `$ git clone https://github.com/HDFGroup/hsds`
@@ -32,24 +32,6 @@ Use these environment variables for running with a multi node OpenIO cluster
     export AWS_S3_GATEWAY=http://host1.mynetwork.com:6007  # Set to the S3 port for one of the OpenIO machine in the cluster
     export HSDS_ENDPOINT=http://hsds.hdf.test    # The DNS name of the machine running docker, or a name defined in /etc/hosts.  Use https protocol if SSL is desired
 
-
-Docker Setup
-------------
-
-The following are instructions for installing docker on Linux/CentOS.  Details for other Linux distros
-may vary.  For OS X, see: <https://docs.docker.com/engine/installation/>.
-
-Run the following commands to install Docker on Linux/CentOS:
-
-    $ sudo yum install docker
-    $ sudo service docker start
-    $ sudo chkconfig --level 300 docker on
-    $ sudo groupadd docker # if group docker doesn't exist already
-    $ sudo gpasswd -a $USER docker
-    # log out and back in again (may also need to stop/start docker service)
-    $ docker ps  # verify
-
-Install docker-compose.  See: <https://docs.docker.com/compose/install/>
 
 Post Install Configuration
 --------------------------

@@ -6,7 +6,7 @@ Export environment variables as shown in "Sample .bashrc" below.
 1. Install Python 3 (e.g. with Miniconda <https://docs.conda.io/en/latest/miniconda.html>)
 2. Install awscli Python packages (`$pip install awscli`)
 3. Install aiohttp Python package (`$pip install aiohttp`)
-4. Install Docker and docker-compose if necessary (see "Docker Setup" below)
+4. Install Docker and docker-compose if necessary. See [Docker Setup](setup_docker.md) 
 5. Create a bucket for HSDS, using aws cli tools or aws management console
 6. Get project source code: `$ git clone https://github.com/HDFGroup/hsds`
 7. Go to admin/config directory: `$ cd hsds/admin/config`
@@ -33,23 +33,6 @@ These environment variables will be passed to the Docker containers on start up.
     # For S3, set AWS_S3_GATEWAY to endpoint for the region the bucket is in.  E.g.: http://s3.amazonaws.com.
     # See http://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region for list of endpoints.
 
-Docker Setup
-------------
-
-The following are instructions for installing docker on Linux/CentOS.  Details for other Linux distros
-may vary.  For OS X, see: <https://docs.docker.com/engine/installation/>.
-
-Run the following commands to install Docker on Linux/CentOS:
-
-    $ sudo yum install docker
-    $ sudo service docker start
-    $ sudo chkconfig --level 300 docker on
-    $ sudo groupadd docker # if group docker doesn't exist already
-    $ sudo gpasswd -a $USER docker
-    # log out and back in again (may also need to stop/start docker service)
-    $ docker ps  # verify
-
-Install docker-compose.  See: <https://docs.docker.com/compose/install/>
 
 Post Install Configuration
 --------------------------
