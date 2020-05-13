@@ -92,7 +92,6 @@ Test the Deployment using Integration Test and Test Data
 
 Perform post install configuration.   See: [Post Install Configuration](post_install.md)
 
-
 Cluster Scaling
 ---------------
 

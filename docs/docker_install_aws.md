@@ -12,6 +12,7 @@ Export environment variables as shown in "Sample .bashrc" below.
 7. Go to admin/config directory: `$ cd hsds/admin/config`
 8. Copy the file "passwd.default" to "passwd.txt".  Add any usernames/passwords you wish.  Modify existing passwords (for admin, test_user1, test_user2) for security.
 9. Create environment variables as in "Sample .bashrc" below
+10. Setup Lambda if desired.  See [AWS Lambda Setup](aws_lambda_setup.md)
 10. From hsds directory, build docker image:  `$ docker build -t hdfgroup/hsds .`
 11. Start the service `$./runall.sh <n>` where n is the number of containers desired (defaults to 1)
 12. Run `$ docker ps` and verify that the containers are running: hsds_head, hsds_sn_[1-n], hsds_dn_[1-n]

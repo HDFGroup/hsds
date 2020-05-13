@@ -3,6 +3,9 @@ AWS Lambda Setup
 
 AWS Lambda is a technology that enables code to be run without the need to provision a server.  For AWS deployments, HSDS can utilize AWS Lambda to provide more scalability and parallelism than would be practical than using just containers running in Docker or Kubernetes (AWS Lambda supports up to 1000-way parallelism by default).  When configured, HSDS will use Lambda for read operations that are likely to execute faster with Lambda than utilziing the existing set of conatiners.
 
+Each Lambda invocation will be charged based on how long the code took to execute (typically less than 2 seconds) and memory used 
+(configured below to 128MB).  These charges are minimal and would generally be much less than running an equivalent number of HSDS containers to provide a lambda level of capacity (though of course you should test for loads typical to your deployment).
+
 To use Lambda, following the following steps in the Management Console:
 
 1. In the AWS Management Console, select the Lambda service (for the same region in which you running HSDS)
