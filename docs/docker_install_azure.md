@@ -98,8 +98,9 @@ on the server VM or on your client.
         3. Password: use password from passwd.txt file
     * If using Active Directory, create a file ".hscfg" in your home folder with the following lines:
         1. `hs_endpoint = <server_endpoint>`
-        2. `hs_ad_tenant_id = <AD tenant_id>`
-        3. `hs_ad_resource_id = <AD resource id>`
+        2. `hs_ad_app_id = <AD Application (client) ID>`
+        3. `hs_ad_tenant_id = <AD tenant_id>`
+        4. `hs_ad_resource_id = <AD resource id>`
 4. Create home folder on server: `hstouch /home/`.  If using AD, select the admin account when prompted.
 5. For each user, create a user home folder: `hstouch -o <username> /home/<username>`
 6. Change user credentials to non-admin account
