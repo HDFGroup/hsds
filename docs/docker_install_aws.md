@@ -16,7 +16,7 @@ Export environment variables as shown in "Sample .bashrc" below.
 11. Start the service `$./runall.sh <n>` where n is the number of containers desired (defaults to 1)
 12. Run `$ docker ps` and verify that the containers are running: hsds_head, hsds_sn_[1-n], hsds_dn_[1-n]
 13. Go to <http://hsds.hdf.test/about> and verify that "cluster_state" is "READY" (might need to give it a minute or two)
-14. Run the integration test: `$ python testall.py --skip_unit`
+14. Perform post install configuration.   See: [Post Install Configuration](post_install.md)
 
 
 Sample .bashrc
@@ -33,21 +33,6 @@ These environment variables will be passed to the Docker containers on start up.
     # For S3, set AWS_S3_GATEWAY to endpoint for the region the bucket is in.  E.g.: http://s3.amazonaws.com.
     # See http://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region for list of endpoints.
 
-
-Post Install Configuration
---------------------------
-
-The following is some optional configuration steps to create test files and configure
-user home folders.
-
-1. Install h5py: `$ pip install h5py`
-2. Install h5pyd (Python client SDK): `$ pip install h5pyd`
-3. Download the following file: `$ wget https://s3.amazonaws.com/hdfgroup/data/hdf5test/tall.h5`
-4. In the following steps use the password that was setup for the test_user1 account in place of \<passwd\>
-5. Create a test folder on HSDS: `$ hstouch -u test_user1 -p <passwd> /home/test_user1/test/` 
-6. Import into hsds: `$ hsload -v -u test_user1 -p <passwd> tall.h5 /home/test_user1/test/`
-7. Verify upload: `$ hsls -r -u test_user1 -p <passwd> /home/test_user1/test/tall.h5`
-8. To setup home folders, for each username in the passwd file (other than admin and test_user1), create a top-level domain: `$ hstouch -o <username> /home/<username>/`
 
 Installing Software Updates
 ---------------------------

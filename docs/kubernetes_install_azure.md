@@ -57,7 +57,7 @@ HSDS on AKS utilizes the following secrets:
 2. azure-conn-str: the AZURE_CONNECTION_STRING value
 3. azure-ad-ids: AZURE_APP_ID and AZURE_RESOURCE_ID (optional)
 
-HSDS accounts can either be set by creating the user-password secret, or by using Azure Active Directory.  If using AD exclustively, set the ADMIN_USER to a valid AD username
+HSDS accounts can either be set by creating the user-password secret, or by using Azure Active Directory (AD).  If using AD exclustively, set the ADMIN_USER to a valid AD username.  See [Azure Active Directory Setup](azure_ad_setup.md) for instructions on using AD.
 
 To use user-password secret, first create a text file with the desired usernames and passwords as follows:
 
@@ -104,31 +104,8 @@ If you need to build and deploy a custom HSDS image (e.g. you have made changes 
 Test the Deployment using Integration Test and Test Data
 --------------------------------------------------------
 
-1. Install h5pyd: `pip install h5pyd`
-2. Run: `hsconfigure` and set:
-    * hs endpoint: e.g. <http://EXTERNAL-IP>)
-    * admin username/password (added to passwd.txt earlier)
-    * Ignore API Key
-3. Run: `hsinfo`.  Server state should be "`READY`".  Ignore the "Not Found" error for the admin home folder
-4. Create "/home" folder: `$ hstouch /home/`.  Note: trailing slash is important!
-5. For each username in the passwd file (or desired AD usernames), create a top-level domain: `hstouch -u <username> -p <passwd> /home/<username>/test/`
-6. Run the integration test: `python testall.py --skip_unit`
-7. Download the following file: `wget https://s3.amazonaws.com/hdfgroup/data/hdf5test/tall.h5`
-8. Create a test folder: `hstouch -u test_user1 -p <passwd> /home/test_user1/test/`
-9. Import into hsds: `hsload -v -u test_user1 -p <passwd> tall.h5 /home/test_user1/test/`
-10. Verify upload: `hsls -r -u test_user1 -p <passwd> /home/test_user1/test/tall.h5`
+Perform post install configuration.   See: [Post Install Configuration](post_install.md)
 
-Azure Active Directory
-----------------------
-
-Rather than user names and passwords being maintained by HSDS, Azure Active Directory can be used for authentication. To enable, in the portal, go to Azure Active Directory, select "App registrations" and
-click the the plus sign, "New registration".  In the register page, chose an appropriate name for the application and select the desired "Supported account types".
-
-In "API permissions", add permissions for "Microsoft Graph, openid", and "Microsoft Graph, User Read".
-
-Next, click "Manifest", and copy the "appId" value and use it to set the AZURE_APP_ID environment variable.  Also on this page, copy the "resourceAppId" value, and use it to set the AZURE_RESOURCE_ID environment variable.
-
-When these settings are used with a HSDS AKS deployment, clients will be able to authenticate using their Active Directory username and password.
 
 AKS Cluster Scaling
 -------------------

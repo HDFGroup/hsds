@@ -2,21 +2,52 @@ Post Install Configuration
 ===========================
 
 Once HSDS is installed and running, the following are some optional configuration steps to create test files, configure
-user home folders and run integration tests.  These can be run from any machine that has connectivity to the server.
+user home folders and run integration tests.  **Important:** trailing slashes are essential here.  These steps can be run
+on the server VM or on your client. 
+
+Home Folder Creation
+--------------------
+
+By design, only the admin account is allowed to create top-level domains (e.g. `/mydomain.h5` cannot be created by a non-admin account).  Typically a folder named `/home` is created by the admin account, and under `/home`, folders that are owned by sepcific user accounts.
+
+To set up folders in this fashion, follow the following steps:
 
 1. Install h5py: `$ pip install h5py`
 2. Install h5pyd (Python client SDK): `$ pip install h5pyd`
 3. Run `$ hsconfigure`.  Answer prompts for HSDS endpoint, username, and password.  These will become the defaults for hs commands and the h5pyd package
 4. Create a top-level home folder if one does not already exists: `$ hstouch -u admin -p <admin_passwd> /home/`
 5. Setup home folders for each username that will need to create domains: `$ hstouch -u admin -p <admin_passd> -o <username> /home/<username>/`
-6. (Optional) Export the admin password as ADMIN_PASSWORD  (enables some additional tests the require admin privalages)
-7. Get project source code: `$ git clone https://github.com/HDFGroup/hsds`
-8. Go to the source directory: `$cd hsds`
-9. Set the environement variable for the HSDS endpoint.  E.g.: `$ export HSDS_ENDPOINT=http://hsds.hdf.test`
-10. If running the tests under an account other than test_user1, run: `$ export USER_NAME=<username>`
-11. Run the integration tests: `$ python testall.py --skip_unit`
-12. Some tests will be skipped with the message: `Is test data setup?`.  To resolve, see the Test Data Setup section below.
+6. Run HSDS integration tests, and/or h5pyd tests if desired.  See the relevant sections below
 
+
+Running HSDS Tests
+------------------
+
+HSDS tests don't depend on h5pyd (other than the optiona test data setup - see below); rather they use the HSDS REST API to verify 
+functionality on the server.  These can be run on any machine.
+
+To run, perform the following steps:
+
+1. (Optional) Export the admin password as ADMIN_PASSWORD  (enables some additional tests the require admin privalages)
+2. Get project source code: `$ git clone https://github.com/HDFGroup/hsds`
+3. Go to the source directory: `$cd hsds`
+4. Set the environement variable for the HSDS endpoint.  E.g.: `$ export HSDS_ENDPOINT=http://hsds.hdf.test`
+5. If running the tests under an account other than test_user1, run: `$ export USER_NAME=<username>`
+6. Run the integration tests: `$ python testall.py --skip_unit`
+7. Some tests will be skipped with the message: `Is test data setup?`.  To resolve, see the Test Data Setup section below.
+
+Running h5pyd Tests
+-------------------
+
+The h5pyd integration tests, verify that the Python SDK (by extension, HSDS) is functioning correctly. 
+
+To run the h5pyd tests, perform the following steps:
+
+1. Set environment variable for test output folder: `export H5PYD_TEST_FOLDER="/home/<username>/h5pyd_test/"`
+2. Create folder for test files: `hstouch $H5PYD_TEST_FOLDER`
+3. Get h5pyd code: `git clone https://github.com/HDFGroup/h5pyd`
+4. Go to the h5pyd directory: `cd h5pyd`
+5. Run h5pyd test suite: `python testall.py`
 
 Test Data Setup
 ---------------
