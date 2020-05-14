@@ -4,7 +4,7 @@ AWS Lambda Setup
 AWS Lambda is a technology that enables code to be run without the need to provision a server.  For AWS deployments, HSDS can utilize AWS Lambda to provide more scalability and parallelism than would be practical than using just containers running in Docker or Kubernetes (AWS Lambda supports up to 1000-way parallelism by default).  When configured, HSDS will use Lambda for read operations that are likely to execute faster with Lambda than utilziing the existing set of conatiners.
 
 Each Lambda invocation will be charged based on how long the code took to execute (typically less than 2 seconds) and memory used 
-(configured below to 128MB).  These charges are minimal and would generally be much less than running an equivalent number of HSDS containers to provide a lambda level of capacity (though of course you should test for loads typical to your deployment).
+(configured below to 128MB).  These charges are minimal and would generally be much less than running an equivalent number of HSDS containers to provide a Lambda level of capacity (though of course you should test for loads typical to your deployment).
 
 To use Lambda, following the following steps in the Management Console:
 
@@ -18,23 +18,23 @@ To use Lambda, following the following steps in the Management Console:
     * `LOG_LEVEL - INFO` (or ERROR or DEBUG if desired)
 7. Leave the default values for Memory (128MB) and Timeout (30 seconds)
 
-Next, build and deploy the lambda function:
+Next, build and deploy the Lambda function:
 
 1. In the HSDS source tree, cd to awslambda
-2. Run: `./build.sh`.  This will create the lambda zip file
+2. Run: `./build.sh`.  This will create the Lambda zip file
 3. Run: `./deploy.sh`.  This will upload the zip to AWS
 4. Refresh the management console, you should see the handler specified in the "Function Code" section
 
-Next, configure HSDS to use lambda:
+Next, configure HSDS to use Lambda:
 
 1. Setup environment variables as in "Sample .bashrc" below
-2. Stop (`./stopall.sh`) and restart the service: (`./runall.sh`)
+2. Stop (`./stopall.sh`) and restart the service: (`./runall.sh`) for the server to pickup the new environment variables.
 
 Testing
 -------
 
 When the server runs requests for hyperslab, point, or query functions that read data from a large number of chunks, 
-the lambda function should be invoked.  Grepping for "serverless" in the SN log files will show when Lambda is invoked.
+the Lambda function should be invoked.  Grepping for "serverless" in the SN log files will show when Lambda is invoked.
 
 In the AWS Management console, go to the "Monitoring" tab to view metrics for Lambda invocations.  Lambda log files can also be
 accessed from this page.
