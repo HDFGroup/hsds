@@ -1138,7 +1138,7 @@ async def GET_ACLs(request):
     except ValueError:
         msg = "Invalid domain"
         log.warn(msg)
-        raise HTTPBadRequest(message=msg)
+        raise HTTPBadRequest(reason=msg)
 
     # use reload to get authoritative domain json
     try:

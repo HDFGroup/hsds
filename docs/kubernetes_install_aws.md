@@ -24,8 +24,8 @@ Setup Pip and Python 3 on your local machine if not already installed (e.g. with
 
 Clone the hsds repository in a local folder: `git clone https://github.com/HDFGroup/hsds`.
 
-Setup your AWS  Kubernetes
----------------------------
+Setup your AWS Kubernetes
+--------------------------
 
 Here we will create a Kubernetes cluster and S3 bucket
 
@@ -90,19 +90,7 @@ If you need to build and deploy a custom HSDS image (e.g. you have made changes 
 Test the Deployment using Integration Test and Test Data
 --------------------------------------------------------
 
-1. Install h5pyd: `pip install h5pyd`
-2. Run: `hsconfigure` and set:
-    * hs endpoint: e.g. <http://EXTERNAL-IP>)
-    * admin username/password (added to passwd.txt earlier)
-    * Ignore API Key
-3. Run: `hsinfo`.  Server state should be "`READY`".  Ignore the "Not Found" error for the admin home folder
-4. Create "/home" folder: `$ hstouch /home/`.  Note: trailing slash is important!
-5. For each username in the passwd file (or desired AD usernames), create a top-level domain: `hstouch -u <username> -p <passwd> /home/<username>/test/`
-6. Run the integration test: `python testall.py --skip_unit`
-7. Download the following file: `wget https://s3.amazonaws.com/hdfgroup/data/hdf5test/tall.h5`
-8. Create a test folder: `hstouch -u test_user1 -p <passwd> /home/test_user1/test/`
-9. Import into hsds: `hsload -v -u test_user1 -p <passwd> tall.h5 /home/test_user1/test/`
-10. Verify upload: `hsls -r -u test_user1 -p <passwd> /home/test_user1/test/tall.h5`
+Perform post install configuration.   See: [Post Install Configuration](post_install.md)
 
 Cluster Scaling
 ---------------

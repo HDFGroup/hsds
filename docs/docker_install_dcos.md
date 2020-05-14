@@ -1,7 +1,7 @@
 Installation using DCOS with AWS S3 storage
 ===========================================
 
-1. Install Docker, if necessary
+1. Install Docker, if necessary.   See [Docker Setup](setup_docker.md)
 3. Create a bucket for HSDS, using aws cli tools or aws management console
 4. Get project source code: `$ git clone https://github.com/HDFGroup/hsds`
 5. Go to admin/config directory: `$ cd hsds/admin/config`

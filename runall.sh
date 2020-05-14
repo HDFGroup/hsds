@@ -119,7 +119,7 @@ for i in {1..120}
 do
   STATUS_CODE=`curl -s -o /dev/null -w "%{http_code}" ${HSDS_ENDPOINT}/about`
   if [[ $STATUS_CODE == "200" ]]; then
-    echo "service ready"
+    echo "service ready!"
     break
   else
     echo "${i}: waiting for server startup (status: ${STATUS_CODE}) "
