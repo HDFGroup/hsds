@@ -9,10 +9,9 @@
 # distribution tree.  If you do not have access to this file, you may        #
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
-from aiohttp.web_exceptions import HTTPNotFound
+from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 
 from aiobotocore import get_session
-from .. import config
 
 from .. import hsds_logger as log
 from .httpUtil import http_get
@@ -31,24 +30,15 @@ class MarathonClient:
         if "session" not in app:
             session = get_session()
             app["session"] = session
-        else:
-            session = app["session"]
+        
         self._app = app
        
-        for x in app:
-            print (x,':',app[x])
-
-        isdcos = config.get("hsds_dcos")
-
-        if isdcos == "true":
-            msg = "dcos app"
-            log.info(msg)
-        else:
+    async def getSNInstances(self):
+        if "is_dcos" not in self._app:
             msg = "cannot use the MarathonClient in a non-DCOS context"
             log.error(msg)
-            return
+            raise HTTPInternalServerError()
 
-    async def getSNInstances(self):
         if "DCOS_PATH_SERVICE_NODE" in os.environ:
             hsds_sn_node = os.environ["DCOS_PATH_SERVICE_NODE"]
         else:
@@ -74,11 +64,16 @@ class MarathonClient:
                 return -1
 
     async def getDNInstances(self):
+        if "is_dcos" not in self._app:
+            msg = "cannot use the MarathonClient in a non-DCOS context"
+            log.error(msg)
+            raise HTTPInternalServerError()
+
         if "DCOS_PATH_DATA_NODE" in os.environ:
             hsds_data_node = os.environ["DCOS_PATH_DATA_NODE"]
         else:
             log.error("Must set DCOS_PATH_DATA_NODE environment variable to Marathon path to service node n order to query the correct marathon config")
-            return -1
+            raise HTTPInternalServerError()
 
         req = "http://master.mesos/marathon/v2/apps/%s" % hsds_data_node
 
@@ -97,4 +92,3 @@ class MarathonClient:
             else:
                 log.warn("Incomplete or malformed JSON returned from DN node.")
                 return -1
-

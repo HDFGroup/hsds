@@ -21,6 +21,8 @@ services:
       - LOG_LEVEL=${LOG_LEVEL}
     ports:
       - ${HEAD_PORT}:${HEAD_PORT}
+    volumes:
+      - ${PWD}/admin/config/:/config/
 
   dn:
     image: hdfgroup/hsds
@@ -44,6 +46,8 @@ services:
       - ${DN_PORT}
     depends_on:
       - head
+    volumes:
+      - ${PWD}/admin/config/:/config/
 
   sn:
     image: hdfgroup/hsds

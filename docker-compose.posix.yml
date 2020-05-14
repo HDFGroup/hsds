@@ -24,6 +24,7 @@ services:
       - ${HEAD_PORT}:${HEAD_PORT}
     volumes:
       - ${ROOT_DIR}:/data
+      - ${PWD}/admin/config/:/config/
 
   dn:
     image: hdfgroup/hsds
@@ -50,6 +51,7 @@ services:
       - head
     volumes:
       - ${ROOT_DIR}:/data
+      - ${PWD}/admin/config/:/config/
   sn:
     image: hdfgroup/hsds
     restart: ${RESTART_POLICY}

@@ -464,7 +464,6 @@ def init():
     else:
         log.info("No default bucket name is set")
 
-    app["head_host"] = config.get("head_host")
     app["head_port"] = config.get("head_port")
 
     nodes = []
@@ -480,12 +479,11 @@ def init():
             log.warn(f"init added a node, up to {len(nodes)}")
 
     # check to see if we are running in a DCOS cluster
-    is_dcos = os.environ.get('MARATHON_APP_ID')
-    if is_dcos:
-        log.warn("setting is_dcos to True")
+    if "MARATHON_APP_ID" in os.environ:
+        log.info("Found MARATHON_APP_ID environment variable, setting is_dcos to True")
         app["is_dcos"] = True
     else:
-        log.warn("net setting is_dcos")
+        log.info("not setting is_dcos")
 
     app["nodes"] = nodes
     app["node_stats"] = {}  # stats retuned by node/info request.  Keyed by node id
