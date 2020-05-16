@@ -19,9 +19,9 @@ import sys
 from aiohttp.web_exceptions import HTTPNotFound
 
 sys.path.append('../..')
+import hsds.config as config
 from hsds.util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes, getStorBytes, isStorObj
-from hsds.util.storUtil import deleteStorObj, getStorObjStats, getStorKeys, releaseStorageClient, getStorageDriverName
-import config
+from hsds.util.storUtil import getStorObjStats, getStorKeys, releaseStorageClient, getStorageDriverName
 
 
 class StorUtilTest(unittest.TestCase):
@@ -214,9 +214,11 @@ class StorUtilTest(unittest.TestCase):
 
     def testStorUtil(self):
 
+        cors_domain = config.get("cors_domain")
+        print(f"cors_domain: [{cors_domain}]")
         bucket = config.get("hsds_unit_test_bucket")
         if not bucket:
-            print("No bucket configued, create bucket and export HSDS_UNIT_TEST_BUCKET=<bucket_name> to enable test")
+            print("No bucket configured, create bucket and export HSDS_UNIT_TEST_BUCKET=<bucket_name> to enable test")
             return
 
         # we need to setup a asyncio loop to query s3

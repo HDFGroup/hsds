@@ -151,7 +151,6 @@ def create_app(loop):
 
 
 def main():
-    config.cfg = {}  # set global for loading key values
     log.info("Service node initializing")
     app = create_app(asyncio.get_event_loop())
 

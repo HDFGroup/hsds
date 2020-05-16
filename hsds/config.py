@@ -13,23 +13,25 @@ import os
 import sys
 import yaml
 
-cfg = None  # global config handle
+cfg = {}
    
-def _load_cfg(cfg):
-    if cfg is None:
-        msg = "cfg global is not set"
-        print(msg)
-        raise ValueError(msg)
-
+def _load_cfg():
+        
     # load config yaml
-    yml_file = "/config/config.yml"
+    yml_file = None
+    for config_dir in [".", "/config"]:
+        file_name = os.path.join(config_dir, "config.yml")
+        if os.path.isfile(file_name):
+            yml_file = file_name
+            break
+    if not yml_file:
+        msg = "unable to find config file"
+        print(msg)
+        raise FileNotFoundError(msg)
+    print(f"_load_cfg with '{yml_file}''")
     try:
         with open(yml_file, "r") as f:
-            yml_config = yaml.load(f)
-    except FileNotFoundError as fnfe:
-        msg = f"Unable to config file: {fnfe}"
-        print(msg)
-        raise
+            yml_config = yaml.safe_load(f)
     except yaml.scanner.ScannerError as se:
         msg = f"Error parsing config.yml: {se}"
         print(msg)
@@ -52,7 +54,7 @@ def _load_cfg(cfg):
         if override is None and x.upper() in os.environ:
             override = os.environ[x.upper()]
 
-        if override is not None:
+        if override:
             if cfgval is not None:
                 try:
                     override = type(cfgval)(override) # convert to same type as yaml
@@ -62,7 +64,6 @@ def _load_cfg(cfg):
                     # raise KeyError(msg)
             cfgval = override # replace the yml value
 
-    
         if isinstance(cfgval, str) and len(cfgval) > 1 and cfgval[-1] in ('g', 'm', 'k') and cfgval[:-1].isdigit():
             # convert values like 512m to corresponding integer
             u = cfgval[-1]
@@ -74,22 +75,10 @@ def _load_cfg(cfg):
             else: # u == 'g'
                 cfgval = n * 1024*1024*1024
         cfg[x] = cfgval
-        print(f"config set {x} to {cfgval}, type: {type(cfgval)}")
-    cfg["yml_loaded"] = True  # mark yaml as being loaded
 
 def get(x):
-    global cfg
-    print(f"cfg.get({x}), cfg type: {type(cfg)}")
-    if not cfg or "yml_loaded" not in cfg:
-        print("loading config values")
-        _load_cfg(cfg)
-        print(f"cfg - {len(cfg)} keys defined")
+    if not cfg:
+        _load_cfg()
     if x not in cfg:
-        print(f"key {x} not found in cfg, existing keys:")
-        for k in cfg:
-            v = cfg[k]
-            print(f"cfg[{k}]: {v}")
-        print("throwing keyerror")
         raise KeyError(f"config value {x} not found")
-    print(f"cfg.get({x}) returning: {cfg[x]}")
     return cfg[x]

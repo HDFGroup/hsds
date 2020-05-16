@@ -655,7 +655,6 @@ async def info(request):
 def baseInit(loop, node_type):
     """Intitialize application and return app object"""
 
-    config.cfg = {}  # set global for laoading key values
     log.info("Application baseInit")
     app = Application(loop=loop)
 

@@ -236,5 +236,4 @@ def main():
     run_app(app, port=port)
 
 if __name__ == '__main__':
-    config.cfg = {}  # set global for loading key values
     main()

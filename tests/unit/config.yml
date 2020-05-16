@@ -1,0 +1,7 @@
+# config values for HSDS unit tests
+root_dir: null
+hsds_unit_test_bucket: null
+azure_connection_string: null
+aws_s3_gateway: null
+log_level: ERROR
+cors_domain: "*"
