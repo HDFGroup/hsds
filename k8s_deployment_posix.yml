@@ -24,6 +24,10 @@ spec:
             mountPath: "/data"
           - name: config
             mountPath: "/config"
+          - name: hsds-config
+            mountPath: "/config1"
+          - name: hsds-override
+            mountPath: "/config2"
           ports:
             -
               containerPort: 5101
@@ -75,8 +79,14 @@ spec:
       - name: data
         hostPath:
           # changee to directory location for bucket parent directory
-          path: /var/buckets
+          path: /Users/john/mybuckets
           type: Directory
       - name: config
         secret:
           secretName: user-password
+      - name: hsds-config
+        configMap:
+          name: hsds-config
+      - name: hsds-override
+        configMap:
+          name: hsds-override

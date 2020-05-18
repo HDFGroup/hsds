@@ -37,6 +37,27 @@ def _load_cfg():
         print(msg)
         raise KeyError(msg)
 
+    # load override yaml
+    yml_override = None
+    if "CONFIG_OVERRIDE_PATH" in os.environ:
+        override_yml_filepath = os.environ["CONFIG_OVERRIDE_PATH"]
+    else:
+        override_yml_filepath = "/config/override.yml"
+    if os.path.isfile(override_yml_filepath):
+        print(f"loading override configuation: {override_yml_filepath}")
+        try:
+            with open(override_yml_filepath, "r") as f:
+                yml_override = yaml.safe_load(f)
+        except yaml.scanner.ScannerError as se:
+            msg = f"Error parsing '{override_yml_filepath}': {se}"
+            print(msg)
+            raise KeyError(msg)
+        print("override settings:")
+        for k in yml_override:
+            v = yml_override[k]
+            print(f"  {k}: {v}")
+        
+
     # apply overrides for each key and store in cfg global
     for x in yml_config:
         cfgval = yml_config[x]
@@ -48,11 +69,20 @@ def _load_cfg():
             if sys.argv[i].startswith(option):
                 # found an override
                 arg = sys.argv[i]
-                override = arg[len(option):]  # return text after option string                    
+                override = arg[len(option):]  # return text after option string   
+                print(f"got cmd line override for {x}: {override} ")
+                 
             
         # see if there are an environment variable override
         if override is None and x.upper() in os.environ:
             override = os.environ[x.upper()]
+            print(f"got env value override for {x}: {override} ")
+
+        # see if there is a yml override
+        if override is None and yml_override and x in yml_override:
+            override = yml_override[x]
+            print(f"got config override for {x}: {override}")
+
 
         if override:
             if cfgval is not None:
