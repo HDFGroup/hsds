@@ -17,20 +17,26 @@ spec:
       containers:
         -
           name: sn
-          image: "hsds"
-          imagePullPolicy: Always
+          image: "hdfgroup/hsds"
+          imagePullPolicy: IfNotPresent
           volumeMounts:
+          - name: accounts
+            mountPath: "/config/passwd.txt"
+            subPath: passwd.txt
           - name: config
-            mountPath: "/config"
-            readOnly: true
+            mountPath: "/config/config.yml"
+            subPath: config.yml
+          - name: override
+            mountPath: "/config/override.yml"
+            subPath: override.yml
           ports:
             -
               containerPort: 5101
           env:
           - name: NODE_TYPE
             value: sn
-          - name: AWS_S3_GATEWAY
-            value: http://s3.amazonaws.com
+          - name: PASSWORD_FILE
+            value: /config/passwd.txt
           - name: AWS_ACCESS_KEY_ID
             valueFrom:
               secretKeyRef:
@@ -41,38 +47,27 @@ spec:
               secretKeyRef:
                 name: aws-auth-keys
                 key: aws_secret_access_key
-          - name: AWS_REGION
-            value: us-east-1
-          - name: BUCKET_NAME
-            value: hsds.bucket
-          - name: LOG_LEVEL
-            value: DEBUG
-          - name: SERVER_NAME
-            value: "Highly Scalable Data Service (HSDS)"
-          - name: HSDS_ENDPOINT
-            value: http://hsds.hdf.test
-          - name: GREETING
-            value: "Welcome to HSDS!"
-          - name: ABOUT
-            value: "HSDS is a webservice for HDF data"
-          - name: PASSWORD_FILE
-            value: /config/passwd.txt
         -
           name: dn
-          image: "hsds"
+          image: "hdfgroup/hsds"
           lifecycle:
             preStop:
               exec:
                 command: ["/usr/bin/curl", "-X", "DELETE", "http://127.0.0.1:6101/prestop"]
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+          - name: config
+            mountPath: "/config/config.yml"
+            subPath: config.yml
+          - name: override
+            mountPath: "/config/override.yml"
+            subPath: override.yml
           ports:
             -
               containerPort: 6101
           env:
           - name: NODE_TYPE
             value: dn
-          - name: AWS_S3_GATEWAY
-            value: http://s3.amazonaws.com
           - name: AWS_ACCESS_KEY_ID
             valueFrom:
               secretKeyRef:
@@ -83,15 +78,14 @@ spec:
               secretKeyRef:
                 name: aws-auth-keys
                 key: aws_secret_access_key
-          - name: AWS_REGION
-            value: us-east-1
-          - name: BUCKET_NAME
-            value: hsds.bucket
-          - name: LOG_LEVEL
-            value: DEBUG
-          - name: HSDS_ENDPOINT
-            value: http://hsds.hdf.test
       volumes:
-        - name: config
-          secret:
-            secretName: user-password
+      - name: accounts
+        secret:
+          secretName: user-password
+      - name: config
+        configMap:
+          name: hsds-config
+      - name: override
+        configMap:
+          name: hsds-override
+        

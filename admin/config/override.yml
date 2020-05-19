@@ -1,0 +1,4 @@
+# override definitions
+log_level: INFO   # one of DEBUG, INFO, ERROR 
+bucket_name: hsdstest  # set to the name of your default Posix directory, AWS bucket or Azure Containert
+server_name: Highly Scalable Data Service (HSDS)  # what shows up for /about - change as desired
