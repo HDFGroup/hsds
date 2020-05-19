@@ -19,6 +19,7 @@ install:
   - pip install requests
   - pip install pyflakes
   - pip install pytz
+  - pip install pyyaml
   - pyflakes hsds/*.py
   - pyflakes hsds/util/*.py
   - cp admin/config/passwd.default admin/config/passwd.txt
