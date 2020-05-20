@@ -33,9 +33,9 @@ Here we will create a Kubernetes cluster and S3 bucket
 2. Install and configure kubectl on the machine being used for the installation
 3. Run `kubectl cluster-info` to verify connection to the cluster
 4. Create a bucket for HSDS, using AWS cli tools or AWS Management console (make sure it's in the same region as the cluster)
-5. If you are using a VPC, veryify an endpoint for S3 is setup (see: <https://docs.aws.amazon.com/vpc/latest/userguide/vpc-endpoints-s3.html>).  This is important to avoid having to pay for egress charges between S3 and the Kubernetes cluster
+5. If you are using a VPC, veryfy an endpoint for S3 is setup (see: <https://docs.aws.amazon.com/vpc/latest/userguide/vpc-endpoints-s3.html>).  This is important to avoid having to pay for egress charges between S3 and the Kubernetes cluster
 
-Create Kubernetes secrets
+Create Kubernetes Secrets
 -------------------------
 
 Kubernetes secrets are used in AWS to make sensitive information available to the service.
@@ -55,9 +55,24 @@ To create the user-password secret, first create a text file with the desired us
 
 Next, verify that you have set the AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables.
 
-Run the make_secrets script: `./k8s_make_secrets.sh`
+Run the make_secrets script: `admin/kubernetes/k8s_make_secrets.sh`
 
 Run: `kubectl get secrets` to verify the secrets have been created.
+
+Create Kubernetes ConfigMaps
+----------------------------
+
+Kubernetes ConfigMaps are used to store settings that are specific to your HSDS deployment.
+
+Review the contents of admin/config/config.yml and create the file admin/config/override.yml for any keys where you don't 
+wish to use the default value.  Values that you will most certainly want to override are:
+
+* bucket_name # set to the name of the bucket you will be using (must be globally unique)
+* aws_region  # set to the aws region you will be deploying to (e.g. us-west-2)
+* hsds_endpoint # use the external IP endpoint or DNS name that maps to the IP
+* aws_s3_endpoint # Use AWS endpoint for the region you will be deploying to
+
+Run the make_config map script to store the yaml settings as Kubernetes ConnfigMaps: `admin/kubernetes/k8s_make_configmap.sh`
 
 Deploy HSDS to K8s
 ------------------
@@ -74,12 +89,8 @@ If you need to build and deploy a custom HSDS image (e.g. you have made changes 
        hsds    LoadBalancer   10.0.242.109   20.36.17.252     80:30326/TCP   23
 
    Note the public-ip (EXTERNAL-IP). This is where you can access the HSDS service externally. It may take some time for the EXTERNAL-IP to show up after the service deployment.
-4. Now we will deploy the HSDS containers. In ***k8s_deployment_aws.yml***, customize the values for:
-   env sections:
-    * HSDS_ENDPOINT (change to `http://public-ip` where pubic-ip is the EXTERNAL-IP from step 3 above)
-    * BUCKET_NAME (this is the name of the blob container created earlier)
-   containers sections
-    * image: '1234567.dkr.ecr.us-east-1.amazonaws.com/hsds:v1' to reflect the ecr repository for deployment (for custom builds only).
+4. Now we will deploy the HSDS containers. In ***k8s_deployment_aws.yml***, modify the image value if a custom build is being used.  E.g:
+    * image: '1234567.dkr.ecr.us-east-1.amazonaws.com/hsds:v1' to reflect the ecr repository for deployment
 5. Apply the deployment: `$ kubectl apply -f k8s_deployment_aws.yml`
 6. Verify that the HSDS pod is running: `$ kubectl get pods`  a pod with a name starting with hsds should be displayed with status as "Running".
 7. Additional verification: Run (`$ kubectl describe pod hsds-xxxx`) and make sure everything looks OK

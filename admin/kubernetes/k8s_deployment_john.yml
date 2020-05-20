@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: hsds
+  name: hsds
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hsds
+  template:
+    metadata:
+      labels:
+        app: hsds
+    spec:
+      containers:
+        -
+          name: sn
+          image: "hdfgroup/hsds"
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+          - name: data
+            mountPath: "/data"
+          - name: accounts
+            mountPath: "/config/passwd.txt"
+            subPath: passwd.txt
+          - name: config
+            mountPath: "/config/config.yml"
+            subPath: config.yml
+          - name: override
+            mountPath: "/config/override.yml"
+            subPath: override.yml
+          ports:
+            -
+              containerPort: 5101
+          env:
+          - name: NODE_TYPE
+            value: sn
+          - name: ROOT_DIR
+            value: /data
+          - name: PASSWORD_FILE
+            value: /config/passwd.txt
+        -
+          name: dn
+          image: "hdfgroup/hsds"
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/usr/bin/curl", "-X", "DELETE", "http://127.0.0.1:6101/prestop"]
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+          - name: data
+            mountPath: "/data"
+          - name: config
+            mountPath: "/config/config.yml"
+            subPath: config.yml
+          - name: override
+            mountPath: "/config/override.yml"
+            subPath: override.yml
+          ports:
+            -
+              containerPort: 6101
+          env:
+          - name: NODE_TYPE
+            value: dn
+          - name: ROOT_DIR
+            value: /data
+      volumes:
+      - name: data
+        hostPath:
+          # changee to directory location for bucket parent directory
+          path: /Users/john/mybuckets
+          type: Directory
+      - name: accounts
+        secret:
+          secretName: user-password
+      - name: config
+        configMap:
+          name: hsds-config
+      - name: override
+        configMap:
+          name: hsds-override
+        
