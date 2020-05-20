@@ -17,40 +17,33 @@ spec:
       containers:
         -
           name: sn
-          image: "hsds"
-          imagePullPolicy: Always
+          image: "hdfgroup/hsds"
+          imagePullPolicy: IfNotPresent
           volumeMounts:
+          - name: data
+            mountPath: "/data"
           - name: config
             mountPath: "/config"
-            readOnly: true
+          - name: hsds-config
+            mountPath: "/config1"
+          - name: hsds-override
+            mountPath: "/config2"
           ports:
             -
               containerPort: 5101
           env:
           - name: NODE_TYPE
             value: sn
-          - name: AWS_S3_GATEWAY
-            value: http://s3.amazonaws.com
-          - name: AWS_ACCESS_KEY_ID
-            valueFrom:
-              secretKeyRef:
-                name: aws-auth-keys
-                key: aws_access_key_id
-          - name: AWS_SECRET_ACCESS_KEY
-            valueFrom:
-              secretKeyRef:
-                name: aws-auth-keys
-                key: aws_secret_access_key
-          - name: AWS_REGION
-            value: us-east-1
+          - name: ROOT_DIR
+            value: /data
           - name: BUCKET_NAME
-            value: hsds.bucket
+            value: hsds
           - name: LOG_LEVEL
             value: DEBUG
           - name: SERVER_NAME
             value: "Highly Scalable Data Service (HSDS)"
           - name: HSDS_ENDPOINT
-            value: http://hsds.hdf.test
+            value: "http://hsds.hdf.test" # change to external DNS LB path
           - name: GREETING
             value: "Welcome to HSDS!"
           - name: ABOUT
@@ -59,39 +52,41 @@ spec:
             value: /config/passwd.txt
         -
           name: dn
-          image: "hsds"
+          image: "hdfgroup/hsds"
           lifecycle:
             preStop:
               exec:
                 command: ["/usr/bin/curl", "-X", "DELETE", "http://127.0.0.1:6101/prestop"]
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+          - name: data
+            mountPath: "/data"
           ports:
             -
               containerPort: 6101
           env:
           - name: NODE_TYPE
             value: dn
-          - name: AWS_S3_GATEWAY
-            value: http://s3.amazonaws.com
-          - name: AWS_ACCESS_KEY_ID
-            valueFrom:
-              secretKeyRef:
-                name: aws-auth-keys
-                key: aws_access_key_id
-          - name: AWS_SECRET_ACCESS_KEY
-            valueFrom:
-              secretKeyRef:
-                name: aws-auth-keys
-                key: aws_secret_access_key
-          - name: AWS_REGION
-            value: us-east-1
+          - name: ROOT_DIR
+            value: /data
           - name: BUCKET_NAME
-            value: hsds.bucket
+            value: hsds
           - name: LOG_LEVEL
             value: DEBUG
           - name: HSDS_ENDPOINT
             value: http://hsds.hdf.test
       volumes:
-        - name: config
-          secret:
-            secretName: user-password
+      - name: data
+        hostPath:
+          # changee to directory location for bucket parent directory
+          path: /Users/john/mybuckets
+          type: Directory
+      - name: config
+        secret:
+          secretName: user-password
+      - name: hsds-config
+        configMap:
+          name: hsds-config
+      - name: hsds-override
+        configMap:
+          name: hsds-override

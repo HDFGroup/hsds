@@ -8,6 +8,8 @@ try:
     from azure.core.exceptions import AzureError
 except ImportError:
     log.warning("unable to import Azure blob packages")
+except ModuleNotFoundError:
+    log.warning("unable to import Azure blob packages")
 from aiohttp.web_exceptions import HTTPNotFound, HTTPForbidden, HTTPInternalServerError, HTTPBadRequest
 from .. import config
 

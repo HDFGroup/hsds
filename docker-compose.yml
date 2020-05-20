@@ -6,11 +6,8 @@ services:
     restart: ${RESTART_POLICY}
     mem_limit: ${HEAD_RAM}
     environment:
-      - AWS_IAM_ROLE=${AWS_IAM_ROLE}
       - TARGET_SN_COUNT=${SN_CORES}
       - TARGET_DN_COUNT=${DN_CORES}
-      - HEAD_PORT=${HEAD_PORT}
-      - HEAD_HOST=hsds_head
       - NODE_TYPE=head_node
       - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
@@ -21,14 +18,14 @@ services:
       - LOG_LEVEL=${LOG_LEVEL}
     ports:
       - ${HEAD_PORT}:${HEAD_PORT}
+    volumes:
+      - ${PWD}/admin/config/:/config/
 
   dn:
     image: hdfgroup/hsds
     restart: ${RESTART_POLICY}
     mem_limit: ${DN_RAM}
     environment:
-      - AWS_IAM_ROLE=${AWS_IAM_ROLE}
-      - DN_PORT=${DN_PORT}
       - DN_HOST=${PUBLIC_DNS}
       - NODE_TYPE=dn
       - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
@@ -38,12 +35,12 @@ services:
       - AZURE_CONNECTION_STRING=${AZURE_CONNECTION_STRING}
       - BUCKET_NAME=${BUCKET_NAME}
       - LOG_LEVEL=${LOG_LEVEL}
-      - CHUNK_MEM_CACHE_SIZE=${CHUNK_MEM_CACHE_SIZE}
-      - MAX_CHUNK_SIZE=${MAX_CHUNK_SIZE}
     ports:
       - ${DN_PORT}
     depends_on:
       - head
+    volumes:
+      - ${PWD}/admin/config/:/config/
 
   sn:
     image: hdfgroup/hsds
@@ -66,25 +63,13 @@ services:
       - BUCKET_NAME=${BUCKET_NAME}
       - LOG_LEVEL=${LOG_LEVEL}
       - SERVER_NAME=${SERVER_NAME}
-      - CHUNK_MEM_CACHE_SIZE=${CHUNK_MEM_CACHE_SIZE}
-      - MAX_CHUNK_SIZE=${MAX_CHUNK_SIZE}
-      - MAX_CHUNKS_PER_FOLDER=${MAX_CHUNKS_PER_FOLDER}
       - AWS_DYNAMODB_USERS_TABLE=${AWS_DYNAMODB_USERS_TABLE}
       - VIRTUAL_HOST=${PUBLIC_DNS}
       - VIRTUAL_PORT=${SN_PORT}
       - HSDS_ENDPOINT=${HSDS_ENDPOINT}
       - SN_HOST=${PUBLIC_DNS}
-      - PASSWORD_SALT=${PASSWORD_SALT}
       - GREETING=${GREETING}
       - ABOUT=${ABOUT}
-      - TOP_LEVEL_DOMAINS=${TOP_LEVEL_DOMAINS}
-      - AUTH_EXPIRATION=${AUTH_EXPIRATION}
-      - ALLOW_NOAUTH=${ALLOW_NOAUTH}
-      - CORS_DOMAIN=${CORS_DOMAIN}
-      - ADMIN_USER=${ADMIN_USER}
-      - OPENID_PROVIDER=${OPENID_PROVIDER}
-      - OPENID_AUDIENCE=${OPENID_AUDIENCE}
-      - OPENID_CLAIMS=${OPENID_CLAIMS}
     ports:
       - ${SN_PORT}:${SN_PORT}
     depends_on:

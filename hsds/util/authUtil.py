@@ -172,12 +172,12 @@ def initUserDB(app):
         log.warn(msg)
         return
 
-    if config.get("AWS_DYNAMODB_GATEWAY") and config.get("AWS_DYNAMODB_USERS_TABLE"):
+    if config.get("aws_dynamodb_gateway") and config.get("aws_dynamodb_users_table"):
         # user entries will be obtained dynamicaly
         log.info("Getting DynamoDB client")
         getDynamoDBClient(app)  # get client here so any errors will be seen right away
         user_db = {}
-    elif config.get("PASSWORD_SALT"):
+    elif config.get("password_salt"):
         # use salt key to verify passwords
         log.info("using PASSWORD_SALT")
         user_db = {}
@@ -233,7 +233,7 @@ async def validateUserPasswordDynamoDB(app, username, password):
     if getPassword(app, username) is None:
         # look up name in dynamodb table
         dynamodb = getDynamoDBClient(app)
-        table_name = config.get("AWS_DYNAMODB_USERS_TABLE")
+        table_name = config.get("aws_dynamodb_users_table")
         log.info(f"looking for user: {username} in DynamoDB table: {table_name}")
         try:
             response = await dynamodb.get_item(
@@ -264,7 +264,7 @@ async def validateUserPasswordDynamoDB(app, username, password):
 def validatePasswordSHA512(app, username, password):
     if getPassword(app, username) is None:
         log.info(f"SHA512 check for username: {username}")
-        salt = config.get("PASSWORD_SALT")
+        salt = config.get("password_salt")
         hex_hash = hashlib.sha512(username.encode('utf-8') + salt.encode('utf-8')).hexdigest()
         if hex_hash[:32] != password:
             log.warn(f"user password is not valid (didn't equal sha512 hash) for user: {username}")
@@ -299,10 +299,10 @@ async def validateUserPassword(app, username, password):
         if "no_auth" in app and app["no_auth"]:
             log.info(f"no-auth access for user: {username}")
             setPassword(app, username, "")
-        elif config.get("AWS_DYNAMODB_USERS_TABLE"):
+        elif config.get("aws_dynamodb_users_table"):
             # look up in Dyanmo db - will throw exception if user not found
             await validateUserPasswordDynamoDB(app, username, password)
-        elif config.get("PASSWORD_SALT"):
+        elif config.get("password_salt"):
             validatePasswordSHA512(app, username, password)
         else:
             log.info("user not found")

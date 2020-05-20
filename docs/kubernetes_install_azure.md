@@ -72,6 +72,18 @@ Run the make_secrets script: `./make_secrets.sh`
 
 Run: `kubectl get secrets` to verify the secrets have been created.
 
+Create Kubernetes ConfigMaps
+----------------------------
+
+Kubernetes ConfigMaps are used to store settings that are specific to your HSDS deployment.
+
+Review the contents of **admin/config/config.yml** and create the file **admin/config/override.yml** for any keys where you don't 
+wish to use the default value.  Values that you will most certainly want to override are:
+
+* bucket_name # set to the name of the Azure Blob container you will be using 
+
+Run the make_config map script to store the yaml settings as Kubernetes ConnfigMaps: `admin/kubernetes/k8s_make_configmap.sh`
+
 Deploy HSDS to AKS
 ------------------
 

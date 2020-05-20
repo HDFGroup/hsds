@@ -11,75 +11,47 @@ services:
       - HEAD_PORT=${HEAD_PORT}
       - HEAD_HOST=hsds_head
       - NODE_TYPE=head_node
-      - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_REGION=${AWS_REGION}
-      - BUCKET_NAME=${BUCKET_NAME}
-      - LOG_LEVEL=${LOG_LEVEL}
     ports:
       - ${HEAD_PORT}:${HEAD_PORT}
+    volumes:
+      - ${PWD}/admin/config/:/config/
 
   dn:
     image: hdfgroup/hsds
     restart: ${RESTART_POLICY}
     mem_limit: ${DN_RAM}
     environment:
-      - AWS_IAM_ROLE=${AWS_IAM_ROLE}
       - DN_PORT=${DN_PORT}
       - DN_HOST=${PUBLIC_DNS}
       - NODE_TYPE=dn
-      - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_REGION=${AWS_REGION}
-      - BUCKET_NAME=${BUCKET_NAME}
       - LOG_LEVEL=${LOG_LEVEL}
-      - CHUNK_MEM_CACHE_SIZE=${CHUNK_MEM_CACHE_SIZE}
-      - MAX_CHUNK_SIZE=${MAX_CHUNK_SIZE}
-
     ports:
       - ${DN_PORT}
     depends_on:
       - head
+    volumes:
+      - ${PWD}/admin/config/:/config/
   sn:
     image: hdfgroup/hsds
     restart: ${RESTART_POLICY}
     mem_limit: ${SN_RAM}
     environment:
-      - AWS_IAM_ROLE=${AWS_IAM_ROLE}
       - SN_PORT=${SN_PORT}
       - NODE_TYPE=sn
-      - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_DYNAMODB_GATEWAY=${AWS_DYNAMODB_GATEWAY}
-      - AWS_REGION=${AWS_REGION}
-      - BUCKET_NAME=${BUCKET_NAME}
-      - LOG_LEVEL=${LOG_LEVEL}
-      - SERVER_NAME=${SERVER_NAME}
-      - CHUNK_MEM_CACHE_SIZE=${CHUNK_MEM_CACHE_SIZE}
-      - MAX_CHUNK_SIZE=${MAX_CHUNK_SIZE}
-      - MAX_CHUNKS_PER_FOLDER=${MAX_CHUNKS_PER_FOLDER}
-      - AWS_DYNAMODB_USERS_TABLE=${AWS_DYNAMODB_USERS_TABLE}
-      - VIRTUAL_HOST=${PUBLIC_DNS}
-      - VIRTUAL_PORT=${SN_PORT}
       - HSDS_ENDPOINT=${HSDS_ENDPOINT}
       - SN_HOST=${PUBLIC_DNS}
-      - PASSWORD_SALT=${PASSWORD_SALT}
-      - GREETING=${GREETING}
-      - ABOUT=${ABOUT}
-      - TOP_LEVEL_DOMAINS=${TOP_LEVEL_DOMAINS}
-      - AUTH_EXPIRATION=${AUTH_EXPIRATION}
-      - CORS_DOMAIN=${CORS_DOMAIN}
-      - OPENID_PROVIDER=${OPENID_PROVIDER}
-      - OPENID_AUDIENCE=${OPENID_AUDIENCE}
-      - OPENID_CLAIMS=${OPENID_CLAIMS}
-
     ports:
       - ${SN_PORT}:${SN_PORT}
     depends_on:
       - head
+    volumes:
+      - ${PWD}/admin/config/:/config/
 
   openio:
     image: openio/sds
@@ -88,7 +60,6 @@ services:
     environment:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_REGION=${AWS_REGION}
     ports:
       - "6007:6007"
     depends_on:

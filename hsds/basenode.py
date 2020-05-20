@@ -14,6 +14,7 @@
 #
 import asyncio
 import sys
+import os
 from asyncio import TimeoutError
 import time
 import random
@@ -64,9 +65,18 @@ async def register(app):
     log.info(f"register: {req_reg}")
 
     if "is_dcos" in app:
-        outside_port = config.get('PORT0')
+        if "PORT0" not in os.environ:
+            msg = "Expected PORT0 environment variable for DCOS"
+            log.error(msg)
+            raise KeyError(msg)
+        outside_port = os.environ['PORT0']
         # see https://github.com/mesosphere/marathon/issues/1198
-        ip = config.get('LIBPROCESS_IP')
+        if "LIBPROCESS_IP" not in os.environ:
+            msg = "Expected LIBPROCESS_IP environment variable for DCOS"
+            log.error(msg)
+            raise KeyError(msg)
+
+        ip = os.environ['LIBPROCESS_IP']
         body = {"id": app["id"], "ip": ip, "port": outside_port, "node_type": app["node_type"]}
     else:
         outside_port = app["node_port"]
@@ -644,6 +654,7 @@ async def info(request):
 
 def baseInit(loop, node_type):
     """Intitialize application and return app object"""
+
     log.info("Application baseInit")
     app = Application(loop=loop)
 
@@ -681,21 +692,22 @@ def baseInit(loop, node_type):
     counter["ERROR"] = 0
     app["log_count"] = counter
 
-    if config.get("oio_proxy"):
-        app["oio_proxy"] = config.get("oio_proxy")
-    if config.get("host_ip"):
-        app["host_ip"] = config.get("host_ip")
+    if "OIO_PROXY" in os.environ:
+        app["oio_proxy"] = os.environ["OIO_PROXY"]
+    if "HOST_IP" in os.environ: 
+        app["host_ip"] = os.environ["HOST_IP"]
     else:
         app["host_ip"] = "127.0.0.1"
 
     # check to see if we are running in a k8s cluster
     #if ospath.exists("/var/run/secrets/kubernetes.io") or True:
-    if config.get("KUBERNETES_SERVICE_HOST"):
+    if "KUBERNETES_SERVICE_HOST" in os.environ:
         log.info("running in kubernetes")
         app["is_k8s"] = True
 
     # check to see if we are running in a DCOS cluster
-    if config.get('MARATHON_APP_ID'):
+    elif "MARATHON_APP_ID" in os.environ:
+        log.info("Found MARATHON_APP_ID environment variable, setting is_dcos to True")
         app["is_dcos"] = True
 
     if not config.get('standalone_app'):

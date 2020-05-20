@@ -22,8 +22,15 @@ spec:
           volumeMounts:
           - name: data
             mountPath: "/data"
+          - name: accounts
+            mountPath: "/config/passwd.txt"
+            subPath: passwd.txt
           - name: config
-            mountPath: "/config"
+            mountPath: "/config/config.yml"
+            subPath: config.yml
+          - name: override
+            mountPath: "/config/override.yml"
+            subPath: override.yml
           ports:
             -
               containerPort: 5101
@@ -32,18 +39,6 @@ spec:
             value: sn
           - name: ROOT_DIR
             value: /data
-          - name: BUCKET_NAME
-            value: hsds
-          - name: LOG_LEVEL
-            value: DEBUG
-          - name: SERVER_NAME
-            value: "Highly Scalable Data Service (HSDS)"
-          - name: HSDS_ENDPOINT
-            value: "http://hsds.hdf.test" # change to external DNS LB path
-          - name: GREETING
-            value: "Welcome to HSDS!"
-          - name: ABOUT
-            value: "HSDS is a webservice for HDF data"
           - name: PASSWORD_FILE
             value: /config/passwd.txt
         -
@@ -57,6 +52,12 @@ spec:
           volumeMounts:
           - name: data
             mountPath: "/data"
+          - name: config
+            mountPath: "/config/config.yml"
+            subPath: config.yml
+          - name: override
+            mountPath: "/config/override.yml"
+            subPath: override.yml
           ports:
             -
               containerPort: 6101
@@ -65,18 +66,19 @@ spec:
             value: dn
           - name: ROOT_DIR
             value: /data
-          - name: BUCKET_NAME
-            value: hsds
-          - name: LOG_LEVEL
-            value: DEBUG
-          - name: HSDS_ENDPOINT
-            value: http://hsds.hdf.test
       volumes:
       - name: data
         hostPath:
           # changee to directory location for bucket parent directory
-          path: /var/buckets
+          path: /Users/john/mybuckets
           type: Directory
-      - name: config
+      - name: accounts
         secret:
           secretName: user-password
+      - name: config
+        configMap:
+          name: hsds-config
+      - name: override
+        configMap:
+          name: hsds-override
+        

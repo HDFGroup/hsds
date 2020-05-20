@@ -11,91 +11,104 @@
 ##############################################################################
 import os
 import sys
+import yaml
 
-cfg = {
-    'allow_noauth': True,  # enable unauthenticated requests
-    'auth_expiration': -1, # set an expiration for credential caching
-    'default_public': False, # new domains are publically readable by default
-    'aws_access_key_id': 'xxx',  # Replace with access key for account
-    'aws_secret_access_key': 'xxx',   # Replace with secret key for account
-    'aws_iam_role': "hsds_role",  # For EC2 using IAM roles
-    'aws_region': 'us-east-1',
-    'hsds_endpoint': '', # used for hateos links in response
-    'head_endpoint': '', # optionally used for nodes to register
-    'aws_s3_gateway': '',   # use endpoint for the region HSDS is running in, e.g. 'https://s3.amazonaws.com' for us-east-1
-    'aws_dynamodb_gateway': 'https://dynamodb.us-east-1.amazonaws.com',
-    'aws_lambda_gateway': '', # use endpoint for region HSDS is running in.  See: https://docs.aws.amazon.com/general/latest/gr/lambda-service.html
-    'aws_dynamodb_users_table': '',
-    'aws_lambda_chunkread_function': '', # name of aws lambda function for chunk reading
-    'aws_lambda_threshold': 4, # number of chunks per node per request to reach before using lambda
-    'aws_lambda_max_invoke': 1000,  # max number of lambda to invoke simultaneously 
-    'azure_connection_string': '', # use for connecting to Azure blob storage
-    'azure_resource_id': '', # resource id for use with Azure Active Directory
-    'root_dir': '',  # base directory to use for Posix storage
-    'password_salt': '',
-    'bucket_name': '',  # set to usee a default bucket, otherwise bucket param is needed for all requests
-    'head_host': 'localhost',
-    'head_port': 5100,
-    'dn_host': 'localhost',
-    'dn_port' : 6101,  # Start dn ports at 6101
-    'sn_port': 5101,   # Start sn ports at 5101
-    'target_sn_count': 4,
-    'target_dn_count': 4,
-    'log_level': 'INFO',   # ERROR, WARNING, INFO, DEBUG, or NOTSET,
-    'max_tcp_connections': 100,
-    'head_sleep_time': 10,
-    'node_sleep_time': 10,
-    'async_sleep_time': 10,
-    's3_sync_interval': 10,  # time to wait to write object data to S3 (in sec)
-    'max_chunks_per_request': 1000,  # maximum number of chunks to be serviced by one request
-    'min_chunk_size': '1m',  # 1 MB
-    'max_chunk_size': '4m',  # 4 MB
-    'max_request_size': '100m',  # 100 MB - should be no smaller than client_max_body_size in nginx tmpl
-    'max_chunks_per_folder': 200000, # max number of chunks per s3 folder. 0 for unlimiited
-    'max_task_count': 100,  # maximum number of concurrent tasks before server will return 503 error
-    'aio_max_pool_connections': 64,  # number of connections to keep in conection pool for aiobotocore requests
-    'metadata_mem_cache_size': '128m',
-    'chunk_mem_cache_size': '128m',  # 128 MB
-    'timeout': 30,  # http timeout - 30 sec
-    'password_file': '/config/passwd.txt',  # filepath to a text file of username/passwords. set to '' for no-auth access
-    'server_name': 'Highly Scalable Data Service (HSDS)', # this gets returned in the about request
-    'greeting': 'Welcome to HSDS!',
-    'about': 'HSDS is a webservice for HDF data',
-    'top_level_domains': [],  # list of possible top-level domains, example: ["/home", "/shared"]
-    'cors_domain': '*',     # domains allowed for CORS
-    'admin_user': 'admin',   # use with admin privileges
-    'openid_provider': 'azure',  # OpenID authentication provider
-    'openid_audience': '', # OpenID audience. This is synonymous with azure_resource_id for azure.
-    'openid_claims': 'unique_name,appid', # Comma seperated list of claims to resolve to usernames.
-    'chaos_die': 0,           # if > 0, have nodes randomly die after n seconds (for testing)
-    'standalone_app': False,  # True when run as a single application
-}
+cfg = {}
+   
+def _load_cfg():
+        
+    # load config yaml
+    yml_file = None
+    for config_dir in [".", "/config"]:
+        file_name = os.path.join(config_dir, "config.yml")
+        if os.path.isfile(file_name):
+            yml_file = file_name
+            break
+    if not yml_file:
+        msg = "unable to find config file"
+        print(msg)
+        raise FileNotFoundError(msg)
+    print(f"_load_cfg with '{yml_file}''")
+    try:
+        with open(yml_file, "r") as f:
+            yml_config = yaml.safe_load(f)
+    except yaml.scanner.ScannerError as se:
+        msg = f"Error parsing config.yml: {se}"
+        print(msg)
+        raise KeyError(msg)
+
+    # load override yaml
+    yml_override = None
+    if "CONFIG_OVERRIDE_PATH" in os.environ:
+        override_yml_filepath = os.environ["CONFIG_OVERRIDE_PATH"]
+    else:
+        override_yml_filepath = "/config/override.yml"
+    if os.path.isfile(override_yml_filepath):
+        print(f"loading override configuation: {override_yml_filepath}")
+        try:
+            with open(override_yml_filepath, "r") as f:
+                yml_override = yaml.safe_load(f)
+        except yaml.scanner.ScannerError as se:
+            msg = f"Error parsing '{override_yml_filepath}': {se}"
+            print(msg)
+            raise KeyError(msg)
+        print("override settings:")
+        for k in yml_override:
+            v = yml_override[k]
+            print(f"  {k}: {v}")
+        
+
+    # apply overrides for each key and store in cfg global
+    for x in yml_config:
+        cfgval = yml_config[x]
+        # see if there is a command-line override
+        option = '--'+x+'='
+        override = None
+        for i in range(1, len(sys.argv)):
+            #print(i, sys.argv[i])
+            if sys.argv[i].startswith(option):
+                # found an override
+                arg = sys.argv[i]
+                override = arg[len(option):]  # return text after option string   
+                print(f"got cmd line override for {x}: {override} ")
+                 
+            
+        # see if there are an environment variable override
+        if override is None and x.upper() in os.environ:
+            override = os.environ[x.upper()]
+            print(f"got env value override for {x}: {override} ")
+
+        # see if there is a yml override
+        if override is None and yml_override and x in yml_override:
+            override = yml_override[x]
+            print(f"got config override for {x}: {override}")
+
+
+        if override:
+            if cfgval is not None:
+                try:
+                    override = type(cfgval)(override) # convert to same type as yaml
+                except ValueError as ve:
+                    msg = f"Error applying command line override value {override} for key: {x}: {ve}"
+                    print(msg)
+                    # raise KeyError(msg)
+            cfgval = override # replace the yml value
+
+        if isinstance(cfgval, str) and len(cfgval) > 1 and cfgval[-1] in ('g', 'm', 'k') and cfgval[:-1].isdigit():
+            # convert values like 512m to corresponding integer
+            u = cfgval[-1]
+            n = int(cfgval[:-1])
+            if u == 'k':
+                cfgval =  n * 1024
+            elif u == 'm':
+                cfgval = n * 1024*1024
+            else: # u == 'g'
+                cfgval = n * 1024*1024*1024
+        cfg[x] = cfgval
 
 def get(x):
-    # see if there is a command-line override
-    #print("config get:", x)
-    option = '--'+x+'='
-    retval = None
-    for i in range(1, len(sys.argv)):
-        #print(i, sys.argv[i])
-        if sys.argv[i].startswith(option):
-            # found an override
-            arg = sys.argv[i]
-            retval = arg[len(option):]  # return text after option string
-    # see if there are an environment variable override
-    if not retval and  x.upper() in os.environ:
-        retval = os.environ[x.upper()]
-    # no command line override, just return the cfg value
-    if not retval and x in cfg:
-        retval = cfg[x]
-    if isinstance(retval, str) and len(retval) > 1 and retval[-1] in ('g', 'm', 'k') and retval[:-1].isdigit():
-        # convert values like 512m to corresponding integer
-        u = retval[-1]
-        n = int(retval[:-1])
-        if u == 'k':
-            retval =  n * 1024
-        elif u == 'm':
-            retval = n * 1024*1024
-        else: # u == 'g'
-            retval = n * 1024*1024*1024
-    return retval
+    if not cfg:
+        _load_cfg()
+    if x not in cfg:
+        raise KeyError(f"config value {x} not found")
+    return cfg[x]

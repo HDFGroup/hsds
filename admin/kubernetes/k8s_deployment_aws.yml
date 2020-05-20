@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: hsds
+  name: hsds
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hsds
+  template:
+    metadata:
+      labels:
+        app: hsds
+    spec:
+      containers:
+        -
+          name: sn
+          image: "hdfgroup/hsds"
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+          - name: accounts
+            mountPath: "/config/passwd.txt"
+            subPath: passwd.txt
+          - name: config
+            mountPath: "/config/config.yml"
+            subPath: config.yml
+          - name: override
+            mountPath: "/config/override.yml"
+            subPath: override.yml
+          ports:
+            -
+              containerPort: 5101
+          env:
+          - name: NODE_TYPE
+            value: sn
+          - name: PASSWORD_FILE
+            value: /config/passwd.txt
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: aws-auth-keys
+                key: aws_access_key_id
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: aws-auth-keys
+                key: aws_secret_access_key
+        -
+          name: dn
+          image: "hdfgroup/hsds"
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/usr/bin/curl", "-X", "DELETE", "http://127.0.0.1:6101/prestop"]
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+          - name: config
+            mountPath: "/config/config.yml"
+            subPath: config.yml
+          - name: override
+            mountPath: "/config/override.yml"
+            subPath: override.yml
+          ports:
+            -
+              containerPort: 6101
+          env:
+          - name: NODE_TYPE
+            value: dn
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: aws-auth-keys
+                key: aws_access_key_id
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: aws-auth-keys
+                key: aws_secret_access_key
+      volumes:
+      - name: accounts
+        secret:
+          secretName: user-password
+      - name: config
+        configMap:
+          name: hsds-config
+      - name: override
+        configMap:
+          name: hsds-override
+        
