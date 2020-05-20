@@ -9,9 +9,6 @@ services:
       - TARGET_SN_COUNT=${SN_CORES}
       - TARGET_DN_COUNT=${DN_CORES}
       - NODE_TYPE=head_node
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AZURE_CONNECTION_STRING=${AZURE_CONNECTION_STRING}
       - ROOT_DIR=/data
       - BUCKET_NAME=${BUCKET_NAME}
     ports:
@@ -27,9 +24,6 @@ services:
     environment:
       - DN_HOST=${PUBLIC_DNS}
       - NODE_TYPE=dn
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AZURE_CONNECTION_STRING=${AZURE_CONNECTION_STRING}
       - ROOT_DIR=/data
       - BUCKET_NAME=${BUCKET_NAME}
     ports:
@@ -46,9 +40,6 @@ services:
     environment:
       - SN_PORT=${SN_PORT}
       - NODE_TYPE=sn
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AZURE_CONNECTION_STRING=${AZURE_CONNECTION_STRING}
       - ROOT_DIR=/data
       - BUCKET_NAME=${BUCKET_NAME}
       - VIRTUAL_HOST=${PUBLIC_DNS}
