@@ -9,11 +9,6 @@ These environment variables will be used to access AWS resources.
 
     export AWS_ACCESS_KEY_ID=1234567890            # user your AWS account access key if using S3 (Not needed if running on EC2 and AWS_IAM_ROLEis defined)
     export AWS_SECRET_ACCESS_KEY=ABCDEFGHIJKL      # use your AWS account access secret key if using S3  (Not needed if running on EC2 and AWS_IAM_ROLE is defined)
-    export ADMIN_USER=admin                        # The username for the HSDS admin acount
-    export BUCKET_NAME=hsds.test                   # set to the name of the bucket you will be using (must be globally unique)
-    export AWS_REGION=us-east-1                    # for boto compatibility - for S3 set to the region the bucket is in
-    export AWS_S3_GATEWAY=http://s3.amazonaws.com  # Use AWS endpoint for S3, see note below
-    export HSDS_ENDPOINT=http://hsds.hdf.test      # use https protocol if SSL is desired
 
 For S3, set AWS_S3_GATEWAY to endpoint for the region the bucket is in.  E.g.: <http://s3.amazonaws.com>. See <http://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region> for list of endpoints.
 
@@ -64,7 +59,7 @@ Create Kubernetes ConfigMaps
 
 Kubernetes ConfigMaps are used to store settings that are specific to your HSDS deployment.
 
-Review the contents of admin/config/config.yml and create the file admin/config/override.yml for any keys where you don't 
+Review the contents of **admin/config/config.yml** and create the file **admin/config/override.yml** for any keys where you don't 
 wish to use the default value.  Values that you will most certainly want to override are:
 
 * bucket_name # set to the name of the bucket you will be using (must be globally unique)
