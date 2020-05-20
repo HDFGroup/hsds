@@ -29,6 +29,7 @@ Other useful resources
 * HDF5 For the Web: <https://hdfgroup.org/wp/2015/04/hdf5-for-the-web-hdf-server>
 * HSDS Security: <https://hdfgroup.org/wp/2015/12/serve-protect-web-security-hdf5>
 * HSDS with Jupyter: <https://www.slideshare.net/HDFEOS/hdf-kita-lab-jupyterlab-hdf-service>
+* AWS Big Data Blog: <https://aws.amazon.com/blogs/big-data/power-from-wind-open-data-on-aws/>
 
 
 Quick Start
@@ -80,7 +81,7 @@ The related project: <https://github.com/HDFGroup/h5pyd> provides a (mostly) h5p
 interface to the server for Python clients.
 
 For C/C++ clients, the HDF REST VOL is a HDF5 library plugin that enables the HDF5 API to read and write data
-using HSDS.  See: <https://bitbucket.hdfgroup.org/projects/HDF5VOL/repos/rest/browse>.
+using HSDS.  See: <https://github.com/HDFGroup/vol-rest>.
 
 Uninstalling
 ------------
