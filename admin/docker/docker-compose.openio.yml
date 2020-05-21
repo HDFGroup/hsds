@@ -6,37 +6,31 @@ services:
     restart: ${RESTART_POLICY}
     mem_limit: ${HEAD_RAM}
     environment:
-      - TARGET_SN_COUNT=${CORES}
-      - TARGET_DN_COUNT=${CORES}
+      - TARGET_SN_COUNT=${SN_CORES}
+      - TARGET_DN_COUNT=${DN_CORES}
       - HEAD_PORT=${HEAD_PORT}
-      - HEAD_HOST=hsds_head
       - NODE_TYPE=head_node
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
     ports:
       - ${HEAD_PORT}:${HEAD_PORT}
-    logging:
-     options:
-        max-size: "5m"
-        max-file: "5"
     volumes:
       - ${PWD}/admin/config/:/config/
+
   dn:
     image: hdfgroup/hsds
     restart: ${RESTART_POLICY}
     mem_limit: ${DN_RAM}
     environment:
       - DN_PORT=${DN_PORT}
-      - DN_HOST=${PUBLIC_DNS}
       - NODE_TYPE=dn
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
+      - LOG_LEVEL=${LOG_LEVEL}
     ports:
       - ${DN_PORT}
-    logging:
-     options:
-        max-size: "5m"
-        max-file: "5"
     depends_on:
       - head
     volumes:
@@ -46,33 +40,27 @@ services:
     restart: ${RESTART_POLICY}
     mem_limit: ${SN_RAM}
     environment:
-      - AWS_IAM_ROLE=${AWS_IAM_ROLE}
       - SN_PORT=${SN_PORT}
       - NODE_TYPE=sn
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
       - HSDS_ENDPOINT=${HSDS_ENDPOINT}
-      - SN_HOST=${PUBLIC_DNS}
-
     ports:
       - ${SN_PORT}:${SN_PORT}
-    logging:
-     options:
-        max-size: "5k"
-        max-file: "5"
     depends_on:
       - head
     volumes:
       - ${PWD}/admin/config/:/config/
-  logs:
-    image: mdsol/logspout
+
+  openio:
+    image: openio/sds
     restart: always
-    command: cloudwatch://auto
-    container_name: logspout
-    hostname: hsds_${PUBLIC_DNS}
-    volumes:
-    - /var/run/docker.sock:/tmp/docker.sock:ro
-    logging:
-     options:
-        max-size: "50m"
-        max-file: "5"
+    container_name: openio_sds
+    environment:
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+    ports:
+      - "6007:6007"
+    depends_on:
+      - head

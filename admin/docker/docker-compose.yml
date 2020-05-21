@@ -9,12 +9,15 @@ services:
       - TARGET_SN_COUNT=${SN_CORES}
       - TARGET_DN_COUNT=${DN_CORES}
       - NODE_TYPE=head_node
-      - ROOT_DIR=/data
+      - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AZURE_CONNECTION_STRING=${AZURE_CONNECTION_STRING}
       - BUCKET_NAME=${BUCKET_NAME}
+      - LOG_LEVEL=${LOG_LEVEL}
     ports:
       - ${HEAD_PORT}:${HEAD_PORT}
     volumes:
-      - ${ROOT_DIR}:/data
       - ${PWD}/admin/config/:/config/
 
   dn:
@@ -22,17 +25,20 @@ services:
     restart: ${RESTART_POLICY}
     mem_limit: ${DN_RAM}
     environment:
-      - DN_HOST=${PUBLIC_DNS}
       - NODE_TYPE=dn
-      - ROOT_DIR=/data
+      - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AZURE_CONNECTION_STRING=${AZURE_CONNECTION_STRING}
       - BUCKET_NAME=${BUCKET_NAME}
+      - LOG_LEVEL=${LOG_LEVEL}
     ports:
       - ${DN_PORT}
     depends_on:
       - head
     volumes:
-      - ${ROOT_DIR}:/data
       - ${PWD}/admin/config/:/config/
+
   sn:
     image: hdfgroup/hsds
     restart: ${RESTART_POLICY}
@@ -40,16 +46,16 @@ services:
     environment:
       - SN_PORT=${SN_PORT}
       - NODE_TYPE=sn
-      - ROOT_DIR=/data
+      - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AZURE_CONNECTION_STRING=${AZURE_CONNECTION_STRING}
       - BUCKET_NAME=${BUCKET_NAME}
-      - VIRTUAL_HOST=${PUBLIC_DNS}
-      - VIRTUAL_PORT=${SN_PORT}
+      - LOG_LEVEL=${LOG_LEVEL}
       - HSDS_ENDPOINT=${HSDS_ENDPOINT}
-      - SN_HOST=${PUBLIC_DNS}
     ports:
       - ${SN_PORT}:${SN_PORT}
     depends_on:
       - head
     volumes:
-      - ${ROOT_DIR}:/data
       - ${PWD}/admin/config/:/config/

@@ -167,7 +167,7 @@ class S3Client():
             raise HTTPInternalServerError()
 
         start_time = time.time()
-        log.debug(f"s3Client.get_object({bucket}/{key} start: {start_time}")
+        log.debug(f"s3Client.get_object({bucket}/{key}) start: {start_time}")
         try:
             resp = await self._client.get_object(Bucket=bucket, Key=key, Range=range)
             data = await resp['Body'].read()
