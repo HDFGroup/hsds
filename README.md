@@ -35,18 +35,21 @@ Other useful resources
 Quick Start
 -------------
 
-**On AWS**
+Make sure you have Python 3, docker, docker-compose installed, then:
 
-Make sure you have Python 3, docker, docker-compose, and aws cli tools installed, then:
-   `$runall.sh`
-to run the server.
+   1. Setup password file: `$ cp admin/config/passwd.template admin/config/passswd.txt`
+   2. Start server: `$ ./runall.sh`
+   3. To run test suite, set an environment variable for the admin password: `$ export ADMIN_PASSWORD=admin`
+   4. Run the test suite: `$ ./testall.sh`
 
-To run test suite, set an environment variable for the admin password:
-   `$export ADMIN_PASSWORD=admin`
+To shut down the server, run: `$ ./stopall.sh`
+    
 Note: passwords can (and should for production use) be modified by changing values in hsds/admin/config/password.txt and rebuilding the docker image.
 
-Next, run the test suite by:
-   `$python testall.py`
+Detailed Install Instructions
+-----------------------------
+
+**On AWS**
 
 See: [docs/docker_install_aws.md](docs/docker_install_aws.md) for complete install instructions.
 
