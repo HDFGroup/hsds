@@ -19,7 +19,7 @@ def _load_cfg():
         
     # load config yaml
     yml_file = None
-    for config_dir in [".", "/config"]:
+    for config_dir in [".", "/config", "/etc/hsds/"]:
         file_name = os.path.join(config_dir, "config.yml")
         if os.path.isfile(file_name):
             yml_file = file_name
@@ -28,7 +28,7 @@ def _load_cfg():
         msg = "unable to find config file"
         print(msg)
         raise FileNotFoundError(msg)
-    print(f"_load_cfg with '{yml_file}''")
+    print(f"_load_cfg with '{yml_file}'")
     try:
         with open(yml_file, "r") as f:
             yml_config = yaml.safe_load(f)
