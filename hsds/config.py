@@ -19,7 +19,7 @@ def _load_cfg():
         
     # load config yaml
     yml_file = None
-    for config_dir in [".", "/config"]:
+    for config_dir in [".", "/config", "/etc/hsds/"]:
         file_name = os.path.join(config_dir, "config.yml")
         if os.path.isfile(file_name):
             yml_file = file_name
@@ -28,7 +28,7 @@ def _load_cfg():
         msg = "unable to find config file"
         print(msg)
         raise FileNotFoundError(msg)
-    print(f"_load_cfg with '{yml_file}''")
+    print(f"_load_cfg with '{yml_file}'")
     try:
         with open(yml_file, "r") as f:
             yml_config = yaml.safe_load(f)
@@ -70,18 +70,18 @@ def _load_cfg():
                 # found an override
                 arg = sys.argv[i]
                 override = arg[len(option):]  # return text after option string   
-                print(f"got cmd line override for {x}: {override} ")
+                print(f"got cmd line override for {x}")
                  
             
         # see if there are an environment variable override
         if override is None and x.upper() in os.environ:
             override = os.environ[x.upper()]
-            print(f"got env value override for {x}: {override} ")
+            print(f"got env value override for {x} ")
 
         # see if there is a yml override
         if override is None and yml_override and x in yml_override:
             override = yml_override[x]
-            print(f"got config override for {x}: {override}")
+            print(f"got config override for {x}")
 
 
         if override:
@@ -89,7 +89,7 @@ def _load_cfg():
                 try:
                     override = type(cfgval)(override) # convert to same type as yaml
                 except ValueError as ve:
-                    msg = f"Error applying command line override value {override} for key: {x}: {ve}"
+                    msg = f"Error applying command line override value for key: {x}: {ve}"
                     print(msg)
                     # raise KeyError(msg)
             cfgval = override # replace the yml value

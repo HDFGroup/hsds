@@ -6,33 +6,29 @@ if [[ $# -eq 1 ]] && ([[ $1 == "-h" ]] || [[ $1 == "--help" ]]); then
    exit 1
 fi
 
-if [[ -z ${AWS_S3_GATEWAY}  ]] && [[ -z ${AZURE_CONNECTION_STRING} ]]; then
-  if [[ -z ${ROOT_DIR} ]]; then
-    echo "AWS_S3_GATEWAY not set - using openio container"
-    export AWS_S3_GATEWAY="http://openio:6007"
-    COMPOSE_FILE="docker-compose.openio.yml"
-    if [[ -z ${AWS_ACCESS_KEY_ID} ]]; then
+if [[ ${AWS_S3_GATEWAY} ]]; then
+  COMPOSE_FILE="admin/docker/docker-compose.aws.yml"
+  echo "AWS_S3_GATEWAY set, using ${COMPOSE_FILE}"
+elif [[ ${AZURE_CONNECTION_STRING} ]]; then
+  COMPOSE_FILE="admin/docker/docker-compose.azure.yml"
+  echo "AZURE_CONNECTION_STRING set, using ${COMPOSE_FILE}"
+elif [[ ${ROOT_DIR} ]]; then
+  COMPOSE_FILE="admin/docker/docker-compose.posix.yml"
+  echo "ROOT_DIR set, using ${COMPOSE_FILE}"
+else
+  COMPOSE_FILE="admin/docker/docker-compose.openio.yml"
+  echo "no persistent storage configured, using OPENIO ephemeral storage, ${COMPOSE_FILE}"
+  export AWS_S3_GATEWAY="http://openio:6007"
+  if [[ -z ${AWS_ACCESS_KEY_ID} ]]; then
       # use default access keys and region for openio demo container
       export AWS_ACCESS_KEY_ID=demo:demo
       export AWS_SECRET_ACCESS_KEY=DEMO_PASS
       export AWS_REGION=us-east-1
-    fi
-    [[ -z ${BUCKET_NAME} ]]  && export BUCKET_NAME="hsds.test"
-    [[ -z ${HSDS_ENDPOINT} ]] && export HSDS_ENDPOINT=http://localhost
-  else
-    # Use Posix driver with ROOT_DIR as base for buckets
-    echo "Using POSIX driver with data directory: ${ROOT_DIR}"
-    COMPOSE_FILE="docker-compose.posix.yml"
   fi
-elif [[ ${HSDS_USE_HTTPS} ]]; then
-   COMPOSE_FILE="docker-compose.secure.yml"
-else
-   echo "using cloud storage"
-   COMPOSE_FILE="docker-compose.yml"
+  [[ -z ${BUCKET_NAME} ]]  && export BUCKET_NAME="hsds.test"
+  [[ -z ${HSDS_ENDPOINT} ]] && export HSDS_ENDPOINT=http://localhost
 fi
-
-echo "Using compose file: ${COMPOSE_FILE}"
-
+ 
 [[ -z ${BUCKET_NAME} ]] && echo "No default bucket set - did you mean to export BUCKET_NAME?"
 
 [[ -z ${HSDS_ENDPOINT} ]] && echo "HSDS_ENDPOINT is not set" && exit 1
@@ -97,9 +93,12 @@ else
 fi
 
 if [[ ${AWS_S3_GATEWAY} == "http://openio:6007" ]]; then
+  # install awscli if not setup already
+  pip freeze | grep -q awscli  || pip install awscli
   # if we've just launched the openio demo container, create a test bucket
   echo "make bucket ${BUCKET_NAME} (may need some retries)"
   sleep 5  # let the openio container spin up first
+
   for ((var = 1; var <= 10; var++)); do
     # call may fail the first few times as the openio container is spinning up
     aws --endpoint-url http://127.0.0.1:6007 --no-verify-ssl s3 mb s3://${BUCKET_NAME} && break

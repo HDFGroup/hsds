@@ -22,12 +22,15 @@ spec:
           volumeMounts:
           - name: data
             mountPath: "/data"
+          - name: accounts
+            mountPath: "/config/passwd.txt"
+            subPath: passwd.txt
           - name: config
-            mountPath: "/config"
-          - name: hsds-config
-            mountPath: "/config1"
-          - name: hsds-override
-            mountPath: "/config2"
+            mountPath: "/config/config.yml"
+            subPath: config.yml
+          - name: override
+            mountPath: "/config/override.yml"
+            subPath: override.yml
           ports:
             -
               containerPort: 5101
@@ -78,8 +81,8 @@ spec:
       volumes:
       - name: data
         hostPath:
-          # changee to directory location for bucket parent directory
-          path: /Users/john/mybuckets
+          # change to directory location for bucket parent directory
+          path: /var/mybuckets
           type: Directory
       - name: config
         secret:

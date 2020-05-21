@@ -6,73 +6,56 @@ services:
     restart: ${RESTART_POLICY}
     mem_limit: ${HEAD_RAM}
     environment:
-      - TARGET_SN_COUNT=${CORES}
-      - TARGET_DN_COUNT=${CORES}
-      - HEAD_PORT=${HEAD_PORT}
-      - HEAD_HOST=hsds_head
+      - TARGET_SN_COUNT=${SN_CORES}
+      - TARGET_DN_COUNT=${DN_CORES}
       - NODE_TYPE=head_node
+      - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AZURE_CONNECTION_STRING=${AZURE_CONNECTION_STRING}
+      - BUCKET_NAME=${BUCKET_NAME}
+      - LOG_LEVEL=${LOG_LEVEL}
     ports:
       - ${HEAD_PORT}:${HEAD_PORT}
-    logging:
-     options:
-        max-size: "5m"
-        max-file: "5"
     volumes:
       - ${PWD}/admin/config/:/config/
+
   dn:
     image: hdfgroup/hsds
     restart: ${RESTART_POLICY}
     mem_limit: ${DN_RAM}
     environment:
-      - DN_PORT=${DN_PORT}
-      - DN_HOST=${PUBLIC_DNS}
       - NODE_TYPE=dn
+      - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AZURE_CONNECTION_STRING=${AZURE_CONNECTION_STRING}
+      - BUCKET_NAME=${BUCKET_NAME}
+      - LOG_LEVEL=${LOG_LEVEL}
     ports:
       - ${DN_PORT}
-    logging:
-     options:
-        max-size: "5m"
-        max-file: "5"
     depends_on:
       - head
     volumes:
       - ${PWD}/admin/config/:/config/
+
   sn:
     image: hdfgroup/hsds
     restart: ${RESTART_POLICY}
     mem_limit: ${SN_RAM}
     environment:
-      - AWS_IAM_ROLE=${AWS_IAM_ROLE}
       - SN_PORT=${SN_PORT}
       - NODE_TYPE=sn
+      - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AZURE_CONNECTION_STRING=${AZURE_CONNECTION_STRING}
+      - BUCKET_NAME=${BUCKET_NAME}
+      - LOG_LEVEL=${LOG_LEVEL}
       - HSDS_ENDPOINT=${HSDS_ENDPOINT}
-      - SN_HOST=${PUBLIC_DNS}
-
     ports:
       - ${SN_PORT}:${SN_PORT}
-    logging:
-     options:
-        max-size: "5k"
-        max-file: "5"
     depends_on:
       - head
     volumes:
       - ${PWD}/admin/config/:/config/
-  logs:
-    image: mdsol/logspout
-    restart: always
-    command: cloudwatch://auto
-    container_name: logspout
-    hostname: hsds_${PUBLIC_DNS}
-    volumes:
-    - /var/run/docker.sock:/tmp/docker.sock:ro
-    logging:
-     options:
-        max-size: "50m"
-        max-file: "5"

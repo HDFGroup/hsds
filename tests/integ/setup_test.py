@@ -33,7 +33,7 @@ class SetupTest(unittest.TestCase):
         admin_headers = None
         try:
             admin_passwd = config.get("admin_password")
-            print("got admin_passwd:", admin_passwd)
+            print("got admin_passwd: ", "*"*len(admin_passwd))
             admin_headers = helper.getRequestHeaders(username="admin", password=admin_passwd)
         except KeyError:
             pass

@@ -1,0 +1,66 @@
+version: '2'
+services:
+  head:
+    image: hdfgroup/hsds
+    container_name: hsds_head
+    restart: ${RESTART_POLICY}
+    mem_limit: ${HEAD_RAM}
+    environment:
+      - TARGET_SN_COUNT=${SN_CORES}
+      - TARGET_DN_COUNT=${DN_CORES}
+      - HEAD_PORT=${HEAD_PORT}
+      - NODE_TYPE=head_node
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
+    ports:
+      - ${HEAD_PORT}:${HEAD_PORT}
+    volumes:
+      - ${PWD}/admin/config/:/config/
+
+  dn:
+    image: hdfgroup/hsds
+    restart: ${RESTART_POLICY}
+    mem_limit: ${DN_RAM}
+    environment:
+      - DN_PORT=${DN_PORT}
+      - NODE_TYPE=dn
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
+      - LOG_LEVEL=${LOG_LEVEL}
+    ports:
+      - ${DN_PORT}
+    depends_on:
+      - head
+    volumes:
+      - ${PWD}/admin/config/:/config/
+  sn:
+    image: hdfgroup/hsds
+    restart: ${RESTART_POLICY}
+    mem_limit: ${SN_RAM}
+    environment:
+      - SN_PORT=${SN_PORT}
+      - NODE_TYPE=sn
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
+      - HSDS_ENDPOINT=${HSDS_ENDPOINT}
+    ports:
+      - ${SN_PORT}:${SN_PORT}
+    depends_on:
+      - head
+    volumes:
+      - ${PWD}/admin/config/:/config/
+
+  openio:
+    image: openio/sds
+    restart: always
+    container_name: openio_sds
+    environment:
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+    ports:
+      - "6007:6007"
+    depends_on:
+      - head
