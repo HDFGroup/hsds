@@ -89,7 +89,7 @@ def _load_cfg():
                 try:
                     override = type(cfgval)(override) # convert to same type as yaml
                 except ValueError as ve:
-                    msg = f"Error applying command line override value for key: {x}"
+                    msg = f"Error applying command line override value for key: {x}: {ve}"
                     print(msg)
                     # raise KeyError(msg)
             cfgval = override # replace the yml value
