@@ -668,7 +668,8 @@ async def doFlush(app, root_id, bucket=None):
         params["bucket"] = bucket
     client = get_http_client(app)
     dn_urls = getDataNodeUrls(app)
-    log.debug(f"dn_urls: {dn_urls}")
+    log.debug(f"doFlush - dn_urls: {dn_urls}")
+    failed_count = 0
 
     try:
         tasks = []
@@ -679,23 +680,32 @@ async def doFlush(app, root_id, bucket=None):
         done, pending = await asyncio.wait(tasks)
         if pending:
             # should be empty since we didn't use return_when parameter
-            log.error("Got pending tasks")
+            log.error("doFlush - got pending tasks")
             raise HTTPInternalServerError()
         for task in done:
-            log.info(f"task: {task}")
+            log.info(f"doFlush - task: {task}")
             if task.exception():
-                log.warn(f"task had exception: {type(task.exception())}")
-                raise HTTPInternalServerError()
-            clientResponse = task.result()
-            if clientResponse.status != 204:
-                log.warn(f"expected 204 but got: {clientResponse.status}")
-                raise HTTPInternalServerError()
+                log.warn(f"doFlush - task had exception: {type(task.exception())}")
+                failed_count += 1
+            else:
+                clientResponse = task.result()
+                if clientResponse.status != 204:
+                    log.warn(f"doFlush - expected 204 but got: {clientResponse.status}")
+                    failed_count += 1
     except ClientError as ce:
-        log.error(f"Error for http_put('/groups/{root_id}'): {str(ce)}")
+        log.error(f"doFlush - ClientError for http_put('/groups/{root_id}'): {str(ce)}")
         raise HTTPInternalServerError()
     except CancelledError as cle:
-        log.warn(f"CancelledError '/groups/{root_id}'): {str(cle)}")
+        log.error(f"doFlush - CancelledError '/groups/{root_id}'): {str(cle)}")
         raise HTTPInternalServerError()
+    log.info(f"doFlush for {root_id} complete, failed: {failed_count} out of {len(dn_urls)}")
+    if failed_count > 0:
+        log.error(f"doFlush fail count: {failed_count} returning 500")
+        return 500
+    else:
+        log.info("doFlush no fails, returning 204")
+        return 204
+
 
 
 async def PUT_Domain(request):
@@ -729,6 +739,7 @@ async def PUT_Domain(request):
 
     if ("flush" in params and params["flush"]) or (body and "flush" in body and body["flush"]):
         # flush domain - update existing domain rather than create a new resource
+        log.info(f"Flush for domain: {domain}")
         domain_json = await getDomainJson(app, domain, reload=True)
         log.debug(f"got domain_json: {domain_json}")
 
@@ -747,9 +758,12 @@ async def PUT_Domain(request):
         aclCheck(domain_json, "update", username)  # throws exception if not allowed
         if "root" in domain_json:
             # nothing to do for folder objects
-            await doFlush(app, domain_json["root"], bucket=bucket)
+            status_code = await doFlush(app, domain_json["root"], bucket=bucket)
+        else:
+            log.info("flush called on folder, ignoring")
+            status_code = 204
         # flush  successful
-        resp = await jsonResponse(request, None, status=204)
+        resp = await jsonResponse(request, None, status=status_code)
         log.response(request, resp=resp)
         return resp
 

@@ -559,7 +559,7 @@ async def write_s3_obj(app, obj_id, bucket=None):
             log.debug(f"removing pending s3 write task for {obj_id}")
             del pending_s3_write_tasks[obj_id]
         # clear dirty flag
-        if obj_id in dirty_ids and dirty_ids[obj_id][0] == last_update_time:
+        if obj_id in dirty_ids and dirty_ids[obj_id][0] == last_update_time and success:
             log.debug(f"clearing dirty flag for {obj_id}")
             del dirty_ids[obj_id]
 
@@ -623,7 +623,7 @@ async def s3sync(app):
                 log.warn(f"obj {obj_id} has been in pending_s3_write for {s3sync_start - pending_s3_write[s3key]} seconds, restarting")
                 del pending_s3_write[s3key]
                 if obj_id not in pending_s3_write_tasks:
-                    log.error(f"Expected to find write task for {obj_id}")
+                    log.warn(f"Expected to find write task for {obj_id}")
                 else:
                     task = pending_s3_write_tasks[obj_id]
                     task.cancel()
