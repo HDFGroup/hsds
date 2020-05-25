@@ -22,6 +22,7 @@ install:
   - pip install pyyaml
   - pyflakes hsds/*.py
   - pyflakes hsds/util/*.py
+  - python setup.py build
   - cp admin/config/passwd.default admin/config/passwd.txt
   - docker build -t hdfgroup/hsds .
 script:
