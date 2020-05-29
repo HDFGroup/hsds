@@ -549,7 +549,7 @@ async def about(request):
     answer["name"] = config.get("server_name")
     answer["greeting"] = config.get("greeting")
     answer["about"] = config.get("about")
-    answer["node_count"] = app["node_count"]
+    answer["node_count"] = len(app["dn_urls"]) 
 
     resp = await jsonResponse(request, answer)
     log.response(request, resp=resp)
