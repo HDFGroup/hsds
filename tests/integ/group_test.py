@@ -285,9 +285,6 @@ class GroupTest(unittest.TestCase):
     def testDelete(self):
         # test Delete
         print("testDelete", self.base_domain)
-        headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
-        print("headers:", headers)
-        return
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
         # get domain

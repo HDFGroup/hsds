@@ -15,7 +15,7 @@ cfg = {
     'hsds_endpoint': 'http://localhost',
     'head_endpoint': 'http://localhost:5100',
     'user_name': 'test_user1',
-    'user_password': 'test2',
+    'user_password': 'test',
     'user2_name': 'test_user2',
     'user2_password': 'test',
     'test_noauth': True,
