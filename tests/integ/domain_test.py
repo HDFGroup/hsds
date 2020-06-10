@@ -580,7 +580,8 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(root_id, rspJson["root"])
 
         # try deleting the domain with a user who doesn't have permissions'
-        headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
+        user2_name = config.get("user2_name")
+        headers = helper.getRequestHeaders(domain=self.base_domain, username=user2_name)
         rsp = requests.delete(req, headers=headers)
         self.assertEqual(rsp.status_code, 403) # forbidden
 
@@ -618,13 +619,14 @@ class DomainTest(unittest.TestCase):
         # try creating a folder using the owner flag
         try:
             admin_passwd = config.get("admin_password")
-            new_domain = self.base_domain + "/test_user2s_folder"
-            body = {"folder": True, "owner": "test_user2"}
+            username = config.get("user2_name")
+            new_domain = f"{self.base_domain}/{username}_folder"
+            body = {"folder": True, "owner": username}
             headers = helper.getRequestHeaders(domain=new_domain, username="admin", password=admin_passwd)
             rsp = requests.put(req, headers=headers, data=json.dumps(body))
             self.assertEqual(rsp.status_code, 201)
 
-            headers = helper.getRequestHeaders(domain=new_domain, username="test_user2")
+            headers = helper.getRequestHeaders(domain=new_domain, username=username)
             rsp = requests.get(req, headers=headers)
             self.assertEqual(rsp.status_code, 200)
             rspJson = json.loads(rsp.text)
