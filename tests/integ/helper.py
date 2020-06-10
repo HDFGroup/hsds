@@ -71,8 +71,11 @@ Helper - get default request headers for domain
 def getRequestHeaders(domain=None, username=None, bucket=None, password=None, **kwargs):
     if username is None:
         username = config.get("user_name")
-    if password is None:
-        password = config.get("user_password")
+        if password is None:
+            password = config.get("user_password")
+    elif username == config.get("user2_name"):
+        if password is None:
+            password = config.get("user2_password")
     headers = { }
     if domain is not None:
         #if config.get("bucket_name"):
@@ -167,8 +170,9 @@ def getRootUUID(domain, username=None, password=None):
 Helper function - get a domain for one of the test files
 """
 def getTestDomain(name):
-    folder = '/home/test_user1/test/'
-    return folder + name
+    username = config.get("user_name")
+    path = f'/home/{username}/test/{name}'
+    return path
 
 """
 Helper function - get uuid for a given path

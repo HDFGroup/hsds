@@ -29,7 +29,8 @@ class AclTest(unittest.TestCase):
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
         # there should be an ACL for "test_user1" who has ability to do any action on the domain
-        req = helper.getEndpoint() + '/acls/test_user1'
+        username = config.get("user_name")
+        req = helper.getEndpoint() + '/acls/' + username
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers['content-type'], 'application/json; charset=utf-8')
@@ -38,7 +39,7 @@ class AclTest(unittest.TestCase):
         self.assertTrue("hrefs" in rsp_json)
         acl = rsp_json["acl"]
         self.assertEqual(len(acl.keys()), len(acl_keys) + 1)
-        self.assertEqual(acl["userName"], "test_user1")
+        self.assertEqual(acl["userName"], username)
         for k in acl_keys:
             self.assertTrue(k in acl)
             self.assertTrue(acl[k])
@@ -71,7 +72,7 @@ class AclTest(unittest.TestCase):
         root_uuid = rspJson["root"]
 
         # get the ACL for the Group
-        req = helper.getEndpoint() + '/groups/' + root_uuid + "/acls/test_user1"
+        req = helper.getEndpoint() + '/groups/' + root_uuid + "/acls/" + username
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers['content-type'], 'application/json; charset=utf-8')
@@ -91,8 +92,9 @@ class AclTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 404)
 
         # try fetching an ACL from a user who doesn't have readACL permissions
-        req = helper.getEndpoint() + '/acls/test_user1'
-        headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
+        req = helper.getEndpoint() + '/acls/' + username
+        user2name = config.get("user2_name")
+        headers = helper.getRequestHeaders(domain=self.base_domain, username=user2name)
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 403) # forbidden
 
@@ -106,6 +108,7 @@ class AclTest(unittest.TestCase):
 
         # there should be an ACL for "default" with read-only access and
         #  "test_user1" who has ability to do any action on the domain
+        username = config.get("user_name")
         req = helper.getEndpoint() + '/acls'
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -121,7 +124,7 @@ class AclTest(unittest.TestCase):
             self.assertEqual(len(acl.keys()), len(acl_keys) + 1)
             self.assertTrue('userName' in acl)
             userName = acl['userName']
-            self.assertTrue(userName in ("default", "test_user1"))
+            self.assertTrue(userName in ("default", username))
             if userName == "default":
                 if expected_acl_count == 1:
                     # should just have the owner acl
@@ -212,7 +215,8 @@ class AclTest(unittest.TestCase):
 
         # try fetching ACLs from a user who doesn't have readACL permissions
         req = helper.getEndpoint() + '/acls'
-        headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
+        user2name = config.get("user2_name")
+        headers = helper.getRequestHeaders(domain=self.base_domain, username=user2name)
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 403) # forbidden
 
@@ -222,7 +226,9 @@ class AclTest(unittest.TestCase):
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
         # create an ACL for "test_user2" with read and update access
-        req = helper.getEndpoint() + '/acls/test_user2'
+        user2name = config.get("user2_name")
+        req = helper.getEndpoint() + '/acls/' + user2name
+        print("req:", req)
         perm = {"read": True, "update": True}
 
         rsp = requests.put(req, headers=headers, data=json.dumps(perm))
@@ -245,20 +251,21 @@ class AclTest(unittest.TestCase):
                 self.assertEqual(acl[k], False)
 
         # The ACL should be fetchable by test_user2...
-        req = helper.getEndpoint() + '/acls/test_user2'
-        headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
+        req = helper.getEndpoint() + '/acls/' + user2name 
+        headers = helper.getRequestHeaders(domain=self.base_domain, username=user2name)
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200) # ok
 
         # The default ACL should be fetchable by test_user2 as well...
         if config.get("default_public"):
             req = helper.getEndpoint() + '/acls/default'
-            headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
+            headers = helper.getRequestHeaders(domain=self.base_domain, username=user2name)
             rsp = requests.get(req, headers=headers)
             self.assertEqual(rsp.status_code, 200) # ok
 
         # test_user2 shouldn't be able to read test_user1's ACL
-        req = helper.getEndpoint() + '/acls/test_user1'
+        username = config.get("user_name")
+        req = helper.getEndpoint() + '/acls/' + username
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 403) # Forbidden
 
