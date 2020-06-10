@@ -437,26 +437,37 @@ def _verifyBearerToken(app, token):
 
     log.debug(f"bearer token - public_key: {public_key}")
 
-    try:
-        jwt_decode = jwt.decode(
-            token,
-            public_key,
-            algorithms='RS256',
-            audience=audience,
-        )
-    except InvalidAudienceError:
-        log.warn(f"OpenID InvalidAudienceError with {audience}")
-        raise HTTPUnauthorized()
-    except InvalidSignatureError:
-        log.warn("OpenID InvalidSignatureError")
+    for algorithm in ("RS256", "HS256"):
+
+        try:
+            jwt_decode = jwt.decode(
+                token,
+                public_key,
+                algorithms=algorithm,
+                audience=audience,
+            )
+            invalid_token = False
+
+            for name in claims:
+                if name in jwt_decode:
+                    username = jwt_decode[name]
+                    break
+                else:
+                    log.warn("unable to retreive username from bearer token")
+
+            break
+
+        except InvalidAudienceError:
+            log.warn(f"OpenID InvalidAudienceError with {audience}, for algorithm: {algorithm}")
+            invalid_token = True
+        except InvalidSignatureError:
+            log.warn(f"OpenID InvalidSignatureError for algorithm: {algorithm}")
+            invalid_token = True
+
+    if invalid_token:
         raise HTTPUnauthorized()
 
-    for name in claims:
-        if name in jwt_decode:
-            username = jwt_decode[name]
-            break
-    else:
-        log.warn("unable to retreive username from bearer token")
+    if not username:
         return None
 
     exp = None
