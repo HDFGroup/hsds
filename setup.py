@@ -28,7 +28,7 @@ install_requires = [
     'aiohttp',
     'aiohttp_cors',
     'aiofiles',
-    'botocore',
+     #'botocore',
     'cryptography',
     'kubernetes',
     'numba',
