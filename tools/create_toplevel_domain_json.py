@@ -9,6 +9,22 @@
 # distribution tree.  If you do not have access to this file, you may        #
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
+
+import sys
+import os
+import asyncio
+import time
+
+if "CONFIG_DIR" not in os.environ:
+    os.environ["CONFIG_DIR"] = "../admin/config/"
+
+from hsds import config
+from hsds.util.storUtil import isStorObj, putStorJSONObj, releaseStorageClient
+from hsds.util.domainUtil import validateDomain, getParentDomain
+from hsds.util.idUtil import getS3Key
+
+from hsds import hsds_logger as log
+"""
 import asyncio
 import sys
 import time
@@ -19,6 +35,7 @@ from hsds.util.idUtil import getS3Key
 from hsds.util.s3Util import putS3JSONObj, isS3Obj, releaseClient
 from hsds import config
 from hsds import hsds_logger as log
+"""
 
 
 # This is a utility to create a top-level domain objecct.
@@ -38,7 +55,7 @@ def printUsage():
     print("usage: python create_toplevel_domain_json.py --user=<username> [--private] --domain=<domain> ")
     print("  options --user: username of who will be owner of the domain (will have full permissions)")
     print("  options --private: if set, private for all other users, otherwise public read")
-    print("  options --domain: domain to be assigned for the user.  If not set, the domain of <username>.home will be used")
+    print("  options --domain: domain to be assigned for the user.  If not set, the domain of  /home/<username> will be used")
     print(" ------------------------------------------------------------------------------")
     print("  Example - ")
     print("       python create_toplevel_domain_json.py --user=joebob --domain=/home/joebob ")
@@ -54,6 +71,7 @@ async def createDomains(app, usernames, default_perm, domain_name=None):
             domain = "/home/" + username
         else:
             domain = domain_name
+        print("domain:", domain)
         validateDomain(domain)  # throws ValueError if invalid
         if domain != domain.lower():
             raise ValueError("top-level domains must be all lowercase")
@@ -68,10 +86,14 @@ async def createDomains(app, usernames, default_perm, domain_name=None):
         domain_json["created"] = now
         await createDomain(app, domain, domain_json)
 
+
 async def createDomain(app, domain, domain_json):
     try:
+        domain = app["bucket_name"] + domain
+        print("domain:", domain)
         s3_key = getS3Key(domain)
-        domain_exists = await isS3Obj(app, s3_key)
+        print("s3_key: ", s3_key)
+        domain_exists = await isStorObj(app, s3_key)
         if domain_exists:
             raise ValueError("Domain already exists")
         parent_domain = getParentDomain(domain)
@@ -79,19 +101,18 @@ async def createDomain(app, domain, domain_json):
             raise ValueError("Domain must have a parent")
 
         log.info("writing domain")
-        await putS3JSONObj(app, s3_key, domain_json)
+        await putStorJSONObj(app, s3_key, domain_json)
         print("domain created!  s3_key: {}  domain_json: {}".format(s3_key, domain_json))
     except ValueError as ve:
         print("Got ValueError exception: {}".format(str(ve)))
-    except ClientOSError as coe:
-        print("Got S3 error: {}".format(str(coe)))
+        raise
 
 #
 # Shutodwn - release S3 client
 #
 async def shutdown(app):
-    log.info("closing S3 connections")
-    await releaseClient(app)
+    log.info("closing storage connections")
+    await releaseStorageClient(app)
 
 def main():
     default_public_perm =  {'create': False, 'read': True, 'update': False, 'delete': False, 'readACL': False, 'updateACL': False }
@@ -142,18 +163,14 @@ def main():
 
     # we need to setup a asyncio loop to query s3
     loop = asyncio.get_event_loop()
-    session = get_session(loop=loop)
     app = {}
-    app["session"] = session
     app["loop"] = loop
     app["bucket_name"] = config.get("bucket_name")
 
     loop.run_until_complete(createDomains(app, usernames, default_perm, domain_name=domain))
     loop.run_until_complete(shutdown(app))
 
-
     loop.close()
-
 
     print("done!")
 

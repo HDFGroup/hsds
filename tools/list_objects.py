@@ -11,8 +11,13 @@
 ##############################################################################
 import asyncio
 import sys
+import os
+
+if "CONFIG_DIR" not in os.environ:
+    os.environ["CONFIG_DIR"] = "../admin/config/"
+
 from aiobotocore import get_session
-from hsds.util.s3Util import getS3Keys, releaseClient
+from hsds.util.storUtil import getStorKeys, isStorObj, releaseStorageClient
 from hsds import config
 
 
@@ -49,8 +54,8 @@ def getS3KeysCallback(app, s3keys):
 
 
 async def listObjects(app, prefix='', deliminator='', suffix='', showstats=False):
-    await getS3Keys(app, prefix=prefix, deliminator=deliminator, suffix=suffix, include_stats=showstats, callback=getS3KeysCallback)
-    await releaseClient(app)
+    await getStorKeys(app, prefix=prefix, deliminator=deliminator, suffix=suffix, include_stats=showstats, callback=getS3KeysCallback)
+    await releaseStorageClient(app)
 
 
 def main():
@@ -96,7 +101,7 @@ def main():
     app = {}
     app["bucket_name"] = config.get("bucket_name")
     app["loop"] = loop
-    session = get_session(loop=loop)
+    session = get_session()
     app["session"] = session
     loop.run_until_complete(listObjects(app, prefix=prefix, deliminator=deliminator, suffix=suffix, showstats=showstats))
 

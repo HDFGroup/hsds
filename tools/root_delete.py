@@ -11,9 +11,15 @@
 ##############################################################################
 import asyncio
 import sys
+import os
 from aiobotocore import get_session
+
+if "CONFIG_DIR" not in os.environ:
+    os.environ["CONFIG_DIR"] = "../admin/config/"
+
 from hsds.util.idUtil import isValidUuid,isSchema2Id
-from hsds.util.s3Util import releaseClient
+from hsds.util.storUtil import releaseStorageClient
+
 from hsds.async_lib import removeKeys
 from hsds import config
 
@@ -27,12 +33,12 @@ from hsds import config
 #
 def printUsage():
     print("       python root_delete.py [rootid]")
-    sys.exit();
+    sys.exit(0)
 
 
 async def run_delete(app, rootid):
     results = await removeKeys(app, rootid)
-    await releaseClient(app)
+    await releaseStorageClient(app)
     return results
 
 
@@ -59,7 +65,8 @@ def main():
     app = {}
     app["bucket_name"] = config.get("bucket_name")
     app["loop"] = loop
-    session = get_session(loop=loop)
+    app["objDelete_prefix"] = None
+    session = get_session()
     app["session"] = session
     loop.run_until_complete(run_delete(app, rootid))
 

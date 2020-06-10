@@ -11,12 +11,15 @@
 ##############################################################################
 import asyncio
 import sys
+import os
 from collections import namedtuple
 from aiobotocore import get_session
 from aiohttp.client_exceptions import ClientOSError
 from aiohttp.web import StreamResponse
 from aiohttp.http_writer import StreamWriter
 
+if "CONFIG_DIR" not in os.environ:
+    os.environ["CONFIG_DIR"] = "../admin/config/"
 from hsds.util.storUtil import releaseStorageClient
 from hsds.util.idUtil import isValidChunkId
 from hsds.util.lruCache import LruCache
@@ -113,6 +116,15 @@ def main():
         printUsage()
         sys.exit(1)
 
+    for arg in sys.argv:
+        if arg.startswith("--domain="):
+            domain = arg[len("--domain="):]
+            print("got domain:", domain)
+
+    if not domain:
+        printUsage()
+        sys.exit(-1)
+
     chunk_id = sys.argv[-1]
     if not isValidChunkId(chunk_id):
         print("Invalid chunk id")
@@ -120,7 +132,7 @@ def main():
 
     # we need to setup a asyncio loop to query s3
     loop = asyncio.get_event_loop()
-    session = get_session(loop=loop)
+    session = get_session()
 
     app = {}
     app["session"] = session
@@ -132,10 +144,8 @@ def main():
     app['pending_s3_read'] = {}
     app['meta_cache'] = LruCache(mem_target=1024*1024, chunk_cache=False)
     app['chunk_cache'] = LruCache(mem_target=64*1024*1024, chunk_cache=True)
-    domain = config.get("domain")
-    if not domain:
-        printUsage()
-        sys.exit(-1)
+
+   
     print("got domain:", domain)
 
     loop.run_until_complete(printChunkValues(app, domain, chunk_id))

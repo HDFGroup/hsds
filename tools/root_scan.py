@@ -11,10 +11,15 @@
 ##############################################################################
 import asyncio
 import sys
+import os
 from datetime import datetime
 from aiobotocore import get_session
+
+if "CONFIG_DIR" not in os.environ:
+    os.environ["CONFIG_DIR"] = "../admin/config/"
+
 from hsds.util.idUtil import isValidUuid,isSchema2Id
-from hsds.util.s3Util import releaseClient
+from hsds.util.storUtil import releaseStorageClient
 from hsds.async_lib import scanRoot
 from hsds import config
 
@@ -33,7 +38,7 @@ def printUsage():
 
 async def run_scan(app, rootid, update=False):
     results = await scanRoot(app, rootid, update=update)
-    await releaseClient(app)
+    await releaseStorageClient(app)
     return results
 
 
@@ -65,7 +70,7 @@ def main():
     app = {}
     app["bucket_name"] = config.get("bucket_name")
     app["loop"] = loop
-    session = get_session(loop=loop)
+    session = get_session()
     app["session"] = session
     loop.run_until_complete(run_scan(app, rootid=rootid, update=do_update))
 
@@ -89,8 +94,6 @@ def main():
     print(f"scan_start: {scan_start}")
     scan_complete = datetime.fromtimestamp(results["scan_complete"])
     print(f"scan_complete: {scan_complete}")
-
-
 
     print("done!")
 

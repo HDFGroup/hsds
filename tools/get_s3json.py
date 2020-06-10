@@ -11,9 +11,13 @@
 ##############################################################################
 import asyncio
 import sys
+import os
 import json
 from aiobotocore import get_session
 from aiohttp.client_exceptions import ClientOSError
+
+if "CONFIG_DIR" not in os.environ:
+    os.environ["CONFIG_DIR"] = "../admin/config/"
 
 from hsds.util.storUtil import getStorJSONObj, isStorObj, releaseStorageClient
 from hsds.util.idUtil import getS3Key, isValidUuid
@@ -59,11 +63,12 @@ def main():
 
     # we need to setup a asyncio loop to query s3
     loop = asyncio.get_event_loop()
-    session = get_session(loop=loop)
+    session = get_session()
 
     app = {}
     app["session"] = session
     app['bucket_name'] = config.get("bucket_name")
+    app["loop"] = loop
 
     loop.run_until_complete(printS3Obj(app, obj_id))
 

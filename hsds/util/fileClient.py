@@ -46,6 +46,7 @@ class FileClient():
         return pp.normpath(filepath)
 
     def _getFileStats(self, filepath):
+        log.debug(f"_getFileStats({filepath})")
         try:
             file_stats = stat(filepath)
             key_stats = {"ETag": "abc", "Size": file_stats.st_size, "LastModified": file_stats.st_mtime}
@@ -256,12 +257,13 @@ class FileClient():
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
-        log.info(f"list_keys('{prefix}','{deliminator}','{suffix}', include_stats={include_stats}")
+        log.info(f"list_keys('{prefix}','{deliminator}','{suffix}', include_stats={include_stats}, bucket={bucket}")
 
         await asyncio.sleep(0)  # for async compat
         basedir = pp.join(self._root_dir, bucket)
         if prefix:
             basedir = pp.join(basedir,prefix)
+        log.debug(f"fileClient listKeys for directory: {basedir}")
 
         if not pp.isdir(basedir):
             msg = f"listkeys - {basedir} not found"
@@ -290,7 +292,8 @@ class FileClient():
                 for filename in filelist:
                     if suffix and not filename.endswith(suffix):
                         continue
-                    files.append(pp.join(root[len(basedir):], filename))
+                    filepath = pp.join(root[len(basedir):], filename)
+                    files.append(filepath)
                     if limit and len(files) >= limit:
                         break
 
@@ -299,6 +302,9 @@ class FileClient():
         else:
             key_names = []
         for filename in files:
+            if filename.startswith('/'):
+                filename = filename[1:]
+            log.debug(f"filename: {filename}, basedir: {basedir}")
             if suffix and not filename.endswith(suffix):
                 continue
             if include_stats:

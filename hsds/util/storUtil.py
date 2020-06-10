@@ -247,33 +247,6 @@ async def getStorObjStats(app, key, bucket=None):
 
     stats = await client.get_key_stats(key, bucket=bucket)
 
-    """
-
-    key_dict = await client.list_keys(bucket=bucket, limit=1, prefix=key, include_stats=True)
-
-    log.info(f"list_keys_resp: {key_dict}")
-
-    if not key_dict:
-        msg = f"key: {key} not found"
-        log.info(msg)
-        raise HTTPNotFound()
-
-    if key not in key_dict:
-        log.error(f"expected to find key {key} in list_keys response: {key_dict}")
-        raise HTTPInternalServerError()
-
-    item = key_dict[key]
-
-    if "ETag" in item:
-        stats["ETag"] = item["ETag"]
-    if "Size" in item:
-        stats["Size"] = item["Size"]
-    if "LastModified" in item:
-        stats["LastModified"] = item["LastModified"]
-    if not stats:
-        log.warn(f"no stats returned for key: {key}")
-    """
-
     return stats
 
 async def isStorObj(app, key, bucket=None):
@@ -288,20 +261,7 @@ async def isStorObj(app, key, bucket=None):
     log.debug(f"isStorObj {bucket}/{key}")
 
     found = await client.is_object(bucket=bucket, key=key)
-    """
-    try:
-        contents = await client.list_keys(bucket=bucket, limit=1, prefix=key)
-        if contents:
-            item = contents[0]
-            print("item:", item)
-            if item == key:
-                # if the key is a S3 folder, the key will be the first object in the folder,
-                # not the requested object
-                found = True
-
-    except HTTPNotFound:
-        pass  # key does not exist
-    """
+    
     log.debug(f"isStorObj {key} returning {found}")
     return found
 

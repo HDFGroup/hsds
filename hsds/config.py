@@ -14,27 +14,50 @@ import sys
 import yaml
 
 cfg = {}
+
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
+
+def debug(*args, **kwargs):
+    # can't use log.debug since that calls back to cfg
+    if "LOG_LEVEL" in os.environ and os.environ["LOG_LEVEL"] == "DEBUG":
+        print(*args, **kwargs)
    
-def _load_cfg():
-        
+def _load_cfg():    
     # load config yaml
     yml_file = None
-    for config_dir in [".", "/config", "/etc/hsds/"]:
+    config_dirs = []
+    # check if there is a command line optionfor config directory
+    for i in range(1, len(sys.argv)):
+        #print(i, sys.argv[i])
+        if sys.argv[i].startswith("--config-dir"):
+            # use the given directory
+            arg = sys.argv[i]
+            config_dirs.append(arg[len("--config-dir")+1:])  # return text after option string   
+            debug(f"got cmd line override for config-dir: {config_dirs[0]}")
+            break
+    if not config_dirs and "CONFIG_DIR" in os.environ:
+        config_dirs.append(os.environ["CONFIG_DIR"])
+        debug(f"got environment override for config-dir: {config_dirs[0]}")
+    if not config_dirs:
+        config_dirs = [".", "/config", "/etc/hsds/"]  # default locations
+    for config_dir in config_dirs:
         file_name = os.path.join(config_dir, "config.yml")
+        debug("checking config path:", file_name)
         if os.path.isfile(file_name):
             yml_file = file_name
             break
     if not yml_file:
         msg = "unable to find config file"
-        print(msg)
+        eprint(msg)
         raise FileNotFoundError(msg)
-    print(f"_load_cfg with '{yml_file}'")
+    debug(f"_load_cfg with '{yml_file}'")
     try:
         with open(yml_file, "r") as f:
             yml_config = yaml.safe_load(f)
     except yaml.scanner.ScannerError as se:
         msg = f"Error parsing config.yml: {se}"
-        print(msg)
+        eprint(msg)
         raise KeyError(msg)
 
     # load override yaml
@@ -44,18 +67,14 @@ def _load_cfg():
     else:
         override_yml_filepath = "/config/override.yml"
     if os.path.isfile(override_yml_filepath):
-        print(f"loading override configuation: {override_yml_filepath}")
+        debug(f"loading override configuation: {override_yml_filepath}")
         try:
             with open(override_yml_filepath, "r") as f:
                 yml_override = yaml.safe_load(f)
         except yaml.scanner.ScannerError as se:
             msg = f"Error parsing '{override_yml_filepath}': {se}"
-            print(msg)
+            eprint(msg)
             raise KeyError(msg)
-        print("override settings:")
-        for k in yml_override:
-            v = yml_override[k]
-            print(f"  {k}: {v}")
         
 
     # apply overrides for each key and store in cfg global
@@ -65,23 +84,23 @@ def _load_cfg():
         option = '--'+x+'='
         override = None
         for i in range(1, len(sys.argv)):
-            #print(i, sys.argv[i])
+            debug(i, sys.argv[i])
             if sys.argv[i].startswith(option):
                 # found an override
                 arg = sys.argv[i]
                 override = arg[len(option):]  # return text after option string   
-                print(f"got cmd line override for {x}")
+                debug(f"got cmd line override for {x}")
                  
             
         # see if there are an environment variable override
         if override is None and x.upper() in os.environ:
             override = os.environ[x.upper()]
-            print(f"got env value override for {x} ")
+            debug(f"got env value override for {x} ")
 
         # see if there is a yml override
         if override is None and yml_override and x in yml_override:
             override = yml_override[x]
-            print(f"got config override for {x}")
+            debug(f"got config override for {x}")
 
 
         if override:
@@ -90,7 +109,7 @@ def _load_cfg():
                     override = type(cfgval)(override) # convert to same type as yaml
                 except ValueError as ve:
                     msg = f"Error applying command line override value for key: {x}: {ve}"
-                    print(msg)
+                    eprint(msg)
                     # raise KeyError(msg)
             cfgval = override # replace the yml value
 

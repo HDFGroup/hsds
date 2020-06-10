@@ -11,9 +11,14 @@
 ##############################################################################
 import asyncio
 import sys
+import os
+
+if "CONFIG_DIR" not in os.environ:
+    os.environ["CONFIG_DIR"] = "../admin/config/"
+
 from aiobotocore import get_session
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
-from hsds.util.s3Util import releaseClient, getS3Keys, getS3JSONObj
+from hsds.util.storUtil import releaseStorageClient, getStorKeys, getStorJSONObj
 from hsds.util.idUtil import getObjId
 from hsds.async_lib import scanRoot
 from hsds import config
@@ -22,7 +27,6 @@ from hsds import hsds_logger as log
 
 # List all root keys and create/update info.json
 # Note: only works with schema v2 domains!
-
 
 
 async def getS3RootKeysCallback(app, s3keys):
@@ -49,7 +53,7 @@ async def getS3RootKeysCallback(app, s3keys):
 
         info_obj = None
         try:
-            info_obj = await getS3JSONObj(app, info_key)
+            info_obj = await getStorJSONObj(app, info_key)
         except HTTPNotFound:
             pass  # info.json not created yet
         except HTTPInternalServerError as ie:
@@ -76,7 +80,7 @@ async def scanRootKeys(app, update=False):
     log.info("scanRootKeys")
     app["scanRootKeys_update"] = update
 
-    await getS3Keys(app, prefix="db/", deliminator='/', include_stats=False, callback=getS3RootKeysCallback)
+    await getStorKeys(app, prefix="db/", deliminator='/', include_stats=False, callback=getS3RootKeysCallback)
 
 
 
@@ -102,7 +106,7 @@ async def run_scan(app, update=False):
     scan_results["metadata_bytes"] = 0
     app["bucket_scan"] = scan_results
     results = await scanRootKeys(app, update=update)
-    await releaseClient(app)
+    await releaseStorageClient(app)
     return results
 
 
@@ -124,7 +128,7 @@ def main():
     app = {}
     app["bucket_name"] = config.get("bucket_name")
     app["loop"] = loop
-    session = get_session(loop=loop)
+    session = get_session()
     app["session"] = session
     loop.run_until_complete(run_scan(app, update=do_update))
 
