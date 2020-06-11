@@ -84,7 +84,6 @@ def _load_cfg():
         option = '--'+x+'='
         override = None
         for i in range(1, len(sys.argv)):
-            debug(i, sys.argv[i])
             if sys.argv[i].startswith(option):
                 # found an override
                 arg = sys.argv[i]
