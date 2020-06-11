@@ -18,6 +18,7 @@ from aiobotocore import get_session
 if "CONFIG_DIR" not in os.environ:
     os.environ["CONFIG_DIR"] = "../admin/config/"
 
+from hsds.util.lruCache import LruCache
 from hsds.util.idUtil import isValidUuid,isSchema2Id
 from hsds.util.storUtil import releaseStorageClient
 from hsds.async_lib import scanRoot
@@ -72,6 +73,11 @@ def main():
     app["loop"] = loop
     session = get_session()
     app["session"] = session
+
+    # need the metadata cache since we will be calling into some SN methods
+    metadata_mem_cache_size = int(config.get("metadata_mem_cache_size"))
+    app['meta_cache'] = LruCache(mem_target=metadata_mem_cache_size, chunk_cache=False)
+   
     loop.run_until_complete(run_scan(app, rootid=rootid, update=do_update))
 
     loop.close()
@@ -79,16 +85,27 @@ def main():
     results = app["scanRoot_results"]
     datasets = results["datasets"]
     lastModified = datetime.fromtimestamp(results["lastModified"])
-    total_size  = results["metadata_bytes"] + results["allocated_bytes"]
     print(f"lastModified: {lastModified}")
-    print(f"size: {total_size}")
+    print(f"metadata bytes: {results['metadata_bytes']}")
+    print(f"allocated bytes: {results['allocated_bytes']}")
+    print(f"linked bytes: {results['linked_bytes']}")
+    print(f"logical bytes: {results['logical_bytes']}")
     print(f"num chunks: {results['num_chunks']}")
+    print(f"linked chunks: {results['num_linked_chunks']}")
     print(f"num_groups: {results['num_groups']}")
     print(f"num_datatypes: {results['num_datatypes']}")
     print(f"num_datasets: {len(datasets)}")
+    if datasets:
+        print("    dataset_id\tlast_modified\tnum_chunks\tallocated_bytes\tlogical_bytes\tnum_link_chunks\tlinked_bytes")
     for dsetid in datasets:
         dataset_info = datasets[dsetid]
-        print(f"   {dsetid}: {dataset_info['lastModified']}, {dataset_info['num_chunks']}, {dataset_info['allocated_bytes']}")
+        lm = dataset_info['lastModified']
+        nc = dataset_info['num_chunks']
+        ab = dataset_info['allocated_bytes']
+        lb = dataset_info['logical_bytes']
+        nl = dataset_info['num_linked_chunks']
+        l_b = dataset_info['linked_bytes']
+        print(f"   {dsetid}: {lm}, {nc}, {ab}, {lb}, {nl}, {l_b}")
 
     scan_start = datetime.fromtimestamp(results["scan_start"])
     print(f"scan_start: {scan_start}")

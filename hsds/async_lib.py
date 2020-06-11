@@ -12,16 +12,96 @@
 
 import time
 from aiohttp.client_exceptions import ClientError
-from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError, HTTPForbidden
 from .util.idUtil import isValidUuid, isSchema2Id, getS3Key, isS3ObjKey, getObjId, isValidChunkId, getCollectionForId
-from .util.chunkUtil import getDatasetId
-from .util.storUtil import getStorKeys, putStorJSONObj, deleteStorObj
+from .util.chunkUtil import getDatasetId, getChunkIds
+from .util.hdf5dtype import getItemSize
+from .util.arrayUtil import getShapeDims, getNumElements
+from .util.dsetUtil import getHyperslabSelection
+from .chunk_sn import getChunkInfoMap
+
+from .util.storUtil import getStorKeys, putStorJSONObj, getStorJSONObj, deleteStorObj
 from . import hsds_logger as log
 from . import config
 
 
 # List all keys under given root and optionally update info.json
 # Note: only works with schema v2 domains!
+
+async def getDatasetJson(app, dsetid, bucket=None):
+    # try to read the dataset json from s3
+    s3_key = getS3Key(dsetid)
+    try:
+        dset_json = await getStorJSONObj(app, s3_key, bucket=bucket)
+    except HTTPNotFound:
+        log.warn(f"HTTPpNotFound error for {s3_key} bucket:{bucket}")
+        return None
+    except HTTPForbidden:
+        log.warn(f"HTTPForbidden error for {s3_key} bucket:{bucket}")
+        return None
+    except HTTPInternalServerError:
+        log.warn(f"HTTPInternalServerError error for {s3_key} bucket:{bucket}")
+        return None
+    return dset_json
+
+async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
+    # get dataset metadata and deteermine number logical)_bytes, linked_bytes, and num_linked_chunks
+
+    dset_json = await getDatasetJson(app, dset_id, bucket=bucket)
+    if dset_json:
+        log.debug(f"getDsetJson: {dset_json}")
+    if "shape" not in dset_json:
+        return   # null dataspace
+    shape_json = dset_json["shape"]
+    if "type" not in dset_json:
+        log.warn("expected to find type in dataet_json")
+        return
+    type_json = dset_json["type"]
+    item_size = getItemSize(type_json)
+
+    log.debug(f"item size: {item_size}")
+
+    dims = getShapeDims(shape_json)  # throws 400 for HS_NULL dsets
+
+    if item_size == 'H5T_VARIABLE':
+        # arbitrary lgoical size for vaariable, so just set to allocated size
+        logical_bytes = dataset_info['allocated_bytes']  
+    else:
+        num_elements = getNumElements(dims)
+        logical_bytes = num_elements * item_size
+    dataset_info["logical_bytes"] = logical_bytes 
+    log.debug(f"dims: {dims}")
+    rank = len(dims)
+    log.debug(f"rank: {rank}")
+    #layout = getChunkLayout(dset_json)
+    #log.debug(f"layout: {layout}")
+
+    if "layout" in dset_json:
+        layout = dset_json["layout"]
+        layout_class = layout["class"]
+        if layout_class != 'H5D_CHUNKED':
+            log.debug(f"get chunk info for layout_class: {layout_class}")
+            selection = getHyperslabSelection(dims)
+            log.debug(f"got selection: {selection}")
+            chunk_ids = getChunkIds(dset_id, selection, layout['dims'])
+            log.debug(f"chunk_ids: {chunk_ids}")
+
+            if "dn_urls" in app:
+                # getChunkInfoMap cannot be used from the tools scripts
+                chunk_map = await getChunkInfoMap(app, dset_id, dset_json, chunk_ids, bucket=bucket)
+                log.debug(f"chunkinfo_map: {chunk_map}")
+                for chunk_id in chunk_map:
+                    chunk_link = chunk_map[chunk_id]
+                    if "s3size" in chunk_link:
+                        s3size = chunk_link["s3size"]
+                        dataset_info["linked_bytes"] += s3size
+                        dataset_info["num_linked_chunks"] += 1
+            else:
+                # run from tools script, just set num_linked_chunks since we
+                # can't get the chunk_map
+                dataset_info["num_linked_chunks"] = len(chunk_ids)
+    else:
+        log.warn(f"updateDatasetInfo - no layout for dataset: {dset_id}")
 
 def scanRootCallback(app, s3keys):
     log.debug(f"scanRoot - callback, {len(s3keys)} items")
@@ -73,6 +153,10 @@ def scanRootCallback(app, s3keys):
                 dataset_info["lastModified"] = 0
                 dataset_info["num_chunks"] = 0
                 dataset_info["allocated_bytes"] = 0
+                dataset_info["logical_bytes"] = 0
+                dataset_info["linked_bytes"] = 0
+                dataset_info["num_linked_chunks"] = 0
+                dataset_info["logical_bytes"] = 0
                 datasets[dsetid] = dataset_info
             dataset_info = datasets[dsetid]
             if lastModified > dataset_info["lastModified"]:
@@ -124,13 +208,30 @@ async def scanRoot(app, rootid, update=False, bucket=None):
     results["num_chunks"] = 0
     results["allocated_bytes"] = 0
     results["metadata_bytes"] = 0
+    results["num_linked_chunks"] = 0
+    results["linked_bytes"] = 0
+    results["logical_bytes"] = 0
+    results["bucket"] = bucket
     results["scan_start"] = time.time()
 
     app["scanRoot_results"] = results
 
     await getStorKeys(app, prefix=root_prefix, include_stats=True, bucket=bucket, callback=scanRootCallback)
 
+    log.info(f"scanRoot - got all keys for rootid: {rootid}")
+
+    dataset_results = results["datasets"]
+    for dsetid in dataset_results:
+        dataset_info = dataset_results[dsetid]
+        log.info(f"got dataset: {dsetid}: {dataset_info}")
+        await updateDatasetInfo(app, dsetid, dataset_info, bucket=bucket)
+        if dataset_info["logical_bytes"] != "variable":
+            results["logical_bytes"] += dataset_info["logical_bytes"]
+            results["linked_bytes"] += dataset_info["linked_bytes"]
+            results["num_linked_chunks"] += dataset_info["num_linked_chunks"]
+
     log.info(f"scanRoot - scan complete for rootid: {rootid}")
+
     results["scan_complete"] = time.time()
 
     if update:

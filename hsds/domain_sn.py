@@ -285,22 +285,34 @@ async def get_domain_response(app, domain_json, bucket=None, verbose=False):
     if "lastModified" in domain_json:
         lastModified = domain_json["lastModified"]
     totalSize = len(json.dumps(domain_json))
+    metadata_bytes = 0
     allocated_bytes = 0
+    linked_bytes = 0
+    num_chunks = 0
+    num_linked_chunks = 0
 
     if verbose and "root" in domain_json:
         root_info = await getRootInfo(app, domain_json["root"], bucket=bucket)
         if root_info:
+            log.debug(f"got root_info: {root_info}")
             allocated_bytes = root_info["allocated_bytes"]
             totalSize += allocated_bytes
+            if "linked_bytes" in root_info:
+                linked_bytes += root_info["linked_bytes"]
+                totalSize += linked_bytes
+            if "num_linked_chunks" in root_info:
+                num_linked_chunks = root_info["num_linked_chunks"]
             if "metadata_bytes" in root_info:
                 # this key was added for schema v2
-                totalSize += root_info["metadata_bytes"]
+                metadata_bytes = root_info["metadata_bytes"]
+                totalSize += metadata_bytes
             if root_info["lastModified"] > lastModified:
                 lastModified = root_info["lastModified"]
             num_groups = root_info["num_groups"]
             num_datatypes = root_info["num_datatypes"]
             num_datasets = len(root_info["datasets"])
             num_chunks = root_info["num_chunks"]
+            rsp_json["scan_info"] = root_info  # return verbose info here
 
         else:
             # root info not available - just return 0 for these values
@@ -320,6 +332,10 @@ async def get_domain_response(app, domain_json, bucket=None, verbose=False):
         rsp_json["total_size"] = totalSize
         rsp_json["allocated_bytes"] = allocated_bytes
         rsp_json["num_objects"] =  num_objects
+        rsp_json["metadata_bytes"] = metadata_bytes
+        rsp_json["linked_bytes"] = linked_bytes
+        rsp_json["num_chunks"] = num_chunks
+        rsp_json["num_linked_chunks"] = num_linked_chunks
 
     # pass back config parameters the client may care about
 

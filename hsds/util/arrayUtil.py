@@ -72,7 +72,6 @@ def getArraySize(arr):
 
 """
 Helper - get num elements defined by a shape
-TODO: refactor some function in dsetUtil.py
 """
 def getNumElements(dims):
     num_elements = 0

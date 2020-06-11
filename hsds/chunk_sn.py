@@ -311,10 +311,6 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_a
         log.debug(f"using partition_chunk_id: {partition_chunk_id}")
         chunk_id = partition_chunk_id  # replace the chunk_id
 
-    req = getDataNodeUrl(app, chunk_id)
-    req += "/chunks/" + chunk_id
-    log.debug(f"GET chunk req: {req}")
-    client = get_http_client(app)
     point_dt = np.dtype('u8')  # use unsigned long for point index
 
     if "type" not in dset_json:
@@ -424,6 +420,10 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_a
                 raise HTTPInternalServerError()
         else:
             # non-serverless = make request to DN node
+            req = getDataNodeUrl(app, chunk_id)
+            req += "/chunks/" + chunk_id
+            log.debug(f"GET chunk req: {req}")
+            client = get_http_client(app)
             try:
                 async with client.post(req, params=params, data=post_data) as rsp:
                     log.debug(f"http_post {req} status: <{rsp.status}>")
@@ -796,7 +796,7 @@ async def getChunkInfoMap(app, dset_id, dset_json, chunk_ids, bucket=None):
                 extent *= dims[dim]
             log.debug(f"setting chunk_info_map to s3offset: {s3offset} s3size: {s3size} for chunk_id: {chunk_id}")
             if s3offset > layout["offset"] + layout["size"]:
-                log.warn(f"range get of s3offset: {s3offset} s3size: {s3size} extends beyond end of contingous dataset for chunk_id: {chunk_id}")
+                log.warn(f"range get of s3offset: {s3offset} s3size: {s3size} extends beyond end of contiguous dataset for chunk_id: {chunk_id}")
             chunkinfo_map[chunk_id] = {"s3path": s3path, "s3offset": s3offset, "s3size": chunk_size}
     elif layout["class"] == 'H5D_CHUNKED_REF':
         s3path = layout["file_uri"]

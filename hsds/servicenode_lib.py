@@ -14,10 +14,10 @@
 #
 import os.path as op
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPInternalServerError
-
+from aiohttp.client_exceptions import ClientOSError
 
 from .util.idUtil import getDataNodeUrl, getCollectionForId, isSchema2Id, getS3Key
-from .util.storUtil import getStorJSONObj
+from .util.storUtil import getStorJSONObj, isStorObj
 from .util.authUtil import aclCheck
 from .util.httpUtil import http_get
 from .util.domainUtil import getBucketForDomain
@@ -136,6 +136,22 @@ async def getObjectJson(app, obj_id, bucket=None, refresh=False, include_links=F
     if obj_id in meta_cache and not refresh:
         log.debug(f"found {obj_id} in meta_cache")
         obj_json = meta_cache[obj_id]
+    elif "dn_urls" not in app:
+        # no DN containers, fetch the JSON directly from storage
+        log.debug("No dn_urls, doing direct read")
+        try:
+            s3_key = getS3Key(obj_id)
+            obj_exists = await isStorObj(app, s3_key)
+            if not obj_exists:
+                log.warn(f"key: {s3_key} not found")
+                raise HTTPNotFound()
+            obj_json = await getStorJSONObj(app, s3_key)
+        except ValueError as ve:
+            log.error(f"Got ValueError exception: {ve}")
+            raise HTTPInternalServerError()
+        except ClientOSError as coe:
+            log.error(f"Got ClientOSError: {coe}")
+            raise HTTPInternalServerError()
     else:
         req = getDataNodeUrl(app, obj_id)
         collection =  getCollectionForId(obj_id)
