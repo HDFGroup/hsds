@@ -88,7 +88,6 @@ def main():
     print(f"lastModified: {lastModified}")
     print(f"metadata bytes: {results['metadata_bytes']}")
     print(f"allocated bytes: {results['allocated_bytes']}")
-    print(f"linked bytes: {results['linked_bytes']}")
     print(f"logical bytes: {results['logical_bytes']}")
     print(f"num chunks: {results['num_chunks']}")
     print(f"linked chunks: {results['num_linked_chunks']}")
@@ -96,7 +95,7 @@ def main():
     print(f"num_datatypes: {results['num_datatypes']}")
     print(f"num_datasets: {len(datasets)}")
     if datasets:
-        print("    dataset_id\tlast_modified\tnum_chunks\tallocated_bytes\tlogical_bytes\tnum_link_chunks\tlinked_bytes")
+        print("    dataset_id\tlast_modified\tnum_chunks\tallocated_bytes\tlogical_bytes\tnum_link_chunks")
     for dsetid in datasets:
         dataset_info = datasets[dsetid]
         lm = dataset_info['lastModified']
@@ -104,8 +103,7 @@ def main():
         ab = dataset_info['allocated_bytes']
         lb = dataset_info['logical_bytes']
         nl = dataset_info['num_linked_chunks']
-        l_b = dataset_info['linked_bytes']
-        print(f"   {dsetid}: {lm}, {nc}, {ab}, {lb}, {nl}, {l_b}")
+        print(f"   {dsetid}: {lm}, {nc}, {ab}, {lb}, {nl}")
 
     scan_start = datetime.fromtimestamp(results["scan_start"])
     print(f"scan_start: {scan_start}")
