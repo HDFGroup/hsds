@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import os.path as pp
 from os import mkdir, rmdir, listdir, stat, remove, walk
 from asyncio import CancelledError
@@ -45,12 +46,22 @@ class FileClient():
         filepath = pp.join(self._root_dir, bucket, key)
         return pp.normpath(filepath)
 
-    def _getFileStats(self, filepath):
+    def _getFileStats(self, filepath, data=None):
         log.debug(f"_getFileStats({filepath})")
+        if data is not None:
+            if not isinstance(data, bytes):
+                log.warn("_getFileStats - expected data to be bytes, not computing ETag")
+                ETag = ""
+            else:
+                hash_object = hashlib.md5(data)
+                ETag =  hash_object.hexdigest()
+        else:
+            log.debug("getFileStats - data is None, so ETag will not be computed")
+            ETag = ""
         try:
             file_stats = stat(filepath)
-            key_stats = {"ETag": "abc", "Size": file_stats.st_size, "LastModified": file_stats.st_mtime}
-            log.info(f"get_file_stats({filepath}) returning: {key_stats}")
+            key_stats = {"ETag": ETag, "Size": file_stats.st_size, "LastModified": file_stats.st_mtime}
+            log.info(f"_getFileStats({filepath}) returning: {key_stats}")
         except FileNotFoundError:
             raise HTTPNotFound()
         return key_stats
@@ -172,7 +183,7 @@ class FileClient():
                 await f.write(data)
             finish_time = time.time()
             log.info(f"fileClient.put_object({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f} bytes={len(data)}")
-            write_rsp = self._getFileStats(filepath)
+            write_rsp = self._getFileStats(filepath, data=data)
         except IOError as ioe:
             msg = f"fileClient: IOError writing {bucket}/{key}: {ioe}"
             log.warn(msg)
@@ -309,7 +320,10 @@ class FileClient():
                 continue
             if include_stats:
                 filepath = pp.join(basedir, filename)
-                key_stats = self._getFileStats(filepath)
+                with open(filepath, "rb") as f:
+                    data = f.read()
+                    log.debug(f"list_keys: read file: {filepath}, {len(data)} bytes, for getFileStats")
+                    key_stats = self._getFileStats(filepath, data=data)
                 key_name = pp.join(prefix, filename)
                 key_names[key_name] = key_stats
             else:

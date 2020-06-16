@@ -290,6 +290,7 @@ async def get_domain_response(app, domain_json, bucket=None, verbose=False):
     linked_bytes = 0
     num_chunks = 0
     num_linked_chunks = 0
+    md5_sum = ""
 
     if verbose and "root" in domain_json:
         root_info = await getRootInfo(app, domain_json["root"], bucket=bucket)
@@ -308,6 +309,9 @@ async def get_domain_response(app, domain_json, bucket=None, verbose=False):
                 totalSize += metadata_bytes
             if root_info["lastModified"] > lastModified:
                 lastModified = root_info["lastModified"]
+            if "md5_sum" in root_info:
+                md5_sum = root_info["md5_sum"]
+
             num_groups = root_info["num_groups"]
             num_datatypes = root_info["num_datatypes"]
             num_datasets = len(root_info["datasets"])
@@ -336,6 +340,7 @@ async def get_domain_response(app, domain_json, bucket=None, verbose=False):
         rsp_json["linked_bytes"] = linked_bytes
         rsp_json["num_chunks"] = num_chunks
         rsp_json["num_linked_chunks"] = num_linked_chunks
+        rsp_json["md5_sum"] = md5_sum
 
     # pass back config parameters the client may care about
 

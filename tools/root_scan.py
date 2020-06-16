@@ -86,6 +86,9 @@ def main():
     datasets = results["datasets"]
     lastModified = datetime.fromtimestamp(results["lastModified"])
     print(f"lastModified: {lastModified}")
+    if "md5_sum" in results:
+        checksum = results["md5_sum"]
+        print(f"md5_sum: {checksum}")
     print(f"metadata bytes: {results['metadata_bytes']}")
     print(f"allocated bytes: {results['allocated_bytes']}")
     print(f"logical bytes: {results['logical_bytes']}")
@@ -106,7 +109,7 @@ def main():
         print(f"   {dsetid}: {lm}, {nc}, {ab}, {lb}, {nl}")
 
     scan_start = datetime.fromtimestamp(results["scan_start"])
-    print(f"scan_start: {scan_start}")
+    print(f"scan_start:    {scan_start}")
     scan_complete = datetime.fromtimestamp(results["scan_complete"])
     print(f"scan_complete: {scan_complete}")
 

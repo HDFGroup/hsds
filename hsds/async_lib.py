@@ -11,6 +11,8 @@
 ##############################################################################
 
 import time
+import hashlib
+import numpy as np
 from aiohttp.client_exceptions import ClientError
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError, HTTPForbidden
 from .util.idUtil import isValidUuid, isSchema2Id, getS3Key, isS3ObjKey, getObjId, isValidChunkId, getCollectionForId
@@ -110,6 +112,7 @@ def scanRootCallback(app, s3keys):
         raise ValueError("unexpected callback format")
 
     results = app["scanRoot_results"]
+    checksums = results["checksums"]
     if results:
         log.debug(f"previous scanRoot_results: {results}")
     for s3key in s3keys.keys():
@@ -124,6 +127,7 @@ def scanRootCallback(app, s3keys):
         item = s3keys[s3key]
         if "ETag" in item:
             etag = item["ETag"]
+            checksums[objid] = etag
         if "Size" in item:
             obj_size = item["Size"]
         if "LastModified" in item:
@@ -211,14 +215,16 @@ async def scanRoot(app, rootid, update=False, bucket=None):
     results["num_linked_chunks"] = 0
     results["linked_bytes"] = 0
     results["logical_bytes"] = 0
+    results["checksums"] = {}  # map of objid to checksums
     results["bucket"] = bucket
     results["scan_start"] = time.time()
 
     app["scanRoot_results"] = results
 
     await getStorKeys(app, prefix=root_prefix, include_stats=True, bucket=bucket, callback=scanRootCallback)
+    num_objects = results["num_groups"] + results["num_datatypes"] + len(results["datasets"]) + results["num_chunks"]
+    log.info(f"scanRoot - got {num_objects} keys for rootid: {rootid}")
 
-    log.info(f"scanRoot - got all keys for rootid: {rootid}")
 
     dataset_results = results["datasets"]
     for dsetid in dataset_results:
@@ -231,6 +237,28 @@ async def scanRoot(app, rootid, update=False, bucket=None):
             results["num_linked_chunks"] += dataset_info["num_linked_chunks"]
 
     log.info(f"scanRoot - scan complete for rootid: {rootid}")
+
+    # compute overall checksum
+    checksums = results["checksums"]
+    
+    if len(checksums) != num_objects:
+        log.warn(f"skipping domain checksum calculation - {len(checksums)} found but {num_objects} hdf objects")
+    else:
+        # create a numpy array to store checksums
+        log.debug(f"creating numpy checksum array for {num_objects} checksums")
+        checksum_arr = np.zeros((num_objects,), dtype='S16')
+        objids = list(checksums.keys())
+        objids.sort()
+        for i in range(num_objects):
+            objid = objids[i]
+            checksum_arr[i] = checksums[objid]
+        log.debug("numpy array created")
+        hash_object = hashlib.md5(checksum_arr.tobytes())
+        md5_sum = hash_object.hexdigest()
+        log.debug(f"got domain_checksum: {md5_sum}")
+        results["md5_sum"] = md5_sum
+    # free up memory used by the checksums
+    del results["checksums"]
 
     results["scan_complete"] = time.time()
 
