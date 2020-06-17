@@ -22,9 +22,10 @@ import time
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPGone, HTTPInternalServerError, HTTPConflict, HTTPServiceUnavailable
 from aiohttp import ClientResponseError
 from aiohttp.client_exceptions import ClientError
+from aiohttp.web import json_response
 
 from .util.httpUtil import  http_post, http_put, http_get, http_delete, getHref, get_http_client, jsonResponse
-from .util.idUtil import  getDataNodeUrl, createObjId, getCollectionForId, getDataNodeUrls
+from .util.idUtil import  getDataNodeUrl, createObjId, getCollectionForId, getDataNodeUrls, isValidUuid, isSchema2Id
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
 from .util.authUtil import validateUserPassword, getAclKeys
 from .util.domainUtil import getParentDomain, getDomainFromRequest, isValidDomain, getBucketForDomain, getPathForDomain
@@ -293,9 +294,10 @@ async def get_domain_response(app, domain_json, bucket=None, verbose=False):
     md5_sum = ""
 
     if verbose and "root" in domain_json:
+        root_id = domain_json["root"]
         root_info = await getRootInfo(app, domain_json["root"], bucket=bucket)
         if root_info:
-            log.debug(f"got root_info: {root_info}")
+            log.info(f"got root_info: {root_info} for root: {root_id}")
             allocated_bytes = root_info["allocated_bytes"]
             totalSize += allocated_bytes
             if "linked_bytes" in root_info:
@@ -320,6 +322,7 @@ async def get_domain_response(app, domain_json, bucket=None, verbose=False):
 
         else:
             # root info not available - just return 0 for these values
+            log.info(f"root_info not available for root: {root_id}")
             allocated_bytes = 0
             totalSize = 0
             num_groups = 0
@@ -787,6 +790,31 @@ async def PUT_Domain(request):
         resp = await jsonResponse(request, None, status=status_code)
         log.response(request, resp=resp)
         return resp
+
+    if "rescan" in params and params["rescan"]:
+        # refresh scan info for the domain
+        log.info(f"rescan for domain: {domain}")
+        domain_json = await getDomainJson(app, domain, reload=True)
+        log.debug(f"got domain_json: {domain_json}")
+        if "root" in domain_json:
+            # nothing to update for folders
+            root_id = domain_json["root"]
+            if not isValidUuid(root_id):  
+                log.error(f"domain: {domain} with invalid  root id: {root_id}")
+                raise HTTPInternalServerError()
+            if not isSchema2Id(root_id):
+                msg = "rescan not supported for v1 ids"
+                log.info(msg)
+                raise HTTPBadRequest(reashon=msg)
+            aclCheck(domain_json, "update", username)  # throws exception if not authorized
+            log.info(f"notify_root: {root_id}")
+            notify_req = getDataNodeUrl(app, root_id) + "/roots/" + root_id
+            post_params = {}
+            if bucket:
+                post_params["bucket"] = bucket
+            await http_post(app, notify_req, data={}, params=post_params)
+            resp = json_response(None, status=204)  # No Content response
+            return resp
 
     is_folder = False
     owner = username
