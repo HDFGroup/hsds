@@ -110,14 +110,14 @@ async def validateAction(app, domain, obj_id, username, action):
 
     reload = False
     try:
-        aclCheck(domain_json, action, username)  # throws exception if not allowed
+        aclCheck(app, domain_json, action, username)  # throws exception if not allowed
     except HTTPForbidden:
         log.info(f"got HttpProcessing error on validate action for domain: {domain}, reloading...")
         # just in case the ACL was recently updated, refetch the domain
         reload = True
     if reload:
         domain_json = await getDomainJson(app, domain, reload=True)
-        aclCheck(domain_json, action, username)
+        aclCheck(app, domain_json, action, username)
 
 
 async def getObjectJson(app, obj_id, bucket=None, refresh=False, include_links=False, include_attrs=False):

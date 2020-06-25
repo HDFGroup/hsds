@@ -269,6 +269,63 @@ class AclTest(unittest.TestCase):
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 403) # Forbidden
 
+    def testGroupAcl(self):
+        print("testPutAcl", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+
+        test_group = config.get("test_group")
+        if not test_group:
+            print("test_group config not set, skipping testGroupAcl")
+            return
+        group_acl = "g:" + test_group  # "g:" prefix is used to distinguish user from group names
+        username = config.get("user_name")
+        user2name = config.get("user2_name")
+
+        # create an ACL for with read and update access for the test_group
+        req = helper.getEndpoint() + '/acls/' + group_acl
+        print("req:", req)
+        perm = {"read": True, "update": True}
+
+        rsp = requests.put(req, headers=headers, data=json.dumps(perm))
+        self.assertEqual(rsp.status_code, 201)
+
+        # fetch the acl and verify it has been updated
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rsp_json = json.loads(rsp.text)
+        self.assertTrue("acl" in rsp_json)
+        self.assertTrue("hrefs" in rsp_json)
+        acl = rsp_json["acl"]
+        print("got acl:", acl)
+        self.assertEqual(len(acl.keys()), len(acl_keys) + 2)  # acl_keys + "domain" + "username"
+
+        for k in acl_keys:
+            self.assertTrue(k in acl)
+            if k in ("read", "update"):
+                self.assertEqual(acl[k], True)
+            else:
+                self.assertEqual(acl[k], False)
+
+        # The ACL should be fetchable by test_user2...
+        req = helper.getEndpoint() + '/acls/' + user2name 
+        headers = helper.getRequestHeaders(domain=self.base_domain, username=user2name)
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200) # ok
+
+        # The default ACL should be fetchable by test_user2 as well...
+        if config.get("default_public"):
+            req = helper.getEndpoint() + '/acls/default'
+            headers = helper.getRequestHeaders(domain=self.base_domain, username=user2name)
+            rsp = requests.get(req, headers=headers)
+            self.assertEqual(rsp.status_code, 200) # ok
+
+        # test_user2 shouldn't be able to read test_user1's ACL
+        username = config.get("user_name")
+        req = helper.getEndpoint() + '/acls/' + username
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 403) # Forbidden
+
+
 
 if __name__ == '__main__':
     #setup test files

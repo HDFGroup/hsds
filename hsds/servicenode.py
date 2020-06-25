@@ -21,7 +21,7 @@ from .util.lruCache import LruCache
 from . import config
 from .basenode import healthCheck,  baseInit
 from . import hsds_logger as log
-from .util.authUtil import initUserDB
+from .util.authUtil import initUserDB, initGroupDB
 from .domain_sn import GET_Domain, PUT_Domain, DELETE_Domain, GET_Domains
 from .domain_sn import GET_Datasets, GET_Groups, GET_Datatypes
 from .domain_sn import GET_ACL, GET_ACLs, PUT_ACL
@@ -144,6 +144,8 @@ def create_app(loop):
         app['allow_noauth'] = False
 
     initUserDB(app)
+
+    initGroupDB(app)
 
     asyncio.ensure_future(healthCheck(app), loop=loop)
 

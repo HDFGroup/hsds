@@ -32,6 +32,8 @@ from .. import config
 MSONLINE_OPENID_URL = "https://login.microsoftonline.com/common/.well-known/openid-configuration"
 GOOGLE_OPENID_URL = "https://accounts.google.com/.well-known/openid-configuration"
 
+GROUP_PREFIX = "g:"  # pre-appended to acl names to distinguish group acls from user acls
+
 def getDynamoDBClient(app):
     """ Return dynamodb handle
     """
@@ -143,24 +145,25 @@ def loadPasswordFile(password_file):
                     continue
                 fields = s.split(':')
                 if len(fields) < 2:
-                    msg = f"line: {line_number} is not valid"
+                    msg = f"line: {line_number} of {password_file} is not valid"
                     log.warn(msg)
                     continue
                 username = fields[0]
                 passwd = fields[1]
                 if len(username) < 3 or len(passwd) < 3:
-                    msg = f"line: {line_number} is not valid, username and password must be 3 characters are longer"
+                    msg = f"line: {line_number} of {password_file} is not valid, username and password must be 3 characters are longer"
                     log.warn(msg)
                     continue
                 if username in user_db:
-                    msg = f"line: {line_number}, username is repated"
+                    msg = f"line: {line_number} of {password_file}, username is repated"
                     log.warn(msg)
                     continue
                 user_db[username] = {"pwd": passwd}
                 log.info(f"added user: {username}")
     except FileNotFoundError:
-        log.error("unable to open password file")
+        log.error(f"unable to open password file: {password_file}")
     return user_db
+
 
 def initUserDB(app):
     """
@@ -353,6 +356,84 @@ def _checkTokenCache(app, token):
 
     return user_id
 
+def loadGroupsFile(group_file):
+    """ 
+    Parse the given file and return a dict where each key is a group name and the key value is a set of usernames.
+    Expectedd format of the file is multiple lines with each line being: <group_name>: user1 user2 user3.
+    Hashmakr '#' in the first column indicates comment and the line is ignored.
+    """
+    log.info(f"using group file: {group_file}")
+    line_number = 0
+    group_db = {}
+    try:
+        with open(group_file) as f:
+            for line in f:
+                line_number += 1
+                s = line.strip()
+                if not s:
+                    continue
+                if s[0] == '#':
+                    # comment line
+                    continue
+                fields = s.split(':')
+                if len(fields) < 2:
+                    msg = f"line: {line_number} is not valid"
+                    log.warn(msg)
+                    continue
+                group_name = fields[0]
+                users = fields[1]
+                user_names = users.split(' ')
+                if group_name in group_db:
+                    msg = f"line: {line_number} of {group_file} group name: {group_name} is repeated"
+                    log.warn(msg)
+                else:
+                    group_db[group_name] = set()
+                group_set = group_db[group_name]
+
+                for user_name in user_names:
+                    if len(user_name) < 3:
+                        msg = f"line: {line_number} of {group_file} is not valid, username must be 3 characters are longer"
+                        log.warn(msg)
+                        continue
+                    group_set.add(user_name)
+                    log.info(f"added {user_name} to group: {group_name}")
+    except FileNotFoundError:
+        log.error(f"unable to open group file: {group_file}")
+    return group_db
+
+def initGroupDB(app):
+    """
+    Called at startup to initialize group dictionary from a groups text file
+    """
+    log.info("initgroupDB")
+    if "group_db" in app:
+        msg = "group_db already initilized"
+        log.warn(msg)
+        return
+
+    groups_file = config.get("groups_file")
+    if not groups_file or not pp.isfile(groups_file) :
+        log.info("No groups file")
+        group_user_db = {}
+    else:
+        log.info(f"Loading groups file: {groups_file}")
+        group_user_db = loadGroupsFile(groups_file)
+
+    app["group_user_db"] = group_user_db
+
+    # create a reverse (user -> set of groups) lookup map
+    user_group_db = {}
+    for group_name in group_user_db:
+        user_names = group_user_db[group_name]
+        for user_name in user_names:
+            if user_name not in user_group_db:
+                user_group_db[user_name] = set()
+            users = user_group_db[user_name]
+            users.add(group_name)
+    app["user_group_db"] = user_group_db
+
+    log.info(f"group_db initialized: {len(group_user_db)} groups")
+
 def _verifyBearerToken(app, token):
     # Contact OpenID provider to validate bearer token.
     # if valid, update user db and return username
@@ -539,7 +620,7 @@ def getUserPasswordFromRequest(request):
 
     return user, pswd
 
-def aclCheck(obj_json, req_action, req_user):
+def aclCheck(app, obj_json, req_action, req_user):
     log.info(f"aclCheck: {req_action} for user: {req_user}")
     admin_user = config.get("admin_user")
     if req_user == admin_user:
@@ -554,20 +635,39 @@ def aclCheck(obj_json, req_action, req_user):
     log.debug(f"acls: {acls}")
     if req_action not in ("create", "read", "update", "delete", "readACL", "updateACL"):
         log.error(f"unexpected req_action: {req_action}")
-    acl = None
+    
     if req_user in acls:
         acl = acls[req_user]
         log.debug(f"got acl: {acl} for user: {req_user}")
-    elif "default" in acls:
+        if req_action in acl and acl[req_action]:
+            log.debug("action permitted by user acl")
+            return
+        else:
+            # treat deny for username as authorative deny
+            log.warn(f"Action: {req_action} not permitted for user: {req_user}")
+            raise HTTPForbidden()  # 403
+
+    if "default" in acls:
         acl = acls["default"]
         log.debug(f"got default acl: {acl}")
-    else:
-        acl = { }
-        log.debug("no acl found")
-    if req_action not in acl or not acl[req_action]:
-        log.warn(f"Action: {req_action} not permitted for user: {req_user}")
-        raise HTTPForbidden()  # 403
-    log.debug("action permitted")
+        if req_action in acl and acl[req_action]:
+            log.debug("action permitted by default acl")
+            return
+
+    user_group_db = app["user_group_db"]
+    if req_user in user_group_db:
+        user_groups = user_group_db[req_user]
+        for user_group in user_groups:
+            acl_name = GROUP_PREFIX + user_group
+            log.debug(f"checking group acl: {acl_name}")
+            if acl_name in acls:
+                acl = acls[acl_name]
+                if req_action in acl and acl[req_action]:
+                    log.debug(f"action permitted by group acl: {acl_name}")
+                    return
+    
+    log.warn(f"Action: {req_action} not permitted for user: {req_user}")
+    raise HTTPForbidden()  # 403
 
 def validateAclJson(acl_json):
     acl_keys = getAclKeys()

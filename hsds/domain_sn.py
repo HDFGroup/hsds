@@ -631,7 +631,7 @@ async def GET_Domain(request):
 
     log.debug(f"got domain_json: {domain_json}")
     # validate that the requesting user has permission to read this domain
-    aclCheck(domain_json, "read", username)  # throws exception if not authorized
+    aclCheck(app, domain_json, "read", username)  # throws exception if not authorized
 
     if "h5path" in params:
         # if h5path is passed in, return object info for that path
@@ -779,7 +779,7 @@ async def PUT_Domain(request):
             log.error("No acls key found in domain")
             raise HTTPInternalServerError()
 
-        aclCheck(domain_json, "update", username)  # throws exception if not allowed
+        aclCheck(app, domain_json, "update", username)  # throws exception if not allowed
         if "root" in domain_json:
             # nothing to do for folder objects
             status_code = await doFlush(app, domain_json["root"], bucket=bucket)
@@ -806,7 +806,7 @@ async def PUT_Domain(request):
                 msg = "rescan not supported for v1 ids"
                 log.info(msg)
                 raise HTTPBadRequest(reashon=msg)
-            aclCheck(domain_json, "update", username)  # throws exception if not authorized
+            aclCheck(app, domain_json, "update", username)  # throws exception if not authorized
             log.info(f"notify_root: {root_id}")
             notify_req = getDataNodeUrl(app, root_id) + "/roots/" + root_id
             post_params = {}
@@ -900,7 +900,7 @@ async def PUT_Domain(request):
             raise HTTPBadRequest(reason=msg)
 
     if parent_json:
-        aclCheck(parent_json, "create", username)  # throws exception if not allowed
+        aclCheck(app, parent_json, "create", username)  # throws exception if not allowed
 
     if linked_domain:
         linked_json = await getDomainJson(app, linked_bucket + linked_domain, reload=True)
@@ -910,8 +910,8 @@ async def PUT_Domain(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         root_id = linked_json["root"]
-        aclCheck(linked_json, "read", username)
-        aclCheck(linked_json, "delete", username)
+        aclCheck(app, linked_json, "read", username)
+        aclCheck(app, linked_json, "delete", username)  # TBD - why is delete needed?
     else:
         linked_json = None
 
@@ -1044,7 +1044,7 @@ async def DELETE_Domain(request):
             log.error(f"unexpected error: {ce.code}")
             raise HTTPInternalServerError()
 
-    aclCheck(domain_json, "delete", username)  # throws exception if not allowed
+    aclCheck(app, domain_json, "delete", username)  # throws exception if not allowed
 
     # check for sub-objects if this is a folder
     if "root" not in domain_json:
@@ -1143,9 +1143,9 @@ async def GET_ACL(request):
     # validate that the requesting user has permission to read ACLs in this domain
     if acl_username in (username, "default"):
         # allow read access for a users on ACL, or default
-        aclCheck(domain_json, "read", username)  # throws exception if not authorized
+        aclCheck(app, domain_json, "read", username)  # throws exception if not authorized
     else:
-        aclCheck(domain_json, "readACL", username)  # throws exception if not authorized
+        aclCheck(app, domain_json, "readACL", username)  # throws exception if not authorized
 
     if 'owner' not in domain_json:
         log.warn("No owner key found in domain")
@@ -1223,7 +1223,7 @@ async def GET_ACLs(request):
 
     log.debug(f"got domain_json: {domain_json}")
     # validate that the requesting user has permission to read this domain
-    aclCheck(domain_json, "readACL", username)  # throws exception if not authorized
+    aclCheck(app, domain_json, "readACL", username)  # throws exception if not authorized
 
     acl_list = []
     acl_usernames = list(acls.keys())
@@ -1355,7 +1355,7 @@ async def GET_Datasets(request):
 
     log.debug(f"got domain_json: {domain_json}")
     # validate that the requesting user has permission to read this domain
-    aclCheck(domain_json, "read", username)  # throws exception if not authorized
+    aclCheck(app, domain_json, "read", username)  # throws exception if not authorized
 
     limit = None
     if "Limit" in params:
@@ -1436,7 +1436,7 @@ async def GET_Groups(request):
 
     log.debug(f"got domain_json: {domain_json}")
     # validate that the requesting user has permission to read this domain
-    aclCheck(domain_json, "read", username)  # throws exception if not authorized
+    aclCheck(app, domain_json, "read", username)  # throws exception if not authorized
 
     # get the groups collection list
     limit = None
@@ -1516,7 +1516,7 @@ async def GET_Datatypes(request):
 
     log.debug(f"got domain_json: {domain_json}")
     # validate that the requesting user has permission to read this domain
-    aclCheck(domain_json, "read", username)  # throws exception if not authorized
+    aclCheck(app, domain_json, "read", username)  # throws exception if not authorized
 
     limit = None
     if "Limit" in params:

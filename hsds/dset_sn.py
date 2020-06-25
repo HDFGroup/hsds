@@ -612,7 +612,7 @@ async def POST_Dataset(request):
     domain_json = await getDomainJson(app, domain, reload=True)
     root_id = domain_json["root"]
 
-    aclCheck(domain_json, "create", username)  # throws exception if not allowed
+    aclCheck(app, domain_json, "create", username)  # throws exception if not allowed
 
     if "root" not in domain_json:
         msg = f"Expected root key for domain: {domain}"

@@ -180,7 +180,7 @@ async def POST_Datatype(request):
     bucket = getBucketForDomain(domain)
     domain_json = await getDomainJson(app, domain, reload=True)
 
-    aclCheck(domain_json, "create", username)  # throws exception if not allowed
+    aclCheck(app, domain_json, "create", username)  # throws exception if not allowed
 
     if "root" not in domain_json:
         msg = f"Expected root key for domain: {domain}"
