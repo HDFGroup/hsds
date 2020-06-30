@@ -57,7 +57,7 @@ HSDS on AKS utilizes the following secrets:
 2. azure-conn-str: the AZURE_CONNECTION_STRING value
 3. azure-ad-ids: AZURE_APP_ID and AZURE_RESOURCE_ID (optional)
 
-HSDS accounts can either be set by creating the user-password secret, or by using Azure Active Directory (AD).  If using AD exclustively, set the ADMIN_USER to a valid AD username.  See [Azure Active Directory Setup](azure_ad_setup.md) for instructions on using AD.
+HSDS accounts can either be set by creating the user-password secret, or by using Azure Active Directory (AD).    See [Azure Active Directory Setup](azure_ad_setup.md) for instructions on using AD.
 
 To use user-password secret, first create a text file with the desired usernames and passwords as follows:
 

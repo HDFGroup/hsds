@@ -12,18 +12,13 @@ These environment variables will be used to create Azure resources.
     export LOCATION=westus
     export VMNAME=myvmname
     export VM_USER=azureuser
-    export ADMIN_USER=admin  # or AD username if AD is used
     export STORAGEACCTNAME=mystorageaccount
 
     # the following will be the same as the variables exported on the VM below
     export AZURE_CONNECTION_STRING="1234567890"      # use the connection string for your Azure account.                                                     # Note the quotation marks around the string
     export BUCKET_NAME=hsdstest                   # set to the name of the container you will be using
 
-    # the following will be used on the VM if Azure Active Directory authentication is desired
-    # See "Azure Active Directory" section below
-    export AZURE_APP_ID=12345678-1234-1234-abcd-123456789ab          # if you will be using Azure Active Directory, set this to the application ID
-    export AZURE_RESOURCE_ID=00000002-0000-0000-c000-000000000000    # if you will be using Azure Active Directory, set this to the resource ID
-
+    
 Prerequisites
 -------------
 
@@ -67,9 +62,6 @@ These environment variables will be passed to the Docker containers on startup.
     export BUCKET_NAME=hsdstest                   # set to the name of the container you will be using
     export HSDS_ENDPOINT=http://myvmname.westus.cloudapp.azure.com      # Set to the public DNS name of the VM.  Use https protocol if SSL is desired and configured
     export AZURE_CONNECTION_STRING="1234567890"      # use the connection string for your Azure account. Note the quotation marks around the string
-    export ADMIN_USER=admin  # The username for the HSDS admin acount.  Set to an AD username if Active Directory is being used
-    export AZURE_APP_ID=12345678-1234-1234-abcd-123456789ab          # if you will be using Azure Active Directory, set this to the application ID
-    export AZURE_RESOURCE_ID=00000002-0000-0000-c000-000000000000    # if you will be using Azure Active Directory, set this to the resource ID
 
 Follow the following steps to setup HSDS:
 
