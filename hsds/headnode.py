@@ -212,17 +212,25 @@ async def register(request):
     text = await request.text()
     # body = await request.json()
     body = json.loads(text)
-    log.info("body: {}".format(body))
+    log.info(f"body: {body}")
     if 'id' not in body:
         msg = "Missing 'id'"
         log.response(request, code=400, message=msg)
         raise HTTPBadRequest(reason=msg)
     if 'ip' not in body:
         peername = request.transport.get_extra_info('peername')
-        host, req_port = peername
-        log.info("register host: {}, port: {}".format(host, req_port))
         if peername is None:
-            raise HTTPBadRequest(reason="Can not determine caller IP")
+            msg = "Can not determine caller IP"
+            log.error(msg)
+            raise HTTPBadRequest(reason=msg)
+        log.debug(f"peername: {peername}")
+        if peername[0] is None or peername[0] in ("::1", "127.0.0.1"):
+            host = "localhost"  
+        else:
+            host = peername[0]
+        req_port = peername[1]
+        log.info(f"register host: {host}, port: {req_port}")
+        
     else:
         #Specify the ip is useful in docker / DCOS situations, where in certain situations a 
         #docker private network IP might be used
@@ -499,6 +507,10 @@ def init():
 
     return app
 
+async def start_background_tasks(app):
+    loop = app['loop']
+    loop.create_task(healthCheck(app))
+
 #
 # Main
 #
@@ -512,11 +524,11 @@ def create_app(loop):
     app = init()  
 
     # create a client Session here so that all client requests
-    #   will share the same connection pool
+    #   will share the same connection pool 
     app["loop"] = loop
     app["last_health_check"] = 0
 
-    asyncio.ensure_future(healthCheck(app), loop=loop)
+    app.on_startup.append(start_background_tasks)
 
     return app
 

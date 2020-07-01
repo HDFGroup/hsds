@@ -421,7 +421,7 @@ async def healthCheck(app):
     chaos_die = config.get("chaos_die")
 
     while True:
-        print("node_state:", app["node_state"])
+        log.info("node_state: {}".format(app["node_state"]))
         if "oio_proxy" in app:
             # for OIO post registration request every time interval
             await oio_register(app)
@@ -656,7 +656,7 @@ def baseInit(loop, node_type):
     """Intitialize application and return app object"""
 
     log.info("Application baseInit")
-    app = Application(loop=loop)
+    app = Application() 
 
     # set a bunch of global state
     node_id = createNodeId(node_type)

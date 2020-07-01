@@ -171,9 +171,19 @@ async def bucketGC(app):
     # shouldn't ever get here
     log.error("bucketGC terminating unexpectedly")
 
-#
-# Main
-#
+async def start_background_tasks(app):
+    loop = app['loop']
+    loop.create_task(healthCheck(app))
+    # run data sync tasks
+    loop.create_task(s3syncCheck(app))
+
+    # run root scan
+    loop.create_task(bucketScan(app))
+
+    # run root/dataset GC
+    loop.create_task(bucketGC(app))
+
+
 
 def create_app(loop):
     """Create datanode aiohttp application
@@ -188,6 +198,7 @@ def create_app(loop):
 
     #create the app object
     app = loop.run_until_complete(init(loop))
+    app["loop"] = loop
     app['meta_cache'] = LruCache(mem_target=metadata_mem_cache_size, chunk_cache=False)
     app['chunk_cache'] = LruCache(mem_target=chunk_mem_cache_size, chunk_cache=True)
     app['deleted_ids'] = set()
@@ -207,24 +218,14 @@ def create_app(loop):
     # delete entire map whenver the synch queue is empty?
 
     # run background tasks
-    try:
-        task = asyncio.ensure_future(healthCheck(app), loop=loop)
-    except Exception as hcEx:
-        log.error(f"Failed to run health checks {hcEx}")
-    finally:
-        if task.done() and not task.cancelled():
-            log.info("health check received {}".format(task.exception()))
-
-    # run data sync tasks
-    asyncio.ensure_future(s3syncCheck(app), loop=loop)
-
-    # run root scan
-    asyncio.ensure_future(bucketScan(app), loop=loop)
-
-    # run root/dataset GC
-    asyncio.ensure_future(bucketGC(app), loop=loop)
+    app.on_startup.append(start_background_tasks)
 
     return app
+
+
+#
+# Main
+#
 
 def main():
     log.info("datanode start")

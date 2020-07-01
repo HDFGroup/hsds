@@ -25,7 +25,7 @@ classifiers = [
 
 install_requires = [
     'aiobotocore<1',
-    'aiohttp',
+    'aiohttp <= 3.6.2',
     'aiohttp_cors',
     'aiofiles',
      #'botocore',

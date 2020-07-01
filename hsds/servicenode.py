@@ -111,9 +111,9 @@ async def init(loop):
 
     return app
 
-#
-# Main
-#
+async def start_background_tasks(app):
+    loop = app['loop']
+    loop.create_task(healthCheck(app))
 
 
 def create_app(loop):
@@ -145,10 +145,14 @@ def create_app(loop):
 
     initUserDB(app)
 
-    asyncio.ensure_future(healthCheck(app), loop=loop)
+    app.on_startup.append(start_background_tasks)
 
     return app
 
+
+#
+# Main
+#
 
 def main():
     log.info("Service node initializing")

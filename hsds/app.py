@@ -95,6 +95,8 @@ def main():
 
     loop = asyncio.get_event_loop()
 
+    log.info("Creating runners")
+
     head_runner = web.AppRunner(headnode.create_app(loop))
     dn_runner = web.AppRunner(datanode.create_app(loop))
     sn_runner = web.AppRunner(servicenode.create_app(loop))
