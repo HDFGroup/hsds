@@ -31,7 +31,7 @@ echo "clean stopped containers"
 docker rm -v $(docker ps -aq -f status=exited)
 
 echo "building hsds sdist"
-python setup.py build
+python setup.py sdist
 
 echo "building docker image"
 docker build -t hdfgroup/hsds .
