@@ -769,26 +769,38 @@ async def getChunkInfoMap(app, dset_id, dset_json, chunk_ids, bucket=None):
         raise HTTPInternalServerError()
     dims = getShapeDims(datashape)
     rank = len(dims)
-    log.debug(f"getChunkInfoMap for dset: {dset_id} bucket: {bucket} rank: {rank} num chunk_ids: {len(chunk_ids)}")
+    log.info(f"getChunkInfoMap for dset: {dset_id} bucket: {bucket} rank: {rank} num chunk_ids: {len(chunk_ids)}")
+    log.debug(f"getChunkInfoMap layout: {layout}")
     chunkinfo_map = {}
 
     if layout["class"] == 'H5D_CONTIGUOUS_REF':
         s3path = layout["file_uri"]
         s3size = layout["size"]
+        if s3size == 0:
+            log.info("getChunkInfoMap - H5D_CONTIGUOUS_REF layout size 0, no allocation")
+            return None
         chunk_dims = layout["dims"]
         item_size = getItemSize(datatype)
         chunk_size = item_size
         for dim in chunk_dims:
             chunk_size *= dim
-        log.debug(f"using chunk_size: {chunk_size}")
+        log.debug(f"using chunk_size: {chunk_size} for H5D_CONTIGUOUS_REF")
 
         for chunk_id in chunk_ids:
+            log.debug(f"getChunkInfoMap - getting data for chunk: {chunk_id}")
             chunk_index = getChunkIndex(chunk_id)
             if len(chunk_index) != rank:
                 log.error("Unexpected chunk_index")
                 raise HTTPInternalServerError()
             extent = item_size
+            if "offset" not in layout:
+                log.error("getChunkInfoMap - expected to find offset in chunk layout for H5D_CONTIGUOUS_REF")
+                continue
             s3offset = layout["offset"]
+            if not isinstance(s3offset, int):
+                log.error(f"getChunkInfoMap - expected offset to be an int but got: {s3offset}")
+                continue
+            log.debug(f"getChunkInfoMap s3offset: {s3offset}")
             for i in range(rank):
                 dim = rank - i - 1
                 index = chunk_index[dim]

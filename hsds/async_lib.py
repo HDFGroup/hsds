@@ -82,7 +82,7 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
         layout = dset_json["layout"]
         layout_class = layout["class"]
         if layout_class != 'H5D_CHUNKED':
-            log.debug(f"get chunk info for layout_class: {layout_class}")
+            log.info(f"get chunk info for layout_class: {layout_class}")
             selection = getHyperslabSelection(dims)
             log.debug(f"got selection: {selection}")
             chunk_ids = getChunkIds(dset_id, selection, layout['dims'])
@@ -91,13 +91,17 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
             if "dn_urls" in app:
                 # getChunkInfoMap cannot be used from the tools scripts
                 chunk_map = await getChunkInfoMap(app, dset_id, dset_json, chunk_ids, bucket=bucket)
-                log.debug(f"chunkinfo_map: {chunk_map}")
-                for chunk_id in chunk_map:
-                    chunk_link = chunk_map[chunk_id]
-                    if "s3size" in chunk_link:
-                        s3size = chunk_link["s3size"]
-                        dataset_info["linked_bytes"] += s3size
-                        dataset_info["num_linked_chunks"] += 1
+                if not chunk_map:
+                    log.info(f"no linked chunks for dset: {dset_id}")
+                else:
+                    log.info(f"{len(chunk_map)} chunks in chunk_map for dset: {dset_id}")
+                    log.debug(f"chunkinfo_map: {chunk_map}")
+                    for chunk_id in chunk_map:
+                        chunk_link = chunk_map[chunk_id]
+                        if "s3size" in chunk_link:
+                            s3size = chunk_link["s3size"]
+                            dataset_info["linked_bytes"] += s3size
+                            dataset_info["num_linked_chunks"] += 1
             else:
                 # run from tools script, just set num_linked_chunks since we
                 # can't get the chunk_map
