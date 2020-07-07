@@ -88,7 +88,9 @@ def validateChunkLayout(shape_json, item_size, layout):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    if layout["class"] == 'H5D_CONTIGUOUS_REF':
+    layout_class = layout["class"]
+
+    if layout_class == 'H5D_CONTIGUOUS_REF':
         # reference to a dataset in a traditional HDF5 files with contigious storage
         if item_size == 'H5T_VARIABLE':
             # can't be used with variable types..
@@ -115,7 +117,7 @@ def validateChunkLayout(shape_json, item_size, layout):
             msg = "'dims' key can not be provided for H5D_CONTIGUOUS_REF layout"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-    elif layout["class"] == 'H5D_CHUNKED_REF':
+    elif layout_class == 'H5D_CHUNKED_REF':
         # reference to a dataset in a traditional HDF5 files with chunked storage
         if item_size == 'H5T_VARIABLE':
             # can't be used with variable types..
@@ -136,7 +138,7 @@ def validateChunkLayout(shape_json, item_size, layout):
             msg = "'chunks' key must be provided for H5D_CHUNKED_REF layout"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-    elif layout["class"] == 'H5D_CHUNKED_REF_INDIRECT':
+    elif layout_class == 'H5D_CHUNKED_REF_INDIRECT':
         # reference to a dataset in a traditional HDF5 files with chunked storage using an auxillary dataset
         if item_size == 'H5T_VARIABLE':
             # can't be used with variable types..
@@ -152,7 +154,7 @@ def validateChunkLayout(shape_json, item_size, layout):
             msg = "'chunk_table' key must be provided for H5D_CHUNKED_REF_INDIRECT layout"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-    elif layout["class"] == 'H5D_CHUNKED':
+    elif layout_class == 'H5D_CHUNKED':
         if "dims" not in layout:
             msg = "dims key not found in layout for creation property list"
             log.warn(msg)
@@ -162,7 +164,9 @@ def validateChunkLayout(shape_json, item_size, layout):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
     else:
-        msg = f"Unexpected layout: {layout['class']}"
+        msg = f"Unexpected layout: {layout_class}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
 
 async def getDatasetDetails(app, dset_id, root_id, bucket=None):
@@ -785,18 +789,23 @@ async def POST_Dataset(request):
         # default to chunked layout
         layout = {"class": "H5D_CHUNKED"}
 
-    if layout and layout["class"] == 'H5D_CONTIGUOUS_REF':
+    if layout:
+        layout_class = layout["class"]
+    else:
+        layout_class = None
+
+    if layout_class == 'H5D_CONTIGUOUS_REF':
         chunk_dims = getContiguousLayout(shape_json, item_size, chunk_min=min_chunk_size, chunk_max=max_chunk_size)
         layout["dims"] = chunk_dims
         log.debug(f"autoContiguous layout: {layout}")
 
-    if layout and layout["class"] == 'H5D_CHUNKED' and "dims" not in layout:
+    if layout_class == 'H5D_CHUNKED' and "dims" not in layout:
         # do autochunking
         chunk_dims = guessChunk(shape_json, item_size)
         layout["dims"] = chunk_dims
         log.debug(f"initial autochunk layout: {layout}")
 
-    if layout and layout["class"] == 'H5D_CHUNKED':
+    if layout_class == 'H5D_CHUNKED':
         chunk_dims = layout["dims"]
         chunk_size = getChunkSize(chunk_dims, item_size)
 
@@ -805,7 +814,7 @@ async def POST_Dataset(request):
         adjusted_chunk_dims = None
         if chunk_size < min_chunk_size:
             log.debug(f"chunk size: {chunk_size} less than min size: {min_chunk_size}, expanding")
-            adjusted_chunk_dims = expandChunk(chunk_dims, item_size, shape_json, chunk_min=min_chunk_size, layout_class=layout["class"])
+            adjusted_chunk_dims = expandChunk(chunk_dims, item_size, shape_json, chunk_min=min_chunk_size, layout_class=layout_class)
         elif chunk_size > max_chunk_size:
             log.debug(f"chunk size: {chunk_size} greater than max size: {max_chunk_size}, shrinking")
             adjusted_chunk_dims = shrinkChunk(chunk_dims, item_size, chunk_max=max_chunk_size)
@@ -851,16 +860,16 @@ async def POST_Dataset(request):
             else:
                 log.info(f"do not need chunk partitions, num_chunks: {num_chunks} max_chunks_per_folder: {max_chunks_per_folder}")
 
-    if layout and layout["class"] in ('H5D_CHUNKED_REF', 'H5D_CHUNKED_REF_INDIRECT'):
+    if layout_class in ('H5D_CHUNKED_REF', 'H5D_CHUNKED_REF_INDIRECT'):
         chunk_dims = layout["dims"]
         chunk_size = getChunkSize(chunk_dims, item_size)
 
         log.debug(f"chunk_size: {chunk_size}, min: {min_chunk_size}, max: {max_chunk_size}")
-        # adjust the chunk shape if chunk size is too small or too big
+        # nothing to do about inefficencly small chunks, but large chunks can be subdivided
         if chunk_size < min_chunk_size:
-            log.warn(f"chunk size: {chunk_size} less than min size: {min_chunk_size} for H5D_CHUNKED_REF dataset")
+            log.warn(f"chunk size: {chunk_size} less than min size: {min_chunk_size} for {layout_class} dataset")
         elif chunk_size > max_chunk_size:
-            log.warn(f"chunk size: {chunk_size} greater than max size: {max_chunk_size}, for H5D_CHUNKED_REF dataset")
+            log.warn(f"chunk size: {chunk_size} greater than max size: {max_chunk_size}, for {layout_class} dataset")
 
 
     link_id = None
