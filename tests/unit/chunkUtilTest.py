@@ -1094,7 +1094,6 @@ class ChunkUtilTest(unittest.TestCase):
         for query in queries.keys():
             eval_str = _getEvalStr(query, "rows", fields)
             self.assertEqual(eval_str, queries[query])
-                #print(query, "->", eval_str)
 
     def testBadQuery(self):
         queries = ( "foobar",    # no variable used
@@ -1182,8 +1181,6 @@ class ChunkUtilTest(unittest.TestCase):
         indexes = (1203,1245,1288,1212,1299)
         num_points = len(indexes)
         point_arr = np.zeros((num_points,), dtype=point_dt)
-        print("point_arr.shape:", point_arr.shape)
-        print("point_arr.dtype:", point_arr.dtype)
         for i in range(num_points):
             e = point_arr[i]
             e[0] = indexes[i]
@@ -1283,7 +1280,6 @@ class ChunkUtilTest(unittest.TestCase):
         result = chunkQuery(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, query="symbol == b'AAPL'", return_json=True)
         json_str = json.dumps(result)  # test we can jsonfy the result
         self.assertTrue(len(json_str) > 100)
-        print(result)
         self.assertTrue("index" in result)
         indexes = result["index"]
         self.assertTrue("value" in result)
