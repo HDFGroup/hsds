@@ -399,7 +399,7 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset
                 while chunk_cache.memTarget - chunk_cache.memDirty < chunk_arr.size:
                     log.warn(f"getChunk, cache utilization: {chunk_cache.cacheUtilizationPercent}, sleeping till items are flushed")
                     if time.time() - wait_start > MAX_WAIT_TIME:
-                        log.error(f"unable to save updated chunk {chunk_id} to cache returning 503 error")
+                        log.warn(f"unable to save chunk {chunk_id} to cache returning 503 error")
                         raise HTTPServiceUnavailable()
                     await asyncio.sleep(1)
 

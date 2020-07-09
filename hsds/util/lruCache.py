@@ -176,12 +176,16 @@ class LruCache(object):
                 self._lru_head = node
             self._hash[key] = node
             self._mem_size += node._mem_size
+            log.debug(f"LRU {self._name} adding {node._mem_size} to cache, mem_size is now: {self._mem_size}")
             if node._isdirty:
                 self._dirty_size += node._mem_size
+                log.debug(f"LRU {self._name} dirty size is now: {self._dirty_size}")
+
             log.debug(f"LRU {self._name} added new node: {key} [{node._mem_size} bytes]")
 
         if self._mem_size > self._mem_target:
             # set dirty temporarily so we can't remove this node in reduceCache
+            log.debug(f"LRU {self._name} mem_size greater than target {self._mem_target} reducing cache")
             isdirty = node._isdirty
             node._isdirty = True
             self._reduceCache()
@@ -198,7 +202,7 @@ class LruCache(object):
                 log.debug(f"LRU {self._name} removing node: {node._id}")
                 self.__delitem__(node._id)
                 if self._mem_size <= self._mem_target:
-                    log.debug(f"LRU {self._name} mem_sized reduced below target")
+                    log.debug(f"LRU {self._name} mem_size reduced below target")
                     break
             else:
                 pass # can't remove dirty nodes

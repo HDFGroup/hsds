@@ -132,7 +132,7 @@ async def GET_Link(request):
 
     links = group_json["links"]
     if link_title not in links:
-        log.warn(f"Link name {link_title} not found in group: {group_id}")
+        log.info(f"Link name {link_title} not found in group: {group_id}")
         raise HTTPNotFound()
 
     link_json = links[link_title]
