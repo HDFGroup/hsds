@@ -167,7 +167,7 @@ def shrinkChunk(layout, typesize, chunk_max=CHUNK_MAX, layout_class='H5D_CHUNKED
         old_chunk_size = chunk_size
         for dim in range(rank):
             if layout[dim] > 1:
-                layout[dim] //= 2
+                layout[dim] = -(-layout[dim] // 2)  # tricky way to do  x // 2 with ceil
                 chunk_size = getChunkSize(layout, typesize)
                 if chunk_size <= chunk_max:
                     break

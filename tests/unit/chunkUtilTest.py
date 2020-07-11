@@ -112,6 +112,19 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertTrue(num_bytes > CHUNK_MIN)
         self.assertTrue(num_bytes < CHUNK_MAX)
 
+        CHUNK_MIN=1*1024*1024
+        CHUNK_MAX=4*1024*1024
+        typesize=4
+        layout = (117, 201, 189, 1)
+        num_bytes = getChunkSize(layout, typesize)
+        self.assertTrue(num_bytes > CHUNK_MAX)
+        shrunk = shrinkChunk(layout, typesize, chunk_max=CHUNK_MAX)
+        self.assertEqual(shrunk, (59,101,95,1))
+        num_bytes = getChunkSize(shrunk, typesize)
+        self.assertTrue(num_bytes > CHUNK_MIN)
+        self.assertTrue(num_bytes < CHUNK_MAX)
+
+
     def testExpandChunk(self):
         CHUNK_MIN = 5000
         CHUNK_MAX = 50000
