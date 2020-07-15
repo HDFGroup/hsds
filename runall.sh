@@ -42,6 +42,9 @@ if [[ ${NO_DOCKER} ]]; then
     [[ -z ${SN_PORT} ]] && export SN_PORT=80
     [[ -z ${PASSWORD_FILE} ]] && export PASSWORD_FILE=${PWD}/admin/config/passwd.txt
     [[ -z ${CONFIG_DIR} ]] && export CONFIG_DIR=${PWD}/admin/config/
+    # TBD - this script needs updating to run multiple SN, DN nodes
+    export SN_CORES=1
+    export DN_CORES=1
 fi
 
 
