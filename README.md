@@ -84,7 +84,7 @@ The related project: <https://github.com/HDFGroup/h5pyd> provides a (mostly) h5p
 interface to the server for Python clients.
 
 For C/C++ clients, the HDF REST VOL is a HDF5 library plugin that enables the HDF5 API to read and write data
-using HSDS.  See: <https://github.com/HDFGroup/vol-rest>.
+using HSDS.  See: <https://github.com/HDFGroup/vol-rest>. Note: requires v1.12.0 or greater version of the HDF5 library.
 
 Uninstalling
 ------------
