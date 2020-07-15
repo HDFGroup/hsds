@@ -475,6 +475,8 @@ async def write_s3_obj(app, obj_id, bucket=None):
     last_update_time = now
     if obj_id in dirty_ids:
         last_update_time = dirty_ids[obj_id][0]  # timestamp is first element of two-tuple
+    else:
+        log.warn(f"expected to find {obj_id} in dirty_ids")
     if last_update_time > now:
         msg = f"last_update time {last_update_time} is in the future for obj_id: {obj_id}"
         log.error(msg)
