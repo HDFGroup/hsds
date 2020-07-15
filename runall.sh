@@ -2,9 +2,48 @@
 
 # script to startup hsds service
 if [[ $# -eq 1 ]] && ([[ $1 == "-h" ]] || [[ $1 == "--help" ]]); then
-   echo "Usage: runall.sh [[count]]"
+   echo "Usage: runall.sh [--no-docker] [count] "
    exit 1
 fi
+
+
+if [[ $# -gt 0 ]] ; then
+  if [[ $1 == "--no-docker" ]] ; then
+    [[ -z $LOG_DIR ]] && echo "need to set LOG_DIR environment variable"  && exit 1
+    export NO_DOCKER=1
+
+    if [[ $# -gt 1 ]] ; then
+      export CORES=$2
+    fi
+  else
+    export CORES=$1
+  fi
+fi
+
+if [[ ${CORES} ]] ; then
+  export DN_CORES=${CORES}
+  export SN_CORES=${CORES}
+else
+  export DN_CORES=1
+  export SN_CORES=1
+fi
+
+
+echo "dn cores:" $DN_CORES
+echo "sn cores:" $SN_CORES
+echo "no_docker:" $NO_DOCKER
+
+if [[ ${NO_DOCKER} ]]; then
+   # setup extra envs needed when not using docker
+    export TARGET_SN_COUNT=$SN_CORES
+    export TARGET_DN_COUNT=$DN_CORES
+    export HEAD_ENDPOINT=http://localhost:5100
+    export PYTHONUNBUFFERED="1"
+    [[ -z ${SN_PORT} ]] && export SN_PORT=80
+    [[ -z ${PASSWORD_FILE} ]] && export PASSWORD_FILE=${PWD}/admin/config/passwd.txt
+    [[ -z ${CONFIG_DIR} ]] && export CONFIG_DIR=${PWD}/admin/config/
+fi
+
 
 if [[ ${AWS_S3_GATEWAY} ]]; then
   COMPOSE_FILE="admin/docker/docker-compose.aws.yml"
@@ -49,19 +88,6 @@ if [[ -z $AWS_IAM_ROLE ]] && [[ $AWS_S3_GATEWAY ]]; then
   [[ -z ${AWS_SECRET_ACCESS_KEY} ]] && echo "Need to set AWS_SECRET_ACCESS_KEY" && exit 1
 fi
 
-if [[ $# -gt 0 ]]; then
-  export DN_CORES=$1
-  export SN_CORES=$1
-elif [[ ${CORES} ]] ; then
-  export DN_CORES=${DN_CORES}
-  export SN_CORES=${SN_CORES}
-else
-  export DN_CORES=1
-  export SN_CORES=1
-fi
-
-echo "dn cores:" $DN_CORES
-
 if [[ $AWS_S3_GATEWAY ]]; then
   echo "AWS_S3_GATEWAY:" $AWS_S3_GATEWAY
   echo "AWS_ACCESS_KEY_ID:" $AWS_ACCESS_KEY_ID
@@ -76,20 +102,32 @@ echo "CORES: ${SN_CORES}/${DN_CORES}"
 echo "HSDS_ENDPOINT:" $HSDS_ENDPOINT
 echo "PUBLIC_DNS:" $PUBLIC_DNS
 
-grep -q -c "^  proxy" ${COMPOSE_FILE}
-if [[ $? -gt 0 ]]; then
-  echo "no load balancer"
-  export SN_CORES=1
-  if [[ -z ${SN_PORT} ]]; then
-    echo "setting sn_port to 80"
-    export SN_PORT=80  # default to port 80 if the SN is fronting requests
-  else
-    echo "SN_PORT is set to: [${SN_PORT}]"
-  fi
-  docker-compose -f ${COMPOSE_FILE} up -d --scale dn=${DN_CORES}
+if [[ $NO_DOCKER ]] ; then
+  echo "no docker startup"
+  echo "starting head node"
+  hsds-headnode >${LOG_DIR}/head.log 2>&1 &
+  sleep 1
+  echo "starting service node"
+  hsds-servicenode >${LOG_DIR}/sn.log 2>&1 &
+  sleep 1
+  echo "starting data node"
+  hsds-datanode >${LOG_DIR}/dn.log 2>&1 &
 else
-  docker-compose -f ${COMPOSE_FILE} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}
-  echo "load balancer"
+  grep -q -c "^  proxy" ${COMPOSE_FILE}
+  if [[ $? -gt 0 ]]; then
+    echo "no load balancer"
+    export SN_CORES=1
+    if [[ -z ${SN_PORT} ]]; then
+      echo "setting sn_port to 80"
+      export SN_PORT=80  # default to port 80 if the SN is fronting requests
+    else
+      echo "SN_PORT is set to: [${SN_PORT}]"
+    fi
+    docker-compose -f ${COMPOSE_FILE} up -d --scale dn=${DN_CORES}
+  else
+    docker-compose -f ${COMPOSE_FILE} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}
+    echo "load balancer"
+  fi
 fi
 
 if [[ ${AWS_S3_GATEWAY} == "http://openio:6007" ]]; then
