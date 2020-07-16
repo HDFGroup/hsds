@@ -1481,7 +1481,7 @@ class DatasetTest(unittest.TestCase):
         chunkinfo_type = {'class': 'H5T_COMPOUND', 'fields': fields }
         req = self.endpoint + "/datasets"
         # Store 40 chunk locations
-        chunkinfo_dims = [40,]
+        chunkinfo_dims = [20,30]
         payload = {'type': chunkinfo_type, 'shape': chunkinfo_dims }
         req = self.endpoint + "/datasets"
         rsp = requests.post(req, data=json.dumps(payload), headers=headers)
@@ -1559,7 +1559,7 @@ class DatasetTest(unittest.TestCase):
         chunkinfo_type = {'class': 'H5T_COMPOUND', 'fields': fields }
         req = self.endpoint + "/datasets"
         # Store 40 chunk locations
-        chunkinfo_dims = [40,]
+        chunkinfo_dims = [20,30]
         payload = {'type': chunkinfo_type, 'shape': chunkinfo_dims }
         req = self.endpoint + "/datasets"
         rsp = requests.post(req, data=json.dumps(payload), headers=headers)

@@ -22,7 +22,7 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict
 from .util.httpUtil import http_post, http_put, http_delete, getHref, jsonResponse
 from .util.idUtil import   isValidUuid, getDataNodeUrl, createObjId, isSchema2Id
 from .util.dsetUtil import  getPreviewQuery
-from .util.arrayUtil import getNumElements
+from .util.arrayUtil import getNumElements, getShapeDims
 from .util.chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk, getContiguousLayout
 from .util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
 from .util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain, getPathForDomain
@@ -35,7 +35,7 @@ from . import hsds_logger as log
 Use chunk layout given in the creationPropertiesList (if defined and layout is valid).
 Return chunk_layout_json
 """
-def validateChunkLayout(shape_json, item_size, layout):
+async def validateChunkLayout(app, shape_json, item_size, layout, bucket=None):
 
     rank = 0
     space_dims = None
@@ -138,7 +138,7 @@ def validateChunkLayout(shape_json, item_size, layout):
             msg = "'chunks' key must be provided for H5D_CHUNKED_REF layout"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-    elif layout_class == 'H5D_CHUNKED_REF_INDIRECT':
+    elif layout_class == 'H5D_CHUNKED_REF_INDIRECT': 
         # reference to a dataset in a traditional HDF5 files with chunked storage using an auxillary dataset
         if item_size == 'H5T_VARIABLE':
             # can't be used with variable types..
@@ -152,6 +152,29 @@ def validateChunkLayout(shape_json, item_size, layout):
             raise HTTPBadRequest(reason=msg)
         if "chunk_table" not in layout:
             msg = "'chunk_table' key must be provided for H5D_CHUNKED_REF_INDIRECT layout"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        chunktable_id = layout["chunk_table"]
+        if not isValidUuid(chunktable_id, "Dataset"):
+            msg = f"Invalid chunk table id: {chunktable_id}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        # verify the chunk table exists and is of reasonable shape
+        try:
+            chunktable_json = await getObjectJson(app, chunktable_id, bucket=bucket, refresh=False)
+        except HTTPNotFound:
+            msg = f"chunk table id: {chunktable_id} not found"
+            log.warn(msg)
+            raise
+        chunktable_shape = chunktable_json["shape"]
+        if chunktable_shape["class"] == 'H5S_NULL':
+            msg = "Null space datasets can not be used as chunk tables"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+        chunktable_dims = getShapeDims(chunktable_shape)
+        if len(chunktable_dims) != len(space_dims):
+            msg = "Chunk table rank must be same as dataspace rank"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
     elif layout_class == 'H5D_CHUNKED':
@@ -783,7 +806,7 @@ async def POST_Dataset(request):
         if 'layout' in creationProperties:
             layout = creationProperties["layout"]
 
-            validateChunkLayout(shape_json, item_size, layout)
+            await validateChunkLayout(app, shape_json, item_size, layout, bucket=bucket)
 
     if layout is None and shape_json["class"] != "H5S_NULL":
         # default to chunked layout
