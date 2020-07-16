@@ -195,6 +195,10 @@ async def save_metadata_obj(app, obj_id, obj_json, bucket=None, notify=False, fl
         log.error("Domain not in partition")
         raise HTTPInternalServerError()
 
+    if  isValidChunkId(obj_id):
+        log.warn(f"save_metadata_obj {obj_id} not supported for chunks")
+        raise HTTPBadRequest()
+
     dirty_ids = app["dirty_ids"]
     deleted_ids = app['deleted_ids']
     if obj_id in deleted_ids:
@@ -212,7 +216,11 @@ async def save_metadata_obj(app, obj_id, obj_json, bucket=None, notify=False, fl
     meta_cache[obj_id] = obj_json
 
     meta_cache.setDirty(obj_id)
-    now = int(time.time())
+    now = time.time()
+    log.debug(f"setting dirty_ids[{obj_id}] = ({now}, {bucket})")
+    if isValidUuid(obj_id) and not bucket:
+        log.warn(f"bucket is not defined for save_metadata_obj: {obj_id}")
+    dirty_ids[obj_id] = (now, bucket)
 
     if flush:
         # write to S3 immediately
@@ -230,16 +238,13 @@ async def save_metadata_obj(app, obj_id, obj_json, bucket=None, notify=False, fl
         if obj_id in dirty_ids:
             log.warn(f"save_metadata_obj flush - object {obj_id} is still dirty")
         # message AN immediately if notify flag is set
-        # otherwise AN will be notified at next S3 sync
+        # otherwise node for root will be notified at next S3 sync
         if notify:
+            log.debug(f"save_metadata_obj - sending notify for {obj_id}")
             if isValidUuid(obj_id) and isSchema2Id(obj_id):
                 root_id = getRootObjId(obj_id)
                 await notify_root(app, root_id, bucket=bucket)
-    else:
-        log.debug(f"setting dirty_ids[{obj_id}] = ({now}, {bucket})")
-        if isValidUuid(obj_id) and  not bucket:
-            log.warn(f"bucket is not defined for save_metadata_obj: {obj_id}")
-        dirty_ids[obj_id] = (now, bucket)
+        
 
 
 
@@ -425,7 +430,7 @@ def save_chunk(app, chunk_id, bucket=None):
 
     # async write to S3
     dirty_ids = app["dirty_ids"]
-    now = int(time.time())
+    now = time.time()
     dirty_ids[chunk_id] = (now, bucket)
 
 async def write_s3_obj(app, obj_id, bucket=None):
@@ -476,7 +481,7 @@ async def write_s3_obj(app, obj_id, bucket=None):
     if obj_id in dirty_ids:
         last_update_time = dirty_ids[obj_id][0]  # timestamp is first element of two-tuple
     else:
-        log.warn(f"expected to find {obj_id} in dirty_ids")
+        log.debug(f"write_s3_obj - {obj_id} not in dirty_ids, assuming flush write")
     if last_update_time > now:
         msg = f"last_update time {last_update_time} is in the future for obj_id: {obj_id}"
         log.error(msg)
@@ -561,7 +566,13 @@ async def write_s3_obj(app, obj_id, bucket=None):
             log.debug(f"removing pending s3 write task for {obj_id}")
             del pending_s3_write_tasks[obj_id]
         # clear dirty flag
-        if obj_id in dirty_ids and dirty_ids[obj_id][0] == last_update_time and success:
+        if obj_id not in dirty_ids:
+            log.warn(f"write_s3_obj - expected to find id: {obj_id} in dirty_ids")
+        elif not success:
+            log.warn(f"write_s3_obj - write not successful, for {obj_id} keeping dirty flag")
+        elif dirty_ids[obj_id][0] > last_update_time:
+            log.warn(f"write_s3_obj - {obj_id} has been modified during write, keeping dirty flag")
+        else:
             log.debug(f"clearing dirty flag for {obj_id}")
             del dirty_ids[obj_id]
 
