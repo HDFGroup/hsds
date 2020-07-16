@@ -63,7 +63,10 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
 
     log.debug(f"item size: {item_size}")
 
-    dims = getShapeDims(shape_json)  # throws 400 for HS_NULL dsets
+    dims = getShapeDims(shape_json)  # returns None for HS_NULL dsets
+
+    if dims is None:
+        return  # null dataspace
 
     if item_size == 'H5T_VARIABLE':
         # arbitrary lgoical size for vaariable, so just set to allocated size

@@ -451,7 +451,7 @@ async def write_s3_obj(app, obj_id, bucket=None):
     if isValidDomain(obj_id):
         domain_bucket = getBucketForDomain(obj_id)
         if bucket and bucket != domain_bucket:
-            log.error(f"expected bucket for domain: {obj_id} to match what wsas passed to write_s3_obj")
+            log.error(f"expected bucket for domain: {obj_id} to match what was passed to write_s3_obj")
         else:
             bucket = domain_bucket
 
@@ -645,7 +645,7 @@ async def s3sync(app):
                 log.debug(f"key {s3key} has a pending write task")
                 create_task = False
                 if obj_id not in pending_s3_write_tasks:
-                    log.error(f"expected to find {obj_id} in pending_s3_write_tasks")
+                    log.warn(f"expected to find {obj_id} in pending_s3_write_tasks")
         if create_task:
             if len(pending_s3_write_tasks) < MAX_PENDING_WRITE_REQUESTS:
                 # create a task to write this object
