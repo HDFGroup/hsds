@@ -23,6 +23,7 @@ install:
   - pyflakes hsds/*.py
   - pyflakes hsds/util/*.py
   - cp admin/config/passwd.default admin/config/passwd.txt
+  - cp admin/config/groups.default admin/config/group.txt
   - docker build -t hdfgroup/hsds .
 script:
   - echo "ROOT_DIR:" $ROOT_DIR
