@@ -609,20 +609,22 @@ class DomainTest(unittest.TestCase):
 
         # delete the domain with the admin account
         try:
+            admin_username = config.get("admin_username")
             admin_passwd = config.get("admin_password")
-            headers = helper.getRequestHeaders(domain=domain, username="admin", password=admin_passwd)
+            headers = helper.getRequestHeaders(domain=domain, username=admin_username, password=admin_passwd)
             rsp = requests.delete(req, headers=headers)
             self.assertEqual(rsp.status_code, 200)
         except KeyError:
-            print("Skipping admin delete test, set ADMIN_PASSWORD environment variable to enable")
+            print("Skipping admin delete test, set ADMIN_USERNAME and ADMIN_PASSWORD environment variables to enable")
 
         # try creating a folder using the owner flag
         try:
+            admin_username = config.get("admin_username")
             admin_passwd = config.get("admin_password")
             username = config.get("user2_name")
             new_domain = f"{self.base_domain}/{username}_folder"
             body = {"folder": True, "owner": username}
-            headers = helper.getRequestHeaders(domain=new_domain, username="admin", password=admin_passwd)
+            headers = helper.getRequestHeaders(domain=new_domain, username=admin_username, password=admin_passwd)
             rsp = requests.put(req, headers=headers, data=json.dumps(body))
             self.assertEqual(rsp.status_code, 201)
 
@@ -631,7 +633,7 @@ class DomainTest(unittest.TestCase):
             self.assertEqual(rsp.status_code, 200)
             rspJson = json.loads(rsp.text)
         except KeyError:
-            print("Skipping domain create with owner test, set ADMIN_PASSWORD environment variable to enable")
+            print("Skipping domain create with owner test, set ADMIN_USERNAME and ADMIN_PASSWORD environment variables to enable")
 
 
         # TBD - try deleting a top-level domain

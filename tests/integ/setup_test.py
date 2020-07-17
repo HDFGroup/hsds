@@ -32,9 +32,10 @@ class SetupTest(unittest.TestCase):
         # get headers for admin account if config is setup
         admin_headers = None
         try:
+            admin_username = config.get("admin_username")
             admin_passwd = config.get("admin_password")
-            print("got admin_passwd: ", "*"*len(admin_passwd))
-            admin_headers = helper.getRequestHeaders(username="admin", password=admin_passwd)
+            print("using admin account:", admin_username, "admin_passwd: ", "*"*len(admin_passwd))
+            admin_headers = helper.getRequestHeaders(username=admin_username, password=admin_passwd)
         except KeyError:
             pass
 
@@ -45,7 +46,7 @@ class SetupTest(unittest.TestCase):
 
         if rsp.status_code == 404:
             if not admin_headers:
-                print("/home folder doesn't exist, set ADMIN_PASSWORD environment variable to enable creation")
+                print("/home folder doesn't exist, set ADMIN_USERNAME AND ADMIN_PASSWORD environment variableS to enable creation")
                 self.assertTrue(False)
             # Setup /home folder
             print("create home folder")
@@ -72,7 +73,7 @@ class SetupTest(unittest.TestCase):
         print(f"{user_domain} get status: {rsp.status_code}")
         if rsp.status_code == 404:
             if not admin_headers:
-                print(f"{user_domain} folder doesn't exist, set ADMIN_PASSWORD environment variable to enable creation")
+                print(f"{user_domain} folder doesn't exist, set ADMIN_USERNAME and ADMIN_PASSWORD environment variable to enable creation")
                 self.assertTrue(False)
             # Setup user home folder
             print("create user folder")

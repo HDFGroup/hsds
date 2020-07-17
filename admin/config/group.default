@@ -1,0 +1,5 @@
+# Example group file
+# copy to groups.txt and restart the server to enable these groups
+#
+admins: admin
+test_group: test_user1 test_user2

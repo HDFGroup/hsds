@@ -42,12 +42,14 @@ metadata_mem_cache_size: 128m  # 128 MB - metadata cache size per DN node
 chunk_mem_cache_size: 128m  # 128 MB - chunk cache size per DN node
 timeout: 30     # http timeout - 30 sec
 password_file: /config/passwd.txt  # filepath to a text file of username/passwords. set to '' for no-auth access
+groups_file: /config/groups.txt     # filepath to text file defining user groups
 server_name: Highly Scalable Data Service (HSDS)  # this gets returned in the about request
 greeting: Welcome to HSDS!
 about: HSDS is a webservice for HDF data
 top_level_domains: []  # list of possible top-level domains, example: ["/home", "/shared"], if empty all top-level folders in default bucket will be returned
 cors_domain: "*"     # domains allowed for CORS
 admin_user: admin  # user with admin privileges
+admin_group: admins  # enable admin privileges for any user in this group
 openid_provider: azure  # OpenID authentication provider
 openid_audience: null # OpenID audience. This is synonymous with azure_resource_id for azure.
 openid_claims: unique_name,appid   # Comma seperated list of claims to resolve to usernames.
