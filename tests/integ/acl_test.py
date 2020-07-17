@@ -48,14 +48,12 @@ class AclTest(unittest.TestCase):
         req = helper.getEndpoint() + '/acls/default'
         rsp = requests.get(req, headers=headers)
         if config.get("default_public"):
-            print("default_public")
             self.assertEqual(rsp.status_code, 200)
             self.assertEqual(rsp.headers['content-type'], 'application/json; charset=utf-8')
             rsp_json = json.loads(rsp.text)
             self.assertTrue("acl" in rsp_json)
             self.assertTrue("hrefs" in rsp_json)
             acl = rsp_json["acl"]
-            print("acl:", acl)
             self.assertEqual(len(acl.keys()), len(acl_keys) + 1)
             for k in acl_keys:
                 self.assertTrue(k in acl)
@@ -64,7 +62,6 @@ class AclTest(unittest.TestCase):
                 else:
                     self.assertEqual(acl[k], False)
         else:
-            print("no default public")
             self.assertTrue(rsp.status_code == 404)
 
         # get the root id
@@ -231,7 +228,6 @@ class AclTest(unittest.TestCase):
         # create an ACL for "test_user2" with read and update access
         user2name = config.get("user2_name")
         req = helper.getEndpoint() + '/acls/' + user2name
-        print("req:", req)
         perm = {"read": True, "update": True}
 
         rsp = requests.put(req, headers=headers, data=json.dumps(perm))
@@ -286,7 +282,6 @@ class AclTest(unittest.TestCase):
 
         # create an ACL for with read and update access for the test_group
         req = helper.getEndpoint() + '/acls/' + group_acl
-        print("req:", req)
         perm = {"read": True, "update": True}
 
         rsp = requests.put(req, headers=headers, data=json.dumps(perm))
@@ -299,7 +294,6 @@ class AclTest(unittest.TestCase):
         self.assertTrue("acl" in rsp_json)
         self.assertTrue("hrefs" in rsp_json)
         acl = rsp_json["acl"]
-        print("got acl:", acl)
         self.assertEqual(len(acl.keys()), len(acl_keys) + 2)  # acl_keys + "domain" + "username"
 
         for k in acl_keys:
