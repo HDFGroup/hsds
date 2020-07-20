@@ -66,8 +66,8 @@ For applications that need to run without human intervention, perform the follow
 1. In the Azure Portal, go to Azure Active Directory, and select the App Registration that was created in the "Active Directory Configuration" section above
 2. Under "Certificates and Secrets", create a new client secret.  Copy and save the secret in a secure location as it will only be displayed this one time
 3. Add permissions for any HSDS folder or domains the unattended application will need access to using the hsacl tool.  For example, if an application will be creating domains in the folder: "/home/joebob/mynightlyrun/", run: `hsacl /home/joebob/mynightlyrun/ +crue <client_id>`, where client_id is the hs_ad_app_id from the .hscfg file
-3. In your ".hscfg" file, add the following line: `hs_ad_client_secret - <the secret>`
-4. Remove any ".hstokencfg" file from your home directory if it exists
-5. Clients will now be able to authenticate with server without any prompt using the username of the client id 
+4. In your ".hscfg" file, add the following line: `hs_ad_client_secret = <the secret>`
+5. Remove any ".hstokencfg" file from your home directory if it exists
+6. Clients will now be able to authenticate with server without any prompt using the client id as the username
 
 Note: Rather than modifying the .hscfg file, you can use environment variables instead.  For example, for the client secret, use the following command: `export HS_AD_CLIENT_SECRET=my_secret`.
