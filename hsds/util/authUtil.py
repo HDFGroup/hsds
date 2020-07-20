@@ -556,6 +556,7 @@ def _verifyBearerToken(app, token):
         return None
 
     exp = None
+    log.debug(f"decoded token: {jwt_decode}")
     if "exp" in jwt_decode:
         exp = jwt_decode["exp"]
         if exp < 0:
