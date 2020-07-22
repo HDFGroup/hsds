@@ -15,13 +15,13 @@ Active Directory Server Configuration
 -------------------------------------
 
 In the Azure Portal, go to Azure Active Directory, select "App registrations" and
-click the the plus sign, "New registration" that will be used by the HSDS service.  In the register page, chose an appropriate name for the application and select the desired "Supported account types".
+click the the plus sign: "New registration" that will be used by the HSDS service.  In the register page, chose an appropriate name for the application and select the desired "Supported account types".
 
 In "API permissions", add the following permissions:
 
 * for "Microsoft Graph (2), add "openid, Sign users in", and "User Read, Sign in and read user profile"
 * for "Azure Service Management (1)", add "user_impersernation, Access Azure Service Management as organization user"
-* for "Azure Active Graph (1)", add "User.Read.All, Read all users' full profiles"k
+* for "Azure Active Graph (1)", add "User.Read.All, Read all users' full profiles"
 
 Under "Authentication", choose "https://login.microsoftonline.com/common/oauth2/nativeclient" for "Redirect URIs".
 
@@ -55,11 +55,11 @@ Active Directory Client Configuration
 -------------------------------------
 
 In the Azure Portal, go to Azure Active Directory, select "App registrations" and
-click the the plus sign, "New registration" that will be used by the HSDS clients.  In the register page, chose an appropriate name for the application and select the desired "Supported account types".
+click the the plus sign: "New registration" that will be used by the HSDS clients.  In the register page, chose an appropriate name for the application and select the desired "Supported account types".
 
 In "API permissions", add the following permissions:
 
-* for "APIs myu organization users", select the HSDS server application.  Choose "Delegated permissions" and add permissions for the HSDS scope
+* for "APIs my organization users", select the HSDS server application.  Choose "Delegated permissions" and add permissions for the HSDS scope
 * for "Azure Active Graph (1)", add "User.Read.All, Read all users' full profiles"
 
 Under "Authentication", choose "https://login.microsoftonline.com/common/oauth2/nativeclient" for "Redirect URIs".
