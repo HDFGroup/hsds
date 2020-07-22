@@ -11,15 +11,25 @@ Active Directory authtication can be used in combination with accounts managed b
 
 The following sections describe how to setup Active Directory, HSDS, and the client to use AD authentication.
 
-Active Directory Configuration
-------------------------------
+Active Directory Server Configuration
+-------------------------------------
 
 In the Azure Portal, go to Azure Active Directory, select "App registrations" and
-click the the plus sign, "New registration".  In the register page, chose an appropriate name for the application and select the desired "Supported account types".
+click the the plus sign, "New registration" that will be used by the HSDS service.  In the register page, chose an appropriate name for the application and select the desired "Supported account types".
 
-In "API permissions", add permissions for "Microsoft Graph, openid", and "Microsoft Graph, User Read".
+In "API permissions", add the following permissions:
+
+* for "Microsoft Graph (2), add "openid, Sign users in", and "User Read, Sign in and read user profile"
+* for "Azure Service Management (1)", add "user_impersernation, Access Azure Service Management as organization user"
+* for "Azure Active Graph (1)", add "User.Read.All, Read all users' full profiles"k
 
 Under "Authentication", choose "https://login.microsoftonline.com/common/oauth2/nativeclient" for "Redirect URIs".
+
+Also under "Authenticaton", toggle "Yes" for "Treat application as a public client"
+
+In "Expose an API", enter an "Application ID URI"  (e.g. "api;://hsds_server")
+
+Also in "Expose an API", add a scope with "Who can consent?" as "Admins only".
 
 In the overview section, note the "Application (client) ID" value, the "Directory (tenant) ID" value, and udner "Manifest" the "resourceAppId" value.  You'll need these for HSDS and client configuration steps (see below).
 
@@ -30,8 +40,7 @@ In the hsds/admin/config directory, create the file "override.yml" if it doesn't
 
 In the override.yml file, create the following two lines:
 
-    azure_app_id: 12345678-1234-1234-abcd-123456789ab          # App ID value for your AD application
-    azure_resource_id: 00000002-0000-0000-c000-000000000000    # Resource ID for your AD application
+    azure_resource_id: 12345678-1234-1234-abcd-123456789ab          # client id value for AD server application
 
 If you would like to use a AD username as the server administrative account instead of "admin", add the following
 to override.yml:
@@ -42,15 +51,33 @@ The admin_user override is required if using AD authentication exclusively.
 
 Save the file and then stop and start the server for the configuration changes to take effect.
 
+Active Directory Client Configuration
+-------------------------------------
+
+In the Azure Portal, go to Azure Active Directory, select "App registrations" and
+click the the plus sign, "New registration" that will be used by the HSDS clients.  In the register page, chose an appropriate name for the application and select the desired "Supported account types".
+
+In "API permissions", add the following permissions:
+
+* for "APIs myu organization users", select the HSDS server application.  Choose "Delegated permissions" and add permissions for the HSDS scope
+* for "Azure Active Graph (1)", add "User.Read.All, Read all users' full profiles"
+
+Under "Authentication", choose "https://login.microsoftonline.com/common/oauth2/nativeclient" for "Redirect URIs".
+
+Also under "Authenticaton", toggle "Yes" for "Treat application as a public client"
+
+
+In the overview section, note the "Application (client) ID" value, the "Directory (tenant) ID" value, and udner "Manifest" the "resourceAppId" value.  You'll need these for the client configuration steps (see below).
+
 Client Configuration
 --------------------
 
 On each client machine(s), create a file ".hscfg" in the user's home folder with the following lines:
 
 1. `hs_endpoint = <server_endpoint>`
-2. `hs_ad_app_id = <AD Application (client) ID>`
+2. `hs_ad_app_id = <AD HSDS Client Application (client) ID>`
 3. `hs_ad_tenant_id = <AD tenant_id>`
-4. `hs_ad_resource_id = <AD resource id>`
+4. `hs_ad_resource_id = <AD HSDS client Application (client) id>`
 
 Test by running: `$hstouch /home/<username>/foo.h5` where `/home/<username>/` has the approriate ACL as explained in the introduction.
 You will be prompted to enter a code to authenticate via Active Directory.
@@ -63,11 +90,10 @@ Unattended Authentication
 
 For applications that need to run without human intervention, perform the following steps:
 
-1. In the Azure Portal, go to Azure Active Directory, and select the App Registration that was created in the "Active Directory Configuration" section above
+1. In the Azure Portal, go to Azure Active Directory, and select the App Registration that was created in the "Active Directory Client Configuration" section above
 2. Under "Certificates and Secrets", create a new client secret.  Copy and save the secret in a secure location as it will only be displayed this one time
 3. Add permissions for any HSDS folder or domains the unattended application will need access to using the hsacl tool.  For example, if an application will be creating domains in the folder: "/home/joebob/mynightlyrun/", run: `hsacl /home/joebob/mynightlyrun/ +crue <client_id>`, where client_id is the hs_ad_app_id from the .hscfg file
 4. In your ".hscfg" file, add the following line: `hs_ad_client_secret = <the secret>`
-5. Remove any ".hstokencfg" file from your home directory if it exists
-6. Clients will now be able to authenticate with server without any prompt using the client id as the username
+5. Clients will now be able to authenticate with server without any prompt using the client id as the username
 
 Note: Rather than modifying the .hscfg file, you can use environment variables instead.  For example, for the client secret, use the following command: `export HS_AD_CLIENT_SECRET=my_secret`.
