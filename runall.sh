@@ -87,7 +87,7 @@ fi
 
 if [[ -z $AWS_IAM_ROLE ]] && [[ $AWS_S3_GATEWAY ]]; then
   # if not using s3 or S3 without EC2 IAM roles, need to define AWS access keys
-  [[ -z ${AWS_ACCESS_KEY_ID} ]] && echo "Need to set AWS_ACCESS_KEY_ID" && exit 1
+  [[ -z ${AWS_ACCESS_KEY_ID} ]] && echo "Need to set AWS_ACCESS_KEY_ID or AWS_IAM_ROLE" && exit 1
   [[ -z ${AWS_SECRET_ACCESS_KEY} ]] && echo "Need to set AWS_SECRET_ACCESS_KEY" && exit 1
 fi
 
