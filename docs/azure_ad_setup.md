@@ -18,20 +18,12 @@ In the Azure Portal, go to Azure Active Directory, select "App registrations" an
 click the the plus sign: "New registration" that will be used by the HSDS service.  In the register page, chose an appropriate name for the application and select the desired "Supported account types".
 
 In "API permissions", add the following permissions:
-
-* for "Microsoft Graph (2), add "openid, Sign users in", and "User Read, Sign in and read user profile"
-* for "Azure Service Management (1)", add "user_impersernation, Access Azure Service Management as organization user"
-* for "Azure Active Graph (1)", add "User.Read.All, Read all users' full profiles"
-
-Under "Authentication", choose "https://login.microsoftonline.com/common/oauth2/nativeclient" for "Redirect URIs".
-
-Also under "Authenticaton", toggle "Yes" for "Treat application as a public client"
-
+ 
 In "Expose an API", enter an "Application ID URI"  (e.g. "api;://hsds_server")
 
 Also in "Expose an API", add a scope with "Who can consent?" as "Admins only".
 
-In the overview section, note the "Application (client) ID" value, the "Directory (tenant) ID" value, and udner "Manifest" the "resourceAppId" value.  You'll need these for HSDS and client configuration steps (see below).
+In the overview section, note the "Application (client) ID" value, and the "Directory (tenant) ID" value.  You'll need these for HSDS and client configuration steps (see below).
 
 HSDS Configuration
 ------------------
@@ -55,19 +47,17 @@ Active Directory Client Configuration
 -------------------------------------
 
 In the Azure Portal, go to Azure Active Directory, select "App registrations" and
-click the the plus sign: "New registration" that will be used by the HSDS clients.  In the register page, chose an appropriate name for the application and select the desired "Supported account types".
+click the the plus sign, "New registration" that will be used by the HSDS clients.  In the register page, chose an appropriate name for the application and select the desired "Supported account types".
 
-In "API permissions", add the following permissions:
+In "API permissions", add the following permission:
 
 * for "APIs my organization users", select the HSDS server application.  Choose "Delegated permissions" and add permissions for the HSDS scope
-* for "Azure Active Graph (1)", add "User.Read.All, Read all users' full profiles"
 
 Under "Authentication", choose "https://login.microsoftonline.com/common/oauth2/nativeclient" for "Redirect URIs".
 
 Also under "Authenticaton", toggle "Yes" for "Treat application as a public client"
 
-
-In the overview section, note the "Application (client) ID" value, the "Directory (tenant) ID" value, and udner "Manifest" the "resourceAppId" value.  You'll need these for the client configuration steps (see below).
+In the overview section, note the "Application (client) ID" value, and the "Directory (tenant) ID" value.  You'll need these for the client configuration steps (see below).
 
 Client Configuration
 --------------------
@@ -77,7 +67,7 @@ On each client machine(s), create a file ".hscfg" in the user's home folder with
 1. `hs_endpoint = <server_endpoint>`
 2. `hs_ad_app_id = <AD HSDS Client Application (client) ID>`
 3. `hs_ad_tenant_id = <AD tenant_id>`
-4. `hs_ad_resource_id = <AD HSDS client Application (client) id>`
+4. `hs_ad_resource_id = <AD HSDS Server Application (client) id>`
 
 Test by running: `$hstouch /home/<username>/foo.h5` where `/home/<username>/` has the approriate ACL as explained in the introduction.
 You will be prompted to enter a code to authenticate via Active Directory.
