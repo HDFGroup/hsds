@@ -159,9 +159,11 @@ async def getStorBytes(app, key, shuffle=0, deflate_level=None, offset=0, length
                 log.info(f"zlib_err: {zlib_error}")
                 log.warn(f"unable to uncompress obj: {key}")
         if shuffle > 0:
+            log.debug(f"shuffle is {shuffle}")
             unshuffled = _unshuffle(shuffle, data)
-            log.info(f"unshuffled to {len(unshuffled)} bytes")
-            data = unshuffled
+            if unshuffled is not None:
+                log.debug(f"unshuffled to {len(unshuffled)} bytes")
+                data = unshuffled
 
     return data
 
@@ -194,8 +196,9 @@ async def putStorBytes(app, key, data, shuffle=0, deflate_level=None, bucket=Non
     log.info(f"putStorBytes({bucket}/{key}), {len(data)} bytes shuffle: {shuffle} deflate: {deflate_level}")
     if shuffle > 0:
         shuffled_data = _shuffle(shuffle, data)
-        log.info(f"shuffled data to {len(shuffled_data)}")
-        data = shuffled_data
+        if shuffled_data is not None:
+            log.info(f"shuffled data to {len(shuffled_data)}")
+            data = shuffled_data
 
     if deflate_level is not None:
         try:
