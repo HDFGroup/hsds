@@ -53,9 +53,9 @@ Detailed Install Instructions
 
 See: [docs/docker_install_aws.md](docs/docker_install_aws.md) for complete install instructions.
 
-See: [docs/kubernetes_install.md](kubernetes_install.md) for setup on Kubernetes.
+See: [docs/kubernetes_install.md](kubernetes_install_aws.md) for setup on Kubernetes.
 
-**On Azure** **(BETA)**
+**On Azure** 
 
 For complete instructions to install on a single Azure VM:
 - See: [docs/docker_install_azure.md](docs/docker_install_azure.md)
@@ -63,15 +63,26 @@ For complete instructions to install on a single Azure VM:
 For complete instructions to install on Azure Kubernetes Service (AKS):
 - See: [docs/kubernetes_install_azure.md](docs/kubernetes_install_azure.md)
 
+**On Prem (POSIX-based storage)** 
+
+For complete instructions to install on a desktop or local server:
+- See: [docs/docker_install_posix.md](docs/docker_install_posix.md)
+
 **On DCOS** **(BETA)**
 
 For complete instructions to install on DCOS:
 - See: [docs/docker_install_dcos.md](docs/docker_install_dcos.md)
 
-**On Prem (POSIX-based storage)**  **(BETA)**
+**General Install Topics**
 
-For complete instructions to install on a desktop or local server:
-- See: [docs/docker_install_posix.md](docs/docker_install_posix.md)
+Setting up docker:
+- See [docs/setup_docker.md](docs/setup_docker.md)
+
+Post install setup and testing:
+- See [docs/post_install.md](docs/post_install.md)
+
+Authorization, ACLs, and Role Based Access Control (RBAC):
+- See [docs/authorization.mid](docs/authorization.md)
 
 Writing Client Applications
 ----------------------------

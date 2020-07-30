@@ -12,15 +12,16 @@ Export environment variables as shown in "Sample .bashrc" below.
 5. Install Docker and docker-compose if necessary.  See [Docker Setup](setup_docker.md)
 6. Get project source code: `$ git clone https://github.com/HDFGroup/hsds`
 7. Go to admin/config directory: `$ cd hsds/admin/config`
-8. Copy the file "passwd.default" to "passwd.txt".  Add any usernames/passwords you wish.  Modify existing passwords (for admin, test_user1, test_user2) for security.
-9. If a non-valid DNS name is used for the HSDS_ENDPOINT (e.g. "hsds.hdf.test"), create a /etc/hosts entry for the DNS name
-10. Verify the environment variables as in "Sample .bashrc" below
-11. For a custom build, , build docker image:  `$ docker build -t hdfgroup/hsds .`
-12. Create the file **admin/config/override.yml** for deployment specific settings (see "Sample override.yml")
-13. Start the service `$./runall.sh <n>` where n is the number of containers desired (defaults to 1)
-14. Run `$ docker ps` and verify that the containers are running: hsds_head, hsds_sn_[1-n], hsds_dn_[1-n]
-15. Go to <http://hsds.hdf.test/about> and verify that "cluster_state" is "READY" (might need to give it a minute or two)
-16. Perform post install configuration.   See: [Post Install Configuration](post_install.md)
+8. Copy the file "passwd.default" to "passwd.txt".  Add any usernames/passwords you wish.  Modify existing passwords (for admin, test_user1, test_user2) for security
+9. If group-level permissions are desired (See [Authorization](authorization.md)), copy the file "groups.default" to "groups.txt".  Modify existing groups as needed
+10. If a non-valid DNS name is used for the HSDS_ENDPOINT (e.g. "hsds.hdf.test"), create a /etc/hosts entry for the DNS name
+11. Verify the environment variables as in "Sample .bashrc" below
+12. For a custom build, build docker image:  `$ docker build -t hdfgroup/hsds .`
+13. Create the file **admin/config/override.yml** for deployment specific settings (see "Sample override.yml")
+14. Start the service `$./runall.sh <n>` where n is the number of containers desired (defaults to 1)
+15. Run `$ docker ps` and verify that the containers are running: hsds_head, hsds_sn_[1-n], hsds_dn_[1-n]
+16. Go to <http://hsds.hdf.test/about> and verify that "cluster_state" is "READY" (might need to give it a minute or two)
+17. Perform post install configuration.   See: [Post Install Configuration](post_install.md)
 
 
 Sample .bashrc
