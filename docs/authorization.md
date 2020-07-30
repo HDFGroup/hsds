@@ -62,29 +62,29 @@ the same as for authenticated users who are not "joe" or "ann".
 For example, the following unauthenticated (no HTTP Authorization header) 
 requests on the domain would be granted or denied as follows
 
-* GET /datasets/<id> - granted (returns HTTP Status 200 - OK)
-* POST /datasets/<id>/value - granted (returns HTTP Status 200 - OK)
-* PUT /datasets/<id>/shape) - denied (returns HTTP Status 401 - Unauthorized)
-* PUT /datasets/<id>/attributes/<name> - denied (returns HTTP Status 401 - Unauthorized)
-* DELETE /datasets/<id>  - denied (returns HTTP Status 401 - Unauthorized)
+* GET /datasets/&lt;id&gt; - granted (returns HTTP Status 200 - OK)
+* POST /datasets/&lt;id&gt;/value - granted (returns HTTP Status 200 - OK)
+* PUT /datasets/&lt;id&gt;/shape) - denied (returns HTTP Status 401 - Unauthorized)
+* PUT /datasets/&lt;id&gt;/attributes/&lt;name&gt; - denied (returns HTTP Status 401 - Unauthorized)
+* DELETE /datasets/&lt;id&gt;  - denied (returns HTTP Status 401 - Unauthorized)
 
 The same response would be returned for an authenticated request where the user is neither 'joe' or 'ann'.
 
 Next the same set of requests are sent with 'joe' as the user in the HTTP Authorization header:
 
-* GET /datasets/<id> - granted (returns HTTP Status 200 - OK)
-* POST /datasets/<id>/value - granted (returns HTTP Status 200 - OK)
-* PUT /datasets/<id>/shape) - grant (returns HTTP Status 200 - OK)
-* PUT /datasets/<id>/attributes/<name> - denied (returns HTTP Status 403 - Forbidden)
-* DELETE /datasets/<id>  - denied (returns HTTP Status 403 - Forbidden)
+* GET /datasets/&lt;id&gt; - granted (returns HTTP Status 200 - OK)
+* POST /datasets/&lt;id&gt;/value - granted (returns HTTP Status 200 - OK)
+* PUT /datasets/&lt;id&gt;/shape) - grant (returns HTTP Status 200 - OK)
+* PUT /datasets/&lt;id&gt;/attributes/&lt;name&gt; - denied (returns HTTP Status 403 - Forbidden)
+* DELETE /datasets/&lt;id&gt; - denied (returns HTTP Status 403 - Forbidden)
 
 Finally the same set of requests are sent with 'ann' as the user:
 
-* GET /datasets/<id> - granted (returns HTTP Status 200 - OK)
-* POST /datasets/<id>/value - granted (returns HTTP Status 200 - OK)
-* PUT /datasets/<id>/shape) - grant (returns HTTP Status 200 - OK)
-* PUT /datasets/<id>/attributes/<name> - denied (returns HTTP Status 201 - Created)
-* DELETE /datasets/<id>  - denied (returns HTTP Status 200 - OK)
+* GET /datasets/&lt;id&gt; - granted (returns HTTP Status 200 - OK)
+* POST /datasets/&lt;id&gt;/value - granted (returns HTTP Status 200 - OK)
+* PUT /datasets/&lt;id&gt;/shape) - grant (returns HTTP Status 200 - OK)
+* PUT /datasets/&lt;id&gt;/attributes/&lt;name&gt; - denied (returns HTTP Status 201 - Created)
+* DELETE /datasets/&lt;id&gt;  - denied (returns HTTP Status 200 - OK)
  
 Note: HTTP Status 401 basically says: "you can't have access until you tell me who your are", 
 while HTTP Status 403 says: "I know who you are, but you don't have permissions to access this
@@ -93,12 +93,12 @@ resource."
 Creating and Managing ACLs
 --------------------------
 
-New ACLs can be created (or existing ACLs modified) by using the PUT /acls/<username> request.
+New ACLs can be created (or existing ACLs modified) by using the PUT /acls/&lt;username&gt; request.
 
 Modifications to ACLs require that the requester have the writeACL permission
 (or the request come from an admin user).
 
-To retrieve the ACL for a given user, use the GET /acls/<username> request (requires the readACL permission),
+To retrieve the ACL for a given user, use the GET /acls/&lt;username&gt; request (requires the readACL permission),
 or to retrieve all the ACLs for a given domain or folder, use GET /acls.
 
 To modify ACLs from the command line, the h5pyd package includes a utility "hsacl" for reading and creating ACLs.  Run
@@ -110,7 +110,7 @@ Group ACLs andd RBAC
 Rather than maintain a large number of ACLs for a set of related users (say, "developers"), you create ACLs that apply to
 groups of users; this is known as "Role Based Access Control" or RBAC.
 
-To specify an RBAC that applies to a group of users, use the string: "g:<groupname>" rather than "<username>" in the PUT /acls request.  The <groupname>
+To specify an RBAC that applies to a group of users, use the string: "g:&lt;groupname&gt;" rather than "&lt;username&gt;" in the PUT /acls request.  The &lt;groupname&gt;
 refers to a valid group name defined in hsds/admin/config/groups.txt.  Refer to to the install instructions for your platform for information on creating the user groups.
 
 By using group ACLs, you can control access to a given domain or folder based on "roles" rather than individually managing user ACLs.  As member of a group change, the user's ability to perform a given action will change based on his or her membership in the group without requring any change in the ACLs.
@@ -142,11 +142,11 @@ and that 'ann' and 'joe' are both members of the 'devs' group.
 
 The following requests on the domain sent with 'joe' as the user would be authorized or denied as follows:
 
-* GET /datasets/<id> - granted (returns HTTP Status 200 - OK)
-* POST /datasets/<id>/value - granted (returns HTTP Status 200 - OK)
-* PUT /datasets/<id>/shape) - grant (returns HTTP Status 200 - OK)
-* PUT /datasets/<id>/attributes/<name> - denied (returns HTTP Status 403 - Forbidden)
-* DELETE /datasets/<id>  - denied (returns HTTP Status 403 - Forbidden)
+* GET /datasets/&lt;id&gt; - granted (returns HTTP Status 200 - OK)
+* POST /datasets/&lt;id&gt;/value - granted (returns HTTP Status 200 - OK)
+* PUT /datasets/&lt;id&gt;/shape) - grant (returns HTTP Status 200 - OK)
+* PUT /datasets/&lt;id&gt;/attributes/&lt;name&gt; - denied (returns HTTP Status 403 - Forbidden)
+* DELETE /datasets/&lt;id&gt;  - denied (returns HTTP Status 403 - Forbidden)
 
 The same requests with 'ann' as the requestor would return HTTP Status 200 - OK, since the 'ann' ACL overrides any 
 settings in the 'default' or 'g:devs' ACL.  
