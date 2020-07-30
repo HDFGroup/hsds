@@ -1,6 +1,5 @@
-*********************************
 Authorization and Authentication
-*********************************
+================================
 
 Request Authentication
 -----------------------
@@ -15,8 +14,7 @@ of the domain the request is acting on.
 Access Control Lists
 --------------------
 
-Access Control List (ACL) are key-value stores that are associated with each domain or folder and manage what operations can 
-be performed by a given user.  
+Once a request is authenticated (i.e. the requesting user is verifyied) it is then authorized (i.e. determine if the user is allowed to perform a specific action, say deleting a domain).  To do this Access Control Lists (ACLs) are associatted with each domain or folder and they determine which actions are permitted for each user (or user group). 
 
 Each ACL consists of 1 or more items in the form:
 
@@ -44,13 +42,13 @@ Example
 
 Suppose a given domain has the following ACL:
 
-========   ====  ======   ======  ======  =======  ========
-username   read  create   update  delete  readACL  writeACL
-========   ====  ======   ======  ======  =======  ========
-default    true  false    false   false   false    false
-joe        true  false    true    false   false    false
-ann        true  true     true    true    true     true
-========   ====  ======   ======  ======  =======  ========
+    ========   ====  ======   ======  ======  =======  ========
+    username   read  create   update  delete  readACL  writeACL
+    ========   ====  ======   ======  ======  =======  ========
+    default    true  false    false   false   false    false
+    joe        true  false    true    false   false    false
+    ann        true  true     true    true    true     true
+    ========   ====  ======   ======  ======  =======  ========
 
 This ACL would enable anyone to read (perform GET requests).  User 'joe' would be able 
 to read and update the domain (e.g. modify values in a dataset).  While user 'ann' would have full 
@@ -103,11 +101,13 @@ or to retrieve all the ACLs for a given domain or folder, use GET /acls.
 To modify ACLs from the command line, the h5pyd package includes a utility "hsacl" for reading and creating ACLs.  Run
 "hsacl --help" for usage information.
 
-Group ACLs
-----------
+Group ACLs andd RBAC
+--------------------
 
-Rather than maintain a large number of ACLs for a set of related users (say, "developers"), you create ACLs that 
-represent of group of users by using the string: "g:<groupname>" rather than "<username>" in the request.  The <groupname>
+Rather than maintain a large number of ACLs for a set of related users (say, "developers"), you create ACLs that apply to
+groups of users; this is known as "Role Based Access Control" or RBAC.
+
+To specify an RBAC that applies to a group of users, use the string: "g:<groupname>" rather than "<username>" in the PUT /acls request.  The <groupname>
 refers to a valid group name defined in hsds/admin/config/groups.txt.  Refer to to the install instructions for your platform for information on creating the user groups.
 
 By using group ACLs, you can control access to a given domain or folder based on "roles" rather than individually managing user ACLs.  As member of a group change, the user's ability to perform a given action will change based on his or her membership in the group without requring any change in the ACLs.
@@ -127,13 +127,13 @@ Group ACL Example
 
 Suppose a given domain has the following ACL:
 
-========   ====  ======   ======  ======  =======  ========
-username   read  create   update  delete  readACL  writeACL
-========   ====  ======   ======  ======  =======  ========
-default    true  false    false   false   false    false
-g:devs     true  false    true    false   false    false
-ann        true  true     true    true    true     true
-========   ====  ======   ======  ======  =======  ========
+    ========   ====  ======   ======  ======  =======  ========
+    username   read  create   update  delete  readACL  writeACL
+    ========   ====  ======   ======  ======  =======  ========
+    default    true  false    false   false   false    false
+    g:devs     true  false    true    false   false    false
+    ann        true  true     true    true    true     true
+    ========   ====  ======   ======  ======  =======  ========
 
 and that 'ann' and 'joe' are both members of the 'devs' group.
 
