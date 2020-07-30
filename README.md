@@ -53,7 +53,7 @@ Detailed Install Instructions
 
 See: [docs/docker_install_aws.md](docs/docker_install_aws.md) for complete install instructions.
 
-See: [docs/kubernetes_install.md](kubernetes_install_aws.md) for setup on Kubernetes.
+See: [docs/kubernetes_install_aws.md](docs/kubernetes_install_aws.md) for setup on Kubernetes.
 
 **On Azure** 
 
