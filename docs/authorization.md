@@ -40,7 +40,7 @@ perform any action regardless of the ACLs used in the domain or folder.
 Example
 -------
 
-Suppose a given domain has the following ACL:
+Suppose a given domain has the following ACLs:
 
     ========   ====  ======   ======  ======  =======  ========
     username   read  create   update  delete  readACL  writeACL
@@ -50,14 +50,17 @@ Suppose a given domain has the following ACL:
     ann        true  true     true    true    true     true
     ========   ====  ======   ======  ======  =======  ========
 
-This ACL would enable anyone to read (perform GET requests).  User 'joe' would be able 
+The ACL with username "default" would enable anyone to read (perform GET requests) from the domain. 
+The ACL with username "joe" would enable requests with usename "joe" 
 to read and update the domain (e.g. modify values in a dataset).  While user 'ann' would have full 
 control to do any operation on the domain (including modifying permissions for herself or
-other users).
+other users) based on the ACL with username "ann".
 
-The following unauthenticated (no HTTP Authorization header) 
+If anonymous requests are supported ("allow_noauth" config value is True), the permissions would be
+the same as for authenticated users who are not "joe" or "ann".  
+
+For example, the following unauthenticated (no HTTP Authorization header) 
 requests on the domain would be granted or denied as follows
-(assuming the "allow_noauth" config value is True):
 
 * GET /datasets/<id> - granted (returns HTTP Status 200 - OK)
 * POST /datasets/<id>/value - granted (returns HTTP Status 200 - OK)
@@ -125,7 +128,7 @@ The overall flow for validation is as follows:
 Group ACL Example
 -----------------
 
-Suppose a given domain has the following ACL:
+Suppose a given domain has the following ACLs:
 
     ========   ====  ======   ======  ======  =======  ========
     username   read  create   update  delete  readACL  writeACL
