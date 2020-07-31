@@ -936,9 +936,27 @@ async def PUT_Domain(request):
     else:
         log.debug("no root group, creating folder")
 
+    domain_acls = {}
+    if parent_json and "acls" in parent_json:
+        parent_acls = parent_json["acls"]
+        for user_name in parent_acls:
+            if user_name == "default":
+                continue
+            if user_name == owner:
+                continue
+            acl = parent_acls[user_name]
+            has_action = False
+            # don't copy ACL if all actions are False
+            for k in ("create", "read", "update", "delete", "readACL", "updateACL"):
+                if acl[k]:
+                    has_action = True
+                    break
+            if has_action:
+                # inherit any acls that are not default or owner acls
+                domain_acls[user_name] = parent_acls[user_name]
+
     domain_json = { }
 
-    domain_acls = {}
     # owner gets full control
     domain_acls[owner] = owner_perm
     if config.get("default_public") or is_folder:

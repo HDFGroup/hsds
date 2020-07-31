@@ -428,6 +428,80 @@ class DomainTest(unittest.TestCase):
                 self.assertTrue(k in rspJson)
             self.assertFalse("root" in rspJson)
 
+    def testAclInheritence(self):
+        # this test is here (rather than acl_test.py) since we need to create domains in a folder
+        print("testAclInheritence", self.base_domain)
+        folder = self.base_domain + "/a_folder"
+        headers = helper.getRequestHeaders(domain=folder)
+        req = helper.getEndpoint() + '/'
+        body = {"folder": True}
+        rsp = requests.put(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        default_public = config.get("default_public")
+
+        # create an ACL for "test_user2" with read and update access
+        user2name = config.get("user2_name")
+        req = helper.getEndpoint() + '/acls/' + user2name
+        perm = {"read": True, "update": True}
+
+        rsp = requests.put(req, headers=headers, data=json.dumps(perm))
+        self.assertEqual(rsp.status_code, 201)
+
+        username = config.get("user_name")
+        req = helper.getEndpoint() + '/acls'
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rsp_json = json.loads(rsp.text)
+        self.assertTrue("acls" in rsp_json)
+        acls = rsp_json["acls"]
+        parent_acls = {}
+        for acl in acls:
+            self.assertTrue("userName" in acl)
+            user_name = acl["userName"]
+            parent_acls[user_name] = acl
+        
+        self.assertTrue(user2name in parent_acls)
+        # folders are always public read
+        self.assertTrue("default" in parent_acls)
+
+        # create a domain
+        domain = folder + "/a_domain"
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + '/'
+        body = {}
+        rsp = requests.put(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        for k in ("owner", "acls", "created", "lastModified"):
+             self.assertTrue(k in rspJson)
+
+        # get ACLs for domain
+        req = helper.getEndpoint() + '/acls'
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rsp_json = json.loads(rsp.text)
+        self.assertTrue("acls" in rsp_json)
+        acls = rsp_json["acls"]
+        expected = ["test_user1", "test_user2"]
+        if default_public:
+            expected.append("default")
+        child_acls = {}
+        for acl in acls:
+            self.assertTrue("userName" in acl)
+            user_name = acl["userName"]
+            child_acls[user_name] = acl
+
+        # verify ACLs match  
+        for user_name in expected:
+            self.assertTrue(user_name in child_acls)
+            parent_acl = parent_acls[user_name]
+            child_acl = child_acls[user_name]
+            for k in ("create", "read", "update", "delete", "readACL", "updateACL"):
+                self.assertEqual(parent_acl[k], child_acl[k])
+                
+            
+        
+
     def testDeleteFolderWithChildren(self):
 
         folder_name = "testDeleteFolder"
