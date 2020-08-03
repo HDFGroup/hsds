@@ -21,6 +21,7 @@ from aiohttp.web import json_response
 from .util.idUtil import isValidUuid, isSchema2Id, isRootObjId, getRootObjId
 from .datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj, save_metadata_obj, delete_metadata_obj
 from . import hsds_logger as log
+from . import config
 
 
 async def GET_Group(request):
@@ -127,8 +128,8 @@ async def PUT_Group(request):
     """ Handler for PUT /groups"""
     """ Used to flush all objects under a root group to S3 """
 
-    FLUSH_TIME_OUT = 10.0  # TBD make config
-    FLUSH_SLEEP_INTERVAL = 0.1  # TBD make config
+    flush_time_out = config.get("flush_time_out")
+    flush_sleep_interval = config.get("flush_sleep_interval")
     log.request(request)
     app = request.app
     params = request.rel_url.query
@@ -165,7 +166,7 @@ async def PUT_Group(request):
             flush_set.add(obj_id)
 
     log.debug(f"flushop - waiting on {len(flush_set)} items")
-    while time.time() - flush_start < FLUSH_TIME_OUT:
+    while time.time() - flush_start < flush_time_out:
         # check to see if the items in our flush set are still there
 
         remaining_set = set()
@@ -181,11 +182,11 @@ async def PUT_Group(request):
         if len(flush_set) == 0:
             log.debug("flush op - all objects have been written")
             break
-        log.debug(f"flushop - {len(flush_set)} item remaining, sleeping for {FLUSH_SLEEP_INTERVAL}")
-        await asyncio.sleep(FLUSH_SLEEP_INTERVAL)
+        log.debug(f"flushop - {len(flush_set)} item remaining, sleeping for {flush_sleep_interval}")
+        await asyncio.sleep(flush_sleep_interval)
 
     if len(flush_set) > 0:
-        log.warn(f"flushop - {len(flush_set)} items not updated after {FLUSH_TIME_OUT}")
+        log.warn(f"flushop - {len(flush_set)} items not updated after {flush_time_out}")
         raise HTTPServiceUnavailable()
 
     resp = json_response(None, status=204)  # NO Content response

@@ -460,10 +460,6 @@ async def write_s3_obj(app, obj_id, bucket=None):
         log.error(msg)
         raise KeyError(msg)
 
-    if obj_id not in pending_s3_write_tasks:
-        # don't allow reentrant write
-        log.debug(f"write_s3_obj for {obj_id} not s3sync task")
-
     if obj_id in deleted_ids and isValidUuid(obj_id):
         # if this objid has been deleted (and its unique since this is not a domain id)
         # cancel any pending task and return
@@ -588,17 +584,17 @@ async def write_s3_obj(app, obj_id, bucket=None):
 
 async def s3sync(app):
     """ Periodic method that writes dirty objects in the metadata cache to S3"""
-    MAX_PENDING_WRITE_REQUESTS=20
+    max_pending_write_requests=config.get("max_pending_write_requests")  
     dirty_ids = app["dirty_ids"]
     pending_s3_write = app["pending_s3_write"]
     pending_s3_write_tasks = app["pending_s3_write_tasks"]
-    s3_sync_interval = config.get("s3_sync_interval")
+    s3_sync_task_timeout = config.get("s3_sync_task_timeout")
     dirty_count = len(dirty_ids)
     if not dirty_count:
         log.info("s3sync nothing to update")
         return 0
 
-    log.info(f"s3sync update - dirtyid count: {dirty_count}, active write tasks: {len(pending_s3_write_tasks)}/{MAX_PENDING_WRITE_REQUESTS}")
+    log.info(f"s3sync update - dirtyid count: {dirty_count}, active write tasks: {len(pending_s3_write_tasks)}/{max_pending_write_requests}")
     log.debug(f"s3sync dirty_ids: {dirty_ids}")
     log.debug(f"s3sync pending write s3keys: {list(pending_s3_write.keys())}")
     log.debug(f"s3sync write tasks: {list(pending_s3_write_tasks.keys())}")
@@ -617,8 +613,14 @@ async def s3sync(app):
 
     log.info(f"s3sync - processing {len(dirty_ids)} dirty_ids")
     for obj_id in dirty_ids:
+        if len(pending_s3_write_tasks) >= max_pending_write_requests:
+            log.debug("max_pending_write requests in flight, not processing more dirtyids for this run")
+            break
         item = dirty_ids[obj_id]
         log.debug(f"got item: {item} for obj_id: {obj_id}")
+        time_since_dirty = s3sync_start - item[0]
+        if time_since_dirty < 0.0:
+            log.warn(f"s3sync: expected time since dirty to be positive, but was {time_since_dirty}")
         bucket = item[1]
         if not bucket:
             if "bucket_name" in app and app["bucket_name"]:
@@ -627,35 +629,41 @@ async def s3sync(app):
                 log.error(f"can not determine bucket for s3sync obj_id: {obj_id}")
                 continue
         s3key = getS3Key(obj_id)
-        log.debug(f"s3sync dirty id: {obj_id}, s3key: {s3key} bucket: {bucket}")
-
-        create_task = True
+        log.debug(f"s3sync - dirty id: {obj_id}, s3key: {s3key} bucket: {bucket}")
+  
         if s3key in pending_s3_write:
-            log.debug(f"key {s3key} has been pending for {s3sync_start - pending_s3_write[s3key]}")
-            if s3sync_start - pending_s3_write[s3key] > s3_sync_interval * 2:
-                log.warn(f"obj {obj_id} has been in pending_s3_write for {s3sync_start - pending_s3_write[s3key]} seconds, restarting")
+            pending_time = s3sync_start - pending_s3_write[s3key]
+            log.debug(f"s3sync - key {s3key} has been pending for {pending_time:.3f}")
+            if s3sync_start - pending_s3_write[s3key] > s3_sync_task_timeout:
+                log.warn(f"s3sync - obj {obj_id} has been in pending_s3_write for {pending_time:.3f} seconds, restarting")
                 del pending_s3_write[s3key]
                 if obj_id not in pending_s3_write_tasks:
-                    log.warn(f"Expected to find write task for {obj_id}")
+                    log.warn(f"s3sync - Expected to find write task for {obj_id}")
                 else:
                     task = pending_s3_write_tasks[obj_id]
                     task.cancel()
                     del pending_s3_write_tasks[obj_id]
+                create_task = True
             else:
-                log.debug(f"key {s3key} has a pending write task")
-                create_task = False
+                log.debug(f"s3sync - key {s3key} has a pending write task")
                 if obj_id not in pending_s3_write_tasks:
                     log.warn(f"expected to find {obj_id} in pending_s3_write_tasks")
+                create_task = False
+
+        elif time_since_dirty < 1.0:
+            log.debug(f"s3sync - obj {obj_id} last written {time_since_dirty:.3f} seconds ago, waiting to age")
+            create_task = False
+        else:
+            log.debug(f"s3sync - obj {obj_id} last written {time_since_dirty:.3f} seconds ago, creating write task")
+            create_task = True
+
         if create_task:
-            if len(pending_s3_write_tasks) < MAX_PENDING_WRITE_REQUESTS:
-                # create a task to write this object
-                log.debug(f"s3sync - ensure future for {obj_id}")
-                task = asyncio.ensure_future(write_s3_obj(app, obj_id, bucket=bucket))
-                task.add_done_callback(callback)
-                pending_s3_write_tasks[obj_id] = task
-                update_count += 1
-            else:
-                log.debug(f"s3sync - too many pending tasks, not creating task for: {obj_id} now")
+            # create a task to write this object
+            log.debug(f"s3sync - ensure future for {obj_id}")
+            task = asyncio.ensure_future(write_s3_obj(app, obj_id, bucket=bucket))
+            task.add_done_callback(callback)
+            pending_s3_write_tasks[obj_id] = task
+            update_count += 1
 
 
     # notify root of obj updates
@@ -680,28 +688,26 @@ async def s3sync(app):
 
 async def s3syncCheck(app):
     s3_sync_interval = config.get("s3_sync_interval")
-    long_sleep = config.get("node_sleep_time")
-    short_sleep = long_sleep/100.0
-    last_write_time = 0
 
     while True:
         if app["node_state"] != "READY":
             log.info("s3sync - clusterstate is not ready, sleeping")
-            await asyncio.sleep(long_sleep)
+            await asyncio.sleep(s3_sync_interval)
             continue
         else:
             log.debug("s3sync - clusterstate is {}".format(app["node_state"]))
 
         update_count = await s3sync(app)
-        now = time.time()
         if update_count:
             log.info(f"s3syncCheck {update_count} objects updated")
-            last_write_time = time.time()
 
-        if now - last_write_time < s3_sync_interval:
-            log.debug(f"s3syncCheck sleeping for {short_sleep}")
-            # this will sleep for ~0.1s by default
-            await asyncio.sleep(short_sleep)
+        pending_s3_write_tasks = app["pending_s3_write_tasks"]
+        dirty_ids = app["dirty_ids"]
+
+        if len(pending_s3_write_tasks) > 0 or len(dirty_ids) > 0:
+            log.debug("s3syncCheck short sleep")
+            # give other tasks a chance to run
+            await asyncio.sleep(0)
         else:
-            log.info(f"s3syncCheck no objects to write, sleeping for {long_sleep}")
-            await asyncio.sleep(long_sleep)
+            log.info(f"s3syncCheck no objects to write, sleeping for {s3_sync_interval}")
+            await asyncio.sleep(s3_sync_interval)
