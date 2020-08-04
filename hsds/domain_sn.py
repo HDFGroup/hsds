@@ -941,8 +941,13 @@ async def PUT_Domain(request):
         parent_acls = parent_json["acls"]
         for user_name in parent_acls:
             if user_name == "default":
+                # will be created below if default_public is iset
                 continue
             if user_name == owner:
+                # will be created below
+                continue
+            if isAdminUser(app, user_name):
+                # no need to copy admin ACLs since admin have full authority
                 continue
             acl = parent_acls[user_name]
             has_action = False
