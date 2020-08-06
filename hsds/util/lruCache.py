@@ -106,12 +106,14 @@ class LruCache(object):
         if key not in self._hash:
             raise KeyError(key)
         node = self._hash[key]
+        now = time.time()
         if self._expire_time:
-            now = time.time()
             if (now - node._last_access) > self._expire_time and not node._isdirty:
+                log.debug(f"LRU {self._name} node {key} has been in cache for {now - node._last_access} seconds, expiring")
                 # node is stale - remove
                 self._delNode(key)
                 raise KeyError(key)  # will result in object getting reloaded from storage
+        self._expire_time = now
         return self._hash[key]
 
     def __delitem__(self, key):
