@@ -43,7 +43,9 @@ max_chunks_per_folder: 200000 # max number of chunks per s3 folder. 0 for unlimi
 max_task_count: 100  # maximum number of concurrent tasks before server will return 503 error
 aio_max_pool_connections: 64  # number of connections to keep in conection pool for aiobotocore requests
 metadata_mem_cache_size: 128m  # 128 MB - metadata cache size per DN node
+metadata_mem_cache_expire: 3600  # expire cache items after one hour
 chunk_mem_cache_size: 128m  # 128 MB - chunk cache size per DN node
+chunk_mem_cache_expire: 3600  # expire cache items after one hour
 timeout: 30     # http timeout - 30 sec
 password_file: /config/passwd.txt  # filepath to a text file of username/passwords. set to '' for no-auth access
 groups_file: /config/groups.txt     # filepath to text file defining user groups

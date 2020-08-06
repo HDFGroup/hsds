@@ -192,15 +192,21 @@ def create_app(loop):
     :rtype: aiohttp.web.Application
     """
     metadata_mem_cache_size = int(config.get("metadata_mem_cache_size"))
-    log.info("Using metadata memory cache size of: {}".format(metadata_mem_cache_size))
+    log.info(f"Using metadata memory cache size of: {metadata_mem_cache_size}")
+    metadata_mem_cache_expire = int(config.get("metadata_mem_cache_expire"))
+    log.info(f"Setting metadata cache expire time to: {metadata_mem_cache_expire}")
     chunk_mem_cache_size = int(config.get("chunk_mem_cache_size"))
-    log.info("Using chunk memory cache size of: {}".format(chunk_mem_cache_size))
+    log.info(f"Using chunk memory cache size of: {chunk_mem_cache_size}")
+    chunk_mem_cache_expire = int(config.get("chunk_mem_cache_expire"))
+    log.info(f"Setting chunk cache expire time to: {chunk_mem_cache_expire}")
+
+    
 
     #create the app object
     app = loop.run_until_complete(init(loop))
     app["loop"] = loop
-    app['meta_cache'] = LruCache(mem_target=metadata_mem_cache_size, chunk_cache=False)
-    app['chunk_cache'] = LruCache(mem_target=chunk_mem_cache_size, chunk_cache=True)
+    app['meta_cache'] = LruCache(mem_target=metadata_mem_cache_size, chunk_cache=False, expire_time=metadata_mem_cache_expire)
+    app['chunk_cache'] = LruCache(mem_target=chunk_mem_cache_size, chunk_cache=True, expire_time=chunk_mem_cache_expire)
     app['deleted_ids'] = set()
     app['dirty_ids'] = {}  # map of objids to timestamp and bucket of which they were last updated
     app['deflate_map'] = {} # map of dataset ids to deflate levels (if compressed)
