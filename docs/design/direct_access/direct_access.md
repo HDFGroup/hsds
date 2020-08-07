@@ -127,10 +127,21 @@ with much less effort than would be required to implement these features in the 
 
 ### 4.2 POSIX File Support
 
-Since the HSDS code base now supports multiple storage drivers (e.g. AWS S3 and Azure Blob storage), it should be relatively easy to add support for writing data to a regular POSIX directory.  (There is a potential issue that there are no async drivers for POSIX IO, so there may be some peformance implications).
+Since the HSDS code base now supports multiple storage drivers (e.g. AWS S3, Azure Blob storage, and POSIX filesystems),
+direct access can be used in conjunction with the POSIX driver to in effect support an alternative file format for HDF5 (i.e a sharded data store) without requiring an object storage device or a server to be setup.  In comparison with the standard HDF5 file format using the storage schema has several advantages:
 
-Adding this feature would enable direct access to support writing and reading from local disk without the need of an object storage service (this would be esp. useful for on prem or desktop applications).
+* Works well with cloud-based storage systems
+* Human readable metadata (as json files)
+* No danger of corrupted content due to a process crash
+* Objects can be deleted without leaving "holes" in the file
 
+Since applications would be using the same HDF5 api for either format, the choice between formats doesn't require any code
+changes to the application, so the determination can be made at file creation time (say based on an environment variable).
+Existing tools (hsget, hsload) can be used to transcode files from one format to the other.
+
+See [obj_store_schema_v2.md](../obj_store_schema/obj_store_schema_v2.md) for a description of the HSDS storage schema.
+
+ 
 
 
 ## 4. Conclusion
