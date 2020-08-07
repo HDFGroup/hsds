@@ -108,10 +108,12 @@ class LruCache(object):
             return True
         node = self._hash[key]
         now = time.time()
-        if self._expire_time:            
+        if self._expire_time:   
             if (now - node._last_access) > self._expire_time and not node._isdirty:
                 log.debug(f"LRU {self._name} node {key} has been in cache for {now - node._last_access:.3f} seconds, expiring")
                 return False
+            else:
+                return True
         else:
             return True
 

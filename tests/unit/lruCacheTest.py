@@ -31,6 +31,8 @@ class LruCacheTest(unittest.TestCase):
         self.assertEqual(len(cc), 0)
         self.assertEqual(cc.dump_lru(), "->\n<-\n")
 
+        self.assertFalse("xyz" in cc)
+
         id = createObjId("chunks")
         try:
             # only dict objects can be added
