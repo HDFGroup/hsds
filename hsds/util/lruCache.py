@@ -98,23 +98,22 @@ class LruCache(object):
                 raise KeyError("unexpected error")
             self._lru_tail = prev
         self._lru_head = node
-        log.debug(f"LRU {self._name} new headnode: {node._id}")
         return node
 
-    def _getNode(self, key):
-        """ Return node  """
+    def _hasKey(self, key, ignore_expire=False):
+        """ check if key is present node  """
         if key not in self._hash:
-            raise KeyError(key)
+            return False
+        if ignore_expire:
+            return True
         node = self._hash[key]
         now = time.time()
-        if self._expire_time:
+        if self._expire_time:            
             if (now - node._last_access) > self._expire_time and not node._isdirty:
-                log.debug(f"LRU {self._name} node {key} has been in cache for {now - node._last_access} seconds, expiring")
-                # node is stale - remove
-                self._delNode(key)
-                raise KeyError(key)  # will result in object getting reloaded from storage
-        self._expire_time = now
-        return self._hash[key]
+                log.debug(f"LRU {self._name} node {key} has been in cache for {now - node._last_access:.3f} seconds, expiring")
+                return False
+        else:
+            return True
 
     def __delitem__(self, key):
         node = self._delNode(key) # remove from LRU
@@ -140,15 +139,14 @@ class LruCache(object):
 
     def __contains__(self, key):
         """ Test if key is in the cache """
-        if key in self._hash:
-            return True
-        else:
-            return False
+        return self._hasKey(key)
 
     def __getitem__(self, key):
         """ Return numpy array from cache """
         # doing a getitem has the side effect of moving this node
         # up in the LRU list
+        if not self._hasKey(key):
+            raise KeyError(key)
         node = self._moveToFront(key)
         return node._data
 
