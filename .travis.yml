@@ -30,4 +30,4 @@ script:
   - mkdir $ROOT_DIR
   - mkdir ${HOME}/buckets/hsds.test
   - ./runall.sh
-  - python testall.py
+  - python testall.py --skip_unit

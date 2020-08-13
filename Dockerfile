@@ -1,4 +1,4 @@
-FROM hdfgroup/python:3.8
+FROM hdfgroup/python:3.8.3
 MAINTAINER John Readey <jreadey@hdfgroup.org>
 RUN mkdir /usr/local/src/hsds-src/ /usr/local/src/hsds/
 COPY . /usr/local/src/hsds-src

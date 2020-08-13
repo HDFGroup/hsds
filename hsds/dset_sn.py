@@ -21,7 +21,7 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict
 
 from .util.httpUtil import http_post, http_put, http_delete, getHref, jsonResponse
 from .util.idUtil import   isValidUuid, getDataNodeUrl, createObjId, isSchema2Id
-from .util.dsetUtil import  getPreviewQuery
+from .util.dsetUtil import  getPreviewQuery, getFilterItem
 from .util.arrayUtil import getNumElements, getShapeDims
 from .util.chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk, getContiguousLayout
 from .util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
@@ -930,6 +930,58 @@ async def POST_Dataset(request):
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
 
+        if "filters" in creationProperties:
+            # convert to standard representation
+            # refer to https://hdf5-json.readthedocs.io/en/latest/bnf/filters.html#grammar-token-filter_list
+            f_in = creationProperties["filters"]
+            log.debug(f"filters provided in creationProperties: {f_in}")
+
+            if not isinstance(f_in, list):
+                msg = "Expected filters in creationProperties to be a list"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+
+            f_out = []
+            for filter in f_in:
+                if isinstance(filter, int) or isinstance(filter, str):
+                    item = getFilterItem(filter)
+                    if not item:
+                        msg = f"filter {filter} not recognized"
+                        log.warn(msg)
+                        raise HTTPBadRequest(reason=msg)
+                    f_out.append(item)
+                elif isinstance(filter, dict):
+                    if "class" not in filter:
+                        msg = "expected 'class' key for filter property"
+                        log.warn(msg)
+                        raise HTTPBadRequest(reason=msg)
+                    if filter['class'] != 'H5Z_FILTER_USER':
+                        item = getFilterItem(filter['class'])
+                    elif 'id' in filter:
+                        item = getFilterItem(filter['id'])
+                    else:
+                        item = None
+                    if not item:
+                        msg = f"filter {filter['class']} not recognized"
+                        log.warn(msg)
+                        raise HTTPBadRequest(reason=msg)
+                    if 'id' not in filter:
+                        filter['id'] = item['id']
+                    elif item['id'] != filter['id']:
+                        msg = f"Expected {filter['class']} to have id: {item['id']} but got {filter['id']}"
+                        log.warn(msg)
+                        raise HTTPBadRequest(reason=msg)
+                    if "name" not in filter:
+                        filter["name"] = item["name"]
+                    f_out.append(filter)
+                else:
+                    msg = f"Unexpected type for filter: {filter}"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
+            # replace filters with our starndardized list
+            log.debug(f"setting filters to: {f_out}")
+            creationProperties["filters"] = f_out
+            
         dataset_json["creationProperties"] = creationProperties
 
     if layout is not None:

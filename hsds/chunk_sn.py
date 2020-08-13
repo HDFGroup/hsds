@@ -28,7 +28,7 @@ from .util.idUtil import   isValidUuid, getDataNodeUrl
 from .util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain
 from .util.hdf5dtype import getItemSize, createDataType
 from .util.dsetUtil import getSliceQueryParam, setSliceQueryParam, getFillValue, isExtensible
-from .util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout, getDeflateLevel
+from .util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout
 from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId, getChunkIndex, getChunkSuffix
 from .util.chunkUtil import getChunkCoverage, getDataCoverage, getChunkIdForPartition
 from .util.arrayUtil import bytesArrayToList, jsonToArray, getShapeDims, getNumElements, arrayToBytes, bytesToArray
@@ -63,15 +63,13 @@ def _isNonStrict(params):
 """
 Write data to given chunk_id.  Pass in type, dims, and selection area.
 """
-async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level, arr, bucket=None):
+async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr, bucket=None):
     """ write the chunk selection to the DN
     chunk_id: id of chunk to write to
     chunk_sel: chunk-relative selection to write to
     np_arr: numpy array of data to be written
     """
     log.info(f"write_chunk_hyperslab, chunk_id:{chunk_id}, slices:{slices}, bucket: {bucket}")
-    if deflate_level is not None:
-        log.info("deflate_level: {deflate_level}")
     if "layout" not in dset_json:
         log.error(f"No layout found in dset_json: {dset_json}")
         raise HTTPInternalServerError()
@@ -1184,7 +1182,6 @@ async def PUT_Value(request):
         raise HTTPBadRequest(reason=msg)
 
     layout = getChunkLayout(dset_json)
-    deflate_level = getDeflateLevel(dset_json)
 
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
@@ -1453,7 +1450,7 @@ async def PUT_Value(request):
         tasks = []
         task_batch_size = len(app["dn_urls"]) * 10
         for chunk_id in chunk_ids:
-            task = asyncio.ensure_future(write_chunk_hyperslab(app, chunk_id, dset_json, slices, deflate_level, arr, bucket=bucket))
+            task = asyncio.ensure_future(write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr, bucket=bucket))
             tasks.append(task)
             if len(tasks) == task_batch_size:
                 await asyncio.gather(*tasks, loop=loop)

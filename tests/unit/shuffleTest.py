@@ -15,7 +15,7 @@ import numpy as np
 import time
 
 sys.path.append('../..')
-from hsds.util.s3Util import _shuffle, _unshuffle
+from hsds.util.storUtil import _shuffle, _unshuffle
 
 
 class ShuffleUtilTest(unittest.TestCase):

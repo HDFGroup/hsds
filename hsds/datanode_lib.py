@@ -21,10 +21,10 @@ from .util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes, getStor
 from .util.domainUtil import isValidDomain, getBucketForDomain
 from .util.attrUtil import getRequestCollectionName
 from .util.httpUtil import http_post
-from .util.dsetUtil import getChunkLayout, getDeflateLevel, isShuffle, getFillValue
+from .util.dsetUtil import getChunkLayout, getFilterOps, getFillValue
 from .util.chunkUtil import getDatasetId
 from .util.arrayUtil import arrayToBytes, bytesToArray
-from .util.hdf5dtype import createDataType
+from .util.hdf5dtype import createDataType, getItemSize
 
 from . import config
 from . import hsds_logger as log
@@ -315,13 +315,13 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset
     chunk_arr = None
     dims = getChunkLayout(dset_json)
     type_json = dset_json["type"]
+    item_size = getItemSize(type_json)
     dt = createDataType(type_json)
     # note - officially we should follow the order in which the filters are defined in the filter_list,
     # but since we currently have just deflate and shuffle we will always apply deflate then shuffle on read,
     # and shuffle then deflate on write
     # also note - get deflate and shuffle will update the deflate and shuffle map so that the s3sync will do the right thing
-    deflate_level = getDeflateLevel(dset_json)
-    shuffle = isShuffle(dset_json)
+    filter_ops = getFilterOps(app, dset_json, item_size)
     s3key = None
 
     if s3path:
@@ -370,7 +370,7 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset
                     pending_s3_read[chunk_id] = time.time()
                 log.debug(f"Reading chunk {s3key} from S3")
 
-                chunk_bytes = await getStorBytes(app, s3key, shuffle=shuffle, deflate_level=deflate_level, offset=s3offset, length=s3size, bucket=bucket)
+                chunk_bytes = await getStorBytes(app, s3key, filter_ops=filter_ops, offset=s3offset, length=s3size, bucket=bucket)
                 if chunk_id in pending_s3_read:
                     # read complete - remove from pending map
                     elapsed_time = time.time() - pending_s3_read[chunk_id]
@@ -414,7 +414,7 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset
 """
 Mark the given chunk as dirty to write to storage
 """
-def save_chunk(app, chunk_id, bucket=None):
+def save_chunk(app, chunk_id, dset_json, bucket=None):
     """ Persist the given object """
     log.info(f"save_chunk {chunk_id} bucket={bucket}")
 
@@ -424,9 +424,13 @@ def save_chunk(app, chunk_id, bucket=None):
         log.error("Domain not in partition")
         raise HTTPInternalServerError()
 
+    item_size = getItemSize(dset_json['type'])
+
     chunk_cache = app["chunk_cache"]
     chunk_cache.setDirty(chunk_id)
     log.info(f"chunk cache dirty count: {chunk_cache.dirtyCount}")
+
+    getFilterOps(app, dset_json, item_size)  # will store filter options into app['filter_map']
 
     # async write to S3
     dirty_ids = app["dirty_ids"]
@@ -442,8 +446,7 @@ async def write_s3_obj(app, obj_id, bucket=None):
     dirty_ids = app["dirty_ids"]
     chunk_cache = app['chunk_cache']
     meta_cache = app['meta_cache']
-    deflate_map = app['deflate_map']
-    shuffle_map = app['shuffle_map']
+    filter_map = app['filter_map']
     notify_objs = app["root_notify_ids"]
     deleted_ids = app['deleted_ids']
     success = False
@@ -497,18 +500,14 @@ async def write_s3_obj(app, obj_id, bucket=None):
             chunk_arr = chunk_cache[obj_id]
             chunk_bytes = arrayToBytes(chunk_arr)
             dset_id = getDatasetId(obj_id)
-            deflate_level = None
-            shuffle = 0
-            if dset_id in shuffle_map:
-                shuffle = shuffle_map[dset_id]
-            if dset_id in deflate_map:
-                deflate_level = deflate_map[dset_id]
-                log.debug(f"got deflate_level: {deflate_level} for dset: {dset_id}")
-            if dset_id in shuffle_map:
-                shuffle = shuffle_map[dset_id]
-                log.debug(f"got shuffle size: {shuffle} for dset: {dset_id}")
+            if dset_id in filter_map:
+                filter_ops = filter_map[dset_id]
+                log.debug(f"write_s3_obj: got filter_op: {filter_ops} for dset: {dset_id}")
+            else:
+                filter_ops = None
+                log.debug(f"write_s3_obj: no filter_op for dset: {dset_id}")
 
-            await putStorBytes(app, s3key, chunk_bytes, shuffle=shuffle, deflate_level=deflate_level, bucket=bucket)
+            await putStorBytes(app, s3key, chunk_bytes, filter_ops=filter_ops, bucket=bucket)
             success = True
 
             # if chunk has been evicted from cache something has gone wrong

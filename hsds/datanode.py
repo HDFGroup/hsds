@@ -13,7 +13,7 @@
 # data node of hsds cluster
 #
 import asyncio
-
+import numcodecs as codecs
 from aiohttp.web import run_app
 from . import config
 from .util.lruCache import LruCache
@@ -199,6 +199,14 @@ def create_app(loop):
     log.info(f"Using chunk memory cache size of: {chunk_mem_cache_size}")
     chunk_mem_cache_expire = int(config.get("chunk_mem_cache_expire"))
     log.info(f"Setting chunk cache expire time to: {chunk_mem_cache_expire}")
+    blosc_nthreads = int(config.get("blosc_nthreads"))
+    if blosc_nthreads > 0:
+        log.info(f"Setting blosc nthreads to: {blosc_nthreads}")
+        codecs.blosc.set_nthreads(blosc_nthreads)
+    else:
+        # let Blosc select thread count based on processor type
+        blosc_nthreads = codecs.blosc_get_nthreads()
+        log.info(f"Using default blosc nthreads: {blosc_nthreads}")
 
     
 
@@ -209,15 +217,15 @@ def create_app(loop):
     app['chunk_cache'] = LruCache(mem_target=chunk_mem_cache_size, chunk_cache=True, expire_time=chunk_mem_cache_expire)
     app['deleted_ids'] = set()
     app['dirty_ids'] = {}  # map of objids to timestamp and bucket of which they were last updated
-    app['deflate_map'] = {} # map of dataset ids to deflate levels (if compressed)
-    app["shuffle_map"] = {} # map of dataset ids to shuffle items size (if shuffle filter is applied)
-    app["pending_s3_read"] = {} # map of s3key to timestamp for in-flight read requests
-    app["pending_s3_write"] = {} # map of s3key to timestamp for in-flight write requests
-    app["pending_s3_write_tasks"] = {} # map of objid to asyncio Task objects for writes
-    app["root_notify_ids"] = {}   # map of root_id to bucket name used for notify root of changes in domain
-    app["root_scan_ids"] = {}   # map of root_id to bucket name for pending root scans
-    app["gc_ids"] = set()       # set of root or dataset ids for deletion
-    app["objDelete_prefix"] = None  # used by async_lib removeKeys
+    app['filter_map'] = {} # map of dataset ids to deflate levels (if compressed)
+    app['pending_s3_read'] = {} # map of s3key to timestamp for in-flight read requests
+    app['pending_s3_write'] = {} # map of s3key to timestamp for in-flight write requests
+    app['pending_s3_write_tasks'] = {} # map of objid to asyncio Task objects for writes
+    app['root_notify_ids'] = {}   # map of root_id to bucket name used for notify root of changes in domain
+    app['root_scan_ids'] = {}   # map of root_id to bucket name for pending root scans
+    app['gc_ids'] = set()       # set of root or dataset ids for deletion
+    app['objDelete_prefix'] = None  # used by async_lib removeKeys
+   
     # TODO - there's nothing to prevent the deflate_map from getting ever larger
     # (though it is only one int per dataset id)
     # add a timestamp and remove at a certain time?

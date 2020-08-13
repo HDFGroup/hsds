@@ -65,7 +65,7 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.headers['content-type'], 'application/json; charset=utf-8')
         rspJson = json.loads(rsp.text)
 
-        for name in ("lastModified", "created", "hrefs", "root", "owner", "class"):
+        for name in ("lastModified", "created", "hrefs", "root", "owner", "class", "limits", "compressors", "version"):
             self.assertTrue(name in rspJson)
         now = time.time()
         self.assertTrue(rspJson["created"] < now - 10)
@@ -76,6 +76,18 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rspJson["class"], "domain")
         self.assertFalse("num_groups" in rspJson)  # should only show up with the verbose param
         self.assertFalse("domain_objs" in rspJson) # should only show if getobjs query param is used
+
+        limits = rspJson["limits"]
+        limit_keys = ("min_chunk_size", "max_chunk_size", "max_request_size", "max_chunks_per_request")
+
+        for k in limit_keys:
+            self.assertTrue(k in limits)
+            limit = limits[k]
+            self.assertTrue(isinstance(limit, int))
+            self.assertTrue(limit > 0)
+        compressors = rspJson["compressors"]
+        for compressor in ['blosclz', 'lz4', 'lz4hc', 'snappy', 'zlib', 'zstd']:
+            self.assertTrue(compressor in compressors)
 
         root_uuid = rspJson["root"]
         helper.validateId(root_uuid)
@@ -262,7 +274,7 @@ class DomainTest(unittest.TestCase):
         rsp = requests.put(req, headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
-        for k in ("root", "owner", "acls", "created", "lastModified", "version", "limits"):
+        for k in ("root", "owner", "acls", "created", "lastModified", "version", "limits", "compressors"):
              self.assertTrue(k in rspJson)
 
         root_id = rspJson["root"]
@@ -278,6 +290,9 @@ class DomainTest(unittest.TestCase):
             limit = limits[k]
             self.assertTrue(isinstance(limit, int))
             self.assertTrue(limit > 0)
+        compressors = rspJson["compressors"]
+        for compressor in ['blosclz', 'lz4', 'lz4hc', 'snappy', 'zlib', 'zstd']:
+            self.assertTrue(compressor in compressors)
 
         # do a get on the new domain
         rsp = requests.get(req, headers=headers)
@@ -709,8 +724,6 @@ class DomainTest(unittest.TestCase):
         except KeyError:
             print("Skipping domain create with owner test, set ADMIN_USERNAME and ADMIN_PASSWORD environment variables to enable")
 
-
-        # TBD - try deleting a top-level domain
 
     def testDomainCollections(self):
         domain = helper.getTestDomain("tall.h5")

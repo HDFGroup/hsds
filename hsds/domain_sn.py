@@ -15,6 +15,7 @@
 from asyncio import CancelledError
 import asyncio
 import json
+import numcodecs as codecs
 import os.path as op
 import re
 import time
@@ -270,6 +271,10 @@ def getLimits():
     limits["max_chunks_per_request"] = int(config.get("max_chunks_per_request"))
     return limits
 
+def getCompressors():
+    """ return available compressors """
+    return codecs.blosc.list_compressors()
+
 async def get_domain_response(app, domain_json, bucket=None, verbose=False):
     rsp_json = { }
     if "root" in domain_json:
@@ -348,8 +353,8 @@ async def get_domain_response(app, domain_json, bucket=None, verbose=False):
     # pass back config parameters the client may care about
 
     rsp_json["limits"] = getLimits()
+    rsp_json["compressors"] = getCompressors()
     rsp_json["version"] = getVersion()
-
     rsp_json["lastModified"] = lastModified
     return rsp_json
 
@@ -680,6 +685,10 @@ async def GET_Domain(request):
         hrefs.append({'rel': 'parent', 'href': getHref(request, '/', domain=parent_domain)})
 
     rsp_json["hrefs"] = hrefs
+    # mixin limits, version
+    domain_json["limits"] = getLimits()
+    domain_json["compressors"] = getCompressors()
+    domain_json["version"] = getVersion()
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp
@@ -987,8 +996,9 @@ async def PUT_Domain(request):
         raise HTTPInternalServerError()
 
     # domain creation successful
-    # maxin limits
+    # mixin limits
     domain_json["limits"] = getLimits()
+    domain_json["compressors"] = getCompressors()
     domain_json["version"] = getVersion()
     resp = await jsonResponse(request, domain_json, status=201)
     log.response(request, resp=resp)

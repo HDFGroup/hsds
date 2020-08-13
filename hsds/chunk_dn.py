@@ -183,7 +183,7 @@ async def PUT_Chunk(request):
         # chunk update successful
         resp = {}
     if is_dirty:
-        save_chunk(app, chunk_id, bucket=bucket)
+        save_chunk(app, chunk_id, dset_json, bucket=bucket)
         status_code = 201
     else:
         status_code = 200
@@ -435,7 +435,7 @@ async def POST_Chunk(request):
          # write empty response
         resp = json_response({})
 
-        save_chunk(app, chunk_id, bucket=bucket) # lazily write chunk to storage
+        save_chunk(app, chunk_id, dset_json, bucket=bucket) # lazily write chunk to storage
     else:
         # read points
         try:
@@ -492,17 +492,13 @@ async def DELETE_Chunk(request):
     if chunk_id in chunk_cache:
         del chunk_cache[chunk_id]
 
-    deflate_map = app["deflate_map"]
-    shuffle_map = app["shuffle_map"]
+    filter_map = app["filter_map"]
     dset_id = getDatasetId(chunk_id)
-    if dset_id in deflate_map:
+    if dset_id in filter_map:
         # The only reason chunks are ever deleted is if the dataset is being deleted,
         # so it should be safe to remove this entry now
-        log.info(f"Removing deflate_map entry for {dset_id}")
-        del deflate_map[dset_id]
-    if dset_id in shuffle_map:
-        log.info(f"Removing shuffle_map entry for {dset_id}")
-        del shuffle_map[dset_id]
+        log.info(f"Removing filter_map entry for {dset_id}")
+        del filter_map[dset_id]
 
     if await isStorObj(app, s3key, bucket=bucket):
         await deleteStorObj(app, s3key, bucket=bucket)

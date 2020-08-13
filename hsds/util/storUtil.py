@@ -15,6 +15,7 @@
 #
 import json
 import zlib
+import numcodecs as codecs
 import numpy as np
 from numba import jit
 from aiohttp.web_exceptions import HTTPInternalServerError
@@ -75,6 +76,7 @@ def _unshuffle(element_size, chunk):
     chunk_size = len(chunk)
     if chunk_size % element_size != 0:
         raise ValueError("unexpected chunk size")
+
     arr = np.zeros((chunk_size,), dtype='u1')
     _doUnshuffle(chunk, arr, element_size)
 
@@ -135,7 +137,7 @@ async def getStorJSONObj(app, key, bucket=None):
     log.debug(f"storage key {key} returned: {json_dict}")
     return json_dict
 
-async def getStorBytes(app, key, shuffle=0, deflate_level=None, offset=0, length=None, bucket=None):
+async def getStorBytes(app, key, filter_ops=None, offset=0, length=None, bucket=None):
     """ Get object identified by key and read as bytes
     """
 
@@ -146,26 +148,97 @@ async def getStorBytes(app, key, shuffle=0, deflate_level=None, offset=0, length
         key = key[1:]  # no leading slash
     log.info(f"getStorBytes({bucket}/{key})")
 
-    data = await client.get_object(bucket=bucket, key=key, offset=offset, length=length)
+    shuffle = 0
+    compressor = None
+    if filter_ops:
+        log.debug(f"getStorBytes for {key} with filter_ops: {filter_ops}")
+        if "is_shuffle" in filter_ops and filter_ops['is_shuffle']:
+            shuffle = filter_ops['item_size']
+        if "compressor" in filter_ops:
+            # TBD - enable blosc compressors
+            compressor = filter_ops["compressor"]
 
-    if data and len(data) > 0:
-        log.info(f"read: {len(data)} bytes for key: {key}")
-        if deflate_level is not None:
+    data = await client.get_object(bucket=bucket, key=key, offset=offset, length=length)
+    if data is None or len(data) == 0:
+        log.info(f"no data found for {key}")
+        return data
+
+    log.info(f"read: {len(data)} bytes for key: {key}")
+    if compressor:
+
+        # compressed chunk data...
+
+        # first check if this was compressed with blosc
+        blosc_metainfo = codecs.blosc.cbuffer_metainfo(data) # returns typesize, isshuffle, and memcopied 
+        if blosc_metainfo[0] > 0:      
+            log.info(f"blosc compressed data for {key}") 
             try:
-                unzip_data = zlib.decompress(data)
-                log.info(f"uncompressed to {len(unzip_data)} bytes")
-                data = unzip_data
+                blosc = codecs.Blosc()
+                udata = blosc.decode(data)
+                log.info(f"uncompressed to {len(udata)} bytes")
+                data = udata
+            except Exception as e:
+                log.error(f"got exception: {e} using blosc decompression for {key}")
+                raise HTTPInternalServerError()
+        elif compressor == "zlib":
+            # data may have been compressed without blosc, try using zlib directly
+            log.info(f"using zlib to decompress {key}")
+            try:
+                udata = zlib.decompress(data)
+                log.info(f"uncompressed to {len(udata)} bytes")
+                data = udata
             except zlib.error as zlib_error:
                 log.info(f"zlib_err: {zlib_error}")
-                log.warn(f"unable to uncompress obj: {key}")
-        if shuffle > 0:
-            log.debug(f"shuffle is {shuffle}")
-            unshuffled = _unshuffle(shuffle, data)
-            if unshuffled is not None:
-                log.debug(f"unshuffled to {len(unshuffled)} bytes")
-                data = unshuffled
+                log.error(f"unable to uncompress obj: {key}")
+                raise HTTPInternalServerError()
+        else:
+            log.error(f"don't know how to decompress data in {compressor} format for {key}")
+            raise HTTPInternalServerError()
+    
+    if shuffle > 0:
+        log.debug(f"shuffle is {shuffle}")
+        unshuffled = _unshuffle(shuffle, data)
+        if unshuffled is not None:
+            log.debug(f"unshuffled to {len(unshuffled)} bytes")
+            data = unshuffled
 
     return data
+
+async def putStorBytes(app, key, data, filter_ops=None, bucket=None):
+    """ Store byte string as S3 object with given key
+    """
+
+    client = _getStorageClient(app)
+    if not bucket:
+        bucket = app['bucket_name']
+    if key[0] == '/':
+        key = key[1:]  # no leading slash
+    shuffle = -1  # auto-shuffle
+    clevel = 5
+    cname = None  # compressor name
+    if filter_ops:
+        if "compressor" in filter_ops:
+            cname = filter_ops["compressor"]
+        if "is_shuffle" in filter_ops and not filter_ops['is_shuffle']:
+            shuffle = 0 # client indicates to turn off shuffling
+        if "level" in filter_ops:
+            clevel = filter_ops["level"]
+    log.info(f"putStorBytes({bucket}/{key}), {len(data)} bytes shuffle: {shuffle} compressor: {cname} level: {clevel}")
+   
+    if cname:
+        try:
+            blosc = codecs.Blosc(cname=cname, clevel=clevel, shuffle=shuffle)
+            cdata = blosc.encode(data)
+            # TBD: add cname in blosc constructor
+            log.info(f"compressed from {len(data)} bytes to {len(cdata)} bytes using filter: {blosc.cname} with level: {blosc.clevel}")
+            data = cdata
+        except Exception as e:
+            log.error(f"got exception using blosc encoding: {e}")
+            raise HTTPInternalServerError()
+
+    rsp = await client.put_object(key, data, bucket=bucket)
+
+    return rsp
 
 async def putStorJSONObj(app, key, json_obj, bucket=None):
     """ Store JSON data as storage object with given key
@@ -179,37 +252,6 @@ async def putStorJSONObj(app, key, json_obj, bucket=None):
     log.info(f"putS3JSONObj({bucket}/{key})")
     data = json.dumps(json_obj)
     data = data.encode('utf8')
-
-    rsp = await client.put_object(key, data, bucket=bucket)
-
-    return rsp
-
-async def putStorBytes(app, key, data, shuffle=0, deflate_level=None, bucket=None):
-    """ Store byte string as S3 object with given key
-    """
-
-    client = _getStorageClient(app)
-    if not bucket:
-        bucket = app['bucket_name']
-    if key[0] == '/':
-        key = key[1:]  # no leading slash
-    log.info(f"putStorBytes({bucket}/{key}), {len(data)} bytes shuffle: {shuffle} deflate: {deflate_level}")
-    if shuffle > 0:
-        shuffled_data = _shuffle(shuffle, data)
-        if shuffled_data is not None:
-            log.info(f"shuffled data to {len(shuffled_data)}")
-            data = shuffled_data
-
-    if deflate_level is not None:
-        try:
-            # the keyword parameter is enabled with py3.6
-            # zip_data = zlib.compress(data, level=deflate_level)
-            zip_data = zlib.compress(data, deflate_level)
-            log.info(f"compressed from {len(data)} bytes to {len(zip_data)} bytes with level: {deflate_level}")
-            data = zip_data
-        except zlib.error as zlib_error:
-            log.info(f"zlib_err: {zlib_error}")
-            log.warn(f"unable to compress obj: {key}, using raw bytes")
 
     rsp = await client.put_object(key, data, bucket=bucket)
 

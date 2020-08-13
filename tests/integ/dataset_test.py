@@ -955,6 +955,66 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("id" in filter)
         self.assertEqual(filter["id"], 1)
 
+    def testCompressionFiltersDataset(self):
+        # test Dataset with creation property list
+        domain = self.base_domain + "/testCompressionFiltersDataset.h5"
+        helper.setupDomain(domain)
+
+        print("testCompressionFiltersDataset", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        # get domain
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        compressors = rspJson["compressors"]
+        self.assertTrue(len(compressors) >= 6)
+
+        for compressor in compressors:
+
+            # create the dataset
+            req = self.endpoint + "/datasets"
+
+            payload = {'type': 'H5T_IEEE_F32LE', 'shape': [40, 80]}
+            payload['creationProperties'] = { 'filters': [compressor,] }
+            req = self.endpoint + "/datasets"
+            rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+            self.assertEqual(rsp.status_code, 201)  # create dataset
+            rspJson = json.loads(rsp.text)
+            dset_uuid = rspJson['id']
+            self.assertTrue(helper.validateId(dset_uuid))
+
+            # link new dataset 
+            req = self.endpoint + "/groups/" + root_uuid + "/links/" + compressor
+            payload = {"id": dset_uuid}
+            rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+            self.assertEqual(rsp.status_code, 201)
+            # verify layout
+            req = helper.getEndpoint() + "/datasets/" + dset_uuid
+            rsp = requests.get(req, headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+            self.assertTrue("layout" in rspJson)
+            layout_json = rspJson["layout"]
+            self.assertTrue("class" in layout_json)
+            self.assertEqual(layout_json["class"], 'H5D_CHUNKED')
+
+            # verify compression
+            self.assertTrue("creationProperties" in rspJson)
+            cpl = rspJson["creationProperties"]
+            self.assertTrue("filters") in cpl
+            filters = cpl["filters"]
+            self.assertEqual(len(filters), 1)
+            filter = filters[0]
+            self.assertTrue(isinstance(filter, dict))
+            self.assertTrue('class' in filter)
+            self.assertTrue('id' in filter)
+            self.assertTrue('name' in filter)
+            self.assertEqual(filter['name'], compressor)
+             
+
 
 
     def testInvalidFillValue(self):
