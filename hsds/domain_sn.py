@@ -273,7 +273,15 @@ def getLimits():
 
 def getCompressors():
     """ return available compressors """
-    return codecs.blosc.list_compressors()
+    compressors = codecs.blosc.list_compressors()
+    # replace zlib with the equivalent gzip since that is the h5py name
+    if "gzip" not in compressors and "zlib" in compressors:
+        for i in range(len(compressors)):
+            if compressors[i] == "zlib":
+                compressors[i] = "gzip"
+                break
+    
+    return compressors 
 
 async def get_domain_response(app, domain_json, bucket=None, verbose=False):
     rsp_json = { }

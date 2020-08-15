@@ -31,9 +31,7 @@ Format is:
 
 FILTER_DEFS = (
     ('H5Z_FILTER_NONE', 0, "none"),
-    ('H5Z_FILTER_DEFLATE', 1, "deflate"),
-    ('H5Z_FILTER_DEFLATE', 1, "zlib"),  # alternate name for H5Z_FILTER_DEFLATE
-    ('H5Z_FILTER_DEFLATE', 1, "gzip"),  # alternate name for H5Z_FILTER_DEFLATE
+    ('H5Z_FILTER_DEFLATE', 1, "gzip"),  # aka as "zlib" for blosc
     ('H5Z_FILTER_SHUFFLE', 2, "shuffle"),
     ('H5Z_FILTER_FLETCHER32', 3, "fletcher32"),
     ('H5Z_FILTER_SZIP', 4, "szip"),
@@ -47,6 +45,18 @@ FILTER_DEFS = (
     ('H5Z_FILTER_ZSTD', 32015, "zstd")
 )
 
+COMPRESSION_FILTERS = (
+    'H5Z_FILTER_DEFLATE',
+    'H5Z_FILTER_SZIP',
+    'H5Z_FILTER_SCALEOFFSET',
+    'H5Z_FILTER_LZF',
+    'H5Z_FILTER_BLOSC',
+    'H5Z_FILTER_SNAPPY',
+    'H5Z_FILTER_LZ4',
+    'H5Z_FILTER_LZ4HC',
+    'H5Z_FILTER_ZSTD'
+)
+
 def getFilterItem(key):
     """
     Return filter code, id, and name, based on an id, a name or a code.
@@ -57,6 +67,83 @@ def getFilterItem(key):
                 return {"class": item[0], "id": item[1], "name": item[2]}
     return None  # not found
 
+""" Return list of filters, or empty list """
+def getFilters(dset_json):
+    if "creationProperties" not in dset_json:
+        return []
+    creationProperties = dset_json["creationProperties"]
+    if "filters" not in creationProperties:
+        return []
+    filters = creationProperties["filters"]
+    return filters
+
+""" Return compression filter from filters, or None """
+def getCompressionFilter(dset_json):
+    filters = getFilters(dset_json)
+    for filter in filters:
+        if 'class' not in filter:
+            log.warn(f"filter option: {filter} with no class key")
+            continue
+        filter_class = filter["class"]
+        if filter_class in COMPRESSION_FILTERS:
+            return filter
+    return None
+
+""" Return shuffle filter, or None """
+def getShuffleFilter(dset_json):
+    filters = getFilters(dset_json)
+    for filter in filters:
+        if 'class' not in filter:
+            log.warn(f"filter option: {filter} with no class key")
+            continue
+        filter_class = filter["class"]
+        if filter_class == 'H5Z_FILTER_SHUFFLE':
+            return filter
+    return None
+        
+
+""" Get the Deflate compression value.
+"""
+def getFilterOps(app, dset_json, item_size):
+    filter_map = app['filter_map']
+    dset_id = dset_json['id']
+    if dset_id in filter_map:
+        return filter_map[dset_id]
+
+
+    compressionFilter = getCompressionFilter(dset_json)
+
+    if not compressionFilter:
+        return None
+
+    filter_ops = {}
+    shuffleFilter = getShuffleFilter(dset_json)
+
+    if compressionFilter["class"] == 'H5Z_FILTER_DEFLATE':
+        filter_ops["compressor"] = 'zlib'  # blosc compressor
+        if shuffleFilter:
+            filter_ops["use_shuffle"] = True
+        else:
+            # for HDF5-style compression, use shuffle only if it turned on
+            filter_ops['use_shuffle'] = False
+    else:
+        if "name" in compressionFilter and compressionFilter["name"] in blosc.list_compressors():
+            filter_ops["compressor"] = compressionFilter["name"] 
+        else:
+            filter_ops["compressor"] = 'lz4' # default to lz4
+    if "level" not in compressionFilter:
+        filter_ops['level'] = 5  # medium level
+    else:
+        filter_ops['level'] = int(compressionFilter["level"])
+        
+    if filter_ops:
+        filter_ops['item_size'] = item_size
+        if item_size == 'H5T_VARIABLE':
+            filter_ops['use_shuffle'] = False
+        log.debug(f"save filter ops: {filter_ops} for {dset_id}")
+        filter_map[dset_id] = filter_ops  # save
+
+    return filter_ops
 
 
 def getHyperslabSelection(dsetshape, start=None, stop=None, step=None):
@@ -411,57 +498,6 @@ def getChunkLayout(dset_json):
     layout = layout_json["dims"]
     return layout
 
-
-""" Get the Deflate compression value.
-"""
-def getFilterOps(app, dset_json, item_size):
-    filter_map = app['filter_map']
-    dset_id = dset_json['id']
-    if dset_id in filter_map:
-        return filter_map[dset_id]
-
-    if "creationProperties" not in dset_json:
-        return None
-    creationProperties = dset_json["creationProperties"]
-    if "filters" not in creationProperties:
-        return None
-    filters = creationProperties["filters"]
-    filter_ops = {}
-
-    for filter in filters:
-        if "class" not in filter:
-            log.warn(f"filter option for {dset_id} with no class key")
-            continue
-        filterClass = filter["class"]
-        compressor = None
-        if filterClass == "H5Z_FILTER_DEFLATE":
-            compressor = 'zlib'
-            if 'use_shuffle' not in filter_ops:
-                # for HDF5-style compression, use shuffle only if it turned on
-                filter_ops['use_shuffle'] = False
-        elif filterClass.lower() in blosc.list_compressors():
-            compressor = filterClass.lower()
-        elif filterClass == "H5Z_FILTER_SHUFFLE":
-            if item_size == 'H5T_VARIABLE':
-                log.warn(f"shuffle filter specified for {dset_id} but not valid with variable length data")
-            else:
-                filter_ops['use_shuffle'] = True
-        else:
-            log.warn(f"ignoring filter class: {filterClass} for {dset_id}")
-        if compressor:
-            filter_ops['compressor'] = compressor
-            if "level" not in filter:
-                filter_ops['level'] = 5  # medium level
-            else:
-                filter_ops['level'] = int(filter["level"])
-    if filter_ops:
-        filter_ops['item_size'] = item_size
-        if item_size == 'H5T_VARIABLE':
-            filter_ops['use_shuffle'] = False
-        log.debug(f"save filter ops: {filter_ops} for {dset_id}")
-        filter_map[dset_id] = filter_ops  # save
-
-    return filter_ops
 
 
 

@@ -959,6 +959,8 @@ async def POST_Dataset(request):
                         item = getFilterItem(filter['class'])
                     elif 'id' in filter:
                         item = getFilterItem(filter['id'])
+                    elif 'name' in filter:
+                        item = getFilterItem(filter['name'])
                     else:
                         item = None
                     if not item:

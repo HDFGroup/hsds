@@ -86,7 +86,7 @@ class DomainTest(unittest.TestCase):
             self.assertTrue(isinstance(limit, int))
             self.assertTrue(limit > 0)
         compressors = rspJson["compressors"]
-        for compressor in ['blosclz', 'lz4', 'lz4hc', 'snappy', 'zlib', 'zstd']:
+        for compressor in ['blosclz', 'lz4', 'lz4hc', 'snappy', 'gzip', 'zstd']:
             self.assertTrue(compressor in compressors)
 
         root_uuid = rspJson["root"]
@@ -291,7 +291,7 @@ class DomainTest(unittest.TestCase):
             self.assertTrue(isinstance(limit, int))
             self.assertTrue(limit > 0)
         compressors = rspJson["compressors"]
-        for compressor in ['blosclz', 'lz4', 'lz4hc', 'snappy', 'zlib', 'zstd']:
+        for compressor in ['blosclz', 'lz4', 'lz4hc', 'snappy', 'gzip', 'zstd']:
             self.assertTrue(compressor in compressors)
 
         # do a get on the new domain
