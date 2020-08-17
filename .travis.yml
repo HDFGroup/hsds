@@ -30,4 +30,5 @@ script:
   - mkdir $ROOT_DIR
   - mkdir ${HOME}/buckets/hsds.test
   - ./runall.sh
+  - sleep 10
   - python testall.py --skip_unit
