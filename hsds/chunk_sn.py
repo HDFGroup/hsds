@@ -675,8 +675,7 @@ Return list of elements from a dataset
 async def getPointData(app, dset_id, dset_json, points, bucket=None, serverless=False):
     loop = app["loop"]
     num_points = len(points)
-    log.info(f"getPointData for {num_points} points")
-    log.debug(f"dset_json: {dset_json}")
+    log.info(f"getPointData {dset_id} for {num_points} points")
     log.debug(f"points: {points}")
     chunk_dict = {}  # chunk ids to list of points in chunk
     datashape = dset_json["shape"]
@@ -1570,7 +1569,6 @@ async def GET_Value(request):
 
     # get state for dataset from DN.
     dset_json = await getObjectJson(app, dset_id, bucket=bucket)
-    log.debug(f"got dset_json: {dset_json}")
 
     datashape = dset_json["shape"]
     if datashape["class"] == 'H5S_NULL':
@@ -1900,7 +1898,6 @@ async def POST_Value(request):
     item_size = getItemSize(type_json)
     log.debug(f"item size: {item_size}")
 
-    log.debug(f"got dset_json: {dset_json}")
     await validateAction(app, domain, dset_id, username, "read")
 
     # read body data

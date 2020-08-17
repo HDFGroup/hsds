@@ -303,8 +303,6 @@ async def GET_Dataset(request):
     # check that we have permissions to read the object
     await validateAction(app, domain, dset_id, username, "read")
 
-    log.debug(f"got dset_json: {dset_json}")
-
     resp_json = {}
     resp_json["id"] = dset_json["id"]
     resp_json["root"] = dset_json["root"]

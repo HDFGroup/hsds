@@ -1787,7 +1787,7 @@ class ValueTest(unittest.TestCase):
 
     def testDeflateCompression(self):
         # test Dataset with creation property list
-        print("testDefalteCompression", self.base_domain)
+        print("testDeflateCompression", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
         # get domain
         req = helper.getEndpoint() + '/'

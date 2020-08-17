@@ -50,18 +50,20 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
     # get dataset metadata and deteermine number logical)_bytes, linked_bytes, and num_linked_chunks
 
     dset_json = await getDatasetJson(app, dset_id, bucket=bucket)
-    if dset_json:
-        log.debug(f"getDsetJson: {dset_json}")
     if "shape" not in dset_json:
+        log.debug(f"updateDatasetInfo - no shape dataet_json for {dset_id} - skipping")
         return   # null dataspace
     shape_json = dset_json["shape"]
     if "type" not in dset_json:
-        log.warn("expected to find type in dataet_json")
+        log.warn(f"updateDatasetInfo - expected to find type in dataet_json for {dset_id}")
         return
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
-
-    log.debug(f"item size: {item_size}")
+    if "layout" not in dset_json:
+        log.warn(f"updateDatasetInfo - expected to find layout in dataet_json for {dset_id}")
+        return
+    layout = dset_json["layout"]
+    log.info(f"updateDatasetInfo - shape: {shape_json} type: {type_json} item size: {item_size} layout: {layout}")
 
     dims = getShapeDims(shape_json)  # returns None for HS_NULL dsets
 
@@ -81,36 +83,32 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
     #layout = getChunkLayout(dset_json)
     #log.debug(f"layout: {layout}")
 
-    if "layout" in dset_json:
-        layout = dset_json["layout"]
-        layout_class = layout["class"]
-        if layout_class != 'H5D_CHUNKED':
-            log.info(f"get chunk info for layout_class: {layout_class}")
-            selection = getHyperslabSelection(dims)
-            log.debug(f"got selection: {selection}")
-            chunk_ids = getChunkIds(dset_id, selection, layout['dims'])
-            log.debug(f"chunk_ids: {chunk_ids}")
+    layout_class = layout["class"]
+    if layout_class != 'H5D_CHUNKED':
+        log.info(f"get chunk info for layout_class: {layout_class}")
+        selection = getHyperslabSelection(dims)
+        log.debug(f"got selection: {selection}")
+        chunk_ids = getChunkIds(dset_id, selection, layout['dims'])
+        log.debug(f"chunk_ids: {chunk_ids}")
 
-            if "dn_urls" in app:
-                # getChunkInfoMap cannot be used from the tools scripts
-                chunk_map = await getChunkInfoMap(app, dset_id, dset_json, chunk_ids, bucket=bucket)
-                if not chunk_map:
-                    log.info(f"no linked chunks for dset: {dset_id}")
-                else:
-                    log.info(f"{len(chunk_map)} chunks in chunk_map for dset: {dset_id}")
-                    log.debug(f"chunkinfo_map: {chunk_map}")
-                    for chunk_id in chunk_map:
-                        chunk_link = chunk_map[chunk_id]
-                        if "s3size" in chunk_link:
-                            s3size = chunk_link["s3size"]
-                            dataset_info["linked_bytes"] += s3size
-                            dataset_info["num_linked_chunks"] += 1
+        if "dn_urls" in app:
+            # getChunkInfoMap cannot be used from the tools scripts
+            chunk_map = await getChunkInfoMap(app, dset_id, dset_json, chunk_ids, bucket=bucket)
+            if not chunk_map:
+                log.info(f"no linked chunks for dset: {dset_id}")
             else:
-                # run from tools script, just set num_linked_chunks since we
-                # can't get the chunk_map
-                dataset_info["num_linked_chunks"] = len(chunk_ids)
-    else:
-        log.warn(f"updateDatasetInfo - no layout for dataset: {dset_id}")
+                log.info(f"{len(chunk_map)} chunks in chunk_map for dset: {dset_id}")
+                log.debug(f"chunkinfo_map: {chunk_map}")
+                for chunk_id in chunk_map:
+                    chunk_link = chunk_map[chunk_id]
+                    if "s3size" in chunk_link:
+                        s3size = chunk_link["s3size"]
+                        dataset_info["linked_bytes"] += s3size
+                        dataset_info["num_linked_chunks"] += 1
+        else:
+            # run from tools script, just set num_linked_chunks since we
+            # can't get the chunk_map
+            dataset_info["num_linked_chunks"] = len(chunk_ids)
 
 def scanRootCallback(app, s3keys):
     log.debug(f"scanRoot - callback, {len(s3keys)} items")

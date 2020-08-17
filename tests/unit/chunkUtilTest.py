@@ -471,8 +471,10 @@ class ChunkUtilTest(unittest.TestCase):
             for j in range(2):
                 chunk_id = chunk_ids.pop()
                 self.assertTrue(chunk_id.startswith("c-"))
+                index0 = int(chunk_id[-5])
                 index1 = int(chunk_id[-3])
                 index2 = int(chunk_id[-1])
+                self.assertEqual(index0, 0)
                 self.assertEqual(index1, i)
                 self.assertEqual(index2, j)
 
@@ -484,13 +486,29 @@ class ChunkUtilTest(unittest.TestCase):
             for j in range(2):
                 chunk_id = chunk_ids.pop()
                 self.assertTrue(chunk_id.startswith("c-"))
+                index0 = int(chunk_id[-5])
                 index1 = int(chunk_id[-3])
                 index2 = int(chunk_id[-1])
+                self.assertEqual(index0, 0)
                 self.assertEqual(index1, i)
                 self.assertEqual(index2, j)
 
-
-
+        # 2d test - laarge number of chunks
+        datashape = [7639, 6307]
+        layout = (1, 6308)
+        selection = getHyperslabSelection(datashape, (0, 0), (7639, 6307))
+        chunk_ids = getChunkIds(dset_id, selection, layout)
+        self.assertEqual(len(chunk_ids), 7639)
+        chunk_ids.reverse() # so we can pop off the front
+        for i in range(7639):
+            chunk_id = chunk_ids.pop()
+            self.assertTrue(chunk_id.startswith("c-"))
+            fields = chunk_id.split('_')
+            self.assertEqual(len(fields), 3)
+            index1 = int(fields[1])
+            index2 = int(fields[2])
+            self.assertEqual(index1, i)
+            self.assertEqual(index2, 0)
 
     def testGetChunkIndex(self):
         chunk_id = "c-12345678-1234-1234-1234-1234567890ab_6_4"
