@@ -103,6 +103,7 @@ def main():
     app["loop"] = loop
     session = get_session()
     app["session"] = session
+    app["filter_map"] = {}
     loop.run_until_complete(listObjects(app, prefix=prefix, deliminator=deliminator, suffix=suffix, showstats=showstats))
 
     loop.close()

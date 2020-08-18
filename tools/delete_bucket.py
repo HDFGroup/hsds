@@ -70,6 +70,7 @@ def main():
     app['bucket_name'] = config.get("bucket_name")
     app["session"] = session
     app["loop"] = loop
+    app["filter_map"] = {}
 
     loop.run_until_complete(deleteAll(app))
     #releaseClient(app)

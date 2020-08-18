@@ -20,7 +20,6 @@ from .util.chunkUtil import getDatasetId, getNumChunks, ChunkIterator
 from .util.hdf5dtype import getItemSize, createDataType
 from .util.arrayUtil import getShapeDims, getNumElements, bytesToArray
 from .util.dsetUtil import getHyperslabSelection, getFilterOps
-#from .chunk_sn import getChunkInfoMap
 
 from .util.storUtil import getStorKeys, putStorJSONObj, getStorJSONObj, deleteStorObj, getStorBytes, isStorObj
 from . import hsds_logger as log
@@ -81,7 +80,7 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
     log.debug(f"dims: {dims}")
     rank = len(dims)
     layout_class = layout["class"]
-    log.info(f"get chunk info for layout_class: {layout_class}")
+    log.debug(f"updateDatasetInfo - {dset_id} has layout_class: {layout_class}")
     selection = getHyperslabSelection(dims) # select entire datashape
     linked_bytes = 0
     num_linked_chunks = 0
@@ -188,14 +187,13 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
                 break
         log.debug(f"updateDatasetInfo - done with chunktable iteration for {chunktable_id}")
     elif layout_class == 'H5D_CHUNKED':
-        log.debug("updateDatasetInfo - done for H5D_CHUNKED layout")
+        log.debug("updateDatasetInfo - no linked bytes/chunks for H5D_CHUNKED layout")
     else:
         log.error(f"unexpected chunk layout: {layout_class}")
 
-    log.debug(f"updateDatasetInfo, setting linked_bytes to {linked_bytes}, num_linked_chunks to {num_linked_chunks}")
+    log.debug(f"updateDatasetInfo - {dset_id} setting linked_bytes to {linked_bytes}, num_linked_chunks to {num_linked_chunks}")
     dataset_info["linked_bytes"] = linked_bytes
     dataset_info["num_linked_chunks"] = num_linked_chunks
-
 
 def scanRootCallback(app, s3keys):
     log.debug(f"scanRoot - callback, {len(s3keys)} items")
@@ -236,7 +234,6 @@ def scanRootCallback(app, s3keys):
             results["allocated_bytes"] += obj_size
         else:
             results["metadata_bytes"] += obj_size
-
 
         if is_chunk or getCollectionForId(objid) == "datasets":
             if is_chunk:

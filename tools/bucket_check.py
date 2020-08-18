@@ -127,6 +127,7 @@ if __name__ == '__main__':
     app["deleted_ids"] = set()
     app["bytes_in_bucket"] = 0
     app["loop"] = loop
+    app["filter_map"] = {}
     loop.run_until_complete(bucketCheck(app, base_folder))
     loop.close()
 

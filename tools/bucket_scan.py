@@ -130,6 +130,7 @@ def main():
     app["loop"] = loop
     session = get_session()
     app["session"] = session
+    app["filter_map"] = {}
     loop.run_until_complete(run_scan(app, update=do_update))
 
     loop.close()
