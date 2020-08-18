@@ -13,6 +13,7 @@
 # data node of hsds cluster
 #
 import asyncio
+import time
 import numcodecs as codecs
 from aiohttp.web import run_app
 from . import config
@@ -99,9 +100,15 @@ async def bucketScan(app):
 
         root_scan_ids = app["root_scan_ids"]
         root_ids = {}
+        now = time.time()
         # copy ids to a new map so we don't need to worry about race conditions
         for root_id in root_scan_ids:
-            root_ids[root_id] = root_scan_ids[root_id]
+            item = root_scan_ids[root_id]  # bucket and timestamp in tuple
+            bucket = item[0]
+            timestamp = item[1]
+            log.debug(f"root_scan id {root_id}: bucket: {bucket} timestamp: {timestamp}")
+            if now - timestamp > async_sleep_time:
+                root_ids[root_id] = bucket
         # remove from map
         for root_id in root_ids:
             del root_scan_ids[root_id]

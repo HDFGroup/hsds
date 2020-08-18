@@ -155,7 +155,7 @@ async def get_metadata_obj(app, obj_id, bucket=None):
             try:
                 obj_json = await getStorJSONObj(app, s3_key, bucket=bucket)
             except HTTPNotFound:
-                log.warn(f"HTTPpNotFound error for {s3_key} bucket:{bucket}")
+                log.warn(f"HTTPNotFound for {s3_key} bucket:{bucket}")
                 if obj_id in pending_s3_read:
                     del pending_s3_read[obj_id]
                 raise
