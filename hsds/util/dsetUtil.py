@@ -45,7 +45,7 @@ FILTER_DEFS = (
     ('H5Z_FILTER_ZSTD', 32015, "zstd")
 )
 
-COMPRESSION_FILTERS = (
+COMPRESSION_FILTER_IDS = (
     'H5Z_FILTER_DEFLATE',
     'H5Z_FILTER_SZIP',
     'H5Z_FILTER_SCALEOFFSET',
@@ -55,6 +55,17 @@ COMPRESSION_FILTERS = (
     'H5Z_FILTER_LZ4',
     'H5Z_FILTER_LZ4HC',
     'H5Z_FILTER_ZSTD'
+)
+
+COMPRESSION_FILTER_NAMES = (
+    'gzip',
+    'szip',
+    'lzf',
+    'blosclz',
+    'snappy',
+    'lz4',
+    'lz4hc',
+    'zstd'
 )
 
 def getFilterItem(key):
@@ -85,7 +96,9 @@ def getCompressionFilter(dset_json):
             log.warn(f"filter option: {filter} with no class key")
             continue
         filter_class = filter["class"]
-        if filter_class in COMPRESSION_FILTERS:
+        if filter_class in COMPRESSION_FILTER_IDS:
+            return filter
+        if filter_class == 'H5Z_FILTER_USER' and 'name' in filter and filter['name'] in COMPRESSION_FILTER_NAMES:
             return filter
     return None
 
@@ -108,10 +121,12 @@ def getFilterOps(app, dset_json, item_size):
     filter_map = app['filter_map']
     dset_id = dset_json['id']
     if dset_id in filter_map:
+        log.debug(f"returning filter from filter_map {filter_map[dset_id]}")
         return filter_map[dset_id]
 
 
     compressionFilter = getCompressionFilter(dset_json)
+    log.debug(f"got compressionFilter: {compressionFilter}")
 
     if not compressionFilter:
         return None
