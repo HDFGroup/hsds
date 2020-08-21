@@ -15,6 +15,8 @@
 #
 import hashlib
 import uuid
+from aiohttp.web_exceptions import HTTPServiceUnavailable
+
 
 from .. import hsds_logger as log
 
@@ -402,7 +404,7 @@ def getDataNodeUrl(app, obj_id):
     if node_state != "READY" or len(dn_urls) <= 0:
         msg="Service not ready"
         log.warn(msg)
-        raise ValueError()
+        raise HTTPServiceUnavailable()
     dn_number = getObjPartition(obj_id, dn_node_count)
     url = dn_urls[dn_number]
     log.debug(f"got dn_url: {url} for obj_id: {obj_id}")

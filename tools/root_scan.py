@@ -73,6 +73,7 @@ def main():
     app["loop"] = loop
     session = get_session()
     app["session"] = session
+    app["filter_map"] = {}
 
     # need the metadata cache since we will be calling into some SN methods
     metadata_mem_cache_size = int(config.get("metadata_mem_cache_size"))
@@ -98,15 +99,16 @@ def main():
     print(f"num_datatypes: {results['num_datatypes']}")
     print(f"num_datasets: {len(datasets)}")
     if datasets:
-        print("    dataset_id\tlast_modified\tnum_chunks\tallocated_bytes\tlogical_bytes\tnum_link_chunks")
+        print("    dataset_id\tlast_modified\tnum_chunks\tallocated_bytes\tlogical_bytes\tlinked_bytes\tnum_link_chunks")
     for dsetid in datasets:
         dataset_info = datasets[dsetid]
         lm = dataset_info['lastModified']
         nc = dataset_info['num_chunks']
         ab = dataset_info['allocated_bytes']
         lb = dataset_info['logical_bytes']
+        ln = dataset_info['linked_bytes']
         nl = dataset_info['num_linked_chunks']
-        print(f"   {dsetid}: {lm}, {nc}, {ab}, {lb}, {nl}")
+        print(f"   {dsetid}: {lm}, {nc}, {ab}, {lb}, {ln}, {nl}")
 
     scan_start = datetime.fromtimestamp(results["scan_start"])
     print(f"scan_start:    {scan_start}")

@@ -155,7 +155,7 @@ async def get_metadata_obj(app, obj_id, bucket=None):
             try:
                 obj_json = await getStorJSONObj(app, s3_key, bucket=bucket)
             except HTTPNotFound:
-                log.warn(f"HTTPpNotFound error for {s3_key} bucket:{bucket}")
+                log.warn(f"HTTPNotFound for {s3_key} bucket:{bucket}")
                 if obj_id in pending_s3_read:
                     del pending_s3_read[obj_id]
                 raise
@@ -701,9 +701,11 @@ async def s3syncCheck(app):
             log.info(f"s3syncCheck {update_count} objects updated")
 
         pending_s3_write_tasks = app["pending_s3_write_tasks"]
+        log.debug(f"pending_write_tasks: {pending_s3_write_tasks}")
         dirty_ids = app["dirty_ids"]
+        log.debug(f"dirty_ids: {dirty_ids}")
 
-        if len(pending_s3_write_tasks) > 0 or len(dirty_ids) > 0:
+        if update_count > 0:
             log.debug("s3syncCheck short sleep")
             # give other tasks a chance to run
             await asyncio.sleep(0)

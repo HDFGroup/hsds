@@ -489,7 +489,7 @@ def getDsetMaxDims(dset_json):
 """
 def getChunkLayout(dset_json):
     if "layout" not in dset_json:
-        log.error("No layout found in dset_json: {}".format(dset_json))
+        log.error("No layout found in dset_json")
         raise HTTPInternalServerError()
     layout_json = dset_json["layout"]
     if layout_json["class"] not in ('H5D_CHUNKED', 'H5D_CHUNKED_REF', 'H5D_CHUNKED_REF_INDIRECT', 'H5D_CONTIGUOUS_REF'):

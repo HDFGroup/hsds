@@ -95,8 +95,6 @@ async def PUT_Chunk(request):
 
     dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
 
-    log.debug(f"dset_json: {dset_json}")
-
     # TBD - does this work with linked datasets?
     dims = getChunkLayout(dset_json)
     log.debug(f"got dims: {dims}")
@@ -249,8 +247,6 @@ async def GET_Chunk(request):
     dims = getChunkLayout(dset_json)
     log.debug(f"got dims: {dims}")
     rank = len(dims)
-
-    log.debug(f"dset_json: {dset_json}")
 
     # get chunk selection from query params
     selection = []

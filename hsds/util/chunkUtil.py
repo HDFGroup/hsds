@@ -434,8 +434,11 @@ def getChunkIds(dset_id, selection, layout, dim=0, prefix=None, chunk_ids=None):
     rank = len(selection)
     if chunk_ids is None:
         chunk_ids = []
+    log.debug(f"getChunkIds - selection: {selection}")
     s = selection[dim]
     c = layout[dim]
+    log.debug(f"getChunkIds - layout: {layout}")
+
 
     if s.step > c:
         # chunks may not be contiguous,  skip along the selection and add

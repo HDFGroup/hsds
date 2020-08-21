@@ -257,7 +257,7 @@ async def POST_Root(request):
 
     # add id to be scanned by the s3sync task
     root_scan_ids = app["root_scan_ids"]
-    root_scan_ids[root_id] = bucket
+    root_scan_ids[root_id] = (bucket, time.time())
 
     resp_json = {  }
 

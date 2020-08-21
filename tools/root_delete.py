@@ -68,6 +68,7 @@ def main():
     app["objDelete_prefix"] = None
     session = get_session()
     app["session"] = session
+    app["filter_map"] = {}
     loop.run_until_complete(run_delete(app, rootid))
 
     loop.close()
