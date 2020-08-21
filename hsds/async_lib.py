@@ -308,7 +308,7 @@ async def scanRoot(app, rootid, update=False, bucket=None):
 
     app["scanRoot_results"] = results
 
-    await getStorKeys(app, prefix=root_prefix, include_stats=True, bucket=bucket, callback=scanRootCallback)
+    await getStorKeys(app, prefix=root_prefix, include_stats=True, bucket=bucket, callback=scanRootCallback, limit=1000)
     num_objects = results["num_groups"] + results["num_datatypes"] + len(results["datasets"]) + results["num_chunks"]
     log.info(f"scanRoot - got {num_objects} keys for rootid: {rootid}")
 
