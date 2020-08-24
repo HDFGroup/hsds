@@ -1747,7 +1747,10 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=None,
     log.info(f"doHyperSlabRead - number of chunk_ids: {len(chunk_ids)}")
     log.debug(f"doHyperSlabRead - chunk_ids: {chunk_ids}")
     cors_domain = config.get("cors_domain")
-
+    log.debug("headers...")
+    for k in request.headers:
+        v = request.headers[k]
+        log.debug(f"   {k}: {v}")
 
     accept_type = getAcceptType(request)
     response_type = accept_type    # will adjust later if binary not possible
@@ -1790,6 +1793,9 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=None,
         # write response
         try:
             resp = StreamResponse()
+            if config.get("http_compression"):
+                log.debug("enabling http_compression")
+                resp.enable_compression()
             resp.headers['Content-Type'] = "application/octet-stream"
             # allow CORS
             if cors_domain:
@@ -1967,6 +1973,9 @@ async def POST_Value(request):
         # write response
         try:
             resp = StreamResponse()
+            if config.get("http_compression"):
+                log.debug("enabling http_compression")
+                resp.enable_compression()
             resp.headers['Content-Type'] = "application/octet-stream"
             resp.content_length = len(output_data)
             await resp.prepare(request)
