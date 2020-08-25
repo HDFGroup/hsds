@@ -1829,7 +1829,8 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("class" in layout_json)
         self.assertEqual(layout_json["class"], 'H5D_CHUNKED')
         self.assertTrue("dims" in layout_json)
-        self.assertTrue("partition_count" in layout_json)
+        if config.get("max_chunks_per_folder") > 0:
+            self.assertTrue("partition_count" in layout_json)
 
         layout = layout_json["dims"]
 
