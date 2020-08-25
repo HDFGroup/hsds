@@ -938,8 +938,9 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(layout_json["class"], 'H5D_CHUNKED')
         self.assertTrue("dims" in layout_json)
         self.assertEqual(layout_json["dims"], [1, 390, 1024])
-        self.assertTrue("partition_count" in layout_json)
-        self.assertEqual(layout_json["partition_count"], 10)
+        if config.get("max_chunks_per_folder") > 0:
+            self.assertTrue("partition_count" in layout_json)
+            self.assertEqual(layout_json["partition_count"], 10)
 
         # verify compression
         self.assertTrue("creationProperties" in rspJson)
@@ -1769,8 +1770,9 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("class" in layout_json)
         self.assertEqual(layout_json["class"], 'H5D_CHUNKED')
         self.assertTrue("dims" in layout_json)
-        self.assertTrue("partition_count" in layout_json)
-        self.assertTrue(layout_json["partition_count"] > 1000)  # will change if max_chunks_per_folder is updated
+        if config.get("max_chunks_per_folder") > 0:
+            self.assertTrue("partition_count" in layout_json)
+            self.assertTrue(layout_json["partition_count"] > 1000)  # will change if max_chunks_per_folder is updated
 
         layout = layout_json["dims"]
 
