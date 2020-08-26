@@ -169,14 +169,8 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
                             chunk_arr = chunk_arr.reshape((nelements,))
                             for i in range(nelements):
                                 e = chunk_arr[i]
-                                # elements should have 2 (if it is offset and size) or 3 (if it is path,offset, and size)
-                                if len(e) == 2:
-                                    chunk_size = int(e[1])
-                                elif len(e) == 3:
-                                    chunk_size = int(e[2])
-                                else:
-                                    msg = f"Unexpected value for chunk table element[{i}]: {e}"
-                                    raise ValueError(msg)
+                                # elements should have 2 (if it is offset and size) or 3 (if it is offset, size, and path)
+                                chunk_size = int(e[1])
                                 if chunk_size > 0:
                                     linked_bytes += chunk_size
                                     num_linked_chunks += 1
