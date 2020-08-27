@@ -24,8 +24,8 @@ classifiers = [
 
 
 install_requires = [
-    'aiobotocore<1',
-    'aiohttp <= 3.6.2',
+    'aiobotocore',
+    'aiohttp',
     'aiohttp_cors',
     'aiofiles',
      #'botocore',
@@ -41,7 +41,7 @@ install_requires = [
 
 
 setup(name='hsds',
-      version='0.5.0',
+      version='0.6.0',
       description='HDF REST API',
       url='http://github.com/HDFGroup/hsds',
       author='John Readey',
