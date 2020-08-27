@@ -91,8 +91,23 @@ class S3Client():
             self._aws_access_key_id = None
 
         if aws_iam_role and not self._aws_secret_access_key:
-            log.info(f"using iam role: {aws_iam_role}")
-            log.info("getting EC2 IAM role credentials")
+            if "token_expiration" in app:
+                # check that our token is not about to expire
+                expiration = app["token_expiration"]
+                now = datetime.datetime.now()
+                delta = expiration - now
+                if delta.total_seconds() > 10:
+                    renew_token = False
+                    self._aws_session_token = app["aws_session_token"]
+                else:
+                    renew_token = True
+            else:
+                renew_token = True  # first time getting token
+        else:
+            renew_token = False
+               
+        if renew_token:
+            log.info(f"get S3 access token using iam role: {aws_iam_role}")
             # Use EC2 IAM role to get credentials
             # See: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html?icmpid=docs_ec2_console
             curl_cmd = ["curl", f"http://169.254.169.254/latest/meta-data/iam/security-credentials/{aws_iam_role}"]
@@ -112,26 +127,13 @@ class S3Client():
                     expiration_str = aws_cred_expiration[:-1] + "UTC" # trim off 'Z' and add 'UTC'
                     # save the expiration
                     app["token_expiration"] = datetime.datetime.strptime(expiration_str, "%Y-%m-%dT%H:%M:%S%Z")
+                    app["aws_session_token"] = self._aws_session_token
                 except json.JSONDecodeError:
                     msg = "Unexpected error decoding EC2 meta-data response"
                     log.error(msg)
                 except KeyError:
                     msg = "Missing expected key from EC2 meta-data response"
                     log.error(msg)
-        """
-
-        session = app["session"]
-        _client = await session.create_client('s3', region_name=aws_region,
-                                    aws_secret_access_key=aws_secret_access_key,
-                                    aws_access_key_id=aws_access_key_id,
-                                    aws_session_token=aws_session_token,
-                                    endpoint_url=s3_gateway,
-                                    use_ssl=use_ssl,
-                                    config=aio_config)
-
-        app['s3'] = _client  # save so same client can be returned in subsequent calls
-        return _client
-        """
 
     def _s3_stats_increment(self, counter, inc=1):
         """ Incremenet the indicated connter
@@ -496,4 +498,11 @@ class S3Client():
         log.info(f"getS3Keys done, got {len(key_names)} keys")
 
         return key_names
+
+    async def releaseClient(self):
+        """ release the client collection to s3
+           (Used for cleanup on application exit)
+        """
+        log.info("release S3Client")
+        await asyncio.sleep(0)  # nothing to do
 
