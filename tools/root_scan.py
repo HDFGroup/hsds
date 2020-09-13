@@ -95,6 +95,7 @@ def main():
     print(f"logical bytes: {results['logical_bytes']}")
     print(f"num chunks: {results['num_chunks']}")
     print(f"linked chunks: {results['num_linked_chunks']}")
+    print(f"linked bytes: {results['linked_bytes']}")
     print(f"num_groups: {results['num_groups']}")
     print(f"num_datatypes: {results['num_datatypes']}")
     print(f"num_datasets: {len(datasets)}")
