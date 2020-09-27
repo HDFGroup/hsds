@@ -152,11 +152,12 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=None, bucket=
     compressor = None
     if filter_ops:
         log.debug(f"getStorBytes for {key} with filter_ops: {filter_ops}")
-        if "is_shuffle" in filter_ops and filter_ops['is_shuffle']:
+        if "use_shuffle" in filter_ops and filter_ops['use_shuffle']:
             shuffle = filter_ops['item_size']
+            log.debug("using shuffle filter")
         if "compressor" in filter_ops:
-            # TBD - enable blosc compressors
             compressor = filter_ops["compressor"]
+            log.debug(f"using compressor: {compressor}")
 
     data = await client.get_object(bucket=bucket, key=key, offset=offset, length=length)
     if data is None or len(data) == 0:
@@ -219,7 +220,7 @@ async def putStorBytes(app, key, data, filter_ops=None, bucket=None):
     if filter_ops:
         if "compressor" in filter_ops:
             cname = filter_ops["compressor"]
-        if "is_shuffle" in filter_ops and not filter_ops['is_shuffle']:
+        if "use_shuffle" in filter_ops and not filter_ops['use_shuffle']:
             shuffle = 0 # client indicates to turn off shuffling
         if "level" in filter_ops:
             clevel = filter_ops["level"]
