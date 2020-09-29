@@ -62,5 +62,5 @@ openid_claims: unique_name,appid   # Comma seperated list of claims to resolve t
 chaos_die: 0           # if > 0, have nodes randomly die after n seconds (for testing)
 standalone_app: false   # True when run as a single application
 blosc_nthreads: 2  # number of threads to use for blosc compression.  Set to 0 to have blosc auto-determine thread count
-http_compression: True  # Use HTTP compression 
+http_compression: False  # Use HTTP compression 
 
