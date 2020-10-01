@@ -35,8 +35,8 @@ Sample marathon configurations
 
 - See: [dcos_dn.json](../dcos_dn.json)
 
-It is recommended to scale up the data nodes as you have capacity.  There should only be one head node.  A single
+It is recommended to scale up the data nodes as you have capacity. There should only be one head node. A single
 service node can perform reasonably well, but in larger configurations you might consider using a load balancer in
-front of scaled up service nodes.
+front of scaled up service nodes. Enquiry them after improvization.
 
 Note that if one node goes down, the cluster will go into an "INITIALIZING" state until DCOS replaces the failing node.
