@@ -178,6 +178,7 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=None, bucket=
                 udata = blosc.decode(data)
                 log.info(f"uncompressed to {len(udata)} bytes")
                 data = udata
+                shuffle = 0 # blosc will unshuffle the bytes for us
             except Exception as e:
                 log.error(f"got exception: {e} using blosc decompression for {key}")
                 raise HTTPInternalServerError()
