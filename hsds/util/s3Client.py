@@ -70,24 +70,24 @@ class S3Client():
             pass
         self._aio_config = AioConfig(max_pool_connections=max_pool_connections)
 
-        log.info(f"S3Client init - aws_region {self._aws_region}")
+        log.debug(f"S3Client init - aws_region {self._aws_region}")
 
         self._s3_gateway = config.get('aws_s3_gateway')
         if not self._s3_gateway:
             msg="Invalid aws s3 gateway"
             log.error(msg)
             raise ValueError(msg)
-        log.info(f"Using S3Gateway: {self._s3_gateway}")
+        log.debug(f"Using S3Gateway: {self._s3_gateway}")
 
         self._use_ssl = False
         if self._s3_gateway.startswith("https"):
             self._use_ssl = True
 
         if not self._aws_secret_access_key or self._aws_secret_access_key == 'xxx':
-            log.info("aws secret access key not set")
+            log.debug("aws secret access key not set")
             self._aws_secret_access_key = None
         if not self._aws_access_key_id or self._aws_access_key_id == 'xxx':
-            log.info("aws access key id not set")
+            log.debug("aws access key id not set")
             self._aws_access_key_id = None
 
         if aws_iam_role and not self._aws_secret_access_key:

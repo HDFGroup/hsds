@@ -341,6 +341,7 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset
         s3key = getS3Key(chunk_id)
         log.debug(f"getChunk chunkid: {chunk_id} bucket: {bucket}")
     if chunk_id in chunk_cache:
+        log.debug(f"getChunk chunkid: {chunk_id} found in cache")
         chunk_arr = chunk_cache[chunk_id]
     else:
         if s3path and s3size == 0:

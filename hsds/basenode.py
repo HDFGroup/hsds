@@ -710,6 +710,34 @@ def baseInit(loop, node_type):
         log.info("Found MARATHON_APP_ID environment variable, setting is_dcos to True")
         app["is_dcos"] = True
 
+    try:
+        aws_iam_role = config.get("aws_iam_role")
+        log.info(f"aws_iam_role set to: {aws_iam_role}")
+    except KeyError:
+        log.info("aws_iam_role not set")
+    try:
+        aws_secret_access_key = config.get("aws_secret_access_key")
+        if aws_secret_access_key == "xxx":
+            log.info("aws_secret_access_key not set")
+        else:
+            log.info("aws_secret_access_key set")
+    except KeyError:
+        log.info("aws_secret_access_key not set")
+    try:
+        aws_access_key_id = config.get("aws_access_key_id")
+        if aws_access_key_id == "xxx":
+            log.info("aws_access_key_id not set")
+        else:
+            log.info("aws_access_key_id set")
+    except KeyError:
+        log.info("aws_access_key_id not set")
+    try:
+        aws_region = config.get("aws_region")
+        log.info(f"aws_region set to: {aws_region}")
+    except KeyError:
+        log.info("aws_region not set")
+
+
     if not config.get('standalone_app'):
         log.app = app
 
