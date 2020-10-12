@@ -369,7 +369,7 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset
             if chunk_arr is None:
                 if chunk_id not in pending_s3_read:
                     pending_s3_read[chunk_id] = time.time()
-                log.debug(f"Reading chunk {s3key} from S3")
+                log.debug(f"Reading chunk {chunk_id} from S3")
 
                 chunk_bytes = await getStorBytes(app, s3key, filter_ops=filter_ops, offset=s3offset, length=s3size, bucket=bucket)
                 if chunk_id in pending_s3_read:
