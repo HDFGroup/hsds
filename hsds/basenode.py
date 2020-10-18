@@ -310,6 +310,7 @@ async def k8s_register(app):
     k8s_client.Configuration.set_default(c) #make that config the default for all new clients
     v1 = k8s_client.CoreV1Api()
     # TBD - use the async version
+    k8s_app_label = config.get("k8s_app_label")
     ret = v1.list_pod_for_all_namespaces(watch=False)
     pod_ips = []
     sn_urls = {}
@@ -319,8 +320,8 @@ async def k8s_register(app):
         if not pod_ip:
             continue
         labels = i.metadata.labels
-        if labels and "app" in labels and labels["app"] == "hsds":
-            log.info(f"hsds pod - ip: {pod_ip}")
+        if labels and "app" in labels and labels["app"] == k8s_app_label:
+            log.info(f"found hsds pod with app label: {k8s_app_label} - ip: {pod_ip}")
             pod_ips.append(pod_ip)
     if not pod_ips:
         log.error("Expected to find at least one hsds pod")
@@ -691,7 +692,7 @@ def baseInit(loop, node_type):
     counter["WARN"] = 0
     counter["ERROR"] = 0
     app["log_count"] = counter
-
+    
     if "OIO_PROXY" in os.environ:
         app["oio_proxy"] = os.environ["OIO_PROXY"]
     if "HOST_IP" in os.environ: 
@@ -700,13 +701,21 @@ def baseInit(loop, node_type):
         app["host_ip"] = "127.0.0.1"
 
     # check to see if we are running in a k8s cluster
-    #if ospath.exists("/var/run/secrets/kubernetes.io") or True:
-    if "KUBERNETES_SERVICE_HOST" in os.environ:
-        log.info("running in kubernetes")
-        app["is_k8s"] = True
+    try:
+        k8s_app_label = config.get("k8s_app_label")
+        if "KUBERNETES_SERVICE_HOST" in os.environ: 
+            log.info("running in kubernetes")
+            if k8s_app_label:
+                log.info("setting is_k8s to True")
+                app["is_k8s"] = True
+            else:
+                log.info("k8s_app_label not set, running in k8s single pod")
+    except KeyError:
+        # guard against KeyError since k8s_app_label is a recent key
+        log.warn("expected to find key k8s_app_label in config")
 
     # check to see if we are running in a DCOS cluster
-    elif "MARATHON_APP_ID" in os.environ:
+    if "MARATHON_APP_ID" in os.environ:
         log.info("Found MARATHON_APP_ID environment variable, setting is_dcos to True")
         app["is_dcos"] = True
 
