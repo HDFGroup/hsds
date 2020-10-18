@@ -28,7 +28,7 @@ Here we will create a Kubernetes cluster and S3 bucket
 2. Install and configure kubectl on the machine being used for the installation
 3. Run `kubectl cluster-info` to verify connection to the cluster
 4. Create a bucket for HSDS, using AWS cli tools or AWS Management console (make sure it's in the same region as the cluster)
-5. If you are using a VPC, veryfy an endpoint for S3 is setup (see: <https://docs.aws.amazon.com/vpc/latest/userguide/vpc-endpoints-s3.html>).  This is important to avoid having to pay for egress charges between S3 and the Kubernetes cluster
+5. If you are using a VPC, verify an endpoint for S3 is setup (see: <https://docs.aws.amazon.com/vpc/latest/userguide/vpc-endpoints-s3.html>).  This is important to avoid having to pay for egress charges between S3 and the Kubernetes cluster
 
 Create Kubernetes Secrets
 -------------------------
@@ -65,9 +65,11 @@ wish to use the default value.  Values that you will most certainly want to over
 * bucket_name # set to the name of the bucket you will be using (must be globally unique)
 * aws_region  # set to the aws region you will be deploying to (e.g. us-west-2)
 * hsds_endpoint # use the external IP endpoint or DNS name that maps to the IP
-* aws_s3_endpoint # Use AWS endpoint for the region you will be deploying to
+* aws_s3_gateway # Use AWS endpoint for the region you will be deploying to
 
 Run the make_config map script to store the yaml settings as Kubernetes ConnfigMaps: `admin/kubernetes/k8s_make_configmap.sh`
+
+Run: `kubectl describe configmaps hsds-config` and `kubectl describe configmaps hsds-override` to verify the configmap entries.
 
 Deploy HSDS to K8s
 ------------------
@@ -90,8 +92,8 @@ If you need to build and deploy a custom HSDS image (e.g. you have made changes 
 6. Verify that the HSDS pod is running: `$ kubectl get pods`  a pod with a name starting with hsds should be displayed with status as "Running".
 7. Additional verification: Run (`$ kubectl describe pod hsds-xxxx`) and make sure everything looks OK
 8. To locally test that HSDS functioning
-    * Create a forwarding port to the Kubernetes service `$ sudo kubectl port-forward hsds-1234 8080:5101` (use another port if 8080 is unavailable)
-    * From a browser hit: <http://127.0.0.1:8080/about> and verify that "cluster_state" is "READY"
+    * Create a forwarding port to the Kubernetes service `$ sudo kubectl port-forward hsds-1234 5101:5101` where 'hsds-1234' is the name of one of the HSDS pods. 
+    * From a browser hit: <http://127.0.0.1:5101/about> and verify that "cluster_state" is "READY"
 
 Test the Deployment using Integration Test and Test Data
 --------------------------------------------------------
@@ -110,10 +112,11 @@ Building a docker image and deploying to ECR
 This step is only needed if a custom image of HSDS needs to be deployed.
 
 1. From hsds directory, build docker image: `bash build.sh`
-2. Tag the docker image using the ECR scheme: `docker tag 1234 56789.dkr.ecr.us-east-1.amazonaws.com/hsds:v1` where 1234 is the docker image id and 56780 is the account being deployed to, and v1 is the version (update this every time you will be deploying a new version of HSDS).
-3. Login to the AWS container registry (ECR): `aws ecr get-login --no-include-email`, run the command that was printed
-4. Push the image to ECR: `docker push 56789.dkr.ecr.us-east-1.amazonaws.com/hsds:v1`
-5. Update the ***k8s_deployment_aws.yml*** file to use the ECR image path (note there are multiple references to the image)
+2. Using AWS CLI or the AWS Mangement console, crete an ECR repository, 'hsds' in the region you will be deploying to
+3. Tag the docker image using the ECR scheme: `docker tag 1234 56789.dkr.ecr.us-east-1.amazonaws.com/hsds:v1` where 1234 is the docker image id and 56780 is the account being deployed to, and v1 is the version (update this every time you will be deploying a new version of HSDS).
+4. Login to the AWS container registry (ECR): `aws ecr get-login --no-include-email`, run the command that was printed
+5. Push the image to ECR: `docker push 56789.dkr.ecr.us-east-1.amazonaws.com/hsds:v1`
+6. Update the ***k8s_deployment_aws.yml*** file to use the ECR image path (note there are multiple references to the image)
 
 Notes for Installation from a Windows Machine
 ---------------------------------------------
