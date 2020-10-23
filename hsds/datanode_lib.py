@@ -119,7 +119,9 @@ async def get_metadata_obj(app, obj_id, bucket=None):
     # immutable data from other nodes
 
     deleted_ids = app['deleted_ids']
-    if obj_id in deleted_ids:
+    # don't raise 410 for domains since a domain might have been
+    # re-created outside the server
+    if obj_id in deleted_ids and not isValidDomain(obj_id):
         msg = f"{obj_id} has been deleted"
         log.warn(msg)
         raise HTTPGone()
@@ -158,6 +160,8 @@ async def get_metadata_obj(app, obj_id, bucket=None):
                 log.warn(f"HTTPNotFound for {s3_key} bucket:{bucket}")
                 if obj_id in pending_s3_read:
                     del pending_s3_read[obj_id]
+                if obj_id in deleted_ids and isValidDomain(obj_id):
+                    raise HTTPGone()
                 raise
             except HTTPForbidden:
                 log.warn(f"HTTPForbidden error for {s3_key} bucket:{bucket}")
