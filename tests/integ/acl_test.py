@@ -307,7 +307,7 @@ class AclTest(unittest.TestCase):
         req = helper.getEndpoint() + '/acls/' + user2name 
         headers = helper.getRequestHeaders(domain=self.base_domain, username=user2name)
         rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 404) # not found
+        self.assertTrue(rsp.status_code in (403,404))  # forbiden or not found
 
         # The default ACL should be fetchable by test_user2 as well...
         if config.get("default_public"):
@@ -316,7 +316,7 @@ class AclTest(unittest.TestCase):
             rsp = requests.get(req, headers=headers)
             self.assertEqual(rsp.status_code, 200) # ok
         else:
-            self.assertEqual(rsp.status_code, 404) # not found
+            self.assertTrue(rsp.status_code in (403,404))  # forbiden or not found
 
         # test_user2 shouldn't be able to read test_user1's ACL
         username = config.get("user_name")
