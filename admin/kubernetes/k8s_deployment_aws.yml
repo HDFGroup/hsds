@@ -17,8 +17,15 @@ spec:
       containers:
         -
           name: sn
-          image: "hdfgroup/hsds"
+          image: "hdfgroup/hsds:v0.6.1a"
           imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "1G"
+              cpu: "500m"
+            limits:
+              memory: "1G"
+              cpu: "1000m"
           volumeMounts:
           - name: accounts
             mountPath: "/config/passwd.txt"
@@ -49,12 +56,19 @@ spec:
                 key: aws_secret_access_key
         -
           name: dn
-          image: "hdfgroup/hsds"
+          image: "hdfgroup/hsds:v0.6.1a"
           lifecycle:
             preStop:
               exec:
                 command: ["/usr/bin/curl", "-X", "DELETE", "http://127.0.0.1:6101/prestop"]
           imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "2G"
+              cpu: "500m"
+            limits:
+              memory: "2G"
+              cpu: "1000m"
           volumeMounts:
           - name: config
             mountPath: "/config/config.yml"
