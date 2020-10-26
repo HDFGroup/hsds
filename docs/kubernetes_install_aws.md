@@ -67,7 +67,7 @@ wish to use the default value.  Values that you will most certainly want to over
 * hsds_endpoint # use the external IP endpoint or DNS name that maps to the IP
 * aws_s3_gateway # Use AWS endpoint for the region you will be deploying to
 
-Run the make_config map script to store the yaml settings as Kubernetes ConnfigMaps: `admin/kubernetes/k8s_make_configmap.sh`
+Run the make_config map script to store the yaml settings as Kubernetes ConfigMaps: `admin/kubernetes/k8s_make_configmap.sh`
 
 Run: `kubectl describe configmaps hsds-config` and `kubectl describe configmaps hsds-override` to verify the configmap entries.
 
