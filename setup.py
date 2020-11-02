@@ -58,5 +58,6 @@ setup(name='hsds',
           'hsds-datanode = hsds.datanode:main',
           'hsds-servicenode = hsds.servicenode:main',
           'hsds-headnode = hsds.headnode:main',
+          'hsds-rangeget = hsds.rangeget_proxy:main', 
           ]}
 )

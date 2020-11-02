@@ -27,6 +27,15 @@ def getEndpoint():
     return endpoint
 
 """
+    Helper function - get endpoint we'll send http requests to
+"""
+def getRangeGetEndpoint():
+
+    endpoint = config.get("rangeget_endpoint")
+    return endpoint
+
+
+"""
 Helper function - return true if the parameter looks like a UUID
 """
 def validateId(id):

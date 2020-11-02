@@ -34,20 +34,18 @@ class Node(object):
 
 class LruCache(object):
     """ LRU cache for Numpy arrays that are read/written from S3
+        
+        If name is "ChunkCache", chunk items are assumed by be ndarrays
     """
-    def __init__(self, mem_target=32*1024*1024, chunk_cache=True, expire_time=None):
+    def __init__(self, mem_target=32*1024*1024, name="LruCache", expire_time=None):
         self._hash = {}
         self._lru_head = None
         self._lru_tail = None
         self._mem_size = 0
         self._dirty_size = 0
         self._mem_target = mem_target
-        self._chunk_cache = chunk_cache
         self._expire_time = expire_time
-        if chunk_cache:
-            self._name = "ChunkCache"
-        else:
-            self._name = "MetaCache"
+        self._name = name
         self._dirty_set = set()
 
 
@@ -153,20 +151,20 @@ class LruCache(object):
         return node._data
 
     def __setitem__(self, key, data):
-        if self._chunk_cache:
-            if not isinstance(data, numpy.ndarray):
-                raise TypeError(f"Expected ndarray but got type: {type(data)}")
+        if isinstance(data, numpy.ndarray):
             if len(key) < 38:
                 # id should be prefix (e.g. "c-") and uuid value + chunk_index
                 raise ValueError("Unexpected id length")
             if not key.startswith("c"):
                 raise ValueError("Unexpected prefix")
             mem_size = getArraySize(data)  # can just compute size for numpy array
-        else:
-            if not isinstance(data, dict):
-                raise TypeError(f"Expected dict but got type: {type(data)}")
+        elif isinstance(data, dict):
             # TBD - come up with a way to get the actual data size for dict objects
             mem_size = 1024
+        elif isinstance(data, bytes):
+            mem_size = len(bytes)
+        else:
+            raise TypeError("Unexpected type for LRUCache")
 
         if key in self._hash:
             # key is already in the LRU - update mem size, data and move to front
@@ -253,6 +251,7 @@ class LruCache(object):
         dirty_usage = 0
         # walk the LRU list
         node = self._lru_head
+        node_type = None
         while node is not None:
             id_list.append(node._id)
             if node._id not in self._hash:
@@ -263,8 +262,11 @@ class LruCache(object):
                     raise ValueError(f"expected to find id: {node._id} in dirty set")
                 dirty_usage += node._mem_size
             mem_usage += node._mem_size
-            if self._chunk_cache and not isinstance(node._data, numpy.ndarray):
-                raise TypeError("Unexpected datatype")
+            if node_type is None:
+                node_type = type(node._data)
+            else:
+                if not isinstance(node._data, node_type):
+                    raise TypeError("Unexpected datatype")
             node = node._next
         # finish forward iteration
         if len(id_list) != len(self._hash):

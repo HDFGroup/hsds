@@ -250,7 +250,7 @@ class LruCacheTest(unittest.TestCase):
 
     def testMetaDataCache(self):
         """ check metadata cache functionality """
-        cc = LruCache(mem_target=1024*10, chunk_cache=False)
+        cc = LruCache(mem_target=1024*10, name="ChunkCache")
         cc.consistencyCheck()
 
         self.assertEqual(len(cc), 0)
