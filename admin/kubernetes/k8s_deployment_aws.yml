@@ -22,10 +22,8 @@ spec:
           resources:
             requests:
               memory: "1G"
-              cpu: "500m"
             limits:
               memory: "1G"
-              cpu: "1000m"
           volumeMounts:
           - name: accounts
             mountPath: "/config/passwd.txt"
@@ -65,10 +63,8 @@ spec:
           resources:
             requests:
               memory: "2G"
-              cpu: "500m"
             limits:
               memory: "2G"
-              cpu: "1000m"
           volumeMounts:
           - name: config
             mountPath: "/config/config.yml"

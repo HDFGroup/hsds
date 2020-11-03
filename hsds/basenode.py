@@ -36,7 +36,7 @@ from . import hsds_logger as log
 from kubernetes import client as k8s_client
 from kubernetes import config as k8s_config
 
-HSDS_VERSION = "0.6"
+HSDS_VERSION = "0.6.2"
 
 def getVersion():
     return HSDS_VERSION
