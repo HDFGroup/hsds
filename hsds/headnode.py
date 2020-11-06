@@ -508,34 +508,23 @@ def init():
     return app
 
 async def start_background_tasks(app):
-    loop = app['loop']
+    loop = asyncio.get_event_loop()
     loop.create_task(healthCheck(app))
 
 #
 # Main
 #
 
-def create_app(loop):
-    """Create headnode aiohttp application
 
-    :param loop: The asyncio loop to use for the application
-    :rtype: aiohttp.web.Application
-    """
+def main():
+    log.info("Head node initializing")
     app = init()  
 
     # create a client Session here so that all client requests
     #   will share the same connection pool 
-    app["loop"] = loop
     app["last_health_check"] = 0
 
     app.on_startup.append(start_background_tasks)
-
-    return app
-
-
-def main():
-    log.info("Head node initializing")
-    app = create_app(asyncio.get_event_loop())
 
     head_port = config.get("head_port")
     log.info("Starting service on port: {}".format(head_port))

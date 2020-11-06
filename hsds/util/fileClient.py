@@ -107,7 +107,7 @@ class FileClient():
 
         start_time = time.time()
         log.debug(f"fileClient.get_object({bucket}/{key} start: {start_time}")
-        loop = self._app["loop"]
+        loop = asyncio.get_event_loop()
 
         try:
             async with aiofiles.open(filepath, loop=loop, mode='rb') as f:
@@ -156,10 +156,7 @@ class FileClient():
         start_time = time.time()
         filepath = self._getFilePath(bucket, key)
         log.debug(f"fileClient.put_object({bucket}/{key} start: {start_time}")
-        if "loop" in self._app:
-            loop = self._app["loop"]
-        else:
-            loop=None
+        loop = asyncio.get_event_loop()
         try:
             key_dirs = key.split("/")
             log.debug(f"key_dirs: {key_dirs}")

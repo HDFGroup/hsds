@@ -40,13 +40,7 @@ class LruCacheTest(unittest.TestCase):
             self.assertTrue(False)
         except TypeError:
             pass # expected
-        arr = np.empty((16, 16), dtype='i4')
-        id = createObjId("datasets")
-        try:
-            cc[id] = arr
-            self.assertTrue(False)
-        except ValueError:
-            pass # expected - not a chunk id
+        arr = np.empty((16, 16), dtype='i4')     
 
         rand_id = createObjId("chunks")
         np_arr = np.random.random((500, 500))  # smaller than our chunk cache size
@@ -256,21 +250,7 @@ class LruCacheTest(unittest.TestCase):
         self.assertEqual(len(cc), 0)
         self.assertEqual(cc.dump_lru(), "->\n<-\n")
 
-        id = createObjId("datasets")
-        try:
-            # only numpy arrays an be added
-            cc[id] = np.zeros((3,4))
-            self.assertTrue(False)
-        except TypeError:
-            pass # expected
         data = { "x": 123, "y": 456}
-        arr = np.zeros((10,))
-        id = createObjId("chunks")
-        try:
-            cc[id] = arr
-            self.assertTrue(False)
-        except TypeError:
-            pass # expected - not a dict
 
         rand_id = createObjId("groups")
         data = {"foo": "bar"}

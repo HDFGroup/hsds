@@ -384,7 +384,7 @@ def getObjPartition(id, count):
     hash_code = getIdHash(id)
     hash_value = int(hash_code, 16)
     number = hash_value % count
-    log.debug(f"ID {id} resolved to data node {number}, out of {count} data paritions.")
+    log.debug(f"ID {id} resolved to data node {number}, out of {count} data partitions.")
     return number
 
 def validateInPartition(app, obj_id):

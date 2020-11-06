@@ -13,6 +13,7 @@
 # httpUtil:
 # http-related helper functions
 #
+import asyncio
 from asyncio import CancelledError
 from aiohttp.web import json_response
 from aiohttp import  ClientSession, TCPConnector
@@ -43,9 +44,7 @@ def get_http_client(app):
     # first time call, create client interface
     # use shared client so that all client requests
     #   will share the same connection pool
-    if "loop" not in app:
-        raise KeyError("loop not initialized")
-    loop = app["loop"]
+    loop = asyncio.get_event_loop()
     max_tcp_connections = int(config.get("max_tcp_connections"))
     log.info(f"Initiating TCPConnector with limit {max_tcp_connections} connections")
     client = ClientSession(loop=loop, connector=TCPConnector(limit_per_host=max_tcp_connections))

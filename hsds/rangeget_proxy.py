@@ -12,48 +12,63 @@
 #
 # data node of hsds cluster
 #
+import asyncio
 from aiohttp.web import run_app
 from aiohttp.web import Application, StreamResponse
 from . import config
 from .util.lruCache import LruCache
 from .util.storUtil import getStorBytes
 from . import hsds_logger as log
-#from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError, HTTPBadRequest
 from aiohttp.web_exceptions import  HTTPInternalServerError, HTTPBadRequest
 
 """
 read indicated bytes from LRU cache (or S3 if not in cache)
 """
-async def read_page(app, key, buffer, offset=0, page_start=0, page_end=0, bucket=None):
-    log.info(f"read_page(key={key}, offset={offset}, page_start={page_start}, page_end={page_end}, bucket={bucket}")
-    if page_end <= page_start:
-        msg = "Invalid parameter - page_end <= page_start"
+async def read_page(app, key, buffer, offset=0, start=0, end=0, bucket=None):
+    log.info(f"read_page(key={key}, offset={offset}, start={start}, end={end}, bucket={bucket}")
+    page_size = int(config.get("data_cache_page_size"))
+    length = end - start
+    if length <= 0:
+        msg = "Invalid parameter - end <= start"
         log.error(msg)
-        raise HTTPBadRequest(reason=msg)
+        raise HTTPInternalServerError()
+    if start // page_size != (end-1) // page_size:
+        msg = "Invalid parameter - start and end not in same page"
+        log.error(msg)
+        raise HTTPInternalServerError()
+    if offset > start:
+        msg = "Invalid parameter - offset greater than start"
+        log.error(msg)
+        raise HTTPInternalServerError()
+
     if not key:
         msg = "Invalid parameter - key"
         log.error(msg)
-        raise HTTPBadRequest(reason=msg)
+        raise HTTPInternalServerError()
     if not key.startswith("/"):
         msg = "Invalid parameter - expected key to start with /"
         log.error(msg)
-        raise HTTPBadRequest(reason=msg)
+        raise HTTPInternalServerError()
     if not bucket:
-        msg = "Invalid parameter - bucket"
-        log.error(msg)
-        raise HTTPBadRequest(reason=msg)
-
-    data_cache = app["data_cache"]
-    cache_key = f"{bucket}{key}:{page_start}"
-    length = page_end - page_start
-    stor_bytes = await getStorBytes(app, key, offset=page_start, length=length, bucket=bucket)
-    buffer[(page_start - offset): (page_end - offset)] = stor_bytes
-
-
+        log.error("read_page - Invalid parameter - bucket not set")
+        raise HTTPInternalServerError()
+    page_start = (start // page_size) * page_size
+    page_number = page_start // page_size
     
-
-
-
+    data_cache = app["data_cache"]
+    cache_key = f"{bucket}{key}:{page_number}"
+    if cache_key not in data_cache:
+        log.debug(f"cache_key: {cache_key} not found in data cache")
+        page_bytes = await getStorBytes(app, key, offset=page_start, length=page_size, bucket=bucket)
+        data_cache[cache_key] = page_bytes
+    else:
+        log.debug(f"cache_key: {cache_key} found in data cache")
+        page_bytes = data_cache[cache_key]
+    page_start = start % page_size
+    page_end = page_start + length
+    buffer_start = start - offset
+    buffer[buffer_start:(buffer_start+length)] = page_bytes[page_start:page_end] 
+  
 
 
 """
@@ -106,12 +121,17 @@ async def GET_ByteRange(request):
             log.error(msg)
             raise HTTPBadRequest(reason=msg)
 
-    page_size = app["data_page_size"]
-    log.info(f"page_size: {page_size}")
+    page_size = int(config.get("data_cache_page_size"))
+    log.debug(f"page_size: {page_size}")
+    log.info(f"GET_ByteRange(bucket={bucket}, key={key}, offset={offset}, length={length})")
+
 
     # create bytearray to store data to be returned
-    buffer = bytearray(length)        
+    buffer = bytearray(length)       
 
+    
+    tasks = []
+    loop = asyncio.get_event_loop()
     page_start = offset
     page_end = page_start
     while page_end < offset + length:
@@ -120,11 +140,16 @@ async def GET_ByteRange(request):
         if page_end > offset + length:
             page_end = offset + length
         print(f"read page {page_start} - {page_end}")  
-        await read_page(app, key, buffer, offset=offset, page_start=page_start, page_end=page_end, bucket=bucket)
+        task = asyncio.ensure_future(read_page(app, key, buffer, offset=offset, start=page_start, end=page_end, bucket=bucket))
+        tasks.append(task)
+        # await read_page(app, key, buffer, offset=offset, start=page_start, end=page_end, bucket=bucket)
         page_start = page_end
-  
-        
-    log.info(f"got: {len(buffer)} bytes")
+
+    log.info(f"gather {len(tasks)} read_page tasks")
+    await asyncio.gather(*tasks, loop=loop)
+
+     
+    log.info(f"GET_ByteRange - returning: {len(buffer)} bytes")
 
     # write response
      
@@ -150,22 +175,21 @@ async def GET_ByteRange(request):
 def main():
     log.info("rangeget_proxy start")
 
-    data_cache_size = int(config.get("data_cache_size"))
-    log.info(f"Using data cache size of: {data_cache_size}")
-    data_page_size = int(config.get("data_page_size"))
-    log.info(f"Setting data page size to: {data_page_size}")
-    data_cache_expire = int(config.get("data_cache_expire"))
-    log.info(f"Setting data cache expire time to: {data_cache_expire}")
+    cache_size = int(config.get("data_cache_size"))
+    log.info(f"Using data cache size of: {cache_size}")
+    page_size = int(config.get("data_cache_page_size"))
+    log.info(f"Setting data page size to: {page_size}")
+    expire_time = int(config.get("data_cache_expire_time"))
+    log.info(f"Setting data cache expire time to: {expire_time}")
      
     # create the app object
     app = Application() 
 
-    app["data_page_size"] = data_page_size
     #
     # call app.router.add_get() here to add node-specific routes
     #
     app.router.add_route('GET', '/', GET_ByteRange)
-    app['data_cache'] = LruCache(mem_target=data_cache_size, name="DataCache", expire_time=data_cache_expire)
+    app['data_cache'] = LruCache(mem_target=cache_size, name="DataCache", expire_time=expire_time)
 
     # run the app
     port = int(config.get("rangeget_port"))

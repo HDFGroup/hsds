@@ -33,9 +33,9 @@ from .async_lib import scanRoot, removeKeys
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError, HTTPForbidden, HTTPBadRequest
 
 
-async def init(loop):
+async def init():
     """Intitialize application and return app object"""
-    app = baseInit(loop, 'dn')
+    app = baseInit('dn')
 
     #
     # call app.router.add_get() here to add node-specific routes
@@ -179,7 +179,7 @@ async def bucketGC(app):
     log.error("bucketGC terminating unexpectedly")
 
 async def start_background_tasks(app):
-    loop = app['loop']
+    loop = asyncio.get_event_loop()
     loop.create_task(healthCheck(app))
     # run data sync tasks
     loop.create_task(s3syncCheck(app))
@@ -192,7 +192,7 @@ async def start_background_tasks(app):
 
 
 
-def create_app(loop):
+def create_app():
     """Create datanode aiohttp application
 
     :param loop: The asyncio loop to use for the application
@@ -215,13 +215,11 @@ def create_app(loop):
         blosc_nthreads = codecs.blosc_get_nthreads()
         log.info(f"Using default blosc nthreads: {blosc_nthreads}")
 
-    
-
     #create the app object
-    app = loop.run_until_complete(init(loop))
-    app["loop"] = loop
-    app['meta_cache'] = LruCache(mem_target=metadata_mem_cache_size, chunk_cache=False, expire_time=metadata_mem_cache_expire)
-    app['chunk_cache'] = LruCache(mem_target=chunk_mem_cache_size, chunk_cache=True, expire_time=chunk_mem_cache_expire)
+    loop = asyncio.get_event_loop()
+    app = loop.run_until_complete(init())
+    app['meta_cache'] = LruCache(mem_target=metadata_mem_cache_size, name="MetaCache", expire_time=metadata_mem_cache_expire)
+    app['chunk_cache'] = LruCache(mem_target=chunk_mem_cache_size, name="ChunkCache", expire_time=chunk_mem_cache_expire)
     app['deleted_ids'] = set()
     app['dirty_ids'] = {}  # map of objids to timestamp and bucket of which they were last updated
     app['filter_map'] = {} # map of dataset ids to deflate levels (if compressed)
@@ -250,7 +248,7 @@ def create_app(loop):
 
 def main():
     log.info("datanode start")
-    app = create_app(asyncio.get_event_loop())
+    app = create_app()
 
     # run the app
     port = int(config.get("dn_port"))

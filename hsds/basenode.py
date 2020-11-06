@@ -653,7 +653,7 @@ async def info(request):
     return resp
 
 
-def baseInit(loop, node_type):
+def baseInit(node_type):
     """Intitialize application and return app object"""
 
     log.info("Application baseInit")
@@ -749,8 +749,6 @@ def baseInit(loop, node_type):
 
     if not config.get('standalone_app'):
         log.app = app
-
-    app["loop"] = loop  # save loop instance
 
     app.router.add_get('/info', info)
     app.router.add_get('/about', about)

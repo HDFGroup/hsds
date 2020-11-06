@@ -34,9 +34,9 @@ from .dset_sn import GET_Dataset, POST_Dataset, DELETE_Dataset, GET_DatasetShape
 from .chunk_sn import PUT_Value, GET_Value, POST_Value
 
 
-async def init(loop):
+async def init():
     """Intitialize application and return app object"""
-    app = baseInit(loop, 'sn')
+    app = baseInit('sn')
 
     # call app.router.add_get() here to add node-specific routes
     #
@@ -112,24 +112,21 @@ async def init(loop):
     return app
 
 async def start_background_tasks(app):
-    loop = app['loop']
+    loop = asyncio.get_event_loop()
     loop.create_task(healthCheck(app))
 
 
-def create_app(loop):
+def create_app():
     """Create servicenode aiohttp application
-
-    :param loop: The asyncio loop to use for the application
-    :rtype: aiohttp.web.Application
     """
-    app = loop.run_until_complete(init(loop))
+    loop = asyncio.get_event_loop()
+    app = loop.run_until_complete(init())
 
     metadata_mem_cache_size = int(config.get("metadata_mem_cache_size"))
     log.info("Using metadata memory cache size of: {}".format(metadata_mem_cache_size))
-    app['meta_cache'] = LruCache(mem_target=metadata_mem_cache_size, chunk_cache=False)
-    app['domain_cache'] = LruCache(mem_target=metadata_mem_cache_size, chunk_cache=False)
+    app['meta_cache'] = LruCache(mem_target=metadata_mem_cache_size, name="MetaCache")
+    app['domain_cache'] = LruCache(mem_target=metadata_mem_cache_size, name="ChunkCache")
 
-    app['loop'] = loop
     if config.get("allow_noauth"):
         allow_noauth = config.get("allow_noauth")
         if isinstance(allow_noauth, str):
@@ -157,7 +154,7 @@ def create_app(loop):
 
 def main():
     log.info("Service node initializing")
-    app = create_app(asyncio.get_event_loop())
+    app = create_app()
 
     # run the app
     port = int(config.get("sn_port"))

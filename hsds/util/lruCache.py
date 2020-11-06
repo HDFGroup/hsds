@@ -151,18 +151,14 @@ class LruCache(object):
         return node._data
 
     def __setitem__(self, key, data):
+        log.debug(f"setitem, key: {key}")
         if isinstance(data, numpy.ndarray):
-            if len(key) < 38:
-                # id should be prefix (e.g. "c-") and uuid value + chunk_index
-                raise ValueError("Unexpected id length")
-            if not key.startswith("c"):
-                raise ValueError("Unexpected prefix")
             mem_size = getArraySize(data)  # can just compute size for numpy array
         elif isinstance(data, dict):
             # TBD - come up with a way to get the actual data size for dict objects
             mem_size = 1024
         elif isinstance(data, bytes):
-            mem_size = len(bytes)
+            mem_size = len(data)
         else:
             raise TypeError("Unexpected type for LRUCache")
 

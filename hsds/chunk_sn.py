@@ -673,7 +673,7 @@ async def read_chunk_query(app, chunk_id, dset_json, slices, query, limit, rsp_d
 Return list of elements from a dataset
 """
 async def getPointData(app, dset_id, dset_json, points, bucket=None, serverless=False):
-    loop = app["loop"]
+    loop = asyncio.get_event_loop()
     num_points = len(points)
     log.info(f"getPointData {dset_id} for {num_points} points")
     log.debug(f"points: {points}")
@@ -1059,7 +1059,7 @@ async def doPutQuery(request, query_update, dset_json):
 async def PUT_Value(request):
     log.request(request)
     app = request.app
-    loop = app["loop"]
+    loop = asyncio.get_event_loop()
     bucket = None
     body = None
     query = None
@@ -1680,7 +1680,7 @@ async def doQueryRead(request, chunk_ids, dset_json, slices, bucket=None, server
     params = request.rel_url.query
     query = params["query"]
     log.info(f"Query request: {query}")
-    loop = app["loop"]
+    loop = asyncio.get_event_loop()
 
     dset_id = dset_json["id"]
     type_json = dset_json["type"]
@@ -1743,7 +1743,7 @@ async def doQueryRead(request, chunk_ids, dset_json, slices, bucket=None, server
 
 async def doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=None, bucket=None, serverless=False):
     app = request.app
-    loop = app["loop"]
+    loop = asyncio.get_event_loop()
     log.info(f"doHyperSlabRead - number of chunk_ids: {len(chunk_ids)}")
     log.debug(f"doHyperSlabRead - chunk_ids: {chunk_ids}")
     cors_domain = config.get("cors_domain")
