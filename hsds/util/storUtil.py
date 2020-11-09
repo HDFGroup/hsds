@@ -182,7 +182,7 @@ async def getStorJSONObj(app, key, bucket=None):
     log.debug(f"storage key {key} returned: {json_dict}")
     return json_dict
 
-async def getStorBytes(app, key, filter_ops=None, offset=0, length=None, bucket=None):
+async def getStorBytes(app, key, filter_ops=None, offset=0, length=None, bucket=None, use_proxy=True):
     """ Get object identified by key and read as bytes
     """
 
@@ -204,7 +204,7 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=None, bucket=
             compressor = filter_ops["compressor"]
             log.debug(f"using compressor: {compressor}")
 
-    if offset > 0:
+    if offset > 0 and use_proxy:
         # use rnageget proxy
         data = await rangegetProxy(app, bucket=bucket, key=key, offset=offset, length=length)
     else:

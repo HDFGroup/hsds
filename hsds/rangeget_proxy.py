@@ -61,7 +61,8 @@ async def read_page(app, key, buffer, obj_size=0, offset=0, start=0, end=0, buck
             page_length = obj_size - page_start
         else:
             page_length = page_size
-        page_bytes = await getStorBytes(app, key, offset=page_start, length=page_length, bucket=bucket)
+        # set use_proxy to False sense we are the proxy!
+        page_bytes = await getStorBytes(app, key, offset=page_start, length=page_length, bucket=bucket, use_proxy=False)
         if page_bytes is None:
             log.debug(f"getStorBytes {bucket}/{key} not found")
             raise HTTPNotFound()

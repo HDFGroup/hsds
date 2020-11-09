@@ -68,6 +68,7 @@ class RangeGetTest(unittest.TestCase):
         
         req_headers = {"accept": "application/octet-stream"}
         req = self.endpoint + '/'
+        
 
         params = {}
         params["bucket"] = hdf5_sample_bucket
@@ -86,6 +87,8 @@ class RangeGetTest(unittest.TestCase):
                 self.assertEqual(data[i], i//4)
             else:
                 self.assertEqual(data[i], 0)
+        
+        
         """
         params = {}
         params["bucket"] = hdf5_sample_bucket
