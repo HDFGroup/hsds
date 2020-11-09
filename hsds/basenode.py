@@ -311,7 +311,14 @@ async def k8s_register(app):
     v1 = k8s_client.CoreV1Api()
     # TBD - use the async version
     k8s_app_label = config.get("k8s_app_label")
-    ret = v1.list_pod_for_all_namespaces(watch=False)
+    k8s_namespace = config.get("k8s_namespace")
+    if k8s_namespace:
+        # get pods for given namespace
+        log.info(f"getting pods for namespace: {k8s_namespace}")
+        ret = v1.list_namespaced_pod(namespace=k8s_namespace)
+    else:
+        log.info("getting pods for all namespaces")
+        ret = v1.list_pod_for_all_namespaces(watch=False)
     pod_ips = []
     sn_urls = {}
     dn_urls = {}
