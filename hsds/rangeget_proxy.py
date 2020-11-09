@@ -17,14 +17,14 @@ from aiohttp.web import run_app
 from aiohttp.web import Application, StreamResponse
 from . import config
 from .util.lruCache import LruCache
-from .util.storUtil import getStorBytes
+from .util.storUtil import getStorBytes, getStorObjStats
 from . import hsds_logger as log
-from aiohttp.web_exceptions import  HTTPInternalServerError, HTTPBadRequest
+from aiohttp.web_exceptions import  HTTPInternalServerError, HTTPNotFound, HTTPBadRequest
 
 """
 read indicated bytes from LRU cache (or S3 if not in cache)
 """
-async def read_page(app, key, buffer, offset=0, start=0, end=0, bucket=None):
+async def read_page(app, key, buffer, obj_size=0, offset=0, start=0, end=0, bucket=None):
     log.info(f"read_page(key={key}, offset={offset}, start={start}, end={end}, bucket={bucket}")
     page_size = int(config.get("data_cache_page_size"))
     length = end - start
@@ -45,10 +45,7 @@ async def read_page(app, key, buffer, offset=0, start=0, end=0, bucket=None):
         msg = "Invalid parameter - key"
         log.error(msg)
         raise HTTPInternalServerError()
-    if not key.startswith("/"):
-        msg = "Invalid parameter - expected key to start with /"
-        log.error(msg)
-        raise HTTPInternalServerError()
+   
     if not bucket:
         log.error("read_page - Invalid parameter - bucket not set")
         raise HTTPInternalServerError()
@@ -56,10 +53,19 @@ async def read_page(app, key, buffer, offset=0, start=0, end=0, bucket=None):
     page_number = page_start // page_size
     
     data_cache = app["data_cache"]
-    cache_key = f"{bucket}{key}:{page_number}"
+    cache_key = f"{bucket}/{key}:{page_number}"
     if cache_key not in data_cache:
         log.debug(f"cache_key: {cache_key} not found in data cache")
-        page_bytes = await getStorBytes(app, key, offset=page_start, length=page_size, bucket=bucket)
+        page_length = page_size
+        if page_start + page_size > obj_size:
+            page_length = obj_size - page_start
+        else:
+            page_length = page_size
+        page_bytes = await getStorBytes(app, key, offset=page_start, length=page_length, bucket=bucket)
+        if page_bytes is None:
+            log.debug(f"getStorBytes {bucket}/{key} not found")
+            raise HTTPNotFound()
+        log.debug(f"got page_bytes, type: {type(page_bytes)}")
         data_cache[cache_key] = page_bytes
     else:
         log.debug(f"cache_key: {cache_key} found in data cache")
@@ -125,11 +131,27 @@ async def GET_ByteRange(request):
     log.debug(f"page_size: {page_size}")
     log.info(f"GET_ByteRange(bucket={bucket}, key={key}, offset={offset}, length={length})")
 
+    obj_stat_map = app["obj_stat_map"]
+    if f"{bucket}/{key}" not in obj_stat_map:
+        log.debug("getStorObjStats")
+        key_stats = await getStorObjStats(app, key, bucket=bucket)  
+        obj_size = key_stats["Size"]
+        obj_stat_map[f"{bucket}/{key}"] = key_stats
+    else: 
+        key_stats = obj_stat_map[f"{bucket}/{key}"]
+        obj_size = key_stats["Size"]
+
+    log.debug(f"{bucket}/{key} size: {obj_size}")
+    if offset + length > obj_size:
+        msg = "ByteRange selection invalid"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+
 
     # create bytearray to store data to be returned
     buffer = bytearray(length)       
 
-    
     tasks = []
     loop = asyncio.get_event_loop()
     page_start = offset
@@ -140,7 +162,7 @@ async def GET_ByteRange(request):
         if page_end > offset + length:
             page_end = offset + length
         print(f"read page {page_start} - {page_end}")  
-        task = asyncio.ensure_future(read_page(app, key, buffer, offset=offset, start=page_start, end=page_end, bucket=bucket))
+        task = asyncio.ensure_future(read_page(app, key, buffer, obj_size=obj_size, offset=offset, start=page_start, end=page_end, bucket=bucket))
         tasks.append(task)
         # await read_page(app, key, buffer, offset=offset, start=page_start, end=page_end, bucket=bucket)
         page_start = page_end
@@ -190,6 +212,7 @@ def main():
     #
     app.router.add_route('GET', '/', GET_ByteRange)
     app['data_cache'] = LruCache(mem_target=cache_size, name="DataCache", expire_time=expire_time)
+    app['obj_stat_map'] = {}
 
     # run the app
     port = int(config.get("rangeget_port"))

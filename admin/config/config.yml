@@ -26,7 +26,7 @@ sn_port: 5101   # Start sn ports at 5101
 rangeget_port: 6900  # singleton proxy at port 6900
 target_sn_count: 4  # number of SN containers
 target_dn_count: 4 # number of DN containers
-log_level: INFO    # log level.  One of ERROR, WARNING,  INFO, DEBUG 
+log_level: INFO    # log level.  One of ERROR, WARNING, INFO, DEBUG 
 max_tcp_connections: 100   # max number of inflight tcp connections
 head_sleep_time: 10  # max sleep time between health checks for head node
 node_sleep_time: 10 # max sleep time between health checks for SN/DN nodes
@@ -49,7 +49,7 @@ chunk_mem_cache_size: 128m  # 128 MB - chunk cache size per DN node
 chunk_mem_cache_expire: 3600  # expire cache items after one hour
 data_cache_size: 128m  # cache for rangegets
 data_cache_expire_time: 3600  # expire cache items after one hour
-data_cache_page_size: 1m  # page size for range get cache
+data_cache_page_size: 40  # page size for range get cache
 timeout: 30     # http timeout - 30 sec
 password_file: /config/passwd.txt  # filepath to a text file of username/passwords. set to '' for no-auth access
 groups_file: /config/groups.txt     # filepath to text file defining user groups

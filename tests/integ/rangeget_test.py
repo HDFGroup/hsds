@@ -71,7 +71,7 @@ class RangeGetTest(unittest.TestCase):
 
         params = {}
         params["bucket"] = hdf5_sample_bucket
-        params["key"] = "/data/hdf5test/tall.h5"
+        params["key"] = "data/hdf5test/tall.h5"
         params["offset"] = dset112_offset
         params["length"] = dset112_size
         rsp = requests.get(req, headers=req_headers, params=params)
@@ -86,6 +86,22 @@ class RangeGetTest(unittest.TestCase):
                 self.assertEqual(data[i], i//4)
             else:
                 self.assertEqual(data[i], 0)
+        """
+        params = {}
+        params["bucket"] = hdf5_sample_bucket
+        params["key"] = "data/hdf5test/tall.h5"
+        params["offset"] = 8287
+        params["length"] = 5
+        rsp = requests.get(req, headers=req_headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+
+        self.assertEqual(rsp.headers['Content-Type'], "application/octet-stream")
+        data = rsp.content
+        self.assertEqual(len(data), 5)
+        print("data:", data)
+        """
+
+        
  
 if __name__ == '__main__':
     #setup test files

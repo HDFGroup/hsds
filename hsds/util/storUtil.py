@@ -18,10 +18,13 @@ import zlib
 import numcodecs as codecs
 import numpy as np
 from numba import jit
-from aiohttp.web_exceptions import HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
+from aiohttp.client_exceptions import ClientError
+from asyncio import CancelledError
 
 
 from .. import hsds_logger as log
+from .httpUtil import get_http_client
 from .s3Client import S3Client
 try:
     from .azureBlobClient import AzureBlobClient
@@ -115,6 +118,48 @@ async def releaseStorageClient(app):
     client = _getStorageClient(app)
     await client.releaseClient()
 
+async def rangegetProxy(app, bucket=None, key=None, offset=0, length=0):
+    """ fetch bytes from rangeget proxy
+    """
+    rangeget_port = config.get("rangeget_port")
+    req = f"http://rangeget:{rangeget_port}/"
+    client = get_http_client(app)
+    log.debug(f"rangeGetProxy: {req}")
+    params = {}
+    params["bucket"] = bucket
+    params["key"] = key
+    params["offset"] = offset
+    params["length"] = length
+    try:
+        rsp = await client.get(req, params=params)
+    except ClientError as ce:
+        log.error(f"Error for http_get({req}): {ce} ")
+        raise HTTPInternalServerError()
+    except CancelledError as cle:
+        log.warn(f"CancelledError for http_get({req}): {cle}")
+        return None
+
+    log.debug(f"http_get {req} status: <{rsp.status}>")
+    if rsp.status == 200:
+        data = await rsp.read()  # read response as bytes
+        if not data:
+            log.warn(f"rangeget for: {bucket}{key} no data returned")
+            raise HTTPNotFound()
+        if len(data) != length:
+            log.warn(f"expected {length} bytes for rangeget {bucket}{key}, but got: {len(data)}")
+        return data
+
+    elif rsp.status == 404:
+        log.warn(f"rangeget for: {bucket}{key} not found")
+        raise HTTPNotFound()
+    else:
+        msg = f"request to {req} failed with code: {rsp.status}"
+        log.error(msg)
+        raise HTTPInternalServerError()
+
+
+
+
 async def getStorJSONObj(app, key, bucket=None):
     """ Get object identified by key and read as JSON
     """
@@ -159,7 +204,11 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=None, bucket=
             compressor = filter_ops["compressor"]
             log.debug(f"using compressor: {compressor}")
 
-    data = await client.get_object(bucket=bucket, key=key, offset=offset, length=length)
+    if offset > 0:
+        # use rnageget proxy
+        data = await rangegetProxy(app, bucket=bucket, key=key, offset=offset, length=length)
+    else:
+        data = await client.get_object(bucket=bucket, key=key, offset=offset, length=length)
     if data is None or len(data) == 0:
         log.info(f"no data found for {key}")
         return data
