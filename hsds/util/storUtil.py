@@ -122,7 +122,7 @@ async def rangegetProxy(app, bucket=None, key=None, offset=0, length=0):
     """ fetch bytes from rangeget proxy
     """
     rangeget_port = config.get("rangeget_port")
-    req = f"http://rangeget:{rangeget_port}/"
+    req = f"http://hsds_rangeget:{rangeget_port}/"
     client = get_http_client(app)
     log.debug(f"rangeGetProxy: {req}")
     params = {}
@@ -182,7 +182,7 @@ async def getStorJSONObj(app, key, bucket=None):
     log.debug(f"storage key {key} returned: {json_dict}")
     return json_dict
 
-async def getStorBytes(app, key, filter_ops=None, offset=0, length=None, bucket=None, use_proxy=True):
+async def getStorBytes(app, key, filter_ops=None, offset=0, length=-1, bucket=None, use_proxy=True):
     """ Get object identified by key and read as bytes
     """
 
@@ -191,7 +191,12 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=None, bucket=
         bucket = app['bucket_name']
     if key[0] == '/':
         key = key[1:]  # no leading slash
-    log.info(f"getStorBytes({bucket}/{key})")
+    log.info(f"getStorBytes({bucket}/{key}, offset={offset}, length: {length})")
+    if offset is None:
+        offset = 0
+    if length is None:
+        length = 0
+    data_cache_page_size = int(config.get("data_cache_page_size"))
 
     shuffle = 0
     compressor = None
@@ -204,7 +209,7 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=None, bucket=
             compressor = filter_ops["compressor"]
             log.debug(f"using compressor: {compressor}")
 
-    if offset > 0 and use_proxy:
+    if offset > 0 and use_proxy and length < data_cache_page_size:
         # use rnageget proxy
         data = await rangegetProxy(app, bucket=bucket, key=key, offset=offset, length=length)
     else:

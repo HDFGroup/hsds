@@ -149,29 +149,29 @@ async def GET_ByteRange(request):
         raise HTTPBadRequest(reason=msg)
 
 
-
     # create bytearray to store data to be returned
     buffer = bytearray(length)       
 
-    tasks = []
+    max_concurrent_read = config.get("data_cache_max_concurrent_read") 
+    tasks = set()
     loop = asyncio.get_event_loop()
     page_start = offset
     page_end = page_start
     while page_end < offset + length:
+        if len(tasks) >= max_concurrent_read:
+            # Wait for some download to finish before adding a new one
+            _done, tasks = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         page_end = page_start + page_size
         page_end -= page_end % page_size  # trim to page boundry
         if page_end > offset + length:
             page_end = offset + length
-        print(f"read page {page_start} - {page_end}")  
-        task = asyncio.ensure_future(read_page(app, key, buffer, obj_size=obj_size, offset=offset, start=page_start, end=page_end, bucket=bucket))
-        tasks.append(task)
-        # await read_page(app, key, buffer, offset=offset, start=page_start, end=page_end, bucket=bucket)
+        log.debug(f"read page {page_start} - {page_end}")  
+        task = loop.create_task(read_page(app, key, buffer, obj_size=obj_size, offset=offset, start=page_start, end=page_end, bucket=bucket))
+        tasks.add(task)
         page_start = page_end
+    # Wait for the remaining downloads to finish
+    await asyncio.wait(tasks)
 
-    log.info(f"gather {len(tasks)} read_page tasks")
-    await asyncio.gather(*tasks, loop=loop)
-
-     
     log.info(f"GET_ByteRange - returning: {len(buffer)} bytes")
 
     # write response

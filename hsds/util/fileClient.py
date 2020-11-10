@@ -91,14 +91,14 @@ class FileClient():
 
         file_stats[counter] += inc
 
-    async def get_object(self, key, bucket=None, offset=0, length=None):
+    async def get_object(self, key, bucket=None, offset=0, length=-1):
         """ Return data for object at given key.
            If Range is set, return the given byte range.
         """
         self._validateBucket(bucket)
         self._validateKey(key)
 
-        if offset or length:
+        if length > 0:
             range = f"bytes={offset}-{offset+length-1}"
             log.info(f"storage range request: {range}")
 
@@ -113,7 +113,7 @@ class FileClient():
             async with aiofiles.open(filepath, loop=loop, mode='rb') as f:
                 if offset:
                     await f.seek(offset)
-                if length:
+                if length > 0:
                     data = await f.read(length)
                 else:
                     data = await f.read()
