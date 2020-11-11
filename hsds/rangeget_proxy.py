@@ -66,7 +66,7 @@ async def read_page(app, key, buffer, obj_size=0, offset=0, start=0, end=0, buck
         if page_bytes is None:
             log.debug(f"getStorBytes {bucket}/{key} not found")
             raise HTTPNotFound()
-        log.debug(f"got page_bytes, type: {type(page_bytes)}")
+        log.debug(f"got page_bytes, add key: {cache_key} to cache")
         data_cache[cache_key] = page_bytes
     else:
         log.debug(f"cache_key: {cache_key} found in data cache")

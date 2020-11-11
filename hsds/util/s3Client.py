@@ -187,7 +187,11 @@ class S3Client():
                 resp = await _client.get_object(Bucket=bucket, Key=key, Range=range)
                 data = await resp['Body'].read()
                 finish_time = time.time()
-                log.info(f"s3Client.getS3Bytes({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f} bytes={len(data)}")
+                if offset > 0:
+                    range_key = f"{key}[{offset}:{offset+length}]"
+                else:
+                    range_key = key
+                log.info(f"s3Client.getS3Bytes({range_key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f} bytes={len(data)}")
 
                 resp['Body'].close()
             except ClientError as ce:
