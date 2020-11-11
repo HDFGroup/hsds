@@ -595,6 +595,36 @@ class DomainTest(unittest.TestCase):
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 404)
 
+    def testNullDomain(self):
+        headers = helper.getRequestHeaders()
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+
+    def testInvalidDomain(self):
+        domain =  "bad_domain.h5"
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 404)  # TBD - should this be 400?
+
+    def testWithBucket(self):
+        domain =  self.base_domain + "/with_bucket.h5"
+        headers = helper.getRequestHeaders(domain=domain)
+        params = {"bucket": "does.not.exist.bucket.47839293433"}
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 404) 
+
+    def testInvalidBucket(self):
+        domain =  self.base_domain + "/invalid_bucket.h5"
+        headers = helper.getRequestHeaders(domain=domain)
+        params = {"bucket": "bad/bucket"}
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 400) 
+
+
     def testDNSDomain(self):
         # DNS domain names are in reverse order with dots as seperators...
 

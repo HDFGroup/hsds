@@ -218,7 +218,7 @@ def getDomainFromRequest(request, validate=True):
     else:
         pass # no domain specified
 
-    if bucket:
+    if bucket and validate:
         if not re.match("^[a-zA-Z0-9.\-_]{1,255}$", bucket):
             raise ValueError(f"bucket name: {bucket} is not valid")
         if domain[0] == '/':
