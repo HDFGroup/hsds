@@ -13,6 +13,7 @@
 # data node of hsds cluster
 #
 import asyncio
+import time
 from aiohttp.web import run_app
 from aiohttp.web import Application, StreamResponse
 from . import config
@@ -51,26 +52,47 @@ async def read_page(app, key, buffer, obj_size=0, offset=0, start=0, end=0, buck
         raise HTTPInternalServerError()
     page_start = (start // page_size) * page_size
     page_number = page_start // page_size
+    page_length = page_size
+    if page_start + page_size > obj_size:
+        page_length = obj_size - page_start
+    else:
+        page_length = page_size
+    page_bytes = None
     
     data_cache = app["data_cache"]
+    pending_read = app["pending_read"]
     cache_key = f"{bucket}/{key}:{page_number}"
     if cache_key not in data_cache:
         log.debug(f"cache_key: {cache_key} not found in data cache")
-        page_length = page_size
-        if page_start + page_size > obj_size:
-            page_length = obj_size - page_start
-        else:
-            page_length = page_size
-        # set use_proxy to False sense we are the proxy!
-        page_bytes = await getStorBytes(app, key, offset=page_start, length=page_length, bucket=bucket, use_proxy=False)
+        if cache_key in pending_read:
+            read_start_time = pending_read[cache_key]
+            log.info(f"read request for {cache_key} was requested at: {read_start_time}")
+            while time.time() - read_start_time < 2.0:
+                log.debug("waiting for pending read, sleeping")
+                await asyncio.sleep(0.1)  
+                if cache_key in data_cache:
+                    log.info(f"cache item {cache_key} has arrived!")
+                    page_bytes = data_cache[cache_key]
+                    break
+            if page_bytes is None:
+                log.warn(f"read for {cache_key} timed-out, initiaiting a new read")
         if page_bytes is None:
-            log.debug(f"getStorBytes {bucket}/{key} not found")
-            raise HTTPNotFound()
-        log.debug(f"got page_bytes, add key: {cache_key} to cache")
-        data_cache[cache_key] = page_bytes
+            pending_read[cache_key] = time.time()
+            
+            # set use_proxy to False since we are the proxy!
+            page_bytes = await getStorBytes(app, key, offset=page_start, length=page_length, bucket=bucket, use_proxy=False)
+            if cache_key in pending_read:
+                del pending_read[cache_key]
+            if page_bytes is None:
+                log.debug(f"getStorBytes {bucket}/{key} not found")
+                raise HTTPNotFound()
+            log.debug(f"got page_bytes, add key: {cache_key} to cache")
+            data_cache[cache_key] = page_bytes
     else:
         log.debug(f"cache_key: {cache_key} found in data cache")
         page_bytes = data_cache[cache_key]
+
+    # fill in the buffer with requested data from thee page
     page_start = start % page_size
     page_end = page_start + length
     buffer_start = start - offset
@@ -213,7 +235,8 @@ def main():
     #
     app.router.add_route('GET', '/', GET_ByteRange)
     app['data_cache'] = LruCache(mem_target=cache_size, name="DataCache", expire_time=expire_time)
-    app['obj_stat_map'] = {}
+    app['obj_stat_map'] = {}  # map of obj stats (e.g. size)
+    app['pending_read'] = {} # map of keuy to timestamp for in-flight read requests
 
     # run the app
     port = int(config.get("rangeget_port"))
