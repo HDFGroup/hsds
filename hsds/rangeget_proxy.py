@@ -68,7 +68,7 @@ async def read_page(app, key, buffer, obj_size=0, offset=0, start=0, end=0, buck
             read_start_time = pending_read[cache_key]
             log.info(f"read request for {cache_key} was requested at: {read_start_time}")
             while time.time() - read_start_time < 2.0:
-                log.debug("waiting for pending read, sleeping")
+                log.debug("waiting for pending read, sleepingq")
                 await asyncio.sleep(0.1)  
                 if cache_key in data_cache:
                     log.info(f"cache item {cache_key} has arrived!")

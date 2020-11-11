@@ -13,6 +13,7 @@
 # storUtil:
 # storage access functions.  Abstracts S3 API vs Azure storage access
 #
+import time
 import json
 import zlib
 import numcodecs as codecs
@@ -210,7 +211,7 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=-1, bucket=No
             log.debug(f"using compressor: {compressor}")
 
     if offset > 0 and use_proxy and length < data_cache_page_size:
-        # use rnageget proxy
+        # use rangeget proxy
         data = await rangegetProxy(app, bucket=bucket, key=key, offset=offset, length=length)
     else:
         data = await client.get_object(bucket=bucket, key=key, offset=offset, length=length)
@@ -253,10 +254,14 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=-1, bucket=No
     
     if shuffle > 0:
         log.debug(f"shuffle is {shuffle}")
+        start_time = time.time()
         unshuffled = _unshuffle(shuffle, data)
         if unshuffled is not None:
             log.debug(f"unshuffled to {len(unshuffled)} bytes")
             data = unshuffled
+        finish_time = time.time()
+        log.debug(f"unshuffled {len(data)} bytes, {(finish_time - start_time):.2f} elapsed")
+        
 
     return data
 
