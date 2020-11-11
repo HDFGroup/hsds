@@ -313,6 +313,9 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset
     if chunk_init and s3offset > 0:
         log.error(f"unable to initiale chunk {chunk_id} for reference layouts ")
         raise  HTTPInternalServerError()
+    if s3path and s3size == 0:
+        log.error(f"Unexpected get_chunk parameter - s3path: {s3path} with size 0")
+        raise  HTTPInternalServerError()
 
     log.debug(f"getChunk cache utilization: {chunk_cache.cacheUtilizationPercent} per, dirty_count: {chunk_cache.dirtyCount}, mem_dirty: {chunk_cache.memDirty}")
 
@@ -340,7 +343,7 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset
             raise HTTPInternalServerError()
         bucket = path[:index]
         s3key = path[(index+1):]
-        log.debug(f"Using s3path bucket: {bucket} and  s3key: {s3key}")
+        log.debug(f"Using s3path bucket: {bucket} and  s3key: {s3key} offset: {s3offset} length: {s3size}")
     else:
         s3key = getS3Key(chunk_id)
         log.debug(f"getChunk chunkid: {chunk_id} bucket: {bucket}")
@@ -348,33 +351,35 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset
         log.debug(f"getChunk chunkid: {chunk_id} found in cache")
         chunk_arr = chunk_cache[chunk_id]
     else:
+        """
         if s3path and s3size == 0:
             obj_exists = False
         else:
             obj_exists = await isStorObj(app, s3key, bucket=bucket)
+        """
         # TBD - potential race condition?
-        if obj_exists:
-            pending_s3_read = app["pending_s3_read"]
+        pending_s3_read = app["pending_s3_read"]
 
-            if chunk_id in pending_s3_read:
-                # already a read in progress, wait for it to complete
-                read_start_time = pending_s3_read[chunk_id]
-                log.info(f"s3 read request for {chunk_id} was requested at: {read_start_time}")
-                while time.time() - read_start_time < 2.0:
-                    log.debug("waiting for pending s3 read, sleeping")
-                    await asyncio.sleep(1)  # sleep for sub-second?
-                    if chunk_id in chunk_cache:
-                        log.info(f"Chunk {chunk_id} has arrived!")
-                        chunk_arr = chunk_cache[chunk_id]
-                        break
-                if chunk_arr is None:
-                    log.warn(f"s3 read for chunk {chunk_id} timed-out, initiaiting a new read")
-
+        if chunk_id in pending_s3_read:
+            # already a read in progress, wait for it to complete
+            read_start_time = pending_s3_read[chunk_id]
+            log.info(f"s3 read request for {chunk_id} was requested at: {read_start_time}")
+            while time.time() - read_start_time < 2.0:
+                log.debug("waiting for pending s3 read, sleeping")
+                await asyncio.sleep(0.1)  # sleep for sub-second?
+                if chunk_id in chunk_cache:
+                    log.info(f"Chunk {chunk_id} has arrived!")
+                    chunk_arr = chunk_cache[chunk_id]
+                    break
             if chunk_arr is None:
-                if chunk_id not in pending_s3_read:
-                    pending_s3_read[chunk_id] = time.time()
+                log.warn(f"s3 read for chunk {chunk_id} timed-out, initiaiting a new read")
+
+        if chunk_arr is None:
+            if chunk_id not in pending_s3_read:
+                pending_s3_read[chunk_id] = time.time()
                 log.debug(f"Reading chunk {chunk_id} from S3")
 
+            try:
                 chunk_bytes = await getStorBytes(app, s3key, filter_ops=filter_ops, offset=s3offset, length=s3size, bucket=bucket)
                 if chunk_id in pending_s3_read:
                     # read complete - remove from pending map
@@ -384,10 +389,13 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset
                 else:
                     log.warn(f"expected to find {chunk_id} in pending_s3_read map")
                 chunk_arr = bytesToArray(chunk_bytes, dt, dims)
+                log.debug(f"chunk size: {chunk_arr.size}")
+            except HTTPNotFound:
+                if not chunk_init:
+                    log.info(f"chunk not found for id: {chunk_id}")
+                    raise  # not found return 404 
 
-            log.debug(f"chunk size: {chunk_arr.size}")
-
-        elif chunk_init:
+        if chunk_arr is None and chunk_init:
             log.debug(f"Initializing chunk {chunk_id}")
             fill_value = getFillValue(dset_json)
             if fill_value:
