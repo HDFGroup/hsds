@@ -20,7 +20,7 @@ from . import config
 from .util.lruCache import LruCache
 from .util.storUtil import getStorBytes, getStorObjStats
 from . import hsds_logger as log
-from aiohttp.web_exceptions import  HTTPInternalServerError, HTTPNotFound, HTTPBadRequest
+from aiohttp.web_exceptions import  HTTPInternalServerError, HTTPNotFound, HTTPBadRequest, HTTPNotImplemented
 
 """
 read indicated bytes from LRU cache (or S3 if not in cache)
@@ -153,6 +153,10 @@ async def GET_ByteRange(request):
     page_size = int(config.get("data_cache_page_size"))
     log.debug(f"page_size: {page_size}")
     log.info(f"GET_ByteRange(bucket={bucket}, key={key}, offset={offset}, length={length})")
+
+    if page_size < 1024:
+        log.error(f"page_size must be greater than 1024 but it was: {page_size}")
+        raise HTTPNotImplemented()
 
     obj_stat_map = app["obj_stat_map"]
     if f"{bucket}/{key}" not in obj_stat_map:
