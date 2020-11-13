@@ -204,21 +204,6 @@ async def info(request):
     log.response(request, resp=resp)
     return resp
 
-def get_request_ip(request):
-    peername = request.transport.get_extra_info('peername')
-    if peername is None:
-        msg = "Can not determine caller IP"
-        log.error(msg)
-        raise HTTPBadRequest(reason=msg)
-    log.debug(f"get_request_ip - peername: {peername}")
-    if peername[0] is None or peername[0] in ("::1", "127.0.0.1"):
-        host = "localhost"  
-    else:
-        host = peername[0]
-    req_port = peername[1]
-    return (host, req_port)
-
-
 async def register(request):
     """ HTTP method for nodes to register with head node"""
     log.request(request)
