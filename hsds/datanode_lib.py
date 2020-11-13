@@ -317,6 +317,12 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset
         log.error(f"Unexpected get_chunk parameter - s3path: {s3path} with size 0")
         raise  HTTPInternalServerError()
 
+    if "oio_proxy" in app or "is_k8s" in app:
+        # TBD - rangeget proxy not supported on k8s yet
+        use_proxy = False
+    else:
+        use_proxy = True
+
     log.debug(f"getChunk cache utilization: {chunk_cache.cacheUtilizationPercent} per, dirty_count: {chunk_cache.dirtyCount}, mem_dirty: {chunk_cache.memDirty}")
 
     chunk_arr = None
@@ -380,7 +386,7 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset
                 log.debug(f"Reading chunk {chunk_id} from S3")
 
             try:
-                chunk_bytes = await getStorBytes(app, s3key, filter_ops=filter_ops, offset=s3offset, length=s3size, bucket=bucket)
+                chunk_bytes = await getStorBytes(app, s3key, filter_ops=filter_ops, offset=s3offset, length=s3size, bucket=bucket, use_proxy=use_proxy)
                 if chunk_id in pending_s3_read:
                     # read complete - remove from pending map
                     elapsed_time = time.time() - pending_s3_read[chunk_id]

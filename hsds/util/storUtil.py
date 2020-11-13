@@ -183,7 +183,7 @@ async def getStorJSONObj(app, key, bucket=None):
     log.debug(f"storage key {key} returned: {json_dict}")
     return json_dict
 
-async def getStorBytes(app, key, filter_ops=None, offset=0, length=-1, bucket=None, use_proxy=True):
+async def getStorBytes(app, key, filter_ops=None, offset=0, length=-1, bucket=None, use_proxy=False):
     """ Get object identified by key and read as bytes
     """
 
