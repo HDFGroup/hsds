@@ -49,7 +49,7 @@ chunk_mem_cache_size: 128m  # 128 MB - chunk cache size per DN node
 chunk_mem_cache_expire: 3600  # expire cache items after one hour
 data_cache_size: 128m  # cache for rangegets
 data_cache_expire_time: 3600  # expire cache items after one hour
-data_cache_page_size: 16m  # page size for range get cache, set to zero to disable proxy
+data_cache_page_size: 4m  # page size for range get cache, set to zero to disable proxy
 data_cache_max_concurrent_read: 16  # maximum number of inflight storage read requests
 timeout: 30     # http timeout - 30 sec
 password_file: /config/passwd.txt  # filepath to a text file of username/passwords. set to '' for no-auth access
