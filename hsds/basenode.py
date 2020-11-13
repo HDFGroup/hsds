@@ -83,10 +83,10 @@ async def register(app):
         body = {"id": app["id"], "port": outside_port, "node_type": app["node_type"]}
     app['register_time'] = int(time.time())
     try:
-        log.debug(f"register req: {req_reg} body: {body}")
+        log.info(f"register req: {req_reg} body: {body}")
         rsp_json = await http_post(app, req_reg, data=body)
         if rsp_json is not None:
-            log.debug(f"register response: {rsp_json}")
+            log.info(f"register response: {rsp_json}")
             app["node_number"] = rsp_json["node_number"]
             app["node_count"] = rsp_json["node_count"]
             log.info("setting node_state to WAITING")
