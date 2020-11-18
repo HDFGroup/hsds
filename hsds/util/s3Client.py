@@ -129,10 +129,10 @@ class S3Client():
                     app["token_expiration"] = datetime.datetime.strptime(expiration_str, "%Y-%m-%dT%H:%M:%S%Z")
                     app["aws_session_token"] = self._aws_session_token
                 except json.JSONDecodeError:
-                    msg = "Unexpected error decoding EC2 meta-data response"
+                    msg = f"Unexpected error decoding EC2 meta-data response: {stdout}"
                     log.error(msg)
                 except KeyError:
-                    msg = "Missing expected key from EC2 meta-data response"
+                    msg = f"Missing expected key from EC2 meta-data response: {stdout}"
                     log.error(msg)
 
     def _s3_stats_increment(self, counter, inc=1):
