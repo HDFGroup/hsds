@@ -91,7 +91,16 @@ class S3Client():
             log.debug("aws access key id not set")
             self._aws_access_key_id = None
 
-        if aws_iam_role and not self._aws_secret_access_key:
+        if "AWS_ROLE_ARN" in os.environ:
+            # Assume IAM roles for EKS is being used.  See:
+            # https://aws.amazon.com/blogs/opensource/introducing-fine-grained-iam-roles-service-accounts/
+            log.info(f"AWS_ROLE_ARN set to: {os.environ['AWS_ROLE_ARN']}")
+            if "AWS_WEB_IDENTIFY_TOKEN_FILE" in os.environ:
+                log.debug(f"AWS_WEB_IDENTIFY_TOKEN_FILE is: {os.environ['AWS_WEB_IDENTIFY_TOKEN_FILE']}")
+            else:
+                log.warn("Expected AWS_WEB_IDENTIFY_TOKEN_FILE environment to be set")
+            renew_token = False
+        elif aws_iam_role and not self._aws_secret_access_key:
             if "token_expiration" in app:
                 # check that our token is not about to expire
                 expiration = app["token_expiration"]
@@ -109,12 +118,6 @@ class S3Client():
                
         if renew_token:
             log.info(f"get S3 access token using iam role: {aws_iam_role}")
-            for env_name in ("AWS_ROLE_ARN", "AWS_WEEB_IDENTIFY_TOKEN_FILE"):
-                if env_name in os.environ:
-                    env_value = os.environ[env_name]
-                    log.debug(f"got sys env: {env_name}: {env_value}")
-                else:
-                    log.debug(f"sys env: {env_name} not found")
             # Use EC2 IAM role to get credentials
             # See: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html?icmpid=docs_ec2_console
             curl_cmd = ["curl", f"http://169.254.169.254/latest/meta-data/iam/security-credentials/{aws_iam_role}"]
