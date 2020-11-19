@@ -1,4 +1,5 @@
 import asyncio
+import os
 from asyncio import CancelledError
 from  inspect import iscoroutinefunction
 import subprocess
@@ -108,6 +109,12 @@ class S3Client():
                
         if renew_token:
             log.info(f"get S3 access token using iam role: {aws_iam_role}")
+            for env_name in ("AWS_ROLE_ARN", "AWS_WEEB_IDENTIFY_TOKEN_FILE"):
+                if env_name in os.environ:
+                    env_value = os.environ[env_name]
+                    log.debug(f"got sys env: {env_name}: {env_value}")
+                else:
+                    log.debug(f"sys env: {env_name} not found")
             # Use EC2 IAM role to get credentials
             # See: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html?icmpid=docs_ec2_console
             curl_cmd = ["curl", f"http://169.254.169.254/latest/meta-data/iam/security-credentials/{aws_iam_role}"]
