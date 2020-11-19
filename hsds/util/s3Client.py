@@ -95,8 +95,8 @@ class S3Client():
             # Assume IAM roles for EKS is being used.  See:
             # https://aws.amazon.com/blogs/opensource/introducing-fine-grained-iam-roles-service-accounts/
             log.info(f"AWS_ROLE_ARN set to: {os.environ['AWS_ROLE_ARN']}")
-            if "AWS_WEB_IDENTIFY_TOKEN_FILE" in os.environ:
-                log.debug(f"AWS_WEB_IDENTIFY_TOKEN_FILE is: {os.environ['AWS_WEB_IDENTIFY_TOKEN_FILE']}")
+            if "AWS_WEB_IDENTITY_TOKEN_FILE" in os.environ:
+                log.debug(f"AWS_WEB_IDENTITY_TOKEN_FILE is: {os.environ['AWS_WEB_IDENTITY_TOKEN_FILE']}")
             else:
                 log.warn("Expected AWS_WEB_IDENTIFY_TOKEN_FILE environment to be set")
             renew_token = False
