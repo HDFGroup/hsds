@@ -90,6 +90,9 @@ def _getStorageClient(app):
     """ get storage client s3 or azure blob
     """
 
+    if "storage_client" in app:
+        return app["storage_client"]
+
     if config.get("aws_s3_gateway"):
         log.debug("_getStorageClient getting S3Client")
         client = S3Client(app)
@@ -99,6 +102,7 @@ def _getStorageClient(app):
     else:
         log.debug("_getStorageClient getting FileClient")
         client = FileClient(app)
+    app["storage_client"] = client # save so we don't neeed to recreate each time
     return client
 
 def getStorageDriverName(app):
@@ -118,6 +122,9 @@ async def releaseStorageClient(app):
     """
     client = _getStorageClient(app)
     await client.releaseClient()
+
+    if "storage_client" in app:
+        del app["storage_client"]
 
 async def rangegetProxy(app, bucket=None, key=None, offset=0, length=0):
     """ fetch bytes from rangeget proxy

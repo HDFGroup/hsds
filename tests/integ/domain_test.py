@@ -599,7 +599,7 @@ class DomainTest(unittest.TestCase):
         headers = helper.getRequestHeaders()
         req = helper.getEndpoint() + '/'
         rsp = requests.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 400)
+        self.assertEqual(rsp.status_code, 404)
 
     def testInvalidDomain(self):
         domain =  "bad_domain.h5"
