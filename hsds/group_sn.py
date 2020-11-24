@@ -20,7 +20,7 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
 from .util.httpUtil import http_post, http_put, http_delete, getHref, jsonResponse
 from .util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
 from .util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
-from .util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain, getPathForDomain
+from .util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain, getPathForDomain, verifyRoot
 from .servicenode_lib import getDomainJson, getObjectJson, validateAction, getObjectIdByPath, getPathForObjectId
 from . import hsds_logger as log
 
@@ -82,10 +82,7 @@ async def GET_Group(request):
         # from root group for absolute paths
 
         domain_json = await getDomainJson(app, domain)
-        if "root" not in domain_json:
-            msg = f"Expected root key for domain: {domain}"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+        verifyRoot(domain_json)
         group_id = domain_json["root"]
 
     if h5path:
@@ -152,10 +149,7 @@ async def POST_Group(request):
 
     aclCheck(app, domain_json, "create", username)  # throws exception if not allowed
 
-    if "root" not in domain_json:
-        msg = f"Expected root key for domain: {domain}"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
+    verifyRoot(domain_json)
 
     link_id = None
     link_title = None
@@ -240,9 +234,7 @@ async def DELETE_Group(request):
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, group_id, username, "delete")
 
-    if "root" not in domain_json:
-        log.error(f"Expected root key for domain: {domain}")
-        raise HTTPBadRequest(reason="Unexpected Error")
+    verifyRoot(domain_json)
 
     if group_id == domain_json["root"]:
         msg = "Forbidden - deletion of root group is not allowed - delete domain first"

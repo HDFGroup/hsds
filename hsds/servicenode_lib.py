@@ -20,7 +20,7 @@ from .util.idUtil import getDataNodeUrl, getCollectionForId, isSchema2Id, getS3K
 from .util.storUtil import getStorJSONObj, isStorObj
 from .util.authUtil import aclCheck
 from .util.httpUtil import http_get
-from .util.domainUtil import getBucketForDomain
+from .util.domainUtil import getBucketForDomain, verifyRoot
 
 from . import hsds_logger as log
 
@@ -75,10 +75,7 @@ async def validateAction(app, domain, obj_id, username, action):
     log.info(f"validateAction(domain={domain}, obj_id={obj_id}, username={username}, action={action})")
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
-    if "root" not in domain_json:
-        msg = f"Expected root key for domain: {domain}"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
+    verifyRoot(domain_json)
 
     obj_json = None
     if obj_id in meta_cache:

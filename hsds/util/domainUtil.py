@@ -12,6 +12,7 @@
 
 import os.path as op
 import re
+from aiohttp.web_exceptions import HTTPBadRequest
 #
 # Domain utilities
 #
@@ -251,3 +252,13 @@ def getBucketForDomain(domain):
         # invalid domain?
         return None
     return domain[:index]
+
+def verifyRoot(domain_json):
+    """ Throw bad request if we are expecting a domain, 
+      but got a folder instead
+    """
+    if "root" not in domain_json:
+        msg = "Expected root key for domain"
+        # can't use hsds logger, since it would create a circular dependency
+        print("WARN> " + msg)  
+        raise HTTPBadRequest(reason=msg)
