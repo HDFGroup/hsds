@@ -26,7 +26,7 @@ from aiohttp.client_exceptions import ClientError
 from aiohttp.web import json_response
 
 from .util.httpUtil import  http_post, http_put, http_get, http_delete, getHref, get_http_client, jsonResponse
-from .util.idUtil import  getDataNodeUrl, createObjId, getCollectionForId, getDataNodeUrls, isValidUuid, isSchema2Id
+from .util.idUtil import  getDataNodeUrl, createObjId, getCollectionForId, isValidUuid, isSchema2Id, getNodeCount
 from .util.authUtil import getUserPasswordFromRequest, aclCheck, isAdminUser
 from .util.authUtil import validateUserPassword, getAclKeys
 from .util.domainUtil import getParentDomain, getDomainFromRequest, isValidDomain, getBucketForDomain, getPathForDomain
@@ -109,7 +109,7 @@ class FolderCrawler:
         for domain in domains:
             self._q.put_nowait(domain)
         self._bucket = bucket
-        max_tasks = max_tasks_per_node * app['node_count']
+        max_tasks = max_tasks_per_node * getNodeCount(app)
         if len(domains) > max_tasks:
             self._max_tasks = max_tasks
         else:
@@ -371,6 +371,11 @@ async def get_domains(request):
     """ This method is called by GET_Domains and GET_Domain """
     app = request.app
     params = request.rel_url.query
+
+    node_count = getNodeCount(app)  # DomainCrawler will expect this to be larger than zero
+    if node_count == 0:
+        log.warn("get_domains called with no active DN nodes")
+        raise HTTPServiceUnavailable()
 
     # if there is no domain passed in, get a list of top level domains
     if "domain" not in request.rel_url.query:
@@ -708,7 +713,7 @@ async def doFlush(app, root_id, bucket=None):
     if bucket:
         params["bucket"] = bucket
     client = get_http_client(app)
-    dn_urls = getDataNodeUrls(app)
+    dn_urls = app["dn_urls"]
     log.debug(f"doFlush - dn_urls: {dn_urls}")
     failed_count = 0
 
@@ -1119,6 +1124,7 @@ async def DELETE_Domain(request):
         del domain_cache[domain]
 
     # delete domain cache from other sn_urls
+    """
     sn_urls = app["sn_urls"]
     log.debug(f"sn_urls: {sn_urls}")
     log.debug(f"node_number: {app['node_number']}")
@@ -1138,6 +1144,7 @@ async def DELETE_Domain(request):
             log.info(f"{req} response: {sn_rsp}")
         except ClientResponseError as ce:
             log.warn(f"got error for sn_delete: {ce}")
+    """
 
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)

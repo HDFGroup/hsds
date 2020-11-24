@@ -387,21 +387,77 @@ def getObjPartition(id, count):
     log.debug(f"ID {id} resolved to data node {number}, out of {count} data partitions.")
     return number
 
+def getPortFromUrl(url):
+    start = url.find('//')
+    if start == -1:
+        # no http prefix?
+        index = 0
+    port = None
+    dns = url[start:]
+    index = dns.find(':')
+    port_str = ""    
+    if index > 0:
+        for i in range(index+1, len(dns)):
+            ch = dns[i]
+            if ch.isdigit():
+                port_str += ch
+            else:
+                break
+    if port_str:
+        port = int(port_str)
+    else:
+        if url.startswith("https"):
+            port = 443
+        else:
+            port = 80
+        
+    return port
+
+
+def getNodeNumber(app, urls=None):
+    node_port = app["node_port"]
+    node_ip = app["node_ip"]
+    if not node_ip:
+        log.error("getNodeNumber - node_ip not set!")
+        raise ValueError()
+    if urls is None:
+        urls = app["dn_urls"]
+    this_url = f"http://{node_ip}:{node_port}"
+    log.debug(f"getNodeNumber(this_url={this_url}, from urls: {urls}")
+    for i in range(len(urls)):
+        url = urls[i]
+        if url == this_url:
+            log.debug(f"got node number: {i}")
+            return i
+    log.error("getNodeNumber, no matching url")
+    return -1
+
+def getNodeCount(app):
+    dn_urls = app["dn_urls"]
+    dn_node_count = len(dn_urls)
+    return dn_node_count                      
+
 def validateInPartition(app, obj_id):
-    log.debug(f'obj_id: {obj_id}, len(app[dn_urls]): {len(app["dn_urls"])}, node_number: {app["node_number"]}')
-    if getObjPartition(obj_id, len(app['dn_urls'])) != app['node_number']:
+    node_number = getNodeNumber(app)
+    node_count = getNodeCount(app)
+    log.debug(f'obj_id: {obj_id}, node_count: {node_count}, node_number: {node_number}')
+    partition_number = getObjPartition(obj_id, node_count)
+    if partition_number != node_number:
         # The request shouldn't have come to this node'
-        msg = f"wrong node for 'id':{obj_id}, expected node {app['node_number']} got {getObjPartition(obj_id, app['node_count'])}"
+        msg = f"wrong node for 'id':{obj_id}, expected node {node_number} got {partition_number}"
         log.error(msg)
         raise KeyError(msg)
+
+
+
 
 def getDataNodeUrl(app, obj_id):
     """ Return host/port for datanode for given obj_id.
     Throw exception if service is not ready"""
     dn_urls = app["dn_urls"]
-    dn_node_count = len(dn_urls)
+    dn_node_count = getNodeCount(app)
     node_state = app["node_state"]
-    if node_state != "READY" or len(dn_urls) <= 0:
+    if node_state != "READY" or dn_node_count <= 0:
         msg="Service not ready"
         log.warn(msg)
         raise HTTPServiceUnavailable()
@@ -410,10 +466,3 @@ def getDataNodeUrl(app, obj_id):
     log.debug(f"got dn_url: {url} for obj_id: {obj_id}")
     return url
 
-def getDataNodeUrls(app):
-    """ Return list of all urls to the set of datanodes """
-    dn_url_map = app["dn_urls"]
-    dn_urls = []
-    for id in dn_url_map:
-        dn_urls.append(dn_url_map[id])
-    return dn_urls

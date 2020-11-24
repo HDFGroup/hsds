@@ -52,6 +52,10 @@ spec:
               secretKeyRef:
                 name: aws-auth-keys
                 key: aws_secret_access_key
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+              fieldPath: status.podIP
         -
           name: dn
           image: "hdfgroup/hsds:v0.6.1a"
@@ -88,6 +92,10 @@ spec:
               secretKeyRef:
                 name: aws-auth-keys
                 key: aws_secret_access_key
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+              fieldPath: status.podIP
       volumes:
       - name: accounts
         secret:

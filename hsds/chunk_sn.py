@@ -24,7 +24,7 @@ from aiohttp.client_exceptions import ClientError
 from aiohttp.web import StreamResponse
 
 from .util.httpUtil import  getHref, getAcceptType, get_http_client, http_put, request_read, jsonResponse
-from .util.idUtil import   isValidUuid, getDataNodeUrl
+from .util.idUtil import   isValidUuid, getDataNodeUrl, getNodeCount
 from .util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain
 from .util.hdf5dtype import getItemSize, createDataType
 from .util.dsetUtil import getSliceQueryParam, setSliceQueryParam, getFillValue, isExtensible
@@ -1016,7 +1016,10 @@ async def doPutQuery(request, query_update, dset_json):
         raise HTTPInternalServerError()
     log.debug(f"doPutQuery - chunk_ids: {chunk_ids}")
 
-    node_count = app['node_count']
+    node_count = getNodeCount(app)
+    if node_count == 0:
+        log.warn("PutQuery request with no active dn nodes")
+        raise HTTPServiceUnavailable()
     resp_index = []
     resp_value = []
     chunk_index = 0
@@ -1447,7 +1450,11 @@ async def PUT_Value(request):
         log.debug(f"chunk_ids: {chunk_ids}")
 
         tasks = []
-        task_batch_size = len(app["dn_urls"]) * 10
+        node_count = getNodeCount(app)
+        if node_count == 0:
+            log.warn("write_chunk_hyperslab request with no active dn nodes")
+            raise HTTPServiceUnavailable()
+        task_batch_size = node_count * 10
         for chunk_id in chunk_ids:
             task = asyncio.ensure_future(write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr, bucket=bucket))
             tasks.append(task)
@@ -1622,7 +1629,7 @@ async def GET_Value(request):
     num_chunks = getNumChunks(slices, layout)
     log.debug(f"num_chunks: {num_chunks}")
 
-    serverless_threshold =  app["node_count"] * config.get("aws_lambda_threshold")
+    serverless_threshold =  getNodeCount(app) * config.get("aws_lambda_threshold")
 
     max_chunks = int(config.get('max_chunks_per_request'))
     if num_chunks > max_chunks:
@@ -1698,8 +1705,10 @@ async def doQueryRead(request, chunk_ids, dset_json, slices, bucket=None, server
             raise HTTPBadRequest(reason=msg)
 
     tasks = []
-    node_count = app['node_count']
-    log.debug(f"node_count:  {node_count}")
+    node_count = getNodeCount(app)
+    if node_count == 0:
+        log.warn("query read request with no active dn nodes")
+        raise HTTPServiceUnavailable()
     chunk_index = 0
     resp_index = []
     resp_value = []
@@ -1944,7 +1953,7 @@ async def POST_Value(request):
             num_points //= rank
             points = points.reshape((num_points, rank))  # conform to point index shape
 
-    serverless_threshold =  app["node_count"] * config.get("aws_lambda_threshold")
+    serverless_threshold = getNodeCount(app) * config.get("aws_lambda_threshold")
 
     lambda_function = config.get("aws_lambda_chunkread_function")
     nonstrict = _isNonStrict(params)

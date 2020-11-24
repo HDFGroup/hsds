@@ -24,8 +24,8 @@ head_port: 5100     # port to use for head node
 dn_port : 6101  # Start dn ports at 6101
 sn_port: 5101   # Start sn ports at 5101
 rangeget_port: 6900  # singleton proxy at port 6900
-target_sn_count: 4  # number of SN containers
-target_dn_count: 4 # number of DN containers
+target_sn_count: 0  # desired number of SN containers
+target_dn_count: 0 # desire number of DN containers
 log_level: INFO    # log level.  One of ERROR, WARNING, INFO, DEBUG 
 max_tcp_connections: 100   # max number of inflight tcp connections
 head_sleep_time: 10  # max sleep time between health checks for head node
