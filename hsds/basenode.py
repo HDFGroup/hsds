@@ -538,8 +538,7 @@ def baseInit(node_type):
         else:
             pod_ip = os.environ["POD_IP"]
             log.info(f"Kubernetes - using pod_ip: {pod_ip}")
-
-
+            app["node_ip"] = pod_ip
     try:
         aws_iam_role = config.get("aws_iam_role")
         log.info(f"aws_iam_role set to: {aws_iam_role}")

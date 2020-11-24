@@ -55,7 +55,7 @@ spec:
           - name: POD_IP
             valueFrom:
               fieldRef:
-              fieldPath: status.podIP
+                fieldPath: status.podIP
         -
           name: dn
           image: "hdfgroup/hsds:v0.6.1a"
@@ -95,7 +95,7 @@ spec:
           - name: POD_IP
             valueFrom:
               fieldRef:
-              fieldPath: status.podIP
+                fieldPath: status.podIP
       volumes:
       - name: accounts
         secret:
