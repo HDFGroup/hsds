@@ -53,6 +53,10 @@ spec:
             value: "HSDS is a webservice for HDF data"
           - name: PASSWORD_FILE
             value: /config/passwd.txt
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
         -
           name: dn
           image: "hdfgroup/hsds"
@@ -78,6 +82,10 @@ spec:
             value: DEBUG
           - name: HSDS_ENDPOINT
             value: http://hsds.hdf.test
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
       volumes:
       - name: data
         hostPath:

@@ -42,6 +42,10 @@ spec:
               secretKeyRef:
                 name: azure-conn-str
                 key: az_conn_str
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
           - name: AZURE_APP_ID  # for Active Directory authentication
             valueFrom:
               secretKeyRef:
@@ -78,6 +82,10 @@ spec:
               secretKeyRef:
                 name: azure-conn-str
                 key: az_conn_str
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
       volumes:
       - name: accounts
         secret:
