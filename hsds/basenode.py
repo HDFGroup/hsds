@@ -225,6 +225,8 @@ async def docker_get_dn_urls(app):
             req_ip = rsp_json["req_ip"]
             log.info(f"setting node ip to: {req_ip}")
             app["node_ip"] = req_ip
+        else:
+            log.debug(f"node_ip already set to: {app['node_ip']}")
 
     except HTTPInternalServerError:
         log.error("HEAD node seems to be down.")
@@ -298,7 +300,7 @@ async def healthCheck(app):
 
     while True:
         node_state = app["node_state"]
-        if node_state == "READY" and chaos_die > 0:
+        if node_state == "READY" and chaos_die > 0 and app["node_type"] == "dn":
             if random.randint(0, chaos_die) == 0:
                 log.error("chaos die - suicide!")
                 sys.exit(1)
@@ -355,7 +357,7 @@ async def info(request):
     answer = {}
     # copy relevant entries from state dictionary to response
     node = {}
-    node['id'] = request.app['id']
+    node['id'] = app['id']
     node['type'] = app['node_type']
     node['start_time'] =  app["start_time"] #unixTimeToUTC(app['start_time'])
     node['state'] = app['node_state']
@@ -486,10 +488,34 @@ def baseInit(node_type):
         log.info("Found MARATHON_APP_ID environment variable, setting is_dcos to True")
         app["is_dcos"] = True
     
-    if "OIO_PROXY" in os.environ:
+    elif "OIO_PROXY" in os.environ:
         app["oio_proxy"] = os.environ["OIO_PROXY"]
-    if "HOST_IP" in os.environ: 
-        app["node_ip"] = os.environ["HOST_IP"]
+        # will set node_ip at registration time
+    else:
+        # check to see if we are running in a k8s cluster
+        try:
+            k8s_app_label = config.get("k8s_app_label")
+            if "KUBERNETES_SERVICE_HOST" in os.environ: 
+                log.info("running in kubernetes")
+                if k8s_app_label:
+                    log.info("setting is_k8s to True")
+                    app["is_k8s"] = True
+                else:
+                    log.info("k8s_app_label not set, running in k8s single pod")
+        except KeyError:
+            # guard against KeyError since k8s_app_label is a recent key
+            log.warn("expected to find key k8s_app_label in config")
+    
+    node_ip = ""
+    if "is_k8s" in app:
+        # get the pod ip
+        if "POD_IP" not in os.environ:
+            log.error("Runing in Kubernetes by POD_IP environment not set")
+        else:
+            node_ip = os.environ["POD_IP"]
+            log.info(f"Kubernetes - using pod_ip: {node_ip}")
+    elif "HOST_IP" in os.environ: 
+        node_ip  = os.environ["HOST_IP"]
     elif "is_dcos" in app:
         # see https://github.com/mesosphere/marathon/issues/1198
         if "LIBPROCESS_IP" not in os.environ:
@@ -498,10 +524,11 @@ def baseInit(node_type):
             node_ip = "127.0.0.1"
         else:
             node_ip = os.environ['LIBPROCESS_IP']
-    else:
-        node_ip = ""  # will be set at register time
+   
     if node_ip:
         log.info(f"Setting node_ip to: {node_ip}")
+    else:
+        log.warn("Could info determine node_ip")
     app["node_ip"] = node_ip
 
     if "is_dcos" in app:
@@ -517,28 +544,7 @@ def baseInit(node_type):
 
     app["custer_state"] = "WAITING"
 
-    # check to see if we are running in a k8s cluster
-    try:
-        k8s_app_label = config.get("k8s_app_label")
-        if "KUBERNETES_SERVICE_HOST" in os.environ: 
-            log.info("running in kubernetes")
-            if k8s_app_label:
-                log.info("setting is_k8s to True")
-                app["is_k8s"] = True
-            else:
-                log.info("k8s_app_label not set, running in k8s single pod")
-    except KeyError:
-        # guard against KeyError since k8s_app_label is a recent key
-        log.warn("expected to find key k8s_app_label in config")
-
-    if "is_k8s" in app:
-        # get the pod ip
-        if "POD_IP" not in os.environ:
-            log.error("Runing in Kubernetes by POD_IP environment not set")
-        else:
-            pod_ip = os.environ["POD_IP"]
-            log.info(f"Kubernetes - using pod_ip: {pod_ip}")
-            app["node_ip"] = pod_ip
+   
     try:
         aws_iam_role = config.get("aws_iam_role")
         log.info(f"aws_iam_role set to: {aws_iam_role}")
