@@ -98,10 +98,11 @@ async def get_info(app, url):
 async def oio_update_dn_info(app):
     """ talk to conscience to get DN info """ 
     oio_proxy = app["oio_proxy"]
-    node_ip = app["node_ip"]
-    if not node_ip:
-        log.error("node_ip not set")
+    if "HOST_IP" not in os.environ:
+        log.error("expected to find HOST_IP env variable")
         return
+
+    node_ip = os.environ["HOST_IP"]
     node_type = app["node_type"]
     if node_type not in ("sn", "dn"):
         log.error("unexpected node type")
@@ -161,10 +162,6 @@ async def oio_update_dn_info(app):
 async def k8s_update_dn_info(app):
     """ update dn urls by querying k8s api.  Call each url to determine node_ids """
     log.info("k8s_update_dn_info")
-    if not app["node_ip"]:
-        log.error("node_ip value not set")
-        dn_urls = []  # this will block going into ready state
-        return dn_urls
     # TBD - find more elegant way to avoid this warning
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -246,12 +243,6 @@ async def docker_update_dn_info(app):
         log.info(f"register response: {rsp_json}")
         app["dn_urls"] = rsp_json["dn_urls"]
         app["dn_ids"] = rsp_json["dn_ids"]
-        if not app["node_ip"]:
-            req_ip = rsp_json["req_ip"]
-            log.info(f"setting node ip to: {req_ip}")
-            app["node_ip"] = req_ip
-        else:
-            log.debug(f"node_ip already set to: {app['node_ip']}")
 
 
 def get_dn_id_set(app):
@@ -549,30 +540,6 @@ def baseInit(node_type):
             # guard against KeyError since k8s_app_label is a recent key
             log.warn("expected to find key k8s_app_label in config")
     
-    node_ip = ""
-    if "is_k8s" in app:
-        # get the pod ip
-        if "POD_IP" not in os.environ:
-            log.error("Runing in Kubernetes by POD_IP environment not set")
-        else:
-            node_ip = os.environ["POD_IP"]
-            log.info(f"Kubernetes - using pod_ip: {node_ip}")
-    elif "HOST_IP" in os.environ: 
-        node_ip  = os.environ["HOST_IP"]
-    elif "is_dcos" in app:
-        # see https://github.com/mesosphere/marathon/issues/1198
-        if "LIBPROCESS_IP" not in os.environ:
-            msg = "Expected LIBPROCESS_IP environment variable for DCOS"
-            log.error(msg)
-            node_ip = "127.0.0.1"
-        else:
-            node_ip = os.environ['LIBPROCESS_IP']
-   
-    if node_ip:
-        log.info(f"Setting node_ip to: {node_ip}")
-    else:
-        log.warn("Could not determine node_ip")
-    app["node_ip"] = node_ip
 
     if "is_dcos" in app:
         if "PORT0" not in os.environ:
