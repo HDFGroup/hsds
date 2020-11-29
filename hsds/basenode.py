@@ -261,7 +261,7 @@ async def update_dn_info(app):
         #  Using OpenIO consicience daemons
         await oio_update_dn_info(app)
     elif "is_k8s" in app:  
-        k8s_update_dn_info(app)
+        await k8s_update_dn_info(app)
     else:
         # docker
         await docker_update_dn_info(app)
