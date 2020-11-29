@@ -384,7 +384,7 @@ async def about(request):
 
 async def info(request):
     """HTTP Method to return node state to caller"""
-    log.request(request)
+    log.info("REQ> info")
     app = request.app
     answer = {}
     # copy relevant entries from state dictionary to response
