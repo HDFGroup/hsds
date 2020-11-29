@@ -22,7 +22,7 @@ import psutil
 #from copy import copy
 
 from aiohttp.web import Application
-from aiohttp.web_exceptions import HTTPNotFound, HTTPGone, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPNotFound, HTTPGone, HTTPInternalServerError, HTTPServiceUnavailable
 from aiohttp.client_exceptions import ClientError
 from asyncio import CancelledError
 
@@ -95,7 +95,7 @@ async def get_info(app, url):
 
     return rsp_json
 
-async def oio_get_dn_urls(app):
+async def oio_update_dn_info(app):
     """ talk to conscience to get DN info """ 
     oio_proxy = app["oio_proxy"]
     node_ip = app["node_ip"]
@@ -140,7 +140,6 @@ async def oio_get_dn_urls(app):
         return
     log.info(f"got {len(dn_node_list)} conscience list items")
     # create map keyed by dn addr
-    dn_node_map = {}
     dn_urls = []
     for dn_node in dn_node_list:
         log.debug(f"checking dn conscience list item: {dn_node}")
@@ -154,19 +153,14 @@ async def oio_get_dn_urls(app):
         if dn_node["score"] <= 0:
             log.debug(f"zero score - skipping conscience list addr: {addr}")
             continue
-        if addr in dn_node_map:
-            # shouldn't ever get this?
-            log.warn(f"duplicate entry for node: {dn_node}")
-            continue
         log.debug(f"oio_get_dn_urls - adding address: {addr}")
         dn_urls.append("http://" + addr)
          
-    log.info(f"done with oio_get_dn_urls, got: {len(dn_urls)} dn urls")
-    return dn_urls
+    log.info(f"done with oio_update_dn_info, got: {len(dn_urls)} dn urls")
 
-def k8s_get_dn_urls(app):
-    """ get http urls by querying k8s api """
-    log.info("k8s_get_dn_urls")
+async def k8s_update_dn_info(app):
+    """ update dn urls by querying k8s api.  Call each url to determine node_ids """
+    log.info("k8s_update_dn_info")
     if not app["node_ip"]:
         log.error("node_ip value not set")
         dn_urls = []  # this will block going into ready state
@@ -199,10 +193,34 @@ def k8s_get_dn_urls(app):
     dn_port = config.get("dn_port")
     for pod_ip in pod_ips:
         dn_urls.append(f"http://{pod_ip}:{dn_port}")
-    return dn_urls
+    # call info on each dn container and get node ids
+    dn_ids = []
+    for dn_url in app["dn_urls"]:
+        req = dn_url + "/info"
+        log.debug(f"about to call: {req}")
+        try:
+            rsp_json = await http_get(app, req)
+            if "node" not in rsp_json:
+                log.error("Unexepected response from info (no node key)")
+                continue
+            node_json = rsp_json["node"]
+            if "id" not in node_json:
+                log.error("Unexepected response from info (no node/id key)")
+                continue
+            dn_ids.append(node_json["id"])
+        except HTTPServiceUnavailable:
+            log.warn("503 error from /info request")
+        except Exception as e:
+            log.error(f"Exception: {e} from /info request")
+    log.info(f"node_info check dn_ids: {dn_ids}")
 
-async def docker_get_dn_urls(app):
-    """ get list of dn_urls by making request to head node """
+    # save to global
+    app["dn_urls"] = dn_urls
+    app["dn_ids"] = dn_ids
+
+
+async def docker_update_dn_info(app):
+    """ update list of dn_urls by making request to head node """
     head_url = getHeadUrl(app)
     if not head_url:
         log.warn("head_url is not set, can not register yet")
@@ -213,14 +231,21 @@ async def docker_get_dn_urls(app):
     body = {"id": app["id"], "port": app["node_port"], "node_type": app["node_type"]}
 
     app['register_time'] = int(time.time())
-    dn_urls = []
+    
     try:
         log.info(f"register req: {req_reg} body: {body}")
         rsp_json = await http_post(app, req_reg, data=body)
-        if rsp_json is not None:
-            log.info(f"register response: {rsp_json}")
-            dn_urls = rsp_json["dn_urls"]
-            dn_urls.sort()
+    except HTTPInternalServerError:
+        log.error("HEAD node seems to be down.")
+        return []
+    except OSError:
+        log.error("failed to register")
+        return []
+
+    if rsp_json is not None:
+        log.info(f"register response: {rsp_json}")
+        app["dn_urls"] = rsp_json["dn_urls"]
+        app["dn_ids"] = rsp_json["dn_ids"]
         if not app["node_ip"]:
             req_ip = rsp_json["req_ip"]
             log.info(f"setting node ip to: {req_ip}")
@@ -228,28 +253,42 @@ async def docker_get_dn_urls(app):
         else:
             log.debug(f"node_ip already set to: {app['node_ip']}")
 
-    except HTTPInternalServerError:
-        log.error("HEAD node seems to be down.")
-    except OSError:
-        log.error("failed to register")
-    return dn_urls
+
+def get_dn_id_set(app):
+    id_set = set()
+    dn_ids = app["dn_ids"]
+    for dn_id in dn_ids:
+        id_set.add(dn_id)
+    return id_set
 
 
-async def get_dn_urls(app):
-    """ get http urls for each dn node """
+async def update_dn_info(app):
+    """ update http urls and ids for each dn node """
+    id_set_pre = get_dn_id_set(app)
+
     if "oio_proxy" in app:
         #  Using OpenIO consicience daemons
-        dn_urls = await oio_get_dn_urls(app)
+        await oio_update_dn_info(app)
     elif "is_k8s" in app:  
-        dn_urls = k8s_get_dn_urls(app)
+        k8s_update_dn_info(app)
     else:
         # docker
-        dn_urls = await docker_get_dn_urls(app)
-    return dn_urls
+        await docker_update_dn_info(app)
 
-def updateReadyState(app, dn_urls):
+    # do a log if there has been a change in the dn nodes
+    id_set_post = get_dn_id_set(app)
+    if id_set_pre != id_set_post:
+        gone_ids = id_set_pre.difference(id_set_post)
+        if gone_ids:
+            log.info(f"update_dn_info - dn_nodes: {gone_ids} are no longer active")
+        new_ids = id_set_post.difference(id_set_pre)
+        if new_ids:
+            log.info(f"update_dn_info - dn_nodes: {new_ids} are now active")
+
+def updateReadyState(app):
     """ update node state (and node_number and node_count) based on number of dn_urls available """
-    log.debug(f"updateNodeState for dn_urls: {dn_urls}")
+    dn_urls = app["dn_urls"]
+    log.debug(f"updateReadyState for dn_urls: {dn_urls}")
     if len(dn_urls) == 0:
         if app["node_type"] == "dn":
             log.error("no dn_urls returned from dn node!")
@@ -257,7 +296,7 @@ def updateReadyState(app, dn_urls):
             log.info(f"setting node_state from {app['node_state']} to INITIALIZING since there are no dn nodes")
             app["node_state"] = "INITIALIZING"
     elif app["node_type"] == "dn":
-        node_number = getNodeNumber(app, dn_urls)
+        node_number = getNodeNumber(app)
         if app["node_number"] != node_number:
             old_number = app["node_number"]
             log.info(f"node_number has changed - old value was {old_number} new number is {node_number}")
@@ -286,7 +325,6 @@ def updateReadyState(app, dn_urls):
         if app["node_state"] != "READY":
             log.info(f"setting node_state from {app['node_state']} to READY")
             app["node_state"] = "READY"
-    app["dn_urls"] = dn_urls
 
 async def healthCheck(app):
     """ Periodic method that either registers with headnode (if state in INITIALIZING) or
@@ -308,8 +346,8 @@ async def healthCheck(app):
                 log.info("chaos die - still alive")
         log.info(f"healthCheck - node_state: {node_state}")
         if node_state != "TERMINATING":
-            dn_urls = await get_dn_urls(app)
-            updateReadyState(app, dn_urls)
+            await update_dn_info(app)
+            updateReadyState(app)
           
         svmem = psutil.virtual_memory()
         num_tasks = len(asyncio.Task.all_tasks())
@@ -345,6 +383,9 @@ async def about(request):
     answer["greeting"] = config.get("greeting")
     answer["about"] = config.get("about")
     answer["node_count"] = getNodeCount(app)
+    answer["dn_urls"] = app["dn_urls"]
+    answer["dn_ids"] = app["dn_ids"]
+
 
     resp = await jsonResponse(request, answer)
     log.response(request, resp=resp)
@@ -456,6 +497,7 @@ def baseInit(node_type):
 
     # set a bunch of global state
     node_id = createNodeId(node_type)
+    log.info(f"setting node_id to: {node_id}")
     app["id"] = node_id
     app["node_state"] = "INITIALIZING"
     app["node_type"] = node_type
@@ -469,6 +511,7 @@ def baseInit(node_type):
         log.info("no default bucket defined")
     app["bucket_name"] = bucket_name
     app["dn_urls"] = []
+    app["dn_ids"] = [] # node ids for each dn_url
     counter = {}
     counter["GET"] = 0
     counter["PUT"] = 0
@@ -528,7 +571,7 @@ def baseInit(node_type):
     if node_ip:
         log.info(f"Setting node_ip to: {node_ip}")
     else:
-        log.warn("Could info determine node_ip")
+        log.warn("Could not determine node_ip")
     app["node_ip"] = node_ip
 
     if "is_dcos" in app:

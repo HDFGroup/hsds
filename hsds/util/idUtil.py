@@ -13,6 +13,7 @@
 # idUtil:
 # id (uuid) related functions
 #
+import os.path
 import hashlib
 import uuid
 from aiohttp.web_exceptions import HTTPServiceUnavailable
@@ -274,9 +275,24 @@ def isS3ObjKey(s3key):
 
 def createNodeId(prefix):
     """ Create a random id used to identify nodes"""
-    node_uuid = str(uuid.uuid1())
-    idhash = getIdHash(node_uuid)
-    key = prefix + "-" + idhash
+    # use the container id if we are running inside docker
+    node_id = None
+    proc_file = "/proc/self/cgroup"
+    if os.path.isfile(proc_file):
+        with open(proc_file) as f:
+            first_line = f.readline()
+            if first_line:
+                fields = first_line.split(':')
+                if len(fields) >= 3:
+                    field = fields[2]
+                    if field.startswith("/docker/"):
+                        docker_len = len("/docker/")
+                        if len(field) > docker_len + 12:
+                            node_id = field[docker_len:(docker_len+12)]
+    if not node_id:  
+        # that didn't work - just use a uuid
+        node_id = getIdHash(str(uuid.uuid1()))
+    key = f"{prefix}-{node_id}"
     return key
 
 
@@ -414,22 +430,19 @@ def getPortFromUrl(url):
     return port
 
 
-def getNodeNumber(app, urls=None):
-    node_port = app["node_port"]
-    node_ip = app["node_ip"]
-    if not node_ip:
-        log.error("getNodeNumber - node_ip not set!")
+def getNodeNumber(app):
+    if app["node_type"] == "sn":
+        log.error("node number if only for DN nodes")
         raise ValueError()
-    if urls is None:
-        urls = app["dn_urls"]
-    this_url = f"http://{node_ip}:{node_port}"
-    log.debug(f"getNodeNumber(this_url={this_url}, from urls: {urls}")
-    for i in range(len(urls)):
-        url = urls[i]
-        if url == this_url:
-            log.debug(f"got node number: {i}")
+
+    dn_ids = app["dn_ids"]
+    log.debug(f"getNodeNumber(from dn_ids: {dn_ids}")
+    for i in range(len(dn_ids)):
+        dn_id = dn_ids[i]
+        if dn_id == app["id"]:
+            log.debug(f"returning nodeNumber: {i}")
             return i
-    log.error("getNodeNumber, no matching url")
+    log.error("getNodeNumber, no matching id")
     return -1
 
 def getNodeCount(app):

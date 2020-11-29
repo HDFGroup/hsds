@@ -245,6 +245,8 @@ async def register(request):
         answer["cluster_state"] = "WAITING"
     sn_urls = []
     dn_urls = []
+    sn_ids = []
+    dn_ids = []
     for node_id in nodes:
         node = nodes[node_id]
         if not node.is_healthy():
@@ -252,14 +254,30 @@ async def register(request):
         node_url = f"http://{node.host}:{node.port}"
         if node.type == "sn":
             sn_urls.append(node_url)
+            sn_ids.append(node_id)
         else:
             dn_urls.append(node_url)
-    sn_urls.sort()
+            dn_ids.append(node_id)
+
+    # sort dn_urls so node number can be determined
+    dn_id_map = {}
+    for i in range(len(dn_urls)):
+        dn_url = dn_urls[i]
+        dn_id = dn_ids[i]
+        dn_id_map[dn_url] = dn_id
+
     dn_urls.sort()
+    dn_ids = [] # re-arrange to match url order
+    for dn_url in dn_urls:
+        dn_ids.append(dn_id_map[dn_url])
+
     answer["sn_urls"] = sn_urls
     answer["dn_urls"] = dn_urls
+    answer["sn_ids"] = sn_ids
+    answer["dn_ids"] = dn_ids
     answer["req_ip"] = node_host
     log.debug(f"register returning: {answer}")
+    app["last_health_check"] = int(time.time())
 
     resp = json_response(answer)
     log.response(request, resp=resp)
@@ -374,7 +392,7 @@ def getActiveNodeCount(app, node_type):
         node = nodes[node_id]
         if node.type != node_type:
             continue
-        if node.is_healthy and node.number:
+        if node.is_healthy:
             count += 1
     return count
 
@@ -406,6 +424,8 @@ def init():
 
     app["nodes"] = nodes
     app["dead_node_ids"] = set()
+    app["start_time"] = int(time.time())  # seconds after epoch
+    app["last_health_check"] = 0
     app.router.add_get('/', info)
     app.router.add_get('/nodestate', nodestate)
     app.router.add_get('/nodestate/{nodetype}', nodestate)

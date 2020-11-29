@@ -678,6 +678,10 @@ async def GET_Domain(request):
         domain_objs = await getDomainObjects(app, root_id, include_attrs=include_attrs, bucket=bucket)
         rsp_json["domain_objs"] = domain_objs
 
+    # include dn_ids if requested
+    if "getdnids" in params and params["getdnids"]:
+        rsp_json["dn_ids"] = app["dn_ids"]
+
     hrefs = []
     hrefs.append({'rel': 'self', 'href': getHref(request, '/')})
     if "root" in domain_json:
@@ -759,6 +763,7 @@ async def PUT_Domain(request):
     log.request(request)
     app = request.app
     params = request.rel_url.query
+    log.info(f"params: {params}")
     # verify username, password
     username, pswd = getUserPasswordFromRequest(request) # throws exception if user/password is not valid
     await validateUserPassword(app, username, pswd)
@@ -802,14 +807,21 @@ async def PUT_Domain(request):
             raise HTTPInternalServerError()
 
         aclCheck(app, domain_json, "update", username)  # throws exception if not allowed
+        rsp_json = None
         if "root" in domain_json:
-            # nothing to do for folder objects
+            # nothing to to do for folder objects
             status_code = await doFlush(app, domain_json["root"], bucket=bucket)
+            # flush  successful
+            if status_code == 204 and "getdnids" in params and params["getdnids"]:
+                # no fails, but return list of dn ids
+                dn_ids = app["dn_ids"]
+                rsp_json = {"dn_ids": dn_ids}
+                log.debug(f"returning dn_ids for PUT domain: {dn_ids}")
+                status_code = 200
         else:
             log.info("flush called on folder, ignoring")
             status_code = 204
-        # flush  successful
-        resp = await jsonResponse(request, None, status=status_code)
+        resp = await jsonResponse(request, rsp_json, status=status_code)
         log.response(request, resp=resp)
         return resp
 
@@ -945,12 +957,12 @@ async def PUT_Domain(request):
 
         # create root group
         req = getDataNodeUrl(app, root_id) + "/groups"
-        params = {}
+        post_params = {}
         bucket = getBucketForDomain(domain)
         if bucket:
-            params["bucket"] = bucket
+            post_params["bucket"] = bucket
         try:
-            group_json = await http_post(app, req, data=group_json, params=params)
+            group_json = await http_post(app, req, data=group_json, params=post_params)
         except ClientResponseError as ce:
             msg="Error creating root group for domain -- " + str(ce)
             log.error(msg)
@@ -1013,6 +1025,13 @@ async def PUT_Domain(request):
     domain_json["limits"] = getLimits()
     domain_json["compressors"] = getCompressors()
     domain_json["version"] = getVersion()
+
+    # put  successful
+    if "getdnids" in params and params["getdnids"]:
+        # mixin list of dn ids
+        dn_ids = app["dn_ids"]
+        domain_json["dn_ids"] = dn_ids
+        log.debug(f"returning dn_ids for PUT domain: {dn_ids}")
     resp = await jsonResponse(request, domain_json, status=201)
     log.response(request, resp=resp)
     return resp
