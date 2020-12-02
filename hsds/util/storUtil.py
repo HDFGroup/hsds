@@ -166,8 +166,6 @@ async def rangegetProxy(app, bucket=None, key=None, offset=0, length=0):
         raise HTTPInternalServerError()
 
 
-
-
 async def getStorJSONObj(app, key, bucket=None):
     """ Get object identified by key and read as JSON
     """

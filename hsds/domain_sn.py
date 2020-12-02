@@ -718,6 +718,7 @@ async def doFlush(app, root_id, bucket=None):
         params["bucket"] = bucket
     client = get_http_client(app)
     dn_urls = app["dn_urls"]
+    dn_ids = []
     log.debug(f"doFlush - dn_urls: {dn_urls}")
     failed_count = 0
 
@@ -733,15 +734,21 @@ async def doFlush(app, root_id, bucket=None):
             log.error("doFlush - got pending tasks")
             raise HTTPInternalServerError()
         for task in done:
-            log.info(f"doFlush - task: {task}")
             if task.exception():
                 log.warn(f"doFlush - task had exception: {type(task.exception())}")
                 failed_count += 1
             else:
                 clientResponse = task.result()
-                if clientResponse.status != 204:
+                if clientResponse.status != 200:
                     log.warn(f"doFlush - expected 204 but got: {clientResponse.status}")
                     failed_count += 1
+                else:
+                    json_rsp = await clientResponse.json()
+                    log.debug(f"PUT /groups rsp: {json_rsp}")
+                    if json_rsp and "id" in json_rsp:
+                        dn_ids.append(json_rsp["id"])
+                    else:
+                        log.error("expected dn_id in flush response from DN")
     except ClientError as ce:
         log.error(f"doFlush - ClientError for http_put('/groups/{root_id}'): {str(ce)}")
         raise HTTPInternalServerError()
@@ -751,10 +758,10 @@ async def doFlush(app, root_id, bucket=None):
     log.info(f"doFlush for {root_id} complete, failed: {failed_count} out of {len(dn_urls)}")
     if failed_count > 0:
         log.error(f"doFlush fail count: {failed_count} returning 500")
-        return 500
+        raise HTTPInternalServerError()
     else:
-        log.info("doFlush no fails, returning 204")
-        return 204
+        log.info("doFlush no fails, returning dn ids")
+        return dn_ids
 
 
 
@@ -763,7 +770,7 @@ async def PUT_Domain(request):
     log.request(request)
     app = request.app
     params = request.rel_url.query
-    log.info(f"params: {params}")
+    log.debug(f"PUT_domain params: {dict(params)}")
     # verify username, password
     username, pswd = getUserPasswordFromRequest(request) # throws exception if user/password is not valid
     await validateUserPassword(app, username, pswd)
@@ -788,6 +795,11 @@ async def PUT_Domain(request):
         body = await request.json()
         log.debug(f"PUT domain with body: {body}")
 
+    if ("getdnids" in params and params["getdnids"]) or (body and "getdnids" in body and body["getdnids"]):
+        getdnids = True
+    else:
+        getdnids = False
+
     if ("flush" in params and params["flush"]) or (body and "flush" in body and body["flush"]):
         # flush domain - update existing domain rather than create a new resource
         log.info(f"Flush for domain: {domain}")
@@ -810,14 +822,14 @@ async def PUT_Domain(request):
         rsp_json = None
         if "root" in domain_json:
             # nothing to to do for folder objects
-            status_code = await doFlush(app, domain_json["root"], bucket=bucket)
+            dn_ids = await doFlush(app, domain_json["root"], bucket=bucket)
             # flush  successful
-            if status_code == 204 and "getdnids" in params and params["getdnids"]:
+            if dn_ids and getdnids:
                 # no fails, but return list of dn ids
-                dn_ids = app["dn_ids"]
                 rsp_json = {"dn_ids": dn_ids}
                 log.debug(f"returning dn_ids for PUT domain: {dn_ids}")
                 status_code = 200
+            else: status_code = 204
         else:
             log.info("flush called on folder, ignoring")
             status_code = 204
@@ -1027,7 +1039,7 @@ async def PUT_Domain(request):
     domain_json["version"] = getVersion()
 
     # put  successful
-    if "getdnids" in params and params["getdnids"]:
+    if getdnids:
         # mixin list of dn ids
         dn_ids = app["dn_ids"]
         domain_json["dn_ids"] = dn_ids

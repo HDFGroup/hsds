@@ -297,17 +297,22 @@ async def nodestate(request):
     nodes = app["nodes"]
 
     if node_id == '*':
+        info_list = []
         for node_id in nodes:
             node = nodes[node_id]
-            if node["node_type"] == node_type or node_type == "*":
-                nodes.append(node.get_info())
-        answer = {"nodes": nodes }
+            if node.type == node_type or node_type == "*":
+                info_list.append(node.get_info())
+        answer = {"nodes": info_list }
         log.debug(f"returning nodestate for {len(nodes)} nodes")
     elif node_id in nodes:
         node = nodes[node_id]
         answer = {}
-        answer = node.get_info()
-    answer["cluster_state"] = app["cluster_state"]
+        answer["node"] = node.get_info()
+    if await isClusterReady(app):
+        cluster_state = 'READY'
+    else:
+        cluster_state = 'WAITING'
+    answer["cluster_state"] = cluster_state
     resp = json_response(answer)
     log.response(request, resp=resp)
     return resp

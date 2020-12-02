@@ -326,6 +326,8 @@ async def healthCheck(app):
     log.info("health check start")
     sleep_secs = config.get("node_sleep_time")
     chaos_die = config.get("chaos_die")
+    if chaos_die > 0:
+        log.debug(f"chaos_die number: {chaos_die}")
 
     while True:
         node_state = app["node_state"]

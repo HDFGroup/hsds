@@ -34,8 +34,7 @@ async_sleep_time: 10  # max sleep time between async task runs
 s3_sync_interval: 1  # time to wait to write object data to S3 (in sec)
 s3_sync_task_timeout: 10  # time to cancel write task if no response
 max_pending_write_requests: 20  # maxium number of inflight write requests
-flush_time_out: 10    # max time in sec for flush operation
-flush_sleep_interval: 0.1  # time to wait between checking on dirty objects
+flush_sleep_interval: 1  # time to wait between checking on dirty objects
 max_chunks_per_request: 1000  # maximum number of chunks to be serviced by one request
 min_chunk_size: 1m  # 1 MB
 max_chunk_size: 4m # 4 MB

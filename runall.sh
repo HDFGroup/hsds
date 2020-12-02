@@ -30,7 +30,6 @@ fi
 
 
 echo "dn cores:" $DN_CORES
-echo "sn cores:" $SN_CORES
 echo "no_docker:" $NO_DOCKER
 
 if [[ ${NO_DOCKER} ]]; then

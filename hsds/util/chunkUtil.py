@@ -965,21 +965,21 @@ def chunkQuery(chunk_id=None, chunk_layout=None, chunk_arr=None, slices=None,
     s = slices[0]
     count = 0
     for index in where_result_index:
-        log.debug(f"chunkQuery - index: {index}")
+        # log.debug(f"chunkQuery - index: {index}")
         value = x[index].copy()
         if replace_mask:
-            log.debug(f"chunkQuery - original value: {value}")
+            # log.debug(f"chunkQuery - original value: {value}")
             for i in range(len(field_names)):
                 if replace_mask[i] is not None:
                     value[i] = replace_mask[i]
-            log.debug(f"chunkQuery - modified value: {value}")
+            # log.debug(f"chunkQuery - modified value: {value}")
             try:
                 chunk_arr[index] = value
             except ValueError as ve:
                 log.error(f"Numpy Value updating array: {ve}")
                 raise
 
-        log.debug(f"chunkQuery - got value: {value}")
+        # log.debug(f"chunkQuery - got value: {value}")
         indices.append(int(index) * s.step + s.start + chunk_coord[0])  # adjust for selection
         values.append(value)
         count += 1

@@ -276,7 +276,8 @@ def isS3ObjKey(s3key):
 def createNodeId(prefix):
     """ Create a random id used to identify nodes"""
     # use the container id if we are running inside docker
-    node_id = None
+    node_id = ""  # nothing too bad happens if this doesn't get set
+    hash_key = getIdHash(str(uuid.uuid1()))
     proc_file = "/proc/self/cgroup"
     if os.path.isfile(proc_file):
         with open(proc_file) as f:
@@ -288,11 +289,12 @@ def createNodeId(prefix):
                     if field.startswith("/docker/"):
                         docker_len = len("/docker/")
                         if len(field) > docker_len + 12:
-                            node_id = field[docker_len:(docker_len+12)]
-    if not node_id:  
-        # that didn't work - just use a uuid
-        node_id = getIdHash(str(uuid.uuid1()))
-    key = f"{prefix}-{node_id}"
+                            node_id = field[docker_len:(docker_len+12)] 
+        
+    if node_id:
+        key = f"{prefix}-{node_id}-{hash_key}"
+    else:
+        key = f"{prefix}-{hash_key}"
     return key
 
 
@@ -400,7 +402,7 @@ def getObjPartition(id, count):
     hash_code = getIdHash(id)
     hash_value = int(hash_code, 16)
     number = hash_value % count
-    log.debug(f"ID {id} resolved to data node {number}, out of {count} data partitions.")
+    #log.debug(f"ID {id} resolved to data node {number}, out of {count} data partitions.")
     return number
 
 def getPortFromUrl(url):
@@ -436,11 +438,11 @@ def getNodeNumber(app):
         raise ValueError()
 
     dn_ids = app["dn_ids"]
-    log.debug(f"getNodeNumber(from dn_ids: {dn_ids}")
+    #log.debug(f"getNodeNumber(from dn_ids: {dn_ids}")
     for i in range(len(dn_ids)):
         dn_id = dn_ids[i]
         if dn_id == app["id"]:
-            log.debug(f"returning nodeNumber: {i}")
+            #log.debug(f"returning nodeNumber: {i}")
             return i
     log.error("getNodeNumber, no matching id")
     return -1

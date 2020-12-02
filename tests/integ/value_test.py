@@ -2505,6 +2505,7 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + "/datasets"
         rsp = requests.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
+        
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
         self.assertTrue(helper.validateId(dset_uuid))
@@ -2524,6 +2525,7 @@ class ValueTest(unittest.TestCase):
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
         self.assertEqual(rspJson["value"], [42,]*10)
+        
 
         # write some values
         payload = { 'start': 0, 'stop': 5, 'value': [24,]*5 }
@@ -2539,6 +2541,7 @@ class ValueTest(unittest.TestCase):
         for i in range(5):
             self.assertEqual(ret_values[i], 24)
             self.assertEqual(ret_values[i+5], 42)
+        
 
 
 if __name__ == '__main__':
