@@ -290,11 +290,11 @@ async def get_metadata_obj(app, obj_id, bucket=None):
                     obj_json = meta_cache[obj_id]
                     break
             if not obj_json:
-                log.warn(f"s3 read for object {s3_key} timed-out, initiaiting a new read")
+                log.warn(f"s3 read for object {obj_id} timed-out, initiaiting a new read")
 
         # invoke S3 read unless the object has just come in from pending read
         if not obj_json:
-            log.debug(f"getS3JSONObj({s3_key}, bucket={bucket})")
+            log.debug(f"getS3JSONObj({obj_id}, bucket={bucket})")
             if obj_id not in pending_s3_read:
                 pending_s3_read[obj_id] = time.time()
             # read S3 object as JSON
@@ -302,18 +302,18 @@ async def get_metadata_obj(app, obj_id, bucket=None):
                 obj_json = await getStorJSONObj(app, s3_key, bucket=bucket)
                 # read complete - remove from pending map
                 elapsed_time = time.time() - pending_s3_read[obj_id]
-                log.info(f"s3 read for {s3_key} took {elapsed_time}")
+                log.info(f"s3 read for {obj_id} took {elapsed_time}")
                 meta_cache[obj_id] = obj_json  # add to cache
             except HTTPNotFound:
-                log.warn(f"HTTPNotFound for {s3_key} bucket:{bucket}")
+                log.warn(f"HTTPNotFound for {obj_id} bucket:{bucket} s3key: {s3_key}")
                 if obj_id in deleted_ids and isValidDomain(obj_id):
                     raise HTTPGone()
                 raise
             except HTTPForbidden:
-                log.warn(f"HTTPForbidden error for {s3_key} bucket:{bucket}")
+                log.warn(f"HTTPForbidden error for {obj_id} bucket:{bucket} s3key: {s3_key}")
                 raise
             except HTTPInternalServerError:
-                log.warn(f"HTTPInternalServerError error for {s3_key} bucket:{bucket}")
+                log.warn(f"HTTPInternalServerError error for {obj_id} bucket:{bucket} s3key: {s3_key}")
                 raise
             finally:
                 if obj_id in pending_s3_read:
@@ -525,7 +525,7 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset
                 if chunk_id in pending_s3_read:
                     # read complete - remove from pending map
                     elapsed_time = time.time() - pending_s3_read[chunk_id]
-                    log.info(f"s3 read for {s3key} took {elapsed_time}")  
+                    log.info(f"s3 read for {chunk_id} took {elapsed_time}")  
                 else:
                     log.warn(f"expected to find {chunk_id} in pending_s3_read map")
                 chunk_arr = bytesToArray(chunk_bytes, dt, dims)
