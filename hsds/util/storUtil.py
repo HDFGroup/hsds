@@ -130,7 +130,7 @@ async def rangegetProxy(app, bucket=None, key=None, offset=0, length=0):
     """ fetch bytes from rangeget proxy
     """
     rangeget_port = config.get("rangeget_port")
-    req = f"http://hsds_rangeget:{rangeget_port}/"
+    req = f"http://127.0.0.1:{rangeget_port}/"
     client = get_http_client(app)
     log.debug(f"rangeGetProxy: {req}")
     params = {}
