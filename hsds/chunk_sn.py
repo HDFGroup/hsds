@@ -1587,6 +1587,7 @@ async def GET_Value(request):
     maxdims = getDsetMaxDims(dset_json)
     rank = len(dims)
     layout = getChunkLayout(dset_json)
+    log.debug(f"chunk layout: {layout}")
 
     await validateAction(app, domain, dset_id, username, "read")
 
