@@ -225,30 +225,31 @@ def getContiguousLayout(shape_json, item_size, chunk_min=1000*1000, chunk_max=4*
     chunk_avg = (chunk_min + chunk_max) // 2
     dims = shape_json["dims"]
     rank = len(dims)
+    if rank == 0:
+        raise ValueError("rank must be positive for Contiguous Layout")
+    for dim in dims:
+        if dim <= 0:
+            raise ValueError("extents must be positive for Contiguous Layout")
+
     nsize = item_size
     layout = [1,] * rank
-    if rank == 1:
-        # just divy up the dimension with whatever works best
-        nsize *= dims[0]
-        if nsize < chunk_max:
-            layout[0] = dims[0]
-        else:
-            layout[0] = chunk_avg // item_size
-    else:
-        unit_chunk = False
-        for i in range(rank):
-            dim = rank - i - 1
-            extent = dims[dim]
+
+    for i in range(rank):
+        dim = rank -i - 1
+        extent = dims[dim]
+        if extent * nsize < chunk_max:
+            # just use the full extent as layout
+            layout[dim] = extent
             nsize *= extent
-            if unit_chunk:
-                layout[dim] = 1
-            else:
-                layout[dim] = extent
-                if nsize > chunk_max:
-                    if i>0:
-                        # make everything after first dimension 1
-                        layout[dim] = 1
-                    unit_chunk = 1
+        else:
+            n = extent
+            while n > 1:
+                n //= 2
+                if n * nsize < chunk_max:
+                    break
+            layout[dim] = n
+            break # just use 1's for the rest of the layout
+
     return layout
 
 

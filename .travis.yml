@@ -16,6 +16,7 @@ env:
 
 install:
   - sudo apt-get update -qq
+  - pip freeze
   - python setup.py install
   - pip install requests
   - pip install pyflakes
