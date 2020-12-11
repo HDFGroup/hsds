@@ -534,6 +534,9 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset
                 if not chunk_init:
                     log.info(f"chunk not found for id: {chunk_id}")
                     raise  # not found return 404 
+            except ValueError as ve:
+                log.error(f"Unable to retrievee chunk array: {ve}")
+                raise HTTPInternalServerError()
             finally:
                 # exception or not, no longer pending
                 if chunk_id in pending_s3_read:
