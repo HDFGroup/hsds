@@ -222,7 +222,6 @@ def getContiguousLayout(shape_json, item_size, chunk_min=1000*1000, chunk_max=4*
         return None
     if shape_json["class"] == 'H5S_SCALAR':
         return (1,)  # just enough to store one item
-    chunk_avg = (chunk_min + chunk_max) // 2
     dims = shape_json["dims"]
     rank = len(dims)
     if rank == 0:

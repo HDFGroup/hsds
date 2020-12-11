@@ -541,6 +541,18 @@ def baseInit(node_type):
         except KeyError:
             # guard against KeyError since k8s_app_label is a recent key
             log.warn("expected to find key k8s_app_label in config")
+        if not "is_k8s" in app:
+            # check to see if we are running in a docker container
+            proc_file = "/proc/self/cgroup"
+            if os.path.isfile(proc_file):
+                with open(proc_file) as f:
+                    first_line = f.readline()
+                    if first_line:
+                        fields = first_line.split(':')
+                        if len(fields) >= 3:
+                            field = fields[2]
+                            if field.startswith("/docker/"):
+                                app["is_docker"] = True
     
 
     if "is_dcos" in app:

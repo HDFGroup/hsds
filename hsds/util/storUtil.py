@@ -130,7 +130,11 @@ async def rangegetProxy(app, bucket=None, key=None, offset=0, length=0):
     """ fetch bytes from rangeget proxy
     """
     rangeget_port = config.get("rangeget_port")
-    req = f"http://127.0.0.1:{rangeget_port}/"
+    if "is_docker" in app:
+        rangeget_host = "rangeget"
+    else:
+        rangeget_host = "127.0.0.1"
+    req = f"http://{rangeget_host}:{rangeget_port}/"
     client = get_http_client(app)
     log.debug(f"rangeGetProxy: {req}")
     params = {}
