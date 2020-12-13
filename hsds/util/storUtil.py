@@ -229,6 +229,8 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=-1, bucket=No
         return data
 
     log.info(f"read: {len(data)} bytes for key: {key}")
+    if length > 0 and len(data) != length:
+        log.warn(f"requested {length} bytes but got {len(data)} bytes")
     if compressor:
 
         # compressed chunk data...

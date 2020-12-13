@@ -470,6 +470,11 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset
     dims = getChunkLayout(dset_json)
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
+    layout = dset_json["layout"]
+    layout_class = None
+    if "class" in layout:
+        layout_class = layout["class"]
+
     dt = createDataType(type_json)
     # note - officially we should follow the order in which the filters are defined in the filter_list,
     # but since we currently have just deflate and shuffle we will always apply deflate then shuffle on read,
@@ -528,6 +533,13 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset
                     log.info(f"s3 read for {chunk_id} took {elapsed_time}")  
                 else:
                     log.warn(f"expected to find {chunk_id} in pending_s3_read map")
+                if layout_class == 'H5D_CONTIGUOUS_REF' and len(chunk_bytes) < s3size:
+                    # we may get less than expected bytes if this chunk is close to the end of the file
+                    # expand to expected number of bytes
+                    log.info(f"extending returned bytearray for H5D_CONTIGUOUS layout from {len(chunk_bytes)} to {s3size}")
+                    tmp_buffer = bytearray(s3size)
+                    tmp_buffer[:len(chunk_bytes)] = chunk_bytes
+                    chunk_bytes = bytes(tmp_buffer)
                 chunk_arr = bytesToArray(chunk_bytes, dt, dims)
                 log.debug(f"chunk size: {chunk_arr.size}")
             except HTTPNotFound:
