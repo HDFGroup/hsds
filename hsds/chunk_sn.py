@@ -186,6 +186,7 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_m
             params["s3path"] = chunk_info["s3path"]
             params["s3offset"] = chunk_info["s3offset"]
             params["s3size"] = chunk_info["s3size"]
+            log.debug(f"using chunk_map entry for {chunk_id}: {chunk_info}")
     else:
         # bucket only applied when s3path is not defined
         params["bucket"] = bucket
