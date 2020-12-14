@@ -243,7 +243,7 @@ def getContiguousLayout(shape_json, item_size, chunk_min=1000*1000, chunk_max=4*
         else:
             n = extent
             while n > 1:
-                n //= 2
+                n = -(-n // 2)  # use negatives so we round up on odds
                 if n * nsize < chunk_max:
                     break
             layout[dim] = n
