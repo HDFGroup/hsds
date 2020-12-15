@@ -305,7 +305,7 @@ async def scanRoot(app, rootid, update=False, bucket=None):
 
     app["scanRoot_results"] = results
 
-    await getStorKeys(app, prefix=root_prefix, include_stats=True, bucket=bucket, callback=scanRootCallback, limit=1000)
+    await getStorKeys(app, prefix=root_prefix, include_stats=True, bucket=bucket, callback=scanRootCallback)
     num_objects = results["num_groups"] + results["num_datatypes"] + len(results["datasets"]) + results["num_chunks"]
     log.info(f"scanRoot - got {num_objects} keys for rootid: {rootid}")
 
@@ -381,7 +381,7 @@ async def objDeleteCallback(app, s3keys):
 async def removeKeys(app, objid):
     # iterate through all s3 keys under the given root or dataset id and delete them
     #
-    # Note: not re-entrant!  Only one scanRoot an be run at a time per app.
+    # Note: not re-entrant!  Only one removeKeys an be run at a time per app.
     log.debug(f"removeKeys: {objid}")
     if not isSchema2Id(objid):
         log.warn("ignoring non-schema2 id")
