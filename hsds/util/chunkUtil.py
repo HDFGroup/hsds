@@ -227,8 +227,11 @@ def getContiguousLayout(shape_json, item_size, chunk_min=1000*1000, chunk_max=4*
     if rank == 0:
         raise ValueError("rank must be positive for Contiguous Layout")
     for dim in dims:
-        if dim <= 0:
+        if dim < 0:
             raise ValueError("extents must be positive for Contiguous Layout")
+        if dim == 0:
+            # datashape with no elements, just return dims as layout
+            return dims
 
     nsize = item_size
     layout = [1,] * rank

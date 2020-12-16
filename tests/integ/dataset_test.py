@@ -1512,6 +1512,64 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue(chunk_size >= CHUNK_MIN)
         self.assertTrue(chunk_size <= CHUNK_MAX)
 
+    def testContiguousRefZeroDimDataset(self):
+        # test Dataset where H5D_CONTIGUOUS_REF layout is used
+        domain = self.base_domain + "/testContiguousRefZeroDimDataset.h5"
+        helper.setupDomain(domain)
+        print("testContiguousRefZeroDimDataset", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        # get domain
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # create the dataset
+        req = self.endpoint + "/datasets"
+        # 0 x 10 dataset
+        dims = [0, 10]
+        payload = {'type': 'H5T_STD_I16LE', 'shape': dims }
+        file_uri = "s3://a-storage-bucket/some-file.h5"
+
+        offset = 1234
+        size = dims[0] * dims[1] * 4  # uncompressed size
+
+        payload['creationProperties'] = {'layout': {'class': 'H5D_CONTIGUOUS_REF', 'file_uri': file_uri, 'offset': offset, 'size': size }}
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+
+        dset_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dset_uuid))
+
+        # link new dataset as 'dset'
+        name = 'dset'
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": dset_uuid}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # verify layout
+        req = helper.getEndpoint() + "/datasets/" + dset_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("layout" in rspJson)
+        layout_json = rspJson["layout"]
+        self.assertTrue("class" in layout_json)
+        self.assertEqual(layout_json["class"], 'H5D_CONTIGUOUS_REF')
+        self.assertEqual(layout_json["file_uri"], file_uri)
+        self.assertEqual(layout_json["offset"], offset)
+        self.assertEqual(layout_json["size"], size)
+        self.assertTrue("dims" in layout_json)
+        chunk_dims = layout_json["dims"]
+        self.assertEqual(len(chunk_dims), 2)
+        # layout should be same as the dims
+        self.assertEqual(chunk_dims[0], dims[0])
+        self.assertEqual(chunk_dims[1], dims[1])
+
     def testChunkedRefDataset(self):
         # test Dataset where H5D_CHUNKED_REF layout is used
         domain = self.base_domain + "/testChunkedRefDataset.h5"
