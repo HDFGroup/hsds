@@ -44,15 +44,17 @@ class S3Client():
         # first time setup of s3 client or limited time token has expired
 
         self._aws_region = None
+        self._aws_iam_role = None
         self._aws_secret_access_key = None
         self._aws_access_key_id = None
-        aws_iam_role = None
         max_pool_connections = 64
         self._aws_session_token = None
+
         try:
-            aws_iam_role = config.get("aws_iam_role")
+            self._aws_iam_role = config.get("aws_iam_role")
         except KeyError:
             pass
+        
         try:
             self._aws_secret_access_key = config.get("aws_secret_access_key")
         except KeyError:
@@ -69,6 +71,17 @@ class S3Client():
             max_pool_connections = config.get('aio_max_pool_connections')
         except KeyError:
             pass
+        self._aws_role_arn = None
+        if "AWS_ROLE_ARN" in os.environ:
+            # Assume IAM roles for EKS is being used.  See:
+            # https://aws.amazon.com/blogs/opensource/introducing-fine-grained-iam-roles-service-accounts/
+            self._aws_role_arn = os.environ['AWS_ROLE_ARN']
+            log.info(f"AWS_ROLE_ARN set to: {self._aws_role_arn}")
+            if "AWS_WEB_IDENTITY_TOKEN_FILE" in os.environ:
+                log.debug(f"AWS_WEB_IDENTITY_TOKEN_FILE is: {os.environ['AWS_WEB_IDENTITY_TOKEN_FILE']}")
+            else:
+                log.warn("Expected AWS_WEB_IDENTIFY_TOKEN_FILE environment to be set")
+
         self._aio_config = AioConfig(max_pool_connections=max_pool_connections)
 
         log.debug(f"S3Client init - aws_region {self._aws_region}")
@@ -90,37 +103,46 @@ class S3Client():
         if not self._aws_access_key_id or self._aws_access_key_id == 'xxx':
             log.debug("aws access key id not set")
             self._aws_access_key_id = None
+        self._renewToken()
 
-        if "AWS_ROLE_ARN" in os.environ:
-            # Assume IAM roles for EKS is being used.  See:
-            # https://aws.amazon.com/blogs/opensource/introducing-fine-grained-iam-roles-service-accounts/
-            log.info(f"AWS_ROLE_ARN set to: {os.environ['AWS_ROLE_ARN']}")
-            if "AWS_WEB_IDENTITY_TOKEN_FILE" in os.environ:
-                log.debug(f"AWS_WEB_IDENTITY_TOKEN_FILE is: {os.environ['AWS_WEB_IDENTITY_TOKEN_FILE']}")
-            else:
-                log.warn("Expected AWS_WEB_IDENTIFY_TOKEN_FILE environment to be set")
-            renew_token = False
-        elif aws_iam_role and not self._aws_secret_access_key:
-            if "token_expiration" in app:
-                # check that our token is not about to expire
-                expiration = app["token_expiration"]
-                now = datetime.datetime.now()
-                delta = expiration - now
-                if delta.total_seconds() > 10:
-                    renew_token = False
-                    self._aws_session_token = app["aws_session_token"]
-                else:
-                    renew_token = True
-            else:
-                renew_token = True  # first time getting token
+    def _renewToken(self):
+        """ if using an aws_iam_role, fetch credentials if our token is about to expire,
+          otherwise just return
+        """
+        app = self._app
+        
+        if not self._aws_iam_role:
+            # need this to get a token
+            return  
+        if self._aws_role_arn:
+            # this is set for running in EKS, shouldn't need a token
+            return 
+        
+        if "token_expiration" in app:
+            # check that our token is not about to expire
+            expiration = app["token_expiration"]
         else:
-            renew_token = False
-               
+            expiration = None
+        
+        if expiration:
+            now = datetime.datetime.now()
+            delta = expiration - now
+            if delta.total_seconds() > 10:
+                renew_token = False
+                self._aws_session_token = app["aws_session_token"]
+            else:
+                renew_token = True
+
+        elif self._aws_access_key_id:
+            renew_token = False  # access key set by config
+        else:
+            renew_token = True  # first time getting token
+    
         if renew_token:
-            log.info(f"get S3 access token using iam role: {aws_iam_role}")
+            log.info(f"get S3 access token using iam role: {self._aws_iam_role}")
             # Use EC2 IAM role to get credentials
             # See: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html?icmpid=docs_ec2_console
-            curl_cmd = ["curl", f"http://169.254.169.254/latest/meta-data/iam/security-credentials/{aws_iam_role}"]
+            curl_cmd = ["curl", f"http://169.254.169.254/latest/meta-data/iam/security-credentials/{self._aws_iam_role}"]
             p = subprocess.run(curl_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             if p.returncode != 0:
                 msg = f"Error getting IAM role credentials: {p.stderr}"
@@ -144,6 +166,7 @@ class S3Client():
                 except KeyError:
                     msg = f"Missing expected key from EC2 meta-data response: {stdout}"
                     log.error(msg)
+
 
     def _s3_stats_increment(self, counter, inc=1):
         """ Incremenet the indicated connter
@@ -186,6 +209,7 @@ class S3Client():
         start_time = time.time()
         log.debug(f"s3Client.get_object({bucket}/{key}) start: {start_time}")
         session = self._app["session"]
+        self._renewToken()
         async with session.create_client('s3', region_name=self._aws_region,
                                     aws_secret_access_key=self._aws_secret_access_key,
                                     aws_access_key_id=self._aws_access_key_id,
@@ -247,6 +271,7 @@ class S3Client():
         start_time = time.time()
         log.debug(f"s3Client.put_object({bucket}/{key} start: {start_time}")
         session = self._app["session"]
+        self._renewToken()
         async with session.create_client('s3', region_name=self._aws_region,
                                     aws_secret_access_key=self._aws_secret_access_key,
                                     aws_access_key_id=self._aws_access_key_id,
@@ -295,6 +320,7 @@ class S3Client():
         start_time = time.time()
         log.debug(f"s3Client.delete_object({bucket}/{key} start: {start_time}")
         session = self._app["session"]
+        self._renewToken()
         async with session.create_client('s3', region_name=self._aws_region,
                                     aws_secret_access_key=self._aws_secret_access_key,
                                     aws_access_key_id=self._aws_access_key_id,
@@ -338,6 +364,7 @@ class S3Client():
         start_time = time.time()
         found = False
         session = self._app["session"]
+        self._renewToken()
         async with session.create_client('s3', region_name=self._aws_region,
                                     aws_secret_access_key=self._aws_secret_access_key,
                                     aws_access_key_id=self._aws_access_key_id,
@@ -374,6 +401,7 @@ class S3Client():
         """
         start_time = time.time()
         session = self._app["session"]
+        self._renewToken()
         async with session.create_client('s3', region_name=self._aws_region,
                                     aws_secret_access_key=self._aws_secret_access_key,
                                     aws_access_key_id=self._aws_access_key_id,
@@ -472,6 +500,7 @@ class S3Client():
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         session = self._app["session"]
+        self._renewToken()
         async with session.create_client('s3', region_name=self._aws_region,
                                     aws_secret_access_key=self._aws_secret_access_key,
                                     aws_access_key_id=self._aws_access_key_id,
