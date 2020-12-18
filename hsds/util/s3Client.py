@@ -113,14 +113,17 @@ class S3Client():
         
         if not self._aws_iam_role:
             # need this to get a token
+            log.debug("renewToken: aws_iam_role not set")
             return  
         if self._aws_role_arn:
             # this is set for running in EKS, shouldn't need a token
+            log.debug("renewToken: aws_role_arn is set")
             return 
         
         if "token_expiration" in app:
             # check that our token is not about to expire
             expiration = app["token_expiration"]
+            log.debug("rewnewToken: found token_expiration")
         else:
             expiration = None
         
@@ -129,11 +132,14 @@ class S3Client():
             delta = expiration - now
             if delta.total_seconds() > 10:
                 renew_token = False
+                log.debug("renewToken: still valid")
                 self._aws_session_token = app["aws_session_token"]
             else:
+                log.debug("renewToken: need to refresh")
                 renew_token = True
 
         elif self._aws_access_key_id:
+            log.debug("renewtoken: aws_key_id set")
             renew_token = False  # access key set by config
         else:
             renew_token = True  # first time getting token
@@ -155,7 +161,7 @@ class S3Client():
                     self._aws_access_key_id = cred["AccessKeyId"]
                     aws_cred_expiration = cred["Expiration"]
                     self._aws_session_token = cred["Token"]
-                    log.info(f"Got Expiration of: {aws_cred_expiration}")
+                    log.info(f"renew token: got Expiration of: {aws_cred_expiration}")
                     expiration_str = aws_cred_expiration[:-1] + "UTC" # trim off 'Z' and add 'UTC'
                     # save the expiration
                     app["token_expiration"] = datetime.datetime.strptime(expiration_str, "%Y-%m-%dT%H:%M:%S%Z")
@@ -225,7 +231,7 @@ class S3Client():
                     range_key = f"{key}[{offset}:{offset+length}]"
                 else:
                     range_key = key
-                log.info(f"s3Client.getS3Bytes({range_key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f} bytes={len(data)}")
+                log.info(f"s3Client.get_object({range_key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f} bytes={len(data)}")
 
                 resp['Body'].close()
             except ClientError as ce:
