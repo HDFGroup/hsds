@@ -113,17 +113,14 @@ class S3Client():
         
         if not self._aws_iam_role:
             # need this to get a token
-            log.debug("renewToken: aws_iam_role not set")
             return  
         if self._aws_role_arn:
             # this is set for running in EKS, shouldn't need a token
-            log.debug("renewToken: aws_role_arn is set")
             return 
         
         if "token_expiration" in app:
             # check that our token is not about to expire
             expiration = app["token_expiration"]
-            log.debug("rewnewToken: found token_expiration")
         else:
             expiration = None
         
@@ -132,14 +129,11 @@ class S3Client():
             delta = expiration - now
             if delta.total_seconds() > 10:
                 renew_token = False
-                log.debug("renewToken: still valid")
                 self._aws_session_token = app["aws_session_token"]
             else:
-                log.debug("renewToken: need to refresh")
                 renew_token = True
 
         elif self._aws_access_key_id:
-            log.debug("renewtoken: aws_key_id set")
             renew_token = False  # access key set by config
         else:
             renew_token = True  # first time getting token
