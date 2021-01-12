@@ -24,11 +24,11 @@ classifiers = [
 
 
 install_requires = [
-    'urllib3',
+    'urllib3 <= 1.25.11',  # required by botocore
     'aiobotocore',
     'aiohttp_cors',
     'aiofiles',
-     #'botocore',
+    'chardet <= 3.0.4',
     'cryptography',
     'kubernetes',
     'numba',
