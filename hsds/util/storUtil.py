@@ -201,11 +201,12 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=-1, bucket=No
         bucket = app['bucket_name']
     if key[0] == '/':
         key = key[1:]  # no leading slash
-    log.info(f"getStorBytes({bucket}/{key}, offset={offset}, length: {length})")
     if offset is None:
         offset = 0
     if length is None:
         length = 0
+    log.info(f"getStorBytes({bucket}/{key}, offset={offset}, length: {length})")
+
     data_cache_page_size = int(config.get("data_cache_page_size"))
 
     shuffle = 0
