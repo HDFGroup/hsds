@@ -20,7 +20,7 @@ from aiohttp.web import StreamResponse
 from .util.httpUtil import  http_get, http_put, http_delete, getHref, getAcceptType, jsonResponse
 from .util.idUtil import   isValidUuid, getDataNodeUrl
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
-from .util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain
+from .util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain, verifyRoot
 from .util.attrUtil import  validateAttributeName, getRequestCollectionName
 from .util.hdf5dtype import validateTypeItem, getBaseTypeJson, createDataType, getItemSize
 from .util.arrayUtil import jsonToArray, getShapeDims, getNumElements, bytesArrayToList
@@ -222,9 +222,8 @@ async def PUT_Attribute(request):
 
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
-    if "root" not in domain_json:
-        log.error(f"Expected root key for domain: {domain}")
-        raise HTTPBadRequest(reason="Unexpected Error")
+    verifyRoot(domain_json)
+
     root_id = domain_json["root"]
 
     # TBD - verify that the obj_id belongs to the given domain
@@ -404,9 +403,7 @@ async def DELETE_Attribute(request):
 
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
-    if "root" not in domain_json:
-        log.error(f"Expected root key for domain: {domain}")
-        raise HTTPBadRequest(reason="Unexpected Error")
+    verifyRoot(domain_json)
 
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "delete")
@@ -461,9 +458,7 @@ async def GET_AttributeValue(request):
 
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
-    if "root" not in domain_json:
-        log.error(f"Expected root key for domain: {domain}")
-        raise HTTPBadRequest(reason="Unexpected Error")
+    verifyRoot(domain_json)
 
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "read")
@@ -580,9 +575,7 @@ async def PUT_AttributeValue(request):
 
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
-    if "root" not in domain_json:
-        log.error(f"Expected root key for domain: {domain}")
-        raise HTTPInternalServerError()
+    verifyRoot(domain_json)
 
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "update")

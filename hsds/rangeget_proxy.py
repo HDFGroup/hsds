@@ -13,13 +13,14 @@
 # data node of hsds cluster
 #
 import asyncio
+import time
 from aiohttp.web import run_app
 from aiohttp.web import Application, StreamResponse
 from . import config
 from .util.lruCache import LruCache
 from .util.storUtil import getStorBytes, getStorObjStats
 from . import hsds_logger as log
-from aiohttp.web_exceptions import  HTTPInternalServerError, HTTPNotFound, HTTPBadRequest
+from aiohttp.web_exceptions import  HTTPInternalServerError, HTTPNotFound, HTTPBadRequest, HTTPNotImplemented
 
 """
 read indicated bytes from LRU cache (or S3 if not in cache)
@@ -51,25 +52,47 @@ async def read_page(app, key, buffer, obj_size=0, offset=0, start=0, end=0, buck
         raise HTTPInternalServerError()
     page_start = (start // page_size) * page_size
     page_number = page_start // page_size
+    page_length = page_size
+    if page_start + page_size > obj_size:
+        page_length = obj_size - page_start
+    else:
+        page_length = page_size
+    page_bytes = None
     
     data_cache = app["data_cache"]
+    pending_read = app["pending_read"]
     cache_key = f"{bucket}/{key}:{page_number}"
     if cache_key not in data_cache:
         log.debug(f"cache_key: {cache_key} not found in data cache")
-        page_length = page_size
-        if page_start + page_size > obj_size:
-            page_length = obj_size - page_start
-        else:
-            page_length = page_size
-        page_bytes = await getStorBytes(app, key, offset=page_start, length=page_length, bucket=bucket)
+        if cache_key in pending_read:
+            read_start_time = pending_read[cache_key]
+            log.info(f"read request for {cache_key} was requested at: {read_start_time}")
+            while time.time() - read_start_time < 2.0:
+                log.debug("waiting for pending read, sleepingq")
+                await asyncio.sleep(0.1)  
+                if cache_key in data_cache:
+                    log.info(f"cache item {cache_key} has arrived!")
+                    page_bytes = data_cache[cache_key]
+                    break
+            if page_bytes is None:
+                log.warn(f"read for {cache_key} timed-out, initiaiting a new read")
         if page_bytes is None:
-            log.debug(f"getStorBytes {bucket}/{key} not found")
-            raise HTTPNotFound()
-        log.debug(f"got page_bytes, type: {type(page_bytes)}")
-        data_cache[cache_key] = page_bytes
+            pending_read[cache_key] = time.time()
+            
+            # set use_proxy to False since we are the proxy!
+            page_bytes = await getStorBytes(app, key, offset=page_start, length=page_length, bucket=bucket, use_proxy=False)
+            if cache_key in pending_read:
+                del pending_read[cache_key]
+            if page_bytes is None:
+                log.debug(f"getStorBytes {bucket}/{key} not found")
+                raise HTTPNotFound()
+            log.debug(f"got page_bytes, add key: {cache_key} to cache")
+            data_cache[cache_key] = page_bytes
     else:
         log.debug(f"cache_key: {cache_key} found in data cache")
         page_bytes = data_cache[cache_key]
+
+    # fill in the buffer with requested data from thee page
     page_start = start % page_size
     page_end = page_start + length
     buffer_start = start - offset
@@ -131,6 +154,10 @@ async def GET_ByteRange(request):
     log.debug(f"page_size: {page_size}")
     log.info(f"GET_ByteRange(bucket={bucket}, key={key}, offset={offset}, length={length})")
 
+    if page_size < 1024:
+        log.error(f"page_size must be greater than 1024 but it was: {page_size}")
+        raise HTTPNotImplemented()
+
     obj_stat_map = app["obj_stat_map"]
     if f"{bucket}/{key}" not in obj_stat_map:
         log.debug("getStorObjStats")
@@ -148,29 +175,29 @@ async def GET_ByteRange(request):
         raise HTTPBadRequest(reason=msg)
 
 
-
     # create bytearray to store data to be returned
     buffer = bytearray(length)       
 
-    tasks = []
+    max_concurrent_read = config.get("data_cache_max_concurrent_read") 
+    tasks = set()
     loop = asyncio.get_event_loop()
     page_start = offset
     page_end = page_start
     while page_end < offset + length:
+        if len(tasks) >= max_concurrent_read:
+            # Wait for some download to finish before adding a new one
+            _done, tasks = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         page_end = page_start + page_size
         page_end -= page_end % page_size  # trim to page boundry
         if page_end > offset + length:
             page_end = offset + length
-        print(f"read page {page_start} - {page_end}")  
-        task = asyncio.ensure_future(read_page(app, key, buffer, obj_size=obj_size, offset=offset, start=page_start, end=page_end, bucket=bucket))
-        tasks.append(task)
-        # await read_page(app, key, buffer, offset=offset, start=page_start, end=page_end, bucket=bucket)
+        log.debug(f"read page {page_start} - {page_end}")  
+        task = loop.create_task(read_page(app, key, buffer, obj_size=obj_size, offset=offset, start=page_start, end=page_end, bucket=bucket))
+        tasks.add(task)
         page_start = page_end
+    # Wait for the remaining downloads to finish
+    await asyncio.wait(tasks)
 
-    log.info(f"gather {len(tasks)} read_page tasks")
-    await asyncio.gather(*tasks, loop=loop)
-
-     
     log.info(f"GET_ByteRange - returning: {len(buffer)} bytes")
 
     # write response
@@ -212,7 +239,8 @@ def main():
     #
     app.router.add_route('GET', '/', GET_ByteRange)
     app['data_cache'] = LruCache(mem_target=cache_size, name="DataCache", expire_time=expire_time)
-    app['obj_stat_map'] = {}
+    app['obj_stat_map'] = {}  # map of obj stats (e.g. size)
+    app['pending_read'] = {} # map of keuy to timestamp for in-flight read requests
 
     # run the app
     port = int(config.get("rangeget_port"))

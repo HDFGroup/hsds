@@ -95,10 +95,10 @@ def getDynamoDBClient(app):
                 # save the expiration
                 app["token_expiration"] = datetime.datetime.strptime(expiration_str, "%Y-%m-%dT%H:%M:%S%Z")
             except json.JSONDecodeError:
-                msg = "Unexpected error decoding EC2 meta-data response"
+                msg = f"Unexpected error decoding EC2 meta-data response: {stdout}"
                 log.error(msg)
             except KeyError:
-                msg = "Missing expected key from EC2 meta-data response"
+                msg = f"Missing expected key from EC2 meta-data response: {stdout}"
                 log.error(msg)
 
     dynamodb_gateway = config.get('aws_dynamodb_gateway')

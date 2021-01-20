@@ -222,33 +222,36 @@ def getContiguousLayout(shape_json, item_size, chunk_min=1000*1000, chunk_max=4*
         return None
     if shape_json["class"] == 'H5S_SCALAR':
         return (1,)  # just enough to store one item
-    chunk_avg = (chunk_min + chunk_max) // 2
     dims = shape_json["dims"]
     rank = len(dims)
+    if rank == 0:
+        raise ValueError("rank must be positive for Contiguous Layout")
+    for dim in dims:
+        if dim < 0:
+            raise ValueError("extents must be positive for Contiguous Layout")
+        if dim == 0:
+            # datashape with no elements, just return dims as layout
+            return dims
+
     nsize = item_size
     layout = [1,] * rank
-    if rank == 1:
-        # just divy up the dimension with whatever works best
-        nsize *= dims[0]
-        if nsize < chunk_max:
-            layout[0] = dims[0]
-        else:
-            layout[0] = chunk_avg // item_size
-    else:
-        unit_chunk = False
-        for i in range(rank):
-            dim = rank - i - 1
-            extent = dims[dim]
+
+    for i in range(rank):
+        dim = rank -i - 1
+        extent = dims[dim]
+        if extent * nsize < chunk_max:
+            # just use the full extent as layout
+            layout[dim] = extent
             nsize *= extent
-            if unit_chunk:
-                layout[dim] = 1
-            else:
-                layout[dim] = extent
-                if nsize > chunk_max:
-                    if i>0:
-                        # make everything after first dimension 1
-                        layout[dim] = 1
-                    unit_chunk = 1
+        else:
+            n = extent
+            while n > 1:
+                n = -(-n // 2)  # use negatives so we round up on odds
+                if n * nsize < chunk_max:
+                    break
+            layout[dim] = n
+            break # just use 1's for the rest of the layout
+
     return layout
 
 
@@ -965,21 +968,21 @@ def chunkQuery(chunk_id=None, chunk_layout=None, chunk_arr=None, slices=None,
     s = slices[0]
     count = 0
     for index in where_result_index:
-        log.debug(f"chunkQuery - index: {index}")
+        # log.debug(f"chunkQuery - index: {index}")
         value = x[index].copy()
         if replace_mask:
-            log.debug(f"chunkQuery - original value: {value}")
+            # log.debug(f"chunkQuery - original value: {value}")
             for i in range(len(field_names)):
                 if replace_mask[i] is not None:
                     value[i] = replace_mask[i]
-            log.debug(f"chunkQuery - modified value: {value}")
+            # log.debug(f"chunkQuery - modified value: {value}")
             try:
                 chunk_arr[index] = value
             except ValueError as ve:
                 log.error(f"Numpy Value updating array: {ve}")
                 raise
 
-        log.debug(f"chunkQuery - got value: {value}")
+        # log.debug(f"chunkQuery - got value: {value}")
         indices.append(int(index) * s.step + s.start + chunk_coord[0])  # adjust for selection
         values.append(value)
         count += 1

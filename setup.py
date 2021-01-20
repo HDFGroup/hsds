@@ -24,15 +24,15 @@ classifiers = [
 
 
 install_requires = [
-    'aiobotocore<1',
-    'aiohttp<= 3.6.2',
+    'urllib3 <= 1.25.11',  # required by botocore
+    'aiobotocore',
     'aiohttp_cors',
     'aiofiles',
-     #'botocore',
+    'chardet <= 3.0.4',
     'cryptography',
     'kubernetes',
     'numba',
-    'numpy >= 1.10.4',
+    'numpy',
     'psutil',
     'pyjwt',
     'pytz',

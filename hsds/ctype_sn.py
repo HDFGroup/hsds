@@ -20,7 +20,7 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPGone
 from .util.httpUtil import http_post, http_put, http_delete, getHref, jsonResponse
 from .util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
 from .util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
-from .util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain
+from .util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain, verifyRoot
 from .util.hdf5dtype import validateTypeItem, getBaseTypeJson
 from .servicenode_lib import getDomainJson, getObjectJson, validateAction, getObjectIdByPath, getPathForObjectId
 from . import hsds_logger as log
@@ -86,10 +86,8 @@ async def GET_Datatype(request):
 
     if h5path:
         domain_json = await getDomainJson(app, domain)
-        if "root" not in domain_json:
-            msg = f"Expected root key for domain: {domain}"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+        verifyRoot(domain_json)
+    
         if group_id is None:
             group_id = domain_json["root"]
         ctype_id = await getObjectIdByPath(app, group_id, h5path, bucket=bucket)  # throws 404 if not found
@@ -182,10 +180,7 @@ async def POST_Datatype(request):
 
     aclCheck(app, domain_json, "create", username)  # throws exception if not allowed
 
-    if "root" not in domain_json:
-        msg = f"Expected root key for domain: {domain}"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
+    verifyRoot(domain_json)
 
     link_id = None
     link_title = None
@@ -261,9 +256,7 @@ async def DELETE_Datatype(request):
 
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
-    if "root" not in domain_json:
-        log.error(f"Expected root key for domain: {domain}")
-        raise HTTPBadRequest(reason="Unexpected Error")
+    verifyRoot(domain_json)
 
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, ctype_id, username, "delete")

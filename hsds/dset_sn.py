@@ -25,7 +25,7 @@ from .util.dsetUtil import  getPreviewQuery, getFilterItem
 from .util.arrayUtil import getNumElements, getShapeDims
 from .util.chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk, getContiguousLayout
 from .util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
-from .util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain, getPathForDomain
+from .util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain, getPathForDomain, verifyRoot
 from .util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson, getItemSize
 from .servicenode_lib import getDomainJson, getObjectJson, validateAction, getObjectIdByPath, getPathForObjectId, getRootInfo
 from . import config
@@ -285,10 +285,7 @@ async def GET_Dataset(request):
     if h5path:
         if group_id is None:
             domain_json = await getDomainJson(app, domain)
-            if "root" not in domain_json:
-                msg = f"Expected root key for domain: {domain}"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
+            verifyRoot(domain_json)
             group_id = domain_json["root"]
         dset_id = await getObjectIdByPath(app, group_id, h5path, bucket=bucket)  # throws 404 if not found
         if not isValidUuid(dset_id, "Dataset"):
@@ -639,11 +636,8 @@ async def POST_Dataset(request):
 
     aclCheck(app, domain_json, "create", username)  # throws exception if not allowed
 
-    if "root" not in domain_json:
-        msg = f"Expected root key for domain: {domain}"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-
+    verifyRoot(domain_json)
+   
     #
     # validate type input
     #
@@ -1040,9 +1034,7 @@ async def DELETE_Dataset(request):
 
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
-    if "root" not in domain_json:
-        log.error(f"Expected root key for domain: {domain}")
-        raise HTTPBadRequest(reason="Unexpected Error")
+    verifyRoot(domain_json)
 
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, dset_id, username, "delete")

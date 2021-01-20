@@ -356,6 +356,58 @@ class DomainTest(unittest.TestCase):
             # we should get the same value for root id
             self.assertEqual(root_id, rspJson["root"])
 
+    def testCreateDomainNodeIds(self):
+        domain = self.base_domain + "/newdomain.h6"
+        print("testCreateDomainNodeIds", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + '/'
+        params = {"getdnids": 1}
+
+        rsp = requests.put(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        for k in ("root", "owner", "acls", "created", "lastModified", "version", "limits", "compressors"):
+             self.assertTrue(k in rspJson)
+
+        self.assertTrue("dn_ids" in rspJson)
+
+        dn_ids = rspJson["dn_ids"]
+        self.assertTrue(len(dn_ids) >= 1)
+        root_id = rspJson["root"]
+
+        # verify we can access root groups
+        root_req =  helper.getEndpoint() + "/groups/" + root_id
+        headers = helper.getRequestHeaders(domain=domain)
+        rsp = requests.get(root_req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # do a GET on the domain
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+       
+        for k in ("root", "owner", "created", "hrefs", "lastModified", "version", "limits", "compressors", "dn_ids"):
+             self.assertTrue(k in rspJson)
+
+        self.assertTrue("dn_ids" in rspJson)
+        self.assertTrue(len(rspJson["dn_ids"]) >= 1)
+        self.assertEqual(set(dn_ids), set(rspJson["dn_ids"]))
+        self.assertEqual(root_id, rspJson["root"])
+
+
+        # try doing a flush on the domain
+        req = helper.getEndpoint() + '/'
+        params = {"flush": 1, "getdnids": 1}
+        rsp = requests.put(req, params=params, headers=headers)
+        #  should get content this time 
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("dn_ids" in rspJson)
+        self.assertTrue(len(rspJson["dn_ids"]) >= 1)
+        self.assertEqual(set(dn_ids), set(rspJson["dn_ids"]))
+
+
+
     def testCreateLinkedDomain(self):
         target_domain = self.base_domain + "/target_domain.h5"
         print("testCreateLinkedDomain", target_domain)
@@ -594,6 +646,36 @@ class DomainTest(unittest.TestCase):
 
         rsp = requests.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 404)
+
+    def testNullDomain(self):
+        headers = helper.getRequestHeaders()
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        self.assertTrue(rsp.status_code in (400, 404))
+
+    def testInvalidDomain(self):
+        domain =  "bad_domain.h5"
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 404)  # TBD - should this be 400?
+
+    def testWithBucket(self):
+        domain =  self.base_domain + "/with_bucket.h5"
+        headers = helper.getRequestHeaders(domain=domain)
+        params = {"bucket": "does.not.exist.bucket.47839293433"}
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 404) 
+
+    def testInvalidBucket(self):
+        domain =  self.base_domain + "/invalid_bucket.h5"
+        headers = helper.getRequestHeaders(domain=domain)
+        params = {"bucket": "bad/bucket"}
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 400) 
+
 
     def testDNSDomain(self):
         # DNS domain names are in reverse order with dots as seperators...

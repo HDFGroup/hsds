@@ -77,7 +77,7 @@ def main():
 
     # need the metadata cache since we will be calling into some SN methods
     metadata_mem_cache_size = int(config.get("metadata_mem_cache_size"))
-    app['meta_cache'] = LruCache(mem_target=metadata_mem_cache_size, chunk_cache=False)
+    app['meta_cache'] = LruCache(mem_target=metadata_mem_cache_size, name="MetaCache")
    
     loop.run_until_complete(run_scan(app, rootid=rootid, update=do_update))
 

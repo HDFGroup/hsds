@@ -72,8 +72,7 @@ class UpTest(unittest.TestCase):
         node = rspJson["node"]
         self.assertTrue("id" in node)
         self.assertTrue(node["id"].startswith("sn-"))
-        self.assertTrue("node_number" in node)
-        self.assertTrue(node["node_number"] >= 0)
+        self.assertTrue("node_number" not in node)  # only for dn nodes
         self.assertTrue("node_count" in node)
         self.assertTrue(node["node_count"] >= 0)
         self.assertTrue("type" in node)

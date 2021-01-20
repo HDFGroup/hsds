@@ -13,18 +13,13 @@
 # Head node of hsds cluster
 #
 import os
-import asyncio
-import json
 import time
 
 from aiohttp.web import Application, StreamResponse, run_app, json_response
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPServiceUnavailable, HTTPNotFound, HTTPException
-
-from asyncio import TimeoutError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 
 from . import config
 from .util.timeUtil import unixTimeToUTC, elapsedTime
-from .util.httpUtil import http_get, getUrl
 from .util.idUtil import  createNodeId
 from . import hsds_logger as log
 from .util import query_marathon as marathonClient
@@ -32,169 +27,123 @@ from .util import query_marathon as marathonClient
 NODE_STAT_KEYS = ("cpu", "diskio", "memory", "log_stats", "disk", "netio",
     "req_count", "s3_stats", "azure_stats", "chunk_cache_stats")
 
-async def healthCheck(app):
-    """ Periodic method that pings each active node and verifies it is still healthy.
-    If node doesn't respond, free up the node slot (the node can re-register if it comes back)'.
-    Note that an aio deprecation against changing state after initial app startup means we might have to do something like https://github.com/aio-libs/aiohttp/issues/3397#issuecomment-440943426 for some of the items currently tracking in app."""
+class Node:
+    def __init__(self, node_id=None, node_type=None, node_host=None, node_port=None):
+        self._id = node_id
+        self._type = node_type
+        self._host = node_host
+        self._port = node_port
+        now = time.time()
+        self._create_time = now
+        self._last_poll = now
+        self._stats = {}
 
+    @property
+    def id(self):
+        return self._id
+    
+    @property
+    def type(self):
+        return self._type
 
+    @property
+    def host(self):
+        return self._host
+
+    @property
+    def port(self):
+        return self._port
+
+    @property
+    def stats(self):
+        return self._stats
+
+    @property
+    def create_time(self):
+        return self._create_time
+
+    def set_stats(self, stats):
+        self._stats = stats
+
+    def get_info(self):
+        info = {}
+        info["id"] = self._id
+        info["type"] = self._type
+        info["host"] = self._host
+        info["port"] = self._port
+        return info
+
+    def poll_update(self):
+        now = time.time()
+        self._last_poll = now
+
+    def is_healthy(self):
+        sleep_sec = int(config.get("node_sleep_time"))
+
+        now = time.time()
+        if now - self._last_poll < sleep_sec * 2:
+            return True
+        else:
+            return False
+
+async def isClusterReady(app):
+    sn_count = 0
+    dn_count = 0
+    target_sn_count = await getTargetNodeCount(app, "sn")
+    target_dn_count = await getTargetNodeCount(app, "dn")
+    last_create_time = None
     nodes = app["nodes"]
+    for node_id in nodes:
+        node = nodes[node_id]
+        if not node.is_healthy():
+            log.debug(f"node {node.id} is unhealthy")
+            continue
+        if last_create_time is None or node.create_time > last_create_time:
+            last_create_time = node.create_time
+        if node.type == "sn":
+            sn_count += 1
+        else:
+            dn_count += 1
+    if sn_count == 0 or dn_count == 0:
+        log.debug("no nodes, cluster not ready")
+        return False
+    if sn_count < target_sn_count or dn_count < target_dn_count:
+        log.debug("not all nodes active, cluster not ready")
+        return False
 
-    while True:
-        app["last_health_check"] = int(time.time())
+    log.debug("cluster is ready")
+    return True
 
-        # sleep for a bit
-        sleep_secs = config.get("head_sleep_time")
-        await  asyncio.sleep(sleep_secs)
-
-        now = int(time.time())
-        log.info("health check {}, cluster_state: {}, node_count: {}".format(unixTimeToUTC(now), app["cluster_state"], len(nodes)))
-
-        fail_count = 0
-        # keep track of where we are in the global node list for possible deletions
-        node_seq_num = -1
-        HEALTH_CHECK_RETRY_COUNT = 1 # times to try before calling a node dead
-        #TODO note that this fail_count actually applies to any node.  Should the fail count be a hash of node_ids to a fail count?
-        for node in nodes:
-            node_seq_num += 1
-            if node["host"] is None:
-                fail_count += 1
-                log.warn("Node found with missing host information.")
-                continue
-            url = getUrl(node["host"], node["port"]) + "/info"
-            try:
-                rsp_json = await http_get(app, url)
-                if "node" not in rsp_json:
-                    log.error("Unexpected response from node")
-                    fail_count += 1
-                    continue
-                node_state = rsp_json["node"]
-                node_id = node_state["id"]
-
-                if node_id != node['id']:
-                    log.warn("unexpected node_id: {} (expecting: {})".format(node_id, node['id']))
-                    node['host'] = None
-                    node['id'] = None
-                    fail_count += 1
-                    continue
-
-                if 'number' in node_state and node_state['number'] != node['node_number']:
-                    msg = "unexpected node_number got {} (expecting: {})"
-                    log.warn(msg.format(node_state["number"], node['node_number']))
-                    node['host'] = None
-                    node['id'] = None
-                    fail_count += 1
-                    continue
-
-                # save off other useful info from the node
-                app_node_stats = app["node_stats"]
-                node_stats = {}
-                for k in NODE_STAT_KEYS:
-                    if k in rsp_json:
-                        node_stats[k] = rsp_json[k]
-                app_node_stats[node_id] = node_stats
-                # mark the last time we got a response from this node
-                node["healthcheck"] = unixTimeToUTC(int(time.time()))
-                node["failcount"] = 0 # rest
-            except OSError as ose:
-                log.warn("OSError for req: {}: {}".format(url, str(ose)))
-                # node has gone away?
-                node["failcount"] += 1
-                if node["failcount"] >= HEALTH_CHECK_RETRY_COUNT:
-                    log.warn("node {}:{} not responding".format(node["host"], node["port"]))
-                    fail_count += 1
-            except TimeoutError as toe:
-                log.warn("TimeoutError for req: {}: {}".format(url, str(toe)))
-                # node has gone away?
-                node["failcount"] += 1
-                if node["failcount"] >= HEALTH_CHECK_RETRY_COUNT:
-                    log.warn("node {}:{} not responding".format(node["host"], node["port"]))
-                    fail_count += 1
-            except Exception as e:
-                log.warn("Exception for healthcheck: {}: {}".format(url, str(e)))
-                # node has gone away?
-                node["failcount"] += 1
-                if node["failcount"] >= HEALTH_CHECK_RETRY_COUNT:
-                    log.warn("removing {}:{} from active list".format(node["host"], node["port"]))
-                    node["host"] = None  # make slow available for new registrations
-                    fail_count += 1
-            except HTTPServiceUnavailable as hsu:
-                log.warn("HTTPServiceUnavailable error for req: {}: {}".format(url, str(hsu)))
-                # node has gone away?
-                node["failcount"] += 1
-                if node["failcount"] >= HEALTH_CHECK_RETRY_COUNT:
-                    log.warn("removing {}:{} from active list".format(node["host"], node["port"]))
-                    fail_count += 1
-            except HTTPNotFound as hnf:
-                log.warn("HTTPException error for req: {}: {}".format(url, str(hnf)))
-                # node has gone away?
-                node["failcount"] += 1
-                if node["failcount"] >= HEALTH_CHECK_RETRY_COUNT:
-                    log.warn("removing {}:{} from active list".format(node["host"], node["port"]))
-                    fail_count += 1
-            except HTTPException as he:
-                log.warn("HTTPException error for req: {}: {}".format(url, str(he)))
-                # node has gone away?
-                node["failcount"] += 1
-                if node["failcount"] >= HEALTH_CHECK_RETRY_COUNT:
-                    log.warn("removing {}:{} from active list".format(node["host"], node["port"]))
-                    fail_count += 1
-            except:
-                log.warn("Unknown exception caught")
-            finally:
-                if node["failcount"] >= HEALTH_CHECK_RETRY_COUNT:
-                    log.warn("Forgetting about node {}:{} due to too many failures.".format(node['host'], node['port']))
-                    node['host'] = None
-                    node['id'] = None
-                    if node['node_type'] == "dn":
-                        log.warn("Removed a DN")
-                        del app['nodes'][node_seq_num]
-                        del node
-                        # best to just break to avoid weird modified loop variable behavior
-                        break
-                    elif node['node_type'] == "sn":
-                        log.warn("Removed a SN")
-                        del app['nodes'][node_seq_num]
-                        del node
-                        # best to just break to avoid weird modified loop variable behavior
-                        break
-                    else:
-                        log.warn("Lost a node that wasn't a dn or sn, no action taken")
-                    #We've handled this particular loop's failed node
-                    fail_count -= 1
-                    # check to see if the cluster is in the process of scaling down and reached its target
-                    log.debug(f"After node removal, checking to see if we can go ready fail_count is {fail_count}, app['cluster_state'] is {app['cluster_state']}, app['target_dn_count'] is {app['target_dn_count']}, getTargetNodeCount(app, 'dn') is {await getTargetNodeCount(app, 'dn')}, getActiveNodeCount(app, 'dn') is {getActiveNodeCount(app, 'dn')}, getTargetNodeCount(app, 'sn') is {await getTargetNodeCount(app, 'sn')}, app['target_sn_count'] is {app['target_sn_count']}, getActiveNodeCount(app, 'sn') is {getActiveNodeCount(app, 'sn')}")
-                    if fail_count == 0 and app["cluster_state"] != "READY" and app['target_dn_count'] == getActiveNodeCount(app, "dn") and app['target_sn_count'] == getActiveNodeCount(app, "sn"):
-                        log.info("All nodes healthy at new cluster size, changing cluster state to READY")
-                        app["cluster_state"] = "READY"
-
-        log.info("node health check fail_count: {}".format(fail_count))
-
-        if fail_count > 0:
-            if app["cluster_state"] == "READY":
-                # go back to INITIALIZING state until another node is registered
-                log.warn("Fail_count > 0, Setting cluster_state from READY to INITIALIZING")
-                app["cluster_state"] = "INITIALIZING"
-        elif fail_count == 0 and app["cluster_state"] != "READY" and app['target_dn_count'] == getActiveNodeCount(app, "dn") and app['target_sn_count'] == getActiveNodeCount(app, "sn"):
-            log.info("All nodes healthy, changing cluster state to READY")
-            app["cluster_state"] = "READY"
-        #else: all is well
-
-
-
+def removeNode(app, host=None, port=None):
+    dead_node_ids = app['dead_node_ids']
+    nodes = app["nodes"]
+    remove_id = None
+    for node_id in nodes:
+        node = nodes[node_id]
+        if node.port == port and node.host == host:
+            remove_id = node_id
+            break  # only expecting one at most
+    if remove_id:
+        del nodes[remove_id]
+        dead_node_ids.add(remove_id)
+ 
 async def info(request):
     """HTTP Method to return node state to caller"""
     log.request(request)
     app = request.app
     resp = StreamResponse()
     resp.headers['Content-Type'] = 'application/json'
+    if await isClusterReady(app):
+        cluster_state = 'READY'
+    else:
+        cluster_state = 'WAITING'
     answer = {}
     # copy relevant entries from state dictionary to response
     answer['id'] = request.app['id']
     answer['start_time'] = unixTimeToUTC(app['start_time'])
     answer['last_health_check'] = unixTimeToUTC(app['last_health_check'])
     answer['up_time'] = elapsedTime(app['start_time'])
-    answer['cluster_state'] = app['cluster_state']
+    answer['cluster_state'] = cluster_state
     answer['bucket_name'] = app['bucket_name']
     answer['target_sn_count'] = await getTargetNodeCount(app, "sn")
     answer['active_sn_count'] = getActiveNodeCount(app, "sn")
@@ -209,147 +158,161 @@ async def register(request):
     """ HTTP method for nodes to register with head node"""
     log.request(request)
     app = request.app
-    text = await request.text()
-    # body = await request.json()
-    body = json.loads(text)
-    log.info(f"body: {body}")
+    if not request.has_body:
+        msg = "register missing body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    body = await request.json()
+    log.info(f"register request body: {body}")
+    node_host = None
+    node_port = None
+    node_type = None
+    node_id = None
     if 'id' not in body:
         msg = "Missing 'id'"
         log.response(request, code=400, message=msg)
         raise HTTPBadRequest(reason=msg)
+    node_id = body['id']
+    if 'node_type' not in body:
+        msg = "missing key 'node_type'"
+        log.response(request, code=400, message=msg)
+        raise HTTPBadRequest(reason=msg)
+    node_type = body['node_type']
+    if node_type not in ('sn', 'dn'):
+        msg=f"invalid node_type: {node_type}"
+        log.response(request, code=400, message=msg)
+        raise HTTPBadRequest(reason=msg)
+    if 'port' not in body:
+        msg = "missing key 'port'"
+        log.response(request, code=400, message=msg)
+        raise HTTPBadRequest(reason=msg)
+    node_port = body['port']
+    
     if 'ip' not in body:
+        log.debug("register - get ip/port from request.transport")
         peername = request.transport.get_extra_info('peername')
         if peername is None:
             msg = "Can not determine caller IP"
             log.error(msg)
             raise HTTPBadRequest(reason=msg)
-        log.debug(f"peername: {peername}")
         if peername[0] is None or peername[0] in ("::1", "127.0.0.1"):
-            host = "localhost"  
+            node_host = "localhost"  
         else:
-            host = peername[0]
-        req_port = peername[1]
-        log.info(f"register host: {host}, port: {req_port}")
-        
+            node_host = peername[0]
     else:
         #Specify the ip is useful in docker / DCOS situations, where in certain situations a 
         #docker private network IP might be used
-        host = body["ip"]
-        log.info("explicit specification of host: {}".format(host))
-    if 'port' not in body:
-        msg = "missing key 'port'"
-        log.response(request, code=400, message=msg)
-        raise HTTPBadRequest(reason=msg)
-    if 'node_type' not in body:
-        raise HTTPBadRequest(reason="missing key 'node_type'")
-    if body['node_type'] not in ('sn', 'dn'):
-        msg="invalid node_type"
-        log.response(request, code=400, message=msg)
-        raise HTTPBadRequest(reason=msg)
+        node_host = body["ip"]
 
-    nodes = None
-    ret_node = None
+    log.info(f"register host: {node_host}, port: {node_port}")    
 
-    node_ids = app['node_ids']
-    if body['id'] in node_ids:
+    nodes = app['nodes']
+    dead_node_ids = app['dead_node_ids']
+
+    if node_id in nodes:
         # already registered?
-        log.warn("Node {} is already registered!!!  Something may be wrong.".format(body['id']))
-        ret_node = node_ids[body['id']]
+        node = nodes[node_id]
+        if node_type != node.type:
+            msg = f"Unexpected node_type {node_type} (expected: {node.type})for node_id: {node_id}"
+            log.error(msg)
+            raise HTTPBadRequest(reason=msg)
+        if node_port != node.port:
+            msg = f"Unexpected node_port {node_port} (expected: {node.port}) for node_id: {node_id}"
+            log.error(msg)
+            raise HTTPBadRequest(reason=msg)
+        if node_host != node.host:
+            msg = f"Unexpected node_host {node_host}(expected: {node.host}) for node_id: {node_id}"
+            log.error(msg)
+            raise HTTPBadRequest(reason=msg)
+        node.poll_update()  # note that the node has checked in
+    elif node_id in dead_node_ids:
+        log.error(f"unexpected register request from node id: {node_id}")
+        raise HTTPInternalServerError()
     else:
-        log.debug(f"Node {body['id']} is unknown, may be a new node coming online.")
-        nodes = app['nodes']
-        app['active_sn_count'] = getActiveNodeCount(app, "sn")
-        app['active_dn_count'] = getActiveNodeCount(app, "dn")
-
-        # If the cluster has any failed nodes, replace them.  Otherwise, see if the cluster is in the process of growing.
-        if(body['node_type'] == "dn" or body['node_type'] == "sn"):
-            replacedNode = False
-            for node in nodes:
-                if node['host'] is None and node['node_type'] == body['node_type']:
-                    # found a free node
-                    log.info("Found free node reference: {}".format(node))
-                    node['host'] = host
-                    node['port'] = body["port"]
-                    node['id'] =   body["id"]
-                    node['connected'] = unixTimeToUTC(int(time.time()))
-                    node['failcount'] = 0
-                    ret_node = node
-                    node_ids[body["id"]] = ret_node
-                    replacedNode = True
-                    break
-            if not replacedNode:
-                node = {"node_number": len(nodes) - 1,
-                    "node_type": body['node_type'],
-                    "host": body['ip'],
-                    "port": body['port'],
-                    "id": body['id'],
-                    "connected": unixTimeToUTC(int(time.time())),
-                    "failcount": 0}
-                log.debug(f"Added node node_type {node['node_type']} host {node['host']} port {node['port']} id {node['id']} connected {node['connected']} failcount {node['failcount']}")
-                nodes.append(node)
-                ret_node = node
-                node_ids[body["id"]] = ret_node
-        else:
-            log.warn("Only sn or dn nodes may be replaced or added to a cluster")
-
-    if ret_node is None:
-        log.info("no free node to assign")
-
-    inactive_node_count = getInactiveNodeCount(app)
-    log.info("inactive_node_count: {}".format(inactive_node_count))
-    if inactive_node_count == 0:
-        # all the nodes have checked in
-        log.info(f"setting cluster state to READY - was: {app['cluster_state']}")
-        app['cluster_state'] = "READY"
+        log.info(f"Node {node_id} is unknown, new node coming online.")
+        node = Node(node_id=node_id, node_type=node_type, node_host=node_host, node_port=node_port)   
+        # delete any existing node with the same port
+        removeNode(app, host=node_host, port=node_port)
+        nodes[node_id] = node
 
     resp = StreamResponse()
     resp.headers['Content-Type'] = 'application/json'
     answer = {}
-    if ret_node is not None:
-        answer["node_number"] = ret_node["node_number"]
-    else:
-        # all nodes allocated, let caller know it's in the reserve pool
-        answer["node_number"] = -1
 
-    #answer["node_count"] = app["target_dn_count"]
-    answer["node_count"] = await getTargetNodeCount(app, body['node_type'])
+    if await isClusterReady(app):
+        answer["cluster_state"] = "READY"
+    else:
+        answer["cluster_state"] = "WAITING"
+    sn_urls = []
+    dn_urls = []
+    sn_ids = []
+    dn_ids = []
+    for node_id in nodes:
+        node = nodes[node_id]
+        if not node.is_healthy():
+            continue
+        node_url = f"http://{node.host}:{node.port}"
+        if node.type == "sn":
+            sn_urls.append(node_url)
+            sn_ids.append(node_id)
+        else:
+            dn_urls.append(node_url)
+            dn_ids.append(node_id)
+
+    # sort dn_urls so node number can be determined
+    dn_id_map = {}
+    for i in range(len(dn_urls)):
+        dn_url = dn_urls[i]
+        dn_id = dn_ids[i]
+        dn_id_map[dn_url] = dn_id
+
+    dn_urls.sort()
+    dn_ids = [] # re-arrange to match url order
+    for dn_url in dn_urls:
+        dn_ids.append(dn_id_map[dn_url])
+
+    answer["sn_urls"] = sn_urls
+    answer["dn_urls"] = dn_urls
+    answer["sn_ids"] = sn_ids
+    answer["dn_ids"] = dn_ids
+    answer["req_ip"] = node_host
+    log.debug(f"register returning: {answer}")
+    app["last_health_check"] = int(time.time())
 
     resp = json_response(answer)
     log.response(request, resp=resp)
     return resp
 
 async def nodestate(request):
-    """HTTP method to return information about registed nodes"""
+    """HTTP method to return information about registered nodes"""
     log.request(request)
-    node_type = request.match_info.get('nodetype', '*')
-    node_number = '*'
-    if node_type != '*':
-        node_number = request.match_info.get('nodenumber', '*')
-
-    log.info("nodestate/{}/{}".format(node_type, node_number))
-    if node_type not in ("sn", "dn", "*"):
-        msg="invalid node_type"
-        log.response(request, code=400, message=msg)
-        raise HTTPBadRequest(reason=msg)
+    node_id = request.match_info.get('node_id', '*')
+    node_type = request.match_info.get('node_type', '*')
+     
+    log.info(f"nodestate/{node_type}/{node_id}")
 
     app = request.app
     resp = StreamResponse()
     resp.headers['Content-Type'] = 'application/json'
+    nodes = app["nodes"]
 
-    if node_number == '*':
-        nodes = []
-        for node in app["nodes"]:
-            if node["node_type"] == node_type or node_type == "*":
-                nodes.append(node)
-                log.debug(f"Added a node in nodestate method, up to {len(nodes)} nodes.")
-        answer = {"nodes": nodes }
+    if node_id == '*':
+        info_list = []
+        for node_id in nodes:
+            node = nodes[node_id]
+            if node.type == node_type or node_type == "*":
+                info_list.append(node.get_info())
+        answer = {"nodes": info_list }
+        log.debug(f"returning nodestate for {len(nodes)} nodes")
+    elif node_id in nodes:
+        node = nodes[node_id]
+        answer = {}
+        answer["node"] = node.get_info()
+    if await isClusterReady(app):
+        cluster_state = 'READY'
     else:
-         answer = {}
-         for node in app["nodes"]:
-            if node["node_type"] == node_type and str(node["node_number"]) == node_number:
-                answer = node
-                break
-    answer["cluster_state"] = app["cluster_state"]
+        cluster_state = 'WAITING'
+    answer["cluster_state"] = cluster_state
     resp = json_response(answer)
     log.response(request, resp=resp)
     return resp
@@ -369,37 +332,39 @@ async def nodeinfo(request):
     resp = StreamResponse()
     resp.headers['Content-Type'] = 'application/json'
 
-    app_node_stats = app["node_stats"]
-    dn_count = await getTargetNodeCount(app, "dn")
-    sn_count = await getTargetNodeCount(app, "sn")
+
+    dn_count = 0
+    sn_count = 0
 
     answer = {}
+    nodes = app["nodes"]
     # re-assemble the individual node stats to arrays indexed by node number
     for stat_key in node_stat_keys:
-        log.info("stat_key: {}".format(stat_key))
+        log.info(f"stat_key: {stat_key}")
         stats = {}
-        for node in app["nodes"]:
-            node_number = node["node_number"]
-            node_type = node["node_type"]
-            if node_type not in ("sn", "dn"):
-                log.error("unexpected node_type: {}".format(node_type))
+        for node_id in nodes:
+            node = nodes[node_id]
+            if not node.is_healthy:
+                continue  # skip unhealthy node
+            if node.type not in ("sn", "dn"):
+                log.error(f"unexpected node_type: {node.type}")
                 continue
-            node_id = node["id"]
-            log.info("app_node_stats: {}".format(app_node_stats))
-            if node_id not in app_node_stats:
-                log.info("node_id: {} not found in node_stats".format(node_id))
+            if stat_key not in node.stats:
+                log.info(f"key: {stat_key} not found in node_stats for node_id: {node_id}")
                 continue
-            node_stats = app_node_stats[node_id]
-            if stat_key not in node_stats:
-                log.info("key: {} not found in node_stats for node_id: {}".format(stat_key, node_id))
-                continue
-            stats_field = node_stats[stat_key]
+            if node.type == "sn":
+                node_number = sn_count
+                sn_count += 1
+            else:
+                node_number = dn_count
+                dn_count += 1
+            stats_field = node.stats[stat_key]
             for k in stats_field:
                 if k not in stats:
                     stats[k] = {}
                     stats[k]["sn"] = [0,] * sn_count
                     stats[k]["dn"] = [0,] * dn_count
-                stats[k][node_type][node_number] = stats_field[k]
+                stats[k][node.type][node_number] = stats_field[k]
         answer[stat_key] = stats
 
     resp = json_response(answer)
@@ -407,47 +372,32 @@ async def nodeinfo(request):
     return resp
 
 async def getTargetNodeCount(app, node_type):
-    count = None
-    prev_count = None
-    marathon = marathonClient.MarathonClient(app)
+    
     if node_type == "dn":
-        prev_count = app['target_dn_count'] 
-        if "is_dcos" in app:
-            app["target_dn_count"] = int(await marathon.getDNInstances())
-        else:
-            app["target_dn_count"] = app['target_dn_count']
-        count = app['target_dn_count']
+        key = 'target_sn_count'
     elif node_type == "sn":
-        prev_count = app['target_sn_count'] 
+        key = "target_sn_count"
+    else:
+        raise KeyError()
+    if 'key' not in app:
         if "is_dcos" in app:
-            app["target_sn_count"] = int(await marathon.getSNInstances())
+            marathon = marathonClient.MarathonClient(app)
+            if node_type == "dn":
+                app[key] = int(await marathon.getDNInstances())
+            else:
+                app[key] = int(await marathon.getDNInstances())
         else:
-            app["target_sn_count"] = app['target_sn_count']
-        count = app['target_sn_count']
-    if prev_count != count:
-        app["cluster_state"] = "INITIALIZING"
-
-    return count
-
-def getTargetNodeCountBlocking(app, node_type):
-    count = None
-    if node_type == "dn":
-        count = app['target_dn_count']
-    elif node_type == "sn":
-        count = app['target_sn_count']
-    return count
+            app[key] = config.get(key)
+    return app[key]
 
 def getActiveNodeCount(app, node_type):
     count = 0
-    for node in app['nodes']:
-        if node["node_type"] == node_type and node["host"] is not None:
-            count += 1
-    return count
-
-def getInactiveNodeCount(app):
-    count = 0
-    for node in app['nodes']:
-        if node['host'] is None:
+    nodes = app["nodes"]
+    for node_id in nodes:
+        node = nodes[node_id]
+        if node.type != node_type:
+            continue
+        if node.is_healthy:
             count += 1
     return count
 
@@ -458,13 +408,7 @@ def init():
 
     # set a bunch of global state
     app["id"] = createNodeId("head")
-    app["cluster_state"] = "INITIALIZING"
-    app["start_time"] = int(time.time())  # seconds after epoch
-    app["target_sn_count"] = int(config.get("target_sn_count"))
-    app["target_dn_count"] = int(config.get("target_dn_count"))
-    log.info("target_sn_count: {}".format(app["target_sn_count"]))
-    log.info("target_dn_count: {}".format(app["target_dn_count"]))
-
+    
     bucket_name = config.get("bucket_name")
     if bucket_name:
         log.info("using bucket: {}".format(bucket_name))
@@ -474,18 +418,8 @@ def init():
 
     app["head_port"] = config.get("head_port")
 
-    nodes = []
-    for node_type in ("dn", "sn"):
-        target_count = int(getTargetNodeCountBlocking(app, node_type))
-        for i in range(target_count):
-            node = {"node_number": i,
-                "node_type": node_type,
-                "host": None,
-                "port": None,
-                "id": None }
-            nodes.append(node)
-            log.warn(f"init added a node, up to {len(nodes)}")
-
+    nodes = {} 
+ 
     # check to see if we are running in a DCOS cluster
     if "MARATHON_APP_ID" in os.environ:
         log.info("Found MARATHON_APP_ID environment variable, setting is_dcos to True")
@@ -494,8 +428,9 @@ def init():
         log.info("not setting is_dcos")
 
     app["nodes"] = nodes
-    app["node_stats"] = {}  # stats retuned by node/info request.  Keyed by node id
-    app["node_ids"] = {}  # dictionary to look up node by id
+    app["dead_node_ids"] = set()
+    app["start_time"] = int(time.time())  # seconds after epoch
+    app["last_health_check"] = 0
     app.router.add_get('/', info)
     app.router.add_get('/nodestate', nodestate)
     app.router.add_get('/nodestate/{nodetype}', nodestate)
@@ -506,10 +441,6 @@ def init():
     app.router.add_post('/register', register)
 
     return app
-
-async def start_background_tasks(app):
-    loop = asyncio.get_event_loop()
-    loop.create_task(healthCheck(app))
 
 #
 # Main
@@ -522,12 +453,9 @@ def main():
 
     # create a client Session here so that all client requests
     #   will share the same connection pool 
-    app["last_health_check"] = 0
-
-    app.on_startup.append(start_background_tasks)
 
     head_port = config.get("head_port")
-    log.info("Starting service on port: {}".format(head_port))
+    log.info(f"Starting service on port: {head_port}")
     log.debug("debug test")
     run_app(app, port=int(head_port))
 

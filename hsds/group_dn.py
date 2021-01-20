@@ -128,7 +128,7 @@ async def PUT_Group(request):
     """ Handler for PUT /groups"""
     """ Used to flush all objects under a root group to S3 """
 
-    flush_time_out = config.get("flush_time_out")
+    flush_time_out = config.get("s3_sync_interval") * 2
     flush_sleep_interval = config.get("flush_sleep_interval")
     log.request(request)
     app = request.app
@@ -166,30 +166,35 @@ async def PUT_Group(request):
             flush_set.add(obj_id)
 
     log.debug(f"flushop - waiting on {len(flush_set)} items")
-    while time.time() - flush_start < flush_time_out:
-        # check to see if the items in our flush set are still there
-
-        remaining_set = set()
-        for obj_id in flush_set:
-            if not obj_id in dirty_ids:
-                log.debug(f"flush - {obj_id} has been written")
-            elif dirty_ids[obj_id][0] > flush_start:
-                log.debug(f"flush - {obj_id} has been updated after flush start")
-            else:
-                log.debug(f"flush - {obj_id} still pending")
-                remaining_set.add(obj_id)
-        flush_set = remaining_set
-        if len(flush_set) == 0:
-            log.debug("flush op - all objects have been written")
-            break
-        log.debug(f"flushop - {len(flush_set)} item remaining, sleeping for {flush_sleep_interval}")
-        await asyncio.sleep(flush_sleep_interval)
 
     if len(flush_set) > 0:
-        log.warn(f"flushop - {len(flush_set)} items not updated after {flush_time_out}")
+        while time.time() - flush_start < flush_time_out:
+            await asyncio.sleep(flush_sleep_interval) # wait a bit
+            # check to see if the items in our flush set are still there
+            remaining_set = set()
+            for obj_id in flush_set:
+                if not obj_id in dirty_ids:
+                    log.debug(f"flush - {obj_id} has been written")
+                elif dirty_ids[obj_id][0] > flush_start:
+                    log.debug(f"flush - {obj_id} has been updated after flush start")
+                else:
+                    log.debug(f"flush - {obj_id} still pending")
+                    remaining_set.add(obj_id)
+            flush_set = remaining_set
+            if len(flush_set) == 0:
+                log.debug("flush op - all objects have been written")
+                break
+            log.debug(f"flushop - {len(flush_set)} item remaining, sleeping for {flush_sleep_interval}")
+            
+
+    if len(flush_set) > 0:
+        log.warn(f"flushop - {len(flush_set)} items not updated after {flush_time_out} seconds")
+        log.debug(f"flush set: {flush_set}")
         raise HTTPServiceUnavailable()
 
-    resp = json_response(None, status=204)  # NO Content response
+    rsp_json = {"id": app['id']}  # return the node id
+    log.debug(f"flush returning: {rsp_json}")
+    resp = json_response(rsp_json, status=200)  
     log.response(request, resp=resp)
     return resp
 

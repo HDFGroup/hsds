@@ -68,6 +68,7 @@ class RangeGetTest(unittest.TestCase):
         
         req_headers = {"accept": "application/octet-stream"}
         req = self.endpoint + '/'
+        
 
         params = {}
         params["bucket"] = hdf5_sample_bucket
@@ -86,7 +87,8 @@ class RangeGetTest(unittest.TestCase):
                 self.assertEqual(data[i], i//4)
             else:
                 self.assertEqual(data[i], 0)
-        """
+        
+        # try reading last 5 bytes
         params = {}
         params["bucket"] = hdf5_sample_bucket
         params["key"] = "data/hdf5test/tall.h5"
@@ -98,9 +100,21 @@ class RangeGetTest(unittest.TestCase):
         self.assertEqual(rsp.headers['Content-Type'], "application/octet-stream")
         data = rsp.content
         self.assertEqual(len(data), 5)
-        print("data:", data)
-        """
+        self.assertEqual(data, b'path\x00')
 
+        # try reading last 5000
+        params = {}
+        params["bucket"] = hdf5_sample_bucket
+        params["key"] = "data/hdf5test/tall.h5"
+        params["offset"] = 3292
+        params["length"] = 5000
+        rsp = requests.get(req, headers=req_headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+
+        self.assertEqual(rsp.headers['Content-Type'], "application/octet-stream")
+        data = rsp.content
+        self.assertEqual(len(data), 5000)
+        self.assertEqual(data[0:5], b'\x00\x00\x00\x00\x00')
         
  
 if __name__ == '__main__':

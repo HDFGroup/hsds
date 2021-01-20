@@ -27,6 +27,9 @@ if [ $run_pyflakes ]; then
     fi
 fi
 
+echo "running setup.py"
+python setup.py install
+
 echo "clean stopped containers"
 docker rm -v $(docker ps -aq -f status=exited)
 

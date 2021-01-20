@@ -17,7 +17,7 @@ spec:
       containers:
         -
           name: sn
-          image: "hdfgroup/hsds:v0.6.1a"
+          image: "hdfgroup/hsds:v0.6.3i"
           imagePullPolicy: IfNotPresent
           resources:
             requests:
@@ -54,7 +54,7 @@ spec:
                 key: aws_secret_access_key
         -
           name: dn
-          image: "hdfgroup/hsds:v0.6.1a"
+          image: "hdfgroup/hsds:v0.6.3i"
           lifecycle:
             preStop:
               exec:

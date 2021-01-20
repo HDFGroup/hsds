@@ -13,6 +13,7 @@
 # storUtil:
 # storage access functions.  Abstracts S3 API vs Azure storage access
 #
+import time
 import json
 import zlib
 import numcodecs as codecs
@@ -89,6 +90,9 @@ def _getStorageClient(app):
     """ get storage client s3 or azure blob
     """
 
+    if "storage_client" in app:
+        return app["storage_client"]
+
     if config.get("aws_s3_gateway"):
         log.debug("_getStorageClient getting S3Client")
         client = S3Client(app)
@@ -98,6 +102,7 @@ def _getStorageClient(app):
     else:
         log.debug("_getStorageClient getting FileClient")
         client = FileClient(app)
+    app["storage_client"] = client # save so we don't neeed to recreate each time
     return client
 
 def getStorageDriverName(app):
@@ -118,11 +123,18 @@ async def releaseStorageClient(app):
     client = _getStorageClient(app)
     await client.releaseClient()
 
+    if "storage_client" in app:
+        del app["storage_client"]
+
 async def rangegetProxy(app, bucket=None, key=None, offset=0, length=0):
     """ fetch bytes from rangeget proxy
     """
     rangeget_port = config.get("rangeget_port")
-    req = f"http://rangeget:{rangeget_port}/"
+    if "is_docker" in app:
+        rangeget_host = "rangeget"
+    else:
+        rangeget_host = "127.0.0.1"
+    req = f"http://{rangeget_host}:{rangeget_port}/"
     client = get_http_client(app)
     log.debug(f"rangeGetProxy: {req}")
     params = {}
@@ -158,8 +170,6 @@ async def rangegetProxy(app, bucket=None, key=None, offset=0, length=0):
         raise HTTPInternalServerError()
 
 
-
-
 async def getStorJSONObj(app, key, bucket=None):
     """ Get object identified by key and read as JSON
     """
@@ -182,7 +192,7 @@ async def getStorJSONObj(app, key, bucket=None):
     log.debug(f"storage key {key} returned: {json_dict}")
     return json_dict
 
-async def getStorBytes(app, key, filter_ops=None, offset=0, length=None, bucket=None):
+async def getStorBytes(app, key, filter_ops=None, offset=0, length=-1, bucket=None, use_proxy=False):
     """ Get object identified by key and read as bytes
     """
 
@@ -191,7 +201,13 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=None, bucket=
         bucket = app['bucket_name']
     if key[0] == '/':
         key = key[1:]  # no leading slash
-    log.info(f"getStorBytes({bucket}/{key})")
+    if offset is None:
+        offset = 0
+    if length is None:
+        length = 0
+    log.info(f"getStorBytes({bucket}/{key}, offset={offset}, length: {length})")
+
+    data_cache_page_size = int(config.get("data_cache_page_size"))
 
     shuffle = 0
     compressor = None
@@ -204,8 +220,8 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=None, bucket=
             compressor = filter_ops["compressor"]
             log.debug(f"using compressor: {compressor}")
 
-    if offset > 0:
-        # use rnageget proxy
+    if offset > 0 and use_proxy and length < data_cache_page_size:
+        # use rangeget proxy
         data = await rangegetProxy(app, bucket=bucket, key=key, offset=offset, length=length)
     else:
         data = await client.get_object(bucket=bucket, key=key, offset=offset, length=length)
@@ -214,6 +230,8 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=None, bucket=
         return data
 
     log.info(f"read: {len(data)} bytes for key: {key}")
+    if length > 0 and len(data) != length:
+        log.warn(f"requested {length} bytes but got {len(data)} bytes")
     if compressor:
 
         # compressed chunk data...
@@ -248,10 +266,14 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=None, bucket=
     
     if shuffle > 0:
         log.debug(f"shuffle is {shuffle}")
+        start_time = time.time()
         unshuffled = _unshuffle(shuffle, data)
         if unshuffled is not None:
             log.debug(f"unshuffled to {len(unshuffled)} bytes")
             data = unshuffled
+        finish_time = time.time()
+        log.debug(f"unshuffled {len(data)} bytes, {(finish_time - start_time):.2f} elapsed")
+        
 
     return data
 

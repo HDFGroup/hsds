@@ -78,7 +78,7 @@ class AzureBlobClient():
 
         azure_stats[counter] += inc
 
-    async def get_object(self, key, bucket=None, offset=0, length=None):
+    async def get_object(self, key, bucket=None, offset=0, length=-1):
         """ Return data for object at given key.
            If Range is set, return the given byte range.
         """
@@ -86,7 +86,7 @@ class AzureBlobClient():
             log.error("get_object - bucket not set")
             raise HTTPInternalServerError()
 
-        if length:
+        if length > 0:
             log.info(f"storage range request -- offset: {offset} length: {length}")
         else:
             offset = None

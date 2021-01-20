@@ -13,6 +13,7 @@
 # idUtil:
 # id (uuid) related functions
 #
+import os.path
 import hashlib
 import uuid
 from aiohttp.web_exceptions import HTTPServiceUnavailable
@@ -274,9 +275,26 @@ def isS3ObjKey(s3key):
 
 def createNodeId(prefix):
     """ Create a random id used to identify nodes"""
-    node_uuid = str(uuid.uuid1())
-    idhash = getIdHash(node_uuid)
-    key = prefix + "-" + idhash
+    # use the container id if we are running inside docker
+    node_id = ""  # nothing too bad happens if this doesn't get set
+    hash_key = getIdHash(str(uuid.uuid1()))
+    proc_file = "/proc/self/cgroup"
+    if os.path.isfile(proc_file):
+        with open(proc_file) as f:
+            first_line = f.readline()
+            if first_line:
+                fields = first_line.split(':')
+                if len(fields) >= 3:
+                    field = fields[2]
+                    if field.startswith("/docker/"):
+                        docker_len = len("/docker/")
+                        if len(field) > docker_len + 12:
+                            node_id = field[docker_len:(docker_len+12)] 
+        
+    if node_id:
+        key = f"{prefix}-{node_id}-{hash_key}"
+    else:
+        key = f"{prefix}-{hash_key}"
     return key
 
 
@@ -384,24 +402,77 @@ def getObjPartition(id, count):
     hash_code = getIdHash(id)
     hash_value = int(hash_code, 16)
     number = hash_value % count
-    log.debug(f"ID {id} resolved to data node {number}, out of {count} data partitions.")
+    #log.debug(f"ID {id} resolved to data node {number}, out of {count} data partitions.")
     return number
 
+def getPortFromUrl(url):
+    start = url.find('//')
+    if start == -1:
+        # no http prefix?
+        index = 0
+    port = None
+    dns = url[start:]
+    index = dns.find(':')
+    port_str = ""    
+    if index > 0:
+        for i in range(index+1, len(dns)):
+            ch = dns[i]
+            if ch.isdigit():
+                port_str += ch
+            else:
+                break
+    if port_str:
+        port = int(port_str)
+    else:
+        if url.startswith("https"):
+            port = 443
+        else:
+            port = 80
+        
+    return port
+
+
+def getNodeNumber(app):
+    if app["node_type"] == "sn":
+        log.error("node number if only for DN nodes")
+        raise ValueError()
+
+    dn_ids = app["dn_ids"]
+    #log.debug(f"getNodeNumber(from dn_ids: {dn_ids}")
+    for i in range(len(dn_ids)):
+        dn_id = dn_ids[i]
+        if dn_id == app["id"]:
+            #log.debug(f"returning nodeNumber: {i}")
+            return i
+    log.error("getNodeNumber, no matching id")
+    return -1
+
+def getNodeCount(app):
+    dn_urls = app["dn_urls"]
+    dn_node_count = len(dn_urls)
+    return dn_node_count                      
+
 def validateInPartition(app, obj_id):
-    log.debug(f'obj_id: {obj_id}, len(app[dn_urls]): {len(app["dn_urls"])}, node_number: {app["node_number"]}')
-    if getObjPartition(obj_id, len(app['dn_urls'])) != app['node_number']:
+    node_number = getNodeNumber(app)
+    node_count = getNodeCount(app)
+    log.debug(f'obj_id: {obj_id}, node_count: {node_count}, node_number: {node_number}')
+    partition_number = getObjPartition(obj_id, node_count)
+    if partition_number != node_number:
         # The request shouldn't have come to this node'
-        msg = f"wrong node for 'id':{obj_id}, expected node {app['node_number']} got {getObjPartition(obj_id, app['node_count'])}"
+        msg = f"wrong node for 'id':{obj_id}, expected node {node_number} got {partition_number}"
         log.error(msg)
         raise KeyError(msg)
+
+
+
 
 def getDataNodeUrl(app, obj_id):
     """ Return host/port for datanode for given obj_id.
     Throw exception if service is not ready"""
     dn_urls = app["dn_urls"]
-    dn_node_count = len(dn_urls)
+    dn_node_count = getNodeCount(app)
     node_state = app["node_state"]
-    if node_state != "READY" or len(dn_urls) <= 0:
+    if node_state != "READY" or dn_node_count <= 0:
         msg="Service not ready"
         log.warn(msg)
         raise HTTPServiceUnavailable()
@@ -410,10 +481,3 @@ def getDataNodeUrl(app, obj_id):
     log.debug(f"got dn_url: {url} for obj_id: {obj_id}")
     return url
 
-def getDataNodeUrls(app):
-    """ Return list of all urls to the set of datanodes """
-    dn_url_map = app["dn_urls"]
-    dn_urls = []
-    for id in dn_url_map:
-        dn_urls.append(dn_url_map[id])
-    return dn_urls

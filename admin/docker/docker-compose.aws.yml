@@ -75,6 +75,6 @@ services:
       - ${RANGEGET_PORT}:${RANGEGET_PORT}
     depends_on:
       - head
-    container_name: rangeget
+    container_name: hsds_rangeget
     volumes:
       - ${PWD}/admin/config/:/config/

@@ -83,9 +83,15 @@ async def PUT_Chunk(request):
             log.error(msg)
             raise HTTPBadRequest(reason=msg)
 
-    validateInPartition(app, chunk_id)
+    try:
+        validateInPartition(app, chunk_id)
+    except KeyError:
+        msg = f"invalid partition for obj id: {chunk_id}"
+        log.error(msg)
+        raise HTTPInternalServerError()
+
     if "dset" in params:
-        msg = "Unexpected param dset in GET request"
+        msg = "Unexpected param dset in PUT request"
         log.error(msg)
         raise HTTPBadRequest(reason=msg)
 
@@ -209,7 +215,12 @@ async def GET_Chunk(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    validateInPartition(app, chunk_id)
+    try:
+        validateInPartition(app, chunk_id)
+    except KeyError:
+        msg = f"invalid partition for obj id: {chunk_id}"
+        log.error(msg)
+        raise HTTPInternalServerError()
     log.debug(f"request params: {params.keys()}")
 
     bucket = None
@@ -361,7 +372,13 @@ async def POST_Chunk(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    validateInPartition(app, chunk_id)
+    try:
+        validateInPartition(app, chunk_id)
+    except KeyError:
+        msg = f"invalid partition for obj id: {chunk_id}"
+        log.error(msg)
+        raise HTTPInternalServerError()
+
     log.debug(f"request params: {list(params.keys())}")
     if "dset" in params:
         msg = "Unexpected dset in POST request"
@@ -479,7 +496,12 @@ async def DELETE_Chunk(request):
     else:
         bucket = None
 
-    validateInPartition(app, chunk_id)
+    try:
+        validateInPartition(app, chunk_id)
+    except KeyError:
+        msg = f"invalid partition for obj id: {chunk_id}"
+        log.error(msg)
+        raise HTTPInternalServerError()
 
     chunk_cache = app['chunk_cache']
     s3key = getS3Key(chunk_id)

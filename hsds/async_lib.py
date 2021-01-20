@@ -51,16 +51,19 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
     dset_json = await getDatasetJson(app, dset_id, bucket=bucket)
     log.debug(f"updateDatasetInfo - id: {dset_id} dataset_info: {dataset_info}")
     if "shape" not in dset_json:
-        log.debug(f"updateDatasetInfo - no shape dataet_json for {dset_id} - skipping")
+        log.debug(f"updateDatasetInfo - no shape dataset_json for {dset_id} - skipping")
         return   # null dataspace
     shape_json = dset_json["shape"]
+    if "class" in shape_json and shape_json["class"] == 'H5S_NULL':
+        log.debug(f"updatedDatasetInfo - null space for {dset_id} - skipping")
+        return
     if "type" not in dset_json:
-        log.warn(f"updateDatasetInfo - expected to find type in dataet_json for {dset_id}")
+        log.warn(f"updateDatasetInfo - expected to find type in dataset_json for {dset_id}")
         return
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
     if "layout" not in dset_json:
-        log.warn(f"updateDatasetInfo - expected to find layout in dataet_json for {dset_id}")
+        log.warn(f"updateDatasetInfo - expected to find layout in dataset_json for {dset_id}")
         return
     layout = dset_json["layout"]
     log.info(f"updateDatasetInfo - shape: {shape_json} type: {type_json} item size: {item_size} layout: {layout}")
@@ -302,7 +305,7 @@ async def scanRoot(app, rootid, update=False, bucket=None):
 
     app["scanRoot_results"] = results
 
-    await getStorKeys(app, prefix=root_prefix, include_stats=True, bucket=bucket, callback=scanRootCallback, limit=1000)
+    await getStorKeys(app, prefix=root_prefix, include_stats=True, bucket=bucket, callback=scanRootCallback)
     num_objects = results["num_groups"] + results["num_datatypes"] + len(results["datasets"]) + results["num_chunks"]
     log.info(f"scanRoot - got {num_objects} keys for rootid: {rootid}")
 
@@ -378,7 +381,7 @@ async def objDeleteCallback(app, s3keys):
 async def removeKeys(app, objid):
     # iterate through all s3 keys under the given root or dataset id and delete them
     #
-    # Note: not re-entrant!  Only one scanRoot an be run at a time per app.
+    # Note: not re-entrant!  Only one removeKeys an be run at a time per app.
     log.debug(f"removeKeys: {objid}")
     if not isSchema2Id(objid):
         log.warn("ignoring non-schema2 id")

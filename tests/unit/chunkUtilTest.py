@@ -184,6 +184,12 @@ class ChunkUtilTest(unittest.TestCase):
         chunk_min=400
         chunk_max=800
 
+        def get_num_bytes(dims):
+            num_bytes = typesize
+            for n in dims:
+                num_bytes *= n
+            return num_bytes
+
         try:
             shape = {"class": 'H5S_SIMPLE', "dims": [100, 100]}
             layout = getContiguousLayout(shape, 'H5T_VARIABLE')
@@ -204,14 +210,14 @@ class ChunkUtilTest(unittest.TestCase):
             shape = {"class": 'H5S_SIMPLE', "dims": dims}
             layout = getContiguousLayout(shape, typesize, chunk_min=chunk_min, chunk_max=chunk_max)
             self.assertTrue(len(layout), 1)
-            chunk_bytes = layout[0]*typesize
-            space_bytes = extent*typesize
+            chunk_bytes = get_num_bytes(layout)
+            space_bytes = get_num_bytes(dims)
             if space_bytes > chunk_min:
                 self.assertTrue(chunk_bytes >= chunk_min)
 
             self.assertTrue(chunk_bytes <= chunk_max)
 
-        for extent in (1, 10, 100):
+        for extent in (1, 9, 90):
             dims = [extent, extent]
             shape = {"class": 'H5S_SIMPLE', "dims": dims}
             layout = getContiguousLayout(shape, typesize, chunk_min=chunk_min, chunk_max=chunk_max)
@@ -220,9 +226,9 @@ class ChunkUtilTest(unittest.TestCase):
                 self.assertTrue(layout[i] >= 1)
                 self.assertTrue(layout[i] <= extent)
             self.assertEqual(layout[1], extent)
+            chunk_bytes = get_num_bytes(layout)
+            space_bytes = get_num_bytes(dims)
 
-            chunk_bytes = layout[0]*layout[1]*typesize
-            space_bytes = extent*extent*typesize
             if space_bytes > chunk_min:
                 self.assertTrue(chunk_bytes >= chunk_min)
             self.assertTrue(chunk_bytes <= chunk_max)
@@ -236,12 +242,27 @@ class ChunkUtilTest(unittest.TestCase):
                 self.assertTrue(layout[i] >= 1)
                 self.assertTrue(layout[i] <= dims[i])
 
-            chunk_bytes = layout[0]*layout[1]*layout[2]*typesize
-            space_bytes = dims[0]*dims[1]*dims[2]*typesize
+            chunk_bytes = get_num_bytes(layout)
+            space_bytes = get_num_bytes(dims)           
+
             if space_bytes > chunk_min:
-                # chunk size maybe less than chunk_min in this case
-                # self.assertTrue(chunk_bytes >= chunk_min)
-                self.assertEqual(layout[0], 1)
+                self.assertTrue(chunk_bytes >= chunk_min)
+            self.assertTrue(chunk_bytes <= chunk_max)
+
+        for extent in (1, 100, 1000):
+            dims = [extent, 4]
+            shape = {"class": 'H5S_SIMPLE', "dims": dims}
+            layout = getContiguousLayout(shape, typesize, chunk_min=chunk_min, chunk_max=chunk_max)
+            self.assertTrue(len(layout), 2)
+            for i in range(2):
+                self.assertTrue(layout[i] >= 1)
+                self.assertTrue(layout[i] <= dims[i])
+
+            chunk_bytes = get_num_bytes(layout)
+            space_bytes = get_num_bytes(dims)
+
+            if space_bytes > chunk_min:
+                self.assertTrue(chunk_bytes >= chunk_min)
             self.assertTrue(chunk_bytes <= chunk_max)
 
     def testGetNumChunks(self):

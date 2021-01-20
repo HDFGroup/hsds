@@ -26,7 +26,7 @@ from aiohttp.client_exceptions import ClientError
 from aiohttp.web import json_response
 
 from .util.httpUtil import  http_post, http_put, http_get, http_delete, getHref, get_http_client, jsonResponse
-from .util.idUtil import  getDataNodeUrl, createObjId, getCollectionForId, getDataNodeUrls, isValidUuid, isSchema2Id
+from .util.idUtil import  getDataNodeUrl, createObjId, getCollectionForId, isValidUuid, isSchema2Id, getNodeCount
 from .util.authUtil import getUserPasswordFromRequest, aclCheck, isAdminUser
 from .util.authUtil import validateUserPassword, getAclKeys
 from .util.domainUtil import getParentDomain, getDomainFromRequest, isValidDomain, getBucketForDomain, getPathForDomain
@@ -109,7 +109,7 @@ class FolderCrawler:
         for domain in domains:
             self._q.put_nowait(domain)
         self._bucket = bucket
-        max_tasks = max_tasks_per_node * app['node_count']
+        max_tasks = max_tasks_per_node * getNodeCount(app)
         if len(domains) > max_tasks:
             self._max_tasks = max_tasks
         else:
@@ -371,6 +371,11 @@ async def get_domains(request):
     """ This method is called by GET_Domains and GET_Domain """
     app = request.app
     params = request.rel_url.query
+
+    node_count = getNodeCount(app)  # DomainCrawler will expect this to be larger than zero
+    if node_count == 0:
+        log.warn("get_domains called with no active DN nodes")
+        raise HTTPServiceUnavailable()
 
     # if there is no domain passed in, get a list of top level domains
     if "domain" not in request.rel_url.query:
@@ -673,6 +678,10 @@ async def GET_Domain(request):
         domain_objs = await getDomainObjects(app, root_id, include_attrs=include_attrs, bucket=bucket)
         rsp_json["domain_objs"] = domain_objs
 
+    # include dn_ids if requested
+    if "getdnids" in params and params["getdnids"]:
+        rsp_json["dn_ids"] = app["dn_ids"]
+
     hrefs = []
     hrefs.append({'rel': 'self', 'href': getHref(request, '/')})
     if "root" in domain_json:
@@ -708,7 +717,8 @@ async def doFlush(app, root_id, bucket=None):
     if bucket:
         params["bucket"] = bucket
     client = get_http_client(app)
-    dn_urls = getDataNodeUrls(app)
+    dn_urls = app["dn_urls"]
+    dn_ids = []
     log.debug(f"doFlush - dn_urls: {dn_urls}")
     failed_count = 0
 
@@ -724,15 +734,21 @@ async def doFlush(app, root_id, bucket=None):
             log.error("doFlush - got pending tasks")
             raise HTTPInternalServerError()
         for task in done:
-            log.info(f"doFlush - task: {task}")
             if task.exception():
                 log.warn(f"doFlush - task had exception: {type(task.exception())}")
                 failed_count += 1
             else:
                 clientResponse = task.result()
-                if clientResponse.status != 204:
+                if clientResponse.status != 200:
                     log.warn(f"doFlush - expected 204 but got: {clientResponse.status}")
                     failed_count += 1
+                else:
+                    json_rsp = await clientResponse.json()
+                    log.debug(f"PUT /groups rsp: {json_rsp}")
+                    if json_rsp and "id" in json_rsp:
+                        dn_ids.append(json_rsp["id"])
+                    else:
+                        log.error("expected dn_id in flush response from DN")
     except ClientError as ce:
         log.error(f"doFlush - ClientError for http_put('/groups/{root_id}'): {str(ce)}")
         raise HTTPInternalServerError()
@@ -742,10 +758,10 @@ async def doFlush(app, root_id, bucket=None):
     log.info(f"doFlush for {root_id} complete, failed: {failed_count} out of {len(dn_urls)}")
     if failed_count > 0:
         log.error(f"doFlush fail count: {failed_count} returning 500")
-        return 500
+        raise HTTPInternalServerError()
     else:
-        log.info("doFlush no fails, returning 204")
-        return 204
+        log.info("doFlush no fails, returning dn ids")
+        return dn_ids
 
 
 
@@ -754,6 +770,7 @@ async def PUT_Domain(request):
     log.request(request)
     app = request.app
     params = request.rel_url.query
+    log.debug(f"PUT_domain params: {dict(params)}")
     # verify username, password
     username, pswd = getUserPasswordFromRequest(request) # throws exception if user/password is not valid
     await validateUserPassword(app, username, pswd)
@@ -778,6 +795,11 @@ async def PUT_Domain(request):
         body = await request.json()
         log.debug(f"PUT domain with body: {body}")
 
+    if ("getdnids" in params and params["getdnids"]) or (body and "getdnids" in body and body["getdnids"]):
+        getdnids = True
+    else:
+        getdnids = False
+
     if ("flush" in params and params["flush"]) or (body and "flush" in body and body["flush"]):
         # flush domain - update existing domain rather than create a new resource
         log.info(f"Flush for domain: {domain}")
@@ -797,14 +819,21 @@ async def PUT_Domain(request):
             raise HTTPInternalServerError()
 
         aclCheck(app, domain_json, "update", username)  # throws exception if not allowed
+        rsp_json = None
         if "root" in domain_json:
-            # nothing to do for folder objects
-            status_code = await doFlush(app, domain_json["root"], bucket=bucket)
+            # nothing to to do for folder objects
+            dn_ids = await doFlush(app, domain_json["root"], bucket=bucket)
+            # flush  successful
+            if dn_ids and getdnids:
+                # no fails, but return list of dn ids
+                rsp_json = {"dn_ids": dn_ids}
+                log.debug(f"returning dn_ids for PUT domain: {dn_ids}")
+                status_code = 200
+            else: status_code = 204
         else:
             log.info("flush called on folder, ignoring")
             status_code = 204
-        # flush  successful
-        resp = await jsonResponse(request, None, status=status_code)
+        resp = await jsonResponse(request, rsp_json, status=status_code)
         log.response(request, resp=resp)
         return resp
 
@@ -940,12 +969,12 @@ async def PUT_Domain(request):
 
         # create root group
         req = getDataNodeUrl(app, root_id) + "/groups"
-        params = {}
+        post_params = {}
         bucket = getBucketForDomain(domain)
         if bucket:
-            params["bucket"] = bucket
+            post_params["bucket"] = bucket
         try:
-            group_json = await http_post(app, req, data=group_json, params=params)
+            group_json = await http_post(app, req, data=group_json, params=post_params)
         except ClientResponseError as ce:
             msg="Error creating root group for domain -- " + str(ce)
             log.error(msg)
@@ -1008,6 +1037,13 @@ async def PUT_Domain(request):
     domain_json["limits"] = getLimits()
     domain_json["compressors"] = getCompressors()
     domain_json["version"] = getVersion()
+
+    # put  successful
+    if getdnids:
+        # mixin list of dn ids
+        dn_ids = app["dn_ids"]
+        domain_json["dn_ids"] = dn_ids
+        log.debug(f"returning dn_ids for PUT domain: {dn_ids}")
     resp = await jsonResponse(request, domain_json, status=201)
     log.response(request, resp=resp)
     return resp
@@ -1119,6 +1155,7 @@ async def DELETE_Domain(request):
         del domain_cache[domain]
 
     # delete domain cache from other sn_urls
+    """
     sn_urls = app["sn_urls"]
     log.debug(f"sn_urls: {sn_urls}")
     log.debug(f"node_number: {app['node_number']}")
@@ -1138,6 +1175,7 @@ async def DELETE_Domain(request):
             log.info(f"{req} response: {sn_rsp}")
         except ClientResponseError as ce:
             log.warn(f"got error for sn_delete: {ce}")
+    """
 
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)

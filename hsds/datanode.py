@@ -223,8 +223,8 @@ def create_app():
     app['deleted_ids'] = set()
     app['dirty_ids'] = {}  # map of objids to timestamp and bucket of which they were last updated
     app['filter_map'] = {} # map of dataset ids to deflate levels (if compressed)
-    app['pending_s3_read'] = {} # map of s3key to timestamp for in-flight read requests
-    app['pending_s3_write'] = {} # map of s3key to timestamp for in-flight write requests
+    app['pending_s3_read'] = {} # map of objid to timestamp for in-flight read requests
+    app['pending_s3_write'] = {} # map of objid to timestamp for in-flight write requests
     app['pending_s3_write_tasks'] = {} # map of objid to asyncio Task objects for writes
     app['root_notify_ids'] = {}   # map of root_id to bucket name used for notify root of changes in domain
     app['root_scan_ids'] = {}   # map of root_id to bucket name for pending root scans
