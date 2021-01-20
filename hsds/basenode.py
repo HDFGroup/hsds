@@ -172,7 +172,14 @@ async def k8s_update_dn_info(app):
     v1 = k8s_client.CoreV1Api()
     # TBD - use the async version
     k8s_app_label = config.get("k8s_app_label")
-    ret = v1.list_pod_for_all_namespaces(watch=False)
+    # If a namespace is specified restrict pod
+    # listing to that namespace otherwise list
+    # pods from all namespaces.
+    k8s_namespace = config.get("k8s_namespace")
+    if k8s_namespace:
+        ret = v1.list_namespaced_pod(k8s_namespace)
+    else:
+        ret = v1.list_pod_for_all_namespaces(watch=False)
     pod_ips = []
     dn_urls = []
     for i in ret.items:

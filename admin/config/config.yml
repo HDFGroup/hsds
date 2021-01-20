@@ -68,4 +68,4 @@ standalone_app: false   # True when run as a single application
 blosc_nthreads: 2  # number of threads to use for blosc compression.  Set to 0 to have blosc auto-determine thread count
 http_compression: true  # Use HTTP compression 
 k8s_app_label: hsds  # The app label for k8s deployments
-
+k8s_namespace: null # Specifies if a the client should be limited to a specific namespace. Useful for some RBAC configurations.
