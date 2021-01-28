@@ -21,7 +21,7 @@ from botocore.exceptions import ClientError
 from aiobotocore import get_session
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPUnauthorized, HTTPNotFound, HTTPForbidden, HTTPServiceUnavailable, HTTPInternalServerError
 import jwt
-from jwt.exceptions import InvalidAudienceError, InvalidSignatureError
+from jwt.exceptions import InvalidAudienceError, InvalidSignatureError, ExpiredSignatureError
 import requests
 from cryptography.x509 import load_pem_x509_certificate
 from cryptography.hazmat.backends import default_backend
@@ -308,7 +308,7 @@ async def validateUserPassword(app, username, password):
         elif config.get("password_salt"):
             validatePasswordSHA512(app, username, password)
         else:
-            log.info("user not found")
+            log.warn(f"user: {username} not found")
             raise HTTPUnauthorized() # 401
         user_data = getPassword(app, username)
 
@@ -444,6 +444,20 @@ def _verifyBearerToken(app, token):
     # if valid, update user db and return username
     username = None
     provider = config.get('openid_provider')
+    if not provider:
+        log.warn("no OpenID provider configured")
+        raise HTTPUnauthorized()
+    # Resolve provider into an OpenID configuration.
+    if provider.lower() == 'azure':
+        openid_url = MSONLINE_OPENID_URL
+    elif provider.lower() == 'google':
+        openid_url = GOOGLE_OPENID_URL
+    else:
+        openid_url = config.get('openid_url')
+        if not openid_url:
+            log.warn(f"OpenID provider: {provider} requires 'openid_url' config to be set")
+            raise HTTPUnauthorized()
+
     audience = config.get('openid_audience')
     claims = config.get('openid_claims').split(',')
 
@@ -452,22 +466,17 @@ def _verifyBearerToken(app, token):
         audience = config.get('azure_resource_id')
 
     # If we still dont have a provider and audience, abort.
-    if not provider or not audience or not claims:
+    if not openid_url or not audience or not claims:
         log.warn('Bearer authorization, but no OpenID configuration.')
         raise HTTPUnauthorized()
 
     log.debug(f"Bearer authorization, using provider: {provider}")
     log.debug(f"Bearer authorization, using audience: {audience}")
     log.debug(f"Bearer authorization, using claims: {claims}")
+    if provider not in ('azure', 'google'):
+        log.debug(f"Bearer authorization, using openid_url: {openid_url}")
 
-    # Resolve provider into an OpenID configuration.
-    if provider.lower() == 'azure':
-        openid_url = MSONLINE_OPENID_URL
-    elif provider.lower() == 'google':
-        openid_url = GOOGLE_OPENID_URL
-    else:
-        log.warn(f"Unknown OpenID provider: {provider}")
-        raise HTTPInternalServerError()
+    log.debug(f"token: {token}")
 
     token_header = jwt.get_unverified_header(token)
     res = requests.get(openid_url)
@@ -485,6 +494,8 @@ def _verifyBearerToken(app, token):
             raise HTTPInternalServerError()
 
     jwk_uri = res.json()['jwks_uri']
+
+    # TBD: cache responses by uri
     res = requests.get(jwk_uri)
     jwk_keys = res.json()
     x5c = None
@@ -546,6 +557,9 @@ def _verifyBearerToken(app, token):
     except InvalidSignatureError:
         log.warn("OpenID InvalidSignatureError")
         raise HTTPUnauthorized()
+    except ExpiredSignatureError:
+        log.warn("OpenID ExpiredSignatureError")
+        raise HTTPUnauthorized()
 
     for name in claims:
         if name in jwt_decode:
@@ -587,7 +601,9 @@ def getUserPasswordFromRequest(request):
         log.info("Invalid Authorization header")
         raise HTTPBadRequest(reason="Invalid Authorization header")
 
+
     if scheme.lower() == 'basic':
+        log.debug("using basic authorization")
         # HTTP Basic Auth
         try:
             token = token.encode('utf-8')  # convert to bytes
