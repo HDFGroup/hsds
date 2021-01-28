@@ -7,7 +7,7 @@ the client will not need to go to login.microsoft.com on each request.
 
 Once a client request is authenticated, the requested action still needs to be authorized by the server based on the ACLs for the given folder or domain.  For example, for user *joebob@acme.com* to create a domain /home/joebob/foo.h5, the folder /home/joebob/ will need to provide write permissions for *joebob@acme.com*.  This can be done using the h5pyd hsacl tool.  For example: `$ hsacl /home/joebob/ +crudep joebob@acme.com`.
 
-Active Directory authtication can be used in combination with accounts managed by the server.  If HTTP Basic Auth is used in the client request, the username and password will be validated against the local account.  If HTTP Bearer token is used, the request will be authenticated using Active Directory.
+Active Directory authentication can be used in combination with accounts managed by the server.  If HTTP Basic Auth is used in the client request, the username and password will be validated against the local account.  If HTTP Bearer token is used, the request will be authenticated using Active Directory.
 
 The following sections describe how to setup Active Directory, HSDS, and the client to use AD authentication.
 
