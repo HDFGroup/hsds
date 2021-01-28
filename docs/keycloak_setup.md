@@ -27,7 +27,7 @@ to override.yml:
 
     admin_user: <admin_username>   # user who will have admin privileges.
 
-The admin_user override is required if using AD authentication exclusively.
+The admin_user override is required if using Keycloak authentication exclusively.
 
 Save the file and then stop and start the server for the configuration changes to take effect.
 
