@@ -31,6 +31,8 @@ The admin_user override is required if using AD authentication exclusively.
 
 Save the file and then stop and start the server for the configuration changes to take effect.
 
+If you are deploying on Kubernetes or OpenShift you'll need to delete and recreate the configmap objects (see the HSDS kubernetes install guide for your platform).
+
 Keycloak Client Configuration
 ------------------------------
 
