@@ -479,7 +479,11 @@ def _verifyBearerToken(app, token):
     log.debug(f"token: {token}")
 
     token_header = jwt.get_unverified_header(token)
-    res = requests.get(openid_url)
+    try:
+        res = requests.get(openid_url, timeout=1.0)
+    except requests.exceptions.ConnectionError:
+        log.warn(f"connection error for getting openid configuration from : {openid_url}")
+        raise HTTPInternalServerError()
     if res.status_code != 200:
         log.warn("Bad response from {openid_url}: {res.status_code}")
         if res.status_code == 404:
