@@ -21,9 +21,13 @@ root_dir: null   # base directory to use for Posix storage
 password_salt: null  # salt value if dynamically generated passwords are used
 bucket_name: null   # set to use a default bucket, otherwise bucket param is needed for all requests
 head_port: 5100     # port to use for head node
-dn_port : 6101  # Start dn ports at 6101
+head_ram: 512m  # memory for head container
+dn_port: 6101  # Start dn ports at 6101
+dn_ram: 3g     # memory for DN container (per container)
 sn_port: 5101   # Start sn ports at 5101
+sn_ram: 1g     # memory for SN container
 rangeget_port: 6900  # singleton proxy at port 6900
+rangeget_ram: 1g  # memoruy for RANGEGET container 
 target_sn_count: 0  # desired number of SN containers
 target_dn_count: 0 # desire number of DN containers
 log_level: INFO    # log level.  One of ERROR, WARNING, INFO, DEBUG 
@@ -70,4 +74,5 @@ blosc_nthreads: 2  # number of threads to use for blosc compression.  Set to 0 t
 http_compression: true  # Use HTTP compression 
 k8s_app_label: hsds  # The app label for k8s deployments
 k8s_namespace: null  # The namespace used for k8s deployment
+restart_policy: on-failure # Docker restart policy
 
