@@ -663,7 +663,7 @@ class DomainTest(unittest.TestCase):
     def testWithBucket(self):
         domain =  self.base_domain + "/with_bucket.h5"
         headers = helper.getRequestHeaders(domain=domain)
-        params = {"bucket": "does.not.exist.bucket.47839293433"}
+        params = {"bucket": "doesnotexistbucket47839293433"}
         req = helper.getEndpoint() + '/'
         rsp = requests.get(req, headers=headers, params=params)
         self.assertEqual(rsp.status_code, 404) 
