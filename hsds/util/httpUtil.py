@@ -176,7 +176,7 @@ async def http_put(app, url, data=None, params=None):
     try:
         async with client.put(url, json=data, params=params, timeout=timeout) as rsp:
             log.info(f"http_put status: {rsp.status}")
-            if rsp.status == 201:
+            if rsp.status in (200, 201):
                 pass # expected
             elif rsp.status == 404:
                 # can come up for replace ops
