@@ -21,7 +21,7 @@ from botocore.exceptions import ClientError
 from aiobotocore import get_session
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPUnauthorized, HTTPNotFound, HTTPForbidden, HTTPServiceUnavailable, HTTPInternalServerError
 import jwt
-from jwt.exceptions import InvalidAudienceError, InvalidSignatureError, ExpiredSignatureError
+from jwt.exceptions import InvalidAudienceError, InvalidSignatureError, ExpiredSignatureError, DecodeError
 import requests
 from cryptography.x509 import load_pem_x509_certificate
 from cryptography.hazmat.backends import default_backend
@@ -478,7 +478,18 @@ def _verifyBearerToken(app, token):
 
     log.debug(f"token: {token}")
 
-    token_header = jwt.get_unverified_header(token)
+    try:
+        token_header = jwt.get_unverified_header(token)
+    except DecodeError as de:
+        log.warn(f"Decode error in jwt get_unverified_header: {de}")
+        raise HTTPUnauthorized()
+    except ValueError as ve:
+        log.warn(f"Value error in jwt get_unverified_header: {ve}")
+        raise HTTPUnauthorized()
+    except Exception as e:
+        log.warn(f"Unexpected exception {e.__class__.__name__} in jwt get_unverified_header: {e}")
+        raise HTTPUnauthorized()
+
     try:
         res = requests.get(openid_url, timeout=1.0)
     except requests.exceptions.ConnectionError:
@@ -630,7 +641,7 @@ def getUserPasswordFromRequest(request):
 
     elif scheme.lower() == 'bearer':
         # OpenID Auth.
-        log.debug("Got OpenID bearer token.")
+        log.debug(f"Got OpenID bearer token: {token}")
 
         # see if we've already validated this token
         user = _checkTokenCache(app, token)
