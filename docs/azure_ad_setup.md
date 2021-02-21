@@ -44,9 +44,9 @@ Active Directory Client Configuration
 -------------------------------------
 
 In the Azure Portal, go to Azure Active Directory, select "App registrations" and
-click the the plus sign, "New registration" that will be used by the HSDS clients.  In the register page, chose an appropriate name for the application and select the desired "Supported account types".
+click the the plus sign, "New registration" that will be used by the HSDS clients.  In the register page, chose an appropriate name for the application and select the desired "Supported account types".  Click "Register", the client configuration page will be displayed.  Note the "Application (client) ID" value.
 
-In "API permissions", add the following permission:
+Next select "API permissions", add the following permission:
 
 * for "APIs my organization users", select the HSDS server application.  Choose "Delegated permissions" and add permissions for the HSDS scope
 
