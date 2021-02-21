@@ -22,6 +22,57 @@ from hsds.util.hdf5dtype import check_dtype
 from hsds.util.hdf5dtype import Reference
 from hsds.util.hdf5dtype import createDataType
 
+# compare two numpy arrays.
+# return true if the same (exclusive of null vs. empty array)
+# faalse otherwise
+def ndarray_compare(arr1, arr2):
+    if not isinstance(arr1, np.ndarray) and not isinstance(arr2, np.ndarray):
+        if not isinstance(arr1, np.void) and not isinstance(arr2, np.void):
+            return arr1 == arr2
+        if isinstance(arr1, np.void) and not isinstance(arr2, np.void):
+            if aar1.size == 0 and not arr2:
+                return True
+            else:
+                return False
+        if not isinstance(arr1, np.void) and isinstance(arr2, np.void):
+            if not arr1 and arr2.size == 0:
+                return True
+            else:
+                return False
+        # both np.voids
+        if arr1.size != arr2.size:
+            return False
+        for i in range(arr1.size):
+            if not ndarray_compare(arr1[i], arr2[i]):
+                return False
+        return True
+        
+    if isinstance(arr1, np.ndarray) and not isinstance(arr2, np.ndarray):
+        # same only if arr1 is empty and arr2 is 0
+        if arr1.size == 0 and not arr2:
+            return True
+        else:
+            return False
+    if not isinstance(arr1, np.ndarray) and isinstance(arr2, np.ndarray):
+        # same only if arr1 is empty and arr2 is 0
+        if not arr1 and not arr2.size == 0:
+            return True
+        else:
+            return False
+        
+    # two ndarrays...
+    if arr1.shape != arr2.shape:
+        return False
+    if arr2.dtype != arr2.dtype:
+        return False
+    nElements = np.prod(arr1.shape)
+    arr1 = arr1.reshape((nElements,))
+    arr2 = arr2.reshape((nElements,))
+    for i in range(nElements):
+        if not ndarray_compare(arr1[i], arr2[i]):
+            return False
+    return True
+    
 
 class ArrayUtilTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -251,7 +302,7 @@ class ArrayUtilTest(unittest.TestCase):
 
         # convert back to arry
         arr_copy = bytesToArray(buffer, dt, (3,))
-        self.assertTrue(np.array_equal(arr, arr_copy))
+        self.assertTrue(ndarray_compare(arr, arr_copy))
 
         # Compound non-vlen
         dt = np.dtype([('x', 'f8'), ('y', 'i4')])
@@ -263,7 +314,7 @@ class ArrayUtilTest(unittest.TestCase):
 
         # convert back to array
         arr_copy = bytesToArray(buffer, dt, (4,))
-        self.assertTrue(np.array_equal(arr, arr_copy))
+        self.assertTrue(ndarray_compare(arr, arr_copy))
 
         # VLEN of int32's
         dt = np.dtype('O', metadata={'vlen': np.dtype('int32')})
@@ -277,13 +328,7 @@ class ArrayUtilTest(unittest.TestCase):
 
         # convert back to array
         arr_copy = bytesToArray(buffer, dt, (4,))
-        # np.array_equal doesn't work for object arrays
-        self.assertEqual(arr.dtype, arr_copy.dtype)
-        self.assertEqual(arr.shape, arr_copy.shape)
-        for i in range(4):
-            e = arr[i]
-            e_copy = arr_copy[i]
-            self.assertTrue(np.array_equal(e, e_copy))
+        self.assertTrue(ndarray_compare(arr, arr_copy))
 
         # VLEN of strings
         dt =  np.dtype('O', metadata={'vlen': str})
@@ -300,8 +345,7 @@ class ArrayUtilTest(unittest.TestCase):
 
         # convert back to array
         arr_copy = bytesToArray(buffer, dt, (5,))
-        self.assertTrue(np.array_equal(arr, arr_copy))
-
+        self.assertTrue(ndarray_compare(arr, arr_copy))
         # VLEN of bytes
         dt =  np.dtype('O', metadata={'vlen': bytes})
         arr = np.zeros((5,), dtype=dt)
@@ -314,13 +358,15 @@ class ArrayUtilTest(unittest.TestCase):
         buffer = arrayToBytes(arr)
 
         expected = b'\x07\x00\x00\x00Parting\x07\x00\x00\x00is such\x05\x00\x00\x00sweet\x06\x00\x00\x00sorrow\x00\x00\x00\x00'
-        self.assertEqual(buffer, expected)  # same serialization as weith str
+        self.assertEqual(buffer, expected)  # same serialization as with str
 
         # convert back to array
         arr_copy = bytesToArray(buffer, dt, (5,))
-        self.assertTrue(np.array_equal(arr, arr_copy))
+        self.assertTrue(ndarray_compare(arr, arr_copy))
 
-        # Compound vlen
+        #
+        # Compound str vlen
+        #
         dt_vstr = np.dtype('O', metadata={'vlen': str})
         dt = np.dtype([('x', 'i4'), ('tag', dt_vstr), ( 'code', 'S4')])
         arr = np.zeros((4,), dtype=dt)
@@ -328,8 +374,6 @@ class ArrayUtilTest(unittest.TestCase):
         arr[3] = (84, "Bye", "XYZ")
         count = getByteArraySize(arr)
         buffer = arrayToBytes(arr)
-        for i in range(len(buffer)):
-            c = buffer[i]
 
         self.assertEqual(len(buffer), 56)
         self.assertEqual(buffer.find(b"Hello"), 8)
@@ -339,12 +383,32 @@ class ArrayUtilTest(unittest.TestCase):
 
         # convert back to array
         arr_copy = bytesToArray(buffer, dt, (4,))
-        self.assertEqual(arr.dtype, arr_copy.dtype)
-        self.assertEqual(arr.shape, arr_copy.shape)
-        for i in range(4):
-            e = arr[i]
-            e_copy = arr_copy[i]
-            self.assertTrue(np.array_equal(e, e_copy))
+        self.assertTrue(ndarray_compare(arr, arr_copy))         
+
+        #
+        # Compound int vlen
+        #
+        dt_vint = np.dtype('O', metadata={'vlen': "int32"})
+        dt = np.dtype([('x', 'int32'), ('tag', dt_vint)])
+        arr = np.zeros((4,), dtype=dt)
+        arr[0] = (42, np.array((), dtype="int32"))
+        arr[3] = (84, np.array((1,2,3), dtype="int32"))
+        count = getByteArraySize(arr)
+        buffer = arrayToBytes(arr)
+
+        self.assertEqual(len(buffer), 44)
+        buffer_expected = {0: 42, 24: 84, 28: 12, 32: 1, 36: 2, 40: 3}
+        for i in range(44):
+            if i in buffer_expected:
+                self.assertEqual(buffer[i], buffer_expected[i])
+            else:
+                self.assertEqual(buffer[i], 0)
+        
+        # convert back to array
+        arr_copy = bytesToArray(buffer, dt, (4,))
+        self.assertTrue(ndarray_compare(arr, arr_copy))
+        
+
         #
         # VLEN utf string with array type
         #
@@ -392,13 +456,7 @@ class ArrayUtilTest(unittest.TestCase):
         # convert back to array
 
         arr_copy = bytesToArray(buffer, dt, (4,))
-
-        self.assertEqual(arr.dtype, arr_copy.dtype)
-        self.assertEqual(arr.shape, arr_copy.shape)
-        for i in range(4):
-            e = arr[i]
-            e_copy = arr_copy[i]
-            self.assertTrue(np.array_equal(e, e_copy))
+        self.assertTrue(ndarray_compare(arr, arr_copy))
 
 
     def testJsonToBytes(self):
