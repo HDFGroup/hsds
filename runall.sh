@@ -166,7 +166,7 @@ else
     docker-compose -f ${COMPOSE_FILE} down 
     exit 0  # can quit now
   else
-    echo "Running docker-compose -f ${COMPOSE_FILE} down"
+    echo "Running docker-compose -f ${COMPOSE_FILE} up"
     docker-compose -f ${COMPOSE_FILE} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}
   fi
 fi
