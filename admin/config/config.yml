@@ -17,13 +17,18 @@ aws_lambda_threshold: 4   # number of chunks per node per request to reach befor
 aws_lambda_max_invoke: 1000  # max number of lambda functions to invoke simultaneously 
 azure_connection_string: null # use for connecting to Azure blob storage
 azure_resource_id: null  # resource id for use with Azure Active Directory
+azure_storage_account: null  # storage account to use on Azure
 root_dir: null   # base directory to use for Posix storage
 password_salt: null  # salt value if dynamically generated passwords are used
 bucket_name: null   # set to use a default bucket, otherwise bucket param is needed for all requests
 head_port: 5100     # port to use for head node
-dn_port : 6101  # Start dn ports at 6101
+head_ram: 512m  # memory for head container
+dn_port: 6101  # Start dn ports at 6101
+dn_ram: 3g     # memory for DN container (per container)
 sn_port: 5101   # Start sn ports at 5101
+sn_ram: 1g     # memory for SN container
 rangeget_port: 6900  # singleton proxy at port 6900
+rangeget_ram: 1g  # memoruy for RANGEGET container 
 target_sn_count: 0  # desired number of SN containers
 target_dn_count: 0 # desire number of DN containers
 log_level: INFO    # log level.  One of ERROR, WARNING, INFO, DEBUG 
@@ -61,7 +66,8 @@ cors_domain: "*"     # domains allowed for CORS
 admin_user: admin  # user with admin privileges
 admin_group: admins  # enable admin privileges for any user in this group
 openid_provider: azure  # OpenID authentication provider
-openid_audience: null # OpenID audience. This is synonymous with azure_resource_id for azure.
+openid_url: null # OpenID connect endpoint if provider is not azure or google
+openid_audience: null # OpenID audience. This is synonymous with azure_resource_id for azure
 openid_claims: unique_name,appid   # Comma seperated list of claims to resolve to usernames.
 chaos_die: 0           # if > 0, have nodes randomly die after n seconds (for testing)
 standalone_app: false   # True when run as a single application
@@ -69,3 +75,4 @@ blosc_nthreads: 2  # number of threads to use for blosc compression.  Set to 0 t
 http_compression: true  # Use HTTP compression 
 k8s_app_label: hsds  # The app label for k8s deployments
 k8s_namespace: null # Specifies if a the client should be limited to a specific namespace. Useful for some RBAC configurations.
+restart_policy: on-failure # Docker restart policy

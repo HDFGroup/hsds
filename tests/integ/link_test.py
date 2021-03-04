@@ -85,9 +85,14 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(rspLink["id"], grp1_id)
         self.assertEqual(rspLink["collection"], "groups")
 
-        # try creating the link again  (should fail with conflict)
+        # try creating the link again  (be ok = PUT is idempotent)
         rsp = requests.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 409)  # conflict
+        self.assertEqual(rsp.status_code, 200)  # OK
+
+        # try creating a link with different target id
+        payload = {"id": root_id}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 409)  # Conflict
 
         # get the root group and verify the link count is one
         req = helper.getEndpoint() + "/groups/" + root_id

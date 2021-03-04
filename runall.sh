@@ -1,11 +1,35 @@
 #!/bin/bash
 
+config_value() {
+  # For given key return env variable, override.yml value, config.yml value in that order
+  # Not a proper yaml parser, but works for simple config we have
+  key=$1
+  # check for environment variable
+  rv="${!key}"
+  if [[ -z $rv ]] ; then
+    # check override yaml
+    yaml_key=`echo $key | awk '{ print tolower($0) }'`
+    rv=`grep "^${yaml_key}" $OVERRIDE_FILE | awk '{ print $2 }'`
+  fi
+  if [[ -z $rv ]] ; then
+    # check config yaml
+    rv=`grep "^${yaml_key}" $CONFIG_FILE | awk '{ print $2 }'`
+  fi
+  if [ "$rv" = "null" ]; then
+    rv=  # treat yml null as empty string
+  fi
+  if [[ ${PRINT_CONFIG} ]]; then
+    echo "${key}=${rv}"
+  fi
+ 
+  [[ -z $rv ]] && return 1 || return 0
+}
+
 # script to startup hsds service
 if [[ $# -eq 1 ]] && ([[ $1 == "-h" ]] || [[ $1 == "--help" ]]); then
-   echo "Usage: runall.sh [--no-docker] [count] "
+   echo "Usage: runall.sh [--no-docker] [--stop] [--config] [count] "
    exit 1
 fi
-
 
 if [[ $# -gt 0 ]] ; then
   if [[ $1 == "--no-docker" ]] ; then
@@ -15,6 +39,10 @@ if [[ $# -gt 0 ]] ; then
     if [[ $# -gt 1 ]] ; then
       export CORES=$2
     fi
+  elif [[ $1 == "--stop" ]]; then
+     echo "stopping"
+  elif [[ $1 == "--config" ]]; then
+     PRINT_CONFIG=1
   else
     export CORES=$1
   fi
@@ -22,15 +50,38 @@ fi
 
 if [[ ${CORES} ]] ; then
   export DN_CORES=${CORES}
-  export SN_CORES=${CORES}
 else
   export DN_CORES=1
+fi
+
+if [[ -z $SN_CORES ]] ; then
+  # Use 1 SN_CORE unless there's an environment variable set
   export SN_CORES=1
 fi
 
+CONFIG_FILE="admin/config/config.yml"
+OVERRIDE_FILE="admin/config/override.yml"
 
-echo "dn cores:" $DN_CORES
-echo "no_docker:" $NO_DOCKER
+# get config values
+config_value "AWS_S3_GATEWAY" && export AWS_S3_GATEWAY=$rv
+config_value "AWS_IAM_ROLE" && export AWS_IAM_ROLE=$rv
+config_value "AWS_ACCESS_KEY_ID" && export AWS_ACCESS_KEY_ID=$rv
+config_value "AWS_SECRET_ACCESS_KEY" && export AWS_SECRET_ACCESS_KEY=$rv
+config_value "AWS_REGION" && export AWS_REGION=$rv
+config_value "AZURE_CONNECTION_STRING" && export AZURE_CONNECTION_STRING=$rv
+config_value "ROOT_DIR" && export ROOT_DIR=$rv
+config_value "BUCKET_NAME" && export BUCKET_NAME=$rv
+config_value "HSDS_ENDPOINT" && export HSDS_ENDPOINT=$rv
+config_value "RESTART_POLICY" && export RESTART_POLICY=$rv
+config_value "PUBLIC_DNS" && export PUBLIC_DNS=$rv
+config_value "HEAD_PORT" && export HEAD_PORT=$rv
+config_value "HEAD_RAM" && export HEAD_RAM=$rv
+config_value "DN_PORT" && export DN_PORT=$rv
+config_value "DN_RAM" && export DN_RAM=$rv
+config_value "SN_PORT" && export SN_PORT=$rv
+config_value "SN_RAM" && export SN_RAM=$rv
+config_value "RANGEGET_PORT" && export RANGEGET_PORT=$rv
+config_value "RANGEGET_RAM" && export RANGEGET_RAM=$rv
 
 if [[ ${NO_DOCKER} ]]; then
    # setup extra envs needed when not using docker
@@ -44,8 +95,11 @@ if [[ ${NO_DOCKER} ]]; then
     # TBD - this script needs updating to run multiple SN, DN nodes
     export SN_CORES=1
     export DN_CORES=1
+else
+    # check that docker-compose is available
+    docker-compose --version >/dev/null || exit 1
+    export COMPOSE_PROJECT_NAME=hsds  # use "hsds_" as prefix for container names
 fi
-
 
 if [[ ${AWS_S3_GATEWAY} ]]; then
   COMPOSE_FILE="admin/docker/docker-compose.aws.yml"
@@ -90,19 +144,10 @@ if [[ -z $AWS_IAM_ROLE ]] && [[ $AWS_S3_GATEWAY ]]; then
   [[ -z ${AWS_SECRET_ACCESS_KEY} ]] && echo "Need to set AWS_SECRET_ACCESS_KEY" && exit 1
 fi
 
-if [[ $AWS_S3_GATEWAY ]]; then
-  echo "AWS_S3_GATEWAY:" $AWS_S3_GATEWAY
-  echo "AWS_ACCESS_KEY_ID:" $AWS_ACCESS_KEY_ID
-  echo "AWS_SECRET_ACCESS_KEY: ******"
-elif [[ $AZURE_CONNECTION_STRING ]]; then
-  echo "AZURE_CONNECTION_STRING: *****"
-else
-  echo "ROOT_DIR:" $ROOT_DIR
+if [[ ${PRINT_CONFIG} ]]; then
+   echo "use $0 without --config option to actually start/stop service"
+   exit 0
 fi
-echo "BUCKET_NAME:"  $BUCKET_NAME
-echo "CORES: ${SN_CORES}/${DN_CORES}"
-echo "HSDS_ENDPOINT:" $HSDS_ENDPOINT
-echo "PUBLIC_DNS:" $PUBLIC_DNS
 
 if [[ $NO_DOCKER ]] ; then
   echo "no docker startup"
@@ -115,20 +160,14 @@ if [[ $NO_DOCKER ]] ; then
   echo "starting data node"
   hsds-datanode >${LOG_DIR}/dn.log 2>&1 &
 else
-  grep -q -c "^  proxy" ${COMPOSE_FILE}
-  if [[ $? -gt 0 ]]; then
-    echo "no load balancer"
-    export SN_CORES=1
-    if [[ -z ${SN_PORT} ]]; then
-      echo "setting sn_port to 80"
-      export SN_PORT=80  # default to port 80 if the SN is fronting requests
-    else
-      echo "SN_PORT is set to: [${SN_PORT}]"
-    fi
-    docker-compose -f ${COMPOSE_FILE} up -d --scale dn=${DN_CORES}
+  if [[ $# -eq 1 ]] && [[ $1 == "--stop" ]]; then
+    # use the compose file to shutdown the sevice
+    echo "Running docker-compose -f ${COMPOSE_FILE} down"
+    docker-compose -f ${COMPOSE_FILE} down 
+    exit 0  # can quit now
   else
+    echo "Running docker-compose -f ${COMPOSE_FILE} up"
     docker-compose -f ${COMPOSE_FILE} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}
-    echo "load balancer"
   fi
 fi
 
@@ -156,7 +195,7 @@ fi
 # wait for the server to be ready
 for i in {1..120}
 do
-  STATUS_CODE=`curl -s -o /dev/null -w "%{http_code}" ${HSDS_ENDPOINT}/about`
+  STATUS_CODE=`curl -s -o /dev/null -w "%{http_code}" http://localhost:${SN_PORT}/about`
   if [[ $STATUS_CODE == "200" ]]; then
     echo "service ready!"
     break

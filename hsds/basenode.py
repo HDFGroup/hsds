@@ -35,7 +35,7 @@ from . import hsds_logger as log
 from kubernetes import client as k8s_client
 from kubernetes import config as k8s_config
 
-HSDS_VERSION = "0.6.2"
+HSDS_VERSION = "0.6.3"
 
 def getVersion():
     return HSDS_VERSION
@@ -170,18 +170,17 @@ async def k8s_update_dn_info(app):
     c.verify_ssl=False #set verify_ssl to false in that config
     k8s_client.Configuration.set_default(c) #make that config the default for all new clients
     v1 = k8s_client.CoreV1Api()
-    # TBD - use the async version
-    k8s_app_label = config.get("k8s_app_label")
-    # If a namespace is specified restrict pod
-    # listing to that namespace otherwise list
-    # pods from all namespaces.
     k8s_namespace = config.get("k8s_namespace")
     if k8s_namespace:
-        ret = v1.list_namespaced_pod(k8s_namespace)
+        # get pods for given namespace
+        log.info(f"getting pods for namespace: {k8s_namespace}")
+        ret = v1.list_namespaced_pod(namespace=k8s_namespace)
     else:
+        log.info("getting pods for all namespaces")
         ret = v1.list_pod_for_all_namespaces(watch=False)
     pod_ips = []
     dn_urls = []
+    k8s_app_label = config.get("k8s_app_label")
     for i in ret.items:
         pod_ip = i.status.pod_ip
         if not pod_ip:
@@ -324,6 +323,26 @@ def updateReadyState(app):
             log.info(f"setting node_state from {app['node_state']} to READY")
             app["node_state"] = "READY"
 
+async def doHealthCheck(app, chaos_die=0):
+    node_state = app["node_state"]
+    if node_state == "READY" and chaos_die > 0 and app["node_type"] == "dn":
+        if random.randint(0, chaos_die) == 0:
+            log.error("chaos die - suicide!")
+            sys.exit(1)
+        else:
+            log.info("chaos die - still alive")
+    log.info(f"healthCheck - node_state: {node_state}")
+    if node_state != "TERMINATING":
+        await update_dn_info(app)
+        updateReadyState(app)
+          
+    svmem = psutil.virtual_memory()
+    num_tasks = len(asyncio.Task.all_tasks())
+    active_tasks = len([task for task in asyncio.Task.all_tasks() if not task.done()])
+    log.debug(f"health check vm: {svmem.percent} num tasks: {num_tasks} active tasks: {active_tasks}")
+      
+
+
 async def healthCheck(app):
     """ Periodic method that either registers with headnode (if state in INITIALIZING) or
     calls headnode to verify vitals about this node (otherwise)"""
@@ -337,22 +356,10 @@ async def healthCheck(app):
         log.debug(f"chaos_die number: {chaos_die}")
 
     while True:
-        node_state = app["node_state"]
-        if node_state == "READY" and chaos_die > 0 and app["node_type"] == "dn":
-            if random.randint(0, chaos_die) == 0:
-                log.error("chaos die - suicide!")
-                sys.exit(1)
-            else:
-                log.info("chaos die - still alive")
-        log.info(f"healthCheck - node_state: {node_state}")
-        if node_state != "TERMINATING":
-            await update_dn_info(app)
-            updateReadyState(app)
-          
-        svmem = psutil.virtual_memory()
-        num_tasks = len(asyncio.Task.all_tasks())
-        active_tasks = len([task for task in asyncio.Task.all_tasks() if not task.done()])
-        log.debug(f"health check sleep: {sleep_secs}, vm: {svmem.percent} num tasks: {num_tasks} active tasks: {active_tasks}")
+        try:
+            await doHealthCheck(app, chaos_die=chaos_die)
+        except Exception as e:
+            log.error(f"Unexpected {e.__class__.__name__} exception in doHealthCheck: {e}")
         await asyncio.sleep(sleep_secs)
 
 async def preStop(request):

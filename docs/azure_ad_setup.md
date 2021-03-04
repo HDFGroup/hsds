@@ -7,7 +7,7 @@ the client will not need to go to login.microsoft.com on each request.
 
 Once a client request is authenticated, the requested action still needs to be authorized by the server based on the ACLs for the given folder or domain.  For example, for user *joebob@acme.com* to create a domain /home/joebob/foo.h5, the folder /home/joebob/ will need to provide write permissions for *joebob@acme.com*.  This can be done using the h5pyd hsacl tool.  For example: `$ hsacl /home/joebob/ +crudep joebob@acme.com`.
 
-Active Directory authtication can be used in combination with accounts managed by the server.  If HTTP Basic Auth is used in the client request, the username and password will be validated against the local account.  If HTTP Bearer token is used, the request will be authenticated using Active Directory.
+Active Directory authentication can be used in combination with accounts managed by the server.  If HTTP Basic Auth is used in the client request, the username and password will be validated against the local account.  If HTTP Bearer token is used, the request will be authenticated using Active Directory.
 
 The following sections describe how to setup Active Directory, HSDS, and the client to use AD authentication.
 
@@ -15,15 +15,12 @@ Active Directory Server Configuration
 -------------------------------------
 
 In the Azure Portal, go to Azure Active Directory, select "App registrations" and
-click the the plus sign: "New registration" that will be used by the HSDS service.  In the register page, chose an appropriate name for the application and select the desired "Supported account types".
+click the the plus sign: "New registration".  And fill in the following fields:
 
-In "API permissions", add the following permissions:
- 
-In "Expose an API", enter an "Application ID URI"  (e.g. "api;://hsds_server")
+* Name: Choose a name for the application
+* Supported account types: Leave as default or choose appropriate multitennant type
+* Redirect URI: Enter DNS endpoint for HSDS (e.g. https://hsds.hdf.test)
 
-Also in "Expose an API", add a scope with "Who can consent?" as "Admins only".
-
-In the overview section, note the "Application (client) ID" value, and the "Directory (tenant) ID" value.  You'll need these for HSDS and client configuration steps (see below).
 
 HSDS Configuration
 ------------------
@@ -47,9 +44,9 @@ Active Directory Client Configuration
 -------------------------------------
 
 In the Azure Portal, go to Azure Active Directory, select "App registrations" and
-click the the plus sign, "New registration" that will be used by the HSDS clients.  In the register page, chose an appropriate name for the application and select the desired "Supported account types".
+click the the plus sign, "New registration" that will be used by the HSDS clients.  In the register page, chose an appropriate name for the application and select the desired "Supported account types".  Click "Register", the client configuration page will be displayed.  Note the "Application (client) ID" value.
 
-In "API permissions", add the following permission:
+Next select "API permissions", add the following permission:
 
 * for "APIs my organization users", select the HSDS server application.  Choose "Delegated permissions" and add permissions for the HSDS scope
 

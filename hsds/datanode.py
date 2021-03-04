@@ -88,7 +88,8 @@ async def bucketScan(app):
     log.info("bucketScan start")
 
     async_sleep_time = int(config.get("async_sleep_time"))
-    log.info("async_sleep_time: {}".format(async_sleep_time))
+    scan_wait_time = async_sleep_time * 6  # default to ~1min
+    log.info("scan_wait_time: {}".format(scan_wait_time))
 
     # update/initialize root object before starting node updates
 
@@ -106,9 +107,12 @@ async def bucketScan(app):
             item = root_scan_ids[root_id]  # bucket and timestamp in tuple
             bucket = item[0]
             timestamp = item[1]
-            log.debug(f"root_scan id {root_id}: bucket: {bucket} timestamp: {timestamp}")
-            if now - timestamp > async_sleep_time:
+            log.info(f"root_scan id {root_id}: bucket: {bucket} timestamp: {timestamp}")
+            if now - timestamp > scan_wait_time:
+                log.info(f"add {root_id} to scan list")
                 root_ids[root_id] = bucket
+            else:
+                log.debug(f"waiting for {root_id} to age before adding to scan list")
         # remove from map
         for root_id in root_ids:
             del root_scan_ids[root_id]

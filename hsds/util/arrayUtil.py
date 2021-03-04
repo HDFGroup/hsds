@@ -193,7 +193,7 @@ def isVlen(dt):
 Get number of byte needed to given element as a bytestream
 """
 def getElementSize(e, dt):
-    #print("getElementSize - e: {}  dt: {}".format(e, dt))
+    #print(f"getElementSize - e: {e}  dt: {dt} metadata: {dt.metadata}")
     if len(dt) > 1:
         count = 0
         for name in dt.names:
@@ -225,8 +225,13 @@ def getElementSize(e, dt):
                     count += getElementSize(item, dt)
             count += 4  # byte count
         elif isinstance(e, list) or isinstance(e, tuple):
-            #print("got list for e:", e)
-            count = len(e) * vlen.itemsize + 4  # +4 for byte count
+            if not e:
+                # empty list, just add byte count
+                count = 4
+            else:
+                # not sure how to deal with this
+                #print(f"got list for e: {e} vlen: {vlen} itemsize: {vlen.itemsize}")
+                count = len(e) * vlen.itemsize + 4  # +4 for byte count
         else:
             raise TypeError("unexpected type: {}".format(type(e)))
     return count
@@ -380,27 +385,23 @@ def readElement(buffer, offset, arr, index, dt):
         offset += count
         try:
             e = np.frombuffer(bytes(e_buffer), dtype=dt)
-            #print(f"setting index: {index} to {e}")
             arr[index] = e[0]
         except ValueError:
-            #print(f"ERROR: ValueError setting {e_buffer} and dtype: {dt}")
+            print(f"ERROR: ValueError setting {e_buffer} and dtype: {dt}")
             raise
     else:
         # variable length element
         vlen = dt.metadata["vlen"]
-        #print("reading vlen element:", vlen)
         e = arr[index]
 
         if isinstance(e, np.ndarray):
             nelements = np.prod(dt.shape)
-            #print("ndarray, nelements:", nelements)
             e.reshape((nelements,))
             for i in range(nelements):
                 offset = readElement(buffer, offset, e, i, dt)
             e.reshape(dt.shape)
         else:
             count = getElementCount(buffer, offset)
-            #print("getElementCount:", count)
             offset += 4
             if count > 0:
                 e_buffer = buffer[offset:(offset+count)]
@@ -412,11 +413,10 @@ def readElement(buffer, offset, arr, index, dt):
                     s = e_buffer.decode("utf-8")
                     arr[index] = s
                 else:
-                    #print("np.fromBuffer buffer len: ", len(e_buffer), "dtype:", vlen)
                     try:
                         e = np.frombuffer(bytes(e_buffer), dtype=vlen)
                     except ValueError:
-                        #print("ValueError -- e_buffer:", e_buffer, "dtype:", vlen)
+                        print("ValueError -- e_buffer:", e_buffer, "dtype:", vlen)
                         raise
                     arr[index] = e
     #print("readElement returning offset:", offset)

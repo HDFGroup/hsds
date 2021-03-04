@@ -13,7 +13,7 @@
 # service node of hsds cluster
 #
 
-from aiohttp.web_exceptions import HTTPBadRequest
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPConflict
 
 from .util.httpUtil import  http_get, http_put, http_delete, getHref, jsonResponse
 from .util.idUtil import   isValidUuid, getDataNodeUrl, getCollectionForId
@@ -198,7 +198,6 @@ async def PUT_Link(request):
     log.info(f"PUT Link_title: [{link_title}]")
     validateLinkName(link_title)
 
-
     username, pswd = getUserPasswordFromRequest(request)
     # write actions need auth
     await validateUserPassword(app, username, pswd)
@@ -259,13 +258,31 @@ async def PUT_Link(request):
     params = {}
     if bucket:
         params["bucket"] = bucket
-    put_rsp = await http_put(app, req, data=link_json, params=params)
-    log.debug("PUT Link resp: " + str(put_rsp))
-
+    try:
+        put_rsp = await http_put(app, req, data=link_json, params=params)
+        log.debug("PUT Link resp: " + str(put_rsp))
+        dn_status = 201
+    except HTTPConflict:
+        # check to see if this is just a duplicate put of an existing link
+        dn_status = 409
+        existing_link = await http_get(app, req, params=params)
+        for prop in ("class", "id", "h5path", "h5domain"):
+            if prop in link_json:
+                if prop not in existing_link:
+                    break
+                if link_json[prop] != existing_link[prop]:
+                    break
+        else:
+            log.info("PUT link is identical to existing value returning OK")
+            dn_status = 200 # return 200 since we didn't actually create a resource
+        if dn_status == 409:
+            raise  # return 409 to client
     hrefs = []  # TBD
     req_rsp = { "hrefs": hrefs }
     # link creation successful
-    resp = await jsonResponse(request, req_rsp, status=201)
+    # returns 201 if new link was created, 200 if this is a duplicate
+    # of an existing link
+    resp = await jsonResponse(request, req_rsp, status=dn_status)
     log.response(request, resp=resp)
     return resp
 
