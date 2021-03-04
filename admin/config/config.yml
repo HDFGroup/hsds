@@ -17,6 +17,7 @@ aws_lambda_threshold: 4   # number of chunks per node per request to reach befor
 aws_lambda_max_invoke: 1000  # max number of lambda functions to invoke simultaneously 
 azure_connection_string: null # use for connecting to Azure blob storage
 azure_resource_id: null  # resource id for use with Azure Active Directory
+azure_storage_account: null  # storage account to use on Azure
 root_dir: null   # base directory to use for Posix storage
 password_salt: null  # salt value if dynamically generated passwords are used
 bucket_name: null   # set to use a default bucket, otherwise bucket param is needed for all requests

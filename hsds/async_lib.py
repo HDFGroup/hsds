@@ -199,12 +199,18 @@ def scanRootCallback(app, s3keys):
         raise ValueError("unexpected callback format")
 
     results = app["scanRoot_results"]
+    scanRoot_keyset = app["scanRoot_keyset"]
     checksums = results["checksums"]
     for s3key in s3keys.keys():
 
         if not isS3ObjKey(s3key):
             log.info(f"not s3obj key, ignoring: {s3key}")
             continue
+        if s3key in scanRoot_keyset:
+            log.warn(f"scanRoot - dejavu for key: {s3key}")
+            continue
+        scanRoot_keyset.add(s3key)
+
         objid = getObjId(s3key)
         etag = None
         obj_size = None
@@ -304,11 +310,11 @@ async def scanRoot(app, rootid, update=False, bucket=None):
     results["scan_start"] = time.time()
 
     app["scanRoot_results"] = results
+    app["scanRoot_keyset"] = set()
 
     await getStorKeys(app, prefix=root_prefix, include_stats=True, bucket=bucket, callback=scanRootCallback)
     num_objects = results["num_groups"] + results["num_datatypes"] + len(results["datasets"]) + results["num_chunks"]
     log.info(f"scanRoot - got {num_objects} keys for rootid: {rootid}")
-
 
     dataset_results = results["datasets"]
     for dsetid in dataset_results:
