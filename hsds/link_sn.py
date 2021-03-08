@@ -265,12 +265,16 @@ async def PUT_Link(request):
     except HTTPConflict:
         # check to see if this is just a duplicate put of an existing link
         dn_status = 409
+        log.warn(f"PUT Link: got conflict error for link_json: {link_json}")
         existing_link = await http_get(app, req, params=params)
+        log.warn(f"PUT Link: fetched existing link: {existing_link}")
         for prop in ("class", "id", "h5path", "h5domain"):
             if prop in link_json:
                 if prop not in existing_link:
+                    log.warn(f"PUT Link - prop {prop} not found in existing link, returning 409")
                     break
                 if link_json[prop] != existing_link[prop]:
+                    log.warn(f"PUT Link - prop {prop} value is different, old: {existing_link[prop]}, new: {link_json[prop]}, returning 409")
                     break
         else:
             log.info("PUT link is identical to existing value returning OK")
