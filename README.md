@@ -112,7 +112,7 @@ Reporting bugs (and general feedback)
 
 Create new issues at <http://github.com/HDFGroup/hsds/issues> for any problems you find.
 
-For general questions/feedback, please use the Kita&trade; forum: <https://forum.hdfgroup.org/c/kita>.
+For general questions/feedback, please use the HSDS forum: <https://forum.hdfgroup.org/c/hsds>.
 
 License
 -------
