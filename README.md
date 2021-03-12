@@ -38,13 +38,14 @@ Quick Start
 Make sure you have Python 3, docker, docker-compose installed, then:
 
    1. Setup password file: `$ cp admin/config/passwd.default admin/config/passswd.txt`
-   2. Start server: `$ ./runall.sh`
-   3. To run test suite, set an environment variable for the admin password: `$ export ADMIN_PASSWORD=admin`
-   4. Run the test suite: `$ ./testall.sh`
+   2. Create a directory the server will use to store data, and then set the ROOT_DIR environment variable to point to it: `$ export ROOT_DIR="~/hsds_data"`
+   3. Start server: `$ ./runall.sh`
+   4. Set environment variables for the admin password and usernaame: `$ export ADMIN_PASSWORD=admin`, `$ export ADMIN_USERNAME=admin`
+   5. Run the test suite: `$ ./testall.sh`
 
 To shut down the server, run: `$ ./stopall.sh`
     
-Note: passwords can (and should for production use) be modified by changing values in hsds/admin/config/password.txt and rebuilding the docker image.
+Note: passwords can (and should for production use) be modified by changing values in hsds/admin/config/password.txt and rebuilding the docker image.  Alternatively, an external identity provider such as Azure Active Directory or KeyCloak can be used.  See: [docs/azure_ad_setup.md](docs/azure_ad_setup.md) for Azure AD setup instructions or [docs/keycloak_setup.md](docs/keycloak_setup.md) for KeyCloak.
 
 Detailed Install Instructions
 -----------------------------
