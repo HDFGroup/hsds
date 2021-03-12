@@ -103,32 +103,34 @@ else
     export COMPOSE_PROJECT_NAME=hsds  # use "hsds_" as prefix for container names
 fi
 
+
+[[ -z ${BUCKET_NAME} ]] && echo "No default bucket set - did you mean to export BUCKET_NAME?"
+
+[[ -z ${HSDS_ENDPOINT} ]] && echo "HSDS_ENDPOINT is not set" && exit 1
+
 if [[ ${AWS_S3_GATEWAY} ]]; then
   COMPOSE_FILE="admin/docker/docker-compose.aws.yml"
   echo "AWS_S3_GATEWAY set, using ${COMPOSE_FILE}"
 elif [[ ${AZURE_CONNECTION_STRING} ]]; then
   COMPOSE_FILE="admin/docker/docker-compose.azure.yml"
   echo "AZURE_CONNECTION_STRING set, using ${COMPOSE_FILE}"
-elif [[ ${ROOT_DIR} ]]; then
+else 
   COMPOSE_FILE="admin/docker/docker-compose.posix.yml"
-  echo "ROOT_DIR set, using ${COMPOSE_FILE}"
-else
-  COMPOSE_FILE="admin/docker/docker-compose.openio.yml"
-  echo "no persistent storage configured, using OPENIO ephemeral storage, ${COMPOSE_FILE}"
-  export AWS_S3_GATEWAY="http://openio:6007"
-  if [[ -z ${AWS_ACCESS_KEY_ID} ]]; then
-      # use default access keys and region for openio demo container
-      export AWS_ACCESS_KEY_ID=demo:demo
-      export AWS_SECRET_ACCESS_KEY=DEMO_PASS
-      export AWS_REGION=us-east-1
+  echo "no AWS or AZURE env set, using ${COMPOSE_FILE}"
+  if [[ -z ${ROOT_DIR} ]]; then
+    export ROOT_DIR=$PWD/data
+    echo "no ROOT_DIR env set, using $ROOT_DIR directory for storage"
   fi
-  [[ -z ${BUCKET_NAME} ]]  && export BUCKET_NAME="hsds.test"
-  [[ -z ${HSDS_ENDPOINT} ]] && export HSDS_ENDPOINT=http://localhost
+  if [[ ! -d ${ROOT_DIR} ]]; then
+      echo "creating directory ${ROOT_DIR}"
+      mkdir ${ROOT_DIR}
+  fi
+  if [[ ! -d ${ROOT_DIR}/${BUCKET_NAME} ]]; then
+      echo "creating directory ${ROOT_DIR}/${BUCKET_NAME}"
+      mkdir ${ROOT_DIR}/${BUCKET_NAME}
+  fi
 fi
  
-[[ -z ${BUCKET_NAME} ]] && echo "No default bucket set - did you mean to export BUCKET_NAME?"
-
-[[ -z ${HSDS_ENDPOINT} ]] && echo "HSDS_ENDPOINT is not set" && exit 1
 
 if [[ -z ${PUBLIC_DNS} ]] ; then
   if [[ ${HSDS_ENDPOINT} == "https://"* ]] ; then
@@ -170,27 +172,6 @@ else
   else
     echo "Running docker-compose -f ${COMPOSE_FILE} up"
     docker-compose -f ${COMPOSE_FILE} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}
-  fi
-fi
-
-if [[ ${AWS_S3_GATEWAY} == "http://openio:6007" ]]; then
-  # install awscli if not setup already
-  pip freeze | grep -q awscli  || pip install awscli
-  # if we've just launched the openio demo container, create a test bucket
-  echo "make bucket ${BUCKET_NAME} (may need some retries)"
-  sleep 5  # let the openio container spin up first
-
-  for ((var = 1; var <= 10; var++)); do
-    # call may fail the first few times as the openio container is spinning up
-    aws --endpoint-url http://127.0.0.1:6007 --no-verify-ssl s3 mb s3://${BUCKET_NAME} && break
-    sleep 2
-  done
-  if aws --endpoint-url http://127.0.0.1:6007 --no-verify-ssl s3 ls s3://${BUCKET_NAME}
-  then
-     echo "bucket ${BUCKET_NAME} created"
-  else
-     echo "failed to create bucket ${BUCKET_NAME}"
-     exit 1
   fi
 fi
 
