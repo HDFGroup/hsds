@@ -20,7 +20,7 @@ azure_resource_id: null  # resource id for use with Azure Active Directory
 azure_storage_account: null  # storage account to use on Azure
 root_dir: null   # base directory to use for Posix storage
 password_salt: null  # salt value if dynamically generated passwords are used
-bucket_name: null   # set to use a default bucket, otherwise bucket param is needed for all requests
+bucket_name: hsdstest  # set to use a default bucket, otherwise bucket param is needed for all requests
 head_port: 5100     # port to use for head node
 head_ram: 512m  # memory for head container
 dn_port: 6101  # Start dn ports at 6101
