@@ -13,6 +13,7 @@
 import os
 import sys
 
+PYTHON_CMD="python3"
 
 unit_tests = ('arrayUtilTest', 'chunkUtilTest', 'domainUtilTest',
     'dsetUtilTest', 'hdf5dtypeTest', 'idUtilTest', 'lruCacheTest', 'shuffleTest')
@@ -46,11 +47,12 @@ os.chdir(test_dir)
 #
 # Run all hsds tests
 #
+
 if not skip_unit:
     os.chdir('unit')
     for file_name in unit_tests:
         print(file_name)
-        rc = os.system('python ' + file_name + '.py')
+        rc = os.system(f"{PYTHON_CMD} {file_name}.py")
         if rc != 0:
             os.chdir(cwd)
             sys.exit("Failed")
@@ -61,7 +63,7 @@ os.chdir('integ')
 
 for file_name in integ_tests:
     print(file_name)
-    rc = os.system('python ' + file_name + '.py')
+    rc = os.system(f"{PYTHON_CMD} {file_name}.py")
     if rc != 0:
         os.chdir(cwd)
         sys.exit("Failed")
