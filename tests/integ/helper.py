@@ -14,8 +14,12 @@ import json
 import os.path as op
 from datetime import datetime
 import time
-import pytz
 import base64
+try:
+    import pytz
+    USE_UTC=True
+except ModuleNotFoundError:
+    USE_UTC=False
 
 import config
 """
@@ -63,7 +67,10 @@ Helper - get base domain to use for test_cases
 """
 def getTestDomainName(name):
     now = time.time()
-    dt = datetime.fromtimestamp(now, pytz.utc)
+    if USE_UTC:
+        dt = datetime.fromtimestamp(now, pytz.utc)
+    else:
+        dt = datetime.fromtimestamp(now)
     domain = "/home/"
     domain += config.get('user_name')
     domain += '/'

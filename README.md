@@ -40,8 +40,9 @@ Make sure you have Python 3, docker, docker-compose installed, then:
    1. Setup password file: `$ cp admin/config/passwd.default admin/config/passswd.txt`
    2. Create a directory the server will use to store data, and then set the ROOT_DIR environment variable to point to it: `$ export ROOT_DIR="~/hsds_data"`
    3. Start server: `$ ./runall.sh`
-   4. Set environment variables for the admin password and usernaame: `$ export ADMIN_PASSWORD=admin`, `$ export ADMIN_USERNAME=admin`
-   5. Run the test suite: `$ ./testall.sh`
+   4. Try making a request to the service: `$ curl http://localhost:5101/about` (should get back a json response)
+   5. Set environment variables for the admin password and usernaame: `$ export ADMIN_PASSWORD=admin`, `$ export ADMIN_USERNAME=admin`
+   5. Run the test suite: `$ ./testall.sh --skip_unit`
 
 To shut down the server, run: `$ ./stopall.sh`
     
