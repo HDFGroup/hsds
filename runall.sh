@@ -4,11 +4,13 @@ config_value() {
   # For given key return env variable, override.yml value, config.yml value in that order
   # Not a proper yaml parser, but works for simple config we have
   key=$1
+  yaml_key=`echo $key | awk '{ print tolower($0) }'`
+
   # check for environment variable
   rv="${!key}"
-  if [[ -z $rv ]] ; then
+  
+  if [[ -z $rv ]] && [[ -f $OVERRIDE_FILE ]] ; then
     # check override yaml
-    yaml_key=`echo $key | awk '{ print tolower($0) }'`
     rv=`grep "^${yaml_key}" $OVERRIDE_FILE | awk '{ print $2 }'`
   fi
   if [[ -z $rv ]] ; then
