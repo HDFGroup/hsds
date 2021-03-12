@@ -65,6 +65,7 @@ CONFIG_FILE="admin/config/config.yml"
 OVERRIDE_FILE="admin/config/override.yml"
 
 # get config values
+config_value "LOG_LEVEL" && export LOG_LEVEL=$rv
 config_value "AWS_S3_GATEWAY" && export AWS_S3_GATEWAY=$rv
 config_value "AWS_IAM_ROLE" && export AWS_IAM_ROLE=$rv
 config_value "AWS_ACCESS_KEY_ID" && export AWS_ACCESS_KEY_ID=$rv

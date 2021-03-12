@@ -392,6 +392,10 @@ async def about(request):
     answer["node_count"] = getNodeCount(app)
     answer["dn_urls"] = app["dn_urls"]
     answer["dn_ids"] = app["dn_ids"]
+    if username:
+        answer["username"] = username
+    else:
+        answer["username"] = "anonymous"
 
 
     resp = await jsonResponse(request, answer)

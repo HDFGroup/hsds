@@ -37,7 +37,7 @@ Quick Start
 
 Make sure you have Python 3, docker, docker-compose installed, then:
 
-   1. Setup password file: `$ cp admin/config/passwd.template admin/config/passswd.txt`
+   1. Setup password file: `$ cp admin/config/passwd.default admin/config/passswd.txt`
    2. Start server: `$ ./runall.sh`
    3. To run test suite, set an environment variable for the admin password: `$ export ADMIN_PASSWORD=admin`
    4. Run the test suite: `$ ./testall.sh`

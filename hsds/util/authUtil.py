@@ -448,6 +448,7 @@ def _verifyBearerToken(app, token):
         log.warn("no OpenID provider configured")
         raise HTTPUnauthorized()
     # Resolve provider into an OpenID configuration.
+    log.debug(f"Using OpenID provider: {provider}")
     if provider.lower() == 'azure':
         openid_url = MSONLINE_OPENID_URL
     elif provider.lower() == 'google':
