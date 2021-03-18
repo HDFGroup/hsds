@@ -18,6 +18,7 @@ aws_lambda_max_invoke: 1000  # max number of lambda functions to invoke simultan
 azure_connection_string: null # use for connecting to Azure blob storage
 azure_resource_id: null  # resource id for use with Azure Active Directory
 azure_storage_account: null  # storage account to use on Azure
+azure_resource_group: null  # Azure resource group the container (BUCKET_NAME) belongs to
 root_dir: null   # base directory to use for Posix storage
 password_salt: null  # salt value if dynamically generated passwords are used
 bucket_name: hsdstest  # set to use a default bucket, otherwise bucket param is needed for all requests
@@ -64,11 +65,11 @@ about: HSDS is a webservice for HDF data
 top_level_domains: []  # list of possible top-level domains, example: ["/home", "/shared"], if empty all top-level folders in default bucket will be returned
 cors_domain: "*"     # domains allowed for CORS
 admin_user: admin  # user with admin privileges
-admin_group: admins  # enable admin privileges for any user in this group
+admin_group: null  # enable admin privileges for any user in this group
 openid_provider: azure  # OpenID authentication provider
 openid_url: null # OpenID connect endpoint if provider is not azure or google
 openid_audience: null # OpenID audience. This is synonymous with azure_resource_id for azure
-openid_claims: unique_name,appid   # Comma seperated list of claims to resolve to usernames.
+openid_claims: unique_name,appid,roles   # Comma seperated list of claims to resolve to usernames.
 chaos_die: 0           # if > 0, have nodes randomly die after n seconds (for testing)
 standalone_app: false   # True when run as a single application
 blosc_nthreads: 2  # number of threads to use for blosc compression.  Set to 0 to have blosc auto-determine thread count

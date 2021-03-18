@@ -424,8 +424,6 @@ def initGroupDB(app):
         log.info(f"Loading groups file: {groups_file}")
         group_user_db = loadGroupsFile(groups_file)
 
-    app["group_user_db"] = group_user_db
-
     # create a reverse (user -> set of groups) lookup map
     user_group_db = {}
     for group_name in group_user_db:
@@ -444,6 +442,7 @@ def _verifyBearerToken(app, token):
     # if valid, update user db and return username
     username = None
     provider = config.get('openid_provider')
+    user_group_db = app["user_group_db"]
     if not provider:
         log.warn("no OpenID provider configured")
         raise HTTPUnauthorized()
@@ -577,13 +576,32 @@ def _verifyBearerToken(app, token):
         log.warn("OpenID ExpiredSignatureError")
         raise HTTPUnauthorized()
 
+    roles = None
     for name in claims:
+        log.debug(f"looking at claim: {name}")
         if name in jwt_decode:
-            username = jwt_decode[name]
-            break
-    else:
+            value = jwt_decode[name]
+            log.debug(f"got value: {value} for claim: {name}")
+            if name == "unique_name":
+                username = value
+            elif name == "appid":
+                pass # tbd
+            elif name == "roles":
+                roles = value
+            else:
+                log.info(f"ignoring claim: {name} with value: {value}")
+        else:
+            log.debug(f"claim: {name} not found in bearer token")
+    
+    if not username:
         log.warn("unable to retreive username from bearer token")
         return None
+    if roles:
+        if username not in user_group_db:
+            user_group_db[username] = set()
+        user_group = user_group_db[username]
+        for role in roles:
+            user_group.add(role)
 
     exp = None
     log.debug(f"decoded token: {jwt_decode}")
@@ -667,11 +685,11 @@ def isAdminUser(app, username):
     admin_group = config.get("admin_group")
     if not admin_group:
         return False
-    group_user_db = app["group_user_db"]
-    if admin_group not in group_user_db:
+    user_group_db = app["user_group_db"]
+    if username not in user_group_db:
         return False
-    admin_users = group_user_db[admin_group]
-    if username in admin_users:
+    user_groups = user_group_db[username]
+    if admin_group in user_groups:
         return True
     return False
 

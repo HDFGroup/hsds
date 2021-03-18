@@ -30,7 +30,7 @@ from asyncio import CancelledError
 from . import config
 from .util.httpUtil import http_get, http_post, jsonResponse 
 from .util.idUtil import createNodeId, getNodeNumber, getNodeCount
-from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
+from .util.authUtil import getUserPasswordFromRequest, validateUserPassword, isAdminUser
 from . import hsds_logger as log
 from kubernetes import client as k8s_client
 from kubernetes import config as k8s_config
@@ -396,6 +396,11 @@ async def about(request):
         answer["username"] = username
     else:
         answer["username"] = "anonymous"
+    if username and isAdminUser(app, username):
+        answer["isadmin"] = True
+    else:
+        answer["isadmin"] = False
+
 
 
     resp = await jsonResponse(request, answer)
