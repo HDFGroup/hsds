@@ -210,6 +210,7 @@ def scanRootCallback(app, s3keys):
             log.warn(f"scanRoot - dejavu for key: {s3key}")
             continue
         scanRoot_keyset.add(s3key)
+        log.debug(f"scanRoot adding key: {s3key} to keyset, {len(scanRoot_keyset)} keys")
 
         objid = getObjId(s3key)
         etag = None
@@ -243,6 +244,7 @@ def scanRootCallback(app, s3keys):
                 dsetid = objid
             datasets = results["datasets"]
             if dsetid not in datasets:
+                log.debug(f"scanRoot - adding dataset id: {dsetid}")
                 dataset_info = {}
                 dataset_info["lastModified"] = 0
                 dataset_info["num_chunks"] = 0
@@ -255,9 +257,10 @@ def scanRootCallback(app, s3keys):
             dataset_info = datasets[dsetid]
             if lastModified > dataset_info["lastModified"]:
                 dataset_info["lastModified"] = lastModified
-                if is_chunk:
-                    dataset_info["num_chunks"] += 1
-                    dataset_info["allocated_bytes"] += obj_size
+            if is_chunk:
+                dataset_info["num_chunks"] += 1
+                dataset_info["allocated_bytes"] += obj_size
+                log.debug(f"scanRoot - updating dataset {dsetid} - num_chunks: {dataset_info['num_chunks']}, allocated_bytes: {dataset_info['allocated_bytes']}")
         elif getCollectionForId(objid) == "groups":
             results["num_groups"] += 1
         elif getCollectionForId(objid) == "datatypes":
@@ -269,7 +272,7 @@ def scanRootCallback(app, s3keys):
 async def scanRoot(app, rootid, update=False, bucket=None):
 
     # iterate through all s3 keys under the given root.
-    # Return dict with stats for the root.
+    # Return dict with stats for the root. 
     #
     # Note: not re-entrant!  Only one scanRoot an be run at a time per app.
     log.info(f"scanRoot for rootid: {rootid} bucket: {bucket}")
