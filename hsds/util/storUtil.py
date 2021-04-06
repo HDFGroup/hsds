@@ -17,8 +17,6 @@ import time
 import json
 import zlib
 import numcodecs as codecs
-import numpy as np
-from numba import jit
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 from aiohttp.client_exceptions import ClientError
 from asyncio import CancelledError
@@ -40,51 +38,18 @@ except ImportError:
         return None
 from .. import config
 
-@jit(nopython=True)
-def _doShuffle(src, des, element_size):
-    count = len(src) // element_size
-    for i in range(count):
-        offset = i*element_size
-        e = src[offset:(offset+element_size)]
-        for byte_index in range(element_size):
-            j = byte_index*count + i
-            des[j] = e[byte_index]
-    return des
-
-@jit(nopython=True)
-def _doUnshuffle(src, des, element_size):
-    count = len(src) // element_size
-    for i in range(element_size):
-        offset = i*count
-        e = src[offset:(offset+count)]
-        for byte_index in range(count):
-            j = byte_index*element_size + i
-            des[j] = e[byte_index]
-    return des
 
 def _shuffle(element_size, chunk):
-    if element_size <= 1:
-        return  None # no shuffling needed
-    chunk_size = len(chunk)
-    if chunk_size % element_size != 0:
-        raise ValueError("unexpected chunk size")
-
-    arr = np.zeros((chunk_size,), dtype='u1')
-    _doShuffle(chunk, arr, element_size)
-
+    shuffler = codecs.Shuffle(element_size)
+    arr = shuffler.encode(chunk)
     return arr.tobytes()
+
 
 def _unshuffle(element_size, chunk):
-    if element_size <= 1:
-        return  None # no shuffling needed
-    chunk_size = len(chunk)
-    if chunk_size % element_size != 0:
-        raise ValueError("unexpected chunk size")
-
-    arr = np.zeros((chunk_size,), dtype='u1')
-    _doUnshuffle(chunk, arr, element_size)
-
+    shuffler = codecs.Shuffle(element_size)
+    arr = shuffler.decode(chunk)
     return arr.tobytes()
+
 
 def _getStorageClient(app):
     """ get storage client s3 or azure blob
@@ -237,9 +202,9 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=-1, bucket=No
         # compressed chunk data...
 
         # first check if this was compressed with blosc
-        blosc_metainfo = codecs.blosc.cbuffer_metainfo(data) # returns typesize, isshuffle, and memcopied 
-        if blosc_metainfo[0] > 0:      
-            log.info(f"blosc compressed data for {key}") 
+        blosc_metainfo = codecs.blosc.cbuffer_metainfo(data) # returns typesize, isshuffle, and memcopied
+        if blosc_metainfo[0] > 0:
+            log.info(f"blosc compressed data for {key}")
             try:
                 blosc = codecs.Blosc()
                 udata = blosc.decode(data)
@@ -263,7 +228,7 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=-1, bucket=No
         else:
             log.error(f"don't know how to decompress data in {compressor} format for {key}")
             raise HTTPInternalServerError()
-    
+
     if shuffle > 0:
         log.debug(f"shuffle is {shuffle}")
         start_time = time.time()
@@ -273,9 +238,9 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=-1, bucket=No
             data = unshuffled
         finish_time = time.time()
         log.debug(f"unshuffled {len(data)} bytes, {(finish_time - start_time):.2f} elapsed")
-        
 
     return data
+
 
 async def putStorBytes(app, key, data, filter_ops=None, bucket=None):
     """ Store byte string as S3 object with given key
@@ -297,7 +262,7 @@ async def putStorBytes(app, key, data, filter_ops=None, bucket=None):
         if "level" in filter_ops:
             clevel = filter_ops["level"]
     log.info(f"putStorBytes({bucket}/{key}), {len(data)} bytes shuffle: {shuffle} compressor: {cname} level: {clevel}")
-   
+
     if cname:
         try:
             blosc = codecs.Blosc(cname=cname, clevel=clevel, shuffle=shuffle)
@@ -379,7 +344,7 @@ async def isStorObj(app, key, bucket=None):
     log.debug(f"isStorObj {bucket}/{key}")
 
     found = await client.is_object(bucket=bucket, key=key)
-    
+
     log.debug(f"isStorObj {key} returning {found}")
     return found
 
