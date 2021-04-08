@@ -124,9 +124,12 @@ def _load_cfg():
                 cfgval = n * 1024*1024*1024
         cfg[x] = cfgval
 
-def get(x):
+def get(x, default=None):
     if not cfg:
         _load_cfg()
     if x not in cfg:
-        raise KeyError(f"config value {x} not found")
+        if default:
+            cfg[x] = default
+        else:
+            raise KeyError(f"config value {x} not found")
     return cfg[x]

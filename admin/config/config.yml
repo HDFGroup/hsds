@@ -77,3 +77,4 @@ http_compression: true  # Use HTTP compression
 k8s_app_label: hsds  # The app label for k8s deployments
 k8s_namespace: null # Specifies if a the client should be limited to a specific namespace. Useful for some RBAC configurations.
 restart_policy: on-failure # Docker restart policy
+domain_req_max_objects_limit: 500  # maximum number of objects to return in GET domain request with use_cache
