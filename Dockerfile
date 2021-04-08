@@ -46,9 +46,9 @@ COPY --from=hsds-base /opt/env/hsds /opt/env/hsds
 
 # Install HSDS
 RUN mkdir /usr/local/src/hsds-src/ /usr/local/src/hsds/ /etc/hsds/
-COPY hsds/ /usr/local/src/hsds-src
-COPY hsds/admin/config/config.yml /etc/hsds/
-COPY hsds/entrypoint.sh  /
+COPY . /usr/local/src/hsds-src
+COPY admin/config/config.yml /etc/hsds/
+COPY entrypoint.sh  /
 RUN /bin/bash -c "source /opt/env/hsds/bin/activate \
     && pip install /usr/local/src/hsds-src/ --no-deps \
     && rm -rf /usr/local/src/hsds-src"
