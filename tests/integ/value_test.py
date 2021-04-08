@@ -94,6 +94,15 @@ class ValueTest(unittest.TestCase):
         self.assertTrue("value" in rspJson)
         self.assertEqual(rspJson["value"], list(range(2,8)))
 
+        # read one element.  cf test for PR #84    
+        params = {"select": "[3]"} # read 4th element
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], [3])
+
         # try to read beyond the bounds of the array
         params = {"select": "[2:18]"} # read 6 elements, starting at index 2
         rsp = requests.get(req, params=params, headers=headers)
@@ -196,19 +205,16 @@ class ValueTest(unittest.TestCase):
             self.assertEqual(data[offset+2], 0)
             self.assertEqual(data[offset+3], 0)
 
-        # read one element
-        # TBD - PR #84
-        """
+        # read one element.  cf test for PR #84    
         params = {"select": "[3]"} # read 4th element
         rsp = requests.get(req, params=params, headers=headers_bin_rsp)
         self.assertEqual(rsp.status_code, 200)
         data = rsp.content
         self.assertEqual(len(data), 4)
-        self.assertEqual(data[0], 0)
+        self.assertEqual(data[0], 3)
         self.assertEqual(data[1], 0)
         self.assertEqual(data[2], 0)
-        self.assertEqual(data[3], 3)
-        """
+        self.assertEqual(data[3], 0)
          
 
     def testPut2DDataset(self):
