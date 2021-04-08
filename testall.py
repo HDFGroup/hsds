@@ -13,13 +13,13 @@
 import os
 import sys
 
-PYTHON_CMD="python3"
+PYTHON_CMD = "python3"
 
 unit_tests = ('arrayUtilTest', 'chunkUtilTest', 'domainUtilTest',
     'dsetUtilTest', 'hdf5dtypeTest', 'idUtilTest', 'lruCacheTest', 'shuffleTest')
 
 integ_tests = ('uptest', 'setup_test', 'domain_test', 'group_test', 'link_test',
- 'attr_test', 'datatype_test', 'dataset_test', 'acl_test', 'value_test', 'pointsel_test', 'query_test', 'vlen_test' )
+ 'attr_test', 'datatype_test', 'dataset_test', 'acl_test', 'value_test', 'pointsel_test', 'query_test', 'vlen_test')
 
 skip_unit = False
 if len(sys.argv) > 1:
@@ -34,9 +34,9 @@ cwd = os.getcwd()
 no_server = False
 if len(sys.argv) > 1:
     if sys.argv[1] == '--unit':
-        integ_tests = () # skip integ tests
+        integ_tests = ()  # skip integ tests
     elif sys.argv[1] == '--integ':
-        unit_tests = () # skip unit tests
+        unit_tests = ()  # skip unit tests
 
 
 this_dir = os.path.dirname(os.path.realpath(sys.argv[0]))
