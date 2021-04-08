@@ -5,6 +5,7 @@ import time
 from .. import hsds_logger as log
 try:
     from azure.storage.blob.aio import BlobServiceClient
+    from azure.storage.blob import BlobPrefix
     from azure.core.exceptions import AzureError
 except ImportError:
     log.warning("unable to import Azure blob packages")
@@ -301,6 +302,52 @@ class AzureBlobClient():
 
         return key_stats
 
+    async def walk_blob_hierarchy(self, container_client, prefix="", include_stats=False, callback=None):
+        log.info(f"walk_blob_hierarchy, prefix: {prefix}")
+        CALLBACK_MAX_COUNT=1000
+        key_names = None
+
+        def init_key_names():
+            if include_stats:
+                return {}
+            else:
+                return []
+
+        async def do_callback(callback, keynames):
+            if iscoroutinefunction(callback):
+                await callback(self._app, key_names)
+            else:
+                callback(self._app, key_names)
+    
+        async for item in container_client.walk_blobs(name_starts_with=prefix):
+            short_name = item.name[len(prefix):]
+            if isinstance(item, BlobPrefix):
+                log.debug(f"walk_blob_hierarchy - BlobPrefix: {short_name}")
+                key_names = await self.walk_blob_hierarchy(container_client, prefix=item.name, include_stats=include_stats, callback=callback)
+            else:
+                key_names = init_key_names()
+                async for item in container_client.list_blobs(name_starts_with=item.name): 
+                    key_name = item['name']
+                    log.debug(f"walk_blob_hierarchy - got name: {key_name}")
+                    if include_stats:
+                        ETag = item["etag"]
+                        lastModified = int(item["last_modified"].timestamp())
+                        data_size = item["size"]
+                        key_names[key_name] = {"ETag": ETag, "Size": data_size, "LastModified": lastModified }
+                    else:
+                        # just add the blob name to the list
+                        key_names.append(item['name'])
+                    if callback and len(key_names) >= CALLBACK_MAX_COUNT:
+                        log.debug(f"walk_blob_hierarchy, invoking callback wiht {len(key_names)} items")
+                        await do_callback(callback, key_names)
+                        key_names = init_key_names()
+            if callback:
+                log.debug(f"walk_blob_hierarchy, invoking callback wiht {len(key_names)} items")
+                await do_callback(callback, key_names)
+                key_names = init_key_names()
+                    
+        log.info(f"walk_blob_hierarchy, returning {len(key_names)} items")
+        return key_names
 
     async def list_keys(self, prefix='', deliminator='', suffix='', include_stats=False, callback=None, bucket=None, limit=None):
         """ return keys matching the arguments
@@ -314,50 +361,11 @@ class AzureBlobClient():
             msg = "Only '/' is supported as deliminator"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        if include_stats:
-            # use a dictionary to hold return values
-            key_names = {}
-        else:
-            # just use a list
-            key_names = []
-        continuation_token = None
-        page_result_count = 1000  # compatible with what S3 uses by default
-        if prefix == '':
-            prefix = None  # azure sdk expects None for no prefix
+        key_names = None
+        
         try:
             async with self._client.get_container_client(container=bucket) as container_client:
-                while True:
-                    log.info(f"list_blobs: {prefix} continuation_token: {continuation_token}")
-                    keyList = container_client.walk_blobs(name_starts_with=prefix, delimiter=deliminator, results_per_page=page_result_count).by_page(continuation_token)
-
-                    async for key in await keyList.__anext__():
-                        key_name = key["name"]
-                        if include_stats:
-                            ETag = key["etag"]
-                            lastModified = int(key["last_modified"].timestamp())
-                            data_size = key["size"]
-                            key_names[key_name] = {"ETag": ETag, "Size": data_size, "LastModified": lastModified }
-                        else:
-                            if suffix and not key_name.endswith(suffix):
-                                continue
-                            if deliminator and key_name[-1] != '/':
-                                # only return folders
-                                continue
-                            if limit and len(key_names) >= limit:
-                                break
-                            key_names.append(key_name)
-                    if callback:
-                        if iscoroutinefunction(callback):
-                            await callback(self._app, key_names)
-                        else:
-                            callback(self._app, key_names)
-                    if not keyList.continuation_token or (limit and len(key_names) >= limit):
-                        # got all the keys (or as many as requested)
-                        break
-                    else:
-                        # keep going
-                        continuation_token = keyList.continuation_token
-
+                key_names = await self.walk_blob_hierarchy(container_client, prefix=prefix, include_stats=include_stats, callback=callback)
         except CancelledError as cle:
             self._azure_stats_increment("error_count")
             msg = f"azureBlobClient.CancelledError for list_keys: {cle}"

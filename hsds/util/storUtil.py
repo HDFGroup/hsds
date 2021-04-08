@@ -189,7 +189,7 @@ async def getStorJSONObj(app, key, bucket=None):
         log.error(f"Error loading JSON at key: {key}")
         raise HTTPInternalServerError()
 
-    log.debug(f"storage key {key} returned: {json_dict}")
+    log.debug(f"storage key {key} returned json object with {len(json_dict)} keys")
     return json_dict
 
 async def getStorBytes(app, key, filter_ops=None, offset=0, length=-1, bucket=None, use_proxy=False):

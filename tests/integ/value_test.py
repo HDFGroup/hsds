@@ -196,6 +196,21 @@ class ValueTest(unittest.TestCase):
             self.assertEqual(data[offset+2], 0)
             self.assertEqual(data[offset+3], 0)
 
+        # read one element
+        # TBD - PR #84
+        """
+        params = {"select": "[3]"} # read 4th element
+        rsp = requests.get(req, params=params, headers=headers_bin_rsp)
+        self.assertEqual(rsp.status_code, 200)
+        data = rsp.content
+        self.assertEqual(len(data), 4)
+        self.assertEqual(data[0], 0)
+        self.assertEqual(data[1], 0)
+        self.assertEqual(data[2], 0)
+        self.assertEqual(data[3], 3)
+        """
+         
+
     def testPut2DDataset(self):
         # Test PUT value for 2d dataset
         print("testPut2DDataset", self.base_domain)

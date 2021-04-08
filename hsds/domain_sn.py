@@ -38,9 +38,10 @@ from . import hsds_logger as log
 from . import config
 
 class DomainCrawler:
-    def __init__(self, app, root_id, bucket=None, include_attrs=True, max_tasks=40):
+    def __init__(self, app, root_id, bucket=None, include_attrs=True, max_tasks=40, max_objects_limit=0):
         log.info(f"DomainCrawler.__init__  root_id: {root_id}")
         self._app = app
+        self._max_objects_limit = max_objects_limit
         self._include_attrs = include_attrs
         self._max_tasks = max_tasks
         self._q = asyncio.Queue()
@@ -70,7 +71,7 @@ class DomainCrawler:
     async def fetch(self, obj_id):
         log.debug(f"DomainCrawler - fetch for obj_id: {obj_id}")
         obj_json = await getObjectJson(self._app, obj_id, include_links=True, include_attrs=self._include_attrs, bucket=self._bucket)
-        log.debug(f"DomainCrawler - for {obj_id} got json: {obj_json}")
+        log.debug(f"DomainCrawler - got json for {obj_id}")
 
         # including links, so don't need link count
         if "link_count" in obj_json:
@@ -78,7 +79,7 @@ class DomainCrawler:
         self._obj_dict[obj_id] = obj_json
         if self._include_attrs:
             del obj_json["attributeCount"]
-
+       
         # if this is a group, iterate through all the hard links and
         # add to the lookup ids set
         if getCollectionForId(obj_id) == "groups":
@@ -87,6 +88,10 @@ class DomainCrawler:
             for title in links:
                 log.debug(f"DomainCrawler - got link: {title}")
                 link_obj = links[title]
+                num_objects = len(self._obj_dict)
+                if self._max_objects_limit > 0 and num_objects >= self._max_objects_limit:
+                    log.info(f"DomainCrawler reached limit of {self._max_objects_limit}")
+                    break
                 if link_obj["class"] != 'H5L_TYPE_HARD':
                     continue
                 link_id = link_obj["id"]
@@ -95,7 +100,7 @@ class DomainCrawler:
                     log.debug(f"DomainCrawler - adding link_id: {link_id}")
                     self._obj_dict[link_id] = {} # placeholder for obj id
                     self._q.put_nowait(link_id)
-        log.debug(f"DomainCrawler - fetch conplete obj_id: {obj_id}")
+        log.debug(f"DomainCrawler - fetch complete obj_id: {obj_id}, {len(self._obj_dict)} objects found")
 
 class FolderCrawler:
     def __init__(self, app, domains, bucket=None, get_root=False, verbose=False, max_tasks_per_node=100):
@@ -234,12 +239,16 @@ async def getDomainObjects(app, root_id, include_attrs=False, bucket=None):
     """
 
     log.info(f"getDomainObjects for root: {root_id}")
+    max_objects_limit = int(config.get("domain_req_max_objects_limit", default=500)) 
 
-    crawler = DomainCrawler(app, root_id, include_attrs=include_attrs, bucket=bucket)
+    crawler = DomainCrawler(app, root_id, include_attrs=include_attrs, bucket=bucket, max_objects_limit=max_objects_limit)
     await crawler.crawl()
-    log.info(f"getDomainObjects returning: {len(crawler._obj_dict)} objects")
-
-    return crawler._obj_dict
+    if len(crawler._obj_dict) >= max_objects_limit:
+        log.info(f"getDomainObjects - too many objects:  {len(crawler._obj_dict)}, returning None")
+        return None
+    else:
+        log.info(f"getDomainObjects returning: {len(crawler._obj_dict)} objects")
+        return crawler._obj_dict
 
 def getIdList(objs, marker=None, limit=None):
     """ takes a map of ids to objs and returns ordered list
@@ -310,7 +319,7 @@ async def get_domain_response(app, domain_json, bucket=None, verbose=False):
         root_id = domain_json["root"]
         root_info = await getRootInfo(app, domain_json["root"], bucket=bucket)
         if root_info:
-            log.info(f"got root_info: {root_info} for root: {root_id}")
+            log.info(f"got root_info for root: {root_id}")
             allocated_bytes = root_info["allocated_bytes"]
             totalSize += allocated_bytes
             if "linked_bytes" in root_info:
@@ -676,7 +685,8 @@ async def GET_Domain(request):
         if "include_attrs" in params and params["include_attrs"]:
             include_attrs = True
         domain_objs = await getDomainObjects(app, root_id, include_attrs=include_attrs, bucket=bucket)
-        rsp_json["domain_objs"] = domain_objs
+        if domain_objs:
+            rsp_json["domain_objs"] = domain_objs
 
     # include dn_ids if requested
     if "getdnids" in params and params["getdnids"]:

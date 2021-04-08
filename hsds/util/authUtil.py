@@ -461,7 +461,7 @@ def _verifyBearerToken(app, token):
     audience = config.get('openid_audience')
     claims = config.get('openid_claims').split(',')
 
-    # Maintain Azure defualts for compatibility.
+    # Maintain Azure defaults for compatibility.
     if not audience:
         audience = config.get('azure_resource_id')
 
