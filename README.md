@@ -142,4 +142,9 @@ and related AWS resources.  Kita&trade; offers these features:
 * Creates a AWS CloudWatch dashboard for service monitoring
 * Aggregates container logs to AWS CloudWatch
 
+Azure Marketplace
+-----------------
+
+VM Offer for Azure Marektplace - coming soon
+
 Kita&trade; Server for AWS Marketplace can be found here: <https://aws.amazon.com/marketplace/pp/B07K2MWS1G>.
