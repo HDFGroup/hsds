@@ -265,7 +265,7 @@ class FileClient():
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
-        log.info(f"list_keys('{prefix}','{deliminator}','{suffix}', include_stats={include_stats}, bucket={bucket}")
+        log.info(f"list_keys('{prefix}','{deliminator}','{suffix}', include_stats={include_stats}, bucket={bucket}, callback {'set' if callback is not None else 'not set'}")
 
         await asyncio.sleep(0)  # for async compat
         basedir = pp.join(self._root_dir, bucket)

@@ -318,14 +318,15 @@ class AzureBlobClient():
                 await callback(self._app, key_names)
             else:
                 callback(self._app, key_names)
-    
+
+        key_names = init_key_names()
+        count = 0
         async for item in container_client.walk_blobs(name_starts_with=prefix):
             short_name = item.name[len(prefix):]
             if isinstance(item, BlobPrefix):
                 log.debug(f"walk_blob_hierarchy - BlobPrefix: {short_name}")
                 key_names = await self.walk_blob_hierarchy(container_client, prefix=item.name, include_stats=include_stats, callback=callback)
             else:
-                key_names = init_key_names()
                 async for item in container_client.list_blobs(name_starts_with=item.name): 
                     key_name = item['name']
                     log.debug(f"walk_blob_hierarchy - got name: {key_name}")
@@ -337,6 +338,7 @@ class AzureBlobClient():
                     else:
                         # just add the blob name to the list
                         key_names.append(item['name'])
+                    count += 1
                     if callback and len(key_names) >= CALLBACK_MAX_COUNT:
                         log.debug(f"walk_blob_hierarchy, invoking callback with {len(key_names)} items")
                         await do_callback(callback, key_names)
@@ -346,7 +348,10 @@ class AzureBlobClient():
                 await do_callback(callback, key_names)
                 key_names = init_key_names()
                     
-        log.info(f"walk_blob_hierarchy, returning {len(key_names)} items")
+        log.info(f"walk_blob_hierarchy, returning {count} items")
+        if not callback and count != len(key_names):
+            log.warning(f"expected {count} keys in return list but got {len(key_names)}")
+
         return key_names
 
     async def list_keys(self, prefix='', deliminator='', suffix='', include_stats=False, callback=None, bucket=None, limit=None):

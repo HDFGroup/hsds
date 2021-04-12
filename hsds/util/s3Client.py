@@ -494,7 +494,7 @@ class S3Client():
         if not bucket:
             log.error("list_keys - bucket not set")
             raise HTTPInternalServerError()
-        log.info(f"list_keys('{prefix}','{deliminator}','{suffix}', include_stats={include_stats}")
+        log.info(f"list_keys('{prefix}','{deliminator}','{suffix}', include_stats={include_stats}, callback {'set' if callback is not None else 'not set'}")
         if deliminator and deliminator != '/':
             msg = "Only '/' is supported as deliminator"
             log.warn(msg)
