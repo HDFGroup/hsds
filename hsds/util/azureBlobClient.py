@@ -338,11 +338,11 @@ class AzureBlobClient():
                         # just add the blob name to the list
                         key_names.append(item['name'])
                     if callback and len(key_names) >= CALLBACK_MAX_COUNT:
-                        log.debug(f"walk_blob_hierarchy, invoking callback wiht {len(key_names)} items")
+                        log.debug(f"walk_blob_hierarchy, invoking callback with {len(key_names)} items")
                         await do_callback(callback, key_names)
                         key_names = init_key_names()
             if callback:
-                log.debug(f"walk_blob_hierarchy, invoking callback wiht {len(key_names)} items")
+                log.debug(f"walk_blob_hierarchy, invoking callback with {len(key_names)} items")
                 await do_callback(callback, key_names)
                 key_names = init_key_names()
                     
@@ -356,7 +356,7 @@ class AzureBlobClient():
             log.error("list_keys - bucket not set")
             raise HTTPInternalServerError()
 
-        log.info(f"list_keys('{prefix}','{deliminator}','{suffix}', include_stats={include_stats}")
+        log.info(f"list_keys('{prefix}','{deliminator}','{suffix}', include_stats={include_stats}, callback {'set' if callback is not None else 'not set'}")
         if deliminator and deliminator != '/':
             msg = "Only '/' is supported as deliminator"
             log.warn(msg)
