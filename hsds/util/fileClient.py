@@ -305,10 +305,9 @@ class FileClient():
                     if limit and len(files) >= limit:
                         break
 
-        if include_stats:
-            key_names = {}
-        else:
-            key_names = []
+        # use a dictionary to hold return values if stats are needed
+        key_names = {} if include_stats else []
+        count = 0
         for filename in files:
             if filename.startswith('/'):
                 filename = filename[1:]
@@ -327,14 +326,17 @@ class FileClient():
                 key_names.append(pp.join(prefix, filename))
             if limit and len(key_names) == limit:
                 break
-
+        count += len(key_names)
         if callback:
             if iscoroutinefunction(callback):
                 await callback(self._app, key_names)
             else:
                 callback(self._app, key_names)
+            key_names = {} if include_stats else [] # reset
 
-        log.info(f"listKeys done, got {len(key_names)} keys")
+        log.info(f"listKeys done, got {count} keys")
+        if not callback and count != len(key_names):
+            log.warning(f"expected {count} keys in return list but got {len(key_names)}")
 
         return key_names
 

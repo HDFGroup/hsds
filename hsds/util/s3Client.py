@@ -509,12 +509,9 @@ class S3Client():
                                     use_ssl=self._use_ssl,
                                     config=self._aio_config) as _client:
             paginator = _client.get_paginator('list_objects')
-            if include_stats:
-                # use a dictionary to hold return values
-                key_names = {}
-            else:
-                # just use a list
-                key_names = []
+            
+            # use a dictionary to hold return values if stats are needed
+            key_names = {} if include_stats else [] 
             count = 0
 
             try:
@@ -528,6 +525,7 @@ class S3Client():
                             await callback(self._app, key_names)
                         else:
                             callback(self._app, key_names)
+                        key_names = {} if include_stats else [] # reset
                     if limit and count >= limit:
                         log.info(f"list_keys - reached limit {limit}")
                         break
@@ -538,7 +536,9 @@ class S3Client():
                 log.error(f"s3 paginate got exception {type(e)}: {e}")
                 raise HTTPInternalServerError()
 
-        log.info(f"getS3Keys done, got {len(key_names)} keys")
+        log.info(f"getS3Keys done, got {count} keys")
+        if not callback and count != len(key_names):
+            log.warning(f"expected {count} keys in return list but got {len(key_names)}")
 
         return key_names
 
