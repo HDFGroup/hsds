@@ -14,6 +14,8 @@ except ModuleNotFoundError:
 from aiohttp.web_exceptions import HTTPNotFound, HTTPForbidden, HTTPInternalServerError, HTTPBadRequest
 from .. import config
 
+CALLBACK_MAX_COUNT=1000 # compatible with S3 batch size
+
 class AzureBlobClient():
     """
      Utility class for reading and storing data to AzureStorage Blobs
@@ -302,16 +304,54 @@ class AzureBlobClient():
 
         return key_stats
 
+    async def walk_blobs(self, container_client, prefix="", suffix="", include_stats=False, deliminator='/', callback=None):
+        continuation_token = None
+        count = 0
+        while True:
+            keyList = container_client.walk_blobs(name_starts_with=prefix, delimiter=deliminator, results_per_page=CALLBACK_MAX_COUNT).by_page(continuation_token)
+            key_names = {} if include_stats else []
+            async for key in await keyList.__anext__():
+                key_name = key["name"]
+                log.debug(f"walk_blobs got: {key_name}")
+                if include_stats:
+                    ETag = key["etag"]
+                    lastModified = int(key["last_modified"].timestamp())
+                    data_size = key["size"]
+                    key_names[key_name] = {"ETag": ETag, "Size": data_size, "LastModified": lastModified }
+                else:
+                    if suffix and not key_name.endswith(suffix):
+                        log.debug(f"skip name that doesn't end with {suffix}")
+                        continue
+                    if deliminator and key_name[-1] != '/':
+                        log.debug("skip name thaat doesn't end in '/'")
+                        # only return folders
+                        continue
+                    if len(key_names) >= CALLBACK_MAX_COUNT:
+                        break
+                    key_names.append(key_name)
+                    count += 1
+            if callback:
+                if iscoroutinefunction(callback):
+                    await callback(self._app, key_names)
+                else:
+                    callback(self._app, key_names)
+                key_names = {} if include_stats else []
+            if not keyList.continuation_token or len(key_names) >= CALLBACK_MAX_COUNT:
+                # got all the keys (or as many as requested)
+                log.debug("walk_blbs complete")
+                break
+            else:
+                # keep going
+                continuation_token = keyList.continuation_token
+        log.info(f"walk_blob_hierarchy, returning {count} items")
+        if not callback and count != len(key_names):
+            log.warning(f"expected {count} keys in return list but got {len(key_names)}")
+        return key_names    
+
     async def walk_blob_hierarchy(self, container_client, prefix="", include_stats=False, callback=None):
         log.info(f"walk_blob_hierarchy, prefix: {prefix}")
-        CALLBACK_MAX_COUNT=1000
+        
         key_names = None
-
-        def init_key_names():
-            if include_stats:
-                return {}
-            else:
-                return []
 
         async def do_callback(callback, keynames):
             if iscoroutinefunction(callback):
@@ -319,7 +359,7 @@ class AzureBlobClient():
             else:
                 callback(self._app, key_names)
 
-        key_names = init_key_names()
+        key_names = key_names = {} if include_stats else []
         count = 0
         async for item in container_client.walk_blobs(name_starts_with=prefix):
             short_name = item.name[len(prefix):]
@@ -342,11 +382,11 @@ class AzureBlobClient():
                     if callback and len(key_names) >= CALLBACK_MAX_COUNT:
                         log.debug(f"walk_blob_hierarchy, invoking callback with {len(key_names)} items")
                         await do_callback(callback, key_names)
-                        key_names = init_key_names()
+                        key_names = key_names = {} if include_stats else []
             if callback:
                 log.debug(f"walk_blob_hierarchy, invoking callback with {len(key_names)} items")
                 await do_callback(callback, key_names)
-                key_names = init_key_names()
+                key_names = {} if include_stats else []
                     
         log.info(f"walk_blob_hierarchy, returning {count} items")
         if not callback and count != len(key_names):
@@ -368,9 +408,13 @@ class AzureBlobClient():
             raise HTTPBadRequest(reason=msg)
         key_names = None
         
+        if prefix == '':
+            prefix = None  # azure sdk expects None for no prefix
+        
         try:
             async with self._client.get_container_client(container=bucket) as container_client:
-                key_names = await self.walk_blob_hierarchy(container_client, prefix=prefix, include_stats=include_stats, callback=callback)
+                key_names = await self.walk_blobs(container_client, prefix=prefix, deliminator=deliminator, include_stats=include_stats, callback=callback)
+                # key_names = await self.walk_blob_hierarchy(container_client, prefix=prefix, include_stats=include_stats, callback=callback)
         except CancelledError as cle:
             self._azure_stats_increment("error_count")
             msg = f"azureBlobClient.CancelledError for list_keys: {cle}"
