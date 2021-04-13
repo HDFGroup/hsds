@@ -226,14 +226,14 @@ def getSliceQueryParam(request, dim, extent, body=None):
         dim_query = query_array[dim].strip()
 
         if dim_query.find(':') < 0:
-            # just a number - return start = stop for this value
+            # just a number - return stop = start + 1 for this value
             try:
                 start = int(dim_query)
             except ValueError:
                 msg = "Bad Request: invalid selection parameter (can't convert to int) for dimension: " + str(dim)
                 log.warn(msg)
                 raise KeyError()
-            stop = start
+            stop = start + 1
         elif dim_query == ':':
             # select everything
             pass

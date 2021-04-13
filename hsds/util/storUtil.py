@@ -17,8 +17,6 @@ import time
 import json
 import zlib
 import numcodecs as codecs
-import numpy as np
-from numba import jit
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 from aiohttp.client_exceptions import ClientError
 from asyncio import CancelledError
@@ -40,51 +38,18 @@ except ImportError:
         return None
 from .. import config
 
-@jit(nopython=True)
-def _doShuffle(src, des, element_size):
-    count = len(src) // element_size
-    for i in range(count):
-        offset = i*element_size
-        e = src[offset:(offset+element_size)]
-        for byte_index in range(element_size):
-            j = byte_index*count + i
-            des[j] = e[byte_index]
-    return des
-
-@jit(nopython=True)
-def _doUnshuffle(src, des, element_size):
-    count = len(src) // element_size
-    for i in range(element_size):
-        offset = i*count
-        e = src[offset:(offset+count)]
-        for byte_index in range(count):
-            j = byte_index*element_size + i
-            des[j] = e[byte_index]
-    return des
 
 def _shuffle(element_size, chunk):
-    if element_size <= 1:
-        return  None # no shuffling needed
-    chunk_size = len(chunk)
-    if chunk_size % element_size != 0:
-        raise ValueError("unexpected chunk size")
-
-    arr = np.zeros((chunk_size,), dtype='u1')
-    _doShuffle(chunk, arr, element_size)
-
+    shuffler = codecs.Shuffle(element_size)
+    arr = shuffler.encode(chunk)
     return arr.tobytes()
+
 
 def _unshuffle(element_size, chunk):
-    if element_size <= 1:
-        return  None # no shuffling needed
-    chunk_size = len(chunk)
-    if chunk_size % element_size != 0:
-        raise ValueError("unexpected chunk size")
-
-    arr = np.zeros((chunk_size,), dtype='u1')
-    _doUnshuffle(chunk, arr, element_size)
-
+    shuffler = codecs.Shuffle(element_size)
+    arr = shuffler.decode(chunk)
     return arr.tobytes()
+
 
 def _getStorageClient(app):
     """ get storage client s3 or azure blob
@@ -102,8 +67,9 @@ def _getStorageClient(app):
     else:
         log.debug("_getStorageClient getting FileClient")
         client = FileClient(app)
-    app["storage_client"] = client # save so we don't neeed to recreate each time
+    app["storage_client"] = client  # save so we don't neeed to recreate each time
     return client
+
 
 def getStorageDriverName(app):
     """ Return name of storage driver that is being used
@@ -116,6 +82,7 @@ def getStorageDriverName(app):
         driver = "FileClient"
     return driver
 
+
 async def releaseStorageClient(app):
     """ release the client storage connection
      (Used for cleanup on application exit)
@@ -125,6 +92,7 @@ async def releaseStorageClient(app):
 
     if "storage_client" in app:
         del app["storage_client"]
+
 
 async def rangegetProxy(app, bucket=None, key=None, offset=0, length=0):
     """ fetch bytes from rangeget proxy
@@ -158,7 +126,8 @@ async def rangegetProxy(app, bucket=None, key=None, offset=0, length=0):
             log.warn(f"rangeget for: {bucket}{key} no data returned")
             raise HTTPNotFound()
         if len(data) != length:
-            log.warn(f"expected {length} bytes for rangeget {bucket}{key}, but got: {len(data)}")
+            log.warn(
+                f"expected {length} bytes for rangeget {bucket}{key}, but got: {len(data)}")
         return data
 
     elif rsp.status == 404:
@@ -191,6 +160,7 @@ async def getStorJSONObj(app, key, bucket=None):
 
     log.debug(f"storage key {key} returned json object with {len(json_dict)} keys")
     return json_dict
+
 
 async def getStorBytes(app, key, filter_ops=None, offset=0, length=-1, bucket=None, use_proxy=False):
     """ Get object identified by key and read as bytes
@@ -237,15 +207,15 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=-1, bucket=No
         # compressed chunk data...
 
         # first check if this was compressed with blosc
-        blosc_metainfo = codecs.blosc.cbuffer_metainfo(data) # returns typesize, isshuffle, and memcopied 
-        if blosc_metainfo[0] > 0:      
-            log.info(f"blosc compressed data for {key}") 
+        blosc_metainfo = codecs.blosc.cbuffer_metainfo(data)  # returns typesize, isshuffle, and memcopied
+        if blosc_metainfo[0] > 0:
+            log.info(f"blosc compressed data for {key}")
             try:
                 blosc = codecs.Blosc()
                 udata = blosc.decode(data)
                 log.info(f"uncompressed to {len(udata)} bytes")
                 data = udata
-                shuffle = 0 # blosc will unshuffle the bytes for us
+                shuffle = 0  # blosc will unshuffle the bytes for us
             except Exception as e:
                 log.error(f"got exception: {e} using blosc decompression for {key}")
                 raise HTTPInternalServerError()
@@ -263,7 +233,7 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=-1, bucket=No
         else:
             log.error(f"don't know how to decompress data in {compressor} format for {key}")
             raise HTTPInternalServerError()
-    
+
     if shuffle > 0:
         log.debug(f"shuffle is {shuffle}")
         start_time = time.time()
@@ -273,9 +243,9 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=-1, bucket=No
             data = unshuffled
         finish_time = time.time()
         log.debug(f"unshuffled {len(data)} bytes, {(finish_time - start_time):.2f} elapsed")
-        
 
     return data
+
 
 async def putStorBytes(app, key, data, filter_ops=None, bucket=None):
     """ Store byte string as S3 object with given key
@@ -293,11 +263,11 @@ async def putStorBytes(app, key, data, filter_ops=None, bucket=None):
         if "compressor" in filter_ops:
             cname = filter_ops["compressor"]
         if "use_shuffle" in filter_ops and not filter_ops['use_shuffle']:
-            shuffle = 0 # client indicates to turn off shuffling
+            shuffle = 0  # client indicates to turn off shuffling
         if "level" in filter_ops:
             clevel = filter_ops["level"]
     log.info(f"putStorBytes({bucket}/{key}), {len(data)} bytes shuffle: {shuffle} compressor: {cname} level: {clevel}")
-   
+
     if cname:
         try:
             blosc = codecs.Blosc(cname=cname, clevel=clevel, shuffle=shuffle)
@@ -312,6 +282,7 @@ async def putStorBytes(app, key, data, filter_ops=None, bucket=None):
     rsp = await client.put_object(key, data, bucket=bucket)
 
     return rsp
+
 
 async def putStorJSONObj(app, key, json_obj, bucket=None):
     """ Store JSON data as storage object with given key
@@ -330,6 +301,7 @@ async def putStorJSONObj(app, key, json_obj, bucket=None):
 
     return rsp
 
+
 async def deleteStorObj(app, key, bucket=None):
     """ Delete storage object identfied by given key
     """
@@ -345,6 +317,7 @@ async def deleteStorObj(app, key, bucket=None):
 
     log.debug("deleteStorObj complete")
 
+
 async def getStorObjStats(app, key, bucket=None):
     """ Return etag, size, and last modified time for given object
     """
@@ -356,7 +329,7 @@ async def getStorObjStats(app, key, bucket=None):
     stats = {}
 
     if key[0] == '/':
-        #key = key[1:]  # no leading slash
+        # key = key[1:]  # no leading slash
         msg = f"key with leading slash: {key}"
         log.error(msg)
         raise KeyError(msg)
@@ -366,6 +339,7 @@ async def getStorObjStats(app, key, bucket=None):
     stats = await client.get_key_stats(key, bucket=bucket)
 
     return stats
+
 
 async def isStorObj(app, key, bucket=None):
     """ Test if the given key maps to S3 object
@@ -379,9 +353,10 @@ async def isStorObj(app, key, bucket=None):
     log.debug(f"isStorObj {bucket}/{key}")
 
     found = await client.is_object(bucket=bucket, key=key)
-    
+
     log.debug(f"isStorObj {key} returning {found}")
     return found
+
 
 async def getStorKeys(app, prefix='', deliminator='', suffix='', include_stats=False, callback=None, bucket=None, limit=None):
     # return keys matching the arguments
@@ -391,7 +366,8 @@ async def getStorKeys(app, prefix='', deliminator='', suffix='', include_stats=F
     log.info(f"getStorKeys('{prefix}','{deliminator}','{suffix}', include_stats={include_stats}")
 
     key_names = await client.list_keys(prefix=prefix, deliminator=deliminator, suffix=suffix,
-        include_stats=include_stats, callback=callback, bucket=bucket, limit=limit)
+                                       include_stats=include_stats, callback=callback,
+                                       bucket=bucket, limit=limit)
 
     log.info(f"getStorKeys done, got {len(key_names)} keys")
 
