@@ -1,0 +1,31 @@
+FROM public.ecr.aws/lambda/python:3.8
+RUN yum -y install git
+RUN pip install   curl
+RUN pip install \ 
+  	psutil \
+        numpy \
+        pytz \
+        requests \
+        aiobotocore \
+        aiofiles \
+        aiohttp \
+        aiohttp-cors \
+        pyjwt \
+        pyyaml \
+        pip \
+        wheel
+
+
+# Install numcodecs from the specific commit since we need the brand new shuffle codec...
+#RUN DISABLE_NUMCODECS_AVX2=1 CFLAGS=-DHAVE_UNISTD_H \
+#`    pip install --no-cache-dir \
+#    git+https://github.com/zarr-developers/numcodecs.git@d16d1eac5198166a24726ffe808e3dcfcab9700d#egg=numcodecs 
+
+# Install HSDS
+RUN mkdir /usr/local/src/hsds-src/ /usr/local/src/hsds/ /etc/hsds/
+COPY . /usr/local/src/hsds-src
+COPY admin/config/config.yml /etc/hsds/ 
+
+COPY app.py   ./
+CMD ["app.handler"]
+
