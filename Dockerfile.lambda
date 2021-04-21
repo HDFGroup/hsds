@@ -26,6 +26,6 @@ RUN mkdir /usr/local/src/hsds-src/ /usr/local/src/hsds/ /etc/hsds/
 COPY . /usr/local/src/hsds-src
 COPY admin/config/config.yml /etc/hsds/ 
 
-COPY app.py   ./
+COPY lambda_function.py   ./
 CMD ["app.handler"]
 
