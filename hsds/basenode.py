@@ -360,6 +360,7 @@ async def healthCheck(app):
             await doHealthCheck(app, chaos_die=chaos_die)
         except Exception as e:
             log.error(f"Unexpected {e.__class__.__name__} exception in doHealthCheck: {e}")
+            raise
         await asyncio.sleep(sleep_secs)
 
 async def preStop(request):
@@ -409,7 +410,7 @@ async def about(request):
 
 async def info(request):
     """HTTP Method to return node state to caller"""
-    log.info("REQ> info")
+    log.request(request)    
     app = request.app
     answer = {}
     # copy relevant entries from state dictionary to response
@@ -466,8 +467,8 @@ async def info(request):
     disk_stats["free"] = sdiskusage.free
     disk_stats["percent"] = sdiskusage.percent
     answer["disk"] = disk_stats
-    answer["log_stats"] = app["log_count"]
-    answer["req_count"] = app["req_count"]
+    answer["log_stats"] = log.log_count
+    answer["req_count"] = log.req_count
     if "s3_stats" in app:
         answer["s3_stats"] = app["s3_stats"]
     elif "azure_stats" in app:
@@ -520,6 +521,8 @@ def baseInit(node_type):
     app["node_number"] = -1
     app["start_time"] = int(time.time())  # seconds after epoch
     app['register_time'] = 0
+    app["max_task_count"] = config.get("max_task_count")
+
     bucket_name = config.get("bucket_name")
     if bucket_name:
         log.info(f"using bucket: {bucket_name}")
@@ -528,6 +531,7 @@ def baseInit(node_type):
     app["bucket_name"] = bucket_name
     app["dn_urls"] = []
     app["dn_ids"] = [] # node ids for each dn_url
+    """
     counter = {}
     counter["GET"] = 0
     counter["PUT"] = 0
@@ -541,6 +545,7 @@ def baseInit(node_type):
     counter["WARN"] = 0
     counter["ERROR"] = 0
     app["log_count"] = counter
+    """
 
     # check to see if we are running in a DCOS cluster
     if "MARATHON_APP_ID" in os.environ:

@@ -153,6 +153,7 @@ def create_app():
 #
 
 def main():
+    log.config["log_level"] = config.get("log_level")
     log.info("Service node initializing")
     app = create_app()
 

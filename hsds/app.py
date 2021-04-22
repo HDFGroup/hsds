@@ -97,9 +97,9 @@ def main():
 
     log.info("Creating runners")
 
-    head_runner = web.AppRunner(headnode.create_app(loop))
-    dn_runner = web.AppRunner(datanode.create_app(loop))
-    sn_runner = web.AppRunner(servicenode.create_app(loop))
+    head_runner = web.AppRunner(headnode.create_app())
+    dn_runner = web.AppRunner(datanode.create_app())
+    sn_runner = web.AppRunner(servicenode.create_app())
 
     log.info('Runners created')
 

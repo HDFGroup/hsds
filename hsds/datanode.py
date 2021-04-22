@@ -251,11 +251,13 @@ def create_app():
 #
 
 def main():
+    log.config["log_level"] = config.get("log_level")
     log.info("datanode start")
     app = create_app()
 
     # run the app
     port = int(config.get("dn_port"))
+
     log.info(f"run_app on port: {port}")
     run_app(app, port=port)
 

@@ -128,7 +128,7 @@ def get(x, default=None):
     if not cfg:
         _load_cfg()
     if x not in cfg:
-        if default:
+        if default is not None:
             cfg[x] = default
         else:
             raise KeyError(f"config value {x} not found")
