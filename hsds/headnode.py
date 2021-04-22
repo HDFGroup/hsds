@@ -456,6 +456,7 @@ def create_app():
 
 
 def main():
+    log.config["log_level"] = config.get("log_level")
     log.info("Head node initializing")
     app = create_app()
 
@@ -463,7 +464,6 @@ def main():
     #   will share the same connection pool 
 
     head_port = config.get("head_port")
-    log.config["log_level"] = config.get("log_level")
     log.info(f"Starting service on port: {head_port}")
     log.debug("debug test")
     run_app(app, port=int(head_port))
