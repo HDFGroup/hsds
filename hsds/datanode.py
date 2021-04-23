@@ -202,6 +202,9 @@ def create_app():
     :param loop: The asyncio loop to use for the application
     :rtype: aiohttp.web.Application
     """
+ 
+    log.info("data node initializing")
+
     metadata_mem_cache_size = int(config.get("metadata_mem_cache_size"))
     log.info(f"Using metadata memory cache size of: {metadata_mem_cache_size}")
     metadata_mem_cache_expire = int(config.get("metadata_mem_cache_expire"))
@@ -251,8 +254,6 @@ def create_app():
 #
 
 def main():
-    log.config["log_level"] = config.get("log_level")
-    log.info("datanode start")
     app = create_app()
 
     # run the app

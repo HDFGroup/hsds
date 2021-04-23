@@ -233,7 +233,7 @@ async def docker_update_dn_info(app):
 
     body = {"id": app["id"], "port": app["node_port"], "node_type": app["node_type"]}
 
-    app['register_time'] = int(time.time())
+    #app['register_time'] = int(time.time())
     
     try:
         log.info(f"register req: {req_reg} body: {body}")
@@ -361,6 +361,7 @@ async def healthCheck(app):
         except Exception as e:
             log.error(f"Unexpected {e.__class__.__name__} exception in doHealthCheck: {e}")
         await asyncio.sleep(sleep_secs)
+        
 
 async def preStop(request):
     """ HTTP Method used by K8s to signal the container is shutting down """
@@ -508,6 +509,12 @@ async def info(request):
 def baseInit(node_type):
     """Intitialize application and return app object"""
 
+    # setup log config
+    log.config["log_level"] = config.get("log_level")
+    if config.get("log_prefix"):
+        log.config["prefix"] = config.get("log_prefix")
+        
+    # create the app object
     log.info("Application baseInit")
     app = Application() 
 
@@ -530,22 +537,7 @@ def baseInit(node_type):
     app["bucket_name"] = bucket_name
     app["dn_urls"] = []
     app["dn_ids"] = [] # node ids for each dn_url
-    """
-    counter = {}
-    counter["GET"] = 0
-    counter["PUT"] = 0
-    counter["POST"] = 0
-    counter["DELETE"] = 0
-    counter["num_tasks"] = 0
-    app["req_count"] = counter
-    counter = {}
-    counter["DEBUG"] = 0
-    counter["INFO"] = 0
-    counter["WARN"] = 0
-    counter["ERROR"] = 0
-    app["log_count"] = counter
-    """
-
+    
     # check to see if we are running in a DCOS cluster
     if "MARATHON_APP_ID" in os.environ:
         log.info("Found MARATHON_APP_ID environment variable, setting is_dcos to True")
@@ -595,7 +587,6 @@ def baseInit(node_type):
 
     app["custer_state"] = "WAITING"
 
-   
     try:
         aws_iam_role = config.get("aws_iam_role")
         log.info(f"aws_iam_role set to: {aws_iam_role}")
@@ -623,13 +614,7 @@ def baseInit(node_type):
     except KeyError:
         log.info("aws_region not set")
 
-
-    if not config.get('standalone_app'):
-        log.app = app
-
     app.router.add_get('/info', info)
     app.router.add_get('/about', about)
-
-
 
     return app

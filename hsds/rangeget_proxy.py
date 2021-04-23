@@ -223,6 +223,9 @@ async def GET_ByteRange(request):
 
 def main():
     log.config["log_level"] = config.get("log_level")
+    if config.get("log_prefix"):
+        log.config["prefix"] = config.get("log_prefix")
+        
     log.info("rangeget_proxy start")
 
     cache_size = int(config.get("data_cache_size"))

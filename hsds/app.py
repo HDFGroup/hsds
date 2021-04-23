@@ -1,6 +1,7 @@
 import argparse
-import asyncio
+import time
 import os
+import subprocess
 
 from aiohttp import web
 
@@ -91,36 +92,36 @@ def main():
 
     # Start apps
 
-    from . import datanode, servicenode, headnode
+    #from . import headnode  datanode, servicenode, headnode
 
-    loop = asyncio.get_event_loop()
-
-    log.info("Creating runners")
-
-    head_runner = web.AppRunner(headnode.create_app())
-    dn_runner = web.AppRunner(datanode.create_app())
-    sn_runner = web.AppRunner(servicenode.create_app())
-
-    log.info('Runners created')
-
-    loop.run_until_complete(start_app_runner(
-        head_runner, 'localhost', config.get('head_port')))
-    loop.run_until_complete(start_app_runner(
-        dn_runner, 'localhost', config.get('dn_port')))
-    loop.run_until_complete(start_app_runner(
-        sn_runner, 'localhost', config.get('sn_port')))
-
-    log.info('Loop about to start')
-
-    runners = [head_runner, dn_runner, sn_runner]
-
+    log.info("Creating subprocesses")
+    head_args = ["hsds-headnode", "--log_prefix=head "]
+    sn_args = ["hsds-servicenode", "--log_prefix=sn "]
+    dn_args = ["hsds-datanode", "--log_prefix=dn "]
+    rangeget_args = ["hsds-rangeget", "--log_prefix=rg "]
+    processes = []
+    for args in (head_args, sn_args, dn_args, rangeget_args):
+        log.info(f"starting {args[0]}")
+        p = subprocess.Popen(args, shell=False)
+        processes.append(p)
     try:
-        loop.run_forever()
-    except:
-        pass
+        while True:
+            time.sleep(1)
+            for p in processes:
+                if p.poll() is not None:
+                    result = p.communicate()
+                    log.error(f"process {p.args[0]} ended, result: {result}")
+                    break
+    except Exception as e:
+        log.error(f"got exception: {e}, quitting")
+    except KeyboardInterrupt:
+        log.warn("got KeyboardInterrupt, quitting")
     finally:
-        log.info('Runners about to stop')
+        for p in processes:
+            if p.poll() is None:
+                log.info(f"killing {p.args[0]}")
+                p.terminate()
+        processes = []
+    
 
-        for runner in reversed(runners):
-            loop.run_until_complete(runner.cleanup())
    

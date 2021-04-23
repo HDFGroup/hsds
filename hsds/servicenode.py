@@ -119,6 +119,8 @@ async def start_background_tasks(app):
 def create_app():
     """Create servicenode aiohttp application
     """
+    log.info("service node initializing")
+
     loop = asyncio.get_event_loop()
     app = loop.run_until_complete(init())
 
@@ -153,7 +155,6 @@ def create_app():
 #
 
 def main():
-    log.config["log_level"] = config.get("log_level")
     log.info("Service node initializing")
     app = create_app()
 

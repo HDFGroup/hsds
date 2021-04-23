@@ -404,6 +404,12 @@ def getActiveNodeCount(app, node_type):
 
 async def init():
     """Intitialize application and return app object """
+
+    # configure log
+    log.config["log_level"] = config.get("log_level")
+    if config.get("log_prefix"):
+        log.config["prefix"] = config.get("log_prefix")
+
     app = Application()
 
     # set a bunch of global state
@@ -446,6 +452,7 @@ async def init():
 def create_app():
     """Create servicenode aiohttp application
     """
+    log.info("Head node initializing")
     loop = asyncio.get_event_loop()
     app = loop.run_until_complete(init())
     return app
@@ -456,8 +463,6 @@ def create_app():
 
 
 def main():
-    log.config["log_level"] = config.get("log_level")
-    log.info("Head node initializing")
     app = create_app()
 
     # create a client Session here so that all client requests
@@ -465,7 +470,6 @@ def main():
 
     head_port = config.get("head_port")
     log.info(f"Starting service on port: {head_port}")
-    log.debug("debug test")
     run_app(app, port=int(head_port))
 
 

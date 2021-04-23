@@ -33,6 +33,7 @@ rangeget_ram: 1g  # memoruy for RANGEGET container
 target_sn_count: 0  # desired number of SN containers
 target_dn_count: 0 # desire number of DN containers
 log_level: INFO    # log level.  One of ERROR, WARNING, INFO, DEBUG 
+log_prefix: null   # Prefix text to append to log entries
 max_tcp_connections: 100   # max number of inflight tcp connections
 head_sleep_time: 10  # max sleep time between health checks for head node
 node_sleep_time: 10 # max sleep time between health checks for SN/DN nodes
