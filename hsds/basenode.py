@@ -363,16 +363,12 @@ async def healthCheck(app):
         log.debug(f"chaos_die number: {chaos_die}")
 
     while True:
-        await doHealthCheck(app, chaos_die=chaos_die)
-        await asyncio.sleep(sleep_secs)
-
-        """
         try:
             await doHealthCheck(app, chaos_die=chaos_die)
         except Exception as e:
             log.error(f"Unexpected {e.__class__.__name__} exception in doHealthCheck: {e}")
         await asyncio.sleep(sleep_secs)
-        """
+        
         
 
 async def preStop(request):
