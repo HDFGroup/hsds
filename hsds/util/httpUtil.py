@@ -13,7 +13,6 @@
 # httpUtil:
 # http-related helper functions
 #
-import asyncio
 from asyncio import CancelledError
 from aiohttp.web import json_response
 from aiohttp import  ClientSession, TCPConnector

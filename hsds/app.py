@@ -1,19 +1,17 @@
 import argparse
+import sys
 import time
 import os
 import subprocess
-
-from aiohttp import web
-
-from . import config
-from . import hsds_logger as log
+import socket
+from contextlib import closing
 
 
-async def start_app_runner(runner, address, port):
-    await runner.setup()
-    site = web.TCPSite(runner, address, port)
-    await site.start()
-
+def find_free_port():
+    with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
+        s.bind(('localhost', 0))
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        return s.getsockname()[1]
 
 _HELP_USAGE = "Starts hsds a REST-based service for HDF5 data."
 
@@ -35,18 +33,23 @@ def main():
         epilog=_HELP_EPILOG)
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
-        '--bucket-dir', nargs=1, type=str, dest='bucket_dir',
+        '--root_dir', type=str, dest='root_dir',
         help='Directory where to store the object store data')
     group.add_argument(
         '--bucket-name', nargs=1, type=str, dest='bucket_name',
         help='Name of the bucket to use (e.g., "hsds.test").')
-
-    parser.add_argument('--host', nargs=1, default=['localhost'],
+    parser.add_argument('--host', default='localhost',
         type=str, dest='host',
         help="Address the service node is bounds with (default: localhost).")
-    parser.add_argument('-p', '--port', nargs=1, default=config.get('sn_port'),
+    parser.add_argument('--logfile', default='',
+        type=str, dest='logfile',
+        help="filename for logout (default stdout).")
+    parser.add_argument('-p', '--port', default=0,
         type=int, dest='port',
-        help='Service node port (default: %d).' % config.get('sn_port'))
+        help='Service node port')
+    parser.add_argument(
+        '--count', default=1, type=int, dest='target_dn_count',
+        help='Number of dn sub-processes to create.')
 
     parser.add_argument(
         '--s3-gateway', nargs=1, type=str, dest='s3_gateway',
@@ -64,45 +67,87 @@ def main():
 
     args, extra_args = parser.parse_known_args()
 
-    config.cfg['standalone_app'] = 'True'
-    config.cfg['target_sn_count'] = '1'
-    config.cfg['target_dn_count'] = '1'
-    config.cfg['head_endpoint'] = 'http://localhost:' + str(config.get('head_port'))
-
-    address = '%s:%d' % (args.host, args.port)
-    config.cfg['sn_port'] = str(args.port)
-    config.cfg['hsds_endpoint'] = 'http://' + address
-    config.cfg['public_dns'] = address
-
-    config.cfg['password_file'] = args.password_file[0]
-    if args.s3_gateway is not None:
-        config.cfg['aws_s3_gateway'] = args.s3_gateway[0]
-    if args.secret_access_key is not None:
-        config.cfg['aws_secret_access_key'] = args.secret_access_key[0]
-    if args.access_key_id is not None:
-        config.cfg['aws_access_key_id'] = args.access_key_id[0]
-
-    if args.bucket_dir is not None:
-        directory = os.path.abspath(args.bucket_dir[0])
-        config.cfg['bucket_name'] = os.path.basename(directory)
-        config.cfg['root_dir'] = os.path.dirname(directory)
+    print("args:", args)
+    print("extra_args:", extra_args)
+    print("count:", args.target_dn_count)
+    print("port:", args.port)
+    if args.port == 0:
+        sn_port = find_free_port()
     else:
-        config.cfg['bucket_name'] = args.bucket_name[0]
-        config.cfg['root_dir'] = ''
+        sn_port = args.port
+    dn_ports = []
+    dn_urls_arg = ""
+    for i in range(args.target_dn_count):
+        dn_port = find_free_port()
+        print(f"dn_port[{i}]:",  dn_port)
+        dn_ports.append(dn_port)
+        if dn_urls_arg:
+            dn_urls_arg += ','
+        dn_urls_arg += f"http://localhost:{dn_port}"
+    
+    print("dn_ports:", dn_urls_arg)
+    rangeget_port = find_free_port()
+    print("rangeget_port:", rangeget_port)
+    print("logfile:", args.logfile)
+
+    common_args = ["--standalone",]
+    common_args.append(f"--sn_port={sn_port}")
+    common_args.append("--dn_urls="+dn_urls_arg)
+    common_args.append(f"--rangeget_port={rangeget_port}")
+
+    hsds_endpoint = "http://localhost"
+    if args.port != 80:
+        hsds_endpoint += ":" + str(args.port)
+    common_args.append(f"--hsds_endpoint={hsds_endpoint}")
+    common_args.append(f"--sn_port={args.port}")
+    
+    print("host:", args.host)
+    public_dns = f"http://{args.host}"
+    if sn_port != 80:
+        public_dns += ":" + str(sn_port)
+    print("public_dns:", public_dns)
+    common_args.append(f"--public_dns={public_dns}")
+
+    if args.root_dir is not None:
+        print("arg.root_dir:", args.root_dir)
+        root_dir = os.path.expanduser(args.root_dir)
+        if not os.path.isdir(root_dir):
+            msg = "Error - directory used in --root-dir option doesn't exist"
+            sys.exit(msg)
+        common_args.append(f"--root_dir={root_dir}")
+        print("root_dir:", root_dir)
+    else:
+        bucket_name = args.bucket_name[0]
+        common_args.append(f"--bucket_name={bucket_name}")
+
+
+    # create handle for log file if specified
+    if args.logfile:
+        pout = open(args.logfile, 'w')
+    else:
+        pout = None  # will write to stdout
 
     # Start apps
 
-    #from . import headnode  datanode, servicenode, headnode
-
-    log.info("Creating subprocesses")
-    head_args = ["hsds-headnode", "--log_prefix=head "]
-    sn_args = ["hsds-servicenode", "--log_prefix=sn "]
-    dn_args = ["hsds-datanode", "--log_prefix=dn "]
-    rangeget_args = ["hsds-rangeget", "--log_prefix=rg "]
+    print("Creating subprocesses")
     processes = []
-    for args in (head_args, sn_args, dn_args, rangeget_args):
-        log.info(f"starting {args[0]}")
-        p = subprocess.Popen(args, shell=False)
+
+    # create processes for count dn nodes, sn node, and rangeget node
+    for i in range(args.target_dn_count+2):
+        if i == 0:
+            # args for service node
+            pargs = ["hsds-servicenode", "--log_prefix=sn "]
+        elif i == 1:
+            # args for rangeget node
+            pargs = ["hsds-rangeget", "--log_prefix=rg "]
+        else:
+            node_number = i - 2  # start with 0
+            pargs = ["hsds-datanode", f"--log_prefix=dn{node_number+1} "]
+            pargs.append(f"--dn_port={dn_ports[node_number]}")
+            pargs.append(f"--node_number={node_number}")
+        print(f"starting {pargs[0]}")
+        pargs.extend(common_args)
+        p = subprocess.Popen(pargs, shell=False, stdout=pout)
         processes.append(p)
     try:
         while True:
@@ -110,18 +155,21 @@ def main():
             for p in processes:
                 if p.poll() is not None:
                     result = p.communicate()
-                    log.error(f"process {p.args[0]} ended, result: {result}")
+                    print(f"process {p.args[0]} ended, result: {result}")
                     break
     except Exception as e:
-        log.error(f"got exception: {e}, quitting")
+        print(f"got exception: {e}, quitting")
     except KeyboardInterrupt:
-        log.warn("got KeyboardInterrupt, quitting")
+        print("got KeyboardInterrupt, quitting")
     finally:
         for p in processes:
             if p.poll() is None:
-                log.info(f"killing {p.args[0]}")
+                print(f"killing {p.args[0]}")
                 p.terminate()
         processes = []
+        # close logfile
+        if pout:
+            pout.close()
     
 
    
