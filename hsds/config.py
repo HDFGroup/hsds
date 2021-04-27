@@ -61,9 +61,9 @@ def _load_cfg():
             yml_file = file_name
             break
     if not yml_file:
-        msg = "unable to find config file"
-        eprint(msg)
-        raise FileNotFoundError(msg)
+        # use yaml file embedded in package
+        package_dir = os.path.dirname(__file__)
+        yml_file = os.path.join(package_dir, "../config/config.yml")
     debug(f"_load_cfg with '{yml_file}'")
     try:
         with open(yml_file, "r") as f:

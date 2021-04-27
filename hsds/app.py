@@ -36,11 +36,16 @@ def main():
         '--root_dir', type=str, dest='root_dir',
         help='Directory where to store the object store data')
     group.add_argument(
-        '--bucket-name', nargs=1, type=str, dest='bucket_name',
+        '--bucket_name', nargs=1, type=str, dest='bucket_name',
         help='Name of the bucket to use (e.g., "hsds.test").')
     parser.add_argument('--host', default='localhost',
         type=str, dest='host',
         help="Address the service node is bounds with (default: localhost).")
+    parser.add_argument('--hs_username', type=str,  dest='hs_username',
+        help="username to be added to list of valid users", default='')
+    parser.add_argument('--hs_password', type=str,  dest='hs_password',
+        help="password for hs_username", default='')
+    
     parser.add_argument('--logfile', default='',
         type=str, dest='logfile',
         help="filename for logout (default stdout).")
@@ -51,26 +56,14 @@ def main():
         '--count', default=1, type=int, dest='target_dn_count',
         help='Number of dn sub-processes to create.')
 
-    parser.add_argument(
-        '--s3-gateway', nargs=1, type=str, dest='s3_gateway',
-        help='S3 service endpoint (e.g., "http://openio:6007")')
-    parser.add_argument(
-        '--access-key-id', nargs=1, type=str, dest='access_key_id',
-        help='s3 access key id (e.g., "demo:demo")')
-    parser.add_argument(
-        '--secret-access-key', nargs=1, type=str, dest='secret_access_key',
-        help='s3 secret access key (e.g., "DEMO_PASS")')
-
-    parser.add_argument(
-        '--password-file', nargs=1, default=[''], type=str, dest='password_file',
-        help="Path to file containing authentication passwords (default: No authentication)")
-
     args, extra_args = parser.parse_known_args()
 
     print("args:", args)
     print("extra_args:", extra_args)
     print("count:", args.target_dn_count)
     print("port:", args.port)
+    print("hs_username:", args.hs_username)
+    print("hs_password:", args.hs_password)
     if args.port == 0:
         sn_port = find_free_port()
     else:
@@ -84,6 +77,10 @@ def main():
         if dn_urls_arg:
             dn_urls_arg += ','
         dn_urls_arg += f"http://localhost:{dn_port}"
+
+    # sort the ports so that node_number can be determined based on dn_url
+    dn_ports.sort()
+    dn_urls_arg
     
     print("dn_ports:", dn_urls_arg)
     rangeget_port = find_free_port()
@@ -94,6 +91,7 @@ def main():
     common_args.append(f"--sn_port={sn_port}")
     common_args.append("--dn_urls="+dn_urls_arg)
     common_args.append(f"--rangeget_port={rangeget_port}")
+    common_args.extend(extra_args) # pass remaining args as config overrides
 
     hsds_endpoint = "http://localhost"
     if args.port != 80:
@@ -137,6 +135,10 @@ def main():
         if i == 0:
             # args for service node
             pargs = ["hsds-servicenode", "--log_prefix=sn "]
+            if args.hs_username:
+                pargs.append(f"--hs_username={args.hs_username}")
+            if args.hs_password:
+                pargs.append(f"--hs_password={args.hs_password}")
         elif i == 1:
             # args for rangeget node
             pargs = ["hsds-rangeget", "--log_prefix=rg "]

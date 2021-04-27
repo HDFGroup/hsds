@@ -273,23 +273,27 @@ def isS3ObjKey(s3key):
         pass # ignore
     return valid
 
-def createNodeId(prefix):
+def createNodeId(prefix, node_number=None):
     """ Create a random id used to identify nodes"""
-    # use the container id if we are running inside docker
     node_id = ""  # nothing too bad happens if this doesn't get set
-    hash_key = getIdHash(str(uuid.uuid1()))
-    proc_file = "/proc/self/cgroup"
-    if os.path.isfile(proc_file):
-        with open(proc_file) as f:
-            first_line = f.readline()
-            if first_line:
-                fields = first_line.split(':')
-                if len(fields) >= 3:
-                    field = fields[2]
-                    if field.startswith("/docker/"):
-                        docker_len = len("/docker/")
-                        if len(field) > docker_len + 12:
-                            node_id = field[docker_len:(docker_len+12)] 
+    if node_number is not None:
+        # just make an id based on the node_number
+        hash_key = f"{node_number+1:03d}"
+    else:
+        # use the container id if we are running inside docker
+        hash_key = getIdHash(str(uuid.uuid1()))
+        proc_file = "/proc/self/cgroup"
+        if os.path.isfile(proc_file):
+            with open(proc_file) as f:
+                first_line = f.readline()
+                if first_line:
+                    fields = first_line.split(':')
+                    if len(fields) >= 3:
+                        field = fields[2]
+                        if field.startswith("/docker/"):
+                            docker_len = len("/docker/")
+                            if len(field) > docker_len + 12:
+                                node_id = field[docker_len:(docker_len+12)] 
         
     if node_id:
         key = f"{prefix}-{node_id}-{hash_key}"

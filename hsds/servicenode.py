@@ -13,6 +13,7 @@
 # service node of hsds cluster
 #
 import asyncio
+import sys
 
 from aiohttp.web import run_app
 import aiohttp_cors
@@ -21,7 +22,7 @@ from .util.lruCache import LruCache
 from . import config
 from .basenode import healthCheck,  baseInit
 from . import hsds_logger as log
-from .util.authUtil import initUserDB, initGroupDB
+from .util.authUtil import initUserDB, initGroupDB, setPassword
 from .domain_sn import GET_Domain, PUT_Domain, DELETE_Domain, GET_Domains
 from .domain_sn import GET_Datasets, GET_Groups, GET_Datatypes
 from .domain_sn import GET_ACL, GET_ACLs, PUT_ACL
@@ -145,6 +146,16 @@ def create_app():
     initUserDB(app)
     initGroupDB(app)
 
+    # typically these are null
+    hs_username = config.getCmdLineArg("hs_username")
+    hs_password = config.getCmdLineArg("hs_password")
+    if hs_username:
+        log.info(f"getCmdLine hs_username: {hs_username}")
+    if hs_password:
+        log.info("getCmdLine hs_password: xxx")
+    if hs_username:
+        setPassword(app, hs_username, hs_password)
+
     app.on_startup.append(start_background_tasks)
  
     return app
@@ -156,6 +167,8 @@ def create_app():
 
 def main():
     log.info("Service node initializing")
+    for arg in sys.argv:
+        log.info(f"command line opt: {arg}")
     app = create_app()
 
     # run the app

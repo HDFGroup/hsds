@@ -187,7 +187,7 @@ def initUserDB(app):
     else:
         password_file = config.get("password_file")
         if not password_file or not pp.isfile(password_file) :
-            log.info("No password file")
+            log.warn(f"No password file, file {password_file} not found")
             user_db = {}
         else:
             log.info(f"Loading password file: {password_file}")

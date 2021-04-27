@@ -524,13 +524,34 @@ def baseInit(node_type):
     log.info("Application baseInit")
     app = Application() 
 
+    is_standalone = config.getCmdLineArg("standalone")
+     
+    if is_standalone:
+        log.info("running in standalone mode")
+        app["is_standalone"] = True
+
     # set a bunch of global state
-    node_id = createNodeId(node_type)
+    if is_standalone:
+        # for standalone, node_number will be passed on command line
+        # create node_id based on the node_number
+        node_number = config.getCmdLineArg("node_number")
+        if node_number is None:
+            log.info("No node_number argument")
+            node_number = 0
+        else:
+            node_number = int(node_number)
+        app["node_number"] = node_number
+        node_id = createNodeId(node_type, node_number=node_number)
+    else: 
+        # create node id based on uuid
+        node_id = createNodeId(node_type)
+    
     log.info(f"setting node_id to: {node_id}")
     app["id"] = node_id
+               
     app["node_state"] = "INITIALIZING"
-    app["node_type"] = node_type
     app["node_number"] = -1
+    app["node_type"] = node_type
     app["start_time"] = int(time.time())  # seconds after epoch
     app['register_time'] = 0
     app["max_task_count"] = config.get("max_task_count")
@@ -560,14 +581,11 @@ def baseInit(node_type):
                 dn_url = dn_urls[i]
                 if not dn_url.startswith("http://"):
                     log.warn(f"Unexpected dn_url value: {dn_url}")
-                dn_ids.append(f"dn-{i+1:03d}")
+                dn_id = createNodeId("dn", node_number=i)
+                dn_ids.append(dn_id)
             app["dn_urls"] = dn_urls
             app["dn_ids"] = dn_ids
-            node_number = config.getCmdLineArg("node_number")
-            if node_number is None:
-                log.warn("Expected node_number argument")
-                node_number = 0
-            app["node_number"] = int(node_number)
+            
         # check to see if we are running in a DCOS cluster
     elif "MARATHON_APP_ID" in os.environ:
         log.info("Found MARATHON_APP_ID environment variable, setting is_dcos to True")
