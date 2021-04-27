@@ -222,6 +222,10 @@ async def GET_ByteRange(request):
 #
 
 def main():
+    log.config["log_level"] = config.get("log_level")
+    if config.get("log_prefix"):
+        log.config["prefix"] = config.get("log_prefix")
+        
     log.info("rangeget_proxy start")
 
     cache_size = int(config.get("data_cache_size"))
@@ -240,7 +244,10 @@ def main():
     app.router.add_route('GET', '/', GET_ByteRange)
     app['data_cache'] = LruCache(mem_target=cache_size, name="DataCache", expire_time=expire_time)
     app['obj_stat_map'] = {}  # map of obj stats (e.g. size)
-    app['pending_read'] = {} # map of keuy to timestamp for in-flight read requests
+    app['pending_read'] = {} # map of key to timestamp for in-flight read requests
+    app['max_task_count'] = config.get('max_task_count')
+    app['node_type'] = 'rg'
+    app['node_state'] = "READY"  # range proxy doesn't care about health state of other nodes
 
     # run the app
     port = int(config.get("rangeget_port"))

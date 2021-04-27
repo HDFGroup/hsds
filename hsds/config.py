@@ -22,20 +22,33 @@ def debug(*args, **kwargs):
     # can't use log.debug since that calls back to cfg
     if "LOG_LEVEL" in os.environ and os.environ["LOG_LEVEL"] == "DEBUG":
         print(*args, **kwargs)
+
+def getCmdLineArg(x):
+    # return value of command-line option
+    # use "--x=val" to set option 'x' to 'val'
+    # use "--x" for boolean flags
+    option = '--'+x+'='
+    for i in range(1, len(sys.argv)):
+        arg = sys.argv[i]
+        if arg == '--'+x:
+            # boolean flag
+            debug(f"got cmd line flag for {x}")
+            return True
+        elif arg.startswith(option):
+            # found an override
+            override = arg[len(option):]  # return text after option string   
+            debug(f"got cmd line override for {x}")
+            return override
+    return None
    
 def _load_cfg():    
     # load config yaml
     yml_file = None
     config_dirs = []
-    # check if there is a command line optionfor config directory
-    for i in range(1, len(sys.argv)):
-        #print(i, sys.argv[i])
-        if sys.argv[i].startswith("--config-dir"):
-            # use the given directory
-            arg = sys.argv[i]
-            config_dirs.append(arg[len("--config-dir")+1:])  # return text after option string   
-            debug(f"got cmd line override for config-dir: {config_dirs[0]}")
-            break
+    # check if there is a command line option for config directory
+    config_dir = getCmdLineArg("config-dir")
+    if config_dir:
+        config_dirs.append(config_dir)     
     if not config_dirs and "CONFIG_DIR" in os.environ:
         config_dirs.append(os.environ["CONFIG_DIR"])
         debug(f"got environment override for config-dir: {config_dirs[0]}")
@@ -48,9 +61,9 @@ def _load_cfg():
             yml_file = file_name
             break
     if not yml_file:
-        msg = "unable to find config file"
-        eprint(msg)
-        raise FileNotFoundError(msg)
+        # use yaml file embedded in package
+        package_dir = os.path.dirname(__file__)
+        yml_file = os.path.join(package_dir, "../config/config.yml")
     debug(f"_load_cfg with '{yml_file}'")
     try:
         with open(yml_file, "r") as f:
@@ -75,22 +88,13 @@ def _load_cfg():
             msg = f"Error parsing '{override_yml_filepath}': {se}"
             eprint(msg)
             raise KeyError(msg)
-        
 
     # apply overrides for each key and store in cfg global
     for x in yml_config:
         cfgval = yml_config[x]
         # see if there is a command-line override
-        option = '--'+x+'='
-        override = None
-        for i in range(1, len(sys.argv)):
-            if sys.argv[i].startswith(option):
-                # found an override
-                arg = sys.argv[i]
-                override = arg[len(option):]  # return text after option string   
-                debug(f"got cmd line override for {x}")
-                 
-            
+        override = getCmdLineArg(x)
+                      
         # see if there are an environment variable override
         if override is None and x.upper() in os.environ:
             override = os.environ[x.upper()]
@@ -100,7 +104,6 @@ def _load_cfg():
         if override is None and yml_override and x in yml_override:
             override = yml_override[x]
             debug(f"got config override for {x}")
-
 
         if override is not None:
             if cfgval is not None:
@@ -128,7 +131,7 @@ def get(x, default=None):
     if not cfg:
         _load_cfg()
     if x not in cfg:
-        if default:
+        if default is not None:
             cfg[x] = default
         else:
             raise KeyError(f"config value {x} not found")

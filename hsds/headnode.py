@@ -12,6 +12,7 @@
 #
 # Head node of hsds cluster
 #
+import asyncio
 import os
 import time
 
@@ -156,7 +157,6 @@ async def info(request):
 
 async def register(request):
     """ HTTP method for nodes to register with head node"""
-    log.request(request)
     app = request.app
     if not request.has_body:
         msg = "register missing body"
@@ -402,8 +402,14 @@ def getActiveNodeCount(app, node_type):
     return count
 
 
-def init():
+async def init():
     """Intitialize application and return app object """
+
+    # configure log
+    log.config["log_level"] = config.get("log_level")
+    if config.get("log_prefix"):
+        log.config["prefix"] = config.get("log_prefix")
+
     app = Application()
 
     # set a bunch of global state
@@ -431,6 +437,7 @@ def init():
     app["dead_node_ids"] = set()
     app["start_time"] = int(time.time())  # seconds after epoch
     app["last_health_check"] = 0
+    app["max_task_count"] = config.get("max_task_count")
     app.router.add_get('/', info)
     app.router.add_get('/nodestate', nodestate)
     app.router.add_get('/nodestate/{nodetype}', nodestate)
@@ -442,21 +449,27 @@ def init():
 
     return app
 
+def create_app():
+    """Create servicenode aiohttp application
+    """
+    log.info("Head node initializing")
+    loop = asyncio.get_event_loop()
+    app = loop.run_until_complete(init())
+    return app
+
 #
 # Main
 #
 
 
 def main():
-    log.info("Head node initializing")
-    app = init()  
+    app = create_app()
 
     # create a client Session here so that all client requests
     #   will share the same connection pool 
 
     head_port = config.get("head_port")
     log.info(f"Starting service on port: {head_port}")
-    log.debug("debug test")
     run_app(app, port=int(head_port))
 
 

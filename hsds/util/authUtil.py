@@ -187,7 +187,7 @@ def initUserDB(app):
     else:
         password_file = config.get("password_file")
         if not password_file or not pp.isfile(password_file) :
-            log.info("No password file")
+            log.warn(f"No password file, file {password_file} not found")
             user_db = {}
         else:
             log.info(f"Loading password file: {password_file}")
@@ -211,6 +211,10 @@ def setPassword(app, username, password, **kwargs):
     if "exp" not in user_data and expiration > 0:
         log.debug(f"setting expiration on credentials for user: {username}")
         user_data["exp"] = time.time() + expiration
+    if username in user_db:
+        log.info(f"user_db setting password for user: {username}")
+    else:
+        log.info(f"user_db adding user: {username}")
     user_db[username] = user_data
 
 def getPassword(app, username):

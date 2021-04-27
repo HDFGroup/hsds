@@ -28,7 +28,7 @@ from asyncio import CancelledError
 
 
 from . import config
-from .util.httpUtil import http_get, http_post, jsonResponse 
+from .util.httpUtil import  http_get, http_post, jsonResponse 
 from .util.idUtil import createNodeId, getNodeNumber, getNodeCount
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword, isAdminUser
 from . import hsds_logger as log
@@ -233,7 +233,7 @@ async def docker_update_dn_info(app):
 
     body = {"id": app["id"], "port": app["node_port"], "node_type": app["node_type"]}
 
-    app['register_time'] = int(time.time())
+    #app['register_time'] = int(time.time())
     
     try:
         log.info(f"register req: {req_reg} body: {body}")
@@ -261,6 +261,11 @@ def get_dn_id_set(app):
 
 async def update_dn_info(app):
     """ update http urls and ids for each dn node """
+
+    if "is_standalone" in app:
+        # nothing to do in standalone mode
+        return  
+
     id_set_pre = get_dn_id_set(app)
 
     if "oio_proxy" in app:
@@ -284,6 +289,10 @@ async def update_dn_info(app):
 
 def updateReadyState(app):
     """ update node state (and node_number and node_count) based on number of dn_urls available """
+    if "is_standalone" in app:
+        # dn_urls don't change in standalone mode, so just return
+        log.debug("skip updateReadyState for standalone app")
+        return
     dn_urls = app["dn_urls"]
     log.debug(f"updateReadyState for dn_urls: {dn_urls}")
     if len(dn_urls) == 0:
@@ -341,8 +350,6 @@ async def doHealthCheck(app, chaos_die=0):
     active_tasks = len([task for task in asyncio.Task.all_tasks() if not task.done()])
     log.debug(f"health check vm: {svmem.percent} num tasks: {num_tasks} active tasks: {active_tasks}")
       
-
-
 async def healthCheck(app):
     """ Periodic method that either registers with headnode (if state in INITIALIZING) or
     calls headnode to verify vitals about this node (otherwise)"""
@@ -361,6 +368,8 @@ async def healthCheck(app):
         except Exception as e:
             log.error(f"Unexpected {e.__class__.__name__} exception in doHealthCheck: {e}")
         await asyncio.sleep(sleep_secs)
+        
+        
 
 async def preStop(request):
     """ HTTP Method used by K8s to signal the container is shutting down """
@@ -401,15 +410,13 @@ async def about(request):
     else:
         answer["isadmin"] = False
 
-
-
     resp = await jsonResponse(request, answer)
     log.response(request, resp=resp)
     return resp
 
 async def info(request):
     """HTTP Method to return node state to caller"""
-    log.info("REQ> info")
+    log.request(request)    
     app = request.app
     answer = {}
     # copy relevant entries from state dictionary to response
@@ -466,8 +473,8 @@ async def info(request):
     disk_stats["free"] = sdiskusage.free
     disk_stats["percent"] = sdiskusage.percent
     answer["disk"] = disk_stats
-    answer["log_stats"] = app["log_count"]
-    answer["req_count"] = app["req_count"]
+    answer["log_stats"] = log.log_count
+    answer["req_count"] = log.req_count
     if "s3_stats" in app:
         answer["s3_stats"] = app["s3_stats"]
     elif "azure_stats" in app:
@@ -508,18 +515,47 @@ async def info(request):
 def baseInit(node_type):
     """Intitialize application and return app object"""
 
+    # setup log config
+    log.config["log_level"] = config.get("log_level")
+    if config.get("log_prefix"):
+        log.config["prefix"] = config.get("log_prefix")
+        
+    # create the app object
     log.info("Application baseInit")
     app = Application() 
 
+    is_standalone = config.getCmdLineArg("standalone")
+     
+    if is_standalone:
+        log.info("running in standalone mode")
+        app["is_standalone"] = True
+
     # set a bunch of global state
-    node_id = createNodeId(node_type)
+    if is_standalone:
+        # for standalone, node_number will be passed on command line
+        # create node_id based on the node_number
+        node_number = config.getCmdLineArg("node_number")
+        if node_number is None:
+            log.info("No node_number argument")
+            node_number = 0
+        else:
+            node_number = int(node_number)
+        app["node_number"] = node_number
+        node_id = createNodeId(node_type, node_number=node_number)
+    else: 
+        # create node id based on uuid
+        node_id = createNodeId(node_type)
+    
     log.info(f"setting node_id to: {node_id}")
     app["id"] = node_id
+               
     app["node_state"] = "INITIALIZING"
-    app["node_type"] = node_type
     app["node_number"] = -1
+    app["node_type"] = node_type
     app["start_time"] = int(time.time())  # seconds after epoch
     app['register_time'] = 0
+    app["max_task_count"] = config.get("max_task_count")
+
     bucket_name = config.get("bucket_name")
     if bucket_name:
         log.info(f"using bucket: {bucket_name}")
@@ -528,25 +564,32 @@ def baseInit(node_type):
     app["bucket_name"] = bucket_name
     app["dn_urls"] = []
     app["dn_ids"] = [] # node ids for each dn_url
-    counter = {}
-    counter["GET"] = 0
-    counter["PUT"] = 0
-    counter["POST"] = 0
-    counter["DELETE"] = 0
-    counter["num_tasks"] = 0
-    app["req_count"] = counter
-    counter = {}
-    counter["DEBUG"] = 0
-    counter["INFO"] = 0
-    counter["WARN"] = 0
-    counter["ERROR"] = 0
-    app["log_count"] = counter
 
-    # check to see if we are running in a DCOS cluster
-    if "MARATHON_APP_ID" in os.environ:
+    is_standalone = config.getCmdLineArg("standalone")
+     
+    if is_standalone:
+        log.info("running in standalone mode")
+        app["is_standalone"] = True
+        # should have been passe a dn_urls arg
+        dn_urls_arg = config.getCmdLineArg("dn_urls")
+        if not dn_urls_arg:
+            log.warn("Expected dn_urls option for standalone mode")
+        else:
+            dn_urls = dn_urls_arg.split(',')
+            dn_ids = []
+            for i in range(len(dn_urls)):
+                dn_url = dn_urls[i]
+                if not dn_url.startswith("http://"):
+                    log.warn(f"Unexpected dn_url value: {dn_url}")
+                dn_id = createNodeId("dn", node_number=i)
+                dn_ids.append(dn_id)
+            app["dn_urls"] = dn_urls
+            app["dn_ids"] = dn_ids
+            
+        # check to see if we are running in a DCOS cluster
+    elif "MARATHON_APP_ID" in os.environ:
         log.info("Found MARATHON_APP_ID environment variable, setting is_dcos to True")
         app["is_dcos"] = True
-    
     elif "OIO_PROXY" in os.environ:
         app["oio_proxy"] = os.environ["OIO_PROXY"]
         # will set node_ip at registration time
@@ -587,11 +630,10 @@ def baseInit(node_type):
             node_port = os.environ['PORT0']
     else:
         node_port = config.get(node_type + "_port")
+
+    log.info(f"using node port: {node_port}")
     app["node_port"] = node_port
 
-    app["custer_state"] = "WAITING"
-
-   
     try:
         aws_iam_role = config.get("aws_iam_role")
         log.info(f"aws_iam_role set to: {aws_iam_role}")
@@ -619,13 +661,15 @@ def baseInit(node_type):
     except KeyError:
         log.info("aws_region not set")
 
-
-    if not config.get('standalone_app'):
-        log.app = app
-
     app.router.add_get('/info', info)
     app.router.add_get('/about', about)
 
-
+    if is_standalone:
+        # can go straight to ready state
+        log.info("setting cluster_state to inital state of READY for standalone mode")
+        app["cluster_state"] = "READY"
+        app['node_state'] = "READY"
+    else:
+        app["custer_state"] = "WAITING"
 
     return app
