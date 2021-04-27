@@ -211,6 +211,10 @@ def setPassword(app, username, password, **kwargs):
     if "exp" not in user_data and expiration > 0:
         log.debug(f"setting expiration on credentials for user: {username}")
         user_data["exp"] = time.time() + expiration
+    if username in user_db:
+        log.info(f"user_db setting password for user: {username}")
+    else:
+        log.info(f"user_db adding user: {username}")
     user_db[username] = user_data
 
 def getPassword(app, username):

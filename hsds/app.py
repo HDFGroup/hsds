@@ -63,7 +63,6 @@ def main():
     print("count:", args.target_dn_count)
     print("port:", args.port)
     print("hs_username:", args.hs_username)
-    print("hs_password:", args.hs_password)
     if args.port == 0:
         sn_port = find_free_port()
     else:

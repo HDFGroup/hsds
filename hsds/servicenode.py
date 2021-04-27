@@ -152,7 +152,7 @@ def create_app():
     if hs_username:
         log.info(f"getCmdLine hs_username: {hs_username}")
     if hs_password:
-        log.info("getCmdLine hs_password: xxx")
+        log.info(f"getCmdLine hs_password: {'*'*len(hs_password)}")
     if hs_username:
         setPassword(app, hs_username, hs_password)
 
