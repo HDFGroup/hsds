@@ -27,5 +27,5 @@ COPY . /usr/local/src/hsds-src
 COPY admin/config/config.yml /etc/hsds/ 
 
 COPY lambda_function.py   ./
-CMD ["lambda_function.handler"]
+CMD ["lambda_function.lambda_handler"]
 
