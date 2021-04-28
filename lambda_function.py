@@ -13,7 +13,7 @@ def find_free_port():
 
 def lambda_handler(event, context):
     result = ""
-    max_retries = 10
+    max_retries = 5
     print("lambda_handler start")
     sn_port = find_free_port()
     dn_ports = []

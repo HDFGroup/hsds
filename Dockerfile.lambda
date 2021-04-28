@@ -13,7 +13,8 @@ RUN pip install \
         pyjwt \
         pyyaml \
         pip \
-        wheel
+        wheel \
+        numcodecs
 
 
 # Install numcodecs from the specific commit since we need the brand new shuffle codec...
