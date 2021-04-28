@@ -1,4 +1,5 @@
 import requests
+import time
 import subprocess
 import socket
 from contextlib import closing
@@ -65,10 +66,11 @@ def lambda_handler(event, context):
         pargs.extend(common_args)
         p = subprocess.Popen(pargs, shell=False)
         processes.append(p)
-    try:
-        for i in range(max_retries):
+
+    for i in range(max_retries):
+        try:
             req = hsds_endpoint+"/about"
-            print(f"doing GET {req}")
+            print(f"doing GET {req} try: {i}")
             r = requests.get(req)
             if r.status_code == 200:
                 print("got status_code 200")
@@ -76,19 +78,20 @@ def lambda_handler(event, context):
                 break
             else:
                 print(f"got status_code: {r.status_code}")
+                time.sleep(1)
             
             for p in processes:
                 if p.poll() is not None:
                     p_comm = p.communicate()
                     print(f"process {p.args[0]} ended, result: {p_comm}")
                     break
-    except Exception as e:
-        print(f"got exception: {e}")
-    finally:
-        for p in processes:
-            if p.poll() is None:
-                print(f"killing {p.args[0]}")
-                p.terminate()
-        processes = []
+        except Exception as e:
+            print(f"got exception: {e}")
+    
+    for p in processes:
+        if p.poll() is None:
+            print(f"killing {p.args[0]}")
+            p.terminate()
+    processes = []
     print("returning result")
     return result
