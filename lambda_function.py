@@ -13,7 +13,7 @@ def find_free_port():
 
 def lambda_handler(event, context):
     result = ""
-    max_retries = 3
+    max_retries = 10
     print("lambda_handler start")
     sn_port = find_free_port()
     dn_ports = []
@@ -87,6 +87,7 @@ def lambda_handler(event, context):
                     break
         except Exception as e:
             print(f"got exception: {e}")
+            time.sleep(1)
     
     for p in processes:
         if p.poll() is None:
