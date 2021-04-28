@@ -21,10 +21,13 @@ RUN pip install \
 #`    pip install --no-cache-dir \
 #    git+https://github.com/zarr-developers/numcodecs.git@d16d1eac5198166a24726ffe808e3dcfcab9700d#egg=numcodecs 
 
+LABEL maintainer="John Readey <help@hdfgroup.org>"
+
 # Install HSDS
 RUN mkdir /usr/local/src/hsds-src/ /usr/local/src/hsds/ /etc/hsds/
 COPY . /usr/local/src/hsds-src
-COPY admin/config/config.yml /etc/hsds/ 
+COPY admin/config/config.yml /etc/hsds/
+RUN /bin/bash  -c "pip install /usr/local/src/hsds-src/ --no-deps"
 
 COPY lambda_function.py   ./
 CMD ["lambda_function.lambda_handler"]
