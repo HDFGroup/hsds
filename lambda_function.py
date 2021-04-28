@@ -40,10 +40,11 @@ def lambda_handler(event, context):
     common_args.append("--dn_urls="+dn_urls_arg)
     common_args.append(f"--rangeget_port={rangeget_port}")
 
-    hsds_endpoint = f"http://localhost:{sn_port}"
+    hsds_endpoint = f"http://127.0.0.1:{sn_port}"
     common_args.append(f"--hsds_endpoint={hsds_endpoint}")
     common_args.append(f"--sn_port={sn_port}")
     common_args.append(f"--public_dns={hsds_endpoint}")
+    common_args.append("--log_level=DEBUG")
 
     # Start apps
     print("Creating subprocesses")
