@@ -1,10 +1,13 @@
 import requests
-import sys
-import time
-import os
 import subprocess
 import socket
 from contextlib import closing
+
+def find_free_port():
+    with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
+        s.bind(('localhost', 0))
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        return s.getsockname()[1]
 
 
 def lambda_handler(event, context):
@@ -38,7 +41,7 @@ def lambda_handler(event, context):
 
     hsds_endpoint = f"http://localhost:{sn_port}"
     common_args.append(f"--hsds_endpoint={hsds_endpoint}")
-    common_args.append(f"--sn_port={args.port}")
+    common_args.append(f"--sn_port={sn_port}")
     common_args.append(f"--public_dns={hsds_endpoint}")
 
     # Start apps
@@ -46,7 +49,7 @@ def lambda_handler(event, context):
     processes = []
 
     # create processes for count dn nodes, sn node, and rangeget node
-    for i in range(args.target_dn_count+2):
+    for i in range(target_dn_count+2):
         if i == 0:
             # args for service node
             pargs = ["hsds-servicenode", "--log_prefix=sn "]
