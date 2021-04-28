@@ -67,7 +67,9 @@ def lambda_handler(event, context):
         processes.append(p)
     try:
         for i in range(max_retries):
-            r = requests.get(hsds_endpoint+"?about")
+            req = hsds_endpoint+"/about"
+            print(f"doing GET {req}")
+            r = requests.get(req)
             if r.status_code == 200:
                 print("got status_code 200")
                 result = r.text
