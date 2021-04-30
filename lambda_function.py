@@ -5,6 +5,8 @@ import socket
 from contextlib import closing
 
 def find_free_port():
+    # note: see https://aws.amazon.com/blogs/compute/parallel-processing-in-python-with-aws-lambda/
+
     with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
         s.bind(('localhost', 0))
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

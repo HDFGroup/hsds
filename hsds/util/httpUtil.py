@@ -15,7 +15,7 @@
 #
 from asyncio import CancelledError
 from aiohttp.web import json_response
-from aiohttp import  ClientSession, TCPConnector
+from aiohttp import  ClientSession, UnixConnector, TCPConnector
 from aiohttp.web_exceptions import HTTPForbidden, HTTPNotFound, HTTPConflict, HTTPGone, HTTPInternalServerError, HTTPRequestEntityTooLarge, HTTPServiceUnavailable
 from aiohttp.client_exceptions import ClientError
 
@@ -43,9 +43,16 @@ def get_http_client(app):
     # first time call, create client interface
     # use shared client so that all client requests
     #   will share the same connection pool
-    max_tcp_connections = int(config.get("max_tcp_connections"))
-    log.info(f"Initiating TCPConnector with limit {max_tcp_connections} connections")
-    client = ClientSession(connector=TCPConnector(limit_per_host=max_tcp_connections))
+    
+    if 'socket_path' in app:
+        socket_path = app["socket_path"]
+        log.info(f"Initiating UnixConnector with path: {socket_path}")
+        client = ClientSession(connector=UnixConnector(path=socket_path))
+    else:
+        max_tcp_connections = int(config.get("max_tcp_connections"))
+        log.info(f"Initiating TCPConnector with limit {max_tcp_connections} connections")
+        client = ClientSession(connector=TCPConnector(limit_per_host=max_tcp_connections))
+
     #create the app object
     app['client'] = client
     return client
