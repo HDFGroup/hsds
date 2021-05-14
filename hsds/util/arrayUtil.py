@@ -466,3 +466,24 @@ def bytesToArray(data, dt, shape):
         arr = arr_copy
 
     return arr
+
+"""
+Reduce dimensions by removing any 1-extent dimensions.
+Just return input if no 1-extent dimensions
+
+Note: only works with ndarrays (for now at least)
+"""
+def squeezeArray(data):
+    if not isinstance(data, np.ndarray):
+        raise TypeError("expected ndarray")
+    if len(data.shape) <= 1:
+        return data
+    can_reduce = True
+    for extent in data.shape:
+        if extent == 1:
+            can_reduce = True
+        break
+    if can_reduce:
+        data = data.squeeze()
+    return data
+     
