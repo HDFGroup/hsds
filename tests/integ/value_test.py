@@ -12,6 +12,7 @@
 import unittest
 import requests
 import json
+import numpy as np
 import helper
 import config
 
@@ -1192,6 +1193,100 @@ class ValueTest(unittest.TestCase):
             self.assertEqual(ret_values[i], 'hello')
             self.assertEqual(len(ret_values[i+5]), len(fill_value))
             self.assertEqual(ret_values[i+5], fill_value)
+
+    
+    def testNaNFillValue(self):
+        # test Dataset with simple type and fill value of NaNs
+        print("testNaNFillValue", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+
+        # get domain
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # create the dataset
+        req = self.endpoint + "/datasets"
+        payload = {'type': 'H5T_IEEE_F32LE', 'shape': 10}
+        creation_props = {'fillValue': np.NaN}
+        payload['creationProperties'] = creation_props
+
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson['id']
+        self.assertTrue(helper.validateId(dset_uuid))
+
+        # link new dataset as 'dset'
+        name = 'dset'
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": dset_uuid}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # read back the data
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        ret_values = rspJson["value"]
+        self.assertEqual(len(ret_values), 10)
+        for i in range(10):
+            self.assertTrue(np.isnan(ret_values[i]))
+
+        # read back data treating NaNs as null
+        params = {"ignore_nan": 1}
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        ret_values = rspJson["value"]
+        self.assertEqual(len(ret_values), 10)
+        print(ret_values)
+        for i in range(10):
+            self.assertEqual(ret_values[i], None)
+
+        # write some values
+        payload = { 'start': 0, 'stop': 5, 'value': [3.12,]*5 }
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        ret_values = rspJson["value"]
+        tol = 0.0001
+        for i in range(10):
+            ret_value = ret_values[i]
+            if i < 5:
+                self.assertTrue(ret_value > 3.12 - tol and ret_value < 3.12 + tol)
+            else:
+                self.assertTrue(np.isnan(ret_value))
+
+        # read back data treating NaNs as null
+        params = {"ignore_nan": 1}
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        ret_values = rspJson["value"]
+        tol = 0.0001
+        for i in range(10):
+            ret_value = ret_values[i]
+            if i < 5:
+                self.assertTrue(ret_value > 3.12 - tol and ret_value < 3.12 + tol)
+            else:
+                self.assertTrue(ret_value is None)
+
 
     def testPutObjRefDataset(self):
         # Test PUT obj ref values for 1d dataset

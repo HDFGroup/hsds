@@ -13,8 +13,6 @@
 # service node of hsds cluster
 #
 
-import json
-
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
 
 from .util.httpUtil import http_post, http_put, http_delete, getHref, jsonResponse
@@ -178,7 +176,7 @@ async def POST_Group(request):
     group_id = createObjId("groups", rootid=root_id)
     log.info(f"new  group id: {group_id}")
     group_json = {"id": group_id, "root": root_id }
-    log.debug("create group, body: " + json.dumps(group_json))
+    log.debug(f"create group, body: {group_json}")
     req = getDataNodeUrl(app, group_id) + "/groups"
     params = {}
     if bucket:

@@ -13,8 +13,6 @@
 # service node of hsds cluster
 # handles dataset requests
 #
-
-import json
 import math
 import numpy as np
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict
@@ -981,7 +979,7 @@ async def POST_Dataset(request):
     if layout is not None:
         dataset_json["layout"] = layout
 
-    log.debug("create dataset: " + json.dumps(dataset_json))
+    log.debug(f"create dataset: {dataset_json}")
     req = getDataNodeUrl(app, dset_id) + "/datasets"
     params = {}
     if bucket:

@@ -15,6 +15,7 @@
 #
 from asyncio import CancelledError
 from aiohttp.web import json_response
+import simplejson
 from aiohttp import  ClientSession, UnixConnector, TCPConnector
 from aiohttp.web_exceptions import HTTPForbidden, HTTPNotFound, HTTPConflict, HTTPGone, HTTPInternalServerError, HTTPRequestEntityTooLarge, HTTPServiceUnavailable
 from aiohttp.client_exceptions import ClientError
@@ -280,8 +281,9 @@ async def http_delete(app, url, data=None, params=None):
 Helper function, create a response object using the provided
 JSON data
 """
-async def jsonResponse(request, data, status=200):
-    return json_response(data, headers={}, status=status)
+async def jsonResponse(request, data, status=200, ignore_nan=False):
+    text = simplejson.dumps(data, ignore_nan=ignore_nan)
+    return json_response(text=text, headers={}, status=status)
 
 """
 Convenience method to compute href links

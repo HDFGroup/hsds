@@ -21,6 +21,7 @@ RUN conda install --name hsds --yes \
         pyjwt \
         pyyaml \
         pip \
+        simplejson \
         wheel
 # Install numcodecs from the specific commit since we need the brand new shuffle codec...
 RUN DISABLE_NUMCODECS_AVX2=1 CFLAGS=-DHAVE_UNISTD_H \

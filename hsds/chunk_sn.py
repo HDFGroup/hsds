@@ -1825,15 +1825,22 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=None,
         log.debug("GET Value - returning JSON data")
         resp_json = {}
         data = arr.tolist()
+        params = request.rel_url.query 
+        if "ignore_nan" in params and params["ignore_nan"]:
+            ignore_nan = True
+        else:
+            ignore_nan = False
+
         json_data = bytesArrayToList(data)
         datashape = dset_json["shape"]
+        
         if datashape["class"] == 'H5S_SCALAR':
             # convert array response to value
             resp_json["value"] = json_data[0]
         else:
             resp_json["value"] = json_data
         resp_json["hrefs"] = get_hrefs(request, dset_json)
-        resp = await jsonResponse(request, resp_json)
+        resp = await jsonResponse(request, resp_json, ignore_nan=ignore_nan)
     return resp
 
 
