@@ -1248,7 +1248,6 @@ class ValueTest(unittest.TestCase):
         self.assertTrue("value" in rspJson)
         ret_values = rspJson["value"]
         self.assertEqual(len(ret_values), 10)
-        print(ret_values)
         for i in range(10):
             self.assertEqual(ret_values[i], None)
 

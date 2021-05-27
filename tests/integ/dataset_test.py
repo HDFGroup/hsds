@@ -13,6 +13,7 @@ import unittest
 import requests
 import json
 import time
+import numpy as np
 import helper
 import config
 
@@ -1093,6 +1094,96 @@ class DatasetTest(unittest.TestCase):
         req = self.endpoint + "/datasets"
         rsp = requests.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 400)  # invalid param
+
+    def testNaNFillValue(self):
+        # test Dataset with simple type and fill value that is incompatible with the type
+        domain = self.base_domain + "/testNaNFillValue.h5"
+        helper.setupDomain(domain)
+        print("testNaNFillValue", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+
+        # get domain
+        req = helper.getEndpoint() + '/'
+        rsp = requests.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        def get_payload(dset_type, fillValue=None):
+            payload = {'type': dset_type, 'shape': 10}
+            if fillValue is not None:
+                payload['creationProperties'] = {'fillValue': fillValue }
+            return payload
+
+        # create the dataset
+        req = self.endpoint + "/datasets"
+
+        payload = get_payload("H5T_STD_I32LE", fillValue=np.NaN)
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 400)  # NaN not compatible with integer type
+
+        payload = get_payload("H5T_IEEE_F32LE", fillValue=np.NaN) 
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # Dataset created
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson['id']
+
+        # link new dataset 
+        req = self.endpoint + "/groups/" + root_uuid + "/links/dset1" 
+        payload = {"id": dset_uuid}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # verify creationProperties
+        req = helper.getEndpoint() + "/datasets/" + dset_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("creationProperties" in rspJson)
+        creationProps = rspJson["creationProperties"]
+        self.assertTrue("fillValue" in creationProps)
+        self.assertTrue(np.isnan(creationProps["fillValue"]))
+
+        # get data json returning "nan" for fillValue rather than np.Nan
+        # the latter works with the Python JSON package, but is not part
+        # of the formal JSON standard
+        params = {"ignore_nan": 1}
+        rsp = requests.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("creationProperties" in rspJson)
+        creationProps = rspJson["creationProperties"]
+        self.assertTrue("fillValue" in creationProps)
+        self.assertEqual(creationProps["fillValue"], "nan")
+
+        # try creating dataset using "nan" as fillValue (rather than the non JSON compliant nan)
+        payload = get_payload("H5T_IEEE_F32LE", fillValue="nan") 
+        req = self.endpoint + "/datasets"
+        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # Dataset created
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson['id']
+
+        # link new dataset 
+        req = self.endpoint + "/groups/" + root_uuid + "/links/dset2" 
+        payload = {"id": dset_uuid}
+        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        
+        # verify creationProperties
+        req = helper.getEndpoint() + "/datasets/" + dset_uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("creationProperties" in rspJson)
+        creationProps = rspJson["creationProperties"]
+        self.assertTrue("fillValue" in creationProps)
+        self.assertTrue(np.isnan(creationProps["fillValue"]))
+
+
+
 
     def testAutoChunk1dDataset(self):
         # test Dataset where chunk layout is set automatically

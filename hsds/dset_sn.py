@@ -304,7 +304,20 @@ async def GET_Dataset(request):
     resp_json["shape"] = dset_json["shape"]
     resp_json["type"] = dset_json["type"]
     if "creationProperties" in dset_json:
-        resp_json["creationProperties"] = dset_json["creationProperties"]
+        if "ignore_nan" in params and params["ignore_nan"]:
+            # convert fillValue to "nan" if it is a np.nan
+            s = dset_json["creationProperties"]
+            d = {}
+            for k in s:
+                v = s[k]
+                if k == "fillValue" and isinstance(v, float) and np.isnan(v):
+                    d[k] = "nan"
+                else:
+                    d[k] = v
+            resp_json["creationProperties"] = d
+        else:
+            # just return the dset_json creation props as is
+            resp_json["creationProperties"] = dset_json["creationProperties"]
     else:
         resp_json["creationProperties"] = {}
 
@@ -911,14 +924,20 @@ async def POST_Dataset(request):
             # validate fill value compatible with type
             dt = createDataType(datatype)
             fill_value = creationProperties["fillValue"]
-            if isinstance(fill_value, list):
-                fill_value = tuple(fill_value)
-            try:
-                np.asarray(fill_value, dtype=dt)
-            except (TypeError, ValueError):
-                msg = f"Fill value {fill_value} not compatible with dataset type: {datatype}"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
+            if isinstance(fill_value, str) and fill_value == "nan" and dt.kind == 'f':
+                # use np.nan as fill value
+                # TBD: this needs to be fixed up for compound types
+                log.debug("converting 'nan' to np.nan for fillValue")
+                creationProperties["fillValue"] = np.nan
+            else:
+                if isinstance(fill_value, list):
+                    fill_value = tuple(fill_value)
+                try:
+                    np.asarray(fill_value, dtype=dt)
+                except (TypeError, ValueError):
+                    msg = f"Fill value {fill_value} not compatible with dataset type: {datatype}"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
 
         if "filters" in creationProperties:
             # convert to standard representation
