@@ -32,29 +32,73 @@ def isOK(http_response):
 def getUrl(host, port):
     return f"http://{host}:{port}"
 
+def isUnixDomainUrl(url):
+    # return True if url is a Unix Socket domain
+    # e.g. http://unix:/tmp/dn_1.sock/about
+    if not url:
+        raise ValueError("url undefined")
+    if not url.startswith("http://"):
+        raise ValueError(f"invalid url: {url}")
+    if url.startswith("http://unix:"):
+        return True
+    else:
+        return False
+
+def getSocketPath(url):
+    # return socket path part of the url
+    # E.g. for "http://unix:/tmp/dn_1.sock/about" return "/tmp/dn_1.sock"
+    if not isUnixDomainUrl(url):
+        return None
+    # url must start with http://unix:
+    start = len("http://unix:")
+    end = url.find(".sock")
+    if end < start:
+        raise ValueError(f"Invalid socket url: {url}")
+    return url[start:(end+5)]
+
+def get_http_std_url(url):
+    # replace socket path (if exists) with 127.0.0.1
+    print("get_http_std_url:", url)
+    if not isUnixDomainUrl(url):
+        return url
+    index = url.find(".sock")
+    url = "http://127.0.0.1" + url[(index+5):]
+    print("returning:", url)
+    return url
+
+
+
 """
 get aiobotocore http client
 """
-def get_http_client(app):
+def get_http_client(app, url=None):
     """ get http client """
-    if "client" in app:
+    if url is None or not isUnixDomainUrl(url):
+        socket_path = None
+    else:
+        socket_path = getSocketPath(url)
+        socket_clients = app["socket_clients"]
+        print("get_http_client, got socket_path:", socket_path)
+    if "client" in app and not socket_path:
         return app["client"]
+    if socket_path and socket_path in socket_clients:
+        return socket_clients[socket_path]
 
     # first time call, create client interface
     # use shared client so that all client requests
     #   will share the same connection pool
     
-    if 'socket_path' in app:
-        socket_path = app["socket_path"]
+    if socket_path:
         log.info(f"Initiating UnixConnector with path: {socket_path}")
         client = ClientSession(connector=UnixConnector(path=socket_path))
+        socket_clients[socket_path] = client
     else:
         max_tcp_connections = int(config.get("max_tcp_connections"))
         log.info(f"Initiating TCPConnector with limit {max_tcp_connections} connections")
         client = ClientSession(connector=TCPConnector(limit_per_host=max_tcp_connections))
+        app['client'] = client
 
-    #create the app object
-    app['client'] = client
+    # return client instance
     return client
 
 
@@ -89,7 +133,8 @@ Helper function  - async HTTP GET
 """
 async def http_get(app, url, params=None, format="json"):
     log.info(f"http_get('{url}')")
-    client = get_http_client(app)
+    client = get_http_client(app, url=url)
+    url = get_http_std_url(url)
     data = None
     status_code = None
     timeout = config.get("timeout")
@@ -135,7 +180,8 @@ Helper function  - async HTTP POST
 """
 async def http_post(app, url, data=None, params=None):
     log.info(f"http_post('{url}', {data})")
-    client = get_http_client(app)
+    client = get_http_client(app, url=url)
+    url = get_http_std_url(url)
     rsp_json = None
     timeout = config.get("timeout")
 
@@ -175,7 +221,8 @@ Helper function  - async HTTP PUT for json data
 async def http_put(app, url, data=None, params=None):
     log.info(f"http_put('{url}', data: {data})")
     rsp = None
-    client = get_http_client(app)
+    client = get_http_client(app, url=url)
+    url = get_http_std_url(url)
     timeout = config.get("timeout")
 
     try:
@@ -213,7 +260,8 @@ Helper function  - async HTTP PUT for binary data
 async def http_put_binary(app, url, data=None, params=None):
     log.info(f"http_put_binary('{url}') nbytes: {len(data)}")
     rsp_json = None
-    client = get_http_client(app)
+    client = get_http_client(app, url=url)
+    url = get_http_std_url(url)
     timeout = config.get("timeout")
 
     try:

@@ -564,6 +564,7 @@ def baseInit(node_type):
     app["bucket_name"] = bucket_name
     app["dn_urls"] = []
     app["dn_ids"] = [] # node ids for each dn_url
+    app["socket_clients"] = {} # map to path of Unix Domain sockets (if used)
 
     is_standalone = config.getCmdLineArg("standalone")
      

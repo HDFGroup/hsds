@@ -4,6 +4,7 @@ import time
 import os
 import subprocess
 import socket
+#import tempfile
 from contextlib import closing
 
 
@@ -67,6 +68,10 @@ def main():
     print("hs_username:", args.hs_username)
     port = find_free_port()
     print("port:", port)
+    if "--use_socket" in extra_args:
+        use_socket = True
+    else:
+        use_socket = False
 
     if args.port == 0:
         sn_port = find_free_port()
@@ -75,12 +80,17 @@ def main():
     dn_ports = []
     dn_urls_arg = ""
     for i in range(args.target_dn_count):
-        dn_port = find_free_port()
-        print(f"dn_port[{i}]:",  dn_port)
+        if use_socket:
+            host = "unix"
+            dn_port = f"/tmp/dn_{(i+1)}.sock"
+        else:
+            dn_port = find_free_port()
+            host = "localhost:"
+        print(f"dn_port[{i}]",  dn_port)
         dn_ports.append(dn_port)
         if dn_urls_arg:
             dn_urls_arg += ','
-        dn_urls_arg += f"http://localhost:{dn_port}"
+        dn_urls_arg += f"http://{host}:{dn_port}"
 
     # sort the ports so that node_number can be determined based on dn_url
     dn_ports.sort()
@@ -121,7 +131,6 @@ def main():
         bucket_name = args.bucket_name[0]
         common_args.append(f"--bucket_name={bucket_name}")
 
-
     # create handle for log file if specified
     if args.logfile:
         pout = open(args.logfile, 'w')
@@ -148,7 +157,10 @@ def main():
         else:
             node_number = i - 2  # start with 0
             pargs = ["hsds-datanode", f"--log_prefix=dn{node_number+1} "]
-            pargs.append(f"--dn_port={dn_ports[node_number]}")
+            if use_socket:
+                pargs.append(f"--dn_socket={dn_ports[node_number]}")
+            else:
+                pargs.append(f"--dn_port={dn_ports[node_number]}")
             pargs.append(f"--node_number={node_number}")
         print(f"starting {pargs[0]}")
         pargs.extend(common_args)

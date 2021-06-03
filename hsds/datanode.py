@@ -15,7 +15,10 @@
 import asyncio
 import time
 import numcodecs as codecs
+import socket
+import os
 from aiohttp.web import run_app
+
 from . import config
 from .util.lruCache import LruCache
 from .util.idUtil import isValidUuid, isSchema2Id, getCollectionForId, isRootObjId
@@ -256,11 +259,27 @@ def create_app():
 def main():
     app = create_app()
 
-    # run the app
-    port = int(config.get("dn_port"))
-
-    log.info(f"run_app on port: {port}")
-    run_app(app, port=port)
+    # run app using either socket or tcp
+    dn_socket = config.getCmdLineArg("dn_socket")
+    if dn_socket:
+        # use a unix domain socket path
+        # first, make sure the socket does not already exist
+        log.info(f"Using socket {dn_socket}")
+        try:
+            os.unlink(dn_socket)
+        except OSError:
+            if os.path.exists(dn_socket):
+                raise
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.bind(dn_socket)
+        run_app(app, sock=s)
+        log.info("run_app done")
+        # close socket?
+    else:
+        # Use TCP connection
+        port = int(config.get("dn_port"))
+        log.info(f"run_app on port: {port}")
+        run_app(app, port=port)
 
 if __name__ == '__main__':
     main()
