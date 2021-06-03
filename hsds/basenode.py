@@ -181,11 +181,15 @@ async def k8s_update_dn_info(app):
     pod_ips = []
     dn_urls = []
     k8s_app_label = config.get("k8s_app_label")
+    log.debug(f"k8s_app_label config: {k8s_app_label}")
     for i in ret.items:
         pod_ip = i.status.pod_ip
         if not pod_ip:
+            log.debug("no pod_ip")
             continue
+        log.debug(f"pod_ip: {pod_ip}")
         labels = i.metadata.labels
+        log.debug(f"metadata.labels: {labels}")
         if labels and "app" in labels and labels["app"] == k8s_app_label:
             log.info(f"found hsds pod with app label: {k8s_app_label} - ip: {pod_ip}")
             pod_ips.append(pod_ip)
