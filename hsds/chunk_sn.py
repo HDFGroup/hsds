@@ -31,7 +31,7 @@ from .util.dsetUtil import getSliceQueryParam, setSliceQueryParam, getFillValue,
 from .util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout
 from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId, getChunkIndex, getChunkSuffix
 from .util.chunkUtil import getChunkCoverage, getDataCoverage, getChunkIdForPartition
-from .util.arrayUtil import bytesArrayToList, jsonToArray, getShapeDims, getNumElements, arrayToBytes, bytesToArray
+from .util.arrayUtil import bytesArrayToList, jsonToArray, getShapeDims, getNumElements, arrayToBytes, bytesToArray, squeezeArray
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from .util.awsLambdaClient import getLambdaClient, lambdaInvoke
 from .servicenode_lib import getObjectJson, validateAction
@@ -1823,6 +1823,9 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices, chunk_map=None,
 
     else:
         log.debug("GET Value - returning JSON data")
+        params = request.rel_url.query
+        if "reduce_dim" in params and params["reduce_dim"]:
+            arr = squeezeArray(arr)
         resp_json = {}
         data = arr.tolist()
         json_data = bytesArrayToList(data)
