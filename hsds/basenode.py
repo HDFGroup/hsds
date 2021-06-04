@@ -33,7 +33,7 @@ from .util.idUtil import createNodeId, getNodeNumber, getNodeCount
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword, isAdminUser
 from . import hsds_logger as log
 from kubernetes import client as k8s_client
-from kubernetes import config as k8s_config
+#from kubernetes import config as k8s_config
 
 HSDS_VERSION = "0.7.0beta"
 
@@ -165,9 +165,15 @@ async def k8s_update_dn_info(app):
     # TBD - find more elegant way to avoid this warning
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-    k8s_config.load_incluster_config() #get the config from within the cluster and set it as the default config for all new clients
+
+    with open("/var/run/secrets/kubernetes.io/serviceaccount/token") as f:
+        ApiToken = f.read()
+    # k8s_config.load_incluster_config() #get the config from within the cluster and set it as the default config for all new clients
     c=k8s_client.Configuration() #go and get a copy of the default config
+    c.host = os.environ["KUBERNETES_SERVICE_HOST"]
     c.verify_ssl=False #set verify_ssl to false in that config
+    c.debug = True
+    c.api_key =  {"authorization": "Bearer " + ApiToken}
     k8s_client.Configuration.set_default(c) #make that config the default for all new clients
     v1 = k8s_client.CoreV1Api()
     k8s_namespace = config.get("k8s_namespace")
