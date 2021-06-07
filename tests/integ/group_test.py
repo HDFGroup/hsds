@@ -166,11 +166,13 @@ class GroupTest(unittest.TestCase):
     def testPost(self):
         # test POST group
         print("testPost", self.base_domain)
+        endpoint = helper.getEndpoint()
+        s = helper.getSession(endpoint)
         headers = helper.getRequestHeaders(domain=self.base_domain)
-        req = helper.getEndpoint() + '/groups'
+        req = endpoint + '/groups'
 
         # create a new group
-        rsp = requests.post(req, headers=headers)
+        rsp = s.post(req, headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["linkCount"], 0)
@@ -179,8 +181,8 @@ class GroupTest(unittest.TestCase):
         self.assertTrue(helper.validateId(group_id))
 
         # verify we can do a get on the new group
-        req = helper.getEndpoint() + '/groups/' + group_id
-        rsp = requests.get(req, headers=headers)
+        req = endpoint + '/groups/' + group_id
+        rsp = s.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("id" in rspJson)
@@ -192,7 +194,7 @@ class GroupTest(unittest.TestCase):
 
         # try getting the path of the group
         params = {"getalias": 1}
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = s.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("alias" in rspJson)
@@ -201,8 +203,8 @@ class GroupTest(unittest.TestCase):
 
         # try POST with user who doesn't have create permission on this domain
         headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
-        req = helper.getEndpoint() + '/groups'
-        rsp = requests.post(req, headers=headers)
+        req = endpoint + '/groups'
+        rsp = s.post(req, headers=headers)
         self.assertEqual(rsp.status_code, 403) # forbidden
 
     def testPostWithLink(self):

@@ -43,8 +43,9 @@ class UpTest(unittest.TestCase):
     def testGetAbout(self):
         endpoint = helper.getEndpoint()
         print("endpoint:", endpoint)
+        s = helper.getSession(endpoint)
         req = endpoint + "/about"
-        rsp = requests.get(req)
+        rsp = s.get(req)
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers["Content-Type"], "application/json; charset=utf-8")
 

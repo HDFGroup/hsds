@@ -74,8 +74,14 @@ def main():
         use_socket = False
 
     if args.port == 0:
-        sn_port = find_free_port()
+        if use_socket:
+            sn_port = "/tmp/sn_1.sock"
+        else:
+            sn_port = find_free_port()
     else:
+        if use_socket:
+            print("--port option can't be used with --use_socket")
+            sys.exit(1)
         sn_port = args.port
     dn_ports = []
     dn_urls_arg = ""
@@ -102,7 +108,10 @@ def main():
     print("logfile:", args.logfile)
 
     common_args = ["--standalone",]
-    common_args.append(f"--sn_port={sn_port}")
+    if use_socket:
+        common_args.append(f"--sn_socket={sn_port}")
+    else:
+        common_args.append(f"--sn_port={sn_port}")
     common_args.append("--dn_urls="+dn_urls_arg)
     common_args.append(f"--rangeget_port={rangeget_port}")
     common_args.extend(extra_args) # pass remaining args as config overrides

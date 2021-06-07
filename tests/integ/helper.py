@@ -10,6 +10,7 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import requests
+import requests_unixsocket
 import json
 import os.path as op
 from datetime import datetime
@@ -29,6 +30,18 @@ def getEndpoint():
 
     endpoint = config.get("hsds_endpoint")
     return endpoint
+
+""" 
+  Helper function - get session object
+"""
+def getSession(endpoint):
+    if endpoint.endswith(".sock"):
+        # use requests_unixsocket to get a socket session
+        session = requests_unixsocket.Session()
+    else:
+        session = requests.Session()
+    return session
+
 
 """
     Helper function - get endpoint we'll send http requests to
@@ -143,9 +156,11 @@ Helper - Create domain (and parent domin if needed)
 """
 def setupDomain(domain, folder=False):
     endpoint = config.get("hsds_endpoint")
+    s = getSession(endpoint)
     headers = getRequestHeaders(domain=domain)
     req = endpoint + "/"
-    rsp = requests.get(req, headers=headers)
+    
+    rsp = s.get(req, headers=headers)
     if rsp.status_code == 200:
         return  # already have domain
     if rsp.status_code != 404:
@@ -161,9 +176,9 @@ def setupDomain(domain, folder=False):
     body=None
     if folder:
         body = {"folder": True}
-        rsp = requests.put(req, data=json.dumps(body), headers=headers)
+        rsp = s.put(req, data=json.dumps(body), headers=headers)
     else:
-        rsp = requests.put(req, headers=headers)
+        rsp = s.put(req, headers=headers)
     if rsp.status_code != 201:
         raise ValueError(f"Unexpected put domain error: {rsp.status_code}")
 

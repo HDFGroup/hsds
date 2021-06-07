@@ -257,6 +257,7 @@ def create_app():
 #
 
 def main():
+    log.info("Data node initializing")
     app = create_app()
 
     # run app using either socket or tcp

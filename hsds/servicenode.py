@@ -13,7 +13,8 @@
 # service node of hsds cluster
 #
 import asyncio
-import sys
+import os
+import socket
 
 from aiohttp.web import run_app
 import aiohttp_cors
@@ -167,14 +168,29 @@ def create_app():
 
 def main():
     log.info("Service node initializing")
-    for arg in sys.argv:
-        log.info(f"command line opt: {arg}")
     app = create_app()
 
-    # run the app
-    port = int(config.get("sn_port"))
-    log.info(f"run_app on port: {port}")
-    run_app(app, port=port)
+    # run app using either socket or tcp
+    sn_socket = config.getCmdLineArg("sn_socket")
+    if sn_socket:
+        # use a unix domain socket path
+        # first, make sure the socket does not already exist
+        log.info(f"Using socket {sn_socket}")
+        try:
+            os.unlink(sn_socket)
+        except OSError:
+            if os.path.exists(sn_socket):
+                raise
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.bind(sn_socket)
+        run_app(app, sock=s)
+        log.info("run_app done")
+        # close socket?
+    else:
+        # Use TCP connection
+        port = int(config.get("sn_port"))
+        log.info(f"run_app on port: {port}")
+        run_app(app, port=port)
 
 
 if __name__ == '__main__':
