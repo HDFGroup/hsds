@@ -43,7 +43,7 @@ def lambda_handler(event, context):
     for i in range(target_dn_count+2):
         if i == 0:
             # args for service node
-            pargs = ["hsds-servicenode", "--log_prefix=sn"]
+            pargs = ["hsds-servicenode", "--log_prefix=sn "]
         
             pargs.append("--hs_username=anonymous")
             pargs.append("--hs_password=none")
@@ -57,15 +57,20 @@ def lambda_handler(event, context):
             pargs.append(f"--node_number={node_number}")
         print(f"starting {pargs[0]}")
         pargs.extend(common_args)
-        p = subprocess.Popen(pargs, shell=False, stdout=subprocess.DEVNULL)
+        p = subprocess.Popen(pargs, shell=False)   #, stdout=subprocess.DEVNULL)
         processes.append(p)
     
-    time.sleep(1)
+    #time.sleep(1)
     for p in processes:
         if p.poll() is not None:
             result = p.communicate()
             raise ValueError(f"process {p.args[0]} ended, result: {result}")
-    
+
+    time.sleep(1)
+    # wait for the socket to be created
+    while not os.path.exists(sn_port):
+        print("waiting on sn socket creation")
+        time.sleep(0.1)
     # invoke about request
     try:
         s = requests_unixsocket.Session()

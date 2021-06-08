@@ -262,15 +262,18 @@ def main():
             if os.path.exists(rangeget_socket):
                 raise
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        log.info("socket bind")
         s.bind(rangeget_socket)
         run_app(app, sock=s)
-        log.info("run_app done")
         # close socket?
     else:
         # Use TCP connection
         port = int(config.get("rangeget_port"))
         log.info(f"run_app on port: {port}")
         run_app(app, port=port)
+
+    log.info("run_app done")
+
 
 if __name__ == '__main__':
     main()
