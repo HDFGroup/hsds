@@ -17,17 +17,21 @@ import binascii
 import subprocess
 import os.path as pp
 import datetime
+import requests
 from botocore.exceptions import ClientError
 from aiobotocore import get_session
+
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPUnauthorized, HTTPNotFound, HTTPForbidden, HTTPServiceUnavailable, HTTPInternalServerError
-import jwt
-from jwt.exceptions import InvalidAudienceError, InvalidSignatureError, ExpiredSignatureError, DecodeError
-import requests
-from cryptography.x509 import load_pem_x509_certificate
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers 
 from .. import hsds_logger as log
 from .. import config
+try:
+    import jwt
+    from jwt.exceptions import InvalidAudienceError, InvalidSignatureError, ExpiredSignatureError, DecodeError
+    from cryptography.x509 import load_pem_x509_certificate
+    from cryptography.hazmat.backends import default_backend
+    from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers 
+except ImportError:
+    log.error("Unable to import jwt, cryptrography packages")
 
 MSONLINE_OPENID_URL = "https://login.microsoftonline.com/common/.well-known/openid-configuration"
 GOOGLE_OPENID_URL = "https://accounts.google.com/.well-known/openid-configuration"

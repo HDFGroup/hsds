@@ -47,8 +47,8 @@ def lambda_handler(event, context):
             # args for service node
             pargs = ["hsds-servicenode", "--log_prefix=sn "]
         
-            pargs.append("--hs_username=anonymous")
-            pargs.append("--hs_password=none")
+            #pargs.append("--hs_username=anonymous")
+            #pargs.append("--hs_password=none")
         elif i == 1:
             # args for rangeget node
             pargs = ["hsds-rangeget", "--log_prefix=rg "]
