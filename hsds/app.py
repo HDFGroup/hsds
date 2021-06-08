@@ -103,17 +103,21 @@ def main():
     dn_urls_arg
     
     print("dn_ports:", dn_urls_arg)
-    rangeget_port = find_free_port()
+    if use_socket:
+        rangeget_port = "/tmp/rangeget.sock"
+    else:
+        rangeget_port = find_free_port()
     print("rangeget_port:", rangeget_port)
     print("logfile:", args.logfile)
 
     common_args = ["--standalone",]
     if use_socket:
         common_args.append(f"--sn_socket={sn_port}")
+        common_args.append(f"--rangeget_socket={rangeget_port}")
     else:
         common_args.append(f"--sn_port={sn_port}")
+        common_args.append(f"--rangeget_port={rangeget_port}")
     common_args.append("--dn_urls="+dn_urls_arg)
-    common_args.append(f"--rangeget_port={rangeget_port}")
     common_args.extend(extra_args) # pass remaining args as config overrides
 
     hsds_endpoint = "http://localhost"
