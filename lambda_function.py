@@ -8,31 +8,33 @@ import os
 
 def lambda_handler(event, context):
     target_dn_count = 1  # TBD - adjust based on number of available VCPUs
-
-    sn_port = "/tmp/sn_1.sock"
-    rangeget_port = "/tmp/rangeget.sock"
-    dn_ports = []
+    socket_paths = ["/tmp/sn_1.sock", "/tmp/rangeget.sock"]
     dn_urls_arg = ""
     for i in range(target_dn_count):
         host = "unix"
-        dn_port = f"/tmp/dn_{(i+1)}.sock"
-        print(f"dn_port[{i}]",  dn_port)
-        dn_ports.append(dn_port)
+        socket_path = f"/tmp/dn_{(i+1)}.sock"
+        print(f"dn_socket[{i}]",  socket_path)
+        socket_paths.append(socket_path)
         if dn_urls_arg:
             dn_urls_arg += ','
-        dn_urls_arg += f"http://{host}:{dn_port}"
-
-    # sort the ports so that node_number can be determined based on dn_url
-    dn_ports.sort()
-    dn_urls_arg
+        dn_urls_arg += f"http://{host}:{socket_path}"
     
     print("dn_ports:", dn_urls_arg)
     common_args = ["--standalone", "--use_socket"]
-    common_args.append(f"--sn_socket={sn_port}")
-    common_args.append(f"--rangeget_socket={rangeget_port}")
+    common_args.append(f"--sn_socket={socket_paths[0]}")
+    common_args.append(f"--rangeget_socket={socket_paths[1]}")
     common_args.append("--dn_urls="+dn_urls_arg)
     bucket_name = "hdflab2"
     common_args.append(f"--bucket_name={bucket_name}")
+
+    # remove any existing socket files
+    for socket_path in socket_paths:
+        try:
+            os.unlink(socket_path)
+        except OSError:
+            if os.path.exists(socket_path):
+                print(f"unable to unline socket: {socket_path}")
+                raise
  
     # Start apps
 
@@ -53,24 +55,31 @@ def lambda_handler(event, context):
         else:
             node_number = i - 2  # start with 0
             pargs = ["hsds-datanode", f"--log_prefix=dn{node_number+1} "]
-            pargs.append(f"--dn_socket={dn_ports[node_number]}")
+            pargs.append(f"--dn_socket={socket_paths[i]}")
             pargs.append(f"--node_number={node_number}")
         print(f"starting {pargs[0]}")
         pargs.extend(common_args)
         p = subprocess.Popen(pargs, shell=False)   #, stdout=subprocess.DEVNULL)
         processes.append(p)
     
-    #time.sleep(1)
     for p in processes:
         if p.poll() is not None:
             result = p.communicate()
             raise ValueError(f"process {p.args[0]} ended, result: {result}")
 
-    time.sleep(1)
-    # wait for the socket to be created
-    while not os.path.exists(sn_port):
-        print("waiting on sn socket creation")
+    # wait for the socket objects to be created by the sub-processes
+    while True:
+        missing_socket = False
+        for socket_path in socket_paths:
+            if not os.path.exists(socket_path):
+                print(f"socket: {socket_path} does not exist yet")
+                missing_socket = True
+                break
+        if not missing_socket:
+            print("all sockets ready")
+            break
         time.sleep(0.1)
+
     # invoke about request
     try:
         s = requests_unixsocket.Session()
