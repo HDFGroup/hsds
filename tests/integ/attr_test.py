@@ -12,6 +12,7 @@
 import unittest
 import requests
 import json
+import numpy as np
 import helper
 
 
@@ -88,8 +89,8 @@ class AttributeTest(unittest.TestCase):
             self.assertTrue("value" not in attrJson)
 
         # get all attributes including data
-        req = self.endpoint + "/groups/" + root_uuid + "/attributes?IncludeData=True"
-        rsp = requests.get(req, headers=headers)
+        params = {"IncludeData": 1}
+        rsp = requests.get(req, headers=headers, params=params)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
 
@@ -152,7 +153,6 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_id = rspJson["root"]
-
 
         for col_name in ("groups", "datatypes", "datasets"):
             # create a new obj
@@ -366,8 +366,6 @@ class AttributeTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("value" in rspJson)
         self.assertEqual(rspJson["value"], None)
-
-
 
     def testPutFixedString(self):
         # Test PUT value for 1d attribute with fixed length string types
@@ -736,8 +734,6 @@ class AttributeTest(unittest.TestCase):
         self.assertTrue("value" in rspJson)
         self.assertEqual(rspJson["value"], [42, 0.42])
 
-
-
     def testPutObjReference(self):
         print("testPutObjReference", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
@@ -842,7 +838,6 @@ class AttributeTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         g1_3_id = rspJson["id"]
         self.assertTrue(helper.validateId(g1_3_id))
-
 
         # create attr of g1 that is a vlen list of obj ref's
         ref_type = {"class": "H5T_REFERENCE",
@@ -1203,6 +1198,106 @@ class AttributeTest(unittest.TestCase):
         self.assertFalse("type" in rspJson)
         self.assertFalse("shape" in rspJson)
         self.assertEqual(rspJson["value"], value)
+
+    def testPutIntegerArray(self):
+        # Test PUT value for 1d attribute with list of integers
+        print("testPutIntegerArray", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + '/'
+
+        # Get root uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create attr
+        value = [2,3,5,7,11,13]
+        data = { "type": 'H5T_STD_I32LE', "shape": 6, "value": value}
+        attr_name = "int_arr_attr"
+        req = self.endpoint + "/groups/" + root_uuid + "/attributes/" + attr_name
+        rsp = requests.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # read attr
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], value)
+        self.assertTrue("type" in rspJson)
+        type_json = rspJson["type"]
+        self.assertTrue("class" in type_json)
+        self.assertEqual(type_json["base"], "H5T_STD_I32LE")
+        self.assertTrue("shape" in rspJson)
+        shape_json = rspJson["shape"]
+        self.assertTrue("class" in shape_json)
+        self.assertTrue(shape_json["class"], 'H5S_SIMPLE')
+        self.assertTrue("dims" in shape_json)
+        self.assertTrue(shape_json["dims"], [6])
+
+        # try creating an array where the shape doesn't match data values
+        data = { "type": 'H5T_STD_I32LE', "shape": 5, "value": value}
+        attr_name = "badarg_arr_attr"
+        req = self.endpoint + "/groups/" + root_uuid + "/attributes/" + attr_name
+        rsp = requests.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 400)  # Bad request
+
+    def testNaNAttributeValue(self):
+        # Test GET Attribute value with JSON response that contains NaN data
+        print("testNaNAttributeValue", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + '/'
+
+        # Get root uuid
+        rsp = requests.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create attr
+        value = [np.NaN,] * 6
+        data = { "type": 'H5T_IEEE_F32LE', "shape": 6, "value": value}
+        attr_name = "nan_arr_attr"
+        req = self.endpoint + "/groups/" + root_uuid + "/attributes/" + attr_name
+        rsp = requests.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # get all attributes, then by name, and then by value
+        for req_suffix in ("", f"/{attr_name}", f"/{attr_name}/value"):
+            for ignore_nan in (False, True):
+                req = self.endpoint + "/groups/" + root_uuid + "/attributes" + req_suffix
+                params = {}
+                if not req_suffix:
+                    # fetch data when getting all attribute
+                    params["IncludeData"] = 1
+                if ignore_nan:
+                    params["ignore_nan"] = 1
+                rsp = requests.get(req, headers=headers, params=params)
+                self.assertEqual(rsp.status_code, 200)
+                rspJson = json.loads(rsp.text)
+                self.assertTrue("hrefs" in rspJson)
+                if "attributes" in rspJson:
+                    # this is returned for the fetch all attribute req
+                    attrs = rspJson["attributes"]
+                    self.assertEqual(len(attrs), 1)
+                    self.assertTrue("value" in attrs[0])
+                    rspValue = attrs[0]["value"]
+                else:
+                    self.assertTrue("value" in rspJson)
+                    rspValue = rspJson["value"]
+                self.assertEqual(len(rspValue), 6)
+                for i in range(6):
+                    if ignore_nan:
+                        self.assertTrue(rspValue[i] is None)
+                    else:
+                        self.assertTrue(np.isnan(rspValue[i]))
+
 
 
 if __name__ == '__main__':

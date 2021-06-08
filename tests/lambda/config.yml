@@ -1,0 +1,18 @@
+# config values for HSDS unit tests
+root_dir: null
+bucket_name: "hsdstest"
+sn_port: 0
+hsds_unit_test_bucket: null
+azure_connection_string: null
+aws_s3_gateway: null
+log_level: ERROR
+cors_domain: "*"
+metadata_mem_cache_size: 128m  # 128 MB - metadata cache size per DN node
+metadata_mem_cache_expire: 3600  # expire cache items after one hour
+chunk_mem_cache_size: 128m  # 128 MB - chunk cache size per DN node
+chunk_mem_cache_expire: 3600  # expire cache items after one hour
+allow_noauth: True
+aws_dynamodb_gateway: null
+password_salt: null
+password_file: null
+groups_file: null

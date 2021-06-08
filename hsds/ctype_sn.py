@@ -14,7 +14,6 @@
 # handles datatypes requests
 #
 
-import json
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPGone
 
 from .util.httpUtil import http_post, http_put, http_delete, getHref, jsonResponse
@@ -200,7 +199,7 @@ async def POST_Datatype(request):
     ctype_id = createObjId("datatypes", rootid=root_id)
     log.debug(f"new  type id: {ctype_id}")
     ctype_json = {"id": ctype_id, "root": root_id, "type": datatype }
-    log.debug("create named type, body: " + json.dumps(ctype_json))
+    log.debug(f"create named type, body: {ctype_json}")
     req = getDataNodeUrl(app, ctype_id) + "/datatypes"
     params = {}
     if bucket:

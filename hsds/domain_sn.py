@@ -975,7 +975,7 @@ async def PUT_Domain(request):
         root_id = createObjId("roots")
         log.debug(f"new root group id: {root_id}")
         group_json = {"id": root_id, "root": root_id, "domain": domain }
-        log.debug("create group for domain, body: " + json.dumps(group_json))
+        log.debug(f"create group for domain, body: {group_json}")
 
         # create root group
         req = getDataNodeUrl(app, root_id) + "/groups"

@@ -8,10 +8,12 @@ from contextlib import closing
 
 
 def find_free_port():
+    # note use the --unix-socket <path> option with curl for sockets
+
     with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
-        s.bind(('localhost', 0))
+        s.bind(('127.0.0.1', 0))
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        return s.getsockname()[1]
+        return s.getsockname()[1]  
 
 _HELP_USAGE = "Starts hsds a REST-based service for HDF5 data."
 
@@ -63,6 +65,9 @@ def main():
     print("count:", args.target_dn_count)
     print("port:", args.port)
     print("hs_username:", args.hs_username)
+    port = find_free_port()
+    print("port:", port)
+
     if args.port == 0:
         sn_port = find_free_port()
     else:
@@ -93,10 +98,9 @@ def main():
     common_args.extend(extra_args) # pass remaining args as config overrides
 
     hsds_endpoint = "http://localhost"
-    if args.port != 80:
-        hsds_endpoint += ":" + str(args.port)
+    if sn_port != 80:
+        hsds_endpoint += ":" + str(sn_port)
     common_args.append(f"--hsds_endpoint={hsds_endpoint}")
-    common_args.append(f"--sn_port={args.port}")
     
     print("host:", args.host)
     public_dns = f"http://{args.host}"

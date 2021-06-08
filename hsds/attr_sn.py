@@ -48,8 +48,12 @@ async def GET_Attributes(request):
         raise HTTPBadRequest(reason=msg)
 
     include_data = False
+    ignore_nan = False
     if "IncludeData" in params and params["IncludeData"]:
         include_data = True
+        if "ignore_nan" in params and params["ignore_nan"]:
+            ignore_nan = True
+    
     limit = None
     if "Limit" in params:
         try:
@@ -112,7 +116,7 @@ async def GET_Attributes(request):
     hrefs.append({'rel': 'owner', 'href': getHref(request, obj_uri)})
     resp_json["hrefs"] = hrefs
 
-    resp = await jsonResponse(request, resp_json)
+    resp = await jsonResponse(request, resp_json, ignore_nan=ignore_nan)
     log.response(request, resp=resp)
     return resp
 
@@ -149,6 +153,11 @@ async def GET_Attribute(request):
 
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "read")
+    params = request.rel_url.query
+    if "ignore_nan" in params and params["ignore_nan"]:
+        ignore_nan = True
+    else:
+        ignore_nan = False
 
     req = getDataNodeUrl(app, obj_id)
     req += '/' + collection + '/' + obj_id + "/attributes/" + attr_name
@@ -158,7 +167,6 @@ async def GET_Attribute(request):
         params["bucket"] = bucket
     dn_json = await http_get(app, req, params=params)
     log.debug("got attributes json from dn for obj_id: " + str(obj_id))
-
 
     resp_json = {}
     resp_json["name"] = attr_name
@@ -177,8 +185,7 @@ async def GET_Attribute(request):
     hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
     hrefs.append({'rel': 'owner', 'href': getHref(request, obj_uri)})
     resp_json["hrefs"] = hrefs
-
-    resp = await jsonResponse(request, resp_json)
+    resp = await jsonResponse(request, resp_json, ignore_nan=ignore_nan)
     log.response(request, resp=resp)
     return resp
 
@@ -323,7 +330,6 @@ async def PUT_Attribute(request):
         shape_json["class"] = "H5S_SCALAR"
         dims = [1,]
 
-
     if "value" in body:
         if dims is None:
             msg = "Bad Request: data can not be included with H5S_NULL space"
@@ -463,6 +469,12 @@ async def GET_AttributeValue(request):
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "read")
 
+    params = request.rel_url.query
+    if "ignore_nan" in params and params["ignore_nan"]:
+        ignore_nan = True
+    else:
+        ignore_nan = False
+
     req = getDataNodeUrl(app, obj_id)
     req += '/' + collection + '/' + obj_id + "/attributes/" + attr_name
     log.debug("get Attribute: " + req)
@@ -532,7 +544,7 @@ async def GET_AttributeValue(request):
         hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
         hrefs.append({'rel': 'owner', 'href': getHref(request, obj_uri)})
         resp_json["hrefs"] = hrefs
-        resp = await jsonResponse(request, resp_json)
+        resp = await jsonResponse(request, resp_json, ignore_nan=ignore_nan)
         log.response(request, resp=resp)
     return resp
 
