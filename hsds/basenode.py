@@ -32,8 +32,11 @@ from .util.httpUtil import  http_get, http_post, jsonResponse
 from .util.idUtil import createNodeId, getNodeNumber, getNodeCount
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword, isAdminUser
 from . import hsds_logger as log
-from kubernetes import client as k8s_client
-from kubernetes import config as k8s_config
+try:
+    from kubernetes import client as k8s_client
+    from kubernetes import config as k8s_config
+except ImportError:
+    log.warning("kubernetes package not installed")
 
 HSDS_VERSION = "0.7.0beta"
 
