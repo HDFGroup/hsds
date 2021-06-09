@@ -10,7 +10,6 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import unittest
-import requests
 import json
 import config
 import helper
@@ -20,6 +19,13 @@ class SetupTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(SetupTest, self).__init__(*args, **kwargs)
         self.base_domain = helper.getTestDomainName(self.__class__.__name__)
+
+    def setUp(self):
+        self.session = helper.getSession()
+
+    def tearDown(self):
+        if self.session:
+            self.session.close()
 
         # main
 
@@ -41,7 +47,7 @@ class SetupTest(unittest.TestCase):
 
         req = helper.getEndpoint() + '/'
         params={"domain": home_domain}
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         print("/home get status:", rsp.status_code)
 
         if rsp.status_code == 404:
@@ -51,11 +57,11 @@ class SetupTest(unittest.TestCase):
             # Setup /home folder
             print("create home folder")
             body = {"folder": True}
-            rsp = requests.put(req, data=json.dumps(body), params=params, headers=admin_headers)
+            rsp = self.session.put(req, data=json.dumps(body), params=params, headers=admin_headers)
             print("put request status:", rsp.status_code)
             self.assertEqual(rsp.status_code, 201)
             # do the original request again
-            rsp = requests.get(req, params=params, headers=headers)
+            rsp = self.session.get(req, params=params, headers=headers)
         elif rsp.status_code in (401, 403):
             print(f"Authorization failure, verify password for {user_name} and set env variable for USER_PASSWORD")
             self.assertTrue(False)
@@ -71,7 +77,7 @@ class SetupTest(unittest.TestCase):
         self.assertFalse("root" in rspJson)  # no root -> folder
 
         params={"domain": user_domain}
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         print(f"{user_domain} get status: {rsp.status_code}")
         if rsp.status_code == 404:
             if not admin_headers:
@@ -80,10 +86,10 @@ class SetupTest(unittest.TestCase):
             # Setup user home folder
             print("create user folder")
             body = {"folder": True, "owner": user_name}
-            rsp = requests.put(req, data=json.dumps(body), params=params, headers=admin_headers)
+            rsp = self.session.put(req, data=json.dumps(body), params=params, headers=admin_headers)
             self.assertEqual(rsp.status_code, 201)
             # do the original request again
-            rsp = requests.get(req, params=params, headers=headers)
+            rsp = self.session.get(req, params=params, headers=headers)
 
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)

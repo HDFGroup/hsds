@@ -25,7 +25,7 @@ from aiohttp import ClientResponseError
 from aiohttp.client_exceptions import ClientError
 from aiohttp.web import json_response
 
-from .util.httpUtil import  http_post, http_put, http_get, http_delete, getHref, get_http_client, jsonResponse
+from .util.httpUtil import  http_post, http_put, http_get, http_delete, getHref, jsonResponse  
 from .util.idUtil import  getDataNodeUrl, createObjId, getCollectionForId, isValidUuid, isSchema2Id, getNodeCount
 from .util.authUtil import getUserPasswordFromRequest, aclCheck, isAdminUser
 from .util.authUtil import validateUserPassword, getAclKeys
@@ -726,7 +726,6 @@ async def doFlush(app, root_id, bucket=None):
     params = {"flush": 1}
     if bucket:
         params["bucket"] = bucket
-    client = get_http_client(app)
     dn_urls = app["dn_urls"]
     dn_ids = []
     log.debug(f"doFlush - dn_urls: {dn_urls}")
@@ -736,7 +735,7 @@ async def doFlush(app, root_id, bucket=None):
         tasks = []
         for dn_url in dn_urls:
             req = dn_url + "/groups/" + root_id
-            task = asyncio.ensure_future(client.put(req, params=params))
+            task = asyncio.ensure_future(http_put(app, req, params=params)) 
             tasks.append(task)
         done, pending = await asyncio.wait(tasks)
         if pending:
@@ -748,17 +747,12 @@ async def doFlush(app, root_id, bucket=None):
                 log.warn(f"doFlush - task had exception: {type(task.exception())}")
                 failed_count += 1
             else:
-                clientResponse = task.result()
-                if clientResponse.status != 200:
-                    log.warn(f"doFlush - expected 204 but got: {clientResponse.status}")
-                    failed_count += 1
+                json_rsp = task.result()
+                log.debug(f"PUT /groups rsp: {json_rsp}")
+                if json_rsp and "id" in json_rsp:
+                    dn_ids.append(json_rsp["id"])
                 else:
-                    json_rsp = await clientResponse.json()
-                    log.debug(f"PUT /groups rsp: {json_rsp}")
-                    if json_rsp and "id" in json_rsp:
-                        dn_ids.append(json_rsp["id"])
-                    else:
-                        log.error("expected dn_id in flush response from DN")
+                    log.error("expected dn_id in flush response from DN")
     except ClientError as ce:
         log.error(f"doFlush - ClientError for http_put('/groups/{root_id}'): {str(ce)}")
         raise HTTPInternalServerError()

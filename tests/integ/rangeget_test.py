@@ -10,7 +10,6 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import unittest
-import requests
 import json
 import time
 import helper
@@ -28,7 +27,12 @@ class RangeGetTest(unittest.TestCase):
         super(RangeGetTest, self).__init__(*args, **kwargs)
         self.endpoint = helper.getRangeGetEndpoint()
 
-        print("endpoint:", self.endpoint)
+    def setUp(self):
+        self.session = helper.getSession()
+
+    def tearDown(self):
+        if self.session:
+            self.session.close()
 
         # main
 
@@ -75,7 +79,7 @@ class RangeGetTest(unittest.TestCase):
         params["key"] = "data/hdf5test/tall.h5"
         params["offset"] = dset112_offset
         params["length"] = dset112_size
-        rsp = requests.get(req, headers=req_headers, params=params)
+        rsp = self.session.get(req, headers=req_headers, params=params)
         self.assertEqual(rsp.status_code, 200)
 
         self.assertEqual(rsp.headers['Content-Type'], "application/octet-stream")
@@ -94,7 +98,7 @@ class RangeGetTest(unittest.TestCase):
         params["key"] = "data/hdf5test/tall.h5"
         params["offset"] = 8287
         params["length"] = 5
-        rsp = requests.get(req, headers=req_headers, params=params)
+        rsp = self.session.get(req, headers=req_headers, params=params)
         self.assertEqual(rsp.status_code, 200)
 
         self.assertEqual(rsp.headers['Content-Type'], "application/octet-stream")
@@ -108,7 +112,7 @@ class RangeGetTest(unittest.TestCase):
         params["key"] = "data/hdf5test/tall.h5"
         params["offset"] = 3292
         params["length"] = 5000
-        rsp = requests.get(req, headers=req_headers, params=params)
+        rsp = self.session.get(req, headers=req_headers, params=params)
         self.assertEqual(rsp.status_code, 200)
 
         self.assertEqual(rsp.headers['Content-Type'], "application/octet-stream")

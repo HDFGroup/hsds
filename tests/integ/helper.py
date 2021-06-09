@@ -27,14 +27,14 @@ import config
     Helper function - get endpoint we'll send http requests to
 """
 def getEndpoint():
-
     endpoint = config.get("hsds_endpoint")
     return endpoint
 
 """ 
   Helper function - get session object
 """
-def getSession(endpoint):
+def getSession():
+    endpoint = getEndpoint()
     if endpoint.endswith(".sock"):
         # use requests_unixsocket to get a socket session
         session = requests_unixsocket.Session()
@@ -67,9 +67,9 @@ def validateId(id):
 """
 Helper - return number of active sn/dn nodes
 """
-def getActiveNodeCount():
+def getActiveNodeCount(session=None):
     req = getEndpoint("head") + "/info"
-    rsp = requests.get(req)
+    rsp = session.get(req)
     rsp_json = json.loads(rsp.text)
     sn_count = rsp_json["active_sn_count"]
     dn_count = rsp_json["active_dn_count"]
@@ -156,40 +156,39 @@ Helper - Create domain (and parent domin if needed)
 """
 def setupDomain(domain, folder=False):
     endpoint = config.get("hsds_endpoint")
-    s = getSession(endpoint)
     headers = getRequestHeaders(domain=domain)
     req = endpoint + "/"
-    
-    rsp = s.get(req, headers=headers)
-    if rsp.status_code == 200:
-        return  # already have domain
-    if rsp.status_code != 404:
-        # something other than "not found"
-        raise ValueError(f"Unexpected get domain error: {rsp.status_code}")
-    parent_domain = getParentDomain(domain)
-    if parent_domain is None:
-        raise ValueError(f"Invalid parent domain: {domain}")
-    # create parent domain if needed
-    setupDomain(parent_domain, folder=True)
+    with getSession() as session:
+        rsp = session.get(req, headers=headers)
+        if rsp.status_code == 200:
+            return  # already have domain
+        if rsp.status_code != 404:
+            # something other than "not found"
+            raise ValueError(f"Unexpected get domain error: {rsp.status_code}")
+        parent_domain = getParentDomain(domain)
+        if parent_domain is None:
+            raise ValueError(f"Invalid parent domain: {domain}")
+        # create parent domain if needed
+        setupDomain(parent_domain, folder=True)
 
-    headers = getRequestHeaders(domain=domain)
-    body=None
-    if folder:
-        body = {"folder": True}
-        rsp = s.put(req, data=json.dumps(body), headers=headers)
-    else:
-        rsp = s.put(req, headers=headers)
-    if rsp.status_code != 201:
-        raise ValueError(f"Unexpected put domain error: {rsp.status_code}")
+        headers = getRequestHeaders(domain=domain)
+        body=None
+        if folder:
+            body = {"folder": True}
+            rsp = session.put(req, data=json.dumps(body), headers=headers)
+        else:
+            rsp = session.put(req, headers=headers)
+        if rsp.status_code != 201:
+            raise ValueError(f"Unexpected put domain error: {rsp.status_code}")
 
 """
 Helper function - get root uuid for domain
 """
-def getRootUUID(domain, username=None, password=None):
+def getRootUUID(domain, username=None, password=None, session=None):
     req = getEndpoint() + "/"
     headers = getRequestHeaders(domain=domain, username=username, password=password)
 
-    rsp = requests.get(req, headers=headers)
+    rsp = session.get(req, headers=headers)
     root_uuid= None
     if rsp.status_code == 200:
         rspJson = json.loads(rsp.text)
@@ -208,11 +207,11 @@ def getTestDomain(name):
 """
 Helper function - get uuid for a given path
 """
-def getUUIDByPath(domain, path, username=None, password=None):
+def getUUIDByPath(domain, path, username=None, password=None, session=None):
     if path[0] != '/':
         raise KeyError("only abs paths") # only abs paths
 
-    parent_uuid = getRootUUID(domain, username=username, password=password)
+    parent_uuid = getRootUUID(domain, username=username, password=password, session=session)
 
     if path == '/':
         return parent_uuid
@@ -232,7 +231,7 @@ def getUUIDByPath(domain, path, username=None, password=None):
             raise KeyError("not found")
 
         req = getEndpoint() + "/groups/" + parent_uuid + "/links/" + name
-        rsp = requests.get(req, headers=headers)
+        rsp = session.get(req, headers=headers)
         if rsp.status_code != 200:
             raise KeyError("not found")
         rsp_json = json.loads(rsp.text)

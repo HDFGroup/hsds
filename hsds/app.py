@@ -177,6 +177,7 @@ def main():
             pargs.append(f"--node_number={node_number}")
         print(f"starting {pargs[0]}")
         pargs.extend(common_args)
+        # p = subprocess.Popen(pargs, shell=False, stdout=subprocess.DEVNULL)
         p = subprocess.Popen(pargs, shell=False, stdout=pout)
         processes.append(p)
     try:
