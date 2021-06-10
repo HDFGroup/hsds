@@ -7,6 +7,39 @@ import os
 
 
 def lambda_handler(event, context):
+
+    # process event data
+    if "action" in event:
+        action = event["action"]
+    else:
+        action = "GET"
+    if action not in ("GET", "POST", "PUT"):
+        err_msg = f"action: {action} is unsupported"
+        print(err_msg)
+        return {"status_code": 400, "error": err_msg}
+    if "request" in event:
+        req = event["request"]
+    else:
+        print("no request found in event")
+        req = "/about"
+    if "headers" in event:
+        headers = event["headers"]
+        if not isinstance(headers, dict):
+            err_msg = f"expected headers to be a dict, but got: {type(headers)}"
+            print(err_msg)
+            return {"status_code": 400, "error": err_msg}
+    else:
+        headers = []
+
+    if "params" in event:
+        params = event["params"]
+        if not isinstance(params, dict):
+            err_msg = f"expected params to be a dict, but got: {type(params)}"
+            print(err_msg)
+            return {"status_code": 400, "error": err_msg}
+    else:
+        params = []
+
     target_dn_count = 1  # TBD - adjust based on number of available VCPUs
     socket_paths = ["/tmp/sn_1.sock", "/tmp/rangeget.sock"]
     dn_urls_arg = ""
@@ -81,16 +114,18 @@ def lambda_handler(event, context):
             break
         time.sleep(1)
 
+    result = {"status_code": 500} # will replace on successful execution
     # invoke about request
     try:
         s = requests_unixsocket.Session()
         hs_endpoint="http+unix://%2Ftmp%2Fsn_1.sock"
-        req = hs_endpoint + "/about"
-        rsp = s.get(req)
+        rsp = s.get(hs_endpoint + req, params=params, headers=headers)
         print(f"got status_code: {rsp.status_code} from req: {req}")
 
+        result["status_code"] = rsp.status_code
         if rsp.status_code == 200:
             print(f"rsp.text: {rsp.text}")
+            result["output"] = rsp.text
     except Exception as e:
         print(f"got exception: {e}, quitting")
     except KeyboardInterrupt:
@@ -104,11 +139,13 @@ def lambda_handler(event, context):
                 p.terminate()
         processes = []
   
-    result = {"done": 1}
     print("returning result:", result)
     return result
 
 ### main
 if __name__ == "__main__":
     print("main")
-    lambda_handler(None, None)
+    req = "/datasets/d-d38053ea-3418fe27-22d9-478e7b-913279/value"
+    params = {"domain": "/shared/tall.h5"}
+    event = {"action": "GET", "request": req, "params": params}
+    lambda_handler(event, None)
