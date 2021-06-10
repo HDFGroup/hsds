@@ -6,6 +6,8 @@ RUN conda update conda -y && \
     conda install conda-pack && \
     conda create --name hsds --yes python=3.8
 RUN conda install --name hsds --yes \
+        pip \
+        wheel \
         curl \
         git \
         compilers \
@@ -20,12 +22,12 @@ RUN conda install --name hsds --yes \
         aiohttp-cors \
         pyjwt \
         pyyaml \
-        pip \
-        wheel
+        imagecodecs \
+        hdf5plugin
 # Install numcodecs from the specific commit since we need the brand new shuffle codec...
 RUN DISABLE_NUMCODECS_AVX2=1 CFLAGS=-DHAVE_UNISTD_H \
     conda run -n hsds --no-capture-output pip install --no-cache-dir \
-    git+https://github.com/zarr-developers/numcodecs.git@d16d1eac5198166a24726ffe808e3dcfcab9700d#egg=numcodecs \
+    git+https://github.com/zarr-developers/numcodecs.git@462278f61a4a9dd6054f90e2795300ea50d60b3b#egg=numcodecs \
     && conda remove --name hsds --yes git compilers \
     && conda run -n hsds --no-capture-output pip install --no-cache-dir kubernetes
 RUN conda-pack -n hsds -o /tmp/hsds-env.tar \
