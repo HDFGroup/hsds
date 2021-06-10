@@ -36,7 +36,6 @@ install_requires = [
     'psutil',
     'pyjwt',
     'pytz',
-    'requests',
     'requests-unixsocket'
     ]
 
