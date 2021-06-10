@@ -17,24 +17,14 @@ import binascii
 import subprocess
 import os.path as pp
 import datetime
-import requests
 from botocore.exceptions import ClientError
 from aiobotocore import get_session
 
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPUnauthorized, HTTPNotFound, HTTPForbidden, HTTPServiceUnavailable, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPUnauthorized, HTTPForbidden, HTTPInternalServerError
+
 from .. import hsds_logger as log
 from .. import config
-try:
-    import jwt
-    from jwt.exceptions import InvalidAudienceError, InvalidSignatureError, ExpiredSignatureError, DecodeError
-    from cryptography.x509 import load_pem_x509_certificate
-    from cryptography.hazmat.backends import default_backend
-    from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers 
-except ImportError:
-    log.error("Unable to import jwt, cryptrography packages")
-
-MSONLINE_OPENID_URL = "https://login.microsoftonline.com/common/.well-known/openid-configuration"
-GOOGLE_OPENID_URL = "https://accounts.google.com/.well-known/openid-configuration"
+from .jwtUtil import verifyBearerToken
 
 GROUP_PREFIX = "g:"  # pre-appended to acl names to distinguish group acls from user acls
 
@@ -445,190 +435,6 @@ def initGroupDB(app):
 
     log.info(f"group_db initialized: {len(group_user_db)} groups")
 
-def _verifyBearerToken(app, token):
-    # Contact OpenID provider to validate bearer token.
-    # if valid, update user db and return username
-    username = None
-    provider = config.get('openid_provider')
-    user_group_db = app["user_group_db"]
-    if not provider:
-        log.warn("no OpenID provider configured")
-        raise HTTPUnauthorized()
-    # Resolve provider into an OpenID configuration.
-    log.debug(f"Using OpenID provider: {provider}")
-    if provider.lower() == 'azure':
-        openid_url = MSONLINE_OPENID_URL
-    elif provider.lower() == 'google':
-        openid_url = GOOGLE_OPENID_URL
-    else:
-        openid_url = config.get('openid_url')
-        if not openid_url:
-            log.warn(f"OpenID provider: {provider} requires 'openid_url' config to be set")
-            raise HTTPUnauthorized()
-
-    audience = config.get('openid_audience')
-    claims = config.get('openid_claims').split(',')
-
-    # Maintain Azure defaults for compatibility.
-    if not audience:
-        audience = config.get('azure_resource_id')
-
-    # If we still dont have a provider and audience, abort.
-    if not openid_url or not audience or not claims:
-        log.warn('Bearer authorization, but no OpenID configuration.')
-        raise HTTPUnauthorized()
-
-    log.debug(f"Bearer authorization, using provider: {provider}")
-    log.debug(f"Bearer authorization, using audience: {audience}")
-    log.debug(f"Bearer authorization, using claims: {claims}")
-    if provider not in ('azure', 'google'):
-        log.debug(f"Bearer authorization, using openid_url: {openid_url}")
-
-    log.debug(f"token: {token}")
-
-    try:
-        token_header = jwt.get_unverified_header(token)
-    except DecodeError as de:
-        log.warn(f"Decode error in jwt get_unverified_header: {de}")
-        raise HTTPUnauthorized()
-    except ValueError as ve:
-        log.warn(f"Value error in jwt get_unverified_header: {ve}")
-        raise HTTPUnauthorized()
-    except Exception as e:
-        log.warn(f"Unexpected exception {e.__class__.__name__} in jwt get_unverified_header: {e}")
-        raise HTTPUnauthorized()
-
-    try:
-        res = requests.get(openid_url, timeout=1.0)
-    except requests.exceptions.ConnectionError:
-        log.warn(f"connection error for getting openid configuration from : {openid_url}")
-        raise HTTPInternalServerError()
-    if res.status_code != 200:
-        log.warn("Bad response from {openid_url}: {res.status_code}")
-        if res.status_code == 404:
-            raise HTTPNotFound()
-        elif res.status_code == 401:
-            raise HTTPUnauthorized()
-        elif res.status_code == 403:
-            raise HTTPForbidden()
-        elif res.status_code == 503:
-            raise HTTPServiceUnavailable()
-        else:
-            raise HTTPInternalServerError()
-
-    jwk_uri = res.json()['jwks_uri']
-
-    # TBD: cache responses by uri
-    res = requests.get(jwk_uri)
-    jwk_keys = res.json()
-    x5c = None
-    rsa = {}
-    log.info("_verifyBearerToken")
-
-    # Iterate JWK keys and extract matching x5c chain
-    for key in jwk_keys['keys']:
-        if key['kid'] == token_header['kid']:
-            if 'x5c' in key:
-                x5c = key['x5c']
-            elif 'e' in key and 'n' in key:
-                for field in ['e', 'n']:
-                    val = key[field]
-                    val = val + '='*((4 - len(val)%4)%4)
-                    val = base64.urlsafe_b64decode(val.encode('utf-8'))
-                    rsa[field] = int.from_bytes(val, 'big')
-
-    # Use the X5C chain to load a public key.
-    if x5c:
-        log.debug("using x5c public key")
-        cert = ''.join([
-            '-----BEGIN CERTIFICATE-----\n',
-            x5c[0],
-            '\n-----END CERTIFICATE-----\n',
-            ])
-        public_key = load_pem_x509_certificate(cert.encode(), default_backend()).public_key()
-        """
-        public_key_bytes = public_key.public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo)
-        log.debug(f"got public key: {public_key_bytes.decode('utf-8')}")
-        """
-
-
-    # Use RSA numbers to load a public key.
-    elif rsa:
-        log.debug("using rsa public key")
-        public_key = RSAPublicNumbers(**rsa).public_key(default_backend())
-
-    # We cannot load a public key.
-    else:
-        log.error("Unable to extract x5c chain or RSA key from JWK keys")
-        raise HTTPInternalServerError()
-
-    #log.debug(f"bearer token - public_key: {public_key}")
-
-    
-    try:
-        jwt_decode = jwt.decode(
-            token,
-            public_key,
-            algorithms='RS256',
-            audience=audience,
-        )
-    except InvalidAudienceError:
-        log.warn(f"OpenID InvalidAudienceError with {audience}")
-        raise HTTPUnauthorized()
-    except InvalidSignatureError:
-        log.warn("OpenID InvalidSignatureError")
-        raise HTTPUnauthorized()
-    except ExpiredSignatureError:
-        log.warn("OpenID ExpiredSignatureError")
-        raise HTTPUnauthorized()
-
-    roles = None
-    for name in claims:
-        log.debug(f"looking at claim: {name}")
-        if name in jwt_decode:
-            value = jwt_decode[name]
-            log.debug(f"got value: {value} for claim: {name}")
-            if name == "unique_name":
-                username = value
-            elif name == "appid":
-                pass # tbd
-            elif name == "roles":
-                roles = value
-            else:
-                log.info(f"ignoring claim: {name} with value: {value}")
-        else:
-            log.debug(f"claim: {name} not found in bearer token")
-    
-    if not username:
-        log.warn("unable to retreive username from bearer token")
-        return None
-    if roles:
-        if username not in user_group_db:
-            user_group_db[username] = set()
-        user_group = user_group_db[username]
-        for role in roles:
-            user_group.add(role)
-
-    exp = None
-    log.debug(f"decoded token: {jwt_decode}")
-    if "exp" in jwt_decode:
-        exp = jwt_decode["exp"]
-        if exp < 0:
-            log.warn("invalid expire time")
-            raise HTTPUnauthorized()
-
-    if exp:
-        log.info(f"decoded bearer token for user: {username}, expired: {exp}")
-        setPassword(app, username, token, scheme="bearer", exp=exp)
-    else:
-        log.info(f"decoded bearer token for user: {username}, no expiration")
-        setPassword(app, username, token, scheme="bearer")
-
-    return username
-
-
 def getUserPasswordFromRequest(request):
     """ Return user defined in Auth header (if any)
     """
@@ -669,13 +475,27 @@ def getUserPasswordFromRequest(request):
     elif scheme.lower() == 'bearer':
         # OpenID Auth.
         log.debug(f"Got OpenID bearer token: {token}")
+        user_group_db = app["user_group_db"]
 
         # see if we've already validated this token
         user = _checkTokenCache(app, token)
         if not user:
-            user = _verifyBearerToken(app, token)
-        if user:
-            pswd = token
+            user, exp, roles = verifyBearerToken(app, token)
+            
+            if exp:
+                log.info(f"decoded bearer token for user: {user}, expired: {exp}")
+                setPassword(app, user, token, scheme="bearer", exp=exp)
+            else:
+                log.info(f"decoded bearer token for user: {user}, no expiration")
+                setPassword(app, user, token, scheme="bearer")
+            if user:
+                pswd = token
+            if roles:
+                if user not in user_group_db:
+                    user_group_db[user] = set()
+                user_group = user_group_db[user]
+                for role in roles:
+                    user_group.add(role)
 
     else:
         msg = f"Unsupported Authorization header scheme: {scheme}"

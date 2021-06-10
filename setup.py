@@ -37,6 +37,7 @@ install_requires = [
     'pyjwt',
     'pytz',
     'requests',
+    'requests-unixsocket'
     ]
 
 
