@@ -164,8 +164,11 @@ async def k8s_update_dn_info(app):
     k8s_app_label = config.get("k8s_app_label")
     k8s_namespace = config.get("k8s_namespace")
     pod_ips = getPodIps(k8s_app_label, k8s_namespace=k8s_namespace)
-     
+    if not pod_ips:
+        log.error("Expected to find at least one hsds pod")
+        return
     pod_ips.sort()  # for assigning node numbers
+    log.debug(f"got pod_ips: {pod_ips}")
     dn_port = config.get("dn_port")
     dn_urls = []
     for pod_ip in pod_ips:

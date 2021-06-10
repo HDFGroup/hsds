@@ -30,7 +30,7 @@ def getPodIps(k8s_app_label, k8s_namespace=None):
     v1 = k8s_client.CoreV1Api()
     if k8s_namespace:
         # get pods for given namespace
-        log.info(f"getting pods for namespace: {k8s_namespace}")
+        log.debug(f"getting pods for namespace: {k8s_namespace}")
         ret = v1.list_namespaced_pod(namespace=k8s_namespace)
     else:
         log.info("getting pods for all namespaces")
@@ -42,10 +42,9 @@ def getPodIps(k8s_app_label, k8s_namespace=None):
             continue
         labels = i.metadata.labels
         if labels and "app" in labels and labels["app"] == k8s_app_label:
-            log.info(f"found hsds pod with app label: {k8s_app_label} - ip: {pod_ip}")
+            log.debug(f"found hsds pod with app label: {k8s_app_label} - ip: {pod_ip}")
             pod_ips.append(pod_ip)
-    if not pod_ips:
-        log.error("Expected to find at least one hsds pod")
+    
     pod_ips.sort()  # for assigning node numbers
     return pod_ips
   
