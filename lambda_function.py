@@ -26,6 +26,7 @@ def lambda_handler(event, context):
     common_args.append("--dn_urls="+dn_urls_arg)
     bucket_name = "hdflab2"
     common_args.append(f"--bucket_name={bucket_name}")
+    common_args.append("--s3_sync_interval=999")
 
     # remove any existing socket files
     for socket_path in socket_paths:
@@ -33,7 +34,7 @@ def lambda_handler(event, context):
             os.unlink(socket_path)
         except OSError:
             if os.path.exists(socket_path):
-                print(f"unable to unline socket: {socket_path}")
+                print(f"unable to unlink socket: {socket_path}")
                 raise
  
     # Start apps
@@ -78,7 +79,7 @@ def lambda_handler(event, context):
         if not missing_socket:
             print("all sockets ready")
             break
-        time.sleep(0.1)
+        time.sleep(1)
 
     # invoke about request
     try:
