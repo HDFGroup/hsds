@@ -9,8 +9,12 @@ import os
 def lambda_handler(event, context):
 
     # process event data
+    print("lambda_handler(event, context)")
+    print(f"event: {event}")
+    print(f"context: {context}")
     if "action" in event:
         action = event["action"]
+        print(f"got action: {action}")
     else:
         action = "GET"
     if action not in ("GET", "POST", "PUT"):
@@ -19,25 +23,30 @@ def lambda_handler(event, context):
         return {"status_code": 400, "error": err_msg}
     if "request" in event:
         req = event["request"]
+        print(f"got requesst: {req}")
     else:
         print("no request found in event")
         req = "/about"
     if "headers" in event:
         headers = event["headers"]
+        print(f"headers: {headers}")
         if not isinstance(headers, dict):
             err_msg = f"expected headers to be a dict, but got: {type(headers)}"
             print(err_msg)
             return {"status_code": 400, "error": err_msg}
     else:
+        print("no headers found in event")
         headers = []
 
     if "params" in event:
         params = event["params"]
+        print(f"params: {params}")
         if not isinstance(params, dict):
             err_msg = f"expected params to be a dict, but got: {type(params)}"
             print(err_msg)
             return {"status_code": 400, "error": err_msg}
     else:
+        print("no params found in event")
         params = []
 
     target_dn_count = 1  # TBD - adjust based on number of available VCPUs
@@ -46,13 +55,16 @@ def lambda_handler(event, context):
     for i in range(target_dn_count):
         host = "unix"
         socket_path = f"/tmp/dn_{(i+1)}.sock"
-        print(f"dn_socket[{i}]",  socket_path)
         socket_paths.append(socket_path)
         if dn_urls_arg:
             dn_urls_arg += ','
         dn_urls_arg += f"http://{host}:{socket_path}"
+
+    print("socket paths:")
+    for socket_path in socket_paths:
+        print(f"  {socket_path}")
     
-    print("dn_ports:", dn_urls_arg)
+    print("dn_urls:", dn_urls_arg)
     common_args = ["--standalone", "--use_socket"]
     common_args.append(f"--sn_socket={socket_paths[0]}")
     common_args.append(f"--rangeget_socket={socket_paths[1]}")
