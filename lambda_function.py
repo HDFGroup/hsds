@@ -1,17 +1,60 @@
 import requests_unixsocket
 import time
 import subprocess
+import queue
+import threading
 import os
 
 # note: see https://aws.amazon.com/blogs/compute/parallel-processing-in-python-with-aws-lambda/
 
+def print_process_output(queues):
+    while True:
+        got_output = False
+        for q in queues:
+            try:  
+                line = q.get_nowait() # or q.get(timeout=.1)
+            except queue.Empty:
+                pass  # no output on this queue yet
+            else: 
+                print(line.decode("utf-8").strip())
+                got_output = True
+        if not got_output:
+            break  # all queues empty for now
+
+def make_request(req, params, headers, result):
+    # invoke about request
+    print("make_request")
+    with requests_unixsocket.Session() as s:
+        try:
+            hs_endpoint="http+unix://%2Ftmp%2Fsn_1.sock"
+            print(f"making request: {req}")
+            rsp = s.get(hs_endpoint + req, params=params, headers=headers)
+            print(f"got status_code: {rsp.status_code} from req: {req}")
+            result["status_code"] = rsp.status_code
+
+            #result["status_code"] = rsp.status_code
+            #print_process_output(processes)
+            if rsp.status_code == 200:
+                print(f"rsp.text: {rsp.text}")
+                result["output"] = rsp.text
+        except Exception as e:
+            print(f"got exception: {e}, quitting")
+        except KeyboardInterrupt:
+            print("got KeyboardInterrupt, quitting")
+        finally:
+            print("request done")      
+
+def enqueue_output(out, queue):
+    for line in iter(out.readline, b''):
+        queue.put(line)
+    print("enqueu_output close()")
+    out.close()
 
 def lambda_handler(event, context):
 
     # process event data
     print("lambda_handler(event, context)")
     print(f"event: {event}")
-    print(f"context: {context}")
     if "action" in event:
         action = event["action"]
         print(f"got action: {action}")
@@ -86,6 +129,8 @@ def lambda_handler(event, context):
 
     print("Creating subprocesses")
     processes = []
+    queues = []
+    result = {}
 
     # create processes for count dn nodes, sn node, and rangeget node
     for i in range(target_dn_count+2):
@@ -105,59 +150,65 @@ def lambda_handler(event, context):
             pargs.append(f"--node_number={node_number}")
         print(f"starting {pargs[0]}")
         pargs.extend(common_args)
-        p = subprocess.Popen(pargs, shell=False)   #, stdout=subprocess.DEVNULL)
+        p = subprocess.Popen(pargs, bufsize=0, shell=False, stdout=subprocess.PIPE)
         processes.append(p)
+        q = queue.Queue()
+        t = threading.Thread(target=enqueue_output, args=(p.stdout, q))
+        queues.append(q)
+        t.daemon = True # thread dies with the program
+        t.start()
     
-    for p in processes:
-        if p.poll() is not None:
-            result = p.communicate()
-            raise ValueError(f"process {p.args[0]} ended, result: {result}")
 
-    # wait for the socket objects to be created by the sub-processes
+    # read line without blocking
+    
+    req_thread = None
     while True:
-        missing_socket = False
-        for socket_path in socket_paths:
-            if not os.path.exists(socket_path):
-                print(f"socket: {socket_path} does not exist yet")
-                missing_socket = True
-                break
-        if not missing_socket:
-            print("all sockets ready")
-            break
-        time.sleep(1)
-
-    result = {"status_code": 500} # will replace on successful execution
-    # invoke about request
-    try:
-        s = requests_unixsocket.Session()
-        hs_endpoint="http+unix://%2Ftmp%2Fsn_1.sock"
-        rsp = s.get(hs_endpoint + req, params=params, headers=headers)
-        print(f"got status_code: {rsp.status_code} from req: {req}")
-
-        result["status_code"] = rsp.status_code
-        if rsp.status_code == 200:
-            print(f"rsp.text: {rsp.text}")
-            result["output"] = rsp.text
-    except Exception as e:
-        print(f"got exception: {e}, quitting")
-    except KeyboardInterrupt:
-        print("got KeyboardInterrupt, quitting")
-    finally:
-        print("killing subprocesses")      
+        print_process_output(queues)
 
         for p in processes:
-            if p.poll() is None:
-                print(f"killing {p.args[0]}")
-                p.terminate()
-        processes = []
+            if p.poll() is not None:
+                r = p.communicate()
+                raise ValueError(f"process {p.args[0]} ended, result: {r}")
+
+        if req_thread:
+            if not req_thread.is_alive():
+                print("request thread is done")
+                break
+        else:
+            # wait for the socket objects to be created by the sub-processes
+            missing_socket = False    
+            for socket_path in socket_paths:
+                if not os.path.exists(socket_path):
+                    print(f"socket: {socket_path} does not exist yet")
+                    missing_socket = True
+                    break
+            if not missing_socket:
+                print("all sockets ready")
+                # make req to sn process
+                req_thread = threading.Thread(target=make_request, args=(req, params, headers, result))
+                req_thread.daemon = True # thread dies with the program
+                req_thread.start()
+          
+            
+        time.sleep(0.1)
+
+      
+    print("killing subprocesses")      
+
+    for p in processes:
+        if p.poll() is None:
+            print(f"killing {p.args[0]}")
+            p.terminate()
+    processes = []
   
     print("returning result:", result)
     return result
 
 ### main
 if __name__ == "__main__":
+    # export PYTHONUNBUFFERED=1
     print("main")
-    req = "/datasets/d-d38053ea-3418fe27-22d9-478e7b-913279/value"
+    req = "/about"  # "/datasets/d-d38053ea-3418fe27-22d9-478e7b-913279/value"
     params = {"domain": "/shared/tall.h5"}
     event = {"action": "GET", "request": req, "params": params}
     lambda_handler(event, None)
