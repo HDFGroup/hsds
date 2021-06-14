@@ -24,7 +24,6 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPUnauthorized, HTTPForbidd
 
 from .. import hsds_logger as log
 from .. import config
-from .jwtUtil import verifyBearerToken
 
 GROUP_PREFIX = "g:"  # pre-appended to acl names to distinguish group acls from user acls
 
@@ -480,6 +479,8 @@ def getUserPasswordFromRequest(request):
         # see if we've already validated this token
         user = _checkTokenCache(app, token)
         if not user:
+            # put import here to avoid jwt package dependency unless required
+            from .jwtUtil import verifyBearerToken
             user, exp, roles = verifyBearerToken(app, token)
             
             if exp:

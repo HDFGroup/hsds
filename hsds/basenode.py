@@ -31,7 +31,6 @@ from . import config
 from .util.httpUtil import  http_get, http_post, jsonResponse 
 from .util.idUtil import createNodeId, getNodeNumber, getNodeCount
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword, isAdminUser
-from .util.k8sClient import getPodIps
 from . import hsds_logger as log
 
 HSDS_VERSION = "0.7.0beta"
@@ -163,6 +162,8 @@ async def k8s_update_dn_info(app):
     log.info("k8s_update_dn_info")
     k8s_app_label = config.get("k8s_app_label")
     k8s_namespace = config.get("k8s_namespace")
+    # put import here to avoid k8s package dependency unless required
+    from .util.k8sClient import getPodIps  
     pod_ips = getPodIps(k8s_app_label, k8s_namespace=k8s_namespace)
     if not pod_ips:
         log.error("Expected to find at least one hsds pod")
