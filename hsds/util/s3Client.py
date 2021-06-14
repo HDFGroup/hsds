@@ -49,6 +49,8 @@ class S3Client():
         self._aws_access_key_id = None
         max_pool_connections = 64
         self._aws_session_token = None
+        self._aws_role_arn = None
+        self._aws_session_token = None
 
         try:
             self._aws_iam_role = config.get("aws_iam_role")
@@ -79,8 +81,10 @@ class S3Client():
             log.info(f"AWS_ROLE_ARN set to: {self._aws_role_arn}")
             if "AWS_WEB_IDENTITY_TOKEN_FILE" in os.environ:
                 log.debug(f"AWS_WEB_IDENTITY_TOKEN_FILE is: {os.environ['AWS_WEB_IDENTITY_TOKEN_FILE']}")
-            else:
-                log.warn("Expected AWS_WEB_IDENTIFY_TOKEN_FILE environment to be set")
+        if "AWS_SESSION_TOKEN" in os.environ:
+            self._aws_session_token = os.environ['AWS_SESSION_TOKEN']
+            log.info(f"AWS_SESSION_TOKEN set from environ to: {self._aws_session_token}")
+
 
         self._aio_config = AioConfig(max_pool_connections=max_pool_connections)
 

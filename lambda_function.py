@@ -55,6 +55,10 @@ def lambda_handler(event, context):
 
     # process event data
     print("lambda_handler(event, context)")
+    if "AWS_ROLE_ARN" in os.environ:
+        print(f"using AWS_ROLE_ARN: {os.environ['AWS_ROLE_ARN']}")
+    if "AWS_SESSION_TOKEN" in os.environ:
+        print(f"using AWS_SESSION_TOKEN: {os.environ['AWS_SESSION_TOKEN']}")
     print(f"event: {event}")
     if "action" in event:
         action = event["action"]
