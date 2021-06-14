@@ -110,6 +110,7 @@ def lambda_handler(event, context):
     
     print("dn_urls:", dn_urls_arg)
     common_args = ["--standalone", "--use_socket", "--readonly"]
+    common_args.append("--log_level=DEBUG")
     common_args.append(f"--sn_socket={socket_paths[0]}")
     common_args.append(f"--rangeget_socket={socket_paths[1]}")
     common_args.append("--dn_urls="+dn_urls_arg)

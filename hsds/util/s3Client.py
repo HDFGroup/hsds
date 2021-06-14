@@ -103,6 +103,8 @@ class S3Client():
         if not self._aws_access_key_id or self._aws_access_key_id == 'xxx':
             log.debug("aws access key id not set")
             self._aws_access_key_id = None
+        else:
+            log.debug(f"using aws key id: {self._aws_access_key_id}")
         self._renewToken()
 
     def _renewToken(self):
