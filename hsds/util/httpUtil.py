@@ -99,6 +99,23 @@ def get_http_client(app, url=None, cache_client=True):
     # return client instance
     return client
 
+"""
+Release any http clients
+"""
+async def release_http_client(app):
+    log.info("releasing http clients")
+    if 'client' in app:
+        client = app['client']
+        await client.close()
+        del app['client']
+    if "socket_clients" in app:
+        socket_clients = app["socket_clients"]
+        for socket_path in socket_clients:
+            client = socket_clients[socket_path]
+            await client.close()
+        app["socket_clients"] = {}
+    
+
 
 """
 Replacement for aiohttp Request.read using our max request limit
@@ -273,38 +290,7 @@ async def http_put(app, url, data=None, params=None):
         log.error(f"CancelledError for http_put({url}): {cle}")
         raise HTTPInternalServerError()
     return rsp_json
-
-"""
-Helper function  - async HTTP PUT for binary data
-"""
-"""
-async def http_put_binary(app, url, data=None, params=None):
-    log.info(f"http_put_binary('{url}') nbytes: {len(data)}")
-    rsp_json = None
-    client = get_http_client(app, url=url)
-    url = get_http_std_url(url)
-    timeout = config.get("timeout")
-
-    try:
-        async with client.put(url, data=data, params=params, timeout=timeout) as rsp:
-            log.info(f"http_put_binary status: {rsp.status}")
-            if rsp.status != 201:
-                log.error(f"PUT (binary) request error for {url}: status {rsp.status}")
-                raise HTTPInternalServerError()
-            elif rsp.status == 503:
-                log.warn(f"503 error for http_put_binary {url}")
-                raise HTTPServiceUnavailable()
-
-            rsp_json = await rsp.json()
-            log.debug(f"http_put_binary({url}) response: {rsp_json}")
-    except ClientError as ce:
-        log.error(f"Error for http_put_binary({url}): {ce} ")
-        raise HTTPInternalServerError()
-    except CancelledError as cle:
-        log.error(f"CancelledError for http_put_binary({url}): {cle}")
-        raise HTTPInternalServerError()
-    return rsp_json
-"""
+ 
 
 """
 Helper function  - async HTTP DELETE

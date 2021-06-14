@@ -522,6 +522,11 @@ def baseInit(node_type):
     else: 
         # create node id based on uuid
         node_id = createNodeId(node_type)
+
+    is_readonly = config.getCmdLineArg("readonly")
+    if is_readonly:
+        log.info("running in readonly mode")
+        app["is_readonly"] = True
     
     log.info(f"setting node_id to: {node_id}")
     app["id"] = node_id

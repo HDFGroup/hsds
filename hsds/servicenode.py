@@ -114,6 +114,8 @@ async def init():
     return app
 
 async def start_background_tasks(app):
+    if "is_standalone" in app:
+        return  # don't need health check
     loop = asyncio.get_event_loop()
     loop.create_task(healthCheck(app))
 
@@ -183,7 +185,16 @@ def main():
                 raise
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         s.bind(sn_socket)
-        run_app(app, sock=s)
+        try:
+            run_app(app, sock=s, handle_signals=True)
+        except KeyboardInterrupt:
+            print("got keyboard interrupt")
+        except SystemExit:
+            print("got system exit")
+        except Exception as e:
+            print(f"got exception: {e}s")
+            #loop = asyncio.get_event_loop()
+            #loop.run_until_complete(release_http_client(app))
         log.info("run_app done")
         # close socket?
     else:
@@ -191,6 +202,10 @@ def main():
         port = int(config.get("sn_port"))
         log.info(f"run_app on port: {port}")
         run_app(app, port=port)
+
+    log.info("Service node exiting")
+    
+      
 
 
 if __name__ == '__main__':

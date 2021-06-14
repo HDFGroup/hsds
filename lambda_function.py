@@ -3,6 +3,7 @@ import time
 import subprocess
 import queue
 import threading
+import signal
 import os
 
 # note: see https://aws.amazon.com/blogs/compute/parallel-processing-in-python-with-aws-lambda/
@@ -108,14 +109,11 @@ def lambda_handler(event, context):
         print(f"  {socket_path}")
     
     print("dn_urls:", dn_urls_arg)
-    common_args = ["--standalone", "--use_socket"]
+    common_args = ["--standalone", "--use_socket", "--readonly"]
     common_args.append(f"--sn_socket={socket_paths[0]}")
     common_args.append(f"--rangeget_socket={socket_paths[1]}")
     common_args.append("--dn_urls="+dn_urls_arg)
-    bucket_name = "hdflab2"
-    common_args.append(f"--bucket_name={bucket_name}")
-    common_args.append("--s3_sync_interval=999")
-
+    
     # remove any existing socket files
     for socket_path in socket_paths:
         try:
@@ -173,6 +171,16 @@ def lambda_handler(event, context):
         if req_thread:
             if not req_thread.is_alive():
                 print("request thread is done")
+                print("killing subprocesses")      
+
+                for p in processes:
+                    if p.poll() is None:
+                        print(f"killing {p.args[0]}")
+                        p.send_signal(signal.SIGINT)
+                        #p.terminate()
+                    processes = []
+                time.sleep(1)
+                print_process_output(queues)
                 break
         else:
             # wait for the socket objects to be created by the sub-processes
@@ -188,18 +196,8 @@ def lambda_handler(event, context):
                 req_thread = threading.Thread(target=make_request, args=(req, params, headers, result))
                 req_thread.daemon = True # thread dies with the program
                 req_thread.start()
-          
-            
         time.sleep(0.1)
-
-      
-    print("killing subprocesses")      
-
-    for p in processes:
-        if p.poll() is None:
-            print(f"killing {p.args[0]}")
-            p.terminate()
-    processes = []
+          
   
     print("returning result:", result)
     return result
@@ -208,7 +206,7 @@ def lambda_handler(event, context):
 if __name__ == "__main__":
     # export PYTHONUNBUFFERED=1
     print("main")
-    req = "/about"  # "/datasets/d-d38053ea-3418fe27-22d9-478e7b-913279/value"
+    req = "/datasets/d-d38053ea-3418fe27-22d9-478e7b-913279/value"
     params = {"domain": "/shared/tall.h5"}
     event = {"action": "GET", "request": req, "params": params}
     lambda_handler(event, None)

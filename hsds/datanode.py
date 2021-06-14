@@ -23,6 +23,7 @@ from . import config
 from .util.lruCache import LruCache
 from .util.idUtil import isValidUuid, isSchema2Id, getCollectionForId, isRootObjId
 from .basenode import healthCheck, baseInit, preStop
+#from .util.httpUtil import release_http_client
 from . import hsds_logger as log
 from .domain_dn import GET_Domain, PUT_Domain, DELETE_Domain, PUT_ACL
 from .group_dn import GET_Group, POST_Group, DELETE_Group, PUT_Group, POST_Root
@@ -186,16 +187,22 @@ async def bucketGC(app):
     log.error("bucketGC terminating unexpectedly")
 
 async def start_background_tasks(app):
+    if "is_standalone" in app:
+        return
     loop = asyncio.get_event_loop()
-    loop.create_task(healthCheck(app))
-    # run data sync tasks
-    loop.create_task(s3syncCheck(app))
 
-    # run root scan
-    loop.create_task(bucketScan(app))
+    if "is_standalone" not in app:
+        loop.create_task(healthCheck(app))
 
-    # run root/dataset GC
-    loop.create_task(bucketGC(app))
+    if "is_readonly" not in app:
+        # run data sync tasks
+        loop.create_task(s3syncCheck(app))
+
+        # run root scan
+        loop.create_task(bucketScan(app))
+
+        # run root/dataset GC
+        loop.create_task(bucketGC(app))
 
 
 
@@ -281,6 +288,9 @@ def main():
         port = int(config.get("dn_port"))
         log.info(f"run_app on port: {port}")
         run_app(app, port=port)
+
+    log.info("datanode exiting")
+    
 
 if __name__ == '__main__':
     main()
