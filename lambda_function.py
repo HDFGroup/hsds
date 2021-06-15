@@ -81,7 +81,7 @@ def lambda_handler(event, context):
         log_level = logging.ERROR
     else:
         print(f"unsupported log_level: {log_level_cfg}, using INFO instead")
-        log_level_cfg = logging.INFO
+        log_level = logging.INFO
 
     logging.basicConfig(level=log_level)
 

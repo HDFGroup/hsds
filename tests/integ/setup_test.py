@@ -47,6 +47,8 @@ class SetupTest(unittest.TestCase):
 
         req = helper.getEndpoint() + '/'
         params={"domain": home_domain}
+        print("req:", req)
+        print("domain:", home_domain)
         rsp = self.session.get(req, params=params, headers=headers)
         print("/home get status:", rsp.status_code)
 
