@@ -32,7 +32,7 @@ install_requires = [
     'chardet <= 3.0.4',
     'cryptography',
     'kubernetes',
-    'numba',
+    'numcodecs',
     'numpy',
     'psutil',
     'pyjwt',
