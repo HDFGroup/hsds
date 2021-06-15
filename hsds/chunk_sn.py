@@ -23,7 +23,7 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPRequestEnti
 from aiohttp.client_exceptions import ClientError
 from aiohttp.web import StreamResponse
 
-from .util.httpUtil import  getHref, getAcceptType, get_http_client, http_put, request_read, jsonResponse
+from .util.httpUtil import  getHref, getAcceptType, http_get, http_put, http_post, request_read, jsonResponse
 from .util.idUtil import   isValidUuid, getDataNodeUrl, getNodeCount
 from .util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain
 from .util.hdf5dtype import getItemSize, createDataType
@@ -93,7 +93,6 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr, bucket=No
     req += "/chunks/" + chunk_id
 
     log.debug(f"PUT chunk req: {req}")
-    client = get_http_client(app)
     data = arrayToBytes(arr_chunk)
     # pass itemsize, type, dimensions, and selection as query params
     params = {}
@@ -102,19 +101,8 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr, bucket=No
         params["bucket"] = bucket
 
     try:
-        async with client.put(req, data=data, params=params) as rsp:
-            log.debug(f"req: {req} status: {rsp.status}")
-            if rsp.status == 200:
-                log.debug(f"http_put({req}) <200> Ok")
-            elif rsp.status == 201:
-                log.debug(f"http_out({req}) <201> Updated")
-            elif rsp.status == 503:
-                log.warn(f"DN node too busy to handle request: {req}")
-                raise HTTPServiceUnavailable()
-            else:
-                log.error(f"request error status: {rsp.status} for {req}: {str(rsp)}")
-                raise HTTPInternalServerError()
-
+        json_rsp = await http_put(app, req, data=data, params=params)
+        log.debug(f"got rsp: {json_rsp} for put binary request: {req}, {len(data)} bytes")
     except ClientError as ce:
         log.error(f"Error for http_put({req}): {ce} ")
         raise HTTPInternalServerError()
@@ -244,9 +232,17 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_m
             req = getDataNodeUrl(app, chunk_id)
             req += "/chunks/" + chunk_id
             log.debug("GET chunk req: " + req)
-            client = get_http_client(app)
             try:
-                rsp = await client.get(req, params=params)
+                array_data = await http_get(app, req, params=params)
+                log.debug(f"http_get {req}, read {len(array_data)} bytes")
+            except HTTPNotFound:
+                if "s3path" in params:
+                    s3path = params["s3path"]
+                    # external HDF5 file, should exist
+                    log.warn(f"s3path: {s3path} for S3 range get not found")
+                    raise 
+                # no data, return zero array
+                chunk_arr = defaultChunk()
             except ClientError as ce:
                 log.error(f"Error for http_get({req}): {ce} ")
                 raise HTTPInternalServerError()
@@ -254,23 +250,7 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_m
                 log.warn(f"CancelledError for http_get({req}): {cle}")
                 return
 
-            log.debug(f"http_get {req} status: <{rsp.status}>")
-            if rsp.status == 200:
-                array_data = await rsp.read()  # read response as bytes
-            elif rsp.status == 404:
-                if "s3path" in params:
-                    s3path = params["s3path"]
-                    # external HDF5 file, should exist
-                    log.warn(f"s3path: {s3path} for S3 range get not found")
-                    raise HTTPNotFound()
-                # no data, return zero array
-                chunk_arr = defaultChunk()
-            else:
-                msg = f"request to {req} failed with code: {rsp.status}"
-                log.error(msg)
-                raise HTTPInternalServerError()
-
-    if array_data:
+    if array_data is not None:
         #convert binary data to numpy array
         try:
             chunk_arr = bytesToArray(array_data, dt, chunk_shape)
@@ -283,7 +263,6 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr, chunk_m
             log.error(f"Expected {nelements_expected} points, but got: {nelements_read}")
             raise HTTPInternalServerError()
         chunk_arr = chunk_arr.reshape(chunk_shape)
-
 
     log.info(f"chunk_arr shape: {chunk_arr.shape}")
     log.info(f"data_sel: {data_sel}")
@@ -422,32 +401,18 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index, np_a
             req = getDataNodeUrl(app, chunk_id)
             req += "/chunks/" + chunk_id
             log.debug(f"GET chunk req: {req}")
-            client = get_http_client(app)
-            try:
-                async with client.post(req, params=params, data=post_data) as rsp:
-                    log.debug(f"http_post {req} status: <{rsp.status}>")
-                    if rsp.status == 200:
-                        rsp_data = await rsp.read()  # read response as bytes
-                        np_arr_rsp = bytesToArray(rsp_data, dt, (num_points,))
-                    elif rsp.status == 404:
-                        if "s3path" in params:
-                            s3path = params["s3path"]
-                            # external HDF5 file, should exist
-                            log.warn(f"s3path: {s3path} for S3 range get found")
-                            raise HTTPNotFound()
-                        # no data, return zero array
-                        np_arr_rsp = defaultArray()
-                    else:
-                        msg = f"request to {req} failed with code: {rsp.status}"
-                        log.error(msg)
-                        raise HTTPInternalServerError()
-
-            except ClientError as ce:
-                log.error(f"Error for http_get({req}): {ce} ")
-                raise HTTPInternalServerError()
-            except CancelledError as cle:
-                log.warn(f"CancelledError for http_get({req}): {cle}")
-                return
+            try: 
+                rsp_data = await http_post(app, req, params=params, data=post_data)
+                log.debug(f"got rsp for http_post({req}): {len(rsp_data)} bytes")
+                np_arr_rsp = bytesToArray(rsp_data, dt, (num_points,))
+            except HTTPNotFound:
+                if "s3path" in params:
+                    s3path = params["s3path"]
+                    # external HDF5 file, should exist
+                    log.warn(f"s3path: {s3path} for S3 range get found")
+                    raise 
+                # no data, return zero array
+                np_arr_rsp = defaultArray()
 
     npoints_read = len(np_arr_rsp)
     log.info(f"got {npoints_read} points response")
@@ -495,7 +460,6 @@ async def write_point_sel(app, chunk_id, dset_json, point_list, point_data, buck
     req = getDataNodeUrl(app, chunk_id)
     req += "/chunks/" + chunk_id
     log.debug("POST chunk req: " + req)
-    client = get_http_client(app)
 
     num_points = len(point_list)
     log.debug(f"write_point_sel - {num_points}")
@@ -530,21 +494,8 @@ async def write_point_sel(app, chunk_id, dset_json, point_list, point_data, buck
     if bucket:
         params["bucket"] = bucket
 
-    try:
-        async with client.post(req, params=params, data=post_data) as rsp:
-            log.debug(f"http_post {req} status: <{rsp.status}>")
-            if rsp.status == 200:
-                log.info(f"req: {req} OK")
-            else:
-                msg = f"request to {req} failed with code: {rsp.status}"
-                log.error(msg)
-                raise HTTPInternalServerError()
-
-    except ClientError as ce:
-        log.error(f"Error for http_get({req}): {ce} ")
-        raise HTTPInternalServerError()
-    except CancelledError as cle:
-        log.warn(f"CancelledError for http_get({req}): {cle}")
+    json_rsp = await http_post(app, req,params=params, data=post_data)
+    log.debug(f"post to {req} returned {json_rsp}")
 
 
 """
@@ -639,34 +590,11 @@ async def read_chunk_query(app, chunk_id, dset_json, slices, query, limit, rsp_d
         req = getDataNodeUrl(app, chunk_id)
         req += "/chunks/" + chunk_id
         log.debug("GET chunk req: " + req)
-        client = get_http_client(app)
-        
         try:
-            async with client.get(req, params=params) as rsp:
-                log.debug(f"http_get {req} status: <{rsp.status}>")
-                if rsp.status == 200:
-                    chunk_rsp = await rsp.json()  # read response as json
-                    log.debug(f"got query data: {chunk_rsp}")
-                elif rsp.status == 404:
-                    # no data, don't return any results
-                    chunk_rsp = {"index": [], "value": []}
-                elif rsp.status == 400:
-                    log.warn(f"request {req} failed withj code {rsp.status}")
-                    raise HTTPBadRequest()
-                else:
-                    log.error(f"request {req} failed with code: {rsp.status}")
-                    raise HTTPInternalServerError()
-
-        except ClientError as ce:
-            log.error(f"Error for http_get({req}): {ce} ")
-            raise HTTPInternalServerError()
-        except CancelledError as cle:
-            log.warn(f"CancelledError for http_get({req}): {cle}")
-            return
-
-        if chunk_rsp is None:
-            log.error("chunk_rsp is none for query")
-            raise HTTPInternalServerError()
+            chunk_rsp = await http_get(app, req, params=params)
+        except HTTPNotFound:
+            # no data, don't return any results
+            chunk_rsp = {"index": [], "value": []}
 
     rsp_dict[chunk_id] = chunk_rsp
 
@@ -906,7 +834,6 @@ async def write_chunk_query(app, chunk_id, dset_json, slices, query, query_updat
     req = getDataNodeUrl(app, chunk_id)
     req += "/chunks/" + chunk_id
     log.debug("PUT chunk req: " + req)
-    client = get_http_client(app)
 
     layout = getChunkLayout(dset_json)
     chunk_sel = getChunkCoverage(chunk_id, slices, layout)
@@ -922,30 +849,12 @@ async def write_chunk_query(app, chunk_id, dset_json, slices, query, query_updat
     chunk_shape = getSelectionShape(chunk_sel)
     log.debug(f"chunk_shape: {chunk_shape}")
     setSliceQueryParam(params, chunk_sel)
-    dn_rsp = None
     try:
-        async with client.put(req, data=json.dumps(query_update), params=params) as rsp:
-            log.debug(f"http_put {req} status: <{rsp.status}>")
-            if rsp.status in (200,201):
-                dn_rsp = await rsp.json()  # read response as json
-                log.debug(f"got query data: {dn_rsp}")
-            elif rsp.status == 404:
-                # no data, don't return any results
-                dn_rsp = {"index": [], "value": []}
-            elif rsp.status == 400:
-                log.warn(f"request {req} failed withj code {rsp.status}")
-                raise HTTPBadRequest()
-            else:
-                log.error(f"request {req} failed with code: {rsp.status}")
-                raise HTTPInternalServerError()
-
-    except ClientError as ce:
-        log.error(f"Error for http_put({req}): {ce} ")
-        raise HTTPInternalServerError()
-    except CancelledError as cle:
-        log.warn(f"CancelledError for http_get({req}): {cle}")
-        return
-
+        dn_rsp = await http_put(app, req, data=query_update, params=params)
+    except HTTPNotFound:
+        # no data, don't return any results
+        dn_rsp = {"index": [], "value": []}
+     
     return dn_rsp
 
 """

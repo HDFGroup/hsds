@@ -11,7 +11,6 @@
 ##############################################################################
 import unittest
 import time
-import requests
 import json
 import helper
 
@@ -20,11 +19,17 @@ class UpTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(UpTest, self).__init__(*args, **kwargs)
 
+    def setUp(self):
+        self.session = helper.getSession()
+
+    def tearDown(self):
+        if self.session:
+            self.session.close()
+
     def testCorsGetAbout(self):
         endpoint = helper.getEndpoint()
-        print("endpoint:", endpoint)
         req = endpoint + "/about"
-        rsp = requests.options(
+        rsp = self.session.options(
             req,
             headers={
                 "Access-Control-Request-Method": "GET",
@@ -42,9 +47,8 @@ class UpTest(unittest.TestCase):
 
     def testGetAbout(self):
         endpoint = helper.getEndpoint()
-        print("endpoint:", endpoint)
         req = endpoint + "/about"
-        rsp = requests.get(req)
+        rsp = self.session.get(req)
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers["Content-Type"], "application/json; charset=utf-8")
 
@@ -64,7 +68,7 @@ class UpTest(unittest.TestCase):
 
     def testGetInfo(self):
         req = helper.getEndpoint() + "/info"
-        rsp = requests.get(req)
+        rsp = self.session.get(req)
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers["Content-Type"], "application/json; charset=utf-8")
         rspJson = json.loads(rsp.text)

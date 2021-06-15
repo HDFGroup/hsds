@@ -29,6 +29,7 @@ try:
     from .azureBlobClient import AzureBlobClient
 except ImportError:
     def AzureBlobClient(app):
+        log.error("Unable to import AzureBlobClient")
         return None
 try:
     from .fileClient import FileClient

@@ -10,7 +10,6 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import unittest
-import requests
 import json
 import helper
 import config
@@ -22,6 +21,19 @@ class ValueTest(unittest.TestCase):
         helper.setupDomain(self.base_domain)
         self.endpoint = helper.getEndpoint()
 
+    def setUp(self):
+        self.session = helper.getSession()
+
+    def tearDown(self):
+        if self.session:
+            self.session.close()
+
+    def getUUIDByPath(self, domain, h5path):
+        return helper.getUUIDByPath(domain, h5path, session=self.session)
+
+    def getRootUUID(self, domain, username=None, password=None):
+        return helper.getRootUUID(domain, username=username, password=password, session=self.session)
+
         # main
 
     def testPut1DDataset(self):
@@ -32,7 +44,7 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -42,7 +54,7 @@ class ValueTest(unittest.TestCase):
         data = { "type": "H5T_STD_I32LE", "shape": 10 }
 
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -52,19 +64,19 @@ class ValueTest(unittest.TestCase):
         attr_payload = {'type': 'H5T_STD_I32LE', 'value': 42}
         attr_name = "attr1"
         req = self.endpoint + '/datasets/' + dset_id + "/attributes/" + attr_name
-        rsp = requests.put(req, data=json.dumps(attr_payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(attr_payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # created
 
         # link new dataset as 'dset1d'
         name = "dset1d"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # read values from dset (should be zeros)
         req = self.endpoint + "/datasets/" + dset_id + "/value"
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -74,11 +86,11 @@ class ValueTest(unittest.TestCase):
         # write to the dset
         data = list(range(10))  # write 0-9
         payload = { 'value': data }
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # read back the data
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -87,7 +99,7 @@ class ValueTest(unittest.TestCase):
 
         # read a selection
         params = {"select": "[2:8]"} # read 6 elements, starting at index 2
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -96,7 +108,7 @@ class ValueTest(unittest.TestCase):
 
         # read one element.  cf test for PR #84    
         params = {"select": "[3]"} # read 4th element
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -105,7 +117,7 @@ class ValueTest(unittest.TestCase):
 
         # try to read beyond the bounds of the array
         params = {"select": "[2:18]"} # read 6 elements, starting at index 2
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 400)
 
     def testPut1DDatasetBinary(self):
@@ -123,7 +135,7 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -132,7 +144,7 @@ class ValueTest(unittest.TestCase):
         # create dataset
         data = { "type": "H5T_STD_I32LE", "shape": NUM_ELEMENTS }
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -142,12 +154,12 @@ class ValueTest(unittest.TestCase):
         name = "dset1d"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # read values from dset (should be zeros)
         req = self.endpoint + "/datasets/" + dset_id + "/value"
-        rsp = requests.get(req, headers=headers_bin_rsp)
+        rsp = self.session.get(req, headers=headers_bin_rsp)
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers['Content-Type'], "application/octet-stream")
         data = rsp.content
@@ -164,11 +176,11 @@ class ValueTest(unittest.TestCase):
         data = bytearray(4*NUM_ELEMENTS)
         for i in range(NUM_ELEMENTS):
             data[i*4] = i%256
-        rsp = requests.put(req, data=data, headers=headers_bin_req)
+        rsp = self.session.put(req, data=data, headers=headers_bin_req)
         self.assertEqual(rsp.status_code, 200)
 
         # read back the data
-        rsp = requests.get(req, headers=headers_bin_rsp)
+        rsp = self.session.get(req, headers=headers_bin_rsp)
         self.assertEqual(rsp.status_code, 200)
         data = rsp.content
         self.assertEqual(len(data), NUM_ELEMENTS*4)
@@ -184,13 +196,13 @@ class ValueTest(unittest.TestCase):
         data = bytearray(4*2)
         for i in range(2):
             data[i*4] = 255
-        rsp = requests.put(req, data=data, params=params, headers=headers_bin_req)
+        rsp = self.session.put(req, data=data, params=params, headers=headers_bin_req)
         self.assertEqual(rsp.status_code, 200)
 
 
         # read a selection
         params = {"select": "[0:6]"} # read first 6 elements
-        rsp = requests.get(req, params=params, headers=headers_bin_rsp)
+        rsp = self.session.get(req, params=params, headers=headers_bin_rsp)
         self.assertEqual(rsp.status_code, 200)
         data = rsp.content
         self.assertEqual(len(data), 24)
@@ -207,7 +219,7 @@ class ValueTest(unittest.TestCase):
 
         # read one element.  cf test for PR #84    
         params = {"select": "[3]"} # read 4th element
-        rsp = requests.get(req, params=params, headers=headers_bin_rsp)
+        rsp = self.session.get(req, params=params, headers=headers_bin_rsp)
         self.assertEqual(rsp.status_code, 200)
         data = rsp.content
         self.assertEqual(len(data), 4)
@@ -225,7 +237,7 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -237,7 +249,7 @@ class ValueTest(unittest.TestCase):
         data = { "type": "H5T_STD_I32LE", "shape": [num_row,num_col] }
 
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -247,12 +259,12 @@ class ValueTest(unittest.TestCase):
         name = "dset2d"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # read values from dset (should be zeros)
         req = self.endpoint + "/datasets/" + dset_id + "/value"
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -268,11 +280,11 @@ class ValueTest(unittest.TestCase):
                 row.append(i*10 + j)
             json_data.append(row)
         payload = { 'value': json_data }
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # read back the data
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -281,7 +293,7 @@ class ValueTest(unittest.TestCase):
 
         # read a selection
         params = {"select": "[3:4,2:8]"} # read 6 elements, starting at index 2
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -301,7 +313,7 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -313,7 +325,7 @@ class ValueTest(unittest.TestCase):
         data = { "type": "H5T_STD_I32LE", "shape": [num_row,num_col] }
 
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -323,12 +335,12 @@ class ValueTest(unittest.TestCase):
         name = "dset2d"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # read values from dset (should be zeros)
         req = self.endpoint + "/datasets/" + dset_id + "/value"
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -345,11 +357,11 @@ class ValueTest(unittest.TestCase):
                 bin_data[(i*num_col+j)*4] = i*10 + j
                 row.append(i*10 + j)  # create json data for comparison
             json_data.append(row)
-        rsp = requests.put(req, data=bin_data, headers=headers_bin_req)
+        rsp = self.session.put(req, data=bin_data, headers=headers_bin_req)
         self.assertEqual(rsp.status_code, 200)
 
         # read back the data as json
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -357,7 +369,7 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(rspJson["value"], json_data)
 
         # read data as binary
-        rsp = requests.get(req, headers=headers_bin_rsp)
+        rsp = self.session.get(req, headers=headers_bin_rsp)
         self.assertEqual(rsp.status_code, 200)
         data = rsp.content
         self.assertEqual(len(data), num_row*num_col*4)
@@ -365,7 +377,7 @@ class ValueTest(unittest.TestCase):
 
         # read a selection
         params = {"select": "[3:4,2:8]"} # read 6 elements, starting at index 2
-        rsp = requests.get(req, params=params, headers=headers_bin_rsp)
+        rsp = self.session.get(req, params=params, headers=headers_bin_rsp)
         self.assertEqual(rsp.status_code, 200)
         data = rsp.content
         self.assertEqual(len(data), 6*4)
@@ -381,7 +393,7 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -391,7 +403,7 @@ class ValueTest(unittest.TestCase):
         dset_body = { "type": "H5T_STD_I32LE", "shape": 10 }
 
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(dset_body), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(dset_body), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -401,7 +413,7 @@ class ValueTest(unittest.TestCase):
         name = "dset1d"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # write to dset
@@ -412,16 +424,16 @@ class ValueTest(unittest.TestCase):
 
         # write part 1
         payload = { 'start': 0, 'stop': 5, 'value': data_part1 }
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # write part 2
         payload = { 'start': 5, 'stop': 10, 'value': data_part2 }
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # read back the data
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -430,15 +442,15 @@ class ValueTest(unittest.TestCase):
 
         # write data with a step of 2
         payload = { 'start': 0, 'stop': 10,  'step': 2, 'value': data_part1 }
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         payload = { 'start': 1, 'stop': 10,  'step': 2, 'value': data_part2 }
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # read back the data
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -461,7 +473,7 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -473,7 +485,7 @@ class ValueTest(unittest.TestCase):
         data['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [10, 10] }}
 
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -483,20 +495,20 @@ class ValueTest(unittest.TestCase):
         name = "dset2d"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # write a horizontal strip of 22s
         req = self.endpoint + "/datasets/" + dset_id + "/value"
         data = [22,] * 50
         payload = { 'start': [22, 2], 'stop': [23, 52], 'value': data }
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # read back a vertical strip that crossed the horizontal strip
         req = self.endpoint + "/datasets/" + dset_id + "/value"  # test
         params = {"select": "[20:25,21:22]"} # read 6 elements, starting at index 20
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -509,13 +521,13 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + "/datasets/" + dset_id + "/value"
         data = [44,] * 20
         payload = { 'start': [10, 20], 'stop': [20, 32], 'step': [2, 3], 'value': data }
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # read back a sub-block
         req = self.endpoint + "/datasets/" + dset_id + "/value"  # test
         params = {"select": "[12:13,23:26]"} # read 6 elements, starting at index (12,14)
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -535,7 +547,7 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -549,7 +561,7 @@ class ValueTest(unittest.TestCase):
         data = { "type": fixed_str_type, "shape": 4 }
 
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -559,12 +571,12 @@ class ValueTest(unittest.TestCase):
         name = "dset_str"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # read values from dset (should be empty strings)
         req = self.endpoint + "/datasets/" + dset_id + "/value"
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -574,11 +586,11 @@ class ValueTest(unittest.TestCase):
         # write to the dset
         data = ["Parting", "is such", "sweet", "sorrow."]
         payload = { 'value': data }
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # read back the data
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -587,7 +599,7 @@ class ValueTest(unittest.TestCase):
 
         # read a selection
         params = {"select": "[1:3]"} # read 2 elements, starting at index 1
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -606,7 +618,7 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -623,7 +635,7 @@ class ValueTest(unittest.TestCase):
         data = { "type": fixed_str_type, "shape": STR_COUNT }
 
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -633,12 +645,12 @@ class ValueTest(unittest.TestCase):
         name = "dset_str"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # read values from dset (should be empty strings)
         req = self.endpoint + "/datasets/" + dset_id + "/value"
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -659,11 +671,11 @@ class ValueTest(unittest.TestCase):
 
 
         payload = { 'value': data }
-        rsp = requests.put(req, data=data, headers=headers_bin_req)
+        rsp = self.session.put(req, data=data, headers=headers_bin_req)
         self.assertEqual(rsp.status_code, 200)
 
         # read back the data
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -683,7 +695,7 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -697,7 +709,7 @@ class ValueTest(unittest.TestCase):
         data = { "type": fixed_str_type, "shape": 4 }
 
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -707,12 +719,12 @@ class ValueTest(unittest.TestCase):
         name = "dset_str"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # read values from dset (should be empty strings)
         req = self.endpoint + "/datasets/" + dset_id + "/value"
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -722,18 +734,18 @@ class ValueTest(unittest.TestCase):
         # write to the dset
         data = ["123456", "1234567", "12345678", "123456789"]
         payload = { 'value': data }
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # read back the data
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
 
         # read all values
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -753,7 +765,7 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -766,7 +778,7 @@ class ValueTest(unittest.TestCase):
                      'length': 40}
         data = { "type": str_type}
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["attributeCount"], 0)
@@ -777,12 +789,12 @@ class ValueTest(unittest.TestCase):
         name = "dset_scalar"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # read unintialized value from dataset
         req = self.endpoint + "/datasets/" + dset_id + "/value"
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -792,11 +804,11 @@ class ValueTest(unittest.TestCase):
         # write to the dataset
         data = "Hello, world"
         payload = { 'value': data }
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # read back the value
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -811,7 +823,7 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -824,7 +836,7 @@ class ValueTest(unittest.TestCase):
                      'length': 40}
         data = { "type": str_type, 'shape': 'H5S_NULL'}
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -834,18 +846,18 @@ class ValueTest(unittest.TestCase):
         name = "dset_null"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # try reading from the dataset
         req = self.endpoint + "/datasets/" + dset_id + "/value"
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 400)
 
         # try writing to the dataset
         data = "Hello, world"
         payload = { 'value': data }
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 400)
 
 
@@ -854,7 +866,7 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -869,7 +881,7 @@ class ValueTest(unittest.TestCase):
         #
         payload = {'type': datatype}
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
 
         rspJson = json.loads(rsp.text)
@@ -878,7 +890,7 @@ class ValueTest(unittest.TestCase):
 
         # verify the shape of the dataset
         req = self.endpoint + "/datasets/" + dset0d_uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)  # get dataset
         rspJson = json.loads(rsp.text)
         shape = rspJson["shape"]
@@ -888,18 +900,18 @@ class ValueTest(unittest.TestCase):
         name = 'dset0d'
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset0d_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # write entire array
         value = (42, 0.42)
         payload = {'value': value}
         req = self.endpoint + "/datasets/" + dset0d_uuid + "/value"
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
 
         # read back the value
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -911,7 +923,7 @@ class ValueTest(unittest.TestCase):
         num_elements = 10
         payload = {'type': datatype, 'shape': num_elements}
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
 
         rspJson = json.loads(rsp.text)
@@ -922,7 +934,7 @@ class ValueTest(unittest.TestCase):
         name = 'dset1d'
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset1d_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
 
@@ -933,17 +945,17 @@ class ValueTest(unittest.TestCase):
             value.append(item)
         payload = {'value': value}
         req = self.endpoint + "/datasets/" + dset1d_uuid + "/value"
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
 
         # selection write
         payload = { 'start': 0, 'stop': 1, 'value': (42, .42) }
         req = self.endpoint + "/datasets/" + dset1d_uuid + "/value"
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
 
         # read back the data
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -960,7 +972,7 @@ class ValueTest(unittest.TestCase):
         dims = [2,2]
         payload = {'type': datatype, 'shape': dims}
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
 
         rspJson = json.loads(rsp.text)
@@ -971,7 +983,7 @@ class ValueTest(unittest.TestCase):
         name = 'dset2d'
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset2d_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
 
@@ -986,11 +998,11 @@ class ValueTest(unittest.TestCase):
         payload = {'value': value}
 
         req = self.endpoint + "/datasets/" + dset2d_uuid + "/value"
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
 
         # read back the data
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -1008,7 +1020,7 @@ class ValueTest(unittest.TestCase):
 
         # get domain
         req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
         root_uuid = rspJson["root"]
@@ -1020,7 +1032,7 @@ class ValueTest(unittest.TestCase):
         payload['creationProperties'] = creation_props
 
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
@@ -1030,12 +1042,12 @@ class ValueTest(unittest.TestCase):
         name = 'dset'
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # read back the data
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -1044,10 +1056,10 @@ class ValueTest(unittest.TestCase):
 
         # write some values
         payload = { 'start': 0, 'stop': 5, 'value': [24,]*5 }
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -1062,7 +1074,7 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -1085,7 +1097,7 @@ class ValueTest(unittest.TestCase):
         #
         payload = {'type': datatype, 'shape': 40, 'creationProperties': creationProperties}
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
 
         rspJson = json.loads(rsp.text)
@@ -1093,7 +1105,7 @@ class ValueTest(unittest.TestCase):
 
         # verify the shape of the dataset
         req = self.endpoint + "/datasets/" + dset_uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)  # get dataset
         rspJson = json.loads(rsp.text)
         shape = rspJson["shape"]
@@ -1102,7 +1114,7 @@ class ValueTest(unittest.TestCase):
 
         # read the default values
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)  # OK
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -1114,12 +1126,12 @@ class ValueTest(unittest.TestCase):
         # write some values
         new_value = ('mytag', 123)
         payload = { 'start': 0, 'stop': 20, 'value': [new_value,]*20}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # read the values back
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)  # OK
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -1137,7 +1149,7 @@ class ValueTest(unittest.TestCase):
 
         # get domain
         req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
         root_uuid = rspJson["root"]
@@ -1155,7 +1167,7 @@ class ValueTest(unittest.TestCase):
         payload = {'type': str_type, 'shape': 10}
         payload['creationProperties'] = {'fillValue': fill_value }
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
@@ -1165,12 +1177,12 @@ class ValueTest(unittest.TestCase):
         name = 'dset'
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # read back the data
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -1179,10 +1191,10 @@ class ValueTest(unittest.TestCase):
 
         # write some values
         payload = { 'start': 0, 'stop': 5, 'value': ['hello',]*5 }
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -1201,7 +1213,7 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -1210,7 +1222,7 @@ class ValueTest(unittest.TestCase):
         # create new group
         payload = { 'link': { 'id': root_uuid, 'name': 'g1' } }
         req = helper.getEndpoint() + "/groups"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         g1_uuid = rspJson["id"]
@@ -1222,7 +1234,7 @@ class ValueTest(unittest.TestCase):
         data = { "type": ref_type, "shape": 3 }
 
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -1232,12 +1244,12 @@ class ValueTest(unittest.TestCase):
         name = "dsetref"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # read values from dset (should be empty strings)
         req = self.endpoint + "/datasets/" + dset_id + "/value"
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -1247,18 +1259,18 @@ class ValueTest(unittest.TestCase):
         # write some values
         ref_values = ["groups/" + root_uuid, '', "groups/" + g1_uuid]
         payload = {  'value': ref_values }
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
         ret_values = rspJson["value"]
-        self.assertEqual(ref_values[0], "groups/" + root_uuid)
-        self.assertEqual(ref_values[1], '')
-        self.assertEqual(ref_values[2], "groups/" + g1_uuid)
+        self.assertEqual(ret_values[0], "groups/" + root_uuid)
+        self.assertEqual(ret_values[1], '')
+        self.assertEqual(ret_values[2], "groups/" + g1_uuid)
 
     def testPutObjRefDatasetBinary(self):
         # Test PUT obj ref values for 1d dataset using binary transfer
@@ -1271,7 +1283,7 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -1280,7 +1292,7 @@ class ValueTest(unittest.TestCase):
         # create new group
         payload = { 'link': { 'id': root_uuid, 'name': 'g1' } }
         req = helper.getEndpoint() + "/groups"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         g1_uuid = rspJson["id"]
@@ -1292,7 +1304,7 @@ class ValueTest(unittest.TestCase):
         data = { "type": ref_type, "shape": 3 }
 
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -1302,7 +1314,7 @@ class ValueTest(unittest.TestCase):
         name = "dsetref"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # write some values
@@ -1316,18 +1328,18 @@ class ValueTest(unittest.TestCase):
                 data[offset] = ord(ref_value[j])
 
         req = self.endpoint + "/datasets/" + dset_id + "/value"
-        rsp = requests.put(req, data=data, headers=headers_bin_req)
+        rsp = self.session.put(req, data=data, headers=headers_bin_req)
         self.assertEqual(rsp.status_code, 200)
 
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
         ret_values = rspJson["value"]
-        self.assertEqual(ref_values[0], "groups/" + root_uuid)
-        self.assertEqual(ref_values[1], '')
-        self.assertEqual(ref_values[2], "groups/" + g1_uuid)
+        self.assertEqual(ret_values[0], "groups/" + root_uuid)
+        self.assertEqual(ret_values[1], '')
+        self.assertEqual(ret_values[2], "groups/" + g1_uuid)
 
 
     def testGet(self):
@@ -1337,19 +1349,20 @@ class ValueTest(unittest.TestCase):
 
         # verify domain exists
         req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         if rsp.status_code != 200:
             print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
             return  # abort rest of test
         domainJson = json.loads(rsp.text)
         root_uuid = domainJson["root"]
+        helper.validateId(root_uuid)
 
         # get the dataset uuid
-        dset1_uuid = helper.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1")
+        dset1_uuid = self.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1")
 
         # read all the dataset values
         req = helper.getEndpoint() + "/datasets/" + dset1_uuid + "/value"
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -1366,7 +1379,7 @@ class ValueTest(unittest.TestCase):
         # read 4x4 block from dataset
         params = {"select": "[0:4, 0:4]"}
         params["nonstrict"] = 1  # SN can read directly from S3 or DN node
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("value" in rspJson)
@@ -1380,7 +1393,7 @@ class ValueTest(unittest.TestCase):
         # read 2x2 block from dataset with step of 2
         params = {"select": "[0:4:2, 0:4:2]"}
         params["nonstrict"] = 1  
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("value" in rspJson)
@@ -1420,7 +1433,7 @@ class ValueTest(unittest.TestCase):
         # try reading a selection that is out of bounds
         params = {"select": "[0:12, 0:12]"}
         params["nonstrict"] = 1
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 400)
 
 
@@ -1431,7 +1444,7 @@ class ValueTest(unittest.TestCase):
 
         # get domain
         req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
         root_uuid = rspJson["root"]
@@ -1441,7 +1454,7 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + "/datasets"
         payload = {'type': 'H5T_STD_I32LE', 'shape': [num_elements,], 'maxdims': [0,]}
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
@@ -1451,14 +1464,14 @@ class ValueTest(unittest.TestCase):
         name = 'dset'
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # write entire array
         value = list(range(num_elements))
         payload = {'value': value}
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
 
         # resize the datasets elements
@@ -1467,14 +1480,14 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + "/datasets/" + dset_uuid + "/shape"
         payload = {"shape": [num_elements,]}
 
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
 
         # read values from the extended region
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         params = {"select": "[{}:{}]".format(0, num_elements)}
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -1485,13 +1498,13 @@ class ValueTest(unittest.TestCase):
         # write to the extended region
         payload = {'value': value, 'start': 10, 'stop': 20}
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
 
         # read values from the extended region
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         params = {"select": "[{}:{}]".format(orig_extent, num_elements)}
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -1501,7 +1514,7 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(len(data), num_elements-orig_extent)
 
         # read all values back
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -1520,7 +1533,7 @@ class ValueTest(unittest.TestCase):
 
         # get domain
         req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
         root_uuid = rspJson["root"]
@@ -1529,7 +1542,7 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + "/datasets"
         payload = {'type': 'H5T_STD_I32LE', 'shape': [0,], 'maxdims': [0,]}
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
@@ -1539,7 +1552,7 @@ class ValueTest(unittest.TestCase):
         name = 'dset'
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # append values [0,10]
@@ -1547,12 +1560,12 @@ class ValueTest(unittest.TestCase):
         value = list(range(num_elements))
         payload = {'value': value, 'append': num_elements}
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
 
         # verify the shape in now (10,)
         req = self.endpoint + "/datasets/" + dset_uuid + "/shape"
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("shape" in rspJson)
@@ -1563,7 +1576,7 @@ class ValueTest(unittest.TestCase):
         # read values from the extended region
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         params = {"select": "[{}:{}]".format(0, num_elements)}
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -1576,12 +1589,12 @@ class ValueTest(unittest.TestCase):
         value = list(range(num_elements, num_elements*2))
         payload = {'value': value, 'append': num_elements}
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
 
          # verify the shape in now (20,)
         req = self.endpoint + "/datasets/" + dset_uuid + "/shape"
-        rsp = requests.get(req,  headers=headers)
+        rsp = self.session.get(req,  headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("shape" in rspJson)
@@ -1592,7 +1605,7 @@ class ValueTest(unittest.TestCase):
         # read values from the extended region
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         params = {"select": "[{}:{}]".format(0, num_elements*2)}
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -1604,7 +1617,7 @@ class ValueTest(unittest.TestCase):
         value = list(range(num_elements, num_elements*2))
         payload = {'value': value, 'append': num_elements+1}
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 400)  # write value
 
     def testAppend1DBinary(self):
@@ -1616,7 +1629,7 @@ class ValueTest(unittest.TestCase):
 
         # get domain
         req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
         root_uuid = rspJson["root"]
@@ -1625,7 +1638,7 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + "/datasets"
         payload = {'type': 'H5T_STD_I32LE', 'shape': [0,], 'maxdims': [0,]}
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
@@ -1635,7 +1648,7 @@ class ValueTest(unittest.TestCase):
         name = 'dset'
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # append values [0,10]
@@ -1646,12 +1659,12 @@ class ValueTest(unittest.TestCase):
             data[i*4] = i%256
         params = {"append": num_elements}
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        rsp = requests.put(req, data=data, params=params, headers=headers_bin_req)
+        rsp = self.session.put(req, data=data, params=params, headers=headers_bin_req)
         self.assertEqual(rsp.status_code, 200)
 
         # verify the shape in now (10,)
         req = self.endpoint + "/datasets/" + dset_uuid + "/shape"
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("shape" in rspJson)
@@ -1662,7 +1675,7 @@ class ValueTest(unittest.TestCase):
         # read values from the extended region
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         params = {"select": "[{}:{}]".format(0, num_elements)}
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -1677,12 +1690,12 @@ class ValueTest(unittest.TestCase):
             data[i*4] = (i+num_elements)%256
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         params = {"append": num_elements}
-        rsp = requests.put(req, data=data, params=params, headers=headers_bin_req)
+        rsp = self.session.put(req, data=data, params=params, headers=headers_bin_req)
         self.assertEqual(rsp.status_code, 200)  # write value
 
         # verify the shape in now (20,)
         req = self.endpoint + "/datasets/" + dset_uuid + "/shape"
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("shape" in rspJson)
@@ -1693,7 +1706,7 @@ class ValueTest(unittest.TestCase):
         # read values from the extended region
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         params = {"select": "[{}:{}]".format(0, num_elements*2)}
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -1704,7 +1717,7 @@ class ValueTest(unittest.TestCase):
         # test mis-match of append value and data
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         params = {"append": num_elements+1}
-        rsp = requests.put(req, data=data, params=params, headers=headers_bin_req)
+        rsp = self.session.put(req, data=data, params=params, headers=headers_bin_req)
         self.assertEqual(rsp.status_code, 400)  # write value
 
     def testAppend2DJson(self):
@@ -1714,7 +1727,7 @@ class ValueTest(unittest.TestCase):
 
         # get domain
         req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
         root_uuid = rspJson["root"]
@@ -1723,7 +1736,7 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + "/datasets"
         payload = {'type': 'H5T_STD_I32LE', 'shape': [0,0], 'maxdims': [0,0]}
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
@@ -1733,7 +1746,7 @@ class ValueTest(unittest.TestCase):
         name = 'dset'
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # append values [0,10]
@@ -1741,12 +1754,12 @@ class ValueTest(unittest.TestCase):
         value = list(range(num_elements))
         payload = {'value': value, 'append': num_elements, 'append_dim': 1}
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
 
         # verify the shape in now (1, 10)
         req = self.endpoint + "/datasets/" + dset_uuid + "/shape"
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("shape" in rspJson)
@@ -1757,7 +1770,7 @@ class ValueTest(unittest.TestCase):
         # read values from the extended region
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         params = {"select": "[0:1,{}:{}]".format(0, num_elements)}
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -1770,12 +1783,12 @@ class ValueTest(unittest.TestCase):
         value = list(range(num_elements, num_elements*2))
         payload = {'value': value, 'append': num_elements, 'append_dim': 1}
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
 
          # verify the shape in now (1, 20)
         req = self.endpoint + "/datasets/" + dset_uuid + "/shape"
-        rsp = requests.get(req,  headers=headers)
+        rsp = self.session.get(req,  headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("shape" in rspJson)
@@ -1786,7 +1799,7 @@ class ValueTest(unittest.TestCase):
         # read values from the extended region
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         params = {"select": "[0:1,{}:{}]".format(0, num_elements*2)}
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -1799,12 +1812,12 @@ class ValueTest(unittest.TestCase):
         value = list(range(num_elements))
         payload = {'value': value, 'append': 1, 'append_dim': 0}
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
 
          # verify the shape in now (2, 20,)
         req = self.endpoint + "/datasets/" + dset_uuid + "/shape"
-        rsp = requests.get(req,  headers=headers)
+        rsp = self.session.get(req,  headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("shape" in rspJson)
@@ -1814,7 +1827,7 @@ class ValueTest(unittest.TestCase):
 
         # read all values from the dataset
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -1829,7 +1842,7 @@ class ValueTest(unittest.TestCase):
         value = list(range(num_elements, num_elements*2))
         payload = {'value': value, 'append': num_elements+1}
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 400)  # write value
 
 
@@ -1839,7 +1852,7 @@ class ValueTest(unittest.TestCase):
         headers = helper.getRequestHeaders(domain=self.base_domain)
         # get domain
         req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
         root_uuid = rspJson["root"]
@@ -1854,7 +1867,7 @@ class ValueTest(unittest.TestCase):
         gzip_filter = {'class': 'H5Z_FILTER_DEFLATE', 'id': 1, 'level': 9, 'name': 'deflate'}
         payload['creationProperties'] = {'filters': [gzip_filter,] }
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
@@ -1864,20 +1877,20 @@ class ValueTest(unittest.TestCase):
         name = 'dset'
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # write a horizontal strip of 22s
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         data = [22,] * 1024
         payload = { 'start': [512, 0], 'stop': [513, 1024], 'value': data }
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # read back the 512,512 element
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"  # test
         params = {"select": "[512:513,512:513]"} # read  1 element
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -1894,7 +1907,7 @@ class ValueTest(unittest.TestCase):
         headers = helper.getRequestHeaders(domain=self.base_domain)
         # get domain
         req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
         root_uuid = rspJson["root"]
@@ -1909,7 +1922,7 @@ class ValueTest(unittest.TestCase):
         shuffle_filter = {'class': 'H5Z_FILTER_SHUFFLE', 'id': 2, 'name': 'shuffle'}
         payload['creationProperties'] = {'filters': [shuffle_filter,] }
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
@@ -1919,20 +1932,20 @@ class ValueTest(unittest.TestCase):
         name = 'dset'
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # write a horizontal strip of 22s
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         data = [22,] * 1024
         payload = { 'start': [512, 0], 'stop': [513, 1024], 'value': data }
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # read back the 512,512 element
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"  # test
         params = {"select": "[512:513,512:513]"} # read  1 element
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -1949,7 +1962,7 @@ class ValueTest(unittest.TestCase):
         headers = helper.getRequestHeaders(domain=self.base_domain)
         # get domain
         req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
         root_uuid = rspJson["root"]
@@ -1966,7 +1979,7 @@ class ValueTest(unittest.TestCase):
         shuffle_filter = {'class': 'H5Z_FILTER_SHUFFLE', 'id': 2, 'name': 'shuffle'}
         payload['creationProperties'] = {'filters': [shuffle_filter, gzip_filter] }
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
@@ -1976,20 +1989,20 @@ class ValueTest(unittest.TestCase):
         name = 'dset'
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # write a horizontal strip of 22s
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         data = [22,] * 1024
         payload = { 'start': [512, 0], 'stop': [513, 1024], 'value': data }
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # read back the 512,512 element
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"  # test
         params = {"select": "[512:513,512:513]"} # read  1 element
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -2048,7 +2061,7 @@ class ValueTest(unittest.TestCase):
 
         # get domain
         req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
         root_uuid = rspJson["root"]
@@ -2060,7 +2073,7 @@ class ValueTest(unittest.TestCase):
         data['creationProperties'] = {'layout': layout}
 
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset112_id = rspJson["id"]
@@ -2070,7 +2083,7 @@ class ValueTest(unittest.TestCase):
         name = "dset112"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset112_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # create dataset for /g2/dset2.2
@@ -2079,7 +2092,7 @@ class ValueTest(unittest.TestCase):
         data['creationProperties'] = {'layout': layout}
 
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset22_id = rspJson["id"]
@@ -2089,13 +2102,13 @@ class ValueTest(unittest.TestCase):
         name = "dset22"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset22_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
 
         # read values from dset112 (should be the sequence 0 through 19)
         req = self.endpoint + "/datasets/" + dset112_id + "/value"
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
 
         if rsp.status_code == 404:
             print("s3object: {} not found, skipping hyperslab read chunk contiguous reference test".format(s3path))
@@ -2112,7 +2125,7 @@ class ValueTest(unittest.TestCase):
 
         # read values from dset22 (should be 3x5 array)
         req = self.endpoint + "/datasets/" + dset22_id + "/value"
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -2160,7 +2173,7 @@ class ValueTest(unittest.TestCase):
 
         # get domain
         req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
         root_uuid = rspJson["root"]
@@ -2193,7 +2206,7 @@ class ValueTest(unittest.TestCase):
         data['creationProperties'] = {'layout': layout}
 
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -2203,14 +2216,14 @@ class ValueTest(unittest.TestCase):
         name = "dset"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # read a selection
         req = self.endpoint + "/datasets/" + dset_id + "/value"
         params = {"select": "[1234567:1234568]"} # read 1 element, starting at index 1234567
         params["nonstrict"] = 1  # allow use of aws lambda if configured
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         if rsp.status_code == 404:
             print("s3object: {} not found, skipping hyperslab read chunk reference test".format(s3path))
             return
@@ -2273,7 +2286,7 @@ class ValueTest(unittest.TestCase):
 
         # get domain
         req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
         root_uuid = rspJson["root"]
@@ -2288,7 +2301,7 @@ class ValueTest(unittest.TestCase):
         chunkinfo_dims = [num_chunks,]
         payload = {'type': chunkinfo_type, 'shape': chunkinfo_dims }
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
         rspJson = json.loads(rsp.text)
         chunkinfo_uuid = rspJson['id']
@@ -2298,14 +2311,14 @@ class ValueTest(unittest.TestCase):
         name = "chunks"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": chunkinfo_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # write to the chunkinfo dataset
         payload = {'value': chunkinfo_data}
 
         req = self.endpoint + "/datasets/" + chunkinfo_uuid + "/value"
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
 
 
@@ -2337,7 +2350,7 @@ class ValueTest(unittest.TestCase):
         data['creationProperties'] = {'layout': layout}
 
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -2347,14 +2360,14 @@ class ValueTest(unittest.TestCase):
         name = "dset"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # read a selection
         req = self.endpoint + "/datasets/" + dset_id + "/value"
         params = {"select": "[1234567:1234568]"} # read 1 element, starting at index 1234567
         params["nonstrict"] = 1 # enable SN to invoke lambda func
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
 
         if rsp.status_code == 404:
             print("s3object: {} not found, skipping hyperslab read chunk reference indirect test".format(s3path))
@@ -2417,7 +2430,7 @@ class ValueTest(unittest.TestCase):
 
         # get domain
         req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
         root_uuid = rspJson["root"]
@@ -2438,7 +2451,7 @@ class ValueTest(unittest.TestCase):
         chunkinfo_dims = [num_chunks,]
         payload = {'type': chunkinfo_type, 'shape': chunkinfo_dims }
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
         rspJson = json.loads(rsp.text)
         chunkinfo_uuid = rspJson['id']
@@ -2448,14 +2461,14 @@ class ValueTest(unittest.TestCase):
         name = "chunks"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": chunkinfo_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # write to the chunkinfo dataset
         payload = {'value': chunkinfo_data}
 
         req = self.endpoint + "/datasets/" + chunkinfo_uuid + "/value"
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
 
 
@@ -2488,7 +2501,7 @@ class ValueTest(unittest.TestCase):
         data['creationProperties'] = {'layout': layout}
 
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -2498,14 +2511,14 @@ class ValueTest(unittest.TestCase):
         name = "dset"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # read a selection
         req = self.endpoint + "/datasets/" + dset_id + "/value"
         params = {"select": "[1234567:1234568]"} # read 1 element, starting at index 1234567
         params["nonstrict"] = 1 # enable SN to invoke lambda func
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
 
         if rsp.status_code == 404:
             print("s3object: {} not found, skipping hyperslab read chunk reference indirect test".format(s3path))
@@ -2534,7 +2547,7 @@ class ValueTest(unittest.TestCase):
 
         # get domain
         req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
         root_uuid = rspJson["root"]
@@ -2551,7 +2564,7 @@ class ValueTest(unittest.TestCase):
         payload['creationProperties'] = creation_props
 
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
         
         rspJson = json.loads(rsp.text)
@@ -2562,12 +2575,12 @@ class ValueTest(unittest.TestCase):
         name = 'dset'
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # read back the data
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -2577,10 +2590,10 @@ class ValueTest(unittest.TestCase):
 
         # write some values
         payload = { 'start': 0, 'stop': 5, 'value': [24,]*5 }
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)

@@ -4,7 +4,10 @@ import time
 import os
 import subprocess
 import socket
+import queue
+import threading
 from contextlib import closing
+import logging
 
 
 def find_free_port():
@@ -14,6 +17,26 @@ def find_free_port():
         s.bind(('127.0.0.1', 0))
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         return s.getsockname()[1]  
+
+def print_process_output(queues):
+    while True:
+        got_output = False
+        for q in queues:
+            try:  
+                line = q.get_nowait() # or q.get(timeout=.1)
+            except queue.Empty:
+                pass  # no output on this queue yet
+            else: 
+                print(line.decode("utf-8").strip())
+                got_output = True
+        if not got_output:
+            break  # all queues empty for now
+
+def enqueue_output(out, queue):
+    for line in iter(out.readline, b''):
+        queue.put(line)
+    logging.debug("enqueu_output close()")
+    out.close()
 
 _HELP_USAGE = "Starts hsds a REST-based service for HDF5 data."
 
@@ -51,6 +74,9 @@ def main():
     parser.add_argument('--logfile', default='',
         type=str, dest='logfile',
         help="filename for logout (default stdout).")
+    parser.add_argument('--loglevel', default='',
+        type=str, dest='loglevel',
+        help="log verbosity: DEBUG, WARNING, INFO, OR ERROR")
     parser.add_argument('-p', '--port', default=0,
         type=int, dest='port',
         help='Service node port')
@@ -60,41 +86,88 @@ def main():
 
     args, extra_args = parser.parse_known_args()
 
-    print("args:", args)
-    print("extra_args:", extra_args)
-    print("count:", args.target_dn_count)
-    print("port:", args.port)
-    print("hs_username:", args.hs_username)
-    port = find_free_port()
-    print("port:", port)
+    # setup logging
+    if args.loglevel:
+        log_level_cfg = args.loglevel
+    elif "LOG_LEVEL" in os.environ:
+        log_level_cfg = os.environ["LOG_LEVEL"]
+    else:
+        log_level_cfg = "INFO"
+    if log_level_cfg == "DEBUG":
+        log_level = logging.DEBUG
+    elif log_level_cfg == "INFO":
+        log_level = logging.INFO
+    elif log_level_cfg in ("WARN", "WARNING"):
+        log_level = logging.WARN
+    elif log_level_cfg == "ERROR":
+        log_level = logging.ERROR
+    else:
+        print(f"unsupported log_level: {log_level_cfg}, using INFO instead")
+        log_level = logging.INFO
+
+    print("set logging to:", log_level)
+    logging.basicConfig(level=log_level)
+
+    logging.debug("args:", args)
+    logging.debug("extra_args:", extra_args)
+    logging.debug("count:", args.target_dn_count)
+    logging.debug("port:", args.port)
+    logging.debug("hs_username:", args.hs_username)
+    #port = find_free_port()
+    #logging.debug("port:", port)
+    if "--use_socket" in extra_args:
+        use_socket = True
+    else:
+        use_socket = False
 
     if args.port == 0:
-        sn_port = find_free_port()
+        if use_socket:
+            sn_port = "/tmp/sn_1.sock"
+        else:
+            sn_port = find_free_port()
     else:
+        if use_socket:
+            msg = "--port option can't be used with --use_socket"
+            logging.error(msg)
+            sys.exit(msg)
         sn_port = args.port
     dn_ports = []
     dn_urls_arg = ""
     for i in range(args.target_dn_count):
-        dn_port = find_free_port()
-        print(f"dn_port[{i}]:",  dn_port)
+        if use_socket:
+            host = "unix"
+            dn_port = f"/tmp/dn_{(i+1)}.sock"
+        else:
+            dn_port = find_free_port()
+            host = "localhost:"
+        logging.debug(f"dn_port[{i}]",  dn_port)
         dn_ports.append(dn_port)
         if dn_urls_arg:
             dn_urls_arg += ','
-        dn_urls_arg += f"http://localhost:{dn_port}"
+        dn_urls_arg += f"http://{host}:{dn_port}"
 
     # sort the ports so that node_number can be determined based on dn_url
     dn_ports.sort()
     dn_urls_arg
     
-    print("dn_ports:", dn_urls_arg)
-    rangeget_port = find_free_port()
-    print("rangeget_port:", rangeget_port)
-    print("logfile:", args.logfile)
+    logging.debug("dn_ports:", dn_urls_arg)
+    if use_socket:
+        rangeget_port = "/tmp/rangeget.sock"
+    else:
+        rangeget_port = find_free_port()
+    logging.debug("rangeget_port:", rangeget_port)
 
     common_args = ["--standalone",]
-    common_args.append(f"--sn_port={sn_port}")
+    if args.loglevel:
+        print("setting log_level to:", args.loglevel)
+        common_args.append(f"--log_level={args.loglevel}")
+    if use_socket:
+        common_args.append(f"--sn_socket={sn_port}")
+        common_args.append(f"--rangeget_socket={rangeget_port}")
+    else:
+        common_args.append(f"--sn_port={sn_port}")
+        common_args.append(f"--rangeget_port={rangeget_port}")
     common_args.append("--dn_urls="+dn_urls_arg)
-    common_args.append(f"--rangeget_port={rangeget_port}")
     common_args.extend(extra_args) # pass remaining args as config overrides
 
     hsds_endpoint = "http://localhost"
@@ -102,36 +175,37 @@ def main():
         hsds_endpoint += ":" + str(sn_port)
     common_args.append(f"--hsds_endpoint={hsds_endpoint}")
     
-    print("host:", args.host)
+    logging.debug(f"host: {args.host}")
     public_dns = f"http://{args.host}"
     if sn_port != 80:
         public_dns += ":" + str(sn_port)
-    print("public_dns:", public_dns)
+    logging.info(f"public_dns: {public_dns}")
     common_args.append(f"--public_dns={public_dns}")
 
     if args.root_dir is not None:
-        print("arg.root_dir:", args.root_dir)
+        logging.debug(f"arg.root_dir: {args.root_dir}")
         root_dir = os.path.expanduser(args.root_dir)
         if not os.path.isdir(root_dir):
             msg = "Error - directory used in --root-dir option doesn't exist"
+            logging.error(msg)
             sys.exit(msg)
         common_args.append(f"--root_dir={root_dir}")
-        print("root_dir:", root_dir)
+        logging.debug("root_dir:", root_dir)
     else:
         bucket_name = args.bucket_name[0]
         common_args.append(f"--bucket_name={bucket_name}")
-
 
     # create handle for log file if specified
     if args.logfile:
         pout = open(args.logfile, 'w')
     else:
-        pout = None  # will write to stdout
+        pout = subprocess.PIPE   # will pipe to parent
 
     # Start apps
 
-    print("Creating subprocesses")
+    logging.debug("Creating subprocesses")
     processes = []
+    queues = []
 
     # create processes for count dn nodes, sn node, and rangeget node
     for i in range(args.target_dn_count+2):
@@ -148,19 +222,31 @@ def main():
         else:
             node_number = i - 2  # start with 0
             pargs = ["hsds-datanode", f"--log_prefix=dn{node_number+1} "]
-            pargs.append(f"--dn_port={dn_ports[node_number]}")
+            if use_socket:
+                pargs.append(f"--dn_socket={dn_ports[node_number]}")
+            else:
+                pargs.append(f"--dn_port={dn_ports[node_number]}")
             pargs.append(f"--node_number={node_number}")
-        print(f"starting {pargs[0]}")
+        logging.info(f"starting {pargs[0]}")
         pargs.extend(common_args)
-        p = subprocess.Popen(pargs, shell=False, stdout=pout)
+        p = subprocess.Popen(pargs, bufsize=0, shell=False, stdout=pout)
         processes.append(p)
+        if not args.logfile:
+            # setup queue so we can check on process output without blocking
+            q = queue.Queue()
+            t = threading.Thread(target=enqueue_output, args=(p.stdout, q))
+            queues.append(q)
+            t.daemon = True # thread dies with the program
+            t.start()
+
     try:
         while True:
-            time.sleep(1)
+            print_process_output(queues)
+            time.sleep(0.1)
             for p in processes:
                 if p.poll() is not None:
                     result = p.communicate()
-                    print(f"process {p.args[0]} ended, result: {result}")
+                    logging.error(f"process {p.args[0]} ended, result: {result}")
                     break
     except Exception as e:
         print(f"got exception: {e}, quitting")
@@ -169,12 +255,10 @@ def main():
     finally:
         for p in processes:
             if p.poll() is None:
-                print(f"killing {p.args[0]}")
+                logging.info(f"killing {p.args[0]}")
                 p.terminate()
         processes = []
-        # close logfile
-        if pout:
-            pout.close()
+         
     
 
    

@@ -15,11 +15,15 @@
 import asyncio
 import time
 import numcodecs as codecs
+import socket
+import os
 from aiohttp.web import run_app
+
 from . import config
 from .util.lruCache import LruCache
 from .util.idUtil import isValidUuid, isSchema2Id, getCollectionForId, isRootObjId
 from .basenode import healthCheck, baseInit, preStop
+#from .util.httpUtil import release_http_client
 from . import hsds_logger as log
 from .domain_dn import GET_Domain, PUT_Domain, DELETE_Domain, PUT_ACL
 from .group_dn import GET_Group, POST_Group, DELETE_Group, PUT_Group, POST_Root
@@ -183,16 +187,22 @@ async def bucketGC(app):
     log.error("bucketGC terminating unexpectedly")
 
 async def start_background_tasks(app):
+    if "is_standalone" in app:
+        return
     loop = asyncio.get_event_loop()
-    loop.create_task(healthCheck(app))
-    # run data sync tasks
-    loop.create_task(s3syncCheck(app))
 
-    # run root scan
-    loop.create_task(bucketScan(app))
+    if "is_standalone" not in app:
+        loop.create_task(healthCheck(app))
 
-    # run root/dataset GC
-    loop.create_task(bucketGC(app))
+    if "is_readonly" not in app:
+        # run data sync tasks
+        loop.create_task(s3syncCheck(app))
+
+        # run root scan
+        loop.create_task(bucketScan(app))
+
+        # run root/dataset GC
+        loop.create_task(bucketGC(app))
 
 
 
@@ -206,21 +216,21 @@ def create_app():
     log.info("data node initializing")
 
     metadata_mem_cache_size = int(config.get("metadata_mem_cache_size"))
-    log.info(f"Using metadata memory cache size of: {metadata_mem_cache_size}")
+    log.debug(f"Using metadata memory cache size of: {metadata_mem_cache_size}")
     metadata_mem_cache_expire = int(config.get("metadata_mem_cache_expire"))
-    log.info(f"Setting metadata cache expire time to: {metadata_mem_cache_expire}")
+    log.debug(f"Setting metadata cache expire time to: {metadata_mem_cache_expire}")
     chunk_mem_cache_size = int(config.get("chunk_mem_cache_size"))
-    log.info(f"Using chunk memory cache size of: {chunk_mem_cache_size}")
+    log.debug(f"Using chunk memory cache size of: {chunk_mem_cache_size}")
     chunk_mem_cache_expire = int(config.get("chunk_mem_cache_expire"))
-    log.info(f"Setting chunk cache expire time to: {chunk_mem_cache_expire}")
+    log.debug(f"Setting chunk cache expire time to: {chunk_mem_cache_expire}")
     blosc_nthreads = int(config.get("blosc_nthreads"))
     if blosc_nthreads > 0:
-        log.info(f"Setting blosc nthreads to: {blosc_nthreads}")
+        log.debug(f"Setting blosc nthreads to: {blosc_nthreads}")
         codecs.blosc.set_nthreads(blosc_nthreads)
     else:
         # let Blosc select thread count based on processor type
         blosc_nthreads = codecs.blosc_get_nthreads()
-        log.info(f"Using default blosc nthreads: {blosc_nthreads}")
+        log.debug(f"Using default blosc nthreads: {blosc_nthreads}")
 
     #create the app object
     loop = asyncio.get_event_loop()
@@ -254,13 +264,33 @@ def create_app():
 #
 
 def main():
+    log.info("Data node initializing")
     app = create_app()
 
-    # run the app
-    port = int(config.get("dn_port"))
+    # run app using either socket or tcp
+    dn_socket = config.getCmdLineArg("dn_socket")
+    if dn_socket:
+        # use a unix domain socket path
+        # first, make sure the socket does not already exist
+        log.info(f"Using socket {dn_socket}")
+        try:
+            os.unlink(dn_socket)
+        except OSError:
+            if os.path.exists(dn_socket):
+                raise
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.bind(dn_socket)
+        run_app(app, sock=s)
+        log.info("run_app done")
+        # close socket?
+    else:
+        # Use TCP connection
+        port = int(config.get("dn_port"))
+        log.info(f"run_app on port: {port}")
+        run_app(app, port=port)
 
-    log.info(f"run_app on port: {port}")
-    run_app(app, port=port)
+    log.info("datanode exiting")
+    
 
 if __name__ == '__main__':
     main()

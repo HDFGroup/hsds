@@ -32,8 +32,6 @@ from .util.httpUtil import  http_get, http_post, jsonResponse
 from .util.idUtil import createNodeId, getNodeNumber, getNodeCount
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword, isAdminUser
 from . import hsds_logger as log
-from kubernetes import client as k8s_client
-from kubernetes import config as k8s_config
 
 HSDS_VERSION = "0.7.0beta"
 
@@ -162,38 +160,18 @@ async def oio_update_dn_info(app):
 async def k8s_update_dn_info(app):
     """ update dn urls by querying k8s api.  Call each url to determine node_ids """
     log.info("k8s_update_dn_info")
-    # TBD - find more elegant way to avoid this warning
-    import urllib3
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-    k8s_config.load_incluster_config() #get the config from within the cluster and set it as the default config for all new clients
-    c=k8s_client.Configuration() #go and get a copy of the default config
-    c.verify_ssl=False #set verify_ssl to false in that config
-    k8s_client.Configuration.set_default(c) #make that config the default for all new clients
-    v1 = k8s_client.CoreV1Api()
-    k8s_namespace = config.get("k8s_namespace")
-    if k8s_namespace:
-        # get pods for given namespace
-        log.info(f"getting pods for namespace: {k8s_namespace}")
-        ret = v1.list_namespaced_pod(namespace=k8s_namespace)
-    else:
-        log.info("getting pods for all namespaces")
-        ret = v1.list_pod_for_all_namespaces(watch=False)
-    pod_ips = []
-    dn_urls = []
     k8s_app_label = config.get("k8s_app_label")
-    for i in ret.items:
-        pod_ip = i.status.pod_ip
-        if not pod_ip:
-            continue
-        labels = i.metadata.labels
-        if labels and "app" in labels and labels["app"] == k8s_app_label:
-            log.info(f"found hsds pod with app label: {k8s_app_label} - ip: {pod_ip}")
-            pod_ips.append(pod_ip)
+    k8s_namespace = config.get("k8s_namespace")
+    # put import here to avoid k8s package dependency unless required
+    from .util.k8sClient import getPodIps  
+    pod_ips = getPodIps(k8s_app_label, k8s_namespace=k8s_namespace)
     if not pod_ips:
         log.error("Expected to find at least one hsds pod")
         return
     pod_ips.sort()  # for assigning node numbers
+    log.debug(f"got pod_ips: {pod_ips}")
     dn_port = config.get("dn_port")
+    dn_urls = []
     for pod_ip in pod_ips:
         dn_urls.append(f"http://{pod_ip}:{dn_port}")
     # call info on each dn container and get node ids
@@ -545,6 +523,11 @@ def baseInit(node_type):
     else: 
         # create node id based on uuid
         node_id = createNodeId(node_type)
+
+    is_readonly = config.getCmdLineArg("readonly")
+    if is_readonly:
+        log.info("running in readonly mode")
+        app["is_readonly"] = True
     
     log.info(f"setting node_id to: {node_id}")
     app["id"] = node_id
@@ -564,6 +547,7 @@ def baseInit(node_type):
     app["bucket_name"] = bucket_name
     app["dn_urls"] = []
     app["dn_ids"] = [] # node ids for each dn_url
+    app["socket_clients"] = {} # map to path of Unix Domain sockets (if used)
 
     is_standalone = config.getCmdLineArg("standalone")
      
