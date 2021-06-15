@@ -28,7 +28,6 @@ class UpTest(unittest.TestCase):
 
     def testCorsGetAbout(self):
         endpoint = helper.getEndpoint()
-        print("endpoint:", endpoint)
         req = endpoint + "/about"
         rsp = self.session.options(
             req,
@@ -48,7 +47,6 @@ class UpTest(unittest.TestCase):
 
     def testGetAbout(self):
         endpoint = helper.getEndpoint()
-        print("endpoint:", endpoint)
         req = endpoint + "/about"
         rsp = self.session.get(req)
         self.assertEqual(rsp.status_code, 200)
