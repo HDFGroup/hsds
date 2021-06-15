@@ -2,15 +2,11 @@ from  inspect import iscoroutinefunction
 from asyncio import CancelledError
 import datetime
 import time
+from azure.storage.blob.aio import BlobServiceClient
+from azure.storage.blob import BlobPrefix
+from azure.core.exceptions import AzureError
 from .. import hsds_logger as log
-try:
-    from azure.storage.blob.aio import BlobServiceClient
-    from azure.storage.blob import BlobPrefix
-    from azure.core.exceptions import AzureError
-except ImportError:
-    log.warning("unable to import Azure blob packages")
-except ModuleNotFoundError:
-    log.warning("unable to import Azure blob packages")
+    
 from aiohttp.web_exceptions import HTTPNotFound, HTTPForbidden, HTTPInternalServerError, HTTPBadRequest
 from .. import config
 

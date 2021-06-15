@@ -216,21 +216,21 @@ def create_app():
     log.info("data node initializing")
 
     metadata_mem_cache_size = int(config.get("metadata_mem_cache_size"))
-    log.info(f"Using metadata memory cache size of: {metadata_mem_cache_size}")
+    log.debug(f"Using metadata memory cache size of: {metadata_mem_cache_size}")
     metadata_mem_cache_expire = int(config.get("metadata_mem_cache_expire"))
-    log.info(f"Setting metadata cache expire time to: {metadata_mem_cache_expire}")
+    log.debug(f"Setting metadata cache expire time to: {metadata_mem_cache_expire}")
     chunk_mem_cache_size = int(config.get("chunk_mem_cache_size"))
-    log.info(f"Using chunk memory cache size of: {chunk_mem_cache_size}")
+    log.debug(f"Using chunk memory cache size of: {chunk_mem_cache_size}")
     chunk_mem_cache_expire = int(config.get("chunk_mem_cache_expire"))
-    log.info(f"Setting chunk cache expire time to: {chunk_mem_cache_expire}")
+    log.debug(f"Setting chunk cache expire time to: {chunk_mem_cache_expire}")
     blosc_nthreads = int(config.get("blosc_nthreads"))
     if blosc_nthreads > 0:
-        log.info(f"Setting blosc nthreads to: {blosc_nthreads}")
+        log.debug(f"Setting blosc nthreads to: {blosc_nthreads}")
         codecs.blosc.set_nthreads(blosc_nthreads)
     else:
         # let Blosc select thread count based on processor type
         blosc_nthreads = codecs.blosc_get_nthreads()
-        log.info(f"Using default blosc nthreads: {blosc_nthreads}")
+        log.debug(f"Using default blosc nthreads: {blosc_nthreads}")
 
     #create the app object
     loop = asyncio.get_event_loop()

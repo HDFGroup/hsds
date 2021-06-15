@@ -234,7 +234,7 @@ def lambda_handler(event, context):
         time.sleep(0.1)
           
   
-    logging.info("returning result:", result)
+    logging.info(f"returning result: {result}")
     return result
 
 ### main
