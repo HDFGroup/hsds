@@ -1,6 +1,7 @@
 import requests_unixsocket
 import time
 import subprocess
+import multiprocessing
 import queue
 import threading
 import signal
@@ -128,7 +129,14 @@ def lambda_handler(event, context):
         logging.debug("no params found in event")
         params = []
 
-    target_dn_count = 1  # TBD - adjust based on number of available VCPUs
+    cpu_count = multiprocessing.cpu_count()
+    logging.info(f"got cpu_count of: {cpu_count}")
+    if "TARGET_DN_COUNT" in os.environ:
+        target_dn_count = int(os.environ["TARGET_DN_COUNT"])
+    else:
+        # base dn count on half the VCPUs (rounded up)
+        target_dn_count = - (-cpu_count // 2)
+    logging.info(f"setting dn count to: {target_dn_count}")
     socket_paths = ["/tmp/sn_1.sock", "/tmp/rangeget.sock"]
     dn_urls_arg = ""
     for i in range(target_dn_count):
@@ -143,7 +151,7 @@ def lambda_handler(event, context):
     for socket_path in socket_paths:
         logging.debug(f"  {socket_path}")
     
-    logging.debug("dn_urls:", dn_urls_arg)
+    logging.debug(f"dn_urls: {dn_urls_arg}")
     common_args = ["--standalone", "--use_socket", "--readonly"]
     common_args.append(f"--log_level={log_level_cfg}")
     common_args.append(f"--sn_socket={socket_paths[0]}")
