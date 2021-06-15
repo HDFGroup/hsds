@@ -494,7 +494,6 @@ def baseInit(node_type):
     """Intitialize application and return app object"""
 
     # setup log config
-    log_level = config.get("log_level")
     log.config["log_level"] = config.get("log_level")
     if config.get("log_prefix"):
         log.config["prefix"] = config.get("log_prefix")
