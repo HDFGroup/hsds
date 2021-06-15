@@ -17,7 +17,6 @@ import config
 
 class GroupTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
-        print("grouptest init")
         super(GroupTest, self).__init__(*args, **kwargs)
         self.base_domain = helper.getTestDomainName(self.__class__.__name__)
         helper.setupDomain(self.base_domain)

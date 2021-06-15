@@ -83,7 +83,7 @@ class S3Client():
                 log.debug(f"AWS_WEB_IDENTITY_TOKEN_FILE is: {os.environ['AWS_WEB_IDENTITY_TOKEN_FILE']}")
         if "AWS_SESSION_TOKEN" in os.environ:
             self._aws_session_token = os.environ['AWS_SESSION_TOKEN']
-            log.info(f"AWS_SESSION_TOKEN set from environ to: {self._aws_session_token}")
+            log.debug(f"got AWS_SESSION_TOKEN: {self._aws_session_token}")
 
 
         self._aio_config = AioConfig(max_pool_connections=max_pool_connections)
