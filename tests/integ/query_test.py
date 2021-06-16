@@ -10,7 +10,6 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import unittest
-import requests
 import json
 import helper
 import config
@@ -23,6 +22,13 @@ class QueryTest(unittest.TestCase):
         helper.setupDomain(self.base_domain)
         self.endpoint = helper.getEndpoint()
 
+    def setUp(self):
+        self.session = helper.getSession()
+
+    def tearDown(self):
+        if self.session:
+            self.session.close()
+
         # main
 
     def testSimpleQuery(self):
@@ -33,7 +39,7 @@ class QueryTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -59,7 +65,7 @@ class QueryTest(unittest.TestCase):
         num_elements = 12
         payload = {'type': datatype, 'shape': num_elements}
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
 
         rspJson = json.loads(rsp.text)
@@ -70,7 +76,7 @@ class QueryTest(unittest.TestCase):
         name = 'dset'
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
 
@@ -92,13 +98,13 @@ class QueryTest(unittest.TestCase):
 
         payload = {'value': value}
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
 
         # read first row with AAPL
         params = {'query': "symbol == b'AAPL'" }
         params["Limit"] = 1
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         #self.assertTrue("hrefs" in rspJson)
@@ -114,7 +120,7 @@ class QueryTest(unittest.TestCase):
         del params["Limit"]
 
         # get back rows for AAPL
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -129,7 +135,7 @@ class QueryTest(unittest.TestCase):
 
         # combine with a selection
         params["select"] = "[2:12]"
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         #self.assertTrue("hrefs" in rspJson)
@@ -144,7 +150,7 @@ class QueryTest(unittest.TestCase):
 
         # combine with Limit
         params["Limit"] = 2
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         #self.assertTrue("hrefs" in rspJson)
@@ -159,12 +165,12 @@ class QueryTest(unittest.TestCase):
 
         # try bad Limit
         params["Limit"] = "abc"
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 400)
 
         # try invalid query string
         params = {'query': "foobar" }
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 400)
 
     def testChunkedRefIndirectDataset(self):
@@ -208,7 +214,7 @@ class QueryTest(unittest.TestCase):
 
         # get domain
         req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
         root_uuid = rspJson["root"]
@@ -223,7 +229,7 @@ class QueryTest(unittest.TestCase):
         chunkinfo_dims = [num_chunks,]
         payload = {'type': chunkinfo_type, 'shape': chunkinfo_dims }
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
         rspJson = json.loads(rsp.text)
         chunkinfo_uuid = rspJson['id']
@@ -233,14 +239,14 @@ class QueryTest(unittest.TestCase):
         name = "chunks"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": chunkinfo_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # write to the chunkinfo dataset
         payload = {'value': chunkinfo_data}
 
         req = self.endpoint + "/datasets/" + chunkinfo_uuid + "/value"
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
 
 
@@ -272,7 +278,7 @@ class QueryTest(unittest.TestCase):
         data['creationProperties'] = {'layout': layout}
 
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -282,7 +288,7 @@ class QueryTest(unittest.TestCase):
         name = "dset"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # read a selection
@@ -291,7 +297,7 @@ class QueryTest(unittest.TestCase):
         #params = {'query': "symbol == b'CVX'" } # query for CVX
         #params["select"] = "[0:100]"
         params["nonstrict"] = 1 # enable SN to invoke lambda func
-        rsp = requests.get(req, params=params, headers=headers)
+        rsp = self.session.get(req, params=params, headers=headers)
 
         if rsp.status_code == 404:
             print("s3object: {} not found, skipping hyperslab read chunk reference indirect test".format(s3path))
@@ -322,7 +328,7 @@ class QueryTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -348,7 +354,7 @@ class QueryTest(unittest.TestCase):
         num_elements = 12
         payload = {'type': datatype, 'shape': num_elements}
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
 
         rspJson = json.loads(rsp.text)
@@ -359,7 +365,7 @@ class QueryTest(unittest.TestCase):
         name = 'dset'
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
 
@@ -381,14 +387,14 @@ class QueryTest(unittest.TestCase):
 
         payload = {'value': value}
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
 
         # set any rows with AAPL to have open of 999
         params = {'query': "symbol == b'AAPL'" }
         update_value = {"open": 999}
         payload = {'value': update_value}
-        rsp = requests.put(req, params=params, data=json.dumps(update_value), headers=headers)
+        rsp = self.session.put(req, params=params, data=json.dumps(update_value), headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -403,7 +409,7 @@ class QueryTest(unittest.TestCase):
 
         # read values and verify the expected changes where made
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         read_values = rspJson["value"]
@@ -423,7 +429,7 @@ class QueryTest(unittest.TestCase):
         # re-write values
         payload = {'value': value}
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
 
         # set just one row with AAPL to have open of 42
@@ -431,7 +437,7 @@ class QueryTest(unittest.TestCase):
         params["Limit"] = 1
         update_value = {"open": 999}
         payload = {'value': update_value}
-        rsp = requests.put(req, params=params, data=json.dumps(update_value), headers=headers)
+        rsp = self.session.put(req, params=params, data=json.dumps(update_value), headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -446,7 +452,7 @@ class QueryTest(unittest.TestCase):
 
         # read values and verify the expected changes where made
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         read_values = rspJson["value"]

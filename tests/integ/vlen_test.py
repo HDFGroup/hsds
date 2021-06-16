@@ -10,7 +10,6 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import unittest
-import requests
 import json
 import helper
 import numpy as np
@@ -27,6 +26,13 @@ class VlenTest(unittest.TestCase):
         helper.setupDomain(self.base_domain)
         self.endpoint = helper.getEndpoint()
 
+    def setUp(self):
+        self.session = helper.getSession()
+
+    def tearDown(self):
+        if self.session:
+            self.session.close()
+
         # main
 
     def testPutVLenInt(self):
@@ -37,7 +43,7 @@ class VlenTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -47,7 +53,7 @@ class VlenTest(unittest.TestCase):
         vlen_type = {"class": "H5T_VLEN", "base": { "class": "H5T_INTEGER", "base": "H5T_STD_I32LE"}}
         payload = {'type': vlen_type, 'shape': [4,]}
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
@@ -57,18 +63,18 @@ class VlenTest(unittest.TestCase):
         name = 'dset'
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # write values to dataset
         data = [[1,], [1,2], [1,2,3], [1,2,3,4]]
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         payload = { 'value': data }
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # read values from dataset
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -80,7 +86,7 @@ class VlenTest(unittest.TestCase):
 
         # read back a selection
         params = {"select": "[2:3]"}
-        rsp = requests.get(req, headers=headers, params=params)
+        rsp = self.session.get(req, headers=headers, params=params)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -93,7 +99,7 @@ class VlenTest(unittest.TestCase):
         points = [1,3]
         body = { "points": points }
         # read selected points
-        rsp = requests.post(req, data=json.dumps(body), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
         # point select not supported on zero-dimensional datasets
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
@@ -125,7 +131,7 @@ class VlenTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -135,7 +141,7 @@ class VlenTest(unittest.TestCase):
         vlen_type = {"class": "H5T_VLEN", "base": { "class": "H5T_INTEGER", "base": "H5T_STD_I32LE"}}
         payload = {'type': vlen_type, 'shape': [count,]}
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
@@ -145,7 +151,7 @@ class VlenTest(unittest.TestCase):
         name = 'dset'
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # create numpy vlen array
@@ -158,11 +164,11 @@ class VlenTest(unittest.TestCase):
         data = arrayToBytes(arr)
         self.assertEqual(len(data), 56)
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        rsp = requests.put(req, data=data, headers=headers_bin_req)
+        rsp = self.session.put(req, data=data, headers=headers_bin_req)
         self.assertEqual(rsp.status_code, 200)
 
         # read values from dataset with json
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -174,7 +180,7 @@ class VlenTest(unittest.TestCase):
             self.assertEqual(value[i], test_values[i])
 
         # read as binary
-        rsp = requests.get(req, headers=headers_bin_rsp)
+        rsp = self.session.get(req, headers=headers_bin_rsp)
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers['Content-Type'], "application/octet-stream")
         data = rsp.content
@@ -186,7 +192,7 @@ class VlenTest(unittest.TestCase):
 
         # read back a selection
         params = {"select": "[2:3]"}
-        rsp = requests.get(req, headers=headers, params=params)
+        rsp = self.session.get(req, headers=headers, params=params)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -207,7 +213,7 @@ class VlenTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -217,7 +223,7 @@ class VlenTest(unittest.TestCase):
         vlen_type = {"class": "H5T_VLEN", "base": { "class": "H5T_INTEGER", "base": "H5T_STD_I32LE"}}
         payload = {'type': vlen_type, 'shape': [nrow,ncol]}
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
@@ -227,7 +233,7 @@ class VlenTest(unittest.TestCase):
         name = 'dset'
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # write values to dataset
@@ -242,11 +248,11 @@ class VlenTest(unittest.TestCase):
 
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         payload = { 'value': data }
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # read values from dataset
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -261,7 +267,7 @@ class VlenTest(unittest.TestCase):
 
         # read values from dataset using selection
         params = {"select": "[0:1,0:2]"}
-        rsp = requests.get(req, headers=headers, params=params)
+        rsp = self.session.get(req, headers=headers, params=params)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -281,7 +287,7 @@ class VlenTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -292,7 +298,7 @@ class VlenTest(unittest.TestCase):
                     "strPad": "H5T_STR_NULLTERM", "length": "H5T_VARIABLE"}
         payload = {'type': vlen_type, 'shape': [4,]}
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
@@ -302,18 +308,18 @@ class VlenTest(unittest.TestCase):
         name = 'dset'
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # write values to dataset
         data = ["This is", "a variable length", "string", "array"]
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         payload = { 'value': data }
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # read values from dataset
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -332,7 +338,7 @@ class VlenTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -354,7 +360,7 @@ class VlenTest(unittest.TestCase):
         datatype = {'class': 'H5T_COMPOUND', 'fields': fields }
         payload = {'type': datatype, 'shape': [count,]}
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
@@ -364,7 +370,7 @@ class VlenTest(unittest.TestCase):
         name = 'dset'
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # write values to dataset
@@ -378,11 +384,11 @@ class VlenTest(unittest.TestCase):
             data.append(e)
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         payload = { 'value': data }
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # read values from dataset
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -403,7 +409,7 @@ class VlenTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -425,7 +431,7 @@ class VlenTest(unittest.TestCase):
         datatype = {'class': 'H5T_COMPOUND', 'fields': fields }
         payload = {'type': datatype, 'shape': [count,]}
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson['id']
@@ -435,7 +441,7 @@ class VlenTest(unittest.TestCase):
         name = 'dset'
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         dt_compound = createDataType(datatype)
@@ -457,11 +463,11 @@ class VlenTest(unittest.TestCase):
         data = arrayToBytes(arr)
         self.assertEqual(len(data), 192) # will vary based on count
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        rsp = requests.put(req, data=data, headers=headers_bin_req)
+        rsp = self.session.put(req, data=data, headers=headers_bin_req)
         self.assertEqual(rsp.status_code, 200)
 
         # read values from dataset as json
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -470,7 +476,7 @@ class VlenTest(unittest.TestCase):
         self.assertEqual(len(value), count)
 
         # read as binary
-        rsp = requests.get(req, headers=headers_bin_rsp)
+        rsp = self.session.get(req, headers=headers_bin_rsp)
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers['Content-Type'], "application/octet-stream")
         data = rsp.content

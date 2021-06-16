@@ -11,7 +11,6 @@
 ##############################################################################
 import base64
 import unittest
-import requests
 import json
 import numpy as np
 import helper
@@ -25,6 +24,12 @@ class PointSelTest(unittest.TestCase):
         helper.setupDomain(self.base_domain)
         self.endpoint = helper.getEndpoint()
 
+    def setUp(self):
+        self.session = helper.getSession()
+
+    def tearDown(self):
+        if self.session:
+            self.session.close()
 
     def testPost1DDataset(self):
 
@@ -37,7 +42,7 @@ class PointSelTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -49,7 +54,7 @@ class PointSelTest(unittest.TestCase):
         data['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [20,] }}
 
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -59,13 +64,13 @@ class PointSelTest(unittest.TestCase):
         name = "dset"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # try reading points from uninitialized chunks
         body = { "points": points }
         req = self.endpoint + "/datasets/" + dset_id + "/value"
-        rsp = requests.post(req, data=json.dumps(body), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("value" in rspJson)
@@ -81,11 +86,11 @@ class PointSelTest(unittest.TestCase):
         payload = { 'value': data }
         req = self.endpoint + "/datasets/" + dset_id + "/value"
 
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # read back data
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -93,7 +98,7 @@ class PointSelTest(unittest.TestCase):
         
         body = { "points": points }
         # read selected points
-        rsp = requests.post(req, data=json.dumps(body), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("value" in rspJson)
@@ -111,7 +116,7 @@ class PointSelTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -123,7 +128,7 @@ class PointSelTest(unittest.TestCase):
         data['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [10, 10] }}
 
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -133,7 +138,7 @@ class PointSelTest(unittest.TestCase):
         name = "dset2d"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # make up some data
@@ -147,7 +152,7 @@ class PointSelTest(unittest.TestCase):
         # write some values
         req = self.endpoint + '/datasets/' + dset_id + '/value'
         payload = { 'value': arr2d }
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # do a point select
@@ -158,7 +163,7 @@ class PointSelTest(unittest.TestCase):
                 points.append(pt)
         body = { "points": points }
         # read a selected points
-        rsp = requests.post(req, data=json.dumps(body), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         expected_result = [50005, 50010, 50015, 50020, 50025, 100005, 100010,
@@ -182,7 +187,7 @@ class PointSelTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -194,7 +199,7 @@ class PointSelTest(unittest.TestCase):
         data['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [20,] }}
 
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -204,7 +209,7 @@ class PointSelTest(unittest.TestCase):
         name = "dset"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         arr = np.zeros((100,), dtype='i4')
@@ -215,7 +220,7 @@ class PointSelTest(unittest.TestCase):
 
         req = self.endpoint + "/datasets/" + dset_id + "/value"
 
-        rsp = requests.put(req, data=data, headers=headers_bin_req)
+        rsp = self.session.put(req, data=data, headers=headers_bin_req)
         self.assertEqual(rsp.status_code, 200)
 
         points = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,97,98]
@@ -224,7 +229,7 @@ class PointSelTest(unittest.TestCase):
         data = arr_points.tobytes()
 
         # read selected points
-        rsp = requests.post(req, data=data, headers=headers_bin_reqrsp)
+        rsp = self.session.post(req, data=data, headers=headers_bin_reqrsp)
         self.assertEqual(rsp.status_code, 200)
         rsp_data = rsp.content
         self.assertEqual(len(rsp_data), num_points*4)
@@ -248,7 +253,7 @@ class PointSelTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -260,7 +265,7 @@ class PointSelTest(unittest.TestCase):
         data['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [10, 10] }}
 
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -270,7 +275,7 @@ class PointSelTest(unittest.TestCase):
         name = "dset2d"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         arr = np.zeros((20, 30), dtype='i4')
@@ -281,7 +286,7 @@ class PointSelTest(unittest.TestCase):
 
         # write some values
         req = self.endpoint + '/datasets/' + dset_id + '/value'
-        rsp = requests.put(req, data=arr_bytes, headers=headers_bin_req)
+        rsp = self.session.put(req, data=arr_bytes, headers=headers_bin_req)
         self.assertEqual(rsp.status_code, 200)
 
         # do a point select
@@ -295,7 +300,7 @@ class PointSelTest(unittest.TestCase):
         pt_bytes = arr_points.tobytes()
 
         # read selected points
-        rsp = requests.post(req, data=pt_bytes, headers=headers_bin_reqrsp)
+        rsp = self.session.post(req, data=pt_bytes, headers=headers_bin_reqrsp)
         self.assertEqual(rsp.status_code, 200)
         rsp_data = rsp.content
         self.assertEqual(len(rsp_data), num_points*4)
@@ -354,7 +359,7 @@ class PointSelTest(unittest.TestCase):
 
         # get domain
         req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
         root_uuid = rspJson["root"]
@@ -366,7 +371,7 @@ class PointSelTest(unittest.TestCase):
         data['creationProperties'] = {'layout': layout}
 
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset112_id = rspJson["id"]
@@ -376,7 +381,7 @@ class PointSelTest(unittest.TestCase):
         name = "dset112"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset112_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # create dataset for /g2/dset2.2
@@ -385,7 +390,7 @@ class PointSelTest(unittest.TestCase):
         data['creationProperties'] = {'layout': layout}
 
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset22_id = rspJson["id"]
@@ -395,7 +400,7 @@ class PointSelTest(unittest.TestCase):
         name = "dset22"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset22_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # do a point selection read on dset22
@@ -405,7 +410,7 @@ class PointSelTest(unittest.TestCase):
         # add nonstrict
         params = {"nonstrict": 1 } # enable SN to invoke lambda func
 
-        rsp = requests.post(req, params=params, data=json.dumps(body), headers=headers)
+        rsp = self.session.post(req, params=params, data=json.dumps(body), headers=headers)
         if rsp.status_code == 404:
             print("s3object: {} not found, skipping point read chunk reference contiguous test".format(s3path))
             return
@@ -421,7 +426,7 @@ class PointSelTest(unittest.TestCase):
         req = self.endpoint + "/datasets/" + dset22_id + "/value"
         points = [(0,0), (1,1), (2,2)]
         body = { "points": points }
-        rsp = requests.post(req, data=json.dumps(body), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("value" in rspJson)
@@ -465,7 +470,7 @@ class PointSelTest(unittest.TestCase):
 
         # get domain
         req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
         root_uuid = rspJson["root"]
@@ -498,7 +503,7 @@ class PointSelTest(unittest.TestCase):
         data['creationProperties'] = {'layout': layout}
 
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -508,14 +513,14 @@ class PointSelTest(unittest.TestCase):
         name = "dset"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # do a point selection
         req = self.endpoint + "/datasets/" + dset_id + "/value"
         points = [1234567,]
         body = { "points": points }
-        rsp = requests.post(req, data=json.dumps(body), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
         if rsp.status_code == 404:
             print("s3object: {} not found, skipping point chunk ref test".format(s3path))
         else:
@@ -571,7 +576,7 @@ class PointSelTest(unittest.TestCase):
 
         # get domain
         req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
         root_uuid = rspJson["root"]
@@ -586,7 +591,7 @@ class PointSelTest(unittest.TestCase):
         chunkinfo_dims = [num_chunks,]
         payload = {'type': chunkinfo_type, 'shape': chunkinfo_dims }
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
         rspJson = json.loads(rsp.text)
         chunkinfo_uuid = rspJson['id']
@@ -596,14 +601,14 @@ class PointSelTest(unittest.TestCase):
         name = "chunks"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": chunkinfo_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # write to the chunkinfo dataset
         payload = {'value': chunkinfo_data}
 
         req = self.endpoint + "/datasets/" + chunkinfo_uuid + "/value"
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
 
 
@@ -635,7 +640,7 @@ class PointSelTest(unittest.TestCase):
         data['creationProperties'] = {'layout': layout}
 
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -645,14 +650,14 @@ class PointSelTest(unittest.TestCase):
         name = "dset"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # do a point selection
         req = self.endpoint + "/datasets/" + dset_id + "/value"
         points = [1234567,]
         body = { "points": points }
-        rsp = requests.post(req, data=json.dumps(body), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
         if rsp.status_code == 404:
             print("s3object: {} not found, skipping point read chunk reference indirect test".format(s3path))
             return
@@ -675,7 +680,7 @@ class PointSelTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -687,7 +692,7 @@ class PointSelTest(unittest.TestCase):
         data['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [20,] }}
 
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -697,7 +702,7 @@ class PointSelTest(unittest.TestCase):
         name = "dset"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # Do a point selection write
@@ -706,11 +711,11 @@ class PointSelTest(unittest.TestCase):
         # write 1's to all the prime indexes
         payload = { 'points': primes, 'value': value }
         req = self.endpoint + "/datasets/" + dset_id + "/value"
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # read back data
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -724,7 +729,7 @@ class PointSelTest(unittest.TestCase):
                 self.assertEqual(value[i], 0)
 
         # read back data as one big hyperslab selection
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -748,7 +753,7 @@ class PointSelTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -760,7 +765,7 @@ class PointSelTest(unittest.TestCase):
         data['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [10, 10] }}
 
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -770,7 +775,7 @@ class PointSelTest(unittest.TestCase):
         name = "dset2d"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # make up some points
@@ -782,11 +787,11 @@ class PointSelTest(unittest.TestCase):
         # write 1's to all the point locations
         payload = { 'points': points, 'value': value }
         req = self.endpoint + "/datasets/" + dset_id + "/value"
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # read back data
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("value" in rspJson)
@@ -811,7 +816,7 @@ class PointSelTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -823,7 +828,7 @@ class PointSelTest(unittest.TestCase):
         data['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [20,] }}
 
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -833,7 +838,7 @@ class PointSelTest(unittest.TestCase):
         name = "dset"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # Do a point selection write
@@ -849,11 +854,11 @@ class PointSelTest(unittest.TestCase):
         # write 1's to all the prime indexes
         payload = { 'points': primes, 'value_base64': value_base64 }
         req = self.endpoint + "/datasets/" + dset_id + "/value"
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # read back data
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -867,7 +872,7 @@ class PointSelTest(unittest.TestCase):
                 self.assertEqual(value[i], 0)
 
         # read back data as one big hyperslab selection
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -891,7 +896,7 @@ class PointSelTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -903,7 +908,7 @@ class PointSelTest(unittest.TestCase):
         data['creationProperties'] = {'layout': {'class': 'H5D_CHUNKED', 'dims': [10, 10] }}
 
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         dset_id = rspJson["id"]
@@ -913,7 +918,7 @@ class PointSelTest(unittest.TestCase):
         name = "dset2d"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # make up some points
@@ -932,11 +937,11 @@ class PointSelTest(unittest.TestCase):
         # write 1's to all the point locations
         payload = { 'points': points, 'value_base64': value_base64 }
         req = self.endpoint + "/datasets/" + dset_id + "/value"
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # read back data
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("value" in rspJson)
@@ -959,7 +964,7 @@ class PointSelTest(unittest.TestCase):
         headers = helper.getRequestHeaders(domain=self.base_domain)
         # get domain
         req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
         root_uuid = rspJson["root"]
@@ -971,7 +976,7 @@ class PointSelTest(unittest.TestCase):
         payload = {'type': 'H5T_STD_I32LE', 'shape': dims }
 
         req = self.endpoint + "/datasets"
-        rsp = requests.post(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
         rspJson = json.loads(rsp.text)
 
@@ -982,12 +987,12 @@ class PointSelTest(unittest.TestCase):
         name = 'big_dset'
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # verify layout
         req = helper.getEndpoint() + "/datasets/" + dset_uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("layout" in rspJson)
@@ -1013,18 +1018,16 @@ class PointSelTest(unittest.TestCase):
         # write 1's to all the point locations
         payload = { 'points': points, 'value': value }
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         # read back data
         body = { "points": points }
         # read a selected points
-        rsp = requests.post(req, data=json.dumps(body), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        expected_result = [50005, 50010, 50015, 50020, 50025, 100005, 100010,
-            100015, 100020, 100025, 150005, 150010, 150015, 150020, 150025]
-
+        
         self.assertTrue("value" in rspJson)
         # verify the correct elements got set
         value = rspJson["value"]
@@ -1038,15 +1041,16 @@ class PointSelTest(unittest.TestCase):
         headers = helper.getRequestHeaders(domain=self.base_domain)
         # get domain
         req = helper.getEndpoint() + '/'
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
         root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
 
         # create a dataset obj
         data = { "type": "H5T_IEEE_F32LE" }
         req = self.endpoint + '/datasets'
-        rsp = requests.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["attributeCount"], 0)
@@ -1059,13 +1063,13 @@ class PointSelTest(unittest.TestCase):
         payload = { 'value': data }
         req = self.endpoint + "/datasets/" + dset_id + "/value"
 
-        rsp = requests.put(req, data=json.dumps(payload), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         points = [0,]
         body = { "points": points }
         # read selected points
-        rsp = requests.post(req, data=json.dumps(body), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
         # point select not supported on zero-dimensional datasets
         self.assertEqual(rsp.status_code, 400)
          

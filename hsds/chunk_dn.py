@@ -70,19 +70,10 @@ async def PUT_Chunk(request):
         bucket = None
 
     if query:
-        expected_content_type = "text/plain; charset=utf-8"
         chunk_init = False  # don't initalize new chunks on query update
     else:
-        expected_content_type = "application/octet-stream"
         chunk_init = True
-    if "Content-Type" in request.headers:
-        # client should use "application/octet-stream" for binary transfer
-        content_type = request.headers["Content-Type"]
-        if content_type != expected_content_type:
-            msg = f"Unexpected content_type: {content_type}"
-            log.error(msg)
-            raise HTTPBadRequest(reason=msg)
-
+     
     try:
         validateInPartition(app, chunk_id)
     except KeyError:
@@ -158,8 +149,6 @@ async def PUT_Chunk(request):
             raise HTTPBadRequest()
         if query_update and resp is not None:
             is_dirty = True
-
-
     else:
         # regular chunk update
 

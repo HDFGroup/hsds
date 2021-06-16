@@ -10,10 +10,12 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 #
-# data node of hsds cluster
+# rangeget proxy of hsds cluster
 #
 import asyncio
 import time
+import os
+import socket
 from aiohttp.web import run_app
 from aiohttp.web import Application, StreamResponse
 from . import config
@@ -249,10 +251,29 @@ def main():
     app['node_type'] = 'rg'
     app['node_state'] = "READY"  # range proxy doesn't care about health state of other nodes
 
-    # run the app
-    port = int(config.get("rangeget_port"))
-    log.info(f"run_app on port: {port}")
-    run_app(app, port=port)
+    rangeget_socket = config.getCmdLineArg("rangeget_socket")
+    if rangeget_socket:
+        # use a unix domain socket path
+        # first, make sure the socket does not already exist
+        log.info(f"Using socket {rangeget_socket}")
+        try:
+            os.unlink(rangeget_socket)
+        except OSError:
+            if os.path.exists(rangeget_socket):
+                raise
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        log.info("socket bind")
+        s.bind(rangeget_socket)
+        run_app(app, sock=s)
+        # close socket?
+    else:
+        # Use TCP connection
+        port = int(config.get("rangeget_port"))
+        log.info(f"run_app on port: {port}")
+        run_app(app, port=port)
+
+    log.info("run_app done")
+
 
 if __name__ == '__main__':
     main()
