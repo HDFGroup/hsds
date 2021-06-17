@@ -1,6 +1,5 @@
 FROM public.ecr.aws/lambda/python:3.8
 RUN yum -y install git
-RUN pip install   curl
 RUN pip install \ 
   	psutil \
         numpy \
