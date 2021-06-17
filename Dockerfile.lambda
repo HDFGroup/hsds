@@ -13,6 +13,7 @@ RUN pip install \
         pyjwt \
         pyyaml \
         pip \
+        simplejson \
         wheel \
         numcodecs
 
