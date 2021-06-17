@@ -3,17 +3,17 @@ HSDS for AWS Lambda
 
 AWS Lambda is a technology that enables code to be run without the need to provision a server.  For AWS deployments, HSDS can be deployed as AWS Lambda function to provide more scalability and parallelism than would be practical compared with containers running in Docker or Kubernetes (AWS Lambda supports up to 1000-way parallelism by default).  
 
-Each Lambda invocation will be charged based on how long the code took to execute (typically than 2-4 seconds) and memory used (can be configured to anything between 128MB and 10GB). This is espically attractive for deployments were the service will be used intermittantly, as there is no charge unless the Lambda function is invoked.
+Each Lambda invocation will be charged based on how long the code took to execute (typically 2-4 seconds per request) and memory used (can be configured to anything between 128MB and 10GB). This is especially attractive for deployments were the service will be used intermittantly, as there is no charge unless the Lambda function is invoked.
 
 Compared with a traiditional deployment, a Lambda deployment is not optimal for situtaions where the lowest possible latency is desired.  Since the Lambda function takes a certain amount of time to "spin up",
-the average latency will be higher compared to a lightly loaded server deployment.  On the other hand, Lambda invocations generally have a more consistent latency when there is a high request rate, since there is no contention for a fixed amount of server resources.
+the average latency will be higher compared to a lightly loaded server deployment.  On the other hand, Lambda invocations generally have a more consistent latency.  Even with a high request rate, the latency should be the same or lower since there is no contention among the executing lambda functions.
 
-Finally, Lambda is best used for read-only applications.  In traditional deployments, HSDS ensures that POST and PUT requests are applied consistently.  If multiple update requests are used with Lambda it is possible to have a race condition where some udpates will get overwritten.
+Finally, Lambda is best used for read-only applications.  In traditional deployments, HSDS ensures that POST and PUT requests are applied consistently.  If multiple update requests are sent simultaneously with Lambda it is possible to have a race condition where some udpates will get overwritten.
 
 Function Creation
 =================
 
-To use Lambda, following the following steps in the Management Console:
+To use HSDS for Lambda, follow these steps:
 
 1. In the AWS Management Console, go to Elastic Container Registry (ECR) and create a repository to store the Lambda container image.
 2. Download the latest image from https://gallery.ecr.aws/w7l0z8b2/hdfgroup with a tag starting in "hslambda".  E.g. `$ docker pull public.ecr.aws/w7l0z8b2/hdfgroup:hslambda_v0.7.0beta01`.  Alternatively, you can build the Lambda image from source, see: "build HSDS Lambda"
@@ -32,7 +32,7 @@ To use Lambda, following the following steps in the Management Console:
 Setting Permissions
 ===================
 
-By default the Lambda function does not have permissions to access any S3 content.  To enable this, follow the following steps:
+By default the Lambda function does not have permissions to access any S3 content.  To enable this, do the following:
 
 1. In the "Configuration" tab, select "Environment variables", click the "Edit" button, and then the "Add environment variable" button.  Enter a key of "AWS_S3_GATEWAY" and a value corresponding to the S3 endpoint for your region.  E.g. "http://s3.us-west-2.amazonaws.com" for us-west-2
 2. Next select "Permissions" and click the "Edit" button for "Execution Role".  Select (or create) a role that includes at least the policies: "AWSLambdaBasicExecutionRole" and "AmazonS3ReadOnlyAccess".  If desired, you may use "AmazonS3FullAccess" (for read-write applications), and/or restrict the resource to a given S3 bucket
