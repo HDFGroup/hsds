@@ -209,8 +209,7 @@ def lambda_handler(event, context):
 
         for p in processes:
             if p.poll() is not None:
-                r = p.communicate()
-                raise ValueError(f"process {p.args[0]} ended, result: {r}")
+                raise ValueError(f"process {p.args[0]} ended unexpectedly")
 
         if req_thread:
             if not req_thread.is_alive():

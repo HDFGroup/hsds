@@ -1,51 +1,71 @@
-AWS Lambda Setup
-================
+HSDS for AWS Lambda
+===================
 
-AWS Lambda is a technology that enables code to be run without the need to provision a server.  For AWS deployments, HSDS can utilize AWS Lambda to provide more scalability and parallelism than would be practical than using just containers running in Docker or Kubernetes (AWS Lambda supports up to 1000-way parallelism by default).  When configured, HSDS will use Lambda for read operations that are likely to execute faster with Lambda than utilziing the existing set of conatiners.
+AWS Lambda is a technology that enables code to be run without the need to provision a server.  For AWS deployments, HSDS can be deployed as AWS Lambda function to provide more scalability and parallelism than would be practical compared with containers running in Docker or Kubernetes (AWS Lambda supports up to 1000-way parallelism by default).  
 
-Each Lambda invocation will be charged based on how long the code took to execute (typically less than 2 seconds) and memory used 
-(configured below to 128MB).  These charges are minimal and would generally be much less than running an equivalent number of HSDS containers to provide a Lambda level of capacity (though of course you should test for loads typical to your deployment).
+Each Lambda invocation will be charged based on how long the code took to execute (typically 2-4 seconds per request) and memory used (can be configured to anything between 128MB and 10GB). This is especially attractive for deployments were the service will be used intermittantly, as there is no charge unless the Lambda function is invoked.
 
-To use Lambda, following the following steps in the Management Console:
+Compared with a traiditional deployment, a Lambda deployment is not optimal for situtaions where the lowest possible latency is desired.  Since the Lambda function takes a certain amount of time to "spin up",
+the average latency will be higher compared to a lightly loaded server deployment.  On the other hand, Lambda invocations generally have a more consistent latency.  Even with a high request rate, the latency should be the same or lower since there is no contention among the executing lambda functions.
 
-1. In the AWS Management Console, select the Lambda service (for the same region in which you running HSDS)
-2. Click the "Create Function" button
-3. In the next page enter the name for the function as: "chunk_read"
-4. Select "Python 3.8" in the Runtime dropdown menu
-5. For "Execution Role", select (or create) a role that enables "AmazonS3ReadOnlyAccess" andd "AWSLambdaBasicExecutionRole"
-6. Create the follwoing keys in the "Environment Variables" section:
-    * `AWS_S3_GATEWAY - http://s3.amazon.com` (use endpoint for your region)
-    * `LOG_LEVEL - INFO` (or ERROR or DEBUG if desired)
-7. Leave the default values for Memory (128MB) and Timeout (30 seconds)
+Finally, Lambda is best used for read-only applications.  In traditional deployments, HSDS ensures that POST and PUT requests are applied consistently.  If multiple update requests are sent simultaneously with Lambda it is possible to have a race condition where some udpates will get overwritten.
 
-Next, build and deploy the Lambda function:
+Function Creation
+=================
 
-1. In the HSDS source tree, cd to awslambda
-2. Run: `./build.sh`.  This will create the Lambda zip file
-3. Run: `./deploy.sh`.  This will upload the zip to AWS
-4. Refresh the management console, you should see the handler specified in the "Function Code" section
+To use HSDS for Lambda, follow these steps:
 
-Next, configure HSDS to use Lambda:
-
-1. Setup environment variables as in "Sample .bashrc" below
-2. Stop (`./stopall.sh`) and restart the service: (`./runall.sh`) for the server to pickup the new environment variables.
-
-Testing
--------
-
-When the server runs requests for hyperslab, point, or query functions that read data from a large number of chunks, 
-the Lambda function should be invoked.  Grepping for "serverless" in the SN log files will show when Lambda is invoked.
-
-In the AWS Management console, go to the "Monitoring" tab to view metrics for Lambda invocations.  Lambda log files can also be
-accessed from this page.
+1. In the AWS Management Console, go to Elastic Container Registry (ECR) and create a repository to store the Lambda container image.
+2. Download the latest image from https://gallery.ecr.aws/w7l0z8b2/hdfgroup with a tag starting in "hslambda".  E.g. `$ docker pull public.ecr.aws/w7l0z8b2/hdfgroup:hslambda_v0.7.0beta01`.  Alternatively, you can build the Lambda image from source, see: "build HSDS Lambda"
+3. Go to the respository you created in ECR and follow the "View push commands" instructions to deploy the Lambda image to your repository
+4. Select the Lambda service in the Management Console
+5. Click the "Create Function" button
+6. Choose the "Container Image" option
+7. Enter a function name (e.g. "hslambda")
+8. Click the "Browse Image" button and select the image you uploaded to ECR.  Wait for the image to load
+9. Click "Create Function". Wait for image to load
+10. Select the "Configuration" tab and change the memory value to at least 1024MB and Timeout of 30 sec (later try out different values for these to see which works best for your workload)
+11. Select the "Test" tab and press the "Test" button using the default event
+12. Function should succeed returning a JSON response with "status_code" of 200, and an "output" value containing general information about HSDS.  If a different status_code is returned, review the Log output to determine the nature of the error
 
 
-Sample .bashrc
---------------
-These environment variables will be used by HSDS for AWS Lambda
+Setting Permissions
+===================
 
-    export AWS_LAMBDA_GATEWAY=https://lambda.us-east-1.amazonaws.com  # use Lambda endpoint for your region.
-    # See: https://docs.aws.amazon.com/general/latest/gr/rande.html for list of endpoints
-    export AWS_LAMBDA_CHUNKREAD_FUNCTION=chunk_read
+By default the Lambda function does not have permissions to access any S3 content.  To enable this, do the following:
+
+1. In the "Configuration" tab, select "Environment variables", click the "Edit" button, and then the "Add environment variable" button.  Enter a key of "AWS_S3_GATEWAY" and a value corresponding to the S3 endpoint for your region.  E.g. "http://s3.us-west-2.amazonaws.com" for us-west-2
+2. Next select "Permissions" and click the "Edit" button for "Execution Role".  Select (or create) a role that includes at least the policies: "AWSLambdaBasicExecutionRole" and "AmazonS3ReadOnlyAccess".  If desired, you may use "AmazonS3FullAccess" (for read-write applications), and/or restrict the resource to a given S3 bucket
+3. Create a test event with the following values:
+
+    {
+      "method": "GET",
+      "request": "/datasets/d-d29fda32-85f3-11e7-bf89-0242ac110008/value",
+      "params": {
+        "domain": "/nrel/wtk-us.h5",
+        "select": "[0:100,620,1401]",
+        "bucket": "nrel-pds-hsds"
+      }
+    }
+
+The Execution result should now return a status_code 200, and output with a 100 data values.
+
+General Usage
+=============
+
+HSDS for AWS Lambda supports the complete REST API supported by HSDS running as a service.  Since AWS Lambda currently doesn't support HTTP requests, it's necessary to "package" the components of a typical 
+http request into the Lambda event structure.  Each event sent to the Lambda function should have key values of "method", "request", and "params" as explained below:
+
+"method": one of the values "GET", "PUT", "POST", "DELETE" corresponding to the typical http verbs.
  
+"request": the api to invoke.  This is the part of the url that would normally be placed after the http endpoint.
+
+"params": a dictionary of query params to be sent to the function
+
+See: https://github.com/HDFGroup/hdf-rest-api, for a complete description of the HDF REST API.
+
+Building the Lambda Image
+=========================
+
+If you wish to build the Lambda image from source, clone this repository and run the script: "lambda_build.sh".  This will create a docker image that you can then push to ECR.
 

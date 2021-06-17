@@ -160,7 +160,6 @@ async def oio_update_dn_info(app):
 async def k8s_update_dn_info(app):
     """ update dn urls by querying k8s api.  Call each url to determine node_ids """
     log.info("k8s_update_dn_info")
-
     k8s_app_label = config.get("k8s_app_label")
     k8s_namespace = config.get("k8s_namespace")
     # put import here to avoid k8s package dependency unless required
