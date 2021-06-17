@@ -1403,6 +1403,33 @@ class ValueTest(unittest.TestCase):
             for i in range(2):
                 self.assertEqual(row[i], (i*2)*(j*2))
 
+        # read 1x4 block from dataset
+        row_index=2
+        params = {"select": f"[{row_index}:{row_index+1}, 0:4]"}
+        params["nonstrict"] = 1  # SN can read directly from S3 or DN node
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        data = rspJson["value"]  # should be 1 x 4 array
+        self.assertTrue(len(data), 1)
+        row = data[0]
+        self.assertEqual(len(row), 4)
+        for i in range(4):
+            self.assertEqual(row[i], i*row_index)
+
+        # read 1x4 block from dataset
+        # use reduce_dim to return 4 element list instead of 1x4 array
+        params["reduce_dim"] = 1
+        rsp = requests.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        row = rspJson["value"]  # should be 1 x 4 array
+        self.assertEqual(len(row), 4)
+        for i in range(4):
+            self.assertEqual(row[i], i*row_index)
+
         # try reading a selection that is out of bounds
         params = {"select": "[0:12, 0:12]"}
         params["nonstrict"] = 1
