@@ -35,8 +35,12 @@ def getEndpoint():
 """
 def getSession():
     endpoint = getEndpoint()
+    
     if endpoint.endswith(".sock"):
         # use requests_unixsocket to get a socket session
+        # Expect domain in the form:
+        #     http+unix://%2Fvar%2Frun%2Fsn_1.sock'
+
         session = requests_unixsocket.Session()
     else:
         session = requests.Session()

@@ -653,7 +653,7 @@ async def getPointData(app, dset_id, dset_json, points, bucket=None, serverless=
     num_chunks = len(chunk_dict)
     log.debug(f"getPointData - num_chunks: {num_chunks}")
     max_chunks = config.get("max_chunks_per_request")
-    if num_chunks > max_chunks:
+    if max_chunks > 0 and num_chunks > max_chunks:
         log.warn(f"Point selection request too large, num_chunks: {num_chunks} max_chunks: {max_chunks}")
         raise HTTPRequestEntityTooLarge(num_chunks, max_chunks)
 
@@ -663,7 +663,6 @@ async def getPointData(app, dset_id, dset_json, points, bucket=None, serverless=
     log.debug(f"chunkinfo_map: {chunk_map}")
 
     # create array to hold response data
-    # TBD: initialize to fill value if not 0
     arr_rsp = np.zeros((num_points,), dtype=dset_dtype)
     tasks = []
     for chunk_id in chunk_dict.keys():

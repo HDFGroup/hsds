@@ -17,9 +17,11 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 
 from .. import hsds_logger as log
 
+
 def getRequestCollectionName(request):
-    """ request is in the form /(datasets|groups|datatypes)/<id>/attributes(/<name>),
-    return datasets | groups | types
+    """ request is in the form:
+        /(datasets|groups|datatypes)/<id>/attributes(/<name>),
+    return: "datasets" | "groups" | "types"
     """
     uri = request.path
 
@@ -32,7 +34,6 @@ def getRequestCollectionName(request):
     npos = uri.find('/')  # second '/'
     col_name = uri[:npos]
 
-
     log.debug('got collection name: [' + col_name + ']')
     if col_name not in ('datasets', 'groups', 'datatypes'):
         msg = "Error: collection name unexpected: {}".format(col_name)
@@ -42,11 +43,12 @@ def getRequestCollectionName(request):
 
     return col_name
 
+
 def validateAttributeName(name):
     """ verify that the attribute name is valid
     """
     if not isinstance(name, str):
-        msg = "attribute name must be a string, but got: {}".format(type(name))
+        msg = f"attribute name must be a string, but got: {type(name)}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     if name.find('/') > -1:
