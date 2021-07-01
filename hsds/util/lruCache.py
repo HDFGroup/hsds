@@ -11,7 +11,10 @@
 ##############################################################################
 import numpy
 import time
+
+from requests.models import MissingSchema
 from .. import hsds_logger as log
+
 
 def getArraySize(arr):
     """ Return size in bytes of numpy array """
@@ -20,8 +23,10 @@ def getArraySize(arr):
         nbytes *= n
     return nbytes
 
+
 class Node(object):
-    def __init__(self, id, data, mem_size=1024, isdirty=False, prev=None, next=None):
+    def __init__(self, id, data,
+                 mem_size=1024, isdirty=False, prev=None, next=None):
         self._id = id
         self._data = data
         self._mem_size = mem_size
@@ -31,13 +36,12 @@ class Node(object):
         self._last_access = time.time()
 
 
-
 class LruCache(object):
     """ LRU cache for Numpy arrays that are read/written from S3
-        
         If name is "ChunkCache", chunk items are assumed by be ndarrays
     """
-    def __init__(self, mem_target=32*1024*1024, name="LruCache", expire_time=None):
+    def __init__(self, mem_target=32*1024*1024,
+                 name="LruCache", expire_time=None):
         self._hash = {}
         self._lru_head = None
         self._lru_tail = None
@@ -47,8 +51,6 @@ class LruCache(object):
         self._expire_time = expire_time
         self._name = name
         self._dirty_set = set()
-
-
 
     def _delNode(self, key):
         # remove from LRU
@@ -70,7 +72,7 @@ class LruCache(object):
         else:
             next_node._prev = prev
         node._next = node._prev = None
-        log.debug(f"LRU {self._name} node {node._id} removed from {self._name}")
+        log.debug(f"LRU {self._name} node {node._id} removed {self._name}")
         return node
 
     def _moveToFront(self, key):
@@ -106,9 +108,12 @@ class LruCache(object):
             return True
         node = self._hash[key]
         now = time.time()
-        if self._expire_time:   
-            if (now - node._last_access) > self._expire_time and not node._isdirty:
-                log.debug(f"LRU {self._name} node {key} has been in cache for {now - node._last_access:.3f} seconds, expiring")
+        if self._expire_time:
+            age = now - node._last_access
+            if age > self._expire_time and not node._isdirty:
+                msg = f"LRU {self._name} node {key} has been in cache for "
+                msg += f"{now - node._last_access:.3f} seconds, expiring"
+                log.debug(msg)
                 return False
             else:
                 return True
@@ -116,8 +121,8 @@ class LruCache(object):
             return True
 
     def __delitem__(self, key):
-        node = self._delNode(key) # remove from LRU
-        del self._hash[key]       # remove from hash
+        node = self._delNode(key)  # remove from LRU
+        del self._hash[key]        # remove from hash
         # remove from LRU list
 
         self._mem_size -= node._mem_size
@@ -153,9 +158,11 @@ class LruCache(object):
     def __setitem__(self, key, data):
         log.debug(f"setitem, key: {key}")
         if isinstance(data, numpy.ndarray):
-            mem_size = getArraySize(data)  # can just compute size for numpy array
+            # can just compute size for numpy array
+            mem_size = getArraySize(data)
         elif isinstance(data, dict):
-            # TBD - come up with a way to get the actual data size for dict objects
+            # TBD - come up with a way to get the actual data size
+            # for dict objects
             mem_size = 1024
         elif isinstance(data, bytes):
             mem_size = len(data)
@@ -163,7 +170,8 @@ class LruCache(object):
             raise TypeError("Unexpected type for LRUCache")
 
         if key in self._hash:
-            # key is already in the LRU - update mem size, data and move to front
+            # key is already in the LRU - update mem size, data and
+            # move to front
             node = self._hash[key]
             old_size = self._hash[key]._mem_size
             mem_delta = node._mem_size - old_size
@@ -174,7 +182,9 @@ class LruCache(object):
             if node._isdirty:
                 self._dirty_size += mem_delta
             node._last_access = time.time()
-            log.debug(f"LRU {self._name} updated node: {key} [was {old_size} bytes now {node._mem_size} bytes]")
+            msg = f"LRU {self._name} updated node: {key} "
+            msg += f"[was {old_size} bytes now {node._mem_size} bytes]"
+            log.debug(msg)
         else:
             node = Node(key, data, mem_size=mem_size)
             if self._lru_head is None:
@@ -189,23 +199,31 @@ class LruCache(object):
                 self._lru_head = node
             self._hash[key] = node
             self._mem_size += node._mem_size
-            log.debug(f"LRU {self._name} adding {node._mem_size} to cache, mem_size is now: {self._mem_size}")
+            msg = f"LRU {self._name} adding {node._mem_size} to cache, "
+            msg += "mem_size is now: {self._mem_size}"
+            log.debug(msg)
             if node._isdirty:
                 self._dirty_size += node._mem_size
-                log.debug(f"LRU {self._name} dirty size is now: {self._dirty_size}")
+                msg = f"LRU {self._name} dirty size is now: {self._dirty_size}"
+                log.debug(msg)
 
-            log.debug(f"LRU {self._name} added new node: {key} [{node._mem_size} bytes]")
+            msg = f"LRU {self._name} added new node: {key} "
+            msg += f"[{node._mem_size} bytes]"
+            log.debug(msg)
 
         if self._mem_size > self._mem_target:
             # set dirty temporarily so we can't remove this node in reduceCache
-            log.debug(f"LRU {self._name} mem_size greater than target {self._mem_target} reducing cache")
+            msg = f"LRU {self._name} mem_size greater than target "
+            msg += f"{self._mem_target} reducing cache"
+            log.debug(msg)
             isdirty = node._isdirty
             node._isdirty = True
             self._reduceCache()
             node._isdirty = isdirty
 
     def _reduceCache(self):
-        # remove nodes from cache (if not dirty) until we are under memory mem_target
+        # remove nodes from cache (if not dirty) until we are under
+        # memory mem_target
         log.debug(f"LRU {self._name} reduceCache")
 
         node = self._lru_tail  # start from the back
@@ -215,13 +233,16 @@ class LruCache(object):
                 log.debug(f"LRU {self._name} removing node: {node._id}")
                 self.__delitem__(node._id)
                 if self._mem_size <= self._mem_target:
-                    log.debug(f"LRU {self._name} mem_size reduced below target")
+                    msg = f"LRU {self._name} mem_size reduced below target"
+                    log.debug(msg)
                     break
             else:
-                pass # can't remove dirty nodes
+                pass  # can't remove dirty nodes
             node = next_node
         if self._mem_size > self._mem_target:
-            log.debug(f"LRU {self._name} mem size of {self._mem_size} not reduced below target {self._mem_target}")
+            msg = f"LRU {self._name} mem size of {self._mem_size} "
+            msg += f"not reduced below target {self._mem_target}"
+            log.debug(msg)
         # done reduceCache
 
     def clearCache(self):
@@ -232,7 +253,9 @@ class LruCache(object):
         while node is not None:
             next_node = node._prev
             if node._isdirty:
-                log.error(f"LRU {self._name} found dirty node during clear: {node._id}")
+                msg = f"LRU {self._name} found dirty node during clear: "
+                msg += f"{node._id}"
+                log.error(msg)
                 raise ValueError("Unable to clear cache")
             log.debug(f"LRU {self._name} removing node: {node._id}")
             self.__delitem__(node._id)
@@ -255,7 +278,8 @@ class LruCache(object):
             if node._isdirty:
                 dirty_count += 1
                 if node._id not in self._dirty_set:
-                    raise ValueError(f"expected to find id: {node._id} in dirty set")
+                    msg = f"expected to find id: {node._id} in dirty set"
+                    raise ValueError(msg)
                 dirty_usage += node._mem_size
             mem_usage += node._mem_size
             if node_type is None:
@@ -266,7 +290,8 @@ class LruCache(object):
             node = node._next
         # finish forward iteration
         if len(id_list) != len(self._hash):
-            raise ValueError("unexpected number of elements in forward LRU list")
+            msg = "unexpected number of elements in forward LRU list"
+            raise ValueError()
         if dirty_count != len(self._dirty_set):
             raise ValueError("unexpected number of dirty nodes")
         if mem_usage != self._mem_size:
@@ -282,17 +307,18 @@ class LruCache(object):
             if pos == 0:
                 raise ValueError(f"unexpected node: {node._id}")
             if node._id != id_list[pos - 1]:
-                raise ValueError(f"expected node: {id_list[pos-1]} but found: {node._id}")
+                msg = f"expected node: {id_list[pos-1]} but found: {node._id}"
+                raise ValueError(msg)
             pos -= 1
             node = node._prev
         if reverse_count != len(id_list):
-            raise ValueError("elements in reverse list do not equal forward list")
+            msg = "elements in reverse list do not equal forward list"
+            raise ValueError(msg)
         # done - consistencyCheck
 
-
     def setDirty(self, key):
-        # setting dirty flag has the side effect of moving this node
-        # up in the LRU list
+        """ setting dirty flag has the side effect of moving this node
+        up in the LRU list """
         log.debug(f"LRU {self._name} set dirty node id: {key}")
 
         node = self._moveToFront(key)
@@ -303,9 +329,11 @@ class LruCache(object):
         self._dirty_set.add(key)
 
     def clearDirty(self, key):
+        """ clear the dirty flag """
         # clearing dirty flag has the side effect of moving this node
         # up in the LRU list
         # also, may trigger a memory cleanup
+
         log.debug(f"LRU {self._name} clear dirty node: {key}")
         node = self._moveToFront(key)
         if node._isdirty:
@@ -319,6 +347,7 @@ class LruCache(object):
                 self._reduceCache()
 
     def isDirty(self, key):
+        """ return dirty flag """
         # don't adjust LRU position
         return key in self._dirty_set
 
@@ -332,14 +361,14 @@ class LruCache(object):
             s += node._id
             node = node._next
             if node:
-                s +=  ","
+                s += ","
         node = self._lru_tail
         s += "\n<-"
         while node:
             s += node._id
             node = node._prev
             if node:
-                s +=  ","
+                s += ","
         s += "\n"
         return s
 

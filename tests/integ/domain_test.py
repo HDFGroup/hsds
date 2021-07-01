@@ -412,7 +412,7 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(set(dn_ids), set(rspJson["dn_ids"]))
 
 
-
+    """
     def testCreateLinkedDomain(self):
         target_domain = self.base_domain + "/target_domain.h5"
         print("testCreateLinkedDomain", target_domain)
@@ -460,7 +460,7 @@ class DomainTest(unittest.TestCase):
         root_req =  helper.getEndpoint() + "/groups/" + root_id
         rsp = self.session.get(root_req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
-
+    """
 
     def testCreateFolder(self):
         domain = self.base_domain + "/newfolder"
@@ -677,7 +677,6 @@ class DomainTest(unittest.TestCase):
         req = helper.getEndpoint() + '/'
         rsp = self.session.get(req, headers=headers, params=params)
         self.assertEqual(rsp.status_code, 400) 
-
 
     def testDNSDomain(self):
         # DNS domain names are in reverse order with dots as seperators...

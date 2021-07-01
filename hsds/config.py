@@ -15,13 +15,27 @@ import yaml
 
 cfg = {}
 
+
 def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
+
 
 def debug(*args, **kwargs):
     # can't use log.debug since that calls back to cfg
     if "LOG_LEVEL" in os.environ and os.environ["LOG_LEVEL"] == "DEBUG":
         print(*args, **kwargs)
+
+
+def _has_unit(cfgval):
+    """ return True if val has unit char at end of string,
+        otherwise return False
+    """
+    if isinstance(cfgval, str):
+        if len(cfgval) > 1 and cfgval[-1] in ('g', 'm', 'k'):
+            if cfgval[:-1].isdigit():
+                return True
+    return False
+
 
 def getCmdLineArg(x):
     # return value of command-line option
@@ -36,19 +50,20 @@ def getCmdLineArg(x):
             return True
         elif arg.startswith(option):
             # found an override
-            override = arg[len(option):]  # return text after option string   
+            override = arg[len(option):]  # return text after option string
             debug(f"got cmd line override for {x}")
             return override
     return None
-   
-def _load_cfg():    
+
+
+def _load_cfg():
     # load config yaml
     yml_file = None
     config_dirs = []
     # check if there is a command line option for config directory
     config_dir = getCmdLineArg("config-dir")
     if config_dir:
-        config_dirs.append(config_dir)     
+        config_dirs.append(config_dir)
     if not config_dirs and "CONFIG_DIR" in os.environ:
         config_dirs.append(os.environ["CONFIG_DIR"])
         debug(f"got environment override for config-dir: {config_dirs[0]}")
@@ -94,7 +109,7 @@ def _load_cfg():
         cfgval = yml_config[x]
         # see if there is a command-line override
         override = getCmdLineArg(x)
-                      
+
         # see if there are an environment variable override
         if override is None and x.upper() in os.environ:
             override = os.environ[x.upper()]
@@ -108,26 +123,34 @@ def _load_cfg():
         if override is not None:
             if cfgval is not None:
                 try:
-                    override = type(cfgval)(override) # convert to same type as yaml
+                    # convert to same type as yaml
+                    override = type(cfgval)(override)
                 except ValueError as ve:
-                    msg = f"Error applying command line override value for key: {x}: {ve}"
+                    msg = "Error applying command line override value for "
+                    msg += f"key: {x}: {ve}"
                     eprint(msg)
                     # raise KeyError(msg)
-            cfgval = override # replace the yml value
+            cfgval = override  # replace the yml value
 
-        if isinstance(cfgval, str) and len(cfgval) > 1 and cfgval[-1] in ('g', 'm', 'k') and cfgval[:-1].isdigit():
+        if _has_unit(cfgval):
             # convert values like 512m to corresponding integer
             u = cfgval[-1]
             n = int(cfgval[:-1])
             if u == 'k':
-                cfgval =  n * 1024
+                cfgval = n * 1024
             elif u == 'm':
                 cfgval = n * 1024*1024
-            else: # u == 'g'
+            elif u == 'g':
                 cfgval = n * 1024*1024*1024
+            else:
+                raise ValueError("Unexpected unit char")
         cfg[x] = cfgval
 
+
 def get(x, default=None):
+    """ get x if found in config
+        otherwise return default
+    """
     if not cfg:
         _load_cfg()
     if x not in cfg:

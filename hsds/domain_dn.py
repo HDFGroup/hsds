@@ -16,11 +16,13 @@ import time
 from aiohttp.web_exceptions import HTTPConflict, HTTPInternalServerError
 from aiohttp.web import json_response
 
-from .util.authUtil import  getAclKeys
+from .util.authUtil import getAclKeys
 from .util.domainUtil import isValidDomain, getBucketForDomain
 from .util.idUtil import validateInPartition
-from .datanode_lib import get_metadata_obj, save_metadata_obj, delete_metadata_obj, check_metadata_obj
+from .datanode_lib import get_metadata_obj, save_metadata_obj
+from .datanode_lib import delete_metadata_obj, check_metadata_obj
 from . import hsds_logger as log
+
 
 def get_domain(request, body=None):
     """ Extract domain and validate """
@@ -50,6 +52,7 @@ def get_domain(request, body=None):
         raise HTTPInternalServerError()
     return domain
 
+
 async def GET_Domain(request):
     """HTTP GET method to return JSON for /domains/
     """
@@ -70,6 +73,7 @@ async def GET_Domain(request):
     log.response(request, resp=resp)
     return resp
 
+
 async def PUT_Domain(request):
     """HTTP PUT method to create a domain
     """
@@ -86,7 +90,9 @@ async def PUT_Domain(request):
         raise HTTPInternalServerError()
     content_type = request.headers["Content-Type"]
     if content_type != "application/json":
-        log.error(f"PUT_Domain, expected json content-type but got: {content_type}")
+        msg = "PUT_Domain, expected json content-type but got: "
+        msg += f"{content_type}"
+        log.error(msg)
         raise HTTPInternalServerError()
 
     body = await request.json()
@@ -119,8 +125,7 @@ async def PUT_Domain(request):
         log.info(msg)
         raise HTTPConflict()
 
-
-    domain_json = { }
+    domain_json = {}
     if "root" in body_json:
         domain_json["root"] = body_json["root"]
     else:
@@ -131,12 +136,14 @@ async def PUT_Domain(request):
     domain_json["created"] = now
     domain_json["lastModified"] = now
 
-    # write the domain json to S3 immediately so it will show up in a get_domains S3 scan
+    # write the domain json to S3 immediately so it will show up in a get
+    # domains S3 scan
     await save_metadata_obj(app, domain, domain_json, notify=True, flush=True)
 
     resp = json_response(domain_json, status=201)
     log.response(request, resp=resp)
     return resp
+
 
 async def DELETE_Domain(request):
     """HTTP DELETE method to delete a domain
@@ -160,11 +167,12 @@ async def DELETE_Domain(request):
     # delete domain
     await delete_metadata_obj(app, domain, notify=True)
 
-    json_rsp = { "domain": domain }
+    json_rsp = {"domain": domain}
 
     resp = json_response(json_rsp)
     log.response(request, resp=resp)
     return resp
+
 
 async def PUT_ACL(request):
     """ Handler creating/update an ACL"""
@@ -187,7 +195,7 @@ async def PUT_ACL(request):
 
     if "acls" not in domain_json:
         log.error(f"unexpected domain data for domain: {domain}")
-        raise HTTPInternalServerError() # 500
+        raise HTTPInternalServerError()  # 500
 
     acl_keys = getAclKeys()
     acls = domain_json["acls"]
@@ -213,7 +221,7 @@ async def PUT_ACL(request):
     # write back to S3
     await save_metadata_obj(app, domain, domain_json, flush=True)
 
-    resp_json = { }
+    resp_json = {}
 
     resp = json_response(resp_json, status=201)
     log.response(request, resp=resp)

@@ -17,13 +17,17 @@ import numpy as np
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 from aiohttp.web import StreamResponse
 
-from .util.httpUtil import  http_get, http_put, http_delete, getHref, getAcceptType, jsonResponse
-from .util.idUtil import   isValidUuid, getDataNodeUrl
+from .util.httpUtil import http_get, http_put, http_delete, getHref
+from .util.httpUtil import getAcceptType, jsonResponse
+from .util.idUtil import isValidUuid, getDataNodeUrl
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
-from .util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain, verifyRoot
-from .util.attrUtil import  validateAttributeName, getRequestCollectionName
-from .util.hdf5dtype import validateTypeItem, getBaseTypeJson, createDataType, getItemSize
-from .util.arrayUtil import jsonToArray, getShapeDims, getNumElements, bytesArrayToList
+from .util.domainUtil import getDomainFromRequest, isValidDomain
+from .util.domainUtil import getBucketForDomain, verifyRoot
+from .util.attrUtil import validateAttributeName, getRequestCollectionName
+from .util.hdf5dtype import validateTypeItem, getBaseTypeJson
+from .util.hdf5dtype import createDataType, getItemSize
+from .util.arrayUtil import jsonToArray, getShapeDims, getNumElements
+from .util.arrayUtil import bytesArrayToList
 from .servicenode_lib import getDomainJson, getObjectJson, validateAction
 from . import hsds_logger as log
 from . import config
@@ -34,7 +38,8 @@ async def GET_Attributes(request):
     log.request(request)
     app = request.app
     params = request.rel_url.query
-    collection = getRequestCollectionName(request) # returns datasets|groups|datatypes
+    # returns datasets|groups|datatypes
+    collection = getRequestCollectionName(request)
 
     obj_id = request.match_info.get('id')
     if not obj_id:
@@ -53,7 +58,7 @@ async def GET_Attributes(request):
         include_data = True
         if "ignore_nan" in params and params["ignore_nan"]:
             ignore_nan = True
-    
+
     limit = None
     if "Limit" in params:
         try:
@@ -103,7 +108,7 @@ async def GET_Attributes(request):
     # mixin hrefs
     for attribute in attributes:
         attr_name = attribute["name"]
-        attr_href = '/' + collection + '/' + obj_id + '/attributes/' + attr_name
+        attr_href = f"/{collection}/{obj_id}/attributes/{attr_name}"
         attribute["href"] = getHref(request, attr_href)
 
     resp_json = {}
@@ -111,7 +116,8 @@ async def GET_Attributes(request):
 
     hrefs = []
     obj_uri = '/' + collection + '/' + obj_id
-    hrefs.append({'rel': 'self', 'href': getHref(request, obj_uri + '/attributes')})
+    href = getHref(request, obj_uri + '/attributes')
+    hrefs.append({'rel': 'self', 'href': href})
     hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
     hrefs.append({'rel': 'owner', 'href': getHref(request, obj_uri)})
     resp_json["hrefs"] = hrefs
@@ -120,11 +126,13 @@ async def GET_Attributes(request):
     log.response(request, resp=resp)
     return resp
 
+
 async def GET_Attribute(request):
     """HTTP method to return JSON for an attribute"""
     log.request(request)
     app = request.app
-    collection = getRequestCollectionName(request) # returns datasets|groups|datatypes
+    # returns datasets|groups|datatypes
+    collection = getRequestCollectionName(request)
 
     obj_id = request.match_info.get('id')
     if not obj_id:
@@ -160,13 +168,13 @@ async def GET_Attribute(request):
         ignore_nan = False
 
     req = getDataNodeUrl(app, obj_id)
-    req += '/' + collection + '/' + obj_id + "/attributes/" + attr_name
-    log.debug("get Attribute: " + req)
+    req += f"/{collection}/{obj_id}/attributes/{attr_name}"
+    log.debug(f"get Attribute: {req}")
     params = {}
     if bucket:
         params["bucket"] = bucket
     dn_json = await http_get(app, req, params=params)
-    log.debug("got attributes json from dn for obj_id: " + str(obj_id))
+    log.debug(f"got attributes json from dn for obj_id: {obj_id}")
 
     resp_json = {}
     resp_json["name"] = attr_name
@@ -189,11 +197,13 @@ async def GET_Attribute(request):
     log.response(request, resp=resp)
     return resp
 
+
 async def PUT_Attribute(request):
     """HTTP method to create a new attribute"""
     log.request(request)
     app = request.app
-    collection = getRequestCollectionName(request) # returns datasets|groups|datatypes
+    # returns datasets|groups|datatypes
+    collection = getRequestCollectionName(request)
 
     obj_id = request.match_info.get('id')
     if not obj_id:
@@ -321,14 +331,14 @@ async def PUT_Attribute(request):
             # use H5S_SIMPLE as class
             if isinstance(shape_body, list) and len(shape_body) == 0:
                 shape_json["class"] = "H5S_SCALAR"
-                dims = [1,]
+                dims = [1, ]
             else:
                 shape_json["class"] = "H5S_SIMPLE"
                 dims = getShapeDims(shape_body)
                 shape_json["dims"] = dims
     else:
         shape_json["class"] = "H5S_SCALAR"
-        dims = [1,]
+        dims = [1, ]
 
     if "value" in body:
         if dims is None:
@@ -339,7 +349,7 @@ async def PUT_Attribute(request):
         # validate that the value agrees with type/shape
         arr_dtype = createDataType(datatype)  # np datatype
         if len(dims) == 0:
-            np_dims = [1,]
+            np_dims = [1, ]
         else:
             np_dims = dims
         log.debug(f"attribute dims: {np_dims}")
@@ -372,17 +382,19 @@ async def PUT_Attribute(request):
     log.info(f"PUT Attribute resp: {put_rsp}")
 
     hrefs = []  # TBD
-    req_rsp = { "hrefs": hrefs }
+    req_rsp = {"hrefs": hrefs}
     # attribute creation successful
     resp = await jsonResponse(request, req_rsp, status=201)
     log.response(request, resp=resp)
     return resp
 
+
 async def DELETE_Attribute(request):
     """HTTP method to delete a attribute resource"""
     log.request(request)
     app = request.app
-    collection = getRequestCollectionName(request) # returns datasets|groups|datatypes
+    # returns datasets|groups|datatypes
+    collection = getRequestCollectionName(request)
 
     obj_id = request.match_info.get('id')
     if not obj_id:
@@ -425,17 +437,19 @@ async def DELETE_Attribute(request):
     log.info(f"PUT Attribute resp: {rsp_json}")
 
     hrefs = []  # TBD
-    req_rsp = { "hrefs": hrefs }
+    req_rsp = {"hrefs": hrefs}
     resp = await jsonResponse(request, req_rsp)
     log.response(request, resp=resp)
     return resp
+
 
 async def GET_AttributeValue(request):
     """HTTP method to return an attribute value"""
     log.request(request)
     app = request.app
     log.info("GET_AttributeValue")
-    collection = getRequestCollectionName(request) # returns datasets|groups|datatypes
+    # returns datasets|groups|datatypes
+    collection = getRequestCollectionName(request)
 
     obj_id = request.match_info.get('id')
     if not obj_id:
@@ -498,7 +512,8 @@ async def GET_AttributeValue(request):
     item_size = getItemSize(type_json)
 
     if item_size == 'H5T_VARIABLE' and accept_type != "json":
-        msg = "Client requested binary, but only JSON is supported for variable length data types"
+        msg = "Client requested binary, but only JSON is supported for "
+        msg += "variable length data types"
         log.info(msg)
         response_type = "json"
 
@@ -512,7 +527,11 @@ async def GET_AttributeValue(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         output_data = arr.tobytes()
-        log.debug(f"GET AttributeValue - returning {len(output_data)} bytes binary data")
+        msg = f"GET AttributeValue - returning {len(output_data)} "
+        msg += "bytes binary data"
+        log.debug(msg)
+        # TBD: do we really need to manually add cors headers for binary
+        # responses?
         cors_domain = config.get("cors_domain")
         # write response
         try:
@@ -522,8 +541,10 @@ async def GET_AttributeValue(request):
             # allow CORS
             if cors_domain:
                 resp.headers['Access-Control-Allow-Origin'] = cors_domain
-                resp.headers['Access-Control-Allow-Methods'] = "GET, POST, DELETE, PUT, OPTIONS"
-                resp.headers['Access-Control-Allow-Headers'] = "Content-Type, api_key, Authorization"
+                cors_methods = "GET, POST, DELETE, PUT, OPTIONS"
+                resp.headers['Access-Control-Allow-Methods'] = cors_methods
+                cors_headers = "Content-Type, api_key, Authorization"
+                resp.headers['Access-Control-Allow-Headers'] = cors_headers
             await resp.prepare(request)
             await resp.write(output_data)
         except Exception as e:
@@ -548,13 +569,14 @@ async def GET_AttributeValue(request):
         log.response(request, resp=resp)
     return resp
 
+
 async def PUT_AttributeValue(request):
     """HTTP method to update an attributes data"""
     log.request(request)
     log.info("PUT_AttributeValue")
     app = request.app
-    collection = getRequestCollectionName(request) # returns datasets|groups|datatypes
-
+    # returns datasets|groups|datatypes
+    collection = getRequestCollectionName(request)
     obj_id = request.match_info.get('id')
     if not obj_id:
         msg = "Missing object id"
@@ -616,7 +638,8 @@ async def PUT_AttributeValue(request):
     if "Content-Type" in request.headers:
         # client should use "application/octet-stream" for binary transfer
         content_type = request.headers["Content-Type"]
-        if content_type not in ("application/json", "application/octet-stream"):
+        expected = ("application/json", "application/octet-stream")
+        if content_type not in expected:
             msg = f"Unknown content_type: {content_type}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
@@ -637,7 +660,8 @@ async def PUT_AttributeValue(request):
         # read binary data
         binary_data = await request.read()
         if len(binary_data) != request.content_length:
-            msg = f"Read {len(binary_data)} bytes, expecting: {request.content_length}"
+            msg = f"Read {len(binary_data)} bytes, expecting: "
+            msg += f"{request.content_length}"
             log.error(msg)
             raise HTTPInternalServerError()
 
@@ -646,7 +670,8 @@ async def PUT_AttributeValue(request):
     if binary_data:
         npoints = getNumElements(np_shape)
         if npoints*item_size != len(binary_data):
-            msg = "Expected: " + str(npoints*item_size) + " bytes, but got: " + str(len(binary_data))
+            msg = f"Expected: {npoints*item_size} bytes, "
+            msg += f"but got {len(binary_data)}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         arr = np.fromstring(binary_data, dtype=np_dtype)
@@ -691,7 +716,7 @@ async def PUT_AttributeValue(request):
     log.info(f"PUT Attribute Value resp: {put_rsp}")
 
     hrefs = []  # TBD
-    req_rsp = { "hrefs": hrefs }
+    req_rsp = {"hrefs": hrefs}
     # attribute creation successful
     resp = await jsonResponse(request, req_rsp)
     log.response(request, resp=resp)

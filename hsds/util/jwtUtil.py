@@ -11,25 +11,31 @@
 ##############################################################################
 import requests
 import base64
-from aiohttp.web_exceptions import HTTPUnauthorized, HTTPForbidden, HTTPNotFound, HTTPServiceUnavailable, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPUnauthorized, HTTPForbidden
+from aiohttp.web_exceptions import HTTPNotFound, HTTPServiceUnavailable
+from aiohttp.web_exceptions import HTTPInternalServerError
 import jwt
-from jwt.exceptions import InvalidAudienceError, InvalidSignatureError, ExpiredSignatureError, DecodeError
+from jwt.exceptions import InvalidAudienceError, InvalidSignatureError
+from jwt.exceptions import ExpiredSignatureError, DecodeError
 from cryptography.x509 import load_pem_x509_certificate
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers 
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
 
 from .. import hsds_logger as log
 from .. import config
 
-MSONLINE_OPENID_URL = "https://login.microsoftonline.com/common/.well-known/openid-configuration"
-GOOGLE_OPENID_URL = "https://accounts.google.com/.well-known/openid-configuration"
+MSONLINE_OPENID_URL = \
+    "https://login.microsoftonline.com/common/.well-known/openid-configuration"
+GOOGLE_OPENID_URL = \
+    "https://accounts.google.com/.well-known/openid-configuration"
+
 
 def verifyBearerToken(app, token):
     # Contact OpenID provider to validate bearer token.
     # if valid, return username, exp, and roles
     username = None
     provider = config.get('openid_provider')
-    
+
     if not provider:
         log.warn("no OpenID provider configured")
         raise HTTPUnauthorized()
@@ -42,7 +48,9 @@ def verifyBearerToken(app, token):
     else:
         openid_url = config.get('openid_url')
         if not openid_url:
-            log.warn(f"OpenID provider: {provider} requires 'openid_url' config to be set")
+            msg = f"OpenID provider: {provider} requires 'openid_url' "
+            msg += "config to be set"
+            log.warn(msg)
             raise HTTPUnauthorized()
 
     audience = config.get('openid_audience')
@@ -74,13 +82,17 @@ def verifyBearerToken(app, token):
         log.warn(f"Value error in jwt get_unverified_header: {ve}")
         raise HTTPUnauthorized()
     except Exception as e:
-        log.warn(f"Unexpected exception {e.__class__.__name__} in jwt get_unverified_header: {e}")
+        msg = f"Unexpected exception {e.__class__.__name__} "
+        msg += f"in jwt get_unverified_header: {e}"
+        log.warn(msg)
         raise HTTPUnauthorized()
 
     try:
         res = requests.get(openid_url, timeout=1.0)
     except requests.exceptions.ConnectionError:
-        log.warn(f"connection error for getting openid configuration from : {openid_url}")
+        msg = "connection error for getting openid configuration "
+        msg += f"from : {openid_url}"
+        log.warn(msg)
         raise HTTPInternalServerError()
     if res.status_code != 200:
         log.warn("Bad response from {openid_url}: {res.status_code}")
@@ -112,7 +124,7 @@ def verifyBearerToken(app, token):
             elif 'e' in key and 'n' in key:
                 for field in ['e', 'n']:
                     val = key[field]
-                    val = val + '='*((4 - len(val)%4)%4)
+                    val = val + '='*((4 - len(val) % 4) % 4)
                     val = base64.urlsafe_b64decode(val.encode('utf-8'))
                     rsa[field] = int.from_bytes(val, 'big')
 
@@ -124,7 +136,8 @@ def verifyBearerToken(app, token):
             x5c[0],
             '\n-----END CERTIFICATE-----\n',
             ])
-        public_key = load_pem_x509_certificate(cert.encode(), default_backend()).public_key()
+        x509 = load_pem_x509_certificate(cert.encode(), default_backend())
+        public_key = x509.public_key()
         """
         public_key_bytes = public_key.public_bytes(
             encoding=serialization.Encoding.PEM,
@@ -142,7 +155,7 @@ def verifyBearerToken(app, token):
         log.error("Unable to extract x5c chain or RSA key from JWK keys")
         raise HTTPInternalServerError()
 
-    #log.debug(f"bearer token - public_key: {public_key}")
+    # log.debug(f"bearer token - public_key: {public_key}")
 
     try:
         jwt_decode = jwt.decode(
@@ -169,18 +182,18 @@ def verifyBearerToken(app, token):
             if name == "unique_name":
                 username = value
             elif name == "appid":
-                pass # tbd
+                pass  # tbd
             elif name == "roles":
                 roles = value
             else:
                 log.info(f"ignoring claim: {name} with value: {value}")
         else:
             log.debug(f"claim: {name} not found in bearer token")
-    
+
     if not username:
         log.warn("unable to retreive username from bearer token")
         return None
-    
+
     exp = None
     log.debug(f"decoded token: {jwt_decode}")
     if "exp" in jwt_decode:
@@ -192,5 +205,4 @@ def verifyBearerToken(app, token):
     else:
         log.info(f"decoded bearer token for user: {username}, no expiration")
 
-     
     return username, exp, roles

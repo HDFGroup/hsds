@@ -15,12 +15,14 @@
 import time
 from bisect import bisect_left
 
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPConflict, HTTPNotFound, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPConflict, HTTPNotFound
+from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.web import json_response
 
 from .util.attrUtil import validateAttributeName
 from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
 from . import hsds_logger as log
+
 
 def index(a, x):
     """ Locate the leftmost value exactly equal to x
@@ -29,6 +31,7 @@ def index(a, x):
     if i != len(a) and a[i] == x:
         return i
     return -1
+
 
 async def GET_Attributes(request):
     """ Return JSON for attribute collection
@@ -107,6 +110,7 @@ async def GET_Attributes(request):
     log.response(request, resp=resp)
     return resp
 
+
 async def GET_Attribute(request):
     """HTTP GET method to return JSON for /(obj)/<id>/attributes/<name>
     """
@@ -124,7 +128,8 @@ async def GET_Attribute(request):
         bucket = None
 
     obj_json = await get_metadata_obj(app, obj_id, bucket=bucket)
-    log.info(f"GET attribute obj_id: {obj_id} name: {attr_name} bucket: {bucket}")
+    msg = f"GET attribute obj_id: {obj_id} name: {attr_name} bucket: {bucket}"
+    log.info(msg)
     log.debug(f"got obj_json: {obj_json}")
 
     if "attributes" not in obj_json:
@@ -143,6 +148,7 @@ async def GET_Attribute(request):
     log.response(request, resp=resp)
     return resp
 
+
 async def PUT_Attribute(request):
     """ Handler for PUT /(obj)/<id>/attributes/<name>
     """
@@ -156,7 +162,7 @@ async def PUT_Attribute(request):
     validateAttributeName(attr_name)
 
     if not request.has_body:
-        log.error( "PUT_Attribute with no body")
+        log.error("PUT_Attribute with no body")
         raise HTTPBadRequest(message="body expected")
 
     body = await request.json()
@@ -199,12 +205,16 @@ async def PUT_Attribute(request):
     attributes = obj_json["attributes"]
     if attr_name in attributes and not replace:
         # Attribute already exists, return a 409
-        log.warn(f"Attempt to overwrite attribute: {attr_name} in obj_id: {obj_id}")
+        msg = f"Attempt to overwrite attribute: {attr_name} "
+        msg += f"in obj_id: {obj_id}"
+        log.warn(msg)
         raise HTTPConflict()
 
     if replace and attr_name not in attributes:
         # Replace requires attribute exists
-        log.warn(f"Attempt to update missing attribute: {attr_name} in obj_id: {obj_id}")
+        msg = f"Attempt to update missing attribute: {attr_name} "
+        msg += f"in obj_id: {obj_id}"
+        log.warn()
         raise HTTPNotFound()
 
     if replace:
@@ -214,13 +224,16 @@ async def PUT_Attribute(request):
         create_time = time.time()
 
     # ok - all set, create attribute obj
-    attr_json = {"type": datatype, "shape": shape, "value": value, "created": create_time }
+    attr_json = {"type": datatype,
+                 "shape": shape,
+                 "value": value,
+                 "created": create_time}
     attributes[attr_name] = attr_json
 
     # write back to S3, save to metadata cache
     await save_metadata_obj(app, obj_id, obj_json, bucket=bucket)
 
-    resp_json = { }
+    resp_json = {}
 
     resp = json_response(resp_json, status=201)
     log.response(request, resp=resp)
@@ -264,7 +277,7 @@ async def DELETE_Attribute(request):
 
     await save_metadata_obj(app, obj_id, obj_json, bucket=bucket)
 
-    resp_json = { }
+    resp_json = {}
     resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp

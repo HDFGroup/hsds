@@ -110,7 +110,6 @@ async def init():
             log.info(f"CORS add route: {route}")
             cors.add(route)
 
-
     return app
 
 async def start_background_tasks(app):

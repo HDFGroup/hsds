@@ -21,18 +21,20 @@ import os
 # This is a utility to interrogate a Marathon HSDS configuration
 # See http://mesosphere.github.io/marathon/api-console/index.html
 
+
 class MarathonClient:
     """
-     Utility class for access the parts of DCOS Marathon configurations we need to coordinate the HSDS nodes
+     Utility class for access the parts of DCOS Marathon configurations we
+     need to coordinate the HSDS nodes
     """
 
     def __init__(self, app):
         if "session" not in app:
             session = get_session()
             app["session"] = session
-        
+
         self._app = app
-       
+
     async def getSNInstances(self):
         if "is_dcos" not in self._app:
             msg = "cannot use the MarathonClient in a non-DCOS context"
@@ -42,10 +44,13 @@ class MarathonClient:
         if "DCOS_PATH_SERVICE_NODE" in os.environ:
             hsds_sn_node = os.environ["DCOS_PATH_SERVICE_NODE"]
         else:
-            log.error("Must set DCOS_PATH_SERVICE_NODE environment variable to Marathon path to service node n order to query the correct marathon config")
+            msg = "Must set DCOS_PATH_SERVICE_NODE environment variable to "
+            msg += "Marathon path to service node n order to query the "
+            msg += "correct marathon config"
+            log.error(msg)
             return -1
 
-        req = "http://master.mesos/marathon/v2/apps/%s" % hsds_sn_node
+        req = f"http://master.mesos/marathon/v2/apps/{hsds_sn_node}"
 
         try:
             instancesJSON = await http_get(self._app, req)
@@ -56,9 +61,15 @@ class MarathonClient:
         if instancesJSON is None or not isinstance(instancesJSON, dict):
             log.warn("invalid marathon query response")
         else:
-            if instancesJSON["app"] is not None and instancesJSON["app"]["instances"] is not None:
-                log.debug("SN instances {}".format(instancesJSON["app"]["instances"]))
-                return instancesJSON["app"]["instances"]
+            instances = None
+            if instancesJSON["app"] is not None:
+                if instancesJSON["app"]["instances"] is not None:
+                    instances = instancesJSON["app"]["instances"]
+
+            if instances:
+                msg = f"SN instances {instances}"
+                log.debug()
+                return instances
             else:
                 log.warn("Incomplete or malformed JSON returned from SN node.")
                 return -1
@@ -72,7 +83,10 @@ class MarathonClient:
         if "DCOS_PATH_DATA_NODE" in os.environ:
             hsds_data_node = os.environ["DCOS_PATH_DATA_NODE"]
         else:
-            log.error("Must set DCOS_PATH_DATA_NODE environment variable to Marathon path to service node n order to query the correct marathon config")
+            msg = "Must set DCOS_PATH_DATA_NODE environment variable to "
+            msg += "Marathon path to service node n order to query the "
+            msg += "correct marathon config"
+            log.error(msg)
             raise HTTPInternalServerError()
 
         req = "http://master.mesos/marathon/v2/apps/%s" % hsds_data_node
@@ -86,7 +100,13 @@ class MarathonClient:
         if instancesJSON is None or not isinstance(instancesJSON, dict):
             log.warn("invalid marathon query response")
         else:
-            if instancesJSON["app"] is not None and instancesJSON["app"]["instances"] is not None:
+            instances = None
+            if "app" in instancesJSON:
+                app_instances = instancesJSON["app"]
+                if "instances" in app_instances:
+                    instances = app_instances["instances"]
+
+            if instances is not None:
                 log.debug(f"DN instances {instancesJSON['app']['instances']}")
                 return instancesJSON["app"]["instances"]
             else:

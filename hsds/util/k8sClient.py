@@ -10,7 +10,7 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 #
-# Kubernetes utility functions 
+# Kubernetes utility functions
 #
 
 from kubernetes import client as k8s_client
@@ -20,13 +20,19 @@ from .. import hsds_logger as log
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+
 def getPodIps(k8s_app_label, k8s_namespace=None):
-    # Return list of IPs of all pods in the cluster with given app label
-    # (and namespace if set)
-    k8s_config.load_incluster_config() #get the config from within the cluster and set it as the default config for all new clients
-    c=k8s_client.Configuration() #go and get a copy of the default config
-    c.verify_ssl=False #set verify_ssl to false in that config
-    k8s_client.Configuration.set_default(c) #make that config the default for all new clients
+    """ Return list of IPs of all pods in the cluster with given app label
+       (and namespace if set)
+    """
+
+    # get the config from within the cluster and set it as the default config
+    # for all new clients
+    k8s_config.load_incluster_config()
+    c = k8s_client.Configuration()  # go and get a copy of the default config
+    c.verify_ssl = False  # set verify_ssl to false in that config
+    # make that config the default for all new clients
+    k8s_client.Configuration.set_default(c)
     v1 = k8s_client.CoreV1Api()
     if k8s_namespace:
         # get pods for given namespace
@@ -42,11 +48,10 @@ def getPodIps(k8s_app_label, k8s_namespace=None):
             continue
         labels = i.metadata.labels
         if labels and "app" in labels and labels["app"] == k8s_app_label:
-            log.debug(f"found hsds pod with app label: {k8s_app_label} - ip: {pod_ip}")
+            msg = f"found hsds pod with app label: {k8s_app_label} "
+            msg += f"- ip: {pod_ip}"
+            log.debug(msg)
             pod_ips.append(pod_ip)
-    
+
     pod_ips.sort()  # for assigning node numbers
     return pod_ips
-  
-
-
