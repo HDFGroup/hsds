@@ -15,11 +15,13 @@
 import time
 import asyncio
 
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalServerError, HTTPServiceUnavailable
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPNotFound, HTTPServiceUnavailable
 from aiohttp.web import json_response
 
 from .util.idUtil import isValidUuid, isSchema2Id, isRootObjId, getRootObjId
-from .datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj, save_metadata_obj, delete_metadata_obj
+from .datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj
+from .datanode_lib import save_metadata_obj, delete_metadata_obj
 from . import hsds_logger as log
 from . import config
 
@@ -38,12 +40,12 @@ async def GET_Group(request):
     log.info(f"GET group: {group_id} bucket: {bucket}")
 
     if not isValidUuid(group_id, obj_class="group"):
-        log.error( "Unexpected group_id: {}".format(group_id))
+        log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
 
     group_json = await get_metadata_obj(app, group_id, bucket=bucket)
 
-    resp_json = { }
+    resp_json = {}
     resp_json["id"] = group_json["id"]
     resp_json["root"] = group_json["root"]
     resp_json["created"] = group_json["created"]
@@ -59,6 +61,7 @@ async def GET_Group(request):
     resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
+
 
 async def POST_Group(request):
     """ Handler for POST /groups"""
@@ -106,10 +109,15 @@ async def POST_Group(request):
     # ok - all set, create group obj
     now = time.time()
 
-    group_json = {"id": group_id, "root": root_id, "created": now, "lastModified": now,
-        "links": {}, "attributes": {} }
+    group_json = {"id": group_id,
+                  "root": root_id,
+                  "created": now,
+                  "lastModified": now,
+                  "links": {},
+                  "attributes": {}}
 
-    await save_metadata_obj(app, group_id, group_json, bucket=bucket, notify=True, flush=True)
+    kwargs = {"bucket": bucket, "notify": True, "flush": True}
+    await save_metadata_obj(app, group_id, group_json, **kwargs)
 
     # formulate response
     resp_json = {}
@@ -124,9 +132,11 @@ async def POST_Group(request):
     log.response(request, resp=resp)
     return resp
 
+
 async def PUT_Group(request):
-    """ Handler for PUT /groups"""
-    """ Used to flush all objects under a root group to S3 """
+    """ Handler for PUT /groups
+        Used to flush all objects under a root group to S3
+    """
 
     flush_time_out = config.get("s3_sync_interval") * 2
     flush_sleep_interval = config.get("flush_sleep_interval")
@@ -140,7 +150,8 @@ async def PUT_Group(request):
     else:
         bucket = None
     log.info(f"PUT group (flush): {root_id}  bucket: {bucket}")
-    # don't really need bucket param since the dirty ids know which bucket they should write too
+    # don't really need bucket param since the dirty ids know which bucket
+    # they should write too
 
     if not isValidUuid(root_id, obj_class="group"):
         log.error(f"Unexpected group_id: {root_id}")
@@ -161,22 +172,24 @@ async def PUT_Group(request):
             if isValidUuid(obj_id) and getRootObjId(obj_id) == root_id:
                 flush_set.add(obj_id)
         else:
-            # for schema1 not easy to determine if a given id is in a domain,
-            # so just wait on all of them
+            # for schema1 not easy to determine if a given id is in a
+            # domain, so just wait on all of them
             flush_set.add(obj_id)
 
     log.debug(f"flushop - waiting on {len(flush_set)} items")
 
     if len(flush_set) > 0:
         while time.time() - flush_start < flush_time_out:
-            await asyncio.sleep(flush_sleep_interval) # wait a bit
+            await asyncio.sleep(flush_sleep_interval)  # wait a bit
             # check to see if the items in our flush set are still there
             remaining_set = set()
             for obj_id in flush_set:
-                if not obj_id in dirty_ids:
+                if obj_id not in dirty_ids:
                     log.debug(f"flush - {obj_id} has been written")
                 elif dirty_ids[obj_id][0] > flush_start:
-                    log.debug(f"flush - {obj_id} has been updated after flush start")
+                    msg = f"flush - {obj_id} has been updated after "
+                    msg += "flush start"
+                    log.debug(msg)
                 else:
                     log.debug(f"flush - {obj_id} still pending")
                     remaining_set.add(obj_id)
@@ -184,17 +197,20 @@ async def PUT_Group(request):
             if len(flush_set) == 0:
                 log.debug("flush op - all objects have been written")
                 break
-            log.debug(f"flushop - {len(flush_set)} item remaining, sleeping for {flush_sleep_interval}")
-            
+            msg = f"flushop - {len(flush_set)} item remaining, sleeping "
+            msg += f"for {flush_sleep_interval}"
+            log.debug(msg)
 
     if len(flush_set) > 0:
-        log.warn(f"flushop - {len(flush_set)} items not updated after {flush_time_out} seconds")
+        msg = f"flushop - {len(flush_set)} items not updated after "
+        msg += f"{flush_time_out} seconds"
+        log.warn(msg)
         log.debug(f"flush set: {flush_set}")
         raise HTTPServiceUnavailable()
 
     rsp_json = {"id": app['id']}  # return the node id
     log.debug(f"flush returning: {rsp_json}")
-    resp = json_response(rsp_json, status=200)  
+    resp = json_response(rsp_json, status=200)
     log.response(request, resp=resp)
     return resp
 
@@ -226,16 +242,19 @@ async def DELETE_Group(request):
 
     log.debug("deleting group: {}".format(group_id))
 
-    notify=True
     if "Notify" in params and not params["Notify"]:
-        notify=False
+        notify = False
+    else:
+        notify = True
+
     await delete_metadata_obj(app, group_id, bucket=bucket, notify=notify)
 
-    resp_json = {  }
+    resp_json = {}
 
     resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
+
 
 async def POST_Root(request):
     """ Notify root that content in the domain has been modified.
@@ -264,7 +283,7 @@ async def POST_Root(request):
     root_scan_ids = app["root_scan_ids"]
     root_scan_ids[root_id] = (bucket, time.time())
 
-    resp_json = {  }
+    resp_json = {}
 
     resp = json_response(resp_json)
     log.response(request, resp=resp)

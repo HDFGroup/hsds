@@ -12,7 +12,6 @@
 import numpy
 import time
 
-from requests.models import MissingSchema
 from .. import hsds_logger as log
 
 

@@ -45,8 +45,6 @@ from .basenode import getVersion
 from . import hsds_logger as log
 from . import config
 
-ACL_KEYS = ("create", "read", "update", "delete", "readACL", "updateACL")
-
 
 class DomainCrawler:
 
@@ -1128,7 +1126,8 @@ async def PUT_Domain(request):
             acl = parent_acls[user_name]
             has_action = False
             # don't copy ACL if all actions are False
-            for k in ACL_KEYS:
+            acl_keys = getAclKeys()
+            for k in acl_keys:
                 if acl[k]:
                     has_action = True
                     break

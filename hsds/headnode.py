@@ -21,15 +21,17 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 
 from . import config
 from .util.timeUtil import unixTimeToUTC, elapsedTime
-from .util.idUtil import  createNodeId
+from .util.idUtil import createNodeId
 from . import hsds_logger as log
 from .util import query_marathon as marathonClient
 
 NODE_STAT_KEYS = ("cpu", "diskio", "memory", "log_stats", "disk", "netio",
-    "req_count", "s3_stats", "azure_stats", "chunk_cache_stats")
+                  "req_count", "s3_stats", "azure_stats", "chunk_cache_stats")
+
 
 class Node:
-    def __init__(self, node_id=None, node_type=None, node_host=None, node_port=None):
+    def __init__(self, node_id=None,
+                 node_type=None, node_host=None, node_port=None):
         self._id = node_id
         self._type = node_type
         self._host = node_host
@@ -42,7 +44,7 @@ class Node:
     @property
     def id(self):
         return self._id
-    
+
     @property
     def type(self):
         return self._type
@@ -87,6 +89,7 @@ class Node:
         else:
             return False
 
+
 async def isClusterReady(app):
     sn_count = 0
     dn_count = 0
@@ -115,6 +118,7 @@ async def isClusterReady(app):
     log.debug("cluster is ready")
     return True
 
+
 def removeNode(app, host=None, port=None):
     dead_node_ids = app['dead_node_ids']
     nodes = app["nodes"]
@@ -127,7 +131,8 @@ def removeNode(app, host=None, port=None):
     if remove_id:
         del nodes[remove_id]
         dead_node_ids.add(remove_id)
- 
+
+
 async def info(request):
     """HTTP Method to return node state to caller"""
     log.request(request)
@@ -155,6 +160,7 @@ async def info(request):
     log.response(request, resp=resp)
     return resp
 
+
 async def register(request):
     """ HTTP method for nodes to register with head node"""
     app = request.app
@@ -179,7 +185,7 @@ async def register(request):
         raise HTTPBadRequest(reason=msg)
     node_type = body['node_type']
     if node_type not in ('sn', 'dn'):
-        msg=f"invalid node_type: {node_type}"
+        msg = f"invalid node_type: {node_type}"
         log.response(request, code=400, message=msg)
         raise HTTPBadRequest(reason=msg)
     if 'port' not in body:
@@ -187,7 +193,7 @@ async def register(request):
         log.response(request, code=400, message=msg)
         raise HTTPBadRequest(reason=msg)
     node_port = body['port']
-    
+
     if 'ip' not in body:
         log.debug("register - get ip/port from request.transport")
         peername = request.transport.get_extra_info('peername')
@@ -196,15 +202,15 @@ async def register(request):
             log.error(msg)
             raise HTTPBadRequest(reason=msg)
         if peername[0] is None or peername[0] in ("::1", "127.0.0.1"):
-            node_host = "localhost"  
+            node_host = "localhost"
         else:
             node_host = peername[0]
     else:
-        #Specify the ip is useful in docker / DCOS situations, where in certain situations a 
-        #docker private network IP might be used
+        # Specify the ip is useful in docker / DCOS situations, where in
+        # certain situations a docker private network IP might be used
         node_host = body["ip"]
 
-    log.info(f"register host: {node_host}, port: {node_port}")    
+    log.info(f"register host: {node_host}, port: {node_port}")
 
     nodes = app['nodes']
     dead_node_ids = app['dead_node_ids']
@@ -213,15 +219,18 @@ async def register(request):
         # already registered?
         node = nodes[node_id]
         if node_type != node.type:
-            msg = f"Unexpected node_type {node_type} (expected: {node.type})for node_id: {node_id}"
+            msg = f"Unexpected node_type {node_type} (expected: {node.type}) "
+            msg += f"for node_id: {node_id}"
             log.error(msg)
             raise HTTPBadRequest(reason=msg)
         if node_port != node.port:
-            msg = f"Unexpected node_port {node_port} (expected: {node.port}) for node_id: {node_id}"
+            msg = f"Unexpected node_port {node_port} (expected: {node.port}) "
+            msg += f"for node_id: {node_id}"
             log.error(msg)
             raise HTTPBadRequest(reason=msg)
         if node_host != node.host:
-            msg = f"Unexpected node_host {node_host}(expected: {node.host}) for node_id: {node_id}"
+            msg = f"Unexpected node_host {node_host}(expected: {node.host}) "
+            msg += f"for node_id: {node_id}"
             log.error(msg)
             raise HTTPBadRequest(reason=msg)
         node.poll_update()  # note that the node has checked in
@@ -230,7 +239,8 @@ async def register(request):
         raise HTTPInternalServerError()
     else:
         log.info(f"Node {node_id} is unknown, new node coming online.")
-        node = Node(node_id=node_id, node_type=node_type, node_host=node_host, node_port=node_port)   
+        node = Node(node_id=node_id, node_type=node_type,
+                    node_host=node_host, node_port=node_port)
         # delete any existing node with the same port
         removeNode(app, host=node_host, port=node_port)
         nodes[node_id] = node
@@ -267,7 +277,7 @@ async def register(request):
         dn_id_map[dn_url] = dn_id
 
     dn_urls.sort()
-    dn_ids = [] # re-arrange to match url order
+    dn_ids = []  # re-arrange to match url order
     for dn_url in dn_urls:
         dn_ids.append(dn_id_map[dn_url])
 
@@ -283,12 +293,13 @@ async def register(request):
     log.response(request, resp=resp)
     return resp
 
+
 async def nodestate(request):
     """HTTP method to return information about registered nodes"""
     log.request(request)
     node_id = request.match_info.get('node_id', '*')
     node_type = request.match_info.get('node_type', '*')
-     
+
     log.info(f"nodestate/{node_type}/{node_id}")
 
     app = request.app
@@ -302,7 +313,7 @@ async def nodestate(request):
             node = nodes[node_id]
             if node.type == node_type or node_type == "*":
                 info_list.append(node.get_info())
-        answer = {"nodes": info_list }
+        answer = {"nodes": info_list}
         log.debug(f"returning nodestate for {len(nodes)} nodes")
     elif node_id in nodes:
         node = nodes[node_id]
@@ -319,25 +330,29 @@ async def nodestate(request):
 
 
 async def nodeinfo(request):
-    """HTTP method to return node stats (cpu usage, request count, errors, etc.) about registed nodes"""
+    """HTTP method to return node stats (cpu usage, request count, errors,
+        etc.) about registed nodes
+    """
     log.request(request)
     node_stat_keys = NODE_STAT_KEYS
     stat_key = request.match_info.get('statkey', '*')
     if stat_key != '*':
         if stat_key not in node_stat_keys:
-             raise HTTPBadRequest(reason="invalid key: {}".format(stat_key))
+            msg = f"nodeinfo - invalid key: {stat_key}"
+            log.warn(msg)
+            raise HTTPBadRequest(msg)
         node_stat_keys = (stat_key,)
 
     app = request.app
     resp = StreamResponse()
     resp.headers['Content-Type'] = 'application/json'
 
-
     dn_count = 0
     sn_count = 0
 
     answer = {}
     nodes = app["nodes"]
+
     # re-assemble the individual node stats to arrays indexed by node number
     for stat_key in node_stat_keys:
         log.info(f"stat_key: {stat_key}")
@@ -350,7 +365,9 @@ async def nodeinfo(request):
                 log.error(f"unexpected node_type: {node.type}")
                 continue
             if stat_key not in node.stats:
-                log.info(f"key: {stat_key} not found in node_stats for node_id: {node_id}")
+                msg = f"key: {stat_key} not found in node_stats for "
+                msg += f"node_id: {node_id}"
+                log.info(msg)
                 continue
             if node.type == "sn":
                 node_number = sn_count
@@ -362,8 +379,8 @@ async def nodeinfo(request):
             for k in stats_field:
                 if k not in stats:
                     stats[k] = {}
-                    stats[k]["sn"] = [0,] * sn_count
-                    stats[k]["dn"] = [0,] * dn_count
+                    stats[k]["sn"] = [0, ] * sn_count
+                    stats[k]["dn"] = [0, ] * dn_count
                 stats[k][node.type][node_number] = stats_field[k]
         answer[stat_key] = stats
 
@@ -371,8 +388,9 @@ async def nodeinfo(request):
     log.response(request, resp=resp)
     return resp
 
+
 async def getTargetNodeCount(app, node_type):
-    
+
     if node_type == "dn":
         key = 'target_sn_count'
     elif node_type == "sn":
@@ -389,6 +407,7 @@ async def getTargetNodeCount(app, node_type):
         else:
             app[key] = config.get(key)
     return app[key]
+
 
 def getActiveNodeCount(app, node_type):
     count = 0
@@ -414,21 +433,23 @@ async def init():
 
     # set a bunch of global state
     app["id"] = createNodeId("head")
-    
+
     bucket_name = config.get("bucket_name")
     if bucket_name:
-        log.info("using bucket: {}".format(bucket_name))
+        log.info(f"using bucket: {bucket_name}")
         app["bucket_name"] = bucket_name
     else:
         log.info("No default bucket name is set")
 
     app["head_port"] = config.get("head_port")
 
-    nodes = {} 
- 
+    nodes = {}
+
     # check to see if we are running in a DCOS cluster
     if "MARATHON_APP_ID" in os.environ:
-        log.info("Found MARATHON_APP_ID environment variable, setting is_dcos to True")
+        msg = "Found MARATHON_APP_ID environment variable, setting "
+        msg += "is_dcos to True"
+        log.info(msg)
         app["is_dcos"] = True
     else:
         log.info("not setting is_dcos")
@@ -449,6 +470,7 @@ async def init():
 
     return app
 
+
 def create_app():
     """Create servicenode aiohttp application
     """
@@ -457,16 +479,15 @@ def create_app():
     app = loop.run_until_complete(init())
     return app
 
-#
-# Main
-#
-
 
 def main():
+    """
+       Main - entry point for headnode
+    """
     app = create_app()
 
     # create a client Session here so that all client requests
-    #   will share the same connection pool 
+    #   will share the same connection pool
 
     head_port = config.get("head_port")
     log.info(f"Starting service on port: {head_port}")

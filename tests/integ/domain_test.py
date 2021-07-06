@@ -411,7 +411,6 @@ class DomainTest(unittest.TestCase):
         self.assertTrue(len(rspJson["dn_ids"]) >= 1)
         self.assertEqual(set(dn_ids), set(rspJson["dn_ids"]))
 
-
     """
     def testCreateLinkedDomain(self):
         target_domain = self.base_domain + "/target_domain.h5"
@@ -461,6 +460,7 @@ class DomainTest(unittest.TestCase):
         rsp = self.session.get(root_req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
     """
+
 
     def testCreateFolder(self):
         domain = self.base_domain + "/newfolder"

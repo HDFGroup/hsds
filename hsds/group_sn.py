@@ -10,16 +10,20 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 #
-# service node of hsds cluster
+# group handler for service node of hsds cluster
 #
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
 
-from .util.httpUtil import http_post, http_put, http_delete, getHref, jsonResponse
-from .util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
-from .util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
-from .util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain, getPathForDomain, verifyRoot
-from .servicenode_lib import getDomainJson, getObjectJson, validateAction, getObjectIdByPath, getPathForObjectId
+from .util.httpUtil import http_post, http_put, http_delete, getHref
+from .util.httpUtil import jsonResponse
+from .util.idUtil import isValidUuid, getDataNodeUrl, createObjId
+from .util.authUtil import getUserPasswordFromRequest, aclCheck
+from .util.authUtil import validateUserPassword
+from .util.domainUtil import getDomainFromRequest, isValidDomain
+from .util.domainUtil import getBucketForDomain, getPathForDomain, verifyRoot
+from .servicenode_lib import getDomainJson, getObjectJson, validateAction
+from .servicenode_lib import getObjectIdByPath, getPathForObjectId
 from . import hsds_logger as log
 
 
@@ -61,7 +65,6 @@ async def GET_Group(request):
     if "include_attrs" in params and params["include_attrs"]:
         include_attrs = True
 
-
     username, pswd = getUserPasswordFromRequest(request)
     if username is None and app['allow_noauth']:
         username = "default"
@@ -84,7 +87,9 @@ async def GET_Group(request):
         group_id = domain_json["root"]
 
     if h5path:
-        group_id = await getObjectIdByPath(app, group_id, h5path, bucket=bucket)  # throws 404 if not found
+        # throws 404 if not found
+        kwargs = {"bucket": bucket}
+        group_id = await getObjectIdByPath(app, group_id, h5path, **kwargs)
         if not isValidUuid(group_id, "Group"):
             msg = f"No group exist with the path: {h5path}"
             log.warn(msg)
@@ -94,8 +99,13 @@ async def GET_Group(request):
     # verify authorization to read the group
     await validateAction(app, domain, group_id, username, "read")
 
-    # get authoritative state for group from DN (even if it's in the meta_cache).
-    group_json = await getObjectJson(app, group_id, refresh=True, include_links=include_links, include_attrs=include_attrs, bucket=bucket)
+    # get authoritative state for group from DN (even if it's in the
+    # meta_cache).
+    kwargs = {"refresh": True,
+              "include_links": include_links,
+              "include_attrs": include_attrs,
+              "bucket": bucket}
+    group_json = await getObjectJson(app, group_id, **kwargs)
     log.debug(f"domain from request: {domain}")
     group_json["domain"] = getPathForDomain(domain)
     if bucket:
@@ -107,25 +117,32 @@ async def GET_Group(request):
         if group_id == root_id:
             alias.append('/')
         else:
-            idpath_map = {root_id: '/'}
-            h5path = await getPathForObjectId(app, root_id, idpath_map, tgt_id=group_id, bucket=bucket)
+            id_map = {root_id: '/'}
+            kwargs = {"bucket": bucket, "tgt_id": group_id}
+            h5path = await getPathForObjectId(app, root_id, id_map, **kwargs)
             if h5path:
                 alias.append(h5path)
         group_json["alias"] = alias
 
     hrefs = []
     group_uri = '/groups/'+group_id
-    hrefs.append({'rel': 'self', 'href': getHref(request, group_uri)})
-    hrefs.append({'rel': 'links', 'href': getHref(request, group_uri+'/links')})
+    href = getHref(request, group_uri)
+    hrefs.append({'rel': 'self', 'href': href})
+    href = getHref(request, group_uri+'/links')
+    hrefs.append({'rel': 'links', 'href': href})
     root_uri = '/groups/' + group_json["root"]
-    hrefs.append({'rel': 'root', 'href': getHref(request, root_uri)})
-    hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
-    hrefs.append({'rel': 'attributes', 'href': getHref(request, group_uri+'/attributes')})
+    href = getHref(request, root_uri)
+    hrefs.append({'rel': 'root', 'href': href})
+    href = getHref(request, '/')
+    hrefs.append({'rel': 'home', 'href': href})
+    href = getHref(request, group_uri+'/attributes')
+    hrefs.append({'rel': 'attributes', 'href': href})
     group_json["hrefs"] = hrefs
 
     resp = await jsonResponse(request, group_json)
     log.response(request, resp=resp)
     return resp
+
 
 async def POST_Group(request):
     """HTTP method to create new Group object"""
@@ -145,7 +162,8 @@ async def POST_Group(request):
 
     domain_json = await getDomainJson(app, domain, reload=True)
 
-    aclCheck(app, domain_json, "create", username)  # throws exception if not allowed
+    # throws exception if not allowed
+    aclCheck(app, domain_json, "create", username)
 
     verifyRoot(domain_json)
 
@@ -164,18 +182,21 @@ async def POST_Group(request):
                     link_title = link_body["name"]
                 if link_id and link_title:
                     log.debug(f"link id: {link_id}")
-                    # verify that the referenced id exists and is in this domain
-                    # and that the requestor has permissions to create a link
-                    await validateAction(app, domain, link_id, username, "create")
+                    # verify that the referenced id exists and is in this
+                    # domainand that the requestor has permissions to create
+                    # a link
+                    act = "create"
+                    await validateAction(app, domain, link_id, username, act)
             if not link_id or not link_title:
                 log.warn(f"POST Group body with no link: {body}")
 
-    domain_json = await getDomainJson(app, domain) # get again in case cache was invalidated
+    # get again in case cache was invalidated
+    domain_json = await getDomainJson(app, domain)
 
     root_id = domain_json["root"]
     group_id = createObjId("groups", rootid=root_id)
     log.info(f"new  group id: {group_id}")
-    group_json = {"id": group_id, "root": root_id }
+    group_json = {"id": group_id, "root": root_id}
     log.debug(f"create group, body: {group_json}")
     req = getDataNodeUrl(app, group_id) + "/groups"
     params = {}
@@ -186,19 +207,21 @@ async def POST_Group(request):
 
     # create link if requested
     if link_id and link_title:
-        link_json={}
+        link_json = {}
         link_json["id"] = group_id
         link_json["class"] = "H5L_TYPE_HARD"
         link_req = getDataNodeUrl(app, link_id)
         link_req += "/groups/" + link_id + "/links/" + link_title
         log.debug("PUT link - : " + link_req)
-        put_json_rsp = await http_put(app, link_req, data=link_json, params=params)
+        kwargs = {"data": link_json, "params": params}
+        put_json_rsp = await http_put(app, link_req, **kwargs)
         log.debug(f"PUT Link resp: {put_json_rsp}")
     log.debug("returning resp")
     # group creation successful
     resp = await jsonResponse(request, group_json, status=201)
     log.response(request, resp=resp)
     return resp
+
 
 async def DELETE_Group(request):
     """HTTP method to delete a group resource"""
@@ -235,7 +258,8 @@ async def DELETE_Group(request):
     verifyRoot(domain_json)
 
     if group_id == domain_json["root"]:
-        msg = "Forbidden - deletion of root group is not allowed - delete domain first"
+        msg = "Forbidden - deletion of root group is not allowed - "
+        msg += "delete domain first"
         log.warn(msg)
         raise HTTPForbidden()
 

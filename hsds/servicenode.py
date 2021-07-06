@@ -32,7 +32,8 @@ from .link_sn import GET_Links, GET_Link, PUT_Link, DELETE_Link
 from .attr_sn import GET_Attributes, GET_Attribute, PUT_Attribute
 from .attr_sn import DELETE_Attribute, GET_AttributeValue, PUT_AttributeValue
 from .ctype_sn import GET_Datatype, POST_Datatype, DELETE_Datatype
-from .dset_sn import GET_Dataset, POST_Dataset, DELETE_Dataset, GET_DatasetShape, PUT_DatasetShape, GET_DatasetType
+from .dset_sn import GET_Dataset, POST_Dataset, DELETE_Dataset
+from .dset_sn import GET_DatasetShape, PUT_DatasetShape, GET_DatasetType
 from .chunk_sn import PUT_Value, GET_Value, POST_Value
 
 
@@ -42,75 +43,113 @@ async def init():
 
     # call app.router.add_get() here to add node-specific routes
     #
-    app.router.add_route('GET', '/', GET_Domain)
-    app.router.add_route('DELETE', '/', DELETE_Domain)
-    app.router.add_route('PUT', '/', PUT_Domain)
-    app.router.add_route('GET', '/domains', GET_Domains)
-    app.router.add_route('GET', '/acls/{username}', GET_ACL)
-    app.router.add_route('PUT', '/acls/{username}', PUT_ACL)
-    app.router.add_route('GET', '/acls', GET_ACLs)
-    app.router.add_route('GET', '/groups/{id}', GET_Group)
-    app.router.add_route('GET', '/groups/', GET_Group)
-    app.router.add_route('GET', '/groups', GET_Groups)
-    app.router.add_route('DELETE', '/groups/{id}', DELETE_Group)
-    app.router.add_route('POST', '/groups', POST_Group)
-    app.router.add_route('GET', '/groups/{id}/links', GET_Links)
-    app.router.add_route('GET', '/groups/{id}/links/{title}', GET_Link)
-    app.router.add_route('DELETE', '/groups/{id}/links/{title}', DELETE_Link)
-    app.router.add_route('PUT', '/groups/{id}/links/{title}', PUT_Link)
-    app.router.add_route('GET', '/groups/{id}/attributes', GET_Attributes)
-    app.router.add_route('GET', '/groups/{id}/attributes/{name}', GET_Attribute)
-    app.router.add_route('DELETE', '/groups/{id}/attributes/{name}', DELETE_Attribute)
-    app.router.add_route('PUT', '/groups/{id}/attributes/{name}', PUT_Attribute)
-    app.router.add_route('GET', '/groups/{id}/attributes/{name}/value', GET_AttributeValue)
-    app.router.add_route('PUT', '/groups/{id}/attributes/{name}/value', PUT_AttributeValue)
-    app.router.add_route('GET', '/groups/{id}/acls/{username}', GET_ACL)
-    app.router.add_route('PUT', '/groups/{id}/acls/{username}', PUT_ACL)
-    app.router.add_route('GET', '/groups/{id}/acls', GET_ACLs)
-    app.router.add_route('GET', '/datatypes/{id}', GET_Datatype)
-    app.router.add_route('GET', '/datatypes/', GET_Datatype)
-    app.router.add_route('GET', '/datatypes', GET_Datatypes)
-    app.router.add_route('DELETE', '/datatypes/{id}', DELETE_Datatype)
-    app.router.add_route('POST', '/datatypes', POST_Datatype)
-    app.router.add_route('GET', '/datatypes/{id}/attributes', GET_Attributes)
-    app.router.add_route('GET', '/datatypes/{id}/attributes/{name}', GET_Attribute)
-    app.router.add_route('DELETE', '/datatypes/{id}/attributes/{name}', DELETE_Attribute)
-    app.router.add_route('PUT', '/datatypes/{id}/attributes/{name}', PUT_Attribute)
-    app.router.add_route('GET', '/datatypes/{id}/attributes/{name}/value', GET_AttributeValue)
-    app.router.add_route('PUT', '/datatypes/{id}/attributes/{name}/value', PUT_AttributeValue)
-    app.router.add_route('GET', '/datatypes/{id}/acls/{username}', GET_ACL)
-    app.router.add_route('PUT', '/datatypes/{id}/acls/{username}', PUT_ACL)
-    app.router.add_route('GET', '/datatypes/{id}/acls', GET_ACLs)
-    app.router.add_route('GET', '/datasets/{id}', GET_Dataset)
-    app.router.add_route('GET', '/datasets/', GET_Dataset)
-    app.router.add_route('GET', '/datasets', GET_Datasets)
-    app.router.add_route('DELETE', '/datasets/{id}', DELETE_Dataset)
-    app.router.add_route('POST', '/datasets', POST_Dataset)
-    app.router.add_route('GET', '/datasets/{id}/shape', GET_DatasetShape)
-    app.router.add_route('PUT', '/datasets/{id}/shape', PUT_DatasetShape)
-    app.router.add_route('GET', '/datasets/{id}/type', GET_DatasetType)
-    app.router.add_route('GET', '/datasets/{id}/attributes', GET_Attributes)
-    app.router.add_route('GET', '/datasets/{id}/attributes/{name}', GET_Attribute)
-    app.router.add_route('DELETE', '/datasets/{id}/attributes/{name}', DELETE_Attribute)
-    app.router.add_route('PUT', '/datasets/{id}/attributes/{name}', PUT_Attribute)
-    app.router.add_route('GET', '/datasets/{id}/attributes/{name}/value', GET_AttributeValue)
-    app.router.add_route('PUT', '/datasets/{id}/attributes/{name}/value', PUT_AttributeValue)
-    app.router.add_route('PUT', '/datasets/{id}/value', PUT_Value)
-    app.router.add_route('GET', '/datasets/{id}/value', GET_Value)
-    app.router.add_route('POST', '/datasets/{id}/value', POST_Value)
-    app.router.add_route('GET', '/datasets/{id}/acls/{username}', GET_ACL)
-    app.router.add_route('PUT', '/datasets/{id}/acls/{username}', PUT_ACL)
-    app.router.add_route('GET', '/datasets/{id}/acls', GET_ACLs)
+    path = '/'
+    app.router.add_route('GET', path, GET_Domain)
+    app.router.add_route('DELETE', path, DELETE_Domain)
+    app.router.add_route('PUT', path, PUT_Domain)
+    path = '/domains'
+    app.router.add_route('GET', path, GET_Domains)
+    path = '/acls/{username}'
+    app.router.add_route('GET', path, GET_ACL)
+    app.router.add_route('PUT', path, PUT_ACL)
+    path = '/acls'
+    app.router.add_route('GET', path, GET_ACLs)
+    path = '/groups/'
+    app.router.add_route('GET', path, GET_Group)
+    path = '/groups'
+    app.router.add_route('GET', path, GET_Groups)
+    app.router.add_route('POST', path, POST_Group)
+    path = '/groups/{id}'
+    app.router.add_route('GET', path, GET_Group)
+    app.router.add_route('DELETE', path, DELETE_Group)
+    path = '/groups/{id}/links'
+    app.router.add_route('GET', path, GET_Links)
+    path = '/groups/{id}/links/{title}'
+    app.router.add_route('GET', path, GET_Link)
+    app.router.add_route('DELETE', path, DELETE_Link)
+    app.router.add_route('PUT', path, PUT_Link)
+    path = '/groups/{id}/attributes'
+    app.router.add_route('GET', path, GET_Attributes)
+    path = '/groups/{id}/attributes/{name}'
+    app.router.add_route('GET', path, GET_Attribute)
+    app.router.add_route('DELETE', path, DELETE_Attribute)
+    app.router.add_route('PUT', path, PUT_Attribute)
+    path = '/groups/{id}/attributes/{name}/value'
+    app.router.add_route('GET', path, GET_AttributeValue)
+    app.router.add_route('PUT', path, PUT_AttributeValue)
+    path = '/groups/{id}/acls/{username}'
+    app.router.add_route('GET', path, GET_ACL)
+    app.router.add_route('PUT', path, PUT_ACL)
+    path = '/groups/{id}/acls'
+    app.router.add_route('GET', path, GET_ACLs)
+    path = '/datatypes'
+    app.router.add_route('GET', path, GET_Datatypes)
+    app.router.add_route('POST', path, POST_Datatype)
+    path = '/datatypes/'
+    app.router.add_route('GET', path, GET_Datatype)
+    path = '/datatypes/{id}'
+    app.router.add_route('GET', path, GET_Datatype)
+    app.router.add_route('DELETE', path, DELETE_Datatype)
+    path = '/datatypes/{id}/attributes'
+    app.router.add_route('GET', path, GET_Attributes)
+    path = '/datatypes/{id}/attributes/{name}'
+    app.router.add_route('GET', path, GET_Attribute)
+    app.router.add_route('DELETE', path, DELETE_Attribute)
+    app.router.add_route('PUT', path, PUT_Attribute)
+    path = '/datatypes/{id}/attributes/{name}/value'
+    app.router.add_route('GET', path, GET_AttributeValue)
+    app.router.add_route('PUT', path, PUT_AttributeValue)
+    path = '/datatypes/{id}/acls/{username}'
+    app.router.add_route('GET', path, GET_ACL)
+    app.router.add_route('PUT', path, PUT_ACL)
+    path = '/datatypes/{id}/acls'
+    app.router.add_route('GET', path, GET_ACLs)
+    path = '/datasets/{id}'
+    app.router.add_route('GET', path, GET_Dataset)
+    app.router.add_route('DELETE', path, DELETE_Dataset)
+    path = '/datasets/'
+    app.router.add_route('GET', path, GET_Dataset)
+    path = '/datasets'
+    app.router.add_route('GET', path, GET_Datasets)
+    app.router.add_route('POST', path, POST_Dataset)
+    path = '/datasets/{id}/shape'
+    app.router.add_route('GET', path, GET_DatasetShape)
+    app.router.add_route('PUT', path, PUT_DatasetShape)
+    path = '/datasets/{id}/type'
+    app.router.add_route('GET', path, GET_DatasetType)
+    path = '/datasets/{id}/attributes'
+    app.router.add_route('GET', path, GET_Attributes)
+    path = '/datasets/{id}/attributes/{name}'
+    app.router.add_route('GET', path, GET_Attribute)
+    app.router.add_route('DELETE', path, DELETE_Attribute)
+    app.router.add_route('PUT', path, PUT_Attribute)
+    path = '/datasets/{id}/attributes/{name}/value'
+    app.router.add_route('GET', path, GET_AttributeValue)
+    app.router.add_route('PUT', path, PUT_AttributeValue)
+    path = '/datasets/{id}/value'
+    app.router.add_route('PUT', path, PUT_Value)
+    app.router.add_route('GET', path, GET_Value)
+    app.router.add_route('POST', path, POST_Value)
+    path = '/datasets/{id}/acls/{username}'
+    app.router.add_route('GET', path, GET_ACL)
+    app.router.add_route('PUT', path, PUT_ACL)
+    path = '/datasets/{id}/acls'
+    app.router.add_route('GET', path, GET_ACLs)
 
     # Add CORS to all routes
     cors_domain = config.get("cors_domain")
     if cors_domain:
-        cors = aiohttp_cors.setup(app, defaults={cors_domain: aiohttp_cors.ResourceOptions(allow_credentials=True, expose_headers="*", allow_headers="*",)})
+        kwargs = {"allow_credentials": True,
+                  "expose_headers": "*",
+                  "allow_headers": "*"}
+        cors_defaults = {cors_domain: aiohttp_cors.ResourceOptions(**kwargs)}
+        cors = aiohttp_cors.setup(app, defaults=cors_defaults)
         for route in list(app.router.routes()):
             log.info(f"CORS add route: {route}")
             cors.add(route)
 
     return app
+
 
 async def start_background_tasks(app):
     if "is_standalone" in app:
@@ -128,9 +167,13 @@ def create_app():
     app = loop.run_until_complete(init())
 
     metadata_mem_cache_size = int(config.get("metadata_mem_cache_size"))
-    log.info("Using metadata memory cache size of: {}".format(metadata_mem_cache_size))
-    app['meta_cache'] = LruCache(mem_target=metadata_mem_cache_size, name="MetaCache")
-    app['domain_cache'] = LruCache(mem_target=metadata_mem_cache_size, name="ChunkCache")
+    msg = f"Using metadata memory cache size of: {metadata_mem_cache_size}"
+    log.info(msg)
+    kwargs = {"mem_target": metadata_mem_cache_size}
+    kwargs["name"] = "MetaCache"
+    app['meta_cache'] = LruCache(**kwargs)
+    kwargs["name"] = "DomainCache"
+    app['domain_cache'] = LruCache(**kwargs)
 
     if config.get("allow_noauth"):
         allow_noauth = config.get("allow_noauth")
@@ -159,15 +202,14 @@ def create_app():
         setPassword(app, hs_username, hs_password)
 
     app.on_startup.append(start_background_tasks)
- 
+
     return app
 
 
-#
-# Main
-#
-
 def main():
+    """
+      Main - entry point for service node
+    """
     log.info("Service node initializing")
     app = create_app()
 
@@ -192,8 +234,8 @@ def main():
             print("got system exit")
         except Exception as e:
             print(f"got exception: {e}s")
-            #loop = asyncio.get_event_loop()
-            #loop.run_until_complete(release_http_client(app))
+            # loop = asyncio.get_event_loop()
+            # loop.run_until_complete(release_http_client(app))
         log.info("run_app done")
         # close socket?
     else:
@@ -203,8 +245,6 @@ def main():
         run_app(app, port=port)
 
     log.info("Service node exiting")
-    
-      
 
 
 if __name__ == '__main__':

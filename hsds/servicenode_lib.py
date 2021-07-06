@@ -13,10 +13,13 @@
 # service node of hsds cluster
 #
 import os.path as op
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
+from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.client_exceptions import ClientOSError
 
-from .util.idUtil import getDataNodeUrl, getCollectionForId, isSchema2Id, getS3Key
+from .util.authUtil import getAclKeys
+from .util.idUtil import getDataNodeUrl, getCollectionForId, isSchema2Id
+from .util.idUtil import getS3Key
 from .util.storUtil import getStorJSONObj, isStorObj
 from .util.authUtil import aclCheck
 from .util.httpUtil import http_get
@@ -49,7 +52,7 @@ async def getDomainJson(app, domain, reload=False):
 
     req = getDataNodeUrl(app, domain)
     req += "/domains"
-    params = { "domain": domain }
+    params = {"domain": domain}
 
     log.debug(f"sending dn req: {req} params: {params}")
 
@@ -66,13 +69,16 @@ async def getDomainJson(app, domain, reload=False):
     domain_cache[domain] = domain_json  # add to cache
     return domain_json
 
+
 async def validateAction(app, domain, obj_id, username, action):
     """ check that the given object belongs in the domain and that the
         requested action (create, read, update, delete, readACL, udpateACL)
         is permitted for the requesting user.
     """
     meta_cache = app['meta_cache']
-    log.info(f"validateAction(domain={domain}, obj_id={obj_id}, username={username}, action={action})")
+    msg = f"validateAction(domain={domain}, obj_id={obj_id}, "
+    msg += f"username={username}, action={action})"
+    log.info(msg)
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
     verifyRoot(domain_json)
@@ -94,24 +100,31 @@ async def validateAction(app, domain, obj_id, username, action):
         obj_json = await http_get(app, req, params=params)
         meta_cache[obj_id] = obj_json
 
-    log.debug("obj_json[root]: {} domain_json[root]: {}".format(obj_json["root"], domain_json["root"]))
+    s1 = obj_json["root"]
+    s2 = domain_json["root"]
+    msg = f"obj_json[root]: {s1} domain_json[root]: {s2}"
+    log.debug(msg)
     if obj_json["root"] != domain_json["root"]:
         log.info("unexpected root, reloading domain")
         domain_json = await getDomainJson(app, domain, reload=True)
-        if "root" not in domain_json or obj_json["root"] != domain_json["root"]:
+        if "root" not in domain_json or s1 != domain_json["root"]:
             msg = "Object id is not a member of the given domain"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
-    if action not in ("create", "read", "update", "delete", "readACL", "updateACL"):
+    acl_keys = getAclKeys()
+    if action not in acl_keys:
         log.error(f"unexpected action: {action}")
         raise HTTPInternalServerError()
 
     reload = False
     try:
-        aclCheck(app, domain_json, action, username)  # throws exception if not allowed
+        # throws exception if not allowed
+        aclCheck(app, domain_json, action, username)
     except HTTPForbidden:
-        log.info(f"got HttpProcessing error on validate action for domain: {domain}, reloading...")
+        msg = "got HttpProcessing error on validate action for domain: "
+        msg += f"{domain}, reloading..."
+        log.info(msg)
         # just in case the ACL was recently updated, refetch the domain
         reload = True
     if reload:
@@ -119,12 +132,15 @@ async def validateAction(app, domain, obj_id, username, action):
         aclCheck(app, domain_json, action, username)
 
 
-async def getObjectJson(app, obj_id, bucket=None, refresh=False, include_links=False, include_attrs=False):
-    """ Return top-level json (i.e. excluding attributes or links by default) for a given obj_id.
-    If refresh is False, any data present in the meta_cache will be returned.  If not
-    the DN will be queries, and any resultant data added to the meta_cache.
-    Note: meta_cache values may be stale, but use of immutable data (e.g. type of a dataset)
-    is always valid
+async def getObjectJson(app, obj_id, bucket=None, refresh=False,
+                        include_links=False, include_attrs=False):
+    """ Return top-level json (i.e. excluding attributes or links by default)
+        for a given obj_id.
+        If refresh is False, any data present in the meta_cache will be
+        returned.  If not the DN will be queried, and any resultant data
+        added to the meta_cache.
+        Note: meta_cache values may be stale, but use of immutable data
+          (e.g. type of a dataset) is always valid
     """
     meta_cache = app['meta_cache']
     obj_json = None
@@ -153,7 +169,7 @@ async def getObjectJson(app, obj_id, bucket=None, refresh=False, include_links=F
             raise HTTPInternalServerError()
     else:
         req = getDataNodeUrl(app, obj_id)
-        collection =  getCollectionForId(obj_id)
+        collection = getCollectionForId(obj_id)
         params = {}
         if include_links:
             params["include_links"] = 1
@@ -162,7 +178,9 @@ async def getObjectJson(app, obj_id, bucket=None, refresh=False, include_links=F
         if bucket:
             params["bucket"] = bucket
         req += '/' + collection + '/' + obj_id
-        obj_json = await http_get(app, req, params=params)  # throws 404 if doesn't exist
+
+        # throws 404 if doesn't exist
+        obj_json = await http_get(app, req, params=params)
         meta_cache[obj_id] = obj_json
     if obj_json is None:
         msg = f"Object: {obj_id} not found"
@@ -170,11 +188,14 @@ async def getObjectJson(app, obj_id, bucket=None, refresh=False, include_links=F
         raise HTTPNotFound()
     return obj_json
 
+
 async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False):
     """ Find the object at the provided h5path location.
     If not found raise 404 error.
     """
-    log.info(f"getObjectIdByPath obj_id: {obj_id} h5path: {h5path} refresh: {refresh}")
+    msg = f"getObjectIdByPath obj_id: {obj_id} h5path: {h5path} "
+    msg += f"refresh: {refresh}"
+    log.info(msg)
     if h5path.startswith("./"):
         h5path = h5path[2:]  # treat as relative path
     links = h5path.split('/')
@@ -204,11 +225,14 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False):
     # if we get here, we've traveresed the entire path and found the object
     return obj_id
 
-async def getPathForObjectId(app, parent_id, idpath_map, tgt_id=None, bucket=None):
+
+async def getPathForObjectId(app, parent_id, idpath_map, tgt_id=None,
+                             bucket=None):
     """ Search the object starting with the given parent_id.
     idpath should be a dict with at minimum the key: parent_id: <parent_path>.
-    If tgt_id is not None, returns first path that matches the tgt_id or None if not found.
-    If Tgt_id is no, returns the idpath_map.
+    If tgt_id is not None, returns first path that matches the tgt_id or
+    None if not found.
+    If Tgt_id is None, returns the idpath_map.
     """
 
     if not parent_id:
@@ -232,7 +256,9 @@ async def getPathForObjectId(app, parent_id, idpath_map, tgt_id=None, bucket=Non
 
     log.debug("getPathForObjectId LINKS: " + req)
     links_json = await http_get(app, req, params=params)
-    log.debug(f"getPathForObjectId got links json from dn for parent_id: {parent_id}")
+    msg = "getPathForObjectId got links json from dn for "
+    msg += f"parent_id: {parent_id}"
+    log.debug(msg)
     links = links_json["links"]
 
     h5path = None
@@ -250,11 +276,14 @@ async def getPathForObjectId(app, parent_id, idpath_map, tgt_id=None, bucket=Non
         idpath_map[link_id] = op.join(parent_path, title)
         if getCollectionForId(link_id) != "groups":
             continue
-        h5path = await getPathForObjectId(app, link_id, idpath_map, tgt_id=tgt_id, bucket=bucket) # recursive call
+        # recursive call
+        kwargs = {"tgt_id": tgt_id, "bucket": bucket}
+        h5path = await getPathForObjectId(app, link_id, idpath_map, **kwargs)
         if tgt_id is not None and h5path:
             break
 
     return h5path
+
 
 async def getRootInfo(app, root_id, bucket=None):
     """ Get extra information the root collection. """
@@ -262,7 +291,9 @@ async def getRootInfo(app, root_id, bucket=None):
     log.debug(f"getRootInfo {root_id}")
 
     if not isSchema2Id(root_id):
-        log.info(f"no dataset details not available for schema v1 id: {root_id} returning null results")
+        msg = f"no dataset details not available for schema v1 id: {root_id} "
+        msg += "returning null results"
+        log.info(msg)
         return None
 
     s3_key = getS3Key(root_id)

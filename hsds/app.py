@@ -168,7 +168,6 @@ def main():
 
     # sort the ports so that node_number can be determined based on dn_url
     dn_ports.sort()
-    dn_urls_arg
 
     logging.debug("dn_ports:", dn_urls_arg)
     if use_socket:
