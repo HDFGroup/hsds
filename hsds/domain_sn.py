@@ -1071,8 +1071,8 @@ async def PUT_Domain(request):
         aclCheck(app, parent_json, "create", username)
 
     if linked_domain:
-        domain = linked_bucket + linked_domain
-        linked_json = await getDomainJson(app, domain, reload=True)
+        l_d = linked_bucket + linked_domain
+        linked_json = await getDomainJson(app, l_d, reload=True)
         log.debug(f"got linked json: {linked_json}")
         if "root" not in linked_json:
             msg = "Folder domains cannot ber used as link target"
