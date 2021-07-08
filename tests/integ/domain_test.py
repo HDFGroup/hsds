@@ -411,8 +411,6 @@ class DomainTest(unittest.TestCase):
         self.assertTrue(len(rspJson["dn_ids"]) >= 1)
         self.assertEqual(set(dn_ids), set(rspJson["dn_ids"]))
 
-
-
     def testCreateLinkedDomain(self):
         target_domain = self.base_domain + "/target_domain.h5"
         print("testCreateLinkedDomain", target_domain)
@@ -677,7 +675,6 @@ class DomainTest(unittest.TestCase):
         req = helper.getEndpoint() + '/'
         rsp = self.session.get(req, headers=headers, params=params)
         self.assertEqual(rsp.status_code, 400) 
-
 
     def testDNSDomain(self):
         # DNS domain names are in reverse order with dots as seperators...

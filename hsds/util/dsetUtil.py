@@ -13,19 +13,17 @@
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 from numcodecs import blosc
 
-
 from .. import hsds_logger as log
 
 """
-
-Filters that are known to HSDS.  
+Filters that are known to HSDS.
 Format is:
   FILTER_CODE, FILTER_ID, Name
 
-  H5Z_FILTER_FLETCHER32, H5Z_FILTER_SZIP, H5Z_FILTER_NBIT, 
+  H5Z_FILTER_FLETCHER32, H5Z_FILTER_SZIP, H5Z_FILTER_NBIT,
   and H5Z_FILTER_SCALEOFFSET, are not currently supported.
-  
-  Non-supported filters metadata will be stored, but are 
+
+  Non-supported filters metadata will be stored, but are
   not (currently) used for compression/decompression.
 """
 
@@ -68,6 +66,14 @@ COMPRESSION_FILTER_NAMES = (
     'zstd'
 )
 
+CHUNK_LAYOUT_CLASSES = (
+    'H5D_CHUNKED',
+    'H5D_CHUNKED_REF',
+    'H5D_CHUNKED_REF_INDIRECT',
+    'H5D_CONTIGUOUS_REF'
+)
+
+
 def getFilterItem(key):
     """
     Return filter code, id, and name, based on an id, a name or a code.
@@ -78,8 +84,9 @@ def getFilterItem(key):
                 return {"class": item[0], "id": item[1], "name": item[2]}
     return None  # not found
 
-""" Return list of filters, or empty list """
+
 def getFilters(dset_json):
+    """ Return list of filters, or empty list """
     if "creationProperties" not in dset_json:
         return []
     creationProperties = dset_json["creationProperties"]
@@ -88,22 +95,26 @@ def getFilters(dset_json):
     filters = creationProperties["filters"]
     return filters
 
-""" Return compression filter from filters, or None """
+
 def getCompressionFilter(dset_json):
+    """ Return compression filter from filters, or None """
     filters = getFilters(dset_json)
     for filter in filters:
         if 'class' not in filter:
-            log.warn(f"filter option: {filter} with no class key")
+            msg = f"filter option: {filter} with no class key"
+            log.warn(msg)
             continue
         filter_class = filter["class"]
         if filter_class in COMPRESSION_FILTER_IDS:
             return filter
-        if filter_class == 'H5Z_FILTER_USER' and 'name' in filter and filter['name'] in COMPRESSION_FILTER_NAMES:
+        if filter_class == 'H5Z_FILTER_USER' and 'name' in filter and \
+                filter['name'] in COMPRESSION_FILTER_NAMES:
             return filter
     return None
 
-""" Return shuffle filter, or None """
+
 def getShuffleFilter(dset_json):
+    """ Return shuffle filter, or None """
     filters = getFilters(dset_json)
     for filter in filters:
         if 'class' not in filter:
@@ -113,17 +124,15 @@ def getShuffleFilter(dset_json):
         if filter_class == 'H5Z_FILTER_SHUFFLE':
             return filter
     return None
-        
 
-""" Get the Deflate compression value.
-"""
+
 def getFilterOps(app, dset_json, item_size):
+    """ Get the Deflate compression value """
     filter_map = app['filter_map']
     dset_id = dset_json['id']
     if dset_id in filter_map:
         log.debug(f"returning filter from filter_map {filter_map[dset_id]}")
         return filter_map[dset_id]
-
 
     compressionFilter = getCompressionFilter(dset_json)
     log.debug(f"got compressionFilter: {compressionFilter}")
@@ -142,15 +151,16 @@ def getFilterOps(app, dset_json, item_size):
             # for HDF5-style compression, use shuffle only if it turned on
             filter_ops['use_shuffle'] = False
     else:
-        if "name" in compressionFilter and compressionFilter["name"] in blosc.list_compressors():
-            filter_ops["compressor"] = compressionFilter["name"] 
+        if "name" in compressionFilter and \
+                compressionFilter["name"] in blosc.list_compressors():
+            filter_ops["compressor"] = compressionFilter["name"]
         else:
-            filter_ops["compressor"] = 'lz4' # default to lz4
+            filter_ops["compressor"] = 'lz4'  # default to lz4
     if "level" not in compressionFilter:
         filter_ops['level'] = 5  # medium level
     else:
         filter_ops['level'] = int(compressionFilter["level"])
-        
+
     if filter_ops:
         filter_ops['item_size'] = item_size
         if item_size == 'H5T_VARIABLE':
@@ -165,7 +175,8 @@ def getHyperslabSelection(dsetshape, start=None, stop=None, step=None):
     """
     Get slices given lists of start, stop, step values
 
-    TBD: for step>1, adjust the slice to not extend beyond last data point returned
+    TBD: for step>1, adjust the slice to not extend beyond last
+        data point returned
     """
     rank = len(dsetshape)
     if start:
@@ -232,6 +243,7 @@ def getHyperslabSelection(dsetshape, start=None, stop=None, step=None):
         slices.append(s)
     return tuple(slices)
 
+
 def getSelectionShape(selection):
     """ Return the shape of the given selection.
       Examples (selection -> returned shape):
@@ -254,12 +266,12 @@ def getSelectionShape(selection):
     return shape
 
 
-"""
-Herlper function, get query parameter value from request.
-If body is provided (as a JSON object) look in JSON and if not found
-look for query param.  Return default value (or None) if not found
-"""
 def getQueryParameter(request, query_name, body=None, default=None):
+    """
+    Herlper function, get query parameter value from request.
+    If body is provided (as a JSON object) look in JSON and if not found
+    look for query param.  Return default value (or None) if not found
+    """
     # as a convience, look up different capitilizations of query name
     params = request.rel_url.query
     query_names = []
@@ -290,7 +302,7 @@ def getQueryParameter(request, query_name, body=None, default=None):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
     if val is None:
-        if  default is not None:
+        if default is not None:
             val = default
         else:
             msg = "Request parameter is missing: {}".format(query_name)
@@ -298,8 +310,10 @@ def getQueryParameter(request, query_name, body=None, default=None):
             raise HTTPBadRequest(reason=msg)
     return val
 
-"""
-Helper method - return slice for dim based on query params
+
+def getSliceQueryParam(request, dim, extent, body=None):
+    """
+    Helper method - return slice for dim based on query params
 
     Query arg should be in the form: [<dim1>, <dim2>, ... , <dimn>]
         brackets are optional for one dimensional arrays.
@@ -307,8 +321,7 @@ Helper method - return slice for dim based on query params
             single integer: n
             start and end: n:m
             start, end, and stride: n:m:s
-"""
-def getSliceQueryParam(request, dim, extent, body=None):
+    """
     # Get optional query parameters for given dim
     log.debug("getSliceQueryParam: " + str(dim) + ", " + str(extent))
     params = request.rel_url.query
@@ -352,7 +365,7 @@ def getSliceQueryParam(request, dim, extent, body=None):
 
     if "select" in params:
         query = params["select"]
-        log.debug("select query value:" + query )
+        log.debug("select query value:" + query)
 
         if not query.startswith('['):
             msg = "Bad Request: selection query missing start bracket"
@@ -378,7 +391,8 @@ def getSliceQueryParam(request, dim, extent, body=None):
             try:
                 start = int(dim_query)
             except ValueError:
-                msg = "Bad Request: invalid selection parameter (can't convert to int) for dimension: " + str(dim)
+                msg = "Bad Request: invalid selection parameter "
+                msg += f"(can't convert to int) for dimension: {dim}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
             stop = start + 1
@@ -389,7 +403,8 @@ def getSliceQueryParam(request, dim, extent, body=None):
             fields = dim_query.split(":")
             log.debug("got fields: {}".format(fields))
             if len(fields) > 3:
-                msg = "Bad Request: Too many ':' seperators for dimension: " + str(dim)
+                msg = "Bad Request: Too many ':' seperators for "
+                msg += f"dimension: {dim}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
             try:
@@ -400,30 +415,36 @@ def getSliceQueryParam(request, dim, extent, body=None):
                 if len(fields) > 2 and fields[2]:
                     step = int(fields[2])
             except ValueError:
-                msg = "Bad Request: invalid selection parameter (can't convert to int) for dimension: " + str(dim)
+                msg = "Bad Request: invalid selection parameter "
+                msg += f"(can't convert to int) for dimension: {dim}"
                 log.info(msg)
                 raise HTTPBadRequest(reason=msg)
     log.debug("start: {}, stop: {}, step: {}".format(start, stop, step))
     # now, validate whaterver start/stop/step values we got
     if start < 0 or start > extent:
-        msg = "Bad Request: Invalid selection start parameter for dimension: " + str(dim)
+        msg = "Bad Request: Invalid selection start parameter "
+        msg += f"for dimension: {dim}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     if stop > extent:
-        msg = "Bad Request: Invalid selection stop parameter for dimension: " + str(dim)
+        msg = "Bad Request: Invalid selection stop parameter for "
+        msg += f"dimension: {dim}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     if step <= 0:
-        msg = "Bad Request: invalid selection step parameter for dimension: " + str(dim)
+        msg = "Bad Request: invalid selection step parameter for "
+        msg += f"dimension: {dim}"
         log.debug(msg)
         raise HTTPBadRequest(reason=msg)
     s = slice(start, stop, step)
-    log.debug("dim query[" + str(dim) + "] returning: start: " +
-            str(start) + " stop: " + str(stop) + " step: " + str(step))
+    msg = f"dim query[{dim}] returning: start:{start} stop:{stop} step:{step}"
+    log.debug(msg)
     return s
 
-"""
-Helper method - set query parameter for given shape + selection
+
+def setSliceQueryParam(params, sel):
+    """
+    Helper method - set query parameter for given shape + selection
 
     Query arg should be in the form: [<dim1>, <dim2>, ... , <dimn>]
         brackets are optional for one dimensional arrays.
@@ -431,12 +452,11 @@ Helper method - set query parameter for given shape + selection
             single integer: n
             start and end: n:m
             start, end, and stride: n:m:s
-"""
-def setSliceQueryParam(params, sel):
+    """
     # pass dimensions, and selection as query params
     rank = len(sel)
     if rank > 0:
-        sel_param="["
+        sel_param = "["
         for i in range(rank):
             s = sel[i]
             sel_param += str(s.start)
@@ -451,8 +471,10 @@ def setSliceQueryParam(params, sel):
         log.debug("select query param: {}".format(sel_param))
         params["select"] = sel_param
 
-"""
-Helper method - set chunk dim param
+
+def setChunkDimQueryParam(params, dims):
+    """
+    Helper method - set chunk dim param
     Send the chunk dimensions as a query param
     Query arg should be in the form: [<dim1>, <dim2>, ... , <dimn>]
         brackets are optional for one dimensional arrays.
@@ -460,12 +482,11 @@ Helper method - set chunk dim param
             single integer: n
             start and end: n:m
             start, end, and stride: n:m:s
-"""
-def setChunkDimQueryParam(params, dims):
+    """
     # pass dimensions, and selection as query params
     rank = len(dims)
     if rank > 0:
-        dim_param="["
+        dim_param = "["
         for i in range(rank):
             extent = dims[i]
             dim_param += str(extent)
@@ -474,13 +495,12 @@ def setChunkDimQueryParam(params, dims):
         params["dim"] = dim_param
 
 
-
-"""
-Get maxdims from a given shape.  Return [1,] for Scalar datasets
-
-Use with H5S_NULL datasets will throw a 400 error.
-"""
 def getDsetMaxDims(dset_json):
+    """
+    Get maxdims from a given shape.  Return [1,] for Scalar datasets
+
+    Use with H5S_NULL datasets will throw a 400 error.
+    """
     if "shape" not in dset_json:
         log.error("No shape found in dset_json")
         raise HTTPInternalServerError()
@@ -491,7 +511,7 @@ def getDsetMaxDims(dset_json):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     elif shape_json['class'] == 'H5S_SCALAR':
-        maxdims = [1,]
+        maxdims = [1, ]
     elif shape_json['class'] == 'H5S_SIMPLE':
         if "maxdims" in shape_json:
             maxdims = shape_json["maxdims"]
@@ -500,27 +520,27 @@ def getDsetMaxDims(dset_json):
         raise HTTPInternalServerError()
     return maxdims
 
-""" Get chunk layout.  Throw 500 if used with non-H5D_CHUNKED layout
-"""
+
 def getChunkLayout(dset_json):
+    """ Get chunk layout.  Throw 500 if used with non-H5D_CHUNKED layout
+    """
     if "layout" not in dset_json:
         log.error("No layout found in dset_json")
         raise HTTPInternalServerError()
     layout_json = dset_json["layout"]
-    if layout_json["class"] not in ('H5D_CHUNKED', 'H5D_CHUNKED_REF', 'H5D_CHUNKED_REF_INDIRECT', 'H5D_CONTIGUOUS_REF'):
+    if layout_json["class"] not in CHUNK_LAYOUT_CLASSES:
         log.error("Unexpected shape layout: {}".format(layout_json["class"]))
         raise HTTPInternalServerError()
     layout = layout_json["dims"]
     return layout
 
 
-
-
-"""Helper method - return query options for a "reasonable" size
-    data preview selection. Return None if the dataset is small
-    enough that a preview is not needed.
-"""
 def getPreviewQuery(dims):
+    """
+    Helper method - return query options for a "reasonable" size
+        data preview selection. Return None if the dataset is small
+        enough that a preview is not needed.
+    """
     select = "select=["
     rank = len(dims)
 
@@ -552,10 +572,11 @@ def getPreviewQuery(dims):
     select += "]"
     return select
 
-"""
-Return fill value if defined, otherwise 0 elements
-"""
+
 def getFillValue(dset_json):
+    """
+    Return fill value if defined, otherwise return None
+    """
     fill_value = None
     if "creationProperties" in dset_json:
         cprops = dset_json["creationProperties"]
@@ -565,10 +586,11 @@ def getFillValue(dset_json):
                 fill_value = tuple(fill_value)
     return fill_value
 
-"""
-Determine if the dataset can be extended
-"""
+
 def isExtensible(dims, maxdims):
+    """
+    Determine if the dataset can be extended
+    """
     if maxdims is None or len(dims) == 0:
         return False
     log.debug("isExtensible - dims: {} maxdims: {}".format(dims, maxdims))
@@ -578,19 +600,20 @@ def isExtensible(dims, maxdims):
     for n in range(rank):
         # TBD - shouldn't have H5S_UNLIMITED in any new files.
         # Remove check once this is confirmed
-        if maxdims[n] == 0 or maxdims[n] == 'H5S_UNLIMITED' or maxdims[n] > dims[n]:
+        if maxdims[n] in (0, 'H5S_UNLIMITED') or maxdims[n] > dims[n]:
             return True
     return False
 
-"""
-Class to iterator through items in a selection
-"""
+
 class ItemIterator:
+    """
+    Class to iterator through items in a selection
+    """
 
     def __init__(self, selection):
         self._selection = selection
         self._rank = len(selection)
-        self._index = [0,] * self._rank
+        self._index = [0, ] * self._rank
         for i in range(self._rank):
             s = self._selection[i]
             self._index[i] = s.start
@@ -604,7 +627,7 @@ class ItemIterator:
             raise StopIteration()
         dim = self._rank - 1
 
-        index = [0,] * self._rank
+        index = [0, ] * self._rank
         for i in range(self._rank):
             index[i] = self._index[i]
         while dim >= 0:

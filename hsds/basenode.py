@@ -19,24 +19,27 @@ from asyncio import TimeoutError
 import time
 import random
 import psutil
-#from copy import copy
 
 from aiohttp.web import Application
-from aiohttp.web_exceptions import HTTPNotFound, HTTPGone, HTTPInternalServerError, HTTPServiceUnavailable
+from aiohttp.web_exceptions import HTTPNotFound, HTTPGone
+from aiohttp.web_exceptions import HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPServiceUnavailable
 from aiohttp.client_exceptions import ClientError
 from asyncio import CancelledError
 
-
 from . import config
-from .util.httpUtil import  http_get, http_post, jsonResponse 
+from .util.httpUtil import http_get, http_post, jsonResponse
 from .util.idUtil import createNodeId, getNodeNumber, getNodeCount
-from .util.authUtil import getUserPasswordFromRequest, validateUserPassword, isAdminUser
+from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
+from .util.authUtil import isAdminUser
 from . import hsds_logger as log
 
 HSDS_VERSION = "0.7.0beta"
 
+
 def getVersion():
     return HSDS_VERSION
+
 
 def getHeadUrl(app):
     head_url = None
@@ -88,13 +91,14 @@ async def get_info(app, url):
         log.warn("Timeout error for req: {}: {}".format(req, str(hg)))
         # node has gone away?
         return None
-    except:
-        log.warn("uncaught exception in get_info")
+    except Exception as e:
+        log.warn(f"uncaught exception in get_info: {e}")
 
     return rsp_json
 
+
 async def oio_update_dn_info(app):
-    """ talk to conscience to get DN info """ 
+    """ talk to conscience to get DN info """
     oio_proxy = app["oio_proxy"]
     if "HOST_IP" not in os.environ:
         log.error("expected to find HOST_IP env variable")
@@ -110,17 +114,21 @@ async def oio_update_dn_info(app):
 
     body = {
         "addr": node_ip + ":" + str(app["node_port"]),
-        "tags": { "stat.cpu": 100, "tag.up": True},
+        "tags": {"stat.cpu": 100, "tag.up": True},
         "type": service_name
     }
     log.debug(f"conscience register: body: {body}")
     try:
         await http_post(app, req, data=body)
     except ClientError as client_exception:
-        log.error(f"got ClientError registering with oio_proxy: {client_exception} and body {body}")
+        msg = "got ClientError registering with oio_proxy: "
+        msg += f"{client_exception} and body {body}"
+        log.error(msg)
         return
     except CancelledError as cancelled_exception:
-        log.error(f"got CancelledError registering with oio_proxy: {cancelled_exception} and body {body}")
+        msg = "got CancelledError registering with oio_proxy: "
+        msg += f"{cancelled_exception} and body {body}"
+        log.error(msg)
         return
     log.info("oio registration successful")
 
@@ -129,10 +137,14 @@ async def oio_update_dn_info(app):
     try:
         dn_node_list = await http_get(app, req)
     except ClientError as client_exception:
-        log.error(f"got ClientError listing dn nodes with oio_proxy: {client_exception}")
+        msg = "got ClientError listing dn nodes with oio_proxy: "
+        msg += f"{client_exception}"
+        log.error(msg)
         return
     except CancelledError as cancelled_exception:
-        log.error(f"got CancelledError listing dn nodes with oio_proxy: {cancelled_exception}")
+        msg = "got CancelledError listing dn nodes with oio_proxy: "
+        msg += f"{cancelled_exception}"
+        log.error(msg)
         return
     except BaseException as error:
         log.error(f"A BaseException occurred: {error}")
@@ -154,16 +166,19 @@ async def oio_update_dn_info(app):
             continue
         log.debug(f"oio_get_dn_urls - adding address: {addr}")
         dn_urls.append("http://" + addr)
-         
+
     log.info(f"done with oio_update_dn_info, got: {len(dn_urls)} dn urls")
 
+
 async def k8s_update_dn_info(app):
-    """ update dn urls by querying k8s api.  Call each url to determine node_ids """
+    """ update dn urls by querying k8s api.
+        Call each url to determine node_ids
+    """
     log.info("k8s_update_dn_info")
     k8s_app_label = config.get("k8s_app_label")
     k8s_namespace = config.get("k8s_namespace")
     # put import here to avoid k8s package dependency unless required
-    from .util.k8sClient import getPodIps  
+    from .util.k8sClient import getPodIps
     pod_ips = getPodIps(k8s_app_label, k8s_namespace=k8s_namespace)
     if not pod_ips:
         log.error("Expected to find at least one hsds pod")
@@ -186,7 +201,7 @@ async def k8s_update_dn_info(app):
                 continue
             node_json = rsp_json["node"]
             if "id" not in node_json:
-                log.error("Unexepected response from info (no node/id key)")
+                log.error("Unexpected response from info (no node/id key)")
                 continue
             dn_ids.append(node_json["id"])
         except HTTPServiceUnavailable:
@@ -209,10 +224,10 @@ async def docker_update_dn_info(app):
     req_reg = head_url + "/register"
     log.info(f"register: {req_reg}")
 
-    body = {"id": app["id"], "port": app["node_port"], "node_type": app["node_type"]}
+    body = {"id": app["id"],
+            "port": app["node_port"],
+            "node_type": app["node_type"]}
 
-    #app['register_time'] = int(time.time())
-    
     try:
         log.info(f"register req: {req_reg} body: {body}")
         rsp_json = await http_post(app, req_reg, data=body)
@@ -242,14 +257,14 @@ async def update_dn_info(app):
 
     if "is_standalone" in app:
         # nothing to do in standalone mode
-        return  
+        return
 
     id_set_pre = get_dn_id_set(app)
 
     if "oio_proxy" in app:
         #  Using OpenIO consicience daemons
         await oio_update_dn_info(app)
-    elif "is_k8s" in app:  
+    elif "is_k8s" in app:
         await k8s_update_dn_info(app)
     else:
         # docker
@@ -260,13 +275,18 @@ async def update_dn_info(app):
     if id_set_pre != id_set_post:
         gone_ids = id_set_pre.difference(id_set_post)
         if gone_ids:
-            log.info(f"update_dn_info - dn_nodes: {gone_ids} are no longer active")
+            msg = f"update_dn_info - dn_nodes: {gone_ids} "
+            msg += "are no longer active"
+            log.info(msg)
         new_ids = id_set_post.difference(id_set_pre)
         if new_ids:
             log.info(f"update_dn_info - dn_nodes: {new_ids} are now active")
 
+
 def updateReadyState(app):
-    """ update node state (and node_number and node_count) based on number of dn_urls available """
+    """ update node state (and node_number and node_count) based on number
+        of dn_urls available
+    """
     if "is_standalone" in app:
         # dn_urls don't change in standalone mode, so just return
         log.debug("skip updateReadyState for standalone app")
@@ -277,19 +297,26 @@ def updateReadyState(app):
         if app["node_type"] == "dn":
             log.error("no dn_urls returned from dn node!")
         if app["node_state"] != "INITIALIZING":
-            log.info(f"setting node_state from {app['node_state']} to INITIALIZING since there are no dn nodes")
+            msg = f"setting node_state from {app['node_state']} to "
+            msg += "INITIALIZING since there are no dn nodes"
+            log.info(msg)
             app["node_state"] = "INITIALIZING"
     elif app["node_type"] == "dn":
         node_number = getNodeNumber(app)
         if app["node_number"] != node_number:
             old_number = app["node_number"]
-            log.info(f"node_number has changed - old value was {old_number} new number is {node_number}")
+            msg = f"node_number has changed - old value was {old_number} "
+            msg += f"new number is {node_number}"
+            log.info(msg)
             meta_cache = app["meta_cache"]
             chunk_cache = app["chunk_cache"]
             dirty_cache_count = meta_cache.dirtyCount + chunk_cache.dirtyCount
             if dirty_cache_count > 0:
-                # set the node state to waiting till the chunk cache have been flushed
-                log.info(f"Waiting on {dirty_cache_count} cache items to be flushed")
+                # set the node state to waiting till the chunk cache have
+                # been flushed
+                msg = f"Waiting on {dirty_cache_count} cache items to be "
+                msg += "flushed"
+                log.info(msg)
                 if app["node_state"] == "READY":
                     log.info("Setting node_state to WAITING (was READY)")
                     app["node_state"] = "WAITING"
@@ -297,7 +324,9 @@ def updateReadyState(app):
                 # flush remaining items from cache
                 meta_cache.clearCache()
                 chunk_cache.clearCache()
-                log.info(f"setting node_number to: {node_number}, node_state to READY")
+                msg = f"setting node_number to: {node_number}, node_state "
+                msg += "to READY"
+                log.info(msg)
                 app["node_number"] = node_number
                 app["node_state"] = "READY"
     else:
@@ -305,10 +334,21 @@ def updateReadyState(app):
         old_count = getNodeCount(app)
         new_count = len(dn_urls)
         if old_count != new_count:
-            log.info(f"number of dn nodes has changed from {old_count} to {new_count}")
+            msg = f"number of dn nodes has changed from {old_count} "
+            msg += f"to {new_count}"
+            log.info(msg)
         if app["node_state"] != "READY":
             log.info(f"setting node_state from {app['node_state']} to READY")
             app["node_state"] = "READY"
+
+
+def _activeTaskCount():
+    count = 0
+    for task in asyncio.Task.all_tasks():
+        if not task.done():
+            count += 1
+    return count
+
 
 async def doHealthCheck(app, chaos_die=0):
     node_state = app["node_state"]
@@ -322,15 +362,19 @@ async def doHealthCheck(app, chaos_die=0):
     if node_state != "TERMINATING":
         await update_dn_info(app)
         updateReadyState(app)
-          
+
     svmem = psutil.virtual_memory()
     num_tasks = len(asyncio.Task.all_tasks())
-    active_tasks = len([task for task in asyncio.Task.all_tasks() if not task.done()])
-    log.debug(f"health check vm: {svmem.percent} num tasks: {num_tasks} active tasks: {active_tasks}")
-      
+    msg = f"health check vm: {svmem.percent} num tasks: {num_tasks} "
+    msg += f"active tasks: {_activeTaskCount()}"
+    log.debug(msg)
+
+
 async def healthCheck(app):
-    """ Periodic method that either registers with headnode (if state in INITIALIZING) or
-    calls headnode to verify vitals about this node (otherwise)"""
+    """ Periodic method that either registers with headnode (if state in
+        INITIALIZING) or calls headnode to verify vitals about this node
+        (otherwise)
+    """
 
     # let the server event loop startup before starting the health check
     await asyncio.sleep(1)
@@ -344,11 +388,15 @@ async def healthCheck(app):
         try:
             await doHealthCheck(app, chaos_die=chaos_die)
         except Exception as e:
-            log.error(f"Unexpected {e.__class__.__name__} exception in doHealthCheck: {e}")
-        await asyncio.sleep(sleep_secs)   
+            msg = f"Unexpected {e.__class__.__name__} exception in "
+            msg += f"doHealthCheck: {e}"
+            log.error(msg)
+        await asyncio.sleep(sleep_secs)
+
 
 async def preStop(request):
-    """ HTTP Method used by K8s to signal the container is shutting down """
+    """ HTTP Method used by K8s to signal the container is shutting down
+    """
 
     log.request(request)
     app = request.app
@@ -359,6 +407,7 @@ async def preStop(request):
     log.response(request, resp=resp)
     return resp
 
+
 async def about(request):
     """ HTTP Method to return general info about the service """
     log.request(request)
@@ -368,7 +417,7 @@ async def about(request):
     if username:
         await validateUserPassword(app, username, pswd)
     answer = {}
-    answer['start_time'] =  app["start_time"]
+    answer['start_time'] = app["start_time"]
     answer['state'] = app['node_state']
     answer["hsds_version"] = getVersion()
     answer["name"] = config.get("server_name")
@@ -390,16 +439,17 @@ async def about(request):
     log.response(request, resp=resp)
     return resp
 
+
 async def info(request):
     """HTTP Method to return node state to caller"""
-    log.request(request)    
+    log.request(request)
     app = request.app
     answer = {}
     # copy relevant entries from state dictionary to response
     node = {}
     node['id'] = app['id']
     node['type'] = app['node_type']
-    node['start_time'] =  app["start_time"] #unixTimeToUTC(app['start_time'])
+    node['start_time'] = app["start_time"]
     node['state'] = app['node_state']
     if app['node_type'] == 'dn':
         node['node_number'] = app['node_number']
@@ -495,13 +545,13 @@ def baseInit(node_type):
     log.config["log_level"] = config.get("log_level")
     if config.get("log_prefix"):
         log.config["prefix"] = config.get("log_prefix")
-        
+
     # create the app object
     log.info("Application baseInit")
-    app = Application() 
+    app = Application()
 
     is_standalone = config.getCmdLineArg("standalone")
-     
+
     if is_standalone:
         log.info("running in standalone mode")
         app["is_standalone"] = True
@@ -518,7 +568,7 @@ def baseInit(node_type):
             node_number = int(node_number)
         app["node_number"] = node_number
         node_id = createNodeId(node_type, node_number=node_number)
-    else: 
+    else:
         # create node id based on uuid
         node_id = createNodeId(node_type)
 
@@ -526,10 +576,10 @@ def baseInit(node_type):
     if is_readonly:
         log.info("running in readonly mode")
         app["is_readonly"] = True
-    
+
     log.info(f"setting node_id to: {node_id}")
     app["id"] = node_id
-               
+
     app["node_state"] = "INITIALIZING"
     app["node_number"] = -1
     app["node_type"] = node_type
@@ -544,11 +594,12 @@ def baseInit(node_type):
         log.info("no default bucket defined")
     app["bucket_name"] = bucket_name
     app["dn_urls"] = []
-    app["dn_ids"] = [] # node ids for each dn_url
-    app["socket_clients"] = {} # map to path of Unix Domain sockets (if used)
+    app["dn_ids"] = []  # node ids for each dn_url
+    # map to path of Unix Domain sockets (if used)
+    app["socket_clients"] = {}
 
     is_standalone = config.getCmdLineArg("standalone")
-     
+
     if is_standalone:
         log.info("running in standalone mode")
         app["is_standalone"] = True
@@ -567,10 +618,12 @@ def baseInit(node_type):
                 dn_ids.append(dn_id)
             app["dn_urls"] = dn_urls
             app["dn_ids"] = dn_ids
-            
+
         # check to see if we are running in a DCOS cluster
     elif "MARATHON_APP_ID" in os.environ:
-        log.info("Found MARATHON_APP_ID environment variable, setting is_dcos to True")
+        msg = "Found MARATHON_APP_ID environment variable, "
+        msg += "setting is_dcos to True"
+        log.info(msg)
         app["is_dcos"] = True
     elif "OIO_PROXY" in os.environ:
         app["oio_proxy"] = os.environ["OIO_PROXY"]
@@ -579,17 +632,18 @@ def baseInit(node_type):
         # check to see if we are running in a k8s cluster
         try:
             k8s_app_label = config.get("k8s_app_label")
-            if "KUBERNETES_SERVICE_HOST" in os.environ: 
+            if "KUBERNETES_SERVICE_HOST" in os.environ:
                 log.info("running in kubernetes")
                 if k8s_app_label:
                     log.info("setting is_k8s to True")
                     app["is_k8s"] = True
                 else:
-                    log.info("k8s_app_label not set, running in k8s single pod")
+                    msg = "k8s_app_label not set, running in k8s single pod"
+                    log.info(msg)
         except KeyError:
             # guard against KeyError since k8s_app_label is a recent key
             log.warn("expected to find key k8s_app_label in config")
-        if not "is_k8s" in app:
+        if "is_k8s" not in app:
             # check to see if we are running in a docker container
             proc_file = "/proc/self/cgroup"
             if os.path.isfile(proc_file):
@@ -601,14 +655,13 @@ def baseInit(node_type):
                             field = fields[2]
                             if field.startswith("/docker/"):
                                 app["is_docker"] = True
-    
 
     if "is_dcos" in app:
         if "PORT0" not in os.environ:
             msg = "Expected PORT0 environment variable for DCOS"
             log.error(msg)
             node_port = config.get(node_type + "_port")
-        else: 
+        else:
             node_port = os.environ['PORT0']
     else:
         node_port = config.get(node_type + "_port")
@@ -648,7 +701,8 @@ def baseInit(node_type):
 
     if is_standalone:
         # can go straight to ready state
-        log.info("setting cluster_state to inital state of READY for standalone mode")
+        msg = "setting cluster_state to inital state of READY for standalone"
+        log.info(msg)
         app["cluster_state"] = "READY"
         app['node_state'] = "READY"
     else:

@@ -1214,7 +1214,7 @@ class AttributeTest(unittest.TestCase):
         req = self.endpoint + '/'
 
         # Get root uuid
-        rsp = requests.get(req, headers=headers)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -1225,7 +1225,7 @@ class AttributeTest(unittest.TestCase):
         data = { "type": 'H5T_IEEE_F32LE', "shape": 6, "value": value}
         attr_name = "nan_arr_attr"
         req = self.endpoint + "/groups/" + root_uuid + "/attributes/" + attr_name
-        rsp = requests.put(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.put(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
         # get all attributes, then by name, and then by value
@@ -1238,7 +1238,7 @@ class AttributeTest(unittest.TestCase):
                     params["IncludeData"] = 1
                 if ignore_nan:
                     params["ignore_nan"] = 1
-                rsp = requests.get(req, headers=headers, params=params)
+                rsp = self.session.get(req, headers=headers, params=params)
                 self.assertEqual(rsp.status_code, 200)
                 rspJson = json.loads(rsp.text)
                 self.assertTrue("hrefs" in rspJson)

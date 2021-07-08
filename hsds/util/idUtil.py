@@ -17,9 +17,8 @@ import os.path
 import hashlib
 import uuid
 from aiohttp.web_exceptions import HTTPServiceUnavailable
-
-
 from .. import hsds_logger as log
+
 
 def getIdHash(id):
     """  Return md5 prefix based on id value"""
@@ -27,6 +26,7 @@ def getIdHash(id):
     m.update(id.encode('utf8'))
     hexdigest = m.hexdigest()
     return hexdigest[:5]
+
 
 def isSchema2Id(id):
     """ return true if this is a v2 id """
@@ -40,6 +40,7 @@ def isSchema2Id(id):
     else:
         return False
 
+
 def getIdHexChars(id):
     """ get the hex chars of the given id """
     if id[0] == 'c':
@@ -52,15 +53,17 @@ def getIdHexChars(id):
         raise ValueError(f"Unexpected id format for uuid: {id}")
     return "".join(parts[1:])
 
+
 def hexRot(ch):
     """ rotate hex character by 8 """
     return format((int(ch, base=16) + 8) % 16, 'x')
+
 
 def isRootObjId(id):
     """ returns true if this is a root id (only for v2 schema) """
     if not isSchema2Id(id):
         raise ValueError("isRootObjId can only be used with v2 ids")
-    validateUuid(id) # will throw ValueError exception if not a objid
+    validateUuid(id)  # will throw ValueError exception if not a objid
     if id[0] != 'g':
         return False  # not a group
     token = getIdHexChars(id)
@@ -72,8 +75,11 @@ def isRootObjId(id):
             break
     return is_root
 
+
 def getRootObjId(id):
-    """ returns root id for this objid if this is a root id (only for v2 schema) """
+    """ returns root id for this objid if this is a root id
+    (only for v2 schema)
+    """
     if isRootObjId(id):
         return id  # this is the root id
     token = list(getIdHexChars(id))
@@ -81,9 +87,11 @@ def getRootObjId(id):
     for i in range(16):
         token[i+16] = hexRot(token[i])
     token = "".join(token)
-    root_id = 'g-' + token[0:8] + '-' + token[8:16] + '-' + token[16:20] + '-' + token[20:26] + '-' + token[26:32]
+    root_id = 'g-' + token[0:8] + '-' + token[8:16] + '-' + token[16:20]
+    root_id += '-' + token[20:26] + '-' + token[26:32]
 
     return root_id
+
 
 def createObjId(obj_type, rootid=None):
     if obj_type not in ('groups', 'datasets', 'datatypes', 'chunks', "roots"):
@@ -96,8 +104,11 @@ def createObjId(obj_type, rootid=None):
         prefix = 'g'  # root obj is a group
     else:
         prefix = obj_type[0]
-    if (not rootid and obj_type != "roots") or (rootid and not isSchema2Id(rootid)):
-        # v1 schema
+    if not rootid and obj_type != "roots":
+        # v1 schema - folder
+        objid = prefix + '-' + str(uuid.uuid1())
+    elif rootid and not isSchema2Id(rootid):
+        # v1 schema - domain
         objid = prefix + '-' + str(uuid.uuid1())
     else:
         # schema v2
@@ -116,7 +127,8 @@ def createObjId(obj_type, rootid=None):
                 token[16+i] = hexRot(token[i])
         # format as a string
         token = "".join(token)
-        objid = prefix + '-' + token[0:8] + '-' + token[8:16] + '-' + token[16:20] + '-' + token[20:26] + '-' + token[26:32]
+        objid = prefix + '-' + token[0:8] + '-' + token[8:16] + '-'
+        objid += token[16:20] + '-' + token[20:26] + '-' + token[26:32]
 
     return objid
 
@@ -130,9 +142,11 @@ def getS3Key(id):
     For schema v2:
         The id is converted to the pattern: "db/{rootid[0:16]}" for rootids and
         "db/id[0:16]/{prefix}/id[16-32]" for other ids
-        Chunk ids have the chunk index added after the slash: "db/id[0:16]/d/id[16:32]/x_y_z
+        Chunk ids have the chunk index added after the slash:
+        "db/id[0:16]/d/id[16:32]/x_y_z
 
-    For domain id's return a key with the .domain suffix and no preceeding slash
+    For domain id's return a key with the .domain suffix and no
+    preceeding slash
     """
     if id.find('/') > 0:
         # a domain id
@@ -156,14 +170,16 @@ def getS3Key(id):
             else:
                 partition = ""
                 if prefix == 'c':
-                    s3col = 'd'  # so that chunks will show up under their dataset
+                    # use 'g' so that chunks will show up under their dataset
+                    s3col = 'd'
                     n = id.find('-')
                     if n > 1:
                         # extract the partition index if present
                         partition = 'p' + id[1:n]
                 else:
                     s3col = prefix
-                key = f"db/{hexid[0:8]}-{hexid[8:16]}/{s3col}/{hexid[16:20]}-{hexid[20:26]}-{hexid[26:32]}"
+                key = f"db/{hexid[0:8]}-{hexid[8:16]}/{s3col}/{hexid[16:20]}"
+                key += f"-{hexid[20:26]}-{hexid[26:32]}"
             if prefix == 'c':
                 if partition:
                     key += '/'
@@ -190,9 +206,11 @@ def getS3Key(id):
 
     return key
 
+
 def getObjId(s3key):
     """ Return object id given valid s3key """
-    if len(s3key) >= 44 and s3key[0:5].isalnum() and s3key[5] == '-' and s3key[6] in ('g', 'd', 'c', 't'):
+    if len(s3key) >= 44 and s3key[0:5].isalnum() and s3key[5] == '-' and \
+            s3key[6] in ('g', 'd', 'c', 't'):
         # v1 obj keys
         objid = s3key[6:]
     elif s3key.endswith("/.domain.json"):
@@ -248,14 +266,13 @@ def getObjId(s3key):
                 raise ValueError(f"unexpected S3Key: {s3key}")
             partition = partition[1:]  # strip off the p
             chunk_coord = "_" + parts[5]
-
-
-
         else:
             raise ValueError(f"unexpected S3Key: {s3key}")
 
         token = "".join(token)
-        objid = prefix + partition + '-' + token[0:8] + '-' + token[8:16] + '-' + token[16:20] + '-' + token[20:26] + '-' + token[26:32] + chunk_coord
+        objid = prefix + partition + '-' + token[0:8] + '-' + token[8:16]
+        objid += '-' + token[16:20] + '-' + token[20:26] + '-'
+        objid += token[26:32] + chunk_coord
     else:
         raise ValueError(f"unexpected S3Key: {s3key}")
     return objid
@@ -268,10 +285,11 @@ def isS3ObjKey(s3key):
         if objid:
             valid = True
     except KeyError:
-        pass # ignore
+        pass  # ignore
     except ValueError:
-        pass # ignore
+        pass  # ignore
     return valid
+
 
 def createNodeId(prefix, node_number=None):
     """ Create a random id used to identify nodes"""
@@ -293,14 +311,13 @@ def createNodeId(prefix, node_number=None):
                         if field.startswith("/docker/"):
                             docker_len = len("/docker/")
                             if len(field) > docker_len + 12:
-                                node_id = field[docker_len:(docker_len+12)] 
-        
+                                node_id = field[docker_len:(docker_len+12)]
+
     if node_id:
         key = f"{prefix}-{node_id}-{hash_key}"
     else:
         key = f"{prefix}-{hash_key}"
     return key
-
 
 
 def getCollectionForId(obj_id):
@@ -317,6 +334,7 @@ def getCollectionForId(obj_id):
     else:
         raise ValueError("not a collection id")
     return collection
+
 
 def validateUuid(id, obj_class=None):
     if not isinstance(id, str):
@@ -358,12 +376,14 @@ def validateUuid(id, obj_class=None):
             continue
         raise ValueError(f"Unexpected character in uuid: {ch}")
 
+
 def isValidUuid(id, obj_class=None):
     try:
         validateUuid(id, obj_class)
         return True
     except ValueError:
         return False
+
 
 def isValidChunkId(id):
     if not isValidUuid(id):
@@ -386,12 +406,14 @@ def getClassForObjId(id):
     else:
         return getCollectionForId(id)
 
+
 def isObjId(id):
     """ return true if uuid or domain """
     if not isinstance(id, str) or len(id) == 0:
         return False
     if id.find('/') > 0:
-        return True  # domain id is any string in the form <bucket_name>/<domain_path>
+        # domain id is any string in the form <bucket_name>/<domain_path>
+        return True
     return isValidUuid(id)
 
 
@@ -400,14 +422,15 @@ def getUuidFromId(id):
     and return the uuid part """
     return id[2:]
 
+
 def getObjPartition(id, count):
     """ Get the id of the dn node that should be handling the given obj id
     """
     hash_code = getIdHash(id)
     hash_value = int(hash_code, 16)
     number = hash_value % count
-    #log.debug(f"ID {id} resolved to data node {number}, out of {count} data partitions.")
     return number
+
 
 def getPortFromUrl(url):
     start = url.find('//')
@@ -417,7 +440,7 @@ def getPortFromUrl(url):
     port = None
     dns = url[start:]
     index = dns.find(':')
-    port_str = ""    
+    port_str = ""
     if index > 0:
         for i in range(index+1, len(dns)):
             ch = dns[i]
@@ -432,7 +455,7 @@ def getPortFromUrl(url):
             port = 443
         else:
             port = 80
-        
+
     return port
 
 
@@ -442,32 +465,35 @@ def getNodeNumber(app):
         raise ValueError()
 
     dn_ids = app["dn_ids"]
-    #log.debug(f"getNodeNumber(from dn_ids: {dn_ids}")
+    # log.debug(f"getNodeNumber(from dn_ids: {dn_ids}")
     for i in range(len(dn_ids)):
         dn_id = dn_ids[i]
         if dn_id == app["id"]:
-            #log.debug(f"returning nodeNumber: {i}")
+            # log.debug(f"returning nodeNumber: {i}")
             return i
     log.error("getNodeNumber, no matching id")
     return -1
 
+
 def getNodeCount(app):
     dn_urls = app["dn_urls"]
     dn_node_count = len(dn_urls)
-    return dn_node_count                      
+    return dn_node_count
+
 
 def validateInPartition(app, obj_id):
     node_number = getNodeNumber(app)
     node_count = getNodeCount(app)
-    log.debug(f'obj_id: {obj_id}, node_count: {node_count}, node_number: {node_number}')
+    msg = f"obj_id: {obj_id}, node_count: {node_count}, "
+    msg += f"node_number: {node_number}"
+    log.debug(msg)
     partition_number = getObjPartition(obj_id, node_count)
     if partition_number != node_number:
         # The request shouldn't have come to this node'
-        msg = f"wrong node for 'id':{obj_id}, expected node {node_number} got {partition_number}"
+        msg = f"wrong node for 'id':{obj_id}, expected node {node_number} "
+        msg += f"got {partition_number}"
         log.error(msg)
         raise KeyError(msg)
-
-
 
 
 def getDataNodeUrl(app, obj_id):
@@ -477,11 +503,10 @@ def getDataNodeUrl(app, obj_id):
     dn_node_count = getNodeCount(app)
     node_state = app["node_state"]
     if node_state != "READY" or dn_node_count <= 0:
-        msg="Service not ready"
+        msg = "Service not ready"
         log.warn(msg)
         raise HTTPServiceUnavailable()
     dn_number = getObjPartition(obj_id, dn_node_count)
     url = dn_urls[dn_number]
     log.debug(f"got dn_url: {url} for obj_id: {obj_id}")
     return url
-

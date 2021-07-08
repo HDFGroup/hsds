@@ -16,13 +16,16 @@
 from asyncio import CancelledError
 from aiohttp.web import json_response
 import simplejson
-from aiohttp import  ClientSession, UnixConnector, TCPConnector
-from aiohttp.web_exceptions import HTTPForbidden, HTTPNotFound, HTTPConflict, HTTPGone, HTTPInternalServerError, HTTPRequestEntityTooLarge, HTTPServiceUnavailable, HTTPBadRequest
+from aiohttp import ClientSession, UnixConnector, TCPConnector
+from aiohttp.web_exceptions import HTTPForbidden, HTTPNotFound, HTTPConflict
+from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPRequestEntityTooLarge
+from aiohttp.web_exceptions import HTTPServiceUnavailable, HTTPBadRequest
 from aiohttp.client_exceptions import ClientError
-
 
 from .. import hsds_logger as log
 from .. import config
+
 
 def isOK(http_response):
     if http_response < 300:
@@ -32,6 +35,7 @@ def isOK(http_response):
 
 def getUrl(host, port):
     return f"http://{host}:{port}"
+
 
 def isUnixDomainUrl(url):
     # return True if url is a Unix Socket domain
@@ -45,6 +49,7 @@ def isUnixDomainUrl(url):
     else:
         return False
 
+
 def getSocketPath(url):
     # return socket path part of the url
     # E.g. for "http://unix:/tmp/dn_1.sock/about" return "/tmp/dn_1.sock"
@@ -57,6 +62,7 @@ def getSocketPath(url):
         raise ValueError(f"Invalid socket url: {url}")
     return url[start:(end+5)]
 
+
 def get_http_std_url(url):
     # replace socket path (if exists) with 127.0.0.1
     if not isUnixDomainUrl(url):
@@ -65,9 +71,7 @@ def get_http_std_url(url):
     url = "http://127.0.0.1" + url[(index+5):]
     return url
 
-"""
-get aiobotocore http client
-"""
+
 def get_http_client(app, url=None, cache_client=True):
     """ get http client """
     if url is None or not isUnixDomainUrl(url):
@@ -84,7 +88,7 @@ def get_http_client(app, url=None, cache_client=True):
     # first time call, create client interface
     # use shared client so that all client requests
     #   will share the same connection pool
-    
+
     if socket_path:
         log.info(f"Initiating UnixConnector with path: {socket_path}")
         client = ClientSession(connector=UnixConnector(path=socket_path))
@@ -92,18 +96,22 @@ def get_http_client(app, url=None, cache_client=True):
             socket_clients[socket_path] = client
     else:
         max_tcp_connections = int(config.get("max_tcp_connections"))
-        log.info(f"Initiating TCPConnector with limit {max_tcp_connections} connections")
-        client = ClientSession(connector=TCPConnector(limit_per_host=max_tcp_connections))
+        msg = "Initiating TCPConnector with limit "
+        msg += f"{max_tcp_connections} connections"
+        log.info(msg)
+        kwargs = {"limit_per_host": max_tcp_connections}
+        client = ClientSession(connector=TCPConnector(**kwargs))
         if cache_client:
             app['client'] = client
 
     # return client instance
     return client
 
-"""
-Release any http clients
-"""
+
 async def release_http_client(app):
+    """
+    Release any http clients
+    """
     log.info("releasing http clients")
     if 'client' in app:
         client = app['client']
@@ -115,14 +123,12 @@ async def release_http_client(app):
             client = socket_clients[socket_path]
             await client.close()
         app["socket_clients"] = {}
-    
 
 
-"""
-Replacement for aiohttp Request.read using our max request limit
-"""
 async def request_read(request) -> bytes:
-    """Read request body if present.
+    """
+    Replacement for aiohttp Request.read using our max request limit
+    Read request body if present.
 
     Returns bytes object with full request content.
     """
@@ -144,10 +150,11 @@ async def request_read(request) -> bytes:
         request._read_bytes = bytes(body)
     return request._read_bytes
 
-"""
-Helper function  - async HTTP GET
-"""
+
 async def http_get(app, url, params=None):
+    """
+    Helper function  - async HTTP GET
+    """
     log.info(f"http_get('{url}')")
     client = get_http_client(app, url=url)
     url = get_http_std_url(url)
@@ -160,7 +167,7 @@ async def http_get(app, url, params=None):
             status_code = rsp.status
             if rsp.status == 200:
                 # 200, so read the response
-                if 'Content-Type' in rsp.headers and rsp.headers['Content-Type'] == "application/octet-stream":
+                if isBinaryResponse(rsp):
                     # return binary data
                     retval = await rsp.read()  # read response as bytes
                 else:
@@ -183,43 +190,49 @@ async def http_get(app, url, params=None):
             else:
                 log.error(f"request to {url} failed with code: {status_code}")
                 raise HTTPInternalServerError()
-          
+
     except ClientError as ce:
         log.debug(f"ClientError: {ce}")
         raise HTTPInternalServerError()
     except CancelledError as cle:
         log.error(f"CancelledError for http_get({url}): {cle}")
         raise HTTPInternalServerError()
-     
+
     return retval
 
 
-"""
-Helper function  - async HTTP POST
-"""
 async def http_post(app, url, data=None, params=None):
+    """
+    Helper function  - async HTTP POST
+    """
     log.info(f"http_post('{url}', {data})")
     client = get_http_client(app, url=url)
     url = get_http_std_url(url)
-    timeout = config.get("timeout")
     if isinstance(data, bytes):
         log.debug("setting http_post for binary")
         kwargs = {"data": data}
     else:
         kwargs = {"json": data}
+    timeout = config.get("timeout")
+    if timeout:
+        kwargs["timeout"] = timeout
+    if params:
+        kwargs["params"] = params
+
     log.debug(f"kwargs: {kwargs}")
-        
+
     try:
-        async with client.post(url, params=params, timeout=timeout, **kwargs) as rsp:
+        async with client.post(url, **kwargs) as rsp:
             log.info(f"http_post status: {rsp.status}")
             if rsp.status == 200:
                 pass  # ok
             elif rsp.status == 201:
-                pass # also ok
-            elif rsp.status == 204: # no data
+                pass  # also ok
+            elif rsp.status == 204:  # no data
                 return None
             elif rsp.status == 404:
-                log.info(f"POST  reqest HTTPNotFound error for url: {url}")
+                msg = f"POST  reqest HTTPNotFound error for url: {url}"
+                log.info(msg)
                 raise HTTPNotFound()
             elif rsp.status == 410:
                 log.info(f"POST  reqest HTTPGone error for url: {url}")
@@ -228,9 +241,10 @@ async def http_post(app, url, data=None, params=None):
                 log.warn(f"503 error for http_get_Json {url}")
                 raise HTTPServiceUnavailable()
             else:
-                log.warn(f"POST request error for url: {url} - status: {rsp.status}")
+                msg = f"POST request error for url: {url} status: {rsp.status}"
+                log.warn(msg)
                 raise HTTPInternalServerError()
-            if 'Content-Type' in rsp.headers and rsp.headers['Content-Type'] == "application/octet-stream":
+            if isBinaryResponse(rsp):
                 # return binary data
                 retval = await(rsp.read())
                 log.debug(f"http_post({url}) returning {len(retval)} bytes")
@@ -245,13 +259,14 @@ async def http_post(app, url, data=None, params=None):
         log.error(f"CancelledError for http_post({url}): {cle}")
         raise HTTPInternalServerError()
 
-    return retval  
+    return retval
 
-"""
-Helper function  - async HTTP PUT
-"""
+
 async def http_put(app, url, data=None, params=None):
-    log.debug(f"http_put('{url}')")
+    """
+    Helper function  - async HTTP PUT
+    """
+    log.info(f"http_put('{url}')")
     client = get_http_client(app, url=url)
     url = get_http_std_url(url)
     if isinstance(data, bytes):
@@ -260,15 +275,19 @@ async def http_put(app, url, data=None, params=None):
     else:
         kwargs = {"json": data}
     log.debug(f"kwargs: {kwargs}")
-        
+
     rsp_json = None
-    timeout = config.get("timeout") 
+    if params is not None:
+        kwargs["params"] = params
+    timeout = config.get("timeout")
+    if timeout:
+        kwargs["timeout"] = timeout
 
     try:
-        async with client.put(url, params=params, timeout=timeout, **kwargs) as rsp:
+        async with client.put(url, **kwargs) as rsp:
             log.info(f"http_put status: {rsp.status}")
             if rsp.status in (200, 201):
-                pass # expected
+                pass  # expected
             elif rsp.status == 404:
                 # can come up for replace ops
                 log.info(f"HTTPNotFound for: {url}")
@@ -279,7 +298,8 @@ async def http_put(app, url, data=None, params=None):
                 log.warn(f"503 error for http_put url: {url}")
                 raise HTTPServiceUnavailable()
             else:
-                log.error(f"PUT request error for url: {url} - status: {rsp.status}")
+                msg = f"PUT request error for url: {url} status: {rsp.status}"
+                log.error(msg)
                 raise HTTPInternalServerError()
 
             rsp_json = await rsp.json()
@@ -291,22 +311,29 @@ async def http_put(app, url, data=None, params=None):
         log.error(f"CancelledError for http_put({url}): {cle}")
         raise HTTPInternalServerError()
     return rsp_json
- 
 
-"""
-Helper function  - async HTTP DELETE
-"""
+
 async def http_delete(app, url, data=None, params=None):
+    """
+    Helper function  - async HTTP DELETE
+    """
     # TBD - do we really need a data param?
     log.info(f"http_delete('{url}')")
     client = get_http_client(app, url=url)
     url = get_http_std_url(url)
 
     rsp_json = None
+    kwargs = {}
     timeout = config.get("timeout")
+    if timeout:
+        kwargs["timeout"] = timeout
+    if params:
+        kwargs["params"] = params
+    if data:
+        params["json"] = data
 
     try:
-        async with client.delete(url, json=data, params=params, timeout=timeout) as rsp:
+        async with client.delete(url, **kwargs) as rsp:
             log.info(f"http_delete status: {rsp.status}")
             if rsp.status == 200:
                 pass  # expectred
@@ -316,11 +343,13 @@ async def http_delete(app, url, data=None, params=None):
                 log.warn(f"503 error for http_delete {url}")
                 raise HTTPServiceUnavailable()
             else:
-                log.error(f"DELETE request error for url: {url} - status: {rsp.status}")
+                msg = f"DELETE request error for url: {url} "
+                msg += f"status: {rsp.status}"
+                log.error(msg)
                 raise HTTPInternalServerError()
 
-            #rsp_json = await rsp.json()
-            #log.debug(f"http_delete({url}) response: {rsp_json}")
+            # rsp_json = await rsp.json()
+            # log.debug(f"http_delete({url}) response: {rsp_json}")
     except ClientError as ce:
         log.error(f"ClientError for http_delete({url}): {ce} ")
         raise HTTPInternalServerError()
@@ -333,18 +362,20 @@ async def http_delete(app, url, data=None, params=None):
 
     return rsp_json
 
-"""
-Helper function, create a response object using the provided
-JSON data
-"""
+
 async def jsonResponse(request, data, status=200, ignore_nan=False):
+    """
+    Helper function, create a response object using the provided
+    JSON data
+    """
     text = simplejson.dumps(data, ignore_nan=ignore_nan)
     return json_response(text=text, headers={}, status=status)
 
-"""
-Convenience method to compute href links
-"""
+
 def getHref(request, uri, query=None, domain=None):
+    """
+    Convenience method to compute href links
+    """
     params = request.rel_url.query
     href = config.get("hsds_endpoint")
     if not href:
@@ -358,7 +389,7 @@ def getHref(request, uri, query=None, domain=None):
         href += "?domain=" + params["domain"]
         delimiter = '&'
     elif "host" in params:
-        href  += "?host=" + params["host"]
+        href += "?host=" + params["host"]
         delimiter = '&'
 
     if query is not None:
@@ -371,19 +402,32 @@ def getHref(request, uri, query=None, domain=None):
                 delimiter = '&'
     return href
 
-"""
-Get requested content type.  Returns either "binary" if the accept header is
-octet stream, otherwise json.
-Currently does not support q fields.
-"""
+
 def getAcceptType(request):
+    """
+    Get requested content type.  Returns either "binary" if the accept
+    header is octet stream, otherwise json.
+    Currently does not support q fields.
+    """
     accept_type = "json"  # default to JSON
     if "accept" in request.headers:
         accept = request.headers["accept"]
         # treat everything as json unless octet-stream is given
         if accept != "application/octet-stream":
             msg = f"Ignoring accept value: {accept}"
-            log.info(msg)
+            log.debug(msg)
         else:
             accept_type = "binary"
     return accept_type
+
+
+def isBinaryResponse(rsp):
+    """
+    Return True if response is binary data
+    """
+    is_binary = False
+    if 'Content-Type' in rsp.headers:
+        content_type = rsp.headers['Content-Type']
+        if content_type == "application/octet-stream":
+            is_binary = True
+    return is_binary

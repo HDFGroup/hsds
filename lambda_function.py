@@ -97,7 +97,7 @@ def lambda_handler(event, context):
         logging.debug(f"got method: {method}")
     else:
         method = "GET"
-    if method not in ("GET", "POST", "PUT"):
+    if method not in ("GET", "POST", "PUT", "DELETE"):
         err_msg = f"method: {method} is unsupported"
         logging.error(err_msg)
         return {"status_code": 400, "error": err_msg}

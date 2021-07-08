@@ -58,4 +58,3 @@ def elapsedTime(timestamp):
         ret_str += "{} minutes ".format(minutes)
     ret_str += "{} seconds".format(delta)
     return ret_str
-

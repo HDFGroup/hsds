@@ -1,3 +1,14 @@
+##############################################################################
+# Copyright by The HDF Group.                                                #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HSDS (HDF5 Scalable Data Service), Libraries and      #
+# Utilities.  The full HSDS copyright notice, including                      #
+# terms governing use, modification, and redistribution, is contained in     #
+# the file COPYING, which can be found at the root of the source code        #
+# distribution tree.  If you do not have access to this file, you may        #
+# request a copy from help@hdfgroup.org.                                     #
+##############################################################################
 import argparse
 import sys
 import time
@@ -16,21 +27,23 @@ def find_free_port():
     with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
         s.bind(('127.0.0.1', 0))
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        return s.getsockname()[1]  
+        return s.getsockname()[1]
+
 
 def print_process_output(queues):
     while True:
         got_output = False
         for q in queues:
-            try:  
-                line = q.get_nowait() # or q.get(timeout=.1)
+            try:
+                line = q.get_nowait()  # or q.get(timeout=.1)
             except queue.Empty:
                 pass  # no output on this queue yet
-            else: 
+            else:
                 print(line.decode("utf-8").strip())
                 got_output = True
         if not got_output:
             break  # all queues empty for now
+
 
 def enqueue_output(out, queue):
     for line in iter(out.readline, b''):
@@ -38,24 +51,30 @@ def enqueue_output(out, queue):
     logging.debug("enqueu_output close()")
     out.close()
 
+
 _HELP_USAGE = "Starts hsds a REST-based service for HDF5 data."
 
 _HELP_EPILOG = """Examples:
 
 - with openio/sds data storage:
 
-  hsds --s3-gateway http://localhost:6007 --access-key-id demo:demo --secret-access-key DEMO_PASS --password-file ./admin/config/passwd.txt --bucket-name hsds.test
+  hsds --s3-gateway http://localhost:6007 --access-key-id demo:demo
+      --secret-access-key DEMO_PASS --password-file ./admin/config/passwd.txt
+      --bucket-name hsds.test
 
-- with a POSIX-based storage for 'hsds.test' sub-folder in the './data' folder:
+- with a POSIX-based storage for 'hsds.test' sub-folder in the './data'
+  folder:
 
   hsds --bucket-dir ./data/hsds.test
 """
+
 
 def main():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawTextHelpFormatter,
         usage=_HELP_USAGE,
         epilog=_HELP_EPILOG)
+
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
         '--root_dir', type=str, dest='root_dir',
@@ -64,25 +83,26 @@ def main():
         '--bucket_name', nargs=1, type=str, dest='bucket_name',
         help='Name of the bucket to use (e.g., "hsds.test").')
     parser.add_argument('--host', default='localhost',
-        type=str, dest='host',
-        help="Address the service node is bounds with (default: localhost).")
+                        type=str, dest='host',
+                        help="host address for service node")
     parser.add_argument('--hs_username', type=str,  dest='hs_username',
-        help="username to be added to list of valid users", default='')
+                        help="username to be added to list of valid users",
+                        default='')
     parser.add_argument('--hs_password', type=str,  dest='hs_password',
-        help="password for hs_username", default='')
-    
+                        help="password for hs_username", default='')
+
     parser.add_argument('--logfile', default='',
-        type=str, dest='logfile',
-        help="filename for logout (default stdout).")
+                        type=str, dest='logfile',
+                        help="filename for logout (default stdout).")
     parser.add_argument('--loglevel', default='',
-        type=str, dest='loglevel',
-        help="log verbosity: DEBUG, WARNING, INFO, OR ERROR")
+                        type=str, dest='loglevel',
+                        help="log verbosity: DEBUG, WARNING, INFO, OR ERROR")
     parser.add_argument('-p', '--port', default=0,
-        type=int, dest='port',
-        help='Service node port')
-    parser.add_argument(
-        '--count', default=1, type=int, dest='target_dn_count',
-        help='Number of dn sub-processes to create.')
+                        type=int, dest='port',
+                        help='Service node port')
+    parser.add_argument('--count', default=1, type=int,
+                        dest='target_dn_count',
+                        help='Number of dn sub-processes to create.')
 
     args, extra_args = parser.parse_known_args()
 
@@ -113,8 +133,8 @@ def main():
     logging.debug("count:", args.target_dn_count)
     logging.debug("port:", args.port)
     logging.debug("hs_username:", args.hs_username)
-    #port = find_free_port()
-    #logging.debug("port:", port)
+    # port = find_free_port()
+    # logging.debug("port:", port)
     if "--use_socket" in extra_args:
         use_socket = True
     else:
@@ -148,8 +168,7 @@ def main():
 
     # sort the ports so that node_number can be determined based on dn_url
     dn_ports.sort()
-    dn_urls_arg
-    
+
     logging.debug("dn_ports:", dn_urls_arg)
     if use_socket:
         rangeget_port = "/tmp/rangeget.sock"
@@ -157,7 +176,7 @@ def main():
         rangeget_port = find_free_port()
     logging.debug("rangeget_port:", rangeget_port)
 
-    common_args = ["--standalone",]
+    common_args = ["--standalone", ]
     if args.loglevel:
         print("setting log_level to:", args.loglevel)
         common_args.append(f"--log_level={args.loglevel}")
@@ -168,13 +187,13 @@ def main():
         common_args.append(f"--sn_port={sn_port}")
         common_args.append(f"--rangeget_port={rangeget_port}")
     common_args.append("--dn_urls="+dn_urls_arg)
-    common_args.extend(extra_args) # pass remaining args as config overrides
+    common_args.extend(extra_args)  # pass remaining args as config overrides
 
     hsds_endpoint = "http://localhost"
     if sn_port != 80:
         hsds_endpoint += ":" + str(sn_port)
     common_args.append(f"--hsds_endpoint={hsds_endpoint}")
-    
+
     logging.debug(f"host: {args.host}")
     public_dns = f"http://{args.host}"
     if sn_port != 80:
@@ -202,7 +221,6 @@ def main():
         pout = subprocess.PIPE   # will pipe to parent
 
     # Start apps
-
     logging.debug("Creating subprocesses")
     processes = []
     queues = []
@@ -236,7 +254,7 @@ def main():
             q = queue.Queue()
             t = threading.Thread(target=enqueue_output, args=(p.stdout, q))
             queues.append(q)
-            t.daemon = True # thread dies with the program
+            t.daemon = True  # thread dies with the program
             t.start()
 
     try:
@@ -246,7 +264,8 @@ def main():
             for p in processes:
                 if p.poll() is not None:
                     result = p.communicate()
-                    logging.error(f"process {p.args[0]} ended, result: {result}")
+                    msg = f"process {p.args[0]} ended, result: {result}"
+                    logging.error(msg)
                     break
     except Exception as e:
         print(f"got exception: {e}, quitting")
@@ -258,7 +277,3 @@ def main():
                 logging.info(f"killing {p.args[0]}")
                 p.terminate()
         processes = []
-         
-    
-
-   

@@ -17,6 +17,7 @@ from aiohttp.web_exceptions import HTTPBadRequest
 
 from .. import hsds_logger as log
 
+
 def validateLinkName(name):
     if not isinstance(name, str):
         msg = "Unexpected type for link name"
@@ -26,5 +27,3 @@ def validateLinkName(name):
         msg = "link name contains slash"
         log.error(msg)
         raise HTTPBadRequest(reason=msg)
-
-
