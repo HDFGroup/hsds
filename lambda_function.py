@@ -1,5 +1,6 @@
 import requests_unixsocket
 import time
+import base64
 import subprocess
 import multiprocessing
 import queue
@@ -86,7 +87,8 @@ def lambda_handler(event, context):
     logging.basicConfig(level=log_level)
 
     # process event data
-    logging.info("lambda_handler(event, context)")
+    function_name = context.function_name
+    logging.info(f"lambda_handler(event, context) for function {function_name}")
     if "AWS_ROLE_ARN" in os.environ:
         logging.debug(f"using AWS_ROLE_ARN: {os.environ['AWS_ROLE_ARN']}")
     if "AWS_SESSION_TOKEN" in os.environ:
@@ -117,6 +119,14 @@ def lambda_handler(event, context):
     else:
         logging.debug("no headers found in event")
         headers = []
+    
+    if "Authorization" not in headers:
+        # Create basic auth header with user: function_name and password lambda
+        auth_string = function_name + ':' + 'lambda'
+        auth_string = auth_string.encode('utf-8')
+        auth_string = base64.b64encode(auth_string)
+        auth_string = b"Basic " + auth_string
+        headers['Authorization'] = auth_string
 
     if "params" in event:
         params = event["params"]
@@ -180,8 +190,8 @@ def lambda_handler(event, context):
             # args for service node
             pargs = ["hsds-servicenode", "--log_prefix=sn "]
         
-            #pargs.append("--hs_username=anonymous")
-            #pargs.append("--hs_password=none")
+            pargs.append(f"--hs_username={function_name}")
+            pargs.append("--hs_password=lambda")
         elif i == 1:
             # args for rangeget node
             pargs = ["hsds-rangeget", "--log_prefix=rg "]
