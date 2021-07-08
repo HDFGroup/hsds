@@ -118,7 +118,7 @@ def lambda_handler(event, context):
             return {"status_code": 400, "error": err_msg}
     else:
         logging.debug("no headers found in event")
-        headers = []
+        headers = {}
     
     if "Authorization" not in headers:
         # Create basic auth header with user: function_name and password lambda
@@ -137,7 +137,7 @@ def lambda_handler(event, context):
             return {"status_code": 400, "error": err_msg}
     else:
         logging.debug("no params found in event")
-        params = []
+        params = {}
 
     cpu_count = multiprocessing.cpu_count()
     logging.info(f"got cpu_count of: {cpu_count}")
