@@ -6,10 +6,10 @@ AWS Lambda is a technology that enables code to be run without the need to provi
 Each Lambda invocation will be charged based on how long the code took to execute (typically 2-4 seconds per request) and memory used (can be configured to anything between 1G and 10GB). This is especially attractive for deployments were the service will be used intermittantly, as there is no charge unless the Lambda function is invoked.
 
 Compared with a traiditional deployment, a Lambda deployment is not optimal for situtaions where the lowest possible latency is desired.  Since the Lambda function takes a certain amount of time to "spin up",
-the average latency will be higher compared to a lightly loaded server deployment.  On the other hand, Lambda invocations generally have a more consistent latency.  Even with a high request rate, the latency should be the same or lower since there is little contention among the executing lambda functions.
+the average latency will be higher compared to a lightly loaded server deployment.  On the other hand, Lambda invocations generally have a more consistent latency.  Even with a high request rate, the latency should be the same or lower since there is little contention among the executing Lambda functions.
 
 HSDS for AWS Lambda supports the full HDF Rest API, though some care should be taken if Lambda is 
-used for operations that modify storage.  If multiple update requests are sent simultaneously with Lambda it is possible to have a race condition where some udpates will get overwritten.  For example, if two lambda functions are invoked simultaneouly, and attempt to modify the same chunk, 
+used for operations that modify storage.  If multiple update requests are sent simultaneously with Lambda it is possible to have a race condition where some udpates will get overwritten.  For example, if two Lambda functions are invoked simultaneouly, and attempt to modify the same chunk, 
 it is possible that one function will overwrite the results of the other.
 
 Function Creation
@@ -53,6 +53,29 @@ The following is an example of how a hyperslab selection is packaged into an eve
     }
 
 See: https://github.com/HDFGroup/hdf-rest-api, for a complete description of the HDF REST API.
+
+Access Control
+==============
+
+On execution the Lambda function will act using the Lambda function name as username. 
+Publicly readable domains (a "Default" ACL with read permission set) will be accessible 
+via the Lambda function without any further action.  To enable the Lambda function to 
+read non-publicly readable domains, use the hsacl tool to add read permission with
+the Lambda function name as username.
+
+For example, if the Lambda function is named "hslambda", and the domain is "/shared/data.h5",
+run:
+
+    hsacl /shared/data.h5 +r hslambda
+
+Note: you'll need to at least briefly run a Docker or Kubernetes-based version of HSDS to
+run the above command.
+
+Similarly, if the Lambda function will be modifying data, add permissions to the Lambda 
+user for update, write, or delete as needed.  The following would give the Lambda function
+full control of the domain (other than reading or modifying ACLs):
+
+   hsacl /shared/data.h5 +crud hslambda
 
 Building the Lambda Image
 =========================
