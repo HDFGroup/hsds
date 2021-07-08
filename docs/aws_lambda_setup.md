@@ -75,7 +75,7 @@ Similarly, if the Lambda function will be modifying data, add permissions to the
 user for update, write, or delete as needed.  The following would give the Lambda function
 full control of the domain (other than reading or modifying ACLs):
 
-   hsacl /shared/data.h5 +crud hslambda
+    hsacl /shared/data.h5 +crud hslambda
 
 Building the Lambda Image
 =========================
