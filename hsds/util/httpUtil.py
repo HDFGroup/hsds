@@ -163,7 +163,7 @@ async def http_get(app, url, params=None):
     # TBD: usse read_bufsize parameter to optimize read for large responses
     try:
         async with client.get(url, params=params, timeout=timeout) as rsp:
-            log.info(f"http_get status: {rsp.status}")
+            log.info(f"http_get status: {rsp.status} for req: {url}")
             status_code = rsp.status
             if rsp.status == 200:
                 # 200, so read the response
@@ -218,8 +218,6 @@ async def http_post(app, url, data=None, params=None):
         kwargs["timeout"] = timeout
     if params:
         kwargs["params"] = params
-
-    log.debug(f"kwargs: {kwargs}")
 
     try:
         async with client.post(url, **kwargs) as rsp:

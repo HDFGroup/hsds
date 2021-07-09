@@ -1890,10 +1890,12 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices,
         tasks.append(task)
     await asyncio.gather(*tasks, loop=loop)
 
-    log.debug(f"arr shape: {arr.shape}")
+    log.info(f"read_chunk_hyperslab gather complete, arr shape: {arr.shape}")
 
     if response_type == "binary":
+        log.debug("preparing binary response")
         output_data = arrayToBytes(arr)
+        log.debug(f"got {len(output_data)} bytes for resp")
 
         # write response
         try:
@@ -1911,11 +1913,14 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices,
                 resp.headers['Access-Control-Allow-Methods'] = cors_methods
                 cors_headers = "Content-Type, api_key, Authorization"
                 resp.headers['Access-Control-Allow-Headers'] = cors_headers
+            log.debug("prepare request")
             await resp.prepare(request)
+            log.debug("write request")
             await resp.write(output_data)
         except Exception as e:
             log.error(f"Exception during binary data write: {e}")
         finally:
+            log.debug("write_eof")
             await resp.write_eof()
 
     else:
