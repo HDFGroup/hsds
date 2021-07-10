@@ -74,8 +74,8 @@ Deploy HSDS to K8s
 
 If you need to build and deploy a custom HSDS image (e.g. you have made changes to the HSDS code), first build and deploy the code to ECR as described in section "Building a docker image and deploying to ECR" below.  Otherwise, the standard image from docker hub (<https://hub.docker.com/repository/docker/hdfgroup/hsds>) will be deployed.
 
-1. Create RBAC roles: `kubectl create -f k8s_rbac.yml`
-2. Create HSDS service: `$ kubectl apply -f k8s_service_lb.yml`
+1. Create RBAC roles: `kubectl create -f admin/kubernetes/k8s_rbac.yml`
+2. Create HSDS service: `$ kubectl apply -f admin/kubernetes/k8s_service_lb.yml`
 3. This will create an external load balancer with an http endpoint with a public-ip.
    Use kubectl to get the public-ip of the hsds service: `$kubectl get service`
    You should see an entry similar to:
