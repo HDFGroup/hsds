@@ -86,7 +86,7 @@ If you need to build and deploy a custom HSDS image (e.g. you have made changes 
    Note the public-ip (EXTERNAL-IP). This is where you can access the HSDS service externally. It may take some time for the EXTERNAL-IP to show up after the service deployment.
 4. Now we will deploy the HSDS containers. In ***k8s_deployment_aws.yml***, modify the image value if a custom build is being used.  E.g:
     * image: '1234567.dkr.ecr.us-east-1.amazonaws.com/hsds:v1' to reflect the ecr repository for deployment
-5. Apply the deployment: `kubectl apply -f k8s_deployment_aws.yml`
+5. Apply the deployment: `kubectl apply -f admin/kubernetes/k8s_deployment_aws.yml`
 6. Verify that the HSDS pod is running: `kubectl get pods`  a pod with a name starting with hsds should be displayed with status as "Running".
 7. Additional verification: Run (`kubectl describe pod hsds-xxxx`) and make sure everything looks OK
 8. To locally test that HSDS functioning
