@@ -74,10 +74,10 @@ Deploy HSDS to K8s
 
 If you need to build and deploy a custom HSDS image (e.g. you have made changes to the HSDS code), first build and deploy the code to ECR as described in section "Building a docker image and deploying to ECR" below.  Otherwise, the standard image from docker hub (<https://hub.docker.com/repository/docker/hdfgroup/hsds>) will be deployed.
 
-1. Create RBAC roles: `kubectl create -f k8s_rbac.yml`
-2. Create HSDS service: `$ kubectl apply -f k8s_service_lb.yml`
+1. Create RBAC roles: `kubectl create -f admin/kubernetes/k8s_rbac.yml`
+2. Create HSDS service: `kubectl apply -f admin/kubernetes/k8s_service_lb.yml`
 3. This will create an external load balancer with an http endpoint with a public-ip.
-   Use kubectl to get the public-ip of the hsds service: `$kubectl get service`
+   Use kubectl to get the public-ip of the hsds service: `kubectl get service`
    You should see an entry similar to:
 
        NAME    TYPE           CLUSTER-IP     EXTERNAL-IP      PORT(S)        AGE
@@ -86,11 +86,11 @@ If you need to build and deploy a custom HSDS image (e.g. you have made changes 
    Note the public-ip (EXTERNAL-IP). This is where you can access the HSDS service externally. It may take some time for the EXTERNAL-IP to show up after the service deployment.
 4. Now we will deploy the HSDS containers. In ***k8s_deployment_aws.yml***, modify the image value if a custom build is being used.  E.g:
     * image: '1234567.dkr.ecr.us-east-1.amazonaws.com/hsds:v1' to reflect the ecr repository for deployment
-5. Apply the deployment: `$ kubectl apply -f k8s_deployment_aws.yml`
-6. Verify that the HSDS pod is running: `$ kubectl get pods`  a pod with a name starting with hsds should be displayed with status as "Running".
-7. Additional verification: Run (`$ kubectl describe pod hsds-xxxx`) and make sure everything looks OK
+5. Apply the deployment: `kubectl apply -f admin/kubernetes/k8s_deployment_aws.yml`
+6. Verify that the HSDS pod is running: `kubectl get pods`  a pod with a name starting with hsds should be displayed with status as "Running".
+7. Additional verification: Run (`kubectl describe pod hsds-xxxx`) and make sure everything looks OK
 8. To locally test that HSDS functioning
-    * Create a forwarding port to the Kubernetes service `$ sudo kubectl port-forward hsds-1234 5101:5101` where 'hsds-1234' is the name of one of the HSDS pods. 
+    * Create a forwarding port to the Kubernetes service `sudo kubectl port-forward hsds-1234 5101:5101` where 'hsds-1234' is the name of one of the HSDS pods. 
     * From a browser hit: <http://127.0.0.1:5101/about> and verify that "cluster_state" is "READY"
 
 Test the Deployment using Integration Test and Test Data
@@ -102,7 +102,7 @@ Cluster Scaling
 ---------------
 
 To scale up or down the number of HSDS pods, run:
-`$kubectl scale --replicas=n deployment/hsds` where n is the number of pods desired.
+`kubectl scale --replicas=n deployment/hsds` where n is the number of pods desired.
 
 Building a docker image and deploying to ECR
 --------------------------------------------
