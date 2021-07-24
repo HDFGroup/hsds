@@ -101,7 +101,9 @@ if [[ ${NO_DOCKER} ]]; then
 else
     # check that docker-compose is available
     docker-compose --version >/dev/null || exit 1
-    export COMPOSE_PROJECT_NAME=hsds  # use "hsds_" as prefix for container names
+    if [[ -z ${COMPOSE_PROJECT_NAME} ]]; then
+      export COMPOSE_PROJECT_NAME=hsds  # use "hsds_" as prefix for container names
+    fi
 fi
 
 

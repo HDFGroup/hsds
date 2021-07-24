@@ -42,16 +42,20 @@ def getVersion():
 
 
 def getHeadUrl(app):
-    head_url = None
-
-    if head_url in app:
+    if "head_url" in app:
         head_url = app["head_url"]
+    else:
+        head_port = config.get("head_port")
+        head_url = f"http://head:{head_port}"
+        app["head_url"] = head_url
+    """
+
     elif config.get("head_endpoint"):
         head_url = config.get("head_endpoint")
     else:
-        head_port = config.get("head_port")
         head_url = f"http://hsds_head:{head_port}"
     log.debug(f"head_url: {head_url}")
+    """
     return head_url
 
 

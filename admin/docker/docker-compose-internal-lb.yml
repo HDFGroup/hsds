@@ -2,18 +2,16 @@ version: '2'
 services:
   head:
     image: hdfgroup/hsds
-    container_name: hsds_head
     restart: ${RESTART_POLICY}
     mem_limit: ${HEAD_RAM}
     environment:
       - TARGET_SN_COUNT=${CORES}
       - TARGET_DN_COUNT=${CORES}
-      - HEAD_PORT=${HEAD_PORT}
       - NODE_TYPE=head_node
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
     ports:
-      - ${HEAD_PORT}:${HEAD_PORT}
+      - ${HEAD_PORT}
     logging:
      options:
         max-size: "5m"

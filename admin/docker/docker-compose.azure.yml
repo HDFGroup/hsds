@@ -2,7 +2,6 @@ version: '2'
 services:
   head:
     image: hdfgroup/hsds
-    container_name: hsds_head
     restart: ${RESTART_POLICY}
     mem_limit: ${HEAD_RAM}
     environment:
@@ -13,7 +12,7 @@ services:
       - BUCKET_NAME=${BUCKET_NAME}
       - LOG_LEVEL=${LOG_LEVEL}
     ports:
-      - ${HEAD_PORT}:${HEAD_PORT}
+      - ${HEAD_PORT}
     volumes:
       - ${PWD}/admin/config/:/config/
 
@@ -32,6 +31,9 @@ services:
       - head
     volumes:
       - ${PWD}/admin/config/:/config/
+    links:
+      - head
+      - rangeget
 
   sn:
     image: hdfgroup/hsds
@@ -50,6 +52,8 @@ services:
       - head
     volumes:
       - ${PWD}/admin/config/:/config/
+    links:
+      - head
 
   rangeget:
     image: hdfgroup/hsds
@@ -63,6 +67,7 @@ services:
       - ${RANGEGET_PORT}:${RANGEGET_PORT}
     depends_on:
       - head
-    container_name: hsds_rangeget
     volumes:
       - ${PWD}/admin/config/:/config/
+    links:
+      - head
