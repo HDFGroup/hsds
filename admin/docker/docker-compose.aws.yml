@@ -76,7 +76,7 @@ services:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - LOG_LEVEL=${LOG_LEVEL}
     ports:
-      - ${RANGEGET_PORT}:${RANGEGET_PORT}
+      - ${RANGEGET_PORT}
     depends_on:
       - head
     volumes:
