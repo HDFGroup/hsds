@@ -255,7 +255,9 @@ class S3Client():
         kwargs = self._get_client_kwargs()
         async with session.create_client('s3', **kwargs) as _client:
             try:
-                kwargs = {"Bucket": bucket, "Key": key, "Range": range}
+                kwargs = {"Bucket": bucket, "Key": key}
+                if range:
+                    kwargs["Range"] = range
                 resp = await _client.get_object(**kwargs)
                 data = await resp['Body'].read()
                 finish_time = time.time()
