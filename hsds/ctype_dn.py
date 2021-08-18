@@ -14,12 +14,13 @@
 #
 import time
 
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound
+from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.web import json_response
 
-
 from .util.idUtil import isValidUuid, validateUuid
-from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj, delete_metadata_obj, check_metadata_obj
+from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
+from .datanode_lib import delete_metadata_obj, check_metadata_obj
 from . import hsds_logger as log
 
 
@@ -42,7 +43,7 @@ async def GET_Datatype(request):
 
     ctype_json = await get_metadata_obj(app, ctype_id, bucket=bucket)
 
-    resp_json = { }
+    resp_json = {}
     resp_json["id"] = ctype_json["id"]
     resp_json["root"] = ctype_json["root"]
     resp_json["created"] = ctype_json["created"]
@@ -55,6 +56,7 @@ async def GET_Datatype(request):
     resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
+
 
 async def POST_Datatype(request):
     """ Handler for POST /datatypes"""
@@ -78,13 +80,13 @@ async def POST_Datatype(request):
 
     ctype_id = get_obj_id(request, body=body)
     if not isValidUuid(ctype_id, obj_class="datatype"):
-        log.error( "Unexpected type_id: {}".format(ctype_id))
+        log.error("Unexpected type_id: {ctype_id}")
         raise HTTPInternalServerError()
 
     # verify the id doesn't already exist
     obj_found = await check_metadata_obj(app, ctype_id, bucket=bucket)
     if obj_found:
-        log.error( "Post with existing type_id: {}".format(ctype_id))
+        log.error(f"Post with existing type_id: {ctype_id}")
         raise HTTPInternalServerError()
 
     root_id = None
@@ -97,7 +99,7 @@ async def POST_Datatype(request):
     try:
         validateUuid(root_id, "group")
     except ValueError:
-        msg = "Invalid root_id: " + root_id
+        msg = f"Invalid root_id: {root_id}"
         log.error(msg)
         raise HTTPInternalServerError()
 
@@ -110,12 +112,17 @@ async def POST_Datatype(request):
     # ok - all set, create committed type obj
     now = time.time()
 
-    log.info("POST_datatype, typejson: {}". format(type_json))
+    log.info(f"POST_datatype, typejson: {type_json}")
 
-    ctype_json = {"id": ctype_id, "root": root_id, "created": now,
-        "lastModified": now, "type": type_json, "attributes": {} }
+    ctype_json = {"id": ctype_id,
+                  "root": root_id,
+                  "created": now,
+                  "lastModified": now,
+                  "type": type_json,
+                  "attributes": {}}
 
-    await save_metadata_obj(app, ctype_id, ctype_json, bucket=bucket, notify=True, flush=True)
+    kwargs = {"bucket": bucket, "notify": True, "flush": True}
+    await save_metadata_obj(app, ctype_id, ctype_json, **kwargs)
 
     resp_json = {}
     resp_json["id"] = ctype_id
@@ -152,15 +159,15 @@ async def DELETE_Datatype(request):
 
     log.info("deleting ctype: {}".format(ctype_id))
 
-    notify=True
     if "Notify" in params and not params["Notify"]:
-        log.info("notify value: {}".format(params["Notify"]))
-        notify=False
-    log.info("notify: {}".format(notify))
+        notify = False
+    else:
+        notify = True
+    log.info(f"Delete datatype, notify: {notify}")
 
     await delete_metadata_obj(app, ctype_id, bucket=bucket, notify=notify)
 
-    resp_json = {  }
+    resp_json = {}
     resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp

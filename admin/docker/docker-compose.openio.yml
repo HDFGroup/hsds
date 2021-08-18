@@ -2,19 +2,17 @@ version: '2'
 services:
   head:
     image: hdfgroup/hsds
-    container_name: hsds_head
     restart: ${RESTART_POLICY}
     mem_limit: ${HEAD_RAM}
     environment:
       - TARGET_SN_COUNT=${SN_CORES}
       - TARGET_DN_COUNT=${DN_CORES}
-      - HEAD_PORT=${HEAD_PORT}
       - NODE_TYPE=head_node
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
     ports:
-      - ${HEAD_PORT}:${HEAD_PORT}
+      - ${HEAD_PORT}
     volumes:
       - ${PWD}/admin/config/:/config/
 
@@ -35,6 +33,10 @@ services:
       - head
     volumes:
       - ${PWD}/admin/config/:/config/
+    links:
+      - head
+      - rangeget
+
   sn:
     image: hdfgroup/hsds
     restart: ${RESTART_POLICY}
@@ -52,6 +54,8 @@ services:
       - head
     volumes:
       - ${PWD}/admin/config/:/config/
+    links:
+      - head
 
   rangeget:
     image: hdfgroup/hsds
@@ -65,12 +69,13 @@ services:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - LOG_LEVEL=${LOG_LEVEL}
     ports:
-      - ${RANGEGET_PORT}:${RANGEGET_PORT}
+      - ${RANGEGET_PORT}
     depends_on:
       - head
-    container_name: hsds_rangeget
     volumes:
       - ${PWD}/admin/config/:/config/
+    links:
+      - head
 
   openio:
     image: openio/sds

@@ -19,20 +19,18 @@ import os.path as pp
 import datetime
 from botocore.exceptions import ClientError
 from aiobotocore import get_session
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPUnauthorized, HTTPNotFound, HTTPForbidden, HTTPServiceUnavailable, HTTPInternalServerError
-import jwt
-from jwt.exceptions import InvalidAudienceError, InvalidSignatureError, ExpiredSignatureError, DecodeError
-import requests
-from cryptography.x509 import load_pem_x509_certificate
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers 
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPUnauthorized
+from aiohttp.web_exceptions import HTTPForbidden, HTTPInternalServerError
+
 from .. import hsds_logger as log
 from .. import config
 
-MSONLINE_OPENID_URL = "https://login.microsoftonline.com/common/.well-known/openid-configuration"
-GOOGLE_OPENID_URL = "https://accounts.google.com/.well-known/openid-configuration"
+# pre-appended to acl names to distinguish group acls from user acls
+GROUP_PREFIX = "g:"
 
-GROUP_PREFIX = "g:"  # pre-appended to acl names to distinguish group acls from user acls
+# keys used for each ACL
+ACL_KEYS = ("create", "read", "update", "delete", "readACL", "updateACL")
+
 
 def getDynamoDBClient(app):
     """ Return dynamodb handle
@@ -76,9 +74,13 @@ def getDynamoDBClient(app):
         # TODO - refactor with similar code in s3Util
         log.info("getted EC2 IAM role credentials")
         # Use EC2 IAM role to get credentials
-        # See: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html?icmpid=docs_ec2_console
-        curl_cmd = ["curl", f"http://169.254.169.254/latest/meta-data/iam/security-credentials/{aws_iam_role}"]
-        p = subprocess.run(curl_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        # See: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/
+        #    iam-roles-for-amazon-ec2.html?icmpid=docs_ec2_console
+        req = "http://169.254.169.254/"
+        req += f"latest/meta-data/iam/security-credentials/{aws_iam_role}"
+        curl_cmd = ["curl", req]
+        p = subprocess.run(curl_cmd, stdout=subprocess.PIPE,
+                           stderr=subprocess.PIPE)
         if p.returncode != 0:
             msg = f"Error getting IAM role credentials: {p.stderr}"
             log.error(msg)
@@ -88,37 +90,46 @@ def getDynamoDBClient(app):
                 cred = json.loads(stdout)
                 aws_secret_access_key = cred["SecretAccessKey"]
                 aws_access_key_id = cred["AccessKeyId"]
-                log.info(f"Got ACCESS_KEY_ID: {aws_access_key_id} from EC2 metadata")
+                log.info(f"Got ACCESS_KEY_ID: {aws_access_key_id} \
+                    from EC2 metadata")
                 aws_session_token = cred["Token"]
                 log.info("Got Expiration of: {}".format(cred["Expiration"]))
-                expiration_str = cred["Expiration"][:-1] + "UTC" # trim off 'Z' and add 'UTC'
+                # trim off 'Z' and add 'UTC'
+                expiration_str = cred["Expiration"][:-1] + "UTC"
                 # save the expiration
-                app["token_expiration"] = datetime.datetime.strptime(expiration_str, "%Y-%m-%dT%H:%M:%S%Z")
+                fmt = "%Y-%m-%dT%H:%M:%S%Z"
+                app["token_expiration"] = \
+                    datetime.datetime.strptime(expiration_str, fmt)
             except json.JSONDecodeError:
-                msg = f"Unexpected error decoding EC2 meta-data response: {stdout}"
+                msg = f"Unexpected error decoding EC2 meta-data response: \
+{stdout}"
                 log.error(msg)
             except KeyError:
-                msg = f"Missing expected key from EC2 meta-data response: {stdout}"
+                msg = f"Missing expected key from EC2 meta-data response: \
+{stdout}"
                 log.error(msg)
 
     dynamodb_gateway = config.get('aws_dynamodb_gateway')
     if not dynamodb_gateway:
-        msg="Invalid aws dynamodb gateway"
+        msg = "Invalid aws dynamodb gateway"
         log.error(msg)
         raise ValueError(msg)
     use_ssl = False
     if dynamodb_gateway.startswith("https"):
         use_ssl = True
-    dynamodb = session.create_client('dynamodb', region_name=aws_region,
-                                   aws_secret_access_key=aws_secret_access_key,
-                                   aws_access_key_id=aws_access_key_id,
-                                   aws_session_token=aws_session_token,
-                                   endpoint_url=dynamodb_gateway,
-                                   use_ssl=use_ssl)
+    kwargs = {"region_name": aws_region,
+              "aws_secret_access_key": aws_secret_access_key,
+              "aws_access_key_id": aws_access_key_id,
+              "aws_session_token": aws_session_token,
+              "endpoint_url": dynamodb_gateway,
+              "use_ssl": use_ssl}
 
-    app['dynamodb'] = dynamodb  # save so same client can be returned in subsiquent calls
+    dynamodb = session.create_client('dynamodb',  **kwargs)
+    # save so same client can be returned in subsiquent calls
+    app['dynamodb'] = dynamodb
 
     return dynamodb
+
 
 def releaseDynamoDBClient(app):
     """ release the client collection to dynamoDB
@@ -129,14 +140,15 @@ def releaseDynamoDBClient(app):
         client.close()
         del app['dynamodb']
 
+
 def loadPasswordFile(password_file):
     log.info(f"using password file: {password_file}")
-    line_number = 0
+    line_num = 0
     user_db = {}
     try:
         with open(password_file) as f:
             for line in f:
-                line_number += 1
+                line_num += 1
                 s = line.strip()
                 if not s:
                     continue
@@ -145,17 +157,20 @@ def loadPasswordFile(password_file):
                     continue
                 fields = s.split(':')
                 if len(fields) < 2:
-                    msg = f"line: {line_number} of {password_file} is not valid"
+                    msg = f"line: {line_num} of {password_file} is not valid"
                     log.warn(msg)
                     continue
                 username = fields[0]
                 passwd = fields[1]
                 if len(username) < 3 or len(passwd) < 3:
-                    msg = f"line: {line_number} of {password_file} is not valid, username and password must be 3 characters are longer"
+                    msg = f"line: {line_num} of {password_file} is not valid,"
+                    msg += " username and password must be "
+                    msg += "3 characters are longer"
                     log.warn(msg)
                     continue
                 if username in user_db:
-                    msg = f"line: {line_number} of {password_file}, username is repated"
+                    msg = f"line: {line_num} of {password_file}, "
+                    msg += "username is repeated"
                     log.warn(msg)
                     continue
                 user_db[username] = {"pwd": passwd}
@@ -167,7 +182,8 @@ def loadPasswordFile(password_file):
 
 def initUserDB(app):
     """
-    Called at startup to initialize user/passwd dictionary from a password text file
+    Called at startup to initialize user/passwd dictionary from a
+    password text file
     """
     log.info("initUserDB")
     if "user_db" in app:
@@ -175,10 +191,12 @@ def initUserDB(app):
         log.warn(msg)
         return
 
-    if config.get("aws_dynamodb_gateway") and config.get("aws_dynamodb_users_table"):
+    if config.get("aws_dynamodb_gateway") and \
+            config.get("aws_dynamodb_users_table"):
         # user entries will be obtained dynamicaly
         log.info("Getting DynamoDB client")
-        getDynamoDBClient(app)  # get client here so any errors will be seen right away
+        # get client here so any errors will be seen right away
+        getDynamoDBClient(app)
         user_db = {}
     elif config.get("password_salt"):
         # use salt key to verify passwords
@@ -186,7 +204,7 @@ def initUserDB(app):
         user_db = {}
     else:
         password_file = config.get("password_file")
-        if not password_file or not pp.isfile(password_file) :
+        if not password_file or not pp.isfile(password_file):
             log.warn(f"No password file, file {password_file} not found")
             user_db = {}
         else:
@@ -196,6 +214,7 @@ def initUserDB(app):
     app["user_db"] = user_db
 
     log.info(f"user_db initialized: {len(user_db)} users")
+
 
 def setPassword(app, username, password, **kwargs):
     """
@@ -217,6 +236,7 @@ def setPassword(app, username, password, **kwargs):
         log.info(f"user_db adding user: {username}")
     user_db[username] = user_data
 
+
 def getPassword(app, username):
     """
     getPassword: gets a password and metadata if valid.
@@ -231,24 +251,28 @@ def getPassword(app, username):
         return user_data
     return None
 
+
 async def validateUserPasswordDynamoDB(app, username, password):
     """
     validateUserPassword: verify user and password.
         throws exception if not valid
-    Note: make this async since we'll eventually need some sort of http request to validate user/passwords
+    Note: make this async since we'll eventually need some sort of http
+        request to validate user/passwords
     """
     if getPassword(app, username) is None:
         # look up name in dynamodb table
         dynamodb = getDynamoDBClient(app)
         table_name = config.get("aws_dynamodb_users_table")
-        log.info(f"looking for user: {username} in DynamoDB table: {table_name}")
+        msg = f"looking for user: {username} in DynamoDB table: {table_name}"
+        log.info(msg)
         try:
             response = await dynamodb.get_item(
                 TableName=table_name,
                 Key={'username': {'S': username}}
             )
         except ClientError as e:
-            log.error("Unable to read dyanamodb table: {}".format(e.response['Error']['Message']))
+            msg = e.response['Error']['Message']
+            log.error(f"Unable to read dyanamodb table: {msg}")
             raise HTTPInternalServerError()  # 500
         if "Item" not in response:
             log.info(f"user: {username} not found")
@@ -268,13 +292,17 @@ async def validateUserPasswordDynamoDB(app, username, password):
         # add user/password to user_db map
         setPassword(app, username, password)
 
+
 def validatePasswordSHA512(app, username, password):
     if getPassword(app, username) is None:
         log.info(f"SHA512 check for username: {username}")
         salt = config.get("password_salt")
-        hex_hash = hashlib.sha512(username.encode('utf-8') + salt.encode('utf-8')).hexdigest()
+        hash_str = username.encode('utf-8') + salt.encode('utf-8')
+        hex_hash = hashlib.sha512(hash_str).hexdigest()
         if hex_hash[:32] != password:
-            log.warn(f"user password is not valid (didn't equal sha512 hash) for user: {username}")
+            msg = "user password is not valid (didn't equal sha512 hash) for "
+            msg += f"user: {username}"
+            log.warn(msg)
             raise HTTPUnauthorized()  # 401
         setPassword(app, username, password)
 
@@ -283,7 +311,8 @@ async def validateUserPassword(app, username, password):
     """
     validateUserPassword: verify user and password.
         throws exception if not valid
-    Note: make this async since we'll eventually need some sort of http request to validate user/passwords
+    Note: make this async since we'll eventually need some sort of http
+        request to validate user/passwords
     """
     log.debug(f"validateUserPassword username: {username}")
 
@@ -313,14 +342,15 @@ async def validateUserPassword(app, username, password):
             validatePasswordSHA512(app, username, password)
         else:
             log.warn(f"user: {username} not found")
-            raise HTTPUnauthorized() # 401
+            raise HTTPUnauthorized()  # 401
         user_data = getPassword(app, username)
 
     if user_data['pwd'] == password:
         log.debug("user password validated")
     else:
         log.info(f"user password is not valid for user: {username}")
-        raise HTTPUnauthorized() # 401
+        raise HTTPUnauthorized()  # 401
+
 
 def _checkTokenCache(app, token):
     # iterate through use_db and return username if this token if found
@@ -329,18 +359,22 @@ def _checkTokenCache(app, token):
     if "user_db" not in app:
         return None
     user_db = app["user_db"]
-    expired_ids = set() # might as well clean up any expired tokens we find
+    expired_ids = set()  # might as well clean up any expired tokens we find
     user_id = None
     for username in user_db:
         user = user_db[username]
         if "scheme" not in user or user["scheme"] != "bearer":
             continue
         if "exp" not in user:
-            log.warn(f"expected to find key: 'exp' in user data for user: {username}")
+            msg = "expected to find key: 'exp' in user data "
+            msg += f" for user: {username}"
+            log.warn(msg)
             continue
         exp = user["exp"]
         if "pwd" not in user:
-            log.warn(f"expected to find key: 'pwd' in user data for user: {username}")
+            msg = "expected to find key: 'pwd' in user data "
+            msg += f"for user: {username}"
+            log.warn(msg)
             continue
         if "pwd" not in user or user["pwd"] != token:
             continue
@@ -360,10 +394,13 @@ def _checkTokenCache(app, token):
 
     return user_id
 
+
 def loadGroupsFile(group_file):
-    """ 
-    Parse the given file and return a dict where each key is a group name and the key value is a set of usernames.
-    Expectedd format of the file is multiple lines with each line being: <group_name>: user1 user2 user3.
+    """
+    Parse the given file and return a dict where each key is a group name and
+    the key value is a set of usernames.
+    Expectedd format of the file is multiple lines with each line being:
+       <group_name>: user1 user2 user3.
     Hashmakr '#' in the first column indicates comment and the line is ignored.
     """
     log.info(f"using group file: {group_file}")
@@ -391,7 +428,8 @@ def loadGroupsFile(group_file):
                 log.debug(f"group: {group_name} users: {user_names}")
 
                 if group_name in group_db:
-                    msg = f"line: {line_number} of {group_file} group name: {group_name} is repeated"
+                    msg = f"line: {line_number} of {group_file} "
+                    msg += f"group name: {group_name} is repeated"
                     log.warn(msg)
                 else:
                     group_db[group_name] = set()
@@ -401,7 +439,9 @@ def loadGroupsFile(group_file):
                     if not user_name:
                         continue  # skip null naame
                     if len(user_name) < 3:
-                        msg = f"line: {line_number} of {group_file} is not valid, username must be 3 characters are longer"
+                        msg = f"line: {line_number} of {group_file} "
+                        msg += "is not valid, username must be 3 characters "
+                        msg += "or longer"
                         log.warn(msg)
                         continue
                     group_set.add(user_name)
@@ -409,6 +449,7 @@ def loadGroupsFile(group_file):
     except FileNotFoundError:
         log.error(f"unable to open group file: {group_file}")
     return group_db
+
 
 def initGroupDB(app):
     """
@@ -421,7 +462,7 @@ def initGroupDB(app):
         return
 
     groups_file = config.get("groups_file")
-    if not groups_file or not pp.isfile(groups_file) :
+    if not groups_file or not pp.isfile(groups_file):
         log.info("No groups file")
         group_user_db = {}
     else:
@@ -441,189 +482,6 @@ def initGroupDB(app):
 
     log.info(f"group_db initialized: {len(group_user_db)} groups")
 
-def _verifyBearerToken(app, token):
-    # Contact OpenID provider to validate bearer token.
-    # if valid, update user db and return username
-    username = None
-    provider = config.get('openid_provider')
-    user_group_db = app["user_group_db"]
-    if not provider:
-        log.warn("no OpenID provider configured")
-        raise HTTPUnauthorized()
-    # Resolve provider into an OpenID configuration.
-    log.debug(f"Using OpenID provider: {provider}")
-    if provider.lower() == 'azure':
-        openid_url = MSONLINE_OPENID_URL
-    elif provider.lower() == 'google':
-        openid_url = GOOGLE_OPENID_URL
-    else:
-        openid_url = config.get('openid_url')
-        if not openid_url:
-            log.warn(f"OpenID provider: {provider} requires 'openid_url' config to be set")
-            raise HTTPUnauthorized()
-
-    audience = config.get('openid_audience')
-    claims = config.get('openid_claims').split(',')
-
-    # Maintain Azure defaults for compatibility.
-    if not audience:
-        audience = config.get('azure_resource_id')
-
-    # If we still dont have a provider and audience, abort.
-    if not openid_url or not audience or not claims:
-        log.warn('Bearer authorization, but no OpenID configuration.')
-        raise HTTPUnauthorized()
-
-    log.debug(f"Bearer authorization, using provider: {provider}")
-    log.debug(f"Bearer authorization, using audience: {audience}")
-    log.debug(f"Bearer authorization, using claims: {claims}")
-    if provider not in ('azure', 'google'):
-        log.debug(f"Bearer authorization, using openid_url: {openid_url}")
-
-    log.debug(f"token: {token}")
-
-    try:
-        token_header = jwt.get_unverified_header(token)
-    except DecodeError as de:
-        log.warn(f"Decode error in jwt get_unverified_header: {de}")
-        raise HTTPUnauthorized()
-    except ValueError as ve:
-        log.warn(f"Value error in jwt get_unverified_header: {ve}")
-        raise HTTPUnauthorized()
-    except Exception as e:
-        log.warn(f"Unexpected exception {e.__class__.__name__} in jwt get_unverified_header: {e}")
-        raise HTTPUnauthorized()
-
-    try:
-        res = requests.get(openid_url, timeout=1.0)
-    except requests.exceptions.ConnectionError:
-        log.warn(f"connection error for getting openid configuration from : {openid_url}")
-        raise HTTPInternalServerError()
-    if res.status_code != 200:
-        log.warn("Bad response from {openid_url}: {res.status_code}")
-        if res.status_code == 404:
-            raise HTTPNotFound()
-        elif res.status_code == 401:
-            raise HTTPUnauthorized()
-        elif res.status_code == 403:
-            raise HTTPForbidden()
-        elif res.status_code == 503:
-            raise HTTPServiceUnavailable()
-        else:
-            raise HTTPInternalServerError()
-
-    jwk_uri = res.json()['jwks_uri']
-
-    # TBD: cache responses by uri
-    res = requests.get(jwk_uri)
-    jwk_keys = res.json()
-    x5c = None
-    rsa = {}
-    log.info("_verifyBearerToken")
-
-    # Iterate JWK keys and extract matching x5c chain
-    for key in jwk_keys['keys']:
-        if key['kid'] == token_header['kid']:
-            if 'x5c' in key:
-                x5c = key['x5c']
-            elif 'e' in key and 'n' in key:
-                for field in ['e', 'n']:
-                    val = key[field]
-                    val = val + '='*((4 - len(val)%4)%4)
-                    val = base64.urlsafe_b64decode(val.encode('utf-8'))
-                    rsa[field] = int.from_bytes(val, 'big')
-
-    # Use the X5C chain to load a public key.
-    if x5c:
-        log.debug("using x5c public key")
-        cert = ''.join([
-            '-----BEGIN CERTIFICATE-----\n',
-            x5c[0],
-            '\n-----END CERTIFICATE-----\n',
-            ])
-        public_key = load_pem_x509_certificate(cert.encode(), default_backend()).public_key()
-        """
-        public_key_bytes = public_key.public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo)
-        log.debug(f"got public key: {public_key_bytes.decode('utf-8')}")
-        """
-
-
-    # Use RSA numbers to load a public key.
-    elif rsa:
-        log.debug("using rsa public key")
-        public_key = RSAPublicNumbers(**rsa).public_key(default_backend())
-
-    # We cannot load a public key.
-    else:
-        log.error("Unable to extract x5c chain or RSA key from JWK keys")
-        raise HTTPInternalServerError()
-
-    #log.debug(f"bearer token - public_key: {public_key}")
-
-    
-    try:
-        jwt_decode = jwt.decode(
-            token,
-            public_key,
-            algorithms='RS256',
-            audience=audience,
-        )
-    except InvalidAudienceError:
-        log.warn(f"OpenID InvalidAudienceError with {audience}")
-        raise HTTPUnauthorized()
-    except InvalidSignatureError:
-        log.warn("OpenID InvalidSignatureError")
-        raise HTTPUnauthorized()
-    except ExpiredSignatureError:
-        log.warn("OpenID ExpiredSignatureError")
-        raise HTTPUnauthorized()
-
-    roles = None
-    for name in claims:
-        log.debug(f"looking at claim: {name}")
-        if name in jwt_decode:
-            value = jwt_decode[name]
-            log.debug(f"got value: {value} for claim: {name}")
-            if name == "unique_name":
-                username = value
-            elif name == "appid":
-                pass # tbd
-            elif name == "roles":
-                roles = value
-            else:
-                log.info(f"ignoring claim: {name} with value: {value}")
-        else:
-            log.debug(f"claim: {name} not found in bearer token")
-    
-    if not username:
-        log.warn("unable to retreive username from bearer token")
-        return None
-    if roles:
-        if username not in user_group_db:
-            user_group_db[username] = set()
-        user_group = user_group_db[username]
-        for role in roles:
-            user_group.add(role)
-
-    exp = None
-    log.debug(f"decoded token: {jwt_decode}")
-    if "exp" in jwt_decode:
-        exp = jwt_decode["exp"]
-        if exp < 0:
-            log.warn("invalid expire time")
-            raise HTTPUnauthorized()
-
-    if exp:
-        log.info(f"decoded bearer token for user: {username}, expired: {exp}")
-        setPassword(app, username, token, scheme="bearer", exp=exp)
-    else:
-        log.info(f"decoded bearer token for user: {username}, no expiration")
-        setPassword(app, username, token, scheme="bearer")
-
-    return username
-
 
 def getUserPasswordFromRequest(request):
     """ Return user defined in Auth header (if any)
@@ -634,11 +492,10 @@ def getUserPasswordFromRequest(request):
     if 'Authorization' not in request.headers:
         log.debug("no Authorization in header")
         return None, None
-    scheme, _, token =  request.headers.get('Authorization', '').partition(' ')
+    scheme, _, token = request.headers.get('Authorization', '').partition(' ')
     if not scheme or not token:
         log.info("Invalid Authorization header")
         raise HTTPBadRequest(reason="Invalid Authorization header")
-
 
     if scheme.lower() == 'basic':
         log.debug("using basic authorization")
@@ -665,13 +522,30 @@ def getUserPasswordFromRequest(request):
     elif scheme.lower() == 'bearer':
         # OpenID Auth.
         log.debug(f"Got OpenID bearer token: {token}")
+        user_group_db = app["user_group_db"]
 
         # see if we've already validated this token
         user = _checkTokenCache(app, token)
         if not user:
-            user = _verifyBearerToken(app, token)
-        if user:
-            pswd = token
+            # put import here to avoid jwt package dependency unless required
+            from .jwtUtil import verifyBearerToken
+            user, exp, roles = verifyBearerToken(app, token)
+            if exp:
+                msg = f"decoded bearer token for user: {user}, expired: {exp}"
+                log.info(msg)
+                setPassword(app, user, token, scheme="bearer", exp=exp)
+            else:
+                msg = f"decoded bearer token for user: {user}, no expiration"
+                log.info(msg)
+                setPassword(app, user, token, scheme="bearer")
+            if user:
+                pswd = token
+            if roles:
+                if user not in user_group_db:
+                    user_group_db[user] = set()
+                user_group = user_group_db[user]
+                for role in roles:
+                    user_group.add(role)
 
     else:
         msg = f"Unsupported Authorization header scheme: {scheme}"
@@ -679,6 +553,7 @@ def getUserPasswordFromRequest(request):
         raise HTTPBadRequest(reason=msg)
 
     return user, pswd
+
 
 def isAdminUser(app, username):
     """ Return true if user is an admin """
@@ -697,21 +572,22 @@ def isAdminUser(app, username):
         return True
     return False
 
+
 def aclCheck(app, obj_json, req_action, req_user):
     log.info(f"aclCheck: {req_action} for user: {req_user}")
     if isAdminUser(app, req_user):
         return  # allow admin user to do anything
     if obj_json is None:
         log.error("aclCheck: no obj json")
-        raise HTTPInternalServerError() # 500
+        raise HTTPInternalServerError()  # 500
     if "acls" not in obj_json:
         log.error("no acl key")
-        raise HTTPInternalServerError() # 500
+        raise HTTPInternalServerError()  # 500
     acls = obj_json["acls"]
     log.debug(f"acls: {acls}")
-    if req_action not in ("create", "read", "update", "delete", "readACL", "updateACL"):
+    if req_action not in ACL_KEYS:
         log.error(f"unexpected req_action: {req_action}")
-    
+
     if req_user in acls:
         acl = acls[req_user]
         log.debug(f"got acl: {acl} for user: {req_user}")
@@ -720,7 +596,8 @@ def aclCheck(app, obj_json, req_action, req_user):
             return
         else:
             # treat deny for username as authorative deny
-            log.warn(f"Action: {req_action} not permitted for user: {req_user}")
+            msg = f"Action: {req_action} not permitted for user: {req_user}"
+            log.warn(msg)
             raise HTTPForbidden()  # 403
 
     if "default" in acls:
@@ -741,22 +618,22 @@ def aclCheck(app, obj_json, req_action, req_user):
                 if req_action in acl and acl[req_action]:
                     log.debug(f"action permitted by group acl: {acl_name}")
                     return
-    
     log.warn(f"Action: {req_action} not permitted for user: {req_user}")
     raise HTTPForbidden()  # 403
 
+
 def validateAclJson(acl_json):
-    acl_keys = getAclKeys()
     for username in acl_json.keys():
         acl = acl_json[username]
         for acl_key in acl.keys():
-            if acl_key not in acl_keys:
+            if acl_key not in ACL_KEYS:
                 msg = f"Invalid ACL key: {acl_key}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
             acl_value = acl[acl_key]
             if acl_value not in (True, False):
                 msg = f"Invalid ACL value: {acl_value}"
+
 
 def aclOpForRequest(request):
     """ return default ACL action for request method
@@ -775,10 +652,6 @@ def aclOpForRequest(request):
         req_action = "read"
     return req_action
 
+
 def getAclKeys():
-    """ Return the set of ACL keys """
-    return ('create', 'read', 'update', 'delete', 'readACL', 'updateACL')
-
-
-    
-    
+    return ACL_KEYS

@@ -16,22 +16,24 @@ import time
 from copy import copy
 from bisect import bisect_left
 
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict
+from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.web import json_response
 
-
-from .util.idUtil import  isValidUuid
+from .util.idUtil import isValidUuid
 from .util.linkUtil import validateLinkName
 from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
 from . import hsds_logger as log
 
-def index(a, x):
+
+def _index(a, x):
     """ Locate the leftmost value exactly equal to x
     """
     i = bisect_left(a, x)
     if i != len(a) and a[i] == x:
         return i
     return -1
+
 
 async def GET_Links(request):
     """HTTP GET method to return JSON for a link collection
@@ -79,7 +81,7 @@ async def GET_Links(request):
 
     start_index = 0
     if marker is not None:
-        start_index = index(titles, marker) + 1
+        start_index = _index(titles, marker) + 1
         if start_index == 0:
             # marker not found, return 404
             msg = f"Link marker: {marker}, not found"
@@ -101,6 +103,7 @@ async def GET_Links(request):
     resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
+
 
 async def GET_Link(request):
     """HTTP GET method to return JSON for a link
@@ -140,6 +143,7 @@ async def GET_Link(request):
     resp = json_response(link_json)
     log.response(request, resp=resp)
     return resp
+
 
 async def PUT_Link(request):
     """ Handler creating a new link"""
@@ -210,7 +214,7 @@ async def PUT_Link(request):
     # write back to S3, save to metadata cache
     await save_metadata_obj(app, group_id, group_json, bucket=bucket)
 
-    resp_json = { }
+    resp_json = {}
 
     resp = json_response(resp_json, status=201)
     log.response(request, resp=resp)

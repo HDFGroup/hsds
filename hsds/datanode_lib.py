@@ -15,9 +15,14 @@
 import asyncio
 import time
 import numpy as np
-from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError, HTTPBadRequest, HTTPNotFound, HTTPForbidden, HTTPServiceUnavailable
-from .util.idUtil import validateInPartition, getS3Key, isValidUuid, isValidChunkId, getDataNodeUrl, isSchema2Id, getRootObjId, isRootObjId
-from .util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes, getStorBytes, isStorObj, deleteStorObj
+from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPNotFound, HTTPForbidden
+from aiohttp.web_exceptions import HTTPServiceUnavailable, HTTPBadRequest
+from .util.idUtil import validateInPartition, getS3Key, isValidUuid
+from .util.idUtil import isValidChunkId, getDataNodeUrl, isSchema2Id
+from .util.idUtil import getRootObjId, isRootObjId
+from .util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes
+from .util.storUtil import getStorBytes, isStorObj, deleteStorObj
 from .util.domainUtil import isValidDomain, getBucketForDomain
 from .util.attrUtil import getRequestCollectionName
 from .util.httpUtil import http_post
@@ -34,14 +39,14 @@ def get_obj_id(request, body=None):
     """ Get object id from request
         Raise HTTPException on errors.
     """
-
     obj_id = None
     collection = None
     app = request.app
     if body and "id" in body:
         obj_id = body["id"]
     else:
-        collection = getRequestCollectionName(request) # returns datasets|groups|datatypes
+        # returns datasets|groups|datatypes
+        collection = getRequestCollectionName(request)
         obj_id = request.match_info.get('id')
 
     if not obj_id:
@@ -62,8 +67,10 @@ def get_obj_id(request, body=None):
 
     return obj_id
 
+
 async def notify_root(app, root_id, bucket=None):
-    # flag to write to S3
+    """ flag to write to S3
+    """
 
     log.info(f"notify_root: {root_id}")
     if not isValidUuid(root_id) or not isSchema2Id(root_id):
@@ -75,6 +82,7 @@ async def notify_root(app, root_id, bucket=None):
     if bucket:
         params["bucket"] = bucket
     await http_post(app, notify_req, data={}, params=params)
+
 
 async def check_metadata_obj(app, obj_id, bucket=None):
     """ Return False is obj does not exist
@@ -105,10 +113,13 @@ async def check_metadata_obj(app, obj_id, bucket=None):
         found = await isStorObj(app, s3_key, bucket=bucket)
     return found
 
+
 async def write_s3_obj(app, obj_id, bucket=None):
     """ writes the given object to s3 """
     s3key = getS3Key(obj_id)
-    log.info(f"write_s3_obj for obj_id: {obj_id} / s3_key: {s3key}  bucket: {bucket}")
+    msg = f"write_s3_obj for obj_id: {obj_id} / s3_key: {s3key}  "
+    msg += f"bucket: {bucket}"
+    log.info(msg)
     pending_s3_write = app["pending_s3_write"]
     pending_s3_write_tasks = app["pending_s3_write_tasks"]
     dirty_ids = app["dirty_ids"]
@@ -122,18 +133,21 @@ async def write_s3_obj(app, obj_id, bucket=None):
     if isValidDomain(obj_id):
         domain_bucket = getBucketForDomain(obj_id)
         if bucket and bucket != domain_bucket:
-            log.error(f"expected bucket for domain: {obj_id} to match what was passed to write_s3_obj")
+            msg = f"expected bucket for domain: {obj_id} to match what was "
+            msg += "passed to write_s3_obj"
+            log.error(msg)
         else:
             bucket = domain_bucket
 
     if obj_id in pending_s3_write:
-        msg = f"write_s3_key - not expected for key {obj_id} to be in pending_s3_write map"
+        msg = f"write_s3_key - not expected for key {obj_id} to be in "
+        msg += "pending_s3_write map"
         log.error(msg)
         raise KeyError(msg)
 
     if obj_id in deleted_ids and isValidUuid(obj_id):
-        # if this objid has been deleted (and its unique since this is not a domain id)
-        # cancel any pending task and return
+        # if this objid has been deleted (and its unique since this is
+        # not a domain id) cancel any pending task and return
         log.warn(f"Canceling write for {obj_id} since it has been deleted")
         if obj_id in pending_s3_write_tasks:
             log.info(f"removing pending s3 write task for {obj_id}")
@@ -146,16 +160,21 @@ async def write_s3_obj(app, obj_id, bucket=None):
 
     last_update_time = now
     if obj_id in dirty_ids:
-        last_update_time = dirty_ids[obj_id][0]  # timestamp is first element of two-tuple
+        # timestamp is first element of two-tuple
+        last_update_time = dirty_ids[obj_id][0]
     else:
-        log.debug(f"write_s3_obj - {obj_id} not in dirty_ids, assuming flush write")
+        msg = f"write_s3_obj - {obj_id} not in dirty_ids, "
+        msg += "assuming flush write"
+        log.debug(msg)
     if last_update_time > now:
-        msg = f"last_update time {last_update_time} is in the future for obj_id: {obj_id}"
+        msg = f"last_update time {last_update_time} is in the future for "
+        msg += f"obj_id: {obj_id}"
         log.error(msg)
         raise ValueError(msg)
 
     pending_s3_write[obj_id] = now
-    # do the following in the try block so we can always remove the pending_s3_write at the end
+    # do the following in the try block so we can always remove the
+    # pending_s3_write at the end
 
     try:
         if isValidChunkId(obj_id):
@@ -170,32 +189,53 @@ async def write_s3_obj(app, obj_id, bucket=None):
             dset_id = getDatasetId(obj_id)
             if dset_id in filter_map:
                 filter_ops = filter_map[dset_id]
-                log.debug(f"write_s3_obj: got filter_op: {filter_ops} for dset: {dset_id}")
+                msg = f"write_s3_obj: got filter_op: {filter_ops} "
+                msg += f"for dset: {dset_id}"
+                log.debug(msg)
             else:
                 filter_ops = None
                 log.debug(f"write_s3_obj: no filter_op for dset: {dset_id}")
 
-            await putStorBytes(app, s3key, chunk_bytes, filter_ops=filter_ops, bucket=bucket)
+            kwargs = {"bucket": bucket, "filter_ops": filter_ops}
+            await putStorBytes(app, s3key, chunk_bytes, **kwargs)
             success = True
 
             # if chunk has been evicted from cache something has gone wrong
             if obj_id not in chunk_cache:
-                msg = f"write_s3_obj: expected to find {obj_id} in chunk_cache"
+                msg = f"write_s3_obj: expected to find {obj_id} "
+                msg += "in chunk_cache"
                 log.error(msg)
-            elif obj_id in dirty_ids and dirty_ids[obj_id][0] > last_update_time:
-                log.info(f"write_s3_obj {obj_id} got updated while s3 write was in progress")
             else:
-                # no new write, can clear dirty
-                chunk_cache.clearDirty(obj_id)  # allow eviction from cache
-                log.debug("write_s3_obj: {} updated - Chunk cache utilization: {} per, dirty_count: {}".format(obj_id, chunk_cache.cacheUtilizationPercent, chunk_cache.dirtyCount))
+                if obj_id in dirty_ids:
+                    timestamp = dirty_ids[obj_id][0]
+                else:
+                    timestamp = 0
+                if timestamp > last_update_time:
+                    msg = f"write_s3_obj {obj_id} got updated while s3 "
+                    msg += "write was in progress"
+                    log.info(msg)
+                else:
+                    # no new write, can clear dirty
+                    # allow eviction from cache
+                    chunk_cache.clearDirty(obj_id)
+                    cache_utilization = chunk_cache.cacheUtilizationPercent
+                    dirty_count = chunk_cache.dirtyCount
+                    msg = f"write_s3_obj: {obj_id} updated - "
+                    msg += f"Chunk cache utilization: {cache_utilization} "
+                    msg += "per, dirty_count: {dirty_count}"
+                    log.debug(msg)
         else:
             # meta data update
             # check for object in meta cache
             if obj_id not in meta_cache:
-                log.error(f"write_s3_obj: expected to find obj_id: {obj_id} in meta cache")
+                msg = f"write_s3_obj: expected to find obj_id: {obj_id} "
+                msg += "in meta cache"
+                log.error(msg)
                 raise KeyError(f"{obj_id} not found in meta cache")
             if not meta_cache.isDirty(obj_id):
-                log.error(f"write_s3_obj: expected meta cache obj {obj_id} to be dirty")
+                msg = f"write_s3_obj: expected meta cache obj {obj_id} "
+                msg == "to be dirty"
+                log.error(msg)
                 raise ValueError("bad dirty state for obj")
             obj_json = meta_cache[obj_id]
 
@@ -203,23 +243,38 @@ async def write_s3_obj(app, obj_id, bucket=None):
             success = True
             # should still be in meta_cache...
             if obj_id in deleted_ids:
-                log.info(f"write_s3_obj: obj {obj_id} has been deleted while write was in progress")
+                msg = f"write_s3_obj: obj {obj_id} has been deleted "
+                msg += "while write was in progress"
+                log.info(msg)
             elif obj_id not in meta_cache:
                 msg = f"write_s3_obj: expected to find {obj_id} in meta_cache"
                 log.error(msg)
-            elif obj_id in dirty_ids and dirty_ids[obj_id][0] > last_update_time:
-                log.info(f"write_s3_obj: {obj_id} got updated while s3 write was in progress")
             else:
-                log.debug(f"write_s3obj: clear dirty for {obj_id} ")
-                meta_cache.clearDirty(obj_id)  # allow eviction from cache
-                log.debug("write_s3_obj: {} updated - Meta cache utilization: {} per, dirty_count: {}".format(obj_id, meta_cache.cacheUtilizationPercent, meta_cache.dirtyCount))
+                if obj_id in dirty_ids:
+                    timestamp = dirty_ids[obj_id][0]
+                else:
+                    timestamp = 0
+                if timestamp > last_update_time:
+                    msg = f"write_s3_obj: {obj_id} got updated while s3 "
+                    msg += "write was in progress"
+                    log.info(msg)
+                else:
+                    log.debug(f"write_s3obj: clear dirty for {obj_id} ")
+                    meta_cache.clearDirty(obj_id)  # allow eviction from cache
+                    cache_utilization = chunk_cache.cacheUtilizationPercent
+                    dirty_count = chunk_cache.dirtyCount
+                    msg = f"write_s3_obj: {obj_id} updated - "
+                    msg += f"Meta cache utilization: {cache_utilization} per, "
+                    msg += f"dirty_count: {dirty_count}"
+                    log.debug(msg)
 
     finally:
         # clear pending_s3_write item
         log.debug(f"write_s3_obj finally block, success={success}")
         if obj_id in pending_s3_write:
             if pending_s3_write[obj_id] != now:
-                msg = f"pending_s3_write timestamp got updated unexpectedly for {obj_id}"
+                msg = "pending_s3_write timestamp got updated unexpectedly "
+                msg += f"for {obj_id}"
                 log.error(msg)
             del pending_s3_write[obj_id]
         # clear task
@@ -230,11 +285,16 @@ async def write_s3_obj(app, obj_id, bucket=None):
             del pending_s3_write_tasks[obj_id]
         # clear dirty flag
         if obj_id not in dirty_ids:
-            log.warn(f"write_s3_obj - expected to find id: {obj_id} in dirty_ids")
+            msg = f"write_s3_obj - expected to find id: {obj_id} in dirty_ids"
+            log.warn(msg)
         elif not success:
-            log.warn(f"write_s3_obj - write not successful, for {obj_id} keeping dirty flag")
+            msg = f"write_s3_obj - write not successful, for {obj_id} "
+            msg += "keeping dirty flag"
+            log.warn(msg)
         elif dirty_ids[obj_id][0] > last_update_time:
-            log.warn(f"write_s3_obj - {obj_id} has been modified during write, keeping dirty flag")
+            msg = f"write_s3_obj - {obj_id} has been modified during "
+            msg += "write, keeping dirty flag"
+            log.warn(msg)
         else:
             log.debug(f"clearing dirty flag for {obj_id}")
             del dirty_ids[obj_id]
@@ -248,7 +308,6 @@ async def write_s3_obj(app, obj_id, bucket=None):
     elapsed_time = time.time() - now
     log.info(f"s3 write for {obj_id} took {elapsed_time:.3f}s")
     return obj_id
-
 
 
 async def get_metadata_obj(app, obj_id, bucket=None):
@@ -281,7 +340,9 @@ async def get_metadata_obj(app, obj_id, bucket=None):
         if obj_id in pending_s3_read:
             # already a read in progress, wait for it to complete
             read_start_time = pending_s3_read[obj_id]
-            log.info(f"s3 read request for {s3_key} was requested at: {read_start_time}")
+            msg = f"s3 read request for {s3_key} was "
+            msg += f"requested at: {read_start_time}"
+            log.info(msg)
             while time.time() - read_start_time < 2.0:
                 log.debug("waiting for pending s3 read, sleeping")
                 await asyncio.sleep(1)  # sleep for sub-second?
@@ -290,7 +351,9 @@ async def get_metadata_obj(app, obj_id, bucket=None):
                     obj_json = meta_cache[obj_id]
                     break
             if not obj_json:
-                log.warn(f"s3 read for object {obj_id} timed-out, initiaiting a new read")
+                msg = f"s3 read for object {obj_id} timed-out, "
+                msg += "initiaiting a new read"
+                log.warn(msg)
 
         # invoke S3 read unless the object has just come in from pending read
         if not obj_json:
@@ -305,26 +368,35 @@ async def get_metadata_obj(app, obj_id, bucket=None):
                 log.info(f"s3 read for {obj_id} took {elapsed_time}")
                 meta_cache[obj_id] = obj_json  # add to cache
             except HTTPNotFound:
-                log.warn(f"HTTPNotFound for {obj_id} bucket:{bucket} s3key: {s3_key}")
+                msg = f"HTTPNotFound for {obj_id} bucket:{bucket} "
+                msg += f"s3key: {s3_key}"
+                log.warn(msg)
                 if obj_id in deleted_ids and isValidDomain(obj_id):
                     raise HTTPGone()
                 raise
             except HTTPForbidden:
-                log.warn(f"HTTPForbidden error for {obj_id} bucket:{bucket} s3key: {s3_key}")
+                msg = f"HTTPForbidden error for {obj_id} bucket:{bucket} "
+                msg += f"s3key: {s3_key}"
+                log.warn(msg)
                 raise
             except HTTPInternalServerError:
-                log.warn(f"HTTPInternalServerError error for {obj_id} bucket:{bucket} s3key: {s3_key}")
+                msg = f"HTTPInternalServerError error for {obj_id} "
+                msg += f"bucket:{bucket} s3key: {s3_key}"
+                log.warn(msg)
                 raise
             finally:
                 if obj_id in pending_s3_read:
                     del pending_s3_read[obj_id]
-           
+
     return obj_json
 
 
-async def save_metadata_obj(app, obj_id, obj_json, bucket=None, notify=False, flush=False):
+async def save_metadata_obj(app, obj_id, obj_json,
+                            bucket=None, notify=False, flush=False):
     """ Persist the given object """
-    log.info(f"save_metadata_obj {obj_id} bucket={bucket} notify={notify} flush={flush}")
+    msg = f"save_metadata_obj {obj_id} bucket={bucket} notify={notify} "
+    msg += f"flush={flush}"
+    log.info(msg)
     if notify and not flush:
         log.error("notify not valid when flush is false")
         raise HTTPInternalServerError()
@@ -339,7 +411,7 @@ async def save_metadata_obj(app, obj_id, obj_json, bucket=None, notify=False, fl
         log.error(f"Object {obj_id} not in partition")
         raise HTTPInternalServerError()
 
-    if  isValidChunkId(obj_id):
+    if isValidChunkId(obj_id):
         log.warn(f"save_metadata_obj {obj_id} not supported for chunks")
         raise HTTPBadRequest()
 
@@ -381,7 +453,8 @@ async def save_metadata_obj(app, obj_id, obj_json, bucket=None, notify=False, fl
             log.warn(f" failed to write {obj_id}")
             raise  # re-throw
         if obj_id in dirty_ids:
-            log.warn(f"save_metadata_obj flush - object {obj_id} is still dirty")
+            msg = f"save_metadata_obj flush - object {obj_id} is still dirty"
+            log.warn(msg)
         # message immediately if notify flag is set
         # otherwise node for root will be notified at next S3 sync
         if notify:
@@ -389,11 +462,10 @@ async def save_metadata_obj(app, obj_id, obj_json, bucket=None, notify=False, fl
             if isValidUuid(obj_id) and isSchema2Id(obj_id):
                 root_id = getRootObjId(obj_id)
                 await notify_root(app, root_id, bucket=bucket)
-        
 
 
-
-async def delete_metadata_obj(app, obj_id, notify=True, root_id=None, bucket=None):
+async def delete_metadata_obj(app, obj_id, notify=True,
+                              root_id=None, bucket=None):
     """ Delete the given object """
     meta_cache = app['meta_cache']
     dirty_ids = app["dirty_ids"]
@@ -428,7 +500,8 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None, bucket=Non
     if await isStorObj(app, s3key, bucket=bucket):
         await deleteStorObj(app, s3key, bucket=bucket)
     else:
-        log.info(f"delete_metadata_obj - key {s3key} not found (never written)?")
+        msg = f"delete_metadata_obj - key {s3key} not found (never written)?"
+        log.info(msg)
 
     if isValidUuid(obj_id) and isSchema2Id(obj_id):
         if isRootObjId(obj_id):
@@ -443,28 +516,36 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None, bucket=Non
 
     log.debug(f"delete_metadata_obj for {obj_id} done")
 
-"""
-Utility method for GET_Chunk, PUT_Chunk, and POST_CHunk
-Get a numpy array for the chunk (possibly initizaling a new chunk if requested)
-"""
-async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset=0, s3size=0, chunk_init=False):
-    # if the chunk cache has too many dirty items, wait till items get flushed to S3
+
+async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None,
+                    s3offset=0, s3size=0, chunk_init=False):
+    """
+    Utility method for GET_Chunk, PUT_Chunk, and POST_CHunk
+    Get a numpy array for the chunk (possibly initizaling a new chunk
+    if requested)
+    """
+    # if the chunk cache has too many dirty items, wait till items
+    # get flushed to S3
     MAX_WAIT_TIME = 10.0  # TBD - make this a config
     chunk_cache = app['chunk_cache']
     if chunk_init and s3offset > 0:
-        log.error(f"unable to initiale chunk {chunk_id} for reference layouts ")
-        raise  HTTPInternalServerError()
+        msg = f"unable to initiale chunk {chunk_id} for reference layouts "
+        log.error(msg)
+        raise HTTPInternalServerError()
     if s3path and s3size == 0:
-        log.error(f"Unexpected get_chunk parameter - s3path: {s3path} with size 0")
-        raise  HTTPInternalServerError()
+        msg = f"Unexpected get_chunk parameter - s3path: {s3path} with size 0"
+        log.error(msg)
+        raise HTTPInternalServerError()
 
     if "oio_proxy" in app or "is_k8s" in app:
         # TBD - rangeget proxy not supported on k8s yet
         use_proxy = False
     else:
         use_proxy = True
-
-    log.debug(f"getChunk cache utilization: {chunk_cache.cacheUtilizationPercent} per, dirty_count: {chunk_cache.dirtyCount}, mem_dirty: {chunk_cache.memDirty}")
+    msg = f"getChunk cache utilization: {chunk_cache.cacheUtilizationPercent}"
+    msg += f" per, dirty_count: {chunk_cache.dirtyCount}, "
+    msg += f"mem_dirty: {chunk_cache.memDirty}"
+    log.debug(msg)
 
     chunk_arr = None
     dims = getChunkLayout(dset_json)
@@ -476,10 +557,12 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset
         layout_class = layout["class"]
 
     dt = createDataType(type_json)
-    # note - officially we should follow the order in which the filters are defined in the filter_list,
-    # but since we currently have just deflate and shuffle we will always apply deflate then shuffle on read,
-    # and shuffle then deflate on write
-    # also note - get deflate and shuffle will update the deflate and shuffle map so that the s3sync will do the right thing
+    # note - officially we should follow the order in which the filters are
+    # defined in the filter_list,
+    # but since we currently have just deflate and shuffle we will always
+    # apply deflate then shuffle on read, and shuffle then deflate on write
+    # also note - get deflate and shuffle will update the deflate and
+    # shuffle map so that the s3sync will do the right thing
     filter_ops = getFilterOps(app, dset_json, item_size)
     s3key = None
 
@@ -495,7 +578,9 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset
             raise HTTPInternalServerError()
         bucket = path[:index]
         s3key = path[(index+1):]
-        log.debug(f"Using s3path bucket: {bucket} and  s3key: {s3key} offset: {s3offset} length: {s3size}")
+        msg = f"Using s3path bucket: {bucket} and  s3key: {s3key} "
+        msg += f"offset: {s3offset} length: {s3size}"
+        log.debug(msg)
     else:
         s3key = getS3Key(chunk_id)
         log.debug(f"getChunk chunkid: {chunk_id} bucket: {bucket}")
@@ -509,7 +594,9 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset
         if chunk_id in pending_s3_read:
             # already a read in progress, wait for it to complete
             read_start_time = pending_s3_read[chunk_id]
-            log.info(f"s3 read request for {chunk_id} was requested at: {read_start_time}")
+            msg = f"s3 read request for {chunk_id} was requested at: "
+            msg += f"{read_start_time}"
+            log.info(msg)
             while time.time() - read_start_time < 2.0:
                 log.debug("waiting for pending s3 read, sleeping")
                 await asyncio.sleep(0.1)  # sleep for sub-second?
@@ -518,7 +605,9 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset
                     chunk_arr = chunk_cache[chunk_id]
                     break
             if chunk_arr is None:
-                log.warn(f"s3 read for chunk {chunk_id} timed-out, initiaiting a new read")
+                msg = f"s3 read for chunk {chunk_id} timed-out, "
+                msg += "initiaiting a new read"
+                log.warn(msg)
 
         if chunk_arr is None:
             if chunk_id not in pending_s3_read:
@@ -526,26 +615,38 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset
                 log.debug(f"Reading chunk {chunk_id} from S3")
 
             try:
-                chunk_bytes = await getStorBytes(app, s3key, filter_ops=filter_ops, offset=s3offset, length=s3size, bucket=bucket, use_proxy=use_proxy)
+                kwargs = {"filter_ops": filter_ops,
+                          "offset": s3offset,
+                          "length": s3size,
+                          "bucket": bucket,
+                          "use_proxy": use_proxy}
+                chunk_bytes = await getStorBytes(app, s3key, **kwargs)
                 if chunk_id in pending_s3_read:
                     # read complete - remove from pending map
                     elapsed_time = time.time() - pending_s3_read[chunk_id]
-                    log.info(f"s3 read for {chunk_id} took {elapsed_time}")  
+                    log.info(f"s3 read for {chunk_id} took {elapsed_time}")
                 else:
-                    log.warn(f"expected to find {chunk_id} in pending_s3_read map")
-                if layout_class == 'H5D_CONTIGUOUS_REF' and len(chunk_bytes) < s3size:
-                    # we may get less than expected bytes if this chunk is close to the end of the file
-                    # expand to expected number of bytes
-                    log.info(f"extending returned bytearray for H5D_CONTIGUOUS layout from {len(chunk_bytes)} to {s3size}")
-                    tmp_buffer = bytearray(s3size)
-                    tmp_buffer[:len(chunk_bytes)] = chunk_bytes
-                    chunk_bytes = bytes(tmp_buffer)
+                    msg = f"expected to find {chunk_id} in "
+                    msg += "pending_s3_read map"
+                    log.warn(msg)
+                if layout_class == 'H5D_CONTIGUOUS_REF':
+                    if len(chunk_bytes) < s3size:
+                        # we may get less than expected bytes if this chunk
+                        # is close to the end of the file
+                        # expand to expected number of bytes
+                        msg = "extending returned bytearray for "
+                        msg += "H5D_CONTIGUOUS layout from "
+                        msg += f"{len(chunk_bytes)} to {s3size}"
+                        log.info(msg)
+                        tmp_buffer = bytearray(s3size)
+                        tmp_buffer[:len(chunk_bytes)] = chunk_bytes
+                        chunk_bytes = bytes(tmp_buffer)
                 chunk_arr = bytesToArray(chunk_bytes, dt, dims)
                 log.debug(f"chunk size: {chunk_arr.size}")
             except HTTPNotFound:
                 if not chunk_init:
                     log.info(f"chunk not found for id: {chunk_id}")
-                    raise  # not found return 404 
+                    raise  # not found return 404
             except ValueError as ve:
                 log.error(f"Unable to retrieve chunk array: {ve}")
                 raise HTTPInternalServerError()
@@ -553,7 +654,6 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset
                 # exception or not, no longer pending
                 if chunk_id in pending_s3_read:
                     del pending_s3_read[chunk_id]
-
 
         if chunk_arr is None and chunk_init:
             log.debug(f"Initializing chunk {chunk_id}")
@@ -572,23 +672,29 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None, s3offset
         if chunk_arr is not None:
             # check that there's room in the cache before adding it
             if chunk_cache.memTarget - chunk_cache.memDirty < chunk_arr.size:
-                # no room in the cache, wait till space is freed by the s3sync task
+                # no room in the cache, wait till space is freed by
+                # the s3sync task
                 wait_start = time.time()
-                while chunk_cache.memTarget - chunk_cache.memDirty < chunk_arr.size:
-                    log.warn(f"getChunk, cache utilization: {chunk_cache.cacheUtilizationPercent}, sleeping till items are flushed")
+                free_space = 0
+                while free_space < chunk_arr.size:
+                    msg = "getChunk, cache utilization: "
+                    msg += f"{chunk_cache.cacheUtilizationPercent}, "
+                    msg += "sleeping till items are flushed"
+                    log.warn(msg)
                     if time.time() - wait_start > MAX_WAIT_TIME:
-                        log.warn(f"unable to save chunk {chunk_id} to cache returning 503 error")
+                        msg = f"unable to save chunk {chunk_id} to "
+                        msg += "cache returning 503 error"
+                        log.warn(msg)
                         raise HTTPServiceUnavailable()
                     await asyncio.sleep(1)
+                    free_space = chunk_cache.memTarget - chunk_cache.memDirty
 
             chunk_cache[chunk_id] = chunk_arr  # store in cache
     return chunk_arr
 
-"""
-Mark the given chunk as dirty to write to storage
-"""
+
 def save_chunk(app, chunk_id, dset_json, bucket=None):
-    """ Persist the given object """
+    """ Persist the given chunk """
     log.info(f"save_chunk {chunk_id} bucket={bucket}")
 
     try:
@@ -603,7 +709,8 @@ def save_chunk(app, chunk_id, dset_json, bucket=None):
     chunk_cache.setDirty(chunk_id)
     log.info(f"chunk cache dirty count: {chunk_cache.dirtyCount}")
 
-    getFilterOps(app, dset_json, item_size)  # will store filter options into app['filter_map']
+    # will store filter options into app['filter_map']
+    getFilterOps(app, dset_json, item_size)
 
     # async write to S3
     dirty_ids = app["dirty_ids"]
@@ -612,8 +719,10 @@ def save_chunk(app, chunk_id, dset_json, bucket=None):
 
 
 async def s3sync(app):
-    """ Periodic method that writes dirty objects in the metadata cache to S3"""
-    max_pending_write_requests=config.get("max_pending_write_requests")  
+    """ Periodic method that writes dirty objects in
+        the metadata cache to S3
+    """
+    max_pending_write_requests = config.get("max_pending_write_requests")
     dirty_ids = app["dirty_ids"]
     pending_s3_write = app["pending_s3_write"]
     pending_s3_write_tasks = app["pending_s3_write_tasks"]
@@ -622,11 +731,15 @@ async def s3sync(app):
     if not dirty_count:
         log.info("s3sync nothing to update")
         return 0
-
-    log.info(f"s3sync update - dirtyid count: {dirty_count}, active write tasks: {len(pending_s3_write_tasks)}/{max_pending_write_requests}")
+    msg = f"s3sync update - dirtyid count: {dirty_count}, "
+    msg += f"active write tasks: {len(pending_s3_write_tasks)}/"
+    msg += f"{max_pending_write_requests}"
+    log.info(msg)
     log.debug(f"s3sync dirty_ids: {dirty_ids}")
-    log.debug(f"s3sync pending write obj_ids: {list(pending_s3_write.keys())}")
-    log.debug(f"s3sync write tasks: {list(pending_s3_write_tasks.keys())}")
+    pending_keys = list(pending_s3_write.keys())
+    log.debug(f"s3sync pending write obj_ids: {pending_keys}")
+    pending_tasks = list(pending_s3_write_tasks.keys())
+    log.debug(f"s3sync write tasks: {pending_tasks}")
 
     def callback(future):
         try:
@@ -635,7 +748,8 @@ async def s3sync(app):
         except HTTPInternalServerError as hse:
             log.error(f"write_s3_obj callback got 500: {hse}")
         except Exception as e:
-            log.error(f"write_s3_obj callback unexpected exception {type(e)}: {e}")
+            msg = f"write_s3_obj callback unexpected exception {type(e)}: {e}"
+            log.error(msg)
 
     update_count = 0
     s3sync_start = time.time()
@@ -643,28 +757,38 @@ async def s3sync(app):
     log.info(f"s3sync - processing {len(dirty_ids)} dirty_ids")
     for obj_id in dirty_ids:
         if len(pending_s3_write_tasks) >= max_pending_write_requests:
-            log.debug("max_pending_write requests in flight, not processing more dirtyids for this run")
+            msg = "max_pending_write requests in flight, not processing "
+            msg += "more dirtyids for this run"
+            log.debug(msg)
             break
         item = dirty_ids[obj_id]
         log.debug(f"s3sync - got item: {item} for obj_id: {obj_id}")
         time_since_dirty = s3sync_start - item[0]
         if time_since_dirty < 0.0:
-            log.warn(f"s3sync: expected time since dirty to be positive, but was {time_since_dirty}")
+            msg = "s3sync: expected time since dirty to be positive, "
+            msg += f"but was {time_since_dirty}"
+            log.warn(msg)
         bucket = item[1]
         if not bucket:
             if "bucket_name" in app and app["bucket_name"]:
                 bucket = app["bucket_name"]
             else:
-                log.error(f"can not determine bucket for s3sync obj_id: {obj_id}")
+                msg = f"can not determine bucket for s3sync obj_id: {obj_id}"
+                log.error(msg)
                 continue
         s3key = getS3Key(obj_id)
-        log.debug(f"s3sync - dirty id: {obj_id}, s3key: {s3key} bucket: {bucket}")
-  
+        msg = f"s3sync - dirty id: {obj_id}, s3key: {s3key} bucket: {bucket}"
+        log.debug(msg)
+
         if obj_id in pending_s3_write:
             pending_time = s3sync_start - pending_s3_write[obj_id]
-            log.debug(f"s3sync - key {obj_id} has been pending for {pending_time:.3f}")
+            msg = f"s3sync - key {obj_id} has been pending for "
+            msg += f"{pending_time:.3f}"
+            log.debug(msg)
             if s3sync_start - pending_s3_write[obj_id] > s3_sync_task_timeout:
-                log.warn(f"s3sync - obj {obj_id} has been in pending_s3_write for {pending_time:.3f} seconds, restarting")
+                msg = f"s3sync - obj {obj_id} has been in pending_s3_write "
+                msg += f"for {pending_time:.3f} seconds, restarting"
+                log.warn(msg)
                 del pending_s3_write[obj_id]
                 if obj_id not in pending_s3_write_tasks:
                     log.warn(f"s3sync - no pending task for {obj_id}")
@@ -677,24 +801,30 @@ async def s3sync(app):
             else:
                 log.debug(f"s3sync - key {obj_id} has a pending write")
                 if obj_id not in pending_s3_write_tasks:
-                    log.info(f"s3sync - no pending task for {obj_id} in pending_s3_write_tasks")
+                    msg = f"s3sync - no pending task for {obj_id} in "
+                    msg += "pending_s3_write_tasks"
+                    log.info()
                 create_task = False
 
         elif time_since_dirty < 1.0:
-            log.debug(f"s3sync - obj {obj_id} last written {time_since_dirty:.3f} seconds ago, waiting to age")
+            msg = f"s3sync - obj {obj_id} last written {time_since_dirty:.3f} "
+            msg += "seconds ago, waiting to age"
+            log.debug(msg)
             create_task = False
         else:
-            log.debug(f"s3sync - obj {obj_id} last written {time_since_dirty:.3f} seconds ago, creating write task")
+            msg = f"s3sync - obj {obj_id} last written {time_since_dirty:.3f} "
+            msg += "seconds ago, creating write task"
+            log.debug(msg)
             create_task = True
 
         if create_task:
             # create a task to write this object
             log.debug(f"s3sync - ensure future for {obj_id}")
-            task = asyncio.ensure_future(write_s3_obj(app, obj_id, bucket=bucket))
+            kwargs = {"bucket": bucket}
+            task = asyncio.ensure_future(write_s3_obj(app, obj_id, **kwargs))
             task.add_done_callback(callback)
             pending_s3_write_tasks[obj_id] = task
             update_count += 1
-
 
     # notify root of obj updates
     notify_ids = app["root_notify_ids"]
@@ -713,7 +843,6 @@ async def s3sync(app):
 
     # return number of objects written
     return update_count
-
 
 
 async def s3syncCheck(app):
@@ -741,5 +870,7 @@ async def s3syncCheck(app):
             # give other tasks a chance to run
             await asyncio.sleep(0)
         else:
-            log.info(f"s3syncCheck no objects to write, sleeping for {s3_sync_interval}")
+            msg = "s3syncCheck no objects to write, "
+            msg += f"sleeping for {s3_sync_interval}"
+            log.info(msg)
             await asyncio.sleep(s3_sync_interval)

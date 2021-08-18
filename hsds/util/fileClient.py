@@ -3,20 +3,22 @@ import hashlib
 import os.path as pp
 from os import mkdir, rmdir, listdir, stat, remove, walk
 from asyncio import CancelledError
-from  inspect import iscoroutinefunction
+from inspect import iscoroutinefunction
 import time
 import aiofiles
-from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError, HTTPBadRequest
+from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPBadRequest
 from .. import hsds_logger as log
 from .. import config
 
+
 class FileClient():
     """
-     Utility class for reading and storing data to local files using aiofiles package
+     Utility class for reading and storing data to local files
+     using aiofiles package
     """
 
     def __init__(self, app):
-
         self._app = app
         self._root_dir = config.get("root_dir")
         if not self._root_dir:
@@ -41,7 +43,6 @@ class FileClient():
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
-
     def _getFilePath(self, bucket, key=''):
         filepath = pp.join(self._root_dir, bucket, key)
         return pp.normpath(filepath)
@@ -50,22 +51,26 @@ class FileClient():
         log.debug(f"_getFileStats({filepath})")
         if data is not None:
             if not isinstance(data, bytes):
-                log.warn("_getFileStats - expected data to be bytes, not computing ETag")
+                msg = "_getFileStats - expected data to be bytes, "
+                msg += "not computing ETag"
+                log.warn(msg)
                 ETag = ""
             else:
                 hash_object = hashlib.md5(data)
-                ETag =  hash_object.hexdigest()
+                ETag = hash_object.hexdigest()
         else:
-            log.debug("getFileStats - data is None, so ETag will not be computed")
+            msg = "getFileStats - data is None, so ETag will not be computed"
+            log.debug(msg)
             ETag = ""
         try:
             file_stats = stat(filepath)
-            key_stats = {"ETag": ETag, "Size": file_stats.st_size, "LastModified": file_stats.st_mtime}
+            key_stats = {"ETag": ETag,
+                         "Size": file_stats.st_size,
+                         "LastModified": file_stats.st_mtime}
             log.info(f"_getFileStats({filepath}) returning: {key_stats}")
         except FileNotFoundError:
             raise HTTPNotFound()
         return key_stats
-
 
     def _file_stats_increment(self, counter, inc=1):
         """ Incremenet the indicated connter
@@ -118,7 +123,10 @@ class FileClient():
                 else:
                     data = await f.read()
             finish_time = time.time()
-            log.info(f"fileClient.get_object({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f} bytes={len(data)}")
+            msg = f"fileClient.get_object({key} bucket={bucket}) "
+            msg += f"start={start_time:.4f} finish={finish_time:.4f} "
+            msg += f"elapsed={finish_time-start_time:.4f}  bytes={len(data)}"
+            log.info(msg)
         except FileNotFoundError:
             msg = f"fileClient: {key} not found "
             log.warn(msg)
@@ -149,7 +157,8 @@ class FileClient():
 
         dirpath = self._getFilePath(bucket)
         if not pp.isdir(dirpath):
-            msg = f"fileClient.put_object - bucket at path: {dirpath} not found"
+            msg = "fileClient.put_object - bucket at path: "
+            msg += f"{dirpath} not found"
             log.warn(msg)
             raise HTTPNotFound()
 
@@ -179,27 +188,33 @@ class FileClient():
             async with aiofiles.open(filepath, loop=loop, mode='wb') as f:
                 await f.write(data)
             finish_time = time.time()
-            log.info(f"fileClient.put_object({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f} bytes={len(data)}")
+            msg = f"fileClient.put_object({key} bucket={bucket}) "
+            msg += f"start={start_time:.4f} finish={finish_time:.4f} "
+            msg += f"elapsed={finish_time-start_time:.4f} bytes={len(data)}"
+            log.info(msg)
             write_rsp = self._getFileStats(filepath, data=data)
         except IOError as ioe:
             msg = f"fileClient: IOError writing {bucket}/{key}: {ioe}"
             log.warn(msg)
             raise HTTPInternalServerError()
         except CancelledError as cle:
-            #file_stats_increment(app, "error_count")
+            # file_stats_increment(app, "error_count")
             msg = f"CancelledError for put s3 obj {key}: {cle}"
             log.error(msg)
             raise HTTPInternalServerError()
 
         except Exception as e:
-            #file_stats_increment(app, "error_count")
-            msg = f"fileClient Unexpected Exception {type(e)} writing  {bucket}/{key}: {e}"
+            # file_stats_increment(app, "error_count")
+            msg = f"fileClient Unexpected Exception {type(e)} "
+            msg += f"writing {bucket}/{key}: {e}"
             log.error(msg)
             raise HTTPInternalServerError()
 
         if data and len(data) > 0:
             self._file_stats_increment("bytes_out", inc=len(data))
-        log.debug(f"fileClient.put_object {key} complete, write_rsp: {write_rsp}")
+            msg = f"fileClient.put_object {key} complete, "
+            msg += f"write_rsp: {write_rsp}"
+        log.debug(msg)
         return write_rsp
 
     async def delete_object(self, key, bucket=None):
@@ -210,7 +225,8 @@ class FileClient():
         filepath = self._getFilePath(bucket, key)
 
         start_time = time.time()
-        log.debug(f"fileClient.delete_object({bucket}/{key} start: {start_time}")
+        msg = f"fileClient.delete_object({bucket}/{key} start: {start_time}"
+        log.debug(msg)
         try:
             log.debug(f"os.remove({filepath})")
             remove(filepath)
@@ -219,17 +235,22 @@ class FileClient():
                 # direcctory is empty, remove
                 rmdir(dir_name)
             finish_time = time.time()
-            log.info(f"fileClient.delete_object({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f}")
+            msg = f"fileClient.delete_object({key} bucket={bucket}) "
+            msg += f"start={start_time:.4f} finish={finish_time:.4f} "
+            msg += f"elapsed={finish_time-start_time:.4f}"
+            log.info(msg)
 
         except IOError as ioe:
             msg = f"fileClient: IOError deleting {bucket}/{key}: {ioe}"
             log.warn(msg)
             raise HTTPInternalServerError()
+
         except CancelledError as cle:
             self._file_stats_increment("error_count")
             msg = f"CancelledError deleting s3 obj {key}: {cle}"
             log.error(msg)
             raise HTTPInternalServerError()
+
         except Exception as e:
             self._file_stats_increment("error_count")
             msg = f"Unexpected Exception {type(e)} deleting s3 obj {key}: {e}"
@@ -256,7 +277,9 @@ class FileClient():
 
         return key_stats
 
-    async def list_keys(self, prefix='', deliminator='', suffix='', include_stats=False, callback=None, bucket=None, limit=None):
+    async def list_keys(self, prefix='', deliminator='', suffix='',
+                        include_stats=False, callback=None, bucket=None,
+                        limit=None):
         """ return keys matching the arguments
         """
         self._validateBucket(bucket)
@@ -265,12 +288,15 @@ class FileClient():
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
-        log.info(f"list_keys('{prefix}','{deliminator}','{suffix}', include_stats={include_stats}, bucket={bucket}, callback {'set' if callback is not None else 'not set'}")
+        msg = f"list_keys('{prefix}','{deliminator}','{suffix}' "
+        msg += f"include_stats={include_stats}, bucket={bucket}, "
+        msg += f"callback {'set' if callback is not None else 'not set'}"
+        log.info(msg)
 
         await asyncio.sleep(0)  # for async compat
         basedir = pp.join(self._root_dir, bucket)
         if prefix:
-            basedir = pp.join(basedir,prefix)
+            basedir = pp.join(basedir, prefix)
         log.debug(f"fileClient listKeys for directory: {basedir}")
 
         if not pp.isdir(basedir):
@@ -318,7 +344,9 @@ class FileClient():
                 filepath = pp.join(basedir, filename)
                 with open(filepath, "rb") as f:
                     data = f.read()
-                    log.debug(f"list_keys: read file: {filepath}, {len(data)} bytes, for getFileStats")
+                    msg = f"list_keys: read file: {filepath}, "
+                    msg += f"{len(data)} bytes, for getFileStats"
+                    log.debug(msg)
                     key_stats = self._getFileStats(filepath, data=data)
                 key_name = pp.join(prefix, filename)
                 key_names[key_name] = key_stats
@@ -332,14 +360,15 @@ class FileClient():
                 await callback(self._app, key_names)
             else:
                 callback(self._app, key_names)
-            key_names = {} if include_stats else [] # reset
+            key_names = {} if include_stats else []  # reset
 
         log.info(f"listKeys done, got {count} keys")
         if not callback and count != len(key_names):
-            log.warning(f"expected {count} keys in return list but got {len(key_names)}")
+            msg = f"expected {count} keys in return list but "
+            msg == f"got {len(key_names)}"
+            log.warning(msg)
 
         return key_names
-
 
     async def releaseClient(self):
         """ release the client collection to s3

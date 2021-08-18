@@ -29,11 +29,7 @@ spec:
             mountPath: "/config/passwd.txt"
             subPath: passwd.txt
           - name: config
-            mountPath: "/config/config.yml"
-            subPath: config.yml
-          - name: override
-            mountPath: "/config/override.yml"
-            subPath: override.yml
+            mountPath: "/config"
           ports:
             -
               containerPort: 5101
@@ -42,16 +38,8 @@ spec:
             value: sn
           - name: PASSWORD_FILE
             value: /config/passwd.txt
-          - name: AWS_ACCESS_KEY_ID
-            valueFrom:
-              secretKeyRef:
-                name: aws-auth-keys
-                key: aws_access_key_id
-          - name: AWS_SECRET_ACCESS_KEY
-            valueFrom:
-              secretKeyRef:
-                name: aws-auth-keys
-                key: aws_secret_access_key
+          - name: AWS_ROLE_ARN
+            value: arn:aws:iam::1234567890:role/eks-node-role
         -
           name: dn
           image: "hdfgroup/hsds:v0.6.3i"
@@ -67,27 +55,15 @@ spec:
               memory: "2G"
           volumeMounts:
           - name: config
-            mountPath: "/config/config.yml"
-            subPath: config.yml
-          - name: override
-            mountPath: "/config/override.yml"
-            subPath: override.yml
+            mountPath: "/config"
           ports:
             -
               containerPort: 6101
           env:
           - name: NODE_TYPE
             value: dn
-          - name: AWS_ACCESS_KEY_ID
-            valueFrom:
-              secretKeyRef:
-                name: aws-auth-keys
-                key: aws_access_key_id
-          - name: AWS_SECRET_ACCESS_KEY
-            valueFrom:
-              secretKeyRef:
-                name: aws-auth-keys
-                key: aws_secret_access_key
+          - name: AWS_ROLE_ARN
+            value: arn:aws:iam::1234567890:role/eks-node-role
       volumes:
       - name: accounts
         secret:
@@ -95,7 +71,3 @@ spec:
       - name: config
         configMap:
           name: hsds-config
-      - name: override
-        configMap:
-          name: hsds-override
-        

@@ -23,6 +23,9 @@ RUN conda install --name hsds --yes \
         imagecodecs \
         hdf5plugin \
         numcodecs \
+        pip \
+        simplejson \
+        wheel
 # Install numcodecs from the specific commit since we need the brand new shuffle codec...
     && \
     conda run -n hsds --no-capture-output pip install --no-cache-dir kubernetes

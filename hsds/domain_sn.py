@@ -20,25 +20,36 @@ import os.path as op
 import re
 import time
 
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPGone, HTTPInternalServerError, HTTPConflict, HTTPServiceUnavailable
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
+from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPConflict, HTTPServiceUnavailable
 from aiohttp import ClientResponseError
 from aiohttp.client_exceptions import ClientError
 from aiohttp.web import json_response
+from requests.sessions import merge_setting
 
-from .util.httpUtil import  http_post, http_put, http_get, http_delete, getHref, get_http_client, jsonResponse
-from .util.idUtil import  getDataNodeUrl, createObjId, getCollectionForId, isValidUuid, isSchema2Id, getNodeCount
+from .util.httpUtil import http_post, http_put, http_get, http_delete, getHref
+from .util.httpUtil import jsonResponse
+from .util.idUtil import getDataNodeUrl, createObjId, getCollectionForId
+from .util.idUtil import isValidUuid, isSchema2Id, getNodeCount
 from .util.authUtil import getUserPasswordFromRequest, aclCheck, isAdminUser
 from .util.authUtil import validateUserPassword, getAclKeys
-from .util.domainUtil import getParentDomain, getDomainFromRequest, isValidDomain, getBucketForDomain, getPathForDomain
+from .util.domainUtil import getParentDomain, getDomainFromRequest
+from .util.domainUtil import isValidDomain, getBucketForDomain
+from .util.domainUtil import getPathForDomain
 from .util.storUtil import getStorKeys
 from .util.boolparser import BooleanParser
-from .servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath, getRootInfo
+from .servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath
+from .servicenode_lib import getRootInfo
 from .basenode import getVersion
 from . import hsds_logger as log
 from . import config
 
+
 class DomainCrawler:
-    def __init__(self, app, root_id, bucket=None, include_attrs=True, max_tasks=40, max_objects_limit=0):
+
+    def __init__(self, app, root_id, bucket=None, include_attrs=True,
+                 max_tasks=40, max_objects_limit=0):
         log.info(f"DomainCrawler.__init__  root_id: {root_id}")
         self._app = app
         self._max_objects_limit = max_objects_limit
@@ -54,9 +65,13 @@ class DomainCrawler:
         workers = [asyncio.Task(self.work())
                    for _ in range(self._max_tasks)]
         # When all work is done, exit.
-        log.info(f"DomainCrawler - await queue.join - count: {len(self._obj_dict)}")
+        msg = "DomainCrawler - await queue.join - "
+        msg += f"count: {len(self._obj_dict)}"
+        log.info(msg)
         await self._q.join()
-        log.info(f"DomainCrawler - join complete - count: {len(self._obj_dict)}")
+        msg = "DomainCrawler - join complete - "
+        msg += f"count: {len(self._obj_dict)}"
+        log.info(msg)
 
         for w in workers:
             w.cancel()
@@ -70,7 +85,10 @@ class DomainCrawler:
 
     async def fetch(self, obj_id):
         log.debug(f"DomainCrawler - fetch for obj_id: {obj_id}")
-        obj_json = await getObjectJson(self._app, obj_id, include_links=True, include_attrs=self._include_attrs, bucket=self._bucket)
+        kwargs = {"include_links": True,
+                  "include_attrs": self._include_attrs,
+                  "bucket": self._bucket}
+        obj_json = await getObjectJson(self._app, obj_id, **kwargs)
         log.debug(f"DomainCrawler - got json for {obj_id}")
 
         # including links, so don't need link count
@@ -79,7 +97,7 @@ class DomainCrawler:
         self._obj_dict[obj_id] = obj_json
         if self._include_attrs:
             del obj_json["attributeCount"]
-       
+
         # if this is a group, iterate through all the hard links and
         # add to the lookup ids set
         if getCollectionForId(obj_id) == "groups":
@@ -89,21 +107,28 @@ class DomainCrawler:
                 log.debug(f"DomainCrawler - got link: {title}")
                 link_obj = links[title]
                 num_objects = len(self._obj_dict)
-                if self._max_objects_limit > 0 and num_objects >= self._max_objects_limit:
-                    log.info(f"DomainCrawler reached limit of {self._max_objects_limit}")
-                    break
+                if self._max_objects_limit > 0:
+                    if num_objects >= self._max_objects_limit:
+                        msg = "DomainCrawler reached limit of "
+                        msg += f"{self._max_objects_limit}"
+                        log.info(msg)
+                        break
                 if link_obj["class"] != 'H5L_TYPE_HARD':
                     continue
                 link_id = link_obj["id"]
                 if link_id not in self._obj_dict:
                     # haven't seen this object yet, get obj json
                     log.debug(f"DomainCrawler - adding link_id: {link_id}")
-                    self._obj_dict[link_id] = {} # placeholder for obj id
+                    self._obj_dict[link_id] = {}  # placeholder for obj id
                     self._q.put_nowait(link_id)
-        log.debug(f"DomainCrawler - fetch complete obj_id: {obj_id}, {len(self._obj_dict)} objects found")
+        msg = f"DomainCrawler - fetch complete obj_id: {obj_id}, "
+        msg += f"{len(self._obj_dict)} objects found"
+        log.debug(msg)
+
 
 class FolderCrawler:
-    def __init__(self, app, domains, bucket=None, get_root=False, verbose=False, max_tasks_per_node=100):
+    def __init__(self, app, domains, bucket=None, get_root=False,
+                 verbose=False, max_tasks_per_node=100):
         log.info(f"FolderCrawler.__init__  {len(domains)} domain names")
         self._app = app
         self._get_root = get_root
@@ -124,9 +149,13 @@ class FolderCrawler:
         workers = [asyncio.Task(self.work())
                    for _ in range(self._max_tasks)]
         # When all work is done, exit.
-        log.info(f"FolderCrawler max_tasks {self._max_tasks} = await queue.join - count: {len(self._domain_dict)}")
+        msg = f"FolderCrawler max_tasks {self._max_tasks} = await queue.join "
+        msg += f"- count: {len(self._domain_dict)}"
+        log.info(msg)
         await self._q.join()
-        log.info(f"FolderCrawler - join complete - count: {len(self._domain_dict)}")
+        folder_count = len(self._domain_dict)
+        msg = f"FolderCrawler - join complete - count: {folder_count}"
+        log.info(msg)
 
         for w in workers:
             w.cancel()
@@ -139,28 +168,41 @@ class FolderCrawler:
             await self.fetch(domain)
             self._q.task_done()
             elapsed = time.time() - start
-            log.debug(f"FolderCrawler - task {domain} start: {start:.3f} elapsed: {elapsed:.3f}")
+            msg = f"FolderCrawler - task {domain} start: {start:.3f} "
+            msg += f"elapsed: {elapsed:.3f}"
+            log.debug(msg)
 
     async def fetch(self, domain):
-        log.debug(f"FolderCrawler - fetch for domain: {domain} bucket: {self._bucket}")
+        msg = f"FolderCrawler - fetch for domain: {domain} bucket: "
+        msg += f"{self._bucket}"
+        log.debug(msg)
         domain_key = self._bucket + domain
         try:
-            domain_json = await getDomainJson(self._app, domain_key, reload=True)
-            log.debug(f"FolderCrawler - {domain} got domain_json: {domain_json}")
+            kwargs = {"reload": True}
+            domain_json = await getDomainJson(self._app, domain_key, **kwargs)
+            msg = f"FolderCrawler - {domain} got domain_json: {domain_json}"
+            log.debug(msg)
             if domain_json:
-                domain_rsp = await get_domain_response(self._app, domain_json, verbose=self._verbose, bucket=self._bucket)
+                kwargs = {"verbose": self._verbose, "bucket": self._bucket}
+                domain_rsp = await get_domain_response(self._app,
+                                                       domain_json,
+                                                       **kwargs)
                 if "limits" in domain_rsp:
                     # don't return limits for multi-domain responses
                     del domain_rsp["limits"]
                 if "version" in domain_rsp:
                     del domain_rsp["version"]
-                log.debug(f"FolderCrawler - {domain} get domain_rsp: {domain_rsp}")
+                msg = f"FolderCrawler - {domain} get domain_rsp: {domain_rsp}"
+                log.debug(msg)
                 # mixin domain name
                 self._domain_dict[domain] = domain_rsp
                 if self._get_root and "root" in domain_json:
                     root_id = domain_json["root"]
                     log.debug(f"fetching root json for {root_id}")
-                    root_json = await getObjectJson(self._app, root_id, include_links=False, include_attrs=True, bucket=self._bucket)
+                    root_json = await getObjectJson(self._app, root_id,
+                                                    include_links=False,
+                                                    include_attrs=True,
+                                                    bucket=self._bucket)
                     log.debug(f"got root_json: {root_json}")
                     self._group_dict[root_id] = root_json
             else:
@@ -177,9 +219,13 @@ class FolderCrawler:
         except HTTPBadRequest:
             log.error(f"fetch result - bad request for: {domain}")
         except HTTPServiceUnavailable:
-            log.warn(f"fetch result - service unavailable for domain: {domain}")
+            msg = f"fetch result - service unavailable for domain: {domain}"
+            log.warn(msg)
         except Exception as e:
-            log.error(f"fetch result - unexpected exception for domain {domain}: exception of type {type(e)}, {e}")
+            msg = f"fetch result - unexpected exception for domain {domain}: "
+            msg += f"exception of type {type(e)}, {e}"
+            log.error(msg)
+
 
 async def get_collections(app, root_id):
     """ Return the object ids for given root.
@@ -198,7 +244,8 @@ async def get_collections(app, root_id):
         req += '/groups/' + grp_id + "/links"
         log.debug("collection get LINKS: " + req)
         try:
-            links_json = await http_get(app, req)  # throws 404 if doesn't exist
+            # throws 404 if doesn't exist
+            links_json = await http_get(app, req)
         except HTTPNotFound:
             log.warn(f"get_collection, group {grp_id} not found")
             continue
@@ -225,7 +272,9 @@ async def get_collections(app, root_id):
                     continue
                 datatypes[link_id] = {}
             else:
-                log.error(f"get_collection: unexpected link object type: {obj_type}")
+                msg = "get_collection: unexpected link object type: "
+                msg += f"{obj_type}"
+                log.error(merge_setting)
                 HTTPInternalServerError()
 
     result = {}
@@ -234,21 +283,31 @@ async def get_collections(app, root_id):
     result["datatypes"] = datatypes
     return result
 
+
 async def getDomainObjects(app, root_id, include_attrs=False, bucket=None):
-    """ Iterate through all objects in heirarchy and add to obj_dict keyed by obj id
+    """ Iterate through all objects in heirarchy and add to obj_dict
+        keyed by obj id
     """
 
     log.info(f"getDomainObjects for root: {root_id}")
-    max_objects_limit = int(config.get("domain_req_max_objects_limit", default=500)) 
+    max_objects_limit = int(config.get("domain_req_max_objects_limit",
+                                       default=500))
 
-    crawler = DomainCrawler(app, root_id, include_attrs=include_attrs, bucket=bucket, max_objects_limit=max_objects_limit)
+    kwargs = {"include_attrs": include_attrs,
+              "bucket": bucket,
+              "max_objects_limit": max_objects_limit}
+    crawler = DomainCrawler(app, root_id, **kwargs)
     await crawler.crawl()
     if len(crawler._obj_dict) >= max_objects_limit:
-        log.info(f"getDomainObjects - too many objects:  {len(crawler._obj_dict)}, returning None")
+        msg = "getDomainObjects - too many objects:  "
+        msg += f"{len(crawler._obj_dict)}, returning None"
+        log.info()
         return None
     else:
-        log.info(f"getDomainObjects returning: {len(crawler._obj_dict)} objects")
+        msg = f"getDomainObjects returning: {len(crawler._obj_dict)} objects"
+        log.info(msg)
         return crawler._obj_dict
+
 
 def getIdList(objs, marker=None, limit=None):
     """ takes a map of ids to objs and returns ordered list
@@ -271,14 +330,17 @@ def getIdList(objs, marker=None, limit=None):
             break
     return ret_ids
 
+
 def getLimits():
     """ return limits the client may need """
     limits = {}
     limits["min_chunk_size"] = int(config.get("min_chunk_size"))
     limits["max_chunk_size"] = int(config.get("max_chunk_size"))
     limits["max_request_size"] = int(config.get("max_request_size"))
-    limits["max_chunks_per_request"] = int(config.get("max_chunks_per_request"))
+    cfg_val = int(config.get("max_chunks_per_request"))
+    limits["max_chunks_per_request"] = cfg_val
     return limits
+
 
 def getCompressors():
     """ return available compressors """
@@ -289,11 +351,12 @@ def getCompressors():
             if compressors[i] == "zlib":
                 compressors[i] = "gzip"
                 break
-    
-    return compressors 
+
+    return compressors
+
 
 async def get_domain_response(app, domain_json, bucket=None, verbose=False):
-    rsp_json = { }
+    rsp_json = {}
     if "root" in domain_json:
         rsp_json["root"] = domain_json["root"]
         rsp_json["class"] = "domain"
@@ -352,7 +415,6 @@ async def get_domain_response(app, domain_json, bucket=None, verbose=False):
             num_datatypes = 0
             num_chunks = 0
 
-
         num_objects = num_groups + num_datasets + num_datatypes + num_chunks
         rsp_json["num_groups"] = num_groups
         rsp_json["num_datasets"] = num_datasets
@@ -360,7 +422,7 @@ async def get_domain_response(app, domain_json, bucket=None, verbose=False):
         rsp_json["num_objects"] = num_objects
         rsp_json["total_size"] = totalSize
         rsp_json["allocated_bytes"] = allocated_bytes
-        rsp_json["num_objects"] =  num_objects
+        rsp_json["num_objects"] = num_objects
         rsp_json["metadata_bytes"] = metadata_bytes
         rsp_json["linked_bytes"] = linked_bytes
         rsp_json["num_chunks"] = num_chunks
@@ -381,7 +443,8 @@ async def get_domains(request):
     app = request.app
     params = request.rel_url.query
 
-    node_count = getNodeCount(app)  # DomainCrawler will expect this to be larger than zero
+    #  DomainCrawler will expect this to be larger than zero
+    node_count = getNodeCount(app)
     if node_count == 0:
         log.warn("get_domains called with no active DN nodes")
         raise HTTPServiceUnavailable()
@@ -407,7 +470,8 @@ async def get_domains(request):
         log.info(f"get_domains - using query: {query}")
 
     # use "verbose" to pull extra info
-    if "verbose" in request.rel_url.query and request.rel_url.query["verbose"]:
+    k = "verbose"
+    if k in request.rel_url.query and request.rel_url.query[k]:
         verbose = True
     else:
         verbose = False
@@ -430,7 +494,6 @@ async def get_domains(request):
             raise HTTPBadRequest(reason=msg)
     else:
         log.debug("get_domains - no limit")
-
 
     marker = None
     if "Marker" in request.rel_url.query:
@@ -461,7 +524,11 @@ async def get_domains(request):
     else:
         s3prefix = prefix[1:]
         log.debug(f"get_domains - listing S3 keys for {s3prefix}")
-        s3keys = await getStorKeys(app, include_stats=False, prefix=s3prefix, deliminator='/', bucket=bucket)
+        kwargs = {"include_stats": False,
+                  "prefix": s3prefix,
+                  "deliminator": '/',
+                  "bucket": bucket}
+        s3keys = await getStorKeys(app, **kwargs)
         log.debug(f"get_domains - getS3Keys returned: {len(s3keys)} keys")
 
         for s3key in s3keys:
@@ -477,11 +544,14 @@ async def get_domains(request):
                 # do a pattern match on the basename
                 basename = op.basename(domain)
                 if not regex.match(basename):
-                    log.debug(f"get_domains - {basename} did not match regex: {pattern}")
+                    msg = f"get_domains - {basename} did not match "
+                    msg += f"regex: {pattern}"
+                    log.debug(msg)
                     continue
 
             if marker:
-                log.debug(f"get_domains - compare marker {marker} and {domain}")
+                msg = f"get_domains - compare marker {marker} and {domain}"
+                log.debug(msg)
                 if marker == domain:
                     log.debug("get_domains - clearing marker")
                     marker = None
@@ -494,14 +564,14 @@ async def get_domains(request):
                 # got to requested limit
                 break
 
-
     # get domain info for each domain
     domains = []
     if query:
         get_root = True
     else:
         get_root = False
-    crawler = FolderCrawler(app, domainNames, bucket=bucket, get_root=get_root, verbose=verbose)
+    kwargs = {"bucket": bucket, "get_root": get_root, "verbose": verbose}
+    crawler = FolderCrawler(app, domainNames, **kwargs)
     await crawler.crawl()
 
     if query:
@@ -521,7 +591,9 @@ async def get_domains(request):
             log.debug(f"get_domains - query search for: {domain}")
             domain_json = crawler._domain_dict[domain]
             if "root" not in domain_json:
-                log.debug(f"get_domains - skipping folder: {domain} for attribute query search")
+                msg = f"get_domains - skipping folder: {domain} for "
+                msg += "attribute query search"
+                log.debug()
                 del domain_keys[domain]
                 continue
 
@@ -541,8 +613,11 @@ async def get_domains(request):
                 log.debug(f"{attr_name}: {attr_json}")
                 attr_type = attr_json["type"]
                 attr_type_class = attr_type["class"]
-                if attr_type_class not in ('H5T_INTEGER', 'H5T_FLOAT', 'H5T_STRING'):
-                    log.debug("unable to query non-primitive attribute class: {attr_type_class}")
+                primative_types = ('H5T_INTEGER', 'H5T_FLOAT', 'H5T_STRING')
+                if attr_type_class not in primative_types:
+                    msg = "unable to query non-primitive attribute class: "
+                    msg += f"{attr_type_class}"
+                    log.debug(msg)
                     del crawler._domain_dict[domain]
                     continue
                 attr_shape = attr_json["shape"]
@@ -550,7 +625,9 @@ async def get_domains(request):
                 if attr_shape_class == 'H5S_SCALAR':
                     variable_dict[attr_name] = attr_json["value"]
                 else:
-                    log.debug("get_domains - unable to query non-scalar attributes")
+                    msg = "get_domains - unable to query non-scalar "
+                    msg += "attributes"
+                    log.debug(msg)
                     del crawler._domain_dict[domain]
                     continue
             # evaluate the boolean expression
@@ -560,7 +637,9 @@ async def get_domains(request):
                 try:
                     parser_value = parser.evaluate(variable_dict)
                 except TypeError as te:
-                    log.warn(f"get_domains - evaluate {query} for {domain} but got error: {te}")
+                    msg = f"get_domains - evaluate {query} for {domain} but "
+                    msg += f"got error: {te}"
+                    log.warn(msg)
                 if parser_value:
                     log.info(f"get_domains - {domain} passed query test")
                 else:
@@ -575,7 +654,9 @@ async def get_domains(request):
             domains.append(domain_json)
         else:
             if not query:
-                log.warn(f"get_domains - domain: {domain} not found in crawler dict")
+                msg = f"get_domains - domain: {domain} not found "
+                msg += "in crawler dict"
+                log.warn(msg)
 
     return domains
 
@@ -599,6 +680,7 @@ async def GET_Domains(request):
     log.response(request, resp=resp)
     return resp
 
+
 async def GET_Domain(request):
     """HTTP method to return JSON for given domain"""
     log.request(request)
@@ -617,6 +699,7 @@ async def GET_Domain(request):
     except ValueError:
         log.warn(f"Invalid domain: {domain}")
         raise HTTPBadRequest(reason="Invalid domain name")
+
     bucket = getBucketForDomain(domain)
     log.debug(f"GET_Domain domain: {domain} bucket: {bucket}")
 
@@ -658,17 +741,21 @@ async def GET_Domain(request):
 
     log.debug(f"got domain_json: {domain_json}")
     # validate that the requesting user has permission to read this domain
-    aclCheck(app, domain_json, "read", username)  # throws exception if not authorized
+    # aclCheck throws exception if not authorized
+    aclCheck(app, domain_json, "read", username)
 
     if "h5path" in params:
         # if h5path is passed in, return object info for that path
         #   (if exists)
         h5path = params["h5path"]
         root_id = domain_json["root"]
-        obj_id = await getObjectIdByPath(app, root_id, h5path, bucket=bucket)  # throws 404 if not found
+        # getObjectIdByPath throws 404 if not found
+        obj_id = await getObjectIdByPath(app, root_id, h5path, bucket=bucket)
         log.info(f"get obj_id: {obj_id} from h5path: {h5path}")
-        # get authoritative state for object from DN (even if it's in the meta_cache).
-        obj_json = await getObjectJson(app, obj_id, refresh=True, bucket=bucket)
+        # get authoritative state for object from DN (even if
+        # it's in the meta_cache).
+        kwargs = {"refresh": True, "bucket": bucket}
+        obj_json = await getObjectJson(app, obj_id, **kwargs)
         obj_json["domain"] = domain
         # Not bothering with hrefs for h5path lookups...
         resp = await jsonResponse(request, obj_json)
@@ -676,7 +763,8 @@ async def GET_Domain(request):
         return resp
 
     # return just the keys as per the REST API
-    rsp_json = await get_domain_response(app, domain_json, bucket=bucket, verbose=verbose)
+    kwargs = {"verbose": verbose, "bucket": bucket}
+    rsp_json = await get_domain_response(app, domain_json, **kwargs)
 
     # include domain objects if requested
     if "getobjs" in params and params["getobjs"] and "root" in domain_json:
@@ -684,7 +772,8 @@ async def GET_Domain(request):
         include_attrs = False
         if "include_attrs" in params and params["include_attrs"]:
             include_attrs = True
-        domain_objs = await getDomainObjects(app, root_id, include_attrs=include_attrs, bucket=bucket)
+        kwargs = {"include_attrs": include_attrs, "bucket": bucket}
+        domain_objs = await getDomainObjects(app, root_id, **kwargs)
         if domain_objs:
             rsp_json["domain_objs"] = domain_objs
 
@@ -696,10 +785,14 @@ async def GET_Domain(request):
     hrefs.append({'rel': 'self', 'href': getHref(request, '/')})
     if "root" in domain_json:
         root_uuid = domain_json["root"]
-        hrefs.append({'rel': 'database', 'href': getHref(request, '/datasets')})
-        hrefs.append({'rel': 'groupbase', 'href': getHref(request, '/groups')})
-        hrefs.append({'rel': 'typebase', 'href': getHref(request, '/datatypes')})
-        hrefs.append({'rel': 'root', 'href': getHref(request, '/groups/' + root_uuid)})
+        href = getHref(request, '/datasets')
+        hrefs.append({'rel': 'database', 'href': href})
+        href = getHref(request, '/groups')
+        hrefs.append({'rel': 'groupbase', 'href': href})
+        href = getHref(request, '/datatypes')
+        hrefs.append({'rel': 'typebase', 'href': href})
+        href = getHref(request, '/groups/' + root_uuid)
+        hrefs.append({'rel': 'root', 'href': href})
 
     hrefs.append({'rel': 'acls', 'href': getHref(request, '/acls')})
     parent_domain = getParentDomain(domain)
@@ -709,7 +802,8 @@ async def GET_Domain(request):
         is_toplevel = False
     log.debug(f"href parent domain: {parent_domain}")
     if not is_toplevel:
-        hrefs.append({'rel': 'parent', 'href': getHref(request, '/', domain=parent_domain)})
+        href = getHref(request, '/', domain=parent_domain)
+        hrefs.append({'rel': 'parent', 'href': href})
 
     rsp_json["hrefs"] = hrefs
     # mixin limits, version
@@ -720,13 +814,13 @@ async def GET_Domain(request):
     log.response(request, resp=resp)
     return resp
 
+
 async def doFlush(app, root_id, bucket=None):
     """ return wnen all DN nodes have wrote any pending changes to S3"""
     log.info(f"doFlush {root_id}")
     params = {"flush": 1}
     if bucket:
         params["bucket"] = bucket
-    client = get_http_client(app)
     dn_urls = app["dn_urls"]
     dn_ids = []
     log.debug(f"doFlush - dn_urls: {dn_urls}")
@@ -736,7 +830,7 @@ async def doFlush(app, root_id, bucket=None):
         tasks = []
         for dn_url in dn_urls:
             req = dn_url + "/groups/" + root_id
-            task = asyncio.ensure_future(client.put(req, params=params))
+            task = asyncio.ensure_future(http_put(app, req, params=params))
             tasks.append(task)
         done, pending = await asyncio.wait(tasks)
         if pending:
@@ -745,34 +839,33 @@ async def doFlush(app, root_id, bucket=None):
             raise HTTPInternalServerError()
         for task in done:
             if task.exception():
-                log.warn(f"doFlush - task had exception: {type(task.exception())}")
+                exception_type = type(task.exception())
+                msg = f"doFlush - task had exception: {exception_type}"
+                log.warn()
                 failed_count += 1
             else:
-                clientResponse = task.result()
-                if clientResponse.status != 200:
-                    log.warn(f"doFlush - expected 204 but got: {clientResponse.status}")
-                    failed_count += 1
+                json_rsp = task.result()
+                log.debug(f"PUT /groups rsp: {json_rsp}")
+                if json_rsp and "id" in json_rsp:
+                    dn_ids.append(json_rsp["id"])
                 else:
-                    json_rsp = await clientResponse.json()
-                    log.debug(f"PUT /groups rsp: {json_rsp}")
-                    if json_rsp and "id" in json_rsp:
-                        dn_ids.append(json_rsp["id"])
-                    else:
-                        log.error("expected dn_id in flush response from DN")
+                    log.error("expected dn_id in flush response from DN")
     except ClientError as ce:
-        log.error(f"doFlush - ClientError for http_put('/groups/{root_id}'): {str(ce)}")
+        msg = f"doFlush - ClientError for http_put('/groups/{root_id}'): {ce}"
+        log.error(msg)
         raise HTTPInternalServerError()
     except CancelledError as cle:
-        log.error(f"doFlush - CancelledError '/groups/{root_id}'): {str(cle)}")
+        log.error(f"doFlush - CancelledError '/groups/{root_id}'): {cle}")
         raise HTTPInternalServerError()
-    log.info(f"doFlush for {root_id} complete, failed: {failed_count} out of {len(dn_urls)}")
+    msg = f"doFlush for {root_id} complete, failed: {failed_count} "
+    msg += f"out of {len(dn_urls)}"
+    log.info(msg)
     if failed_count > 0:
         log.error(f"doFlush fail count: {failed_count} returning 500")
         raise HTTPInternalServerError()
     else:
         log.info("doFlush no fails, returning dn ids")
         return dn_ids
-
 
 
 async def PUT_Domain(request):
@@ -782,12 +875,22 @@ async def PUT_Domain(request):
     params = request.rel_url.query
     log.debug(f"PUT_domain params: {dict(params)}")
     # verify username, password
-    username, pswd = getUserPasswordFromRequest(request) # throws exception if user/password is not valid
+    username, pswd = getUserPasswordFromRequest(request)
     await validateUserPassword(app, username, pswd)
 
     # inital perms for owner and default
-    owner_perm = {'create': True, 'read': True, 'update': True, 'delete': True, 'readACL': True, 'updateACL': True }
-    default_perm = {'create': False, 'read': True, 'update': False, 'delete': False, 'readACL': False, 'updateACL': False }
+    owner_perm = {'create': True,
+                  'read': True,
+                  'update': True,
+                  'delete': True,
+                  'readACL': True,
+                  'updateACL': True}
+    default_perm = {'create': False,
+                    'read': True,
+                    'update': False,
+                    'delete': False,
+                    'readACL': False,
+                    'updateACL': False}
 
     try:
         domain = getDomainFromRequest(request)
@@ -805,13 +908,22 @@ async def PUT_Domain(request):
         body = await request.json()
         log.debug(f"PUT domain with body: {body}")
 
-    if ("getdnids" in params and params["getdnids"]) or (body and "getdnids" in body and body["getdnids"]):
+    if "getdnids" in params and params["getdnids"]:
+        getdnids = True
+    elif body and "getdnids" in body and body["getdnids"]:
         getdnids = True
     else:
         getdnids = False
 
-    if ("flush" in params and params["flush"]) or (body and "flush" in body and body["flush"]):
-        # flush domain - update existing domain rather than create a new resource
+    if "flush" in params and params["flush"]:
+        do_flush = True
+    elif body and "flush" in body and body["flush"]:
+        do_flush = True
+    else:
+        do_flush = False
+    if do_flush:
+        # flush domain - update existing domain rather than create
+        # a new resource
         log.info(f"Flush for domain: {domain}")
         domain_json = await getDomainJson(app, domain, reload=True)
         log.debug(f"got domain_json: {domain_json}")
@@ -827,8 +939,8 @@ async def PUT_Domain(request):
         if 'acls' not in domain_json:
             log.error("No acls key found in domain")
             raise HTTPInternalServerError()
-
-        aclCheck(app, domain_json, "update", username)  # throws exception if not allowed
+        # throws exception if not allowed
+        aclCheck(app, domain_json, "update", username)
         rsp_json = None
         if "root" in domain_json:
             # nothing to to do for folder objects
@@ -839,7 +951,8 @@ async def PUT_Domain(request):
                 rsp_json = {"dn_ids": dn_ids}
                 log.debug(f"returning dn_ids for PUT domain: {dn_ids}")
                 status_code = 200
-            else: status_code = 204
+            else:
+                status_code = 204
         else:
             log.info("flush called on folder, ignoring")
             status_code = 204
@@ -855,14 +968,15 @@ async def PUT_Domain(request):
         if "root" in domain_json:
             # nothing to update for folders
             root_id = domain_json["root"]
-            if not isValidUuid(root_id):  
-                log.error(f"domain: {domain} with invalid  root id: {root_id}")
+            if not isValidUuid(root_id):
+                msg = f"domain: {domain} with invalid  root id: {root_id}"
+                log.error(msg)
                 raise HTTPInternalServerError()
             if not isSchema2Id(root_id):
                 msg = "rescan not supported for v1 ids"
                 log.info(msg)
                 raise HTTPBadRequest(reashon=msg)
-            aclCheck(app, domain_json, "update", username)  # throws exception if not authorized
+            aclCheck(app, domain_json, "update", username)
             log.info(f"notify_root: {root_id}")
             notify_req = getDataNodeUrl(app, root_id) + "/roots/" + root_id
             post_params = {}
@@ -893,11 +1007,12 @@ async def PUT_Domain(request):
             msg = f"linked_domain: {linked_domain} is not valid"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
+        log.debug(f"Using linked_domain: {linked_domain}")
         if "linked_bucket" in body:
             linked_bucket = body["linked_bucket"]
         elif bucket:
             linked_bucket = bucket
-        elif  "bucket_name" in request.app and request.app["bucket_name"]:
+        elif "bucket_name" in request.app and request.app["bucket_name"]:
             linked_bucket = request.app["bucket_name"]
         else:
             linked_bucket = None
@@ -910,7 +1025,6 @@ async def PUT_Domain(request):
     if owner != username and not isAdminUser(app, username):
         log.warn("Only admin users are allowed to set owner for new domains")
         raise HTTPForbidden()
-
 
     parent_domain = getParentDomain(domain)
     log.debug(f"Parent domain: [{parent_domain}]")
@@ -929,7 +1043,6 @@ async def PUT_Domain(request):
         msg = "creation of top-level domains is only supported by admin users"
         log.warn(msg)
         raise HTTPForbidden()
-
 
     parent_json = None
     if not is_toplevel:
@@ -955,10 +1068,11 @@ async def PUT_Domain(request):
             raise HTTPBadRequest(reason=msg)
 
     if parent_json:
-        aclCheck(app, parent_json, "create", username)  # throws exception if not allowed
+        aclCheck(app, parent_json, "create", username)
 
     if linked_domain:
-        linked_json = await getDomainJson(app, linked_bucket + linked_domain, reload=True)
+        l_d = linked_bucket + linked_domain
+        linked_json = await getDomainJson(app, l_d, reload=True)
         log.debug(f"got linked json: {linked_json}")
         if "root" not in linked_json:
             msg = "Folder domains cannot ber used as link target"
@@ -966,7 +1080,8 @@ async def PUT_Domain(request):
             raise HTTPBadRequest(reason=msg)
         root_id = linked_json["root"]
         aclCheck(app, linked_json, "read", username)
-        aclCheck(app, linked_json, "delete", username)  # TBD - why is delete needed?
+        # TBD - why is delete needed?
+        aclCheck(app, linked_json, "delete", username)
     else:
         linked_json = None
 
@@ -974,8 +1089,8 @@ async def PUT_Domain(request):
         # create a root group for the new domain
         root_id = createObjId("roots")
         log.debug(f"new root group id: {root_id}")
-        group_json = {"id": root_id, "root": root_id, "domain": domain }
-        log.debug("create group for domain, body: " + json.dumps(group_json))
+        group_json = {"id": root_id, "root": root_id, "domain": domain}
+        log.debug(f"create group for domain, body: {group_json}")
 
         # create root group
         req = getDataNodeUrl(app, root_id) + "/groups"
@@ -984,9 +1099,12 @@ async def PUT_Domain(request):
         if bucket:
             post_params["bucket"] = bucket
         try:
-            group_json = await http_post(app, req, data=group_json, params=post_params)
+            group_json = await http_post(app,
+                                         req,
+                                         data=group_json,
+                                         params=post_params)
         except ClientResponseError as ce:
-            msg="Error creating root group for domain -- " + str(ce)
+            msg = "Error creating root group for domain -- " + str(ce)
             log.error(msg)
             raise HTTPInternalServerError()
     else:
@@ -1008,7 +1126,8 @@ async def PUT_Domain(request):
             acl = parent_acls[user_name]
             has_action = False
             # don't copy ACL if all actions are False
-            for k in ("create", "read", "update", "delete", "readACL", "updateACL"):
+            acl_keys = getAclKeys()
+            for k in acl_keys:
                 if acl[k]:
                     has_action = True
                     break
@@ -1016,19 +1135,19 @@ async def PUT_Domain(request):
                 # inherit any acls that are not default or owner acls
                 domain_acls[user_name] = parent_acls[user_name]
 
-    domain_json = { }
+    domain_json = {}
 
     # owner gets full control
     domain_acls[owner] = owner_perm
     if config.get("default_public") or is_folder:
         # this will make the domain public readable
         log.debug(f"adding default perm for domain: {domain}")
-        domain_acls["default"] =  default_perm
+        domain_acls["default"] = default_perm
 
     # construct dn request to create new domain
     req = getDataNodeUrl(app, domain)
     req += "/domains"
-    body = { "owner": owner, "domain": domain }
+    body = {"owner": owner, "domain": domain}
     body["acls"] = domain_acls
 
     if root_id:
@@ -1038,7 +1157,7 @@ async def PUT_Domain(request):
     try:
         domain_json = await http_put(app, req, data=body)
     except ClientResponseError as ce:
-        msg="Error creating domain state -- " + str(ce)
+        msg = "Error creating domain state -- " + str(ce)
         log.error(msg)
         raise HTTPInternalServerError()
 
@@ -1057,6 +1176,7 @@ async def PUT_Domain(request):
     resp = await jsonResponse(request, domain_json, status=201)
     log.response(request, resp=resp)
     return resp
+
 
 async def DELETE_Domain(request):
     """HTTP method to delete a domain resource"""
@@ -1129,25 +1249,29 @@ async def DELETE_Domain(request):
             log.error(f"unexpected error: {ce.code}")
             raise HTTPInternalServerError()
 
-    aclCheck(app, domain_json, "delete", username)  # throws exception if not allowed
+    # throws exception if not allowed
+    aclCheck(app, domain_json, "delete", username)
 
     # check for sub-objects if this is a folder
     if "root" not in domain_json:
         index = domain.find('/')
         s3prefix = domain[(index+1):] + '/'
         log.info(f"checking s3key with prefix: {s3prefix} in bucket: {bucket}")
-        s3keys = await getStorKeys(app, include_stats=False, prefix=s3prefix, deliminator='/', bucket=bucket)
+        kwargs = {"include_stats": False,
+                  "prefix": s3prefix,
+                  "deliminator": '/',
+                  "bucket": bucket}
+        s3keys = await getStorKeys(app, **kwargs)
         for s3key in s3keys:
             if s3key.endswith("/"):
                 log.warn(f"attempt to delete folder {domain} with sub-items")
                 log.debug(f"got prefix: {s3keys[0]}")
                 raise HTTPConflict(reason="folder has sub-items")
 
-
     req = getDataNodeUrl(app, domain)
     req += "/domains"
 
-    params = {} # for http_delete requests to DN nodes
+    params = {}  # for http_delete requests to DN nodes
     params["domain"] = domain
     rsp_json = await http_delete(app, req, params=params)
 
@@ -1164,32 +1288,10 @@ async def DELETE_Domain(request):
     if domain in domain_cache:
         del domain_cache[domain]
 
-    # delete domain cache from other sn_urls
-    """
-    sn_urls = app["sn_urls"]
-    log.debug(f"sn_urls: {sn_urls}")
-    log.debug(f"node_number: {app['node_number']}")
-    params = {}
-    params["domain"] = getPathForDomain(domain)
-    params["bucket"] = getBucketForDomain(domain)
-    params["meta_only"] = 1  # can't pass booleans as params, so use 1 instead of True
-    for node_no in sn_urls:
-        log.debug(f"node_no: {node_no}")
-        if node_no == app["node_number"]:
-            continue # don't send to ourselves
-        sn_url = sn_urls[node_no]
-        req = sn_url + "/"
-        log.info(f"sending sn request: {req}")
-        try:
-            sn_rsp = await http_delete(app, req, params=params)
-            log.info(f"{req} response: {sn_rsp}")
-        except ClientResponseError as ce:
-            log.warn(f"got error for sn_delete: {ce}")
-    """
-
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp
+
 
 async def GET_ACL(request):
     """HTTP method to return JSON for given domain/ACL"""
@@ -1219,7 +1321,7 @@ async def GET_ACL(request):
     try:
         domain_json = await getDomainJson(app, domain, reload=True)
     except ClientResponseError as ce:
-        if ce.code in (404,410):
+        if ce.code in (404, 410):
             msg = "domain not found"
             log.warn(msg)
             raise HTTPNotFound()
@@ -1227,12 +1329,15 @@ async def GET_ACL(request):
             log.error(f"unexpected error: {ce.code}")
             raise HTTPInternalServerError()
 
-    # validate that the requesting user has permission to read ACLs in this domain
+    # validate that the requesting user has permission to read ACLs
+    # in this domain
     if acl_username in (username, "default"):
         # allow read access for a users on ACL, or default
-        aclCheck(app, domain_json, "read", username)  # throws exception if not authorized
+        # throws exception if not authorized
+        aclCheck(app, domain_json, "read", username)
     else:
-        aclCheck(app, domain_json, "readACL", username)  # throws exception if not authorized
+        # throws exception if not authorized
+        aclCheck(app, domain_json, "readACL", username)
 
     if 'owner' not in domain_json:
         log.warn("No owner key found in domain")
@@ -1258,12 +1363,13 @@ async def GET_ACL(request):
     acl_rsp["userName"] = acl_username
 
     # return just the keys as per the REST API
-    rsp_json = { }
+    rsp_json = {}
     rsp_json["acl"] = acl_rsp
     hrefs = []
     hrefs.append({'rel': 'self', 'href': getHref(request, '/acls')})
     if "root" in domain_json:
-        hrefs.append({'rel': 'root', 'href': getHref(request, '/groups/' + domain_json["root"])})
+        href = getHref(request, '/groups/' + domain_json["root"])
+        hrefs.append({'rel': 'root', 'href': href})
     hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
     hrefs.append({'rel': 'owner', 'href': getHref(request, '/')})
     rsp_json["hrefs"] = hrefs
@@ -1271,6 +1377,7 @@ async def GET_ACL(request):
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp
+
 
 async def GET_ACLs(request):
     """HTTP method to return JSON for domain/ACLs"""
@@ -1310,7 +1417,8 @@ async def GET_ACLs(request):
 
     log.debug(f"got domain_json: {domain_json}")
     # validate that the requesting user has permission to read this domain
-    aclCheck(app, domain_json, "readACL", username)  # throws exception if not authorized
+    # throws exception if not authorized
+    aclCheck(app, domain_json, "readACL", username)
 
     acl_list = []
     acl_usernames = list(acls.keys())
@@ -1323,13 +1431,14 @@ async def GET_ACLs(request):
             entry[k] = acl[k]
         acl_list.append(entry)
     # return just the keys as per the REST API
-    rsp_json = { }
+    rsp_json = {}
     rsp_json["acls"] = acl_list
 
     hrefs = []
     hrefs.append({'rel': 'self', 'href': getHref(request, '/acls')})
     if "root" in domain_json:
-        hrefs.append({'rel': 'root', 'href': getHref(request, '/groups/' + domain_json["root"])})
+        href = getHref(request, '/groups/' + domain_json["root"])
+        hrefs.append({'rel': 'root', 'href': href})
     hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
     hrefs.append({'rel': 'owner', 'href': getHref(request, '/')})
     rsp_json["hrefs"] = hrefs
@@ -1337,6 +1446,7 @@ async def GET_ACLs(request):
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp
+
 
 async def PUT_ACL(request):
     """HTTP method to add a new ACL for a domain"""
@@ -1442,7 +1552,8 @@ async def GET_Datasets(request):
 
     log.debug(f"got domain_json: {domain_json}")
     # validate that the requesting user has permission to read this domain
-    aclCheck(app, domain_json, "read", username)  # throws exception if not authorized
+    # aclCheck throws exception if not authorized
+    aclCheck(app, domain_json, "read", username)
 
     limit = None
     if "Limit" in params:
@@ -1470,17 +1581,19 @@ async def GET_Datasets(request):
     hrefs.append({'rel': 'self', 'href': getHref(request, '/datasets')})
     if "root" in domain_json:
         root_uuid = domain_json["root"]
-        hrefs.append({'rel': 'root', 'href': getHref(request, '/groups/' + root_uuid)})
+        href = getHref(request, '/groups/' + root_uuid)
+        hrefs.append({'rel': 'root', 'href': href})
     hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
 
     # return obj ids and hrefs
-    rsp_json = { }
+    rsp_json = {}
     rsp_json["datasets"] = obj_ids
     rsp_json["hrefs"] = hrefs
 
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp
+
 
 async def GET_Groups(request):
     """HTTP method to return groups collection for given domain"""
@@ -1523,7 +1636,8 @@ async def GET_Groups(request):
 
     log.debug(f"got domain_json: {domain_json}")
     # validate that the requesting user has permission to read this domain
-    aclCheck(app, domain_json, "read", username)  # throws exception if not authorized
+    # aclCheck throws exception if not authorized
+    aclCheck(app, domain_json, "read", username)
 
     # get the groups collection list
     limit = None
@@ -1550,17 +1664,19 @@ async def GET_Groups(request):
     hrefs.append({'rel': 'self', 'href': getHref(request, '/groups')})
     if "root" in domain_json:
         root_uuid = domain_json["root"]
-        hrefs.append({'rel': 'root', 'href': getHref(request, '/groups/' + root_uuid)})
+        href = getHref(request, '/groups/' + root_uuid)
+        hrefs.append({'rel': 'root', 'href': href})
     hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
 
     # return obj ids and hrefs
-    rsp_json = { }
+    rsp_json = {}
     rsp_json["groups"] = obj_ids
     rsp_json["hrefs"] = hrefs
 
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp
+
 
 async def GET_Datatypes(request):
     """HTTP method to return datatype collection for given domain"""
@@ -1603,7 +1719,8 @@ async def GET_Datatypes(request):
 
     log.debug(f"got domain_json: {domain_json}")
     # validate that the requesting user has permission to read this domain
-    aclCheck(app, domain_json, "read", username)  # throws exception if not authorized
+    # aclCheck throws exception if not authorized
+    aclCheck(app, domain_json, "read", username)
 
     limit = None
     if "Limit" in params:
@@ -1630,11 +1747,12 @@ async def GET_Datatypes(request):
     hrefs.append({'rel': 'self', 'href': getHref(request, '/datatypes')})
     if "root" in domain_json:
         root_uuid = domain_json["root"]
-        hrefs.append({'rel': 'root', 'href': getHref(request, '/groups/' + root_uuid)})
+        href = getHref(request, '/groups/' + root_uuid)
+        hrefs.append({'rel': 'root', 'href': href})
     hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
 
     # return obj ids and hrefs
-    rsp_json = { }
+    rsp_json = {}
     rsp_json["datatypes"] = obj_ids
     rsp_json["hrefs"] = hrefs
 

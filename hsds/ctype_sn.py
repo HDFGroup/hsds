@@ -14,15 +14,18 @@
 # handles datatypes requests
 #
 
-import json
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPGone
 
-from .util.httpUtil import http_post, http_put, http_delete, getHref, jsonResponse
-from .util.idUtil import   isValidUuid, getDataNodeUrl, createObjId
-from .util.authUtil import getUserPasswordFromRequest, aclCheck, validateUserPassword
-from .util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain, verifyRoot
+from .util.httpUtil import http_post, http_put, http_delete, getHref
+from .util.httpUtil import jsonResponse
+from .util.idUtil import isValidUuid, getDataNodeUrl, createObjId
+from .util.authUtil import getUserPasswordFromRequest, aclCheck
+from .util.authUtil import validateUserPassword
+from .util.domainUtil import getDomainFromRequest, isValidDomain
+from .util.domainUtil import getBucketForDomain, verifyRoot
 from .util.hdf5dtype import validateTypeItem, getBaseTypeJson
-from .servicenode_lib import getDomainJson, getObjectJson, validateAction, getObjectIdByPath, getPathForObjectId
+from .servicenode_lib import getDomainJson, getObjectJson, validateAction
+from .servicenode_lib import getObjectIdByPath, getPathForObjectId
 from . import hsds_logger as log
 
 
@@ -87,10 +90,12 @@ async def GET_Datatype(request):
     if h5path:
         domain_json = await getDomainJson(app, domain)
         verifyRoot(domain_json)
-    
+
         if group_id is None:
             group_id = domain_json["root"]
-        ctype_id = await getObjectIdByPath(app, group_id, h5path, bucket=bucket)  # throws 404 if not found
+        # throws 404 if not found
+        kwargs = {"bucket": bucket}
+        ctype_id = await getObjectIdByPath(app, group_id, h5path, **kwargs)
         if not isValidUuid(ctype_id, "Datatype"):
             msg = f"No datatype exist with the path: {h5path}"
             log.warn(msg)
@@ -99,15 +104,20 @@ async def GET_Datatype(request):
 
     await validateAction(app, domain, ctype_id, username, "read")
 
-    # get authoritative state for ctype from DN (even if it's in the meta_cache).
-    type_json = await getObjectJson(app, ctype_id, bucket=bucket, refresh=True, include_attrs=include_attrs)
+    # get authoritative state for ctype from DN
+    #   (even if it's in the meta_cache)
+    kwargs = {"bucket": bucket,
+              "refresh": True,
+              "include_attrs": include_attrs}
+    type_json = await getObjectJson(app, ctype_id, **kwargs)
     type_json["domain"] = domain
 
     if getAlias:
         root_id = type_json["root"]
         alias = []
         idpath_map = {root_id: '/'}
-        h5path = await getPathForObjectId(app, root_id, idpath_map, tgt_id=ctype_id, bucket=bucket)
+        kwargs = {"bucket": bucket, "tgt_id": ctype_id}
+        h5path = await getPathForObjectId(app, root_id, idpath_map, **kwargs)
         if h5path:
             alias.append(h5path)
         type_json["alias"] = alias
@@ -118,12 +128,14 @@ async def GET_Datatype(request):
     root_uri = '/groups/' + type_json["root"]
     hrefs.append({'rel': 'root', 'href': getHref(request, root_uri)})
     hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
-    hrefs.append({'rel': 'attributes', 'href': getHref(request, ctype_uri+'/attributes')})
+    href = getHref(request, ctype_uri+'/attributes')
+    hrefs.append({'rel': 'attributes', 'href': href})
     type_json["hrefs"] = hrefs
 
     resp = await jsonResponse(request, type_json)
     log.response(request, resp=resp)
     return resp
+
 
 async def POST_Datatype(request):
     """HTTP method to create new committed datatype object"""
@@ -178,7 +190,8 @@ async def POST_Datatype(request):
     bucket = getBucketForDomain(domain)
     domain_json = await getDomainJson(app, domain, reload=True)
 
-    aclCheck(app, domain_json, "create", username)  # throws exception if not allowed
+    # throws exception if not allowed
+    aclCheck(app, domain_json, "create", username)
 
     verifyRoot(domain_json)
 
@@ -199,8 +212,8 @@ async def POST_Datatype(request):
     root_id = domain_json["root"]
     ctype_id = createObjId("datatypes", rootid=root_id)
     log.debug(f"new  type id: {ctype_id}")
-    ctype_json = {"id": ctype_id, "root": root_id, "type": datatype }
-    log.debug("create named type, body: " + json.dumps(ctype_json))
+    ctype_json = {"id": ctype_id, "root": root_id, "type": datatype}
+    log.debug(f"create named type, body: {ctype_json}")
     req = getDataNodeUrl(app, ctype_id) + "/datatypes"
     params = {}
     if bucket:
@@ -210,7 +223,7 @@ async def POST_Datatype(request):
 
     # create link if requested
     if link_id and link_title:
-        link_json={}
+        link_json = {}
         link_json["id"] = ctype_id
         link_json["class"] = "H5L_TYPE_HARD"
         link_req = getDataNodeUrl(app, link_id)
@@ -224,6 +237,7 @@ async def POST_Datatype(request):
     log.response(request, resp=resp)
 
     return resp
+
 
 async def DELETE_Datatype(request):
     """HTTP method to delete a committed type resource"""

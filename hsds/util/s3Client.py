@@ -1,7 +1,18 @@
+##############################################################################
+# Copyright by The HDF Group.                                                #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HSDS (HDF5 Scalable Data Service), Libraries and      #
+# Utilities.  The full HSDS copyright notice, including                      #
+# terms governing use, modification, and redistribution, is contained in     #
+# the file COPYING, which can be found at the root of the source code        #
+# distribution tree.  If you do not have access to this file, you may        #
+# request a copy from help@hdfgroup.org.                                     #
+##############################################################################
 import asyncio
 import os
 from asyncio import CancelledError
-from  inspect import iscoroutinefunction
+from inspect import iscoroutinefunction
 import subprocess
 import datetime
 import json
@@ -9,9 +20,11 @@ import time
 from aiobotocore.config import AioConfig
 from aiobotocore import get_session
 from botocore.exceptions import ClientError
-from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError, HTTPForbidden, HTTPBadRequest
+from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPForbidden, HTTPBadRequest
 from .. import hsds_logger as log
 from .. import config
+
 
 class S3Client():
     """
@@ -34,7 +47,7 @@ class S3Client():
                 delta = expiration - now
                 if delta.total_seconds() > 10:
                     _client = app["s3"]
-                    return _client 
+                    return _client
                 # otherwise, fall through and get a new token
                 log.info("S3 access token has expired - renewing")
             else:
@@ -49,12 +62,14 @@ class S3Client():
         self._aws_access_key_id = None
         max_pool_connections = 64
         self._aws_session_token = None
+        self._aws_role_arn = None
+        self._aws_session_token = None
 
         try:
             self._aws_iam_role = config.get("aws_iam_role")
         except KeyError:
             pass
-        
+
         try:
             self._aws_secret_access_key = config.get("aws_secret_access_key")
         except KeyError:
@@ -74,13 +89,16 @@ class S3Client():
         self._aws_role_arn = None
         if "AWS_ROLE_ARN" in os.environ:
             # Assume IAM roles for EKS is being used.  See:
-            # https://aws.amazon.com/blogs/opensource/introducing-fine-grained-iam-roles-service-accounts/
+            # https://aws.amazon.com/blogs/opensource/\
+            # introducing-fine-grained-iam-roles-service-accounts/
             self._aws_role_arn = os.environ['AWS_ROLE_ARN']
             log.info(f"AWS_ROLE_ARN set to: {self._aws_role_arn}")
             if "AWS_WEB_IDENTITY_TOKEN_FILE" in os.environ:
-                log.debug(f"AWS_WEB_IDENTITY_TOKEN_FILE is: {os.environ['AWS_WEB_IDENTITY_TOKEN_FILE']}")
-            else:
-                log.warn("Expected AWS_WEB_IDENTIFY_TOKEN_FILE environment to be set")
+                token_file = os.environ['AWS_WEB_IDENTITY_TOKEN_FILE']
+                log.debug(f"AWS_WEB_IDENTITY_TOKEN_FILE is: {token_file}")
+        if "AWS_SESSION_TOKEN" in os.environ:
+            self._aws_session_token = os.environ['AWS_SESSION_TOKEN']
+            log.debug(f"got AWS_SESSION_TOKEN: {self._aws_session_token}")
 
         self._aio_config = AioConfig(max_pool_connections=max_pool_connections)
 
@@ -88,7 +106,7 @@ class S3Client():
 
         self._s3_gateway = config.get('aws_s3_gateway')
         if not self._s3_gateway:
-            msg="Invalid aws s3 gateway"
+            msg = "Invalid aws s3 gateway"
             log.error(msg)
             raise ValueError(msg)
         log.debug(f"Using S3Gateway: {self._s3_gateway}")
@@ -97,33 +115,47 @@ class S3Client():
         if self._s3_gateway.startswith("https"):
             self._use_ssl = True
 
-        if not self._aws_secret_access_key or self._aws_secret_access_key == 'xxx':
+        if not self._aws_secret_access_key or \
+                self._aws_secret_access_key == 'xxx':
             log.debug("aws secret access key not set")
             self._aws_secret_access_key = None
         if not self._aws_access_key_id or self._aws_access_key_id == 'xxx':
             log.debug("aws access key id not set")
             self._aws_access_key_id = None
+        else:
+            log.debug(f"using aws key id: {self._aws_access_key_id}")
         self._renewToken()
 
+    def _get_client_kwargs(self):
+        kwargs = {}
+        kwargs["region_name"] = self._aws_region
+        kwargs["aws_secret_access_key"] = self._aws_secret_access_key
+        kwargs["aws_access_key_id"] = self._aws_access_key_id
+        kwargs["aws_session_token"] = self._aws_session_token
+        kwargs["endpoint_url"] = self._s3_gateway
+        kwargs["use_ssl"] = self._use_ssl
+        kwargs["config"] = self._aio_config
+        return kwargs
+
     def _renewToken(self):
-        """ if using an aws_iam_role, fetch credentials if our token is about to expire,
-          otherwise just return
+        """ if using an aws_iam_role, fetch credentials if our token is about
+          to expire, otherwise just return
         """
         app = self._app
-        
+
         if not self._aws_iam_role:
             # need this to get a token
-            return  
+            return
         if self._aws_role_arn:
             # this is set for running in EKS, shouldn't need a token
-            return 
-        
+            return
+
         if "token_expiration" in app:
             # check that our token is not about to expire
             expiration = app["token_expiration"]
         else:
             expiration = None
-        
+
         if expiration:
             now = datetime.datetime.now()
             delta = expiration - now
@@ -137,13 +169,18 @@ class S3Client():
             renew_token = False  # access key set by config
         else:
             renew_token = True  # first time getting token
-    
+
         if renew_token:
-            log.info(f"get S3 access token using iam role: {self._aws_iam_role}")
+            msg = f"get S3 access token using iam role: {self._aws_iam_role}"
+            log.info(msg)
             # Use EC2 IAM role to get credentials
-            # See: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html?icmpid=docs_ec2_console
-            curl_cmd = ["curl", f"http://169.254.169.254/latest/meta-data/iam/security-credentials/{self._aws_iam_role}"]
-            p = subprocess.run(curl_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            # See: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/\
+            # iam-roles-for-amazon-ec2.html?icmpid=docs_ec2_console
+            url = "http://169.254.169.254/latest/meta-data/iam/"
+            url += f"security-credentials/{self._aws_iam_role}"
+            curl_cmd = ["curl", url]
+            kwargs = {"stdout": subprocess.PIPE, "stderr": subprocess.PIPE}
+            p = subprocess.run(curl_cmd, **kwargs)
             if p.returncode != 0:
                 msg = f"Error getting IAM role credentials: {p.stderr}"
                 log.error(msg)
@@ -155,18 +192,23 @@ class S3Client():
                     self._aws_access_key_id = cred["AccessKeyId"]
                     aws_cred_expiration = cred["Expiration"]
                     self._aws_session_token = cred["Token"]
-                    log.info(f"renew token: got Expiration of: {aws_cred_expiration}")
-                    expiration_str = aws_cred_expiration[:-1] + "UTC" # trim off 'Z' and add 'UTC'
+                    msg = "renew token: got Expiration of: "
+                    msg += f"{aws_cred_expiration}"
+                    log.info(msg)
+                    # trim off 'Z' and add 'UTC'
+                    s = aws_cred_expiration[:-1] + "UTC"
                     # save the expiration
-                    app["token_expiration"] = datetime.datetime.strptime(expiration_str, "%Y-%m-%dT%H:%M:%S%Z")
+                    t_e = datetime.datetime.strptime(s, "%Y-%m-%dT%H:%M:%S%Z")
+                    app["token_expiration"] = t_e
                     app["aws_session_token"] = self._aws_session_token
                 except json.JSONDecodeError:
-                    msg = f"Unexpected error decoding EC2 meta-data response: {stdout}"
+                    msg = "Unexpected error decoding EC2 meta-data "
+                    msg += f"response: {stdout}"
                     log.error(msg)
                 except KeyError:
-                    msg = f"Missing expected key from EC2 meta-data response: {stdout}"
+                    msg = "Missing expected key from EC2 meta-data "
+                    msg += f"response: {stdout}"
                     log.error(msg)
-
 
     def _s3_stats_increment(self, counter, inc=1):
         """ Incremenet the indicated connter
@@ -197,7 +239,7 @@ class S3Client():
            If Range is set, return the given byte range.
         """
 
-        range=""
+        range = ""
         if length > 0:
             range = f"bytes={offset}-{offset+length-1}"
             log.info(f"storage range request: {range}")
@@ -210,29 +252,31 @@ class S3Client():
         log.debug(f"s3Client.get_object({bucket}/{key}) start: {start_time}")
         session = self._app["session"]
         self._renewToken()
-        async with session.create_client('s3', region_name=self._aws_region,
-                                    aws_secret_access_key=self._aws_secret_access_key,
-                                    aws_access_key_id=self._aws_access_key_id,
-                                    aws_session_token=self._aws_session_token,
-                                    endpoint_url=self._s3_gateway,
-                                    use_ssl=self._use_ssl,
-                                    config=self._aio_config) as _client:
+        kwargs = self._get_client_kwargs()
+        async with session.create_client('s3', **kwargs) as _client:
             try:
-                resp = await _client.get_object(Bucket=bucket, Key=key, Range=range)
+                kwargs = {"Bucket": bucket, "Key": key}
+                if range:
+                    kwargs["Range"] = range
+                resp = await _client.get_object(**kwargs)
                 data = await resp['Body'].read()
                 finish_time = time.time()
                 if offset > 0:
                     range_key = f"{key}[{offset}:{offset+length}]"
                 else:
                     range_key = key
-                log.info(f"s3Client.get_object({range_key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f} bytes={len(data)}")
+                msg = f"s3Client.get_object({range_key} bucket={bucket}) "
+                msg += f"start={start_time:.4f} finish={finish_time:.4f} "
+                msg += f"elapsed={finish_time-start_time:.4f} "
+                msg += f"bytes={len(data)}"
+                log.info(msg)
 
                 resp['Body'].close()
             except ClientError as ce:
                 # key does not exist?
                 # check for not found status
                 response_code = ce.response["Error"]["Code"]
-                if response_code in ("NoSuchKey", "404") or response_code == 404:
+                if response_code in ("NoSuchKey", "404", 404):
                     msg = f"s3_key: {key} not found "
                     log.warn(msg)
                     raise HTTPNotFound()
@@ -240,13 +284,15 @@ class S3Client():
                     msg = f"s3_bucket: {bucket} not found"
                     log.info(msg)
                     raise HTTPNotFound()
-                elif response_code in ("AccessDenied", "401", "403") or response_code in (401, 403):
+                elif response_code in ("AccessDenied", "401", "403", 401, 403):
                     msg = f"access denied for s3_bucket: {bucket}"
                     log.info(msg)
                     raise HTTPForbidden()
                 else:
                     self._s3_stats_increment("error_count")
-                    log.error(f"got unexpected ClientError on s3 get {key}: {response_code}")
+                    msg = f"got unexpected ClientError on s3 get {key}: "
+                    msg += f"{response_code}"
+                    log.error(msg)
                     raise HTTPInternalServerError()
             except CancelledError as cle:
                 self._s3_stats_increment("error_count")
@@ -272,18 +318,20 @@ class S3Client():
         log.debug(f"s3Client.put_object({bucket}/{key} start: {start_time}")
         session = self._app["session"]
         self._renewToken()
-        async with session.create_client('s3', region_name=self._aws_region,
-                                    aws_secret_access_key=self._aws_secret_access_key,
-                                    aws_access_key_id=self._aws_access_key_id,
-                                    aws_session_token=self._aws_session_token,
-                                    endpoint_url=self._s3_gateway,
-                                    use_ssl=self._use_ssl,
-                                    config=self._aio_config) as _client:
+        kwargs = self._get_client_kwargs()
+        async with session.create_client('s3', **kwargs) as _client:
             try:
-                rsp = await _client.put_object(Bucket=bucket, Key=key, Body=data)
+                kwargs = {"Bucket": bucket, "Key": key, "Body": data}
+                rsp = await _client.put_object(**kwargs)
                 finish_time = time.time()
-                log.info(f"s3Client.put_object({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f} bytes={len(data)}")
-                s3_rsp = {"etag": rsp["ETag"], "size": len(data), "lastModified": int(finish_time)}
+                msg = f"s3Client.put_object({key} bucket={bucket}) "
+                msg += f"start={start_time:.4f} finish={finish_time:.4f} "
+                msg += f"elapsed={finish_time-start_time:.4f} "
+                msg += f"bytes={len(data)}"
+                log.info(msg)
+                s3_rsp = {"etag": rsp["ETag"],
+                          "size": len(data),
+                          "lastModified": int(finish_time)}
             except ClientError as ce:
                 response_code = ce.response["Error"]["Code"]
                 if response_code == "NoSuchBucket":
@@ -296,13 +344,14 @@ class S3Client():
                     log.error(msg)
                     raise HTTPInternalServerError()
             except CancelledError as cle:
-                #s3_stats_increment(app, "error_count")
+                # s3_stats_increment(app, "error_count")
                 msg = f"CancelledError for put s3 obj {key}: {cle}"
                 log.error(msg)
                 raise HTTPInternalServerError()
             except Exception as e:
-                #s3_stats_increment(app, "error_count")
-                msg = f"Unexpected Exception {type(e)} putting s3 obj {key}: {e}"
+                # s3_stats_increment(app, "error_count")
+                msg = f"Unexpected Exception {type(e)} putting s3 obj "
+                msg += f"{key}: {e}"
                 log.error(msg)
                 raise HTTPInternalServerError()
         if data and len(data) > 0:
@@ -321,17 +370,15 @@ class S3Client():
         log.debug(f"s3Client.delete_object({bucket}/{key} start: {start_time}")
         session = self._app["session"]
         self._renewToken()
-        async with session.create_client('s3', region_name=self._aws_region,
-                                    aws_secret_access_key=self._aws_secret_access_key,
-                                    aws_access_key_id=self._aws_access_key_id,
-                                    aws_session_token=self._aws_session_token,
-                                    endpoint_url=self._s3_gateway,
-                                    use_ssl=self._use_ssl,
-                                    config=self._aio_config) as _client:
+        kwargs = self._get_client_kwargs()
+        async with session.create_client('s3', **kwargs) as _client:
             try:
                 await _client.delete_object(Bucket=bucket, Key=key)
                 finish_time = time.time()
-                log.info(f"s3Client.delete_object({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f}")
+                msg = f"s3Client.delete_object({key} bucket={bucket}) "
+                msg += f"start={start_time:.4f} finish={finish_time:.4f} "
+                msg += f"elapsed={finish_time-start_time:.4f}"
+                log.info(msg)
 
             except ClientError as ce:
                 # key does not exist?
@@ -351,7 +398,8 @@ class S3Client():
                 raise HTTPInternalServerError()
             except Exception as e:
                 self._s3_stats_increment("error_count")
-                msg = f"Unexpected Exception {type(e)} deleting s3 obj {key}: {e}"
+                msg = f"Unexpected Exception {type(e)} deleting s3 obj "
+                msg += f"{key}: {e}"
                 log.error(msg)
                 raise HTTPInternalServerError()
 
@@ -365,13 +413,8 @@ class S3Client():
         found = False
         session = self._app["session"]
         self._renewToken()
-        async with session.create_client('s3', region_name=self._aws_region,
-                                    aws_secret_access_key=self._aws_secret_access_key,
-                                    aws_access_key_id=self._aws_access_key_id,
-                                    aws_session_token=self._aws_session_token,
-                                    endpoint_url=self._s3_gateway,
-                                    use_ssl=self._use_ssl,
-                                    config=self._aio_config) as _client:
+        kwargs = self._get_client_kwargs()
+        async with session.create_client('s3', **kwargs) as _client:
             try:
                 head_data = await _client.head_object(Bucket=bucket, Key=key)
                 finish_time = time.time()
@@ -389,26 +432,25 @@ class S3Client():
                 raise HTTPInternalServerError()
             except Exception as e:
                 self._s3_stats_increment("error_count")
-                msg = f"Unexpected Exception {type(e)} getting head for s3 obj {key}: {e}"
+                msg = f"Unexpected Exception {type(e)} getting head for s3 obj"
+                msg += f"{key}: {e}"
                 log.error(msg)
                 raise HTTPInternalServerError()
-        log.info(f"s3Client.is_object({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f}")
+        msg = f"s3Client.is_object({key} bucket={bucket}) "
+        msg += f"start={start_time:.4f} finish={finish_time:.4f} "
+        msg += f"elapsed={finish_time-start_time:.4f}"
+        log.info(msg)
 
         return found
 
     async def get_key_stats(self, key, bucket=None):
-        """ Get ETag, size, and last modified time for given objecct
+        """ Get ETag, size, and last modified time for given object
         """
         start_time = time.time()
         session = self._app["session"]
         self._renewToken()
-        async with session.create_client('s3', region_name=self._aws_region,
-                                    aws_secret_access_key=self._aws_secret_access_key,
-                                    aws_access_key_id=self._aws_access_key_id,
-                                    aws_session_token=self._aws_session_token,
-                                    endpoint_url=self._s3_gateway,
-                                    use_ssl=self._use_ssl,
-                                    config=self._aio_config) as _client:
+        kwargs = self._get_client_kwargs()
+        async with session.create_client('s3', **kwargs) as _client:
             try:
                 head_data = await _client.head_object(Bucket=bucket, Key=key)
                 finish_time = time.time()
@@ -421,37 +463,44 @@ class S3Client():
                 raise HTTPNotFound()
             except CancelledError as cle:
                 self._s3_stats_increment("error_count")
-                msg = f"s3Client.get_key_stats: CancelledError getting head for s3 obj {key}: {cle}"
+                msg = "s3Client.get_key_stats: CancelledError getting head "
+                msg += f"for s3 obj {key}: {cle}"
                 log.error(msg)
                 raise HTTPInternalServerError()
             except Exception as e:
                 self._s3_stats_increment("error_count")
-                msg = f"s3Client.get_key_stats: Unexpected Exception {type(e)} getting head for s3 obj {key}: {e}"
+                msg = f"s3Client.get_key_stats: Unexpected Exception {type(e)}"
+                msg += f" getting head for s3 obj {key}: {e}"
                 log.error(msg)
                 raise HTTPInternalServerError()
 
         for head_key in ("ContentLength", "ETag", "LastModified"):
             if head_key not in head_data:
-                msg = f"s3Client.get_key_stats, expected to find key: {head_key} in head_data"
+                msg = "s3Client.get_key_stats, expected to find key: "
+                msg += f"{head_key} in head_data"
                 log.error(msg)
                 raise HTTPInternalServerError()
 
         last_modified_dt = head_data["LastModified"]
         if not isinstance(last_modified_dt, datetime.datetime):
-            msg ="S3Client.get_key_stats, expected datetime object in head data"
+            msg = "S3Client.get_key_stats, expected datetime object "
+            msg += "in head data"
             log.error(msg)
             raise HTTPInternalServerError()
         key_stats = {}
         key_stats["Size"] = head_data['ContentLength']
         key_stats["ETag"] = head_data["ETag"]
-        key_stats["LastModified"] = datetime.datetime.timestamp(last_modified_dt)
-        log.info(f"s3Client.get_key_stats({key} bucket={bucket}) start={start_time:.4f} finish={finish_time:.4f} elapsed={finish_time-start_time:.4f}")
-
+        LastModified = datetime.datetime.timestamp(last_modified_dt)
+        key_stats["LastModified"] = LastModified
+        msg = f"s3Client.get_key_stats({key} bucket={bucket}) "
+        msg += f"start={start_time:.4f} finish={finish_time:.4f} "
+        msg += f"elapsed={finish_time-start_time:.4f}"
+        log.info(msg)
 
         return key_stats
 
     def _getPageItems(self, response, items, include_stats=False):
-
+        """ internl method for list pagination """
         log.info("getPageItems")
 
         if 'CommonPrefixes' in response:
@@ -478,7 +527,8 @@ class S3Client():
                     else:
                         log.warn(f"No Size for key: {key_name}")
                     if "LastModified" in item:
-                        stats["LastModified"] = int(item["LastModified"].timestamp())
+                        LastModified = int(item["LastModified"].timestamp())
+                        stats["LastModified"] = LastModified
                     else:
                         log.warn(f"No LastModified for key: {key_name}")
                     log.debug(f"key: {key_name} stats: {stats}")
@@ -486,46 +536,46 @@ class S3Client():
                 else:
                     items.append(key_name)
 
-
-
-    async def list_keys(self, prefix='', deliminator='', suffix='', include_stats=False, callback=None, bucket=None, limit=None):
+    async def list_keys(self, prefix='', deliminator='', suffix='',
+                        include_stats=False, callback=None, bucket=None,
+                        limit=None):
         """ return keys matching the arguments
         """
         if not bucket:
             log.error("list_keys - bucket not set")
             raise HTTPInternalServerError()
-        log.info(f"list_keys('{prefix}','{deliminator}','{suffix}', include_stats={include_stats}, callback {'set' if callback is not None else 'not set'}")
+        msg = f"list_keys('{prefix}','{deliminator}','{suffix}', "
+        msg += f"include_stats={include_stats}, "
+        msg += f"callback {'set' if callback is not None else 'not set'}"
+        log.info(msg)
         if deliminator and deliminator != '/':
             msg = "Only '/' is supported as deliminator"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         session = self._app["session"]
         self._renewToken()
-        async with session.create_client('s3', region_name=self._aws_region,
-                                    aws_secret_access_key=self._aws_secret_access_key,
-                                    aws_access_key_id=self._aws_access_key_id,
-                                    aws_session_token=self._aws_session_token,
-                                    endpoint_url=self._s3_gateway,
-                                    use_ssl=self._use_ssl,
-                                    config=self._aio_config) as _client:
+        kwargs = self._get_client_kwargs()
+        async with session.create_client('s3', **kwargs) as _client:
             paginator = _client.get_paginator('list_objects')
-            
+
             # use a dictionary to hold return values if stats are needed
-            key_names = {} if include_stats else [] 
+            key_names = {} if include_stats else []
             count = 0
 
             try:
                 async for page in paginator.paginate(
-                    PaginationConfig={'PageSize': 1000}, Bucket=bucket,  Prefix=prefix, Delimiter=deliminator):
+                         PaginationConfig={'PageSize': 1000}, Bucket=bucket,
+                         Prefix=prefix, Delimiter=deliminator):
                     assert not asyncio.iscoroutine(page)
-                    self._getPageItems(page, key_names, include_stats=include_stats)
+                    kwargs = {"include_stats": include_stats}
+                    self._getPageItems(page, key_names, **kwargs)
                     count += len(key_names)
                     if callback:
                         if iscoroutinefunction(callback):
                             await callback(self._app, key_names)
                         else:
                             callback(self._app, key_names)
-                        key_names = {} if include_stats else [] # reset
+                        key_names = {} if include_stats else []  # reset
                     if limit and count >= limit:
                         log.info(f"list_keys - reached limit {limit}")
                         break
@@ -538,7 +588,9 @@ class S3Client():
 
         log.info(f"getS3Keys done, got {count} keys")
         if not callback and count != len(key_names):
-            log.warning(f"expected {count} keys in return list but got {len(key_names)}")
+            msg = f"expected {count} keys in return list "
+            msg += f"but got {len(key_names)}"
+            log.warning(msg)
 
         return key_names
 
@@ -548,4 +600,3 @@ class S3Client():
         """
         log.info("release S3Client")
         await asyncio.sleep(0)  # nothing to do
-

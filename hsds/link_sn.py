@@ -15,12 +15,14 @@
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPConflict
 
-from .util.httpUtil import  http_get, http_put, http_delete, getHref, jsonResponse
-from .util.idUtil import   isValidUuid, getDataNodeUrl, getCollectionForId
+from .util.httpUtil import http_get, http_put, http_delete, getHref
+from .util.httpUtil import jsonResponse
+from .util.idUtil import isValidUuid, getDataNodeUrl, getCollectionForId
 from .util.authUtil import getUserPasswordFromRequest,   validateUserPassword
-from .util.domainUtil import  getDomainFromRequest, isValidDomain, getBucketForDomain
+from .util.domainUtil import getDomainFromRequest, isValidDomain
+from .util.domainUtil import getBucketForDomain
 from .util.linkUtil import validateLinkName
-from .servicenode_lib import  validateAction, getObjectJson
+from .servicenode_lib import validateAction, getObjectJson
 from . import hsds_logger as log
 
 
@@ -97,14 +99,18 @@ async def GET_Links(request):
     resp_json["links"] = links
     hrefs = []
     group_uri = '/groups/'+group_id
-    hrefs.append({'rel': 'self', 'href': getHref(request, group_uri+'/links')})
-    hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
-    hrefs.append({'rel': 'owner', 'href': getHref(request, group_uri)})
+    href = getHref(request, group_uri+'/links')
+    hrefs.append({'rel': 'self', 'href': href})
+    href = getHref(request, '/')
+    hrefs.append({'rel': 'home', 'href': href})
+    href = getHref(request, group_uri)
+    hrefs.append({'rel': 'owner', 'href': href})
     resp_json["hrefs"] = hrefs
 
     resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
     return resp
+
 
 async def GET_Link(request):
     """HTTP method to return JSON for a group link"""
@@ -167,18 +173,23 @@ async def GET_Link(request):
 
     hrefs = []
     group_uri = '/groups/'+group_id
-    hrefs.append({'rel': 'self', 'href': getHref(request, group_uri+'/links/'+link_title)})
-    hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
-    hrefs.append({'rel': 'owner', 'href': getHref(request, group_uri)})
+    href = getHref(request, f"{group_uri}/links/{link_title}")
+    hrefs.append({'rel': 'self', 'href': href})
+    href = getHref(request, '/')
+    hrefs.append({'rel': 'home', 'href': href})
+    href = getHref(request, group_uri)
+    hrefs.append({'rel': 'owner', 'href': href})
     if link_json["class"] == "H5L_TYPE_HARD":
         target = '/' + resp_link["collection"] + '/' + resp_link["id"]
-        hrefs.append({'rel': 'target', 'href': getHref(request, target)})
+        href = getHref(request, target)
+        hrefs.append({'rel': 'target', 'href': href})
 
     resp_json["hrefs"] = hrefs
 
     resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
     return resp
+
 
 async def PUT_Link(request):
     """HTTP method to create a new link"""
@@ -240,8 +251,8 @@ async def PUT_Link(request):
     bucket = getBucketForDomain(domain)
     await validateAction(app, domain, group_id, username, "create")
 
-
-    # for hard links, verify that the referenced id exists and is in this domain
+    # for hard links, verify that the referenced id exists and is in
+    # this domain
     if "id" in body:
         ref_id = body["id"]
         ref_json = await getObjectJson(app, ref_id, bucket=bucket)
@@ -271,24 +282,31 @@ async def PUT_Link(request):
         for prop in ("class", "id", "h5path", "h5domain"):
             if prop in link_json:
                 if prop not in existing_link:
-                    log.warn(f"PUT Link - prop {prop} not found in existing link, returning 409")
+                    msg = f"PUT Link - prop {prop} not found in existing "
+                    msg += "link, returning 409"
+                    log.warn(msg)
                     break
                 if link_json[prop] != existing_link[prop]:
-                    log.warn(f"PUT Link - prop {prop} value is different, old: {existing_link[prop]}, new: {link_json[prop]}, returning 409")
+                    msg = f"PUT Link - prop {prop} value is different, old: "
+                    msg += f"{existing_link[prop]}, new: {link_json[prop]}, "
+                    msg += "returning 409"
+                    log.warn(msg)
                     break
         else:
             log.info("PUT link is identical to existing value returning OK")
-            dn_status = 200 # return 200 since we didn't actually create a resource
+            # return 200 since we didn't actually create a resource
+            dn_status = 200
         if dn_status == 409:
             raise  # return 409 to client
     hrefs = []  # TBD
-    req_rsp = { "hrefs": hrefs }
+    req_rsp = {"hrefs": hrefs}
     # link creation successful
     # returns 201 if new link was created, 200 if this is a duplicate
     # of an existing link
     resp = await jsonResponse(request, req_rsp, status=dn_status)
     log.response(request, resp=resp)
     return resp
+
 
 async def DELETE_Link(request):
     """HTTP method to delete a link"""

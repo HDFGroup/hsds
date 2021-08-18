@@ -11,7 +11,8 @@
 ##############################################################################
 #
 # storUtil:
-# storage access functions.  Abstracts S3 API vs Azure storage access
+# storage access functions.
+# Abstracts S3 API vs Azure vs Posix storage access
 #
 import time
 import json
@@ -29,6 +30,7 @@ try:
     from .azureBlobClient import AzureBlobClient
 except ImportError:
     def AzureBlobClient(app):
+        log.error("Unable to import AzureBlobClient")
         return None
 try:
     from .fileClient import FileClient
@@ -67,7 +69,8 @@ def _getStorageClient(app):
     else:
         log.debug("_getStorageClient getting FileClient")
         client = FileClient(app)
-    app["storage_client"] = client  # save so we don't neeed to recreate each time
+    # save client so we don't neeed to recreate each time
+    app["storage_client"] = client
     return client
 
 
@@ -126,8 +129,9 @@ async def rangegetProxy(app, bucket=None, key=None, offset=0, length=0):
             log.warn(f"rangeget for: {bucket}{key} no data returned")
             raise HTTPNotFound()
         if len(data) != length:
-            log.warn(
-                f"expected {length} bytes for rangeget {bucket}{key}, but got: {len(data)}")
+            msg = f"expected {length} bytes for rangeget {bucket}{key}, "
+            msg += f"but got: {len(data)}"
+            log.warn(msg)
         return data
 
     elif rsp.status == 404:
@@ -158,11 +162,14 @@ async def getStorJSONObj(app, key, bucket=None):
         log.error(f"Error loading JSON at key: {key}")
         raise HTTPInternalServerError()
 
-    log.debug(f"storage key {key} returned json object with {len(json_dict)} keys")
+    msg = f"storage key {key} returned json object "
+    msg += f"with {len(json_dict)} keys"
+    log.debug(msg)
     return json_dict
 
 
-async def getStorBytes(app, key, filter_ops=None, offset=0, length=-1, bucket=None, use_proxy=False):
+async def getStorBytes(app, key, filter_ops=None, offset=0,
+                       length=-1, bucket=None, use_proxy=False):
     """ Get object identified by key and read as bytes
     """
 
@@ -175,7 +182,8 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=-1, bucket=No
         offset = 0
     if length is None:
         length = 0
-    log.info(f"getStorBytes({bucket}/{key}, offset={offset}, length: {length})")
+    msg = f"getStorBytes({bucket}/{key}, offset={offset}, length: {length})"
+    log.info(msg)
 
     data_cache_page_size = int(config.get("data_cache_page_size"))
 
@@ -190,11 +198,13 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=-1, bucket=No
             compressor = filter_ops["compressor"]
             log.debug(f"using compressor: {compressor}")
 
+    kwargs = {"bucket": bucket, "key": key,
+              "offset": offset, "length": length}
     if offset > 0 and use_proxy and length < data_cache_page_size:
         # use rangeget proxy
-        data = await rangegetProxy(app, bucket=bucket, key=key, offset=offset, length=length)
+        data = await rangegetProxy(app, **kwargs)
     else:
-        data = await client.get_object(bucket=bucket, key=key, offset=offset, length=length)
+        data = await client.get_object(**kwargs)
     if data is None or len(data) == 0:
         log.info(f"no data found for {key}")
         return data
@@ -207,7 +217,8 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=-1, bucket=No
         # compressed chunk data...
 
         # first check if this was compressed with blosc
-        blosc_metainfo = codecs.blosc.cbuffer_metainfo(data)  # returns typesize, isshuffle, and memcopied
+        # returns typesize, isshuffle, and memcopied
+        blosc_metainfo = codecs.blosc.cbuffer_metainfo(data)
         if blosc_metainfo[0] > 0:
             log.info(f"blosc compressed data for {key}")
             try:
@@ -217,10 +228,12 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=-1, bucket=No
                 data = udata
                 shuffle = 0  # blosc will unshuffle the bytes for us
             except Exception as e:
-                log.error(f"got exception: {e} using blosc decompression for {key}")
+                msg = f"got exception: {e} using blosc decompression for {key}"
+                log.error(msg)
                 raise HTTPInternalServerError()
         elif compressor == "zlib":
-            # data may have been compressed without blosc, try using zlib directly
+            # data may have been compressed without blosc,
+            # try using zlib directly
             log.info(f"using zlib to decompress {key}")
             try:
                 udata = zlib.decompress(data)
@@ -231,7 +244,9 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=-1, bucket=No
                 log.error(f"unable to uncompress obj: {key}")
                 raise HTTPInternalServerError()
         else:
-            log.error(f"don't know how to decompress data in {compressor} format for {key}")
+            msg = f"don't know how to decompress data in {compressor} "
+            msg += f"format for {key}"
+            log.error(msg)
             raise HTTPInternalServerError()
 
     if shuffle > 0:
@@ -242,7 +257,9 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=-1, bucket=No
             log.debug(f"unshuffled to {len(unshuffled)} bytes")
             data = unshuffled
         finish_time = time.time()
-        log.debug(f"unshuffled {len(data)} bytes, {(finish_time - start_time):.2f} elapsed")
+        elapsed = finish_time - start_time
+        msg = f"unshuffled {len(data)} bytes, {(elapsed):.2f} elapsed"
+        log.debug(msg)
 
     return data
 
@@ -266,14 +283,18 @@ async def putStorBytes(app, key, data, filter_ops=None, bucket=None):
             shuffle = 0  # client indicates to turn off shuffling
         if "level" in filter_ops:
             clevel = filter_ops["level"]
-    log.info(f"putStorBytes({bucket}/{key}), {len(data)} bytes shuffle: {shuffle} compressor: {cname} level: {clevel}")
+    msg = f"putStorBytes({bucket}/{key}), {len(data)} bytes shuffle: {shuffle}"
+    msg += f" compressor: {cname} level: {clevel}"
+    log.info(msg)
 
     if cname:
         try:
             blosc = codecs.Blosc(cname=cname, clevel=clevel, shuffle=shuffle)
             cdata = blosc.encode(data)
             # TBD: add cname in blosc constructor
-            log.info(f"compressed from {len(data)} bytes to {len(cdata)} bytes using filter: {blosc.cname} with level: {blosc.clevel}")
+            msg = f"compressed from {len(data)} bytes to {len(cdata)} bytes "
+            msg += f"using filter: {blosc.cname} with level: {blosc.clevel}"
+            log.info(msg)
             data = cdata
         except Exception as e:
             log.error(f"got exception using blosc encoding: {e}")
@@ -358,16 +379,26 @@ async def isStorObj(app, key, bucket=None):
     return found
 
 
-async def getStorKeys(app, prefix='', deliminator='', suffix='', include_stats=False, callback=None, bucket=None, limit=None):
+async def getStorKeys(app, prefix='', deliminator='', suffix='',
+                      include_stats=False, callback=None, bucket=None,
+                      limit=None):
     # return keys matching the arguments
     client = _getStorageClient(app)
     if not bucket:
         bucket = app['bucket_name']
-    log.info(f"getStorKeys('{prefix}','{deliminator}','{suffix}', include_stats={include_stats}")
+    msg = f"getStorKeys('{prefix}','{deliminator}','{suffix}', "
+    msg += f"include_stats={include_stats}"
+    log.info(msg)
+    kwargs = {}
+    kwargs["prefix"] = prefix
+    kwargs["deliminator"] = deliminator
+    kwargs["suffix"] = suffix
+    kwargs["include_stats"] = include_stats
+    kwargs["callback"] = callback
+    kwargs["bucket"] = bucket
+    kwargs["limit"] = limit
 
-    key_names = await client.list_keys(prefix=prefix, deliminator=deliminator, suffix=suffix,
-                                       include_stats=include_stats, callback=callback,
-                                       bucket=bucket, limit=limit)
+    key_names = await client.list_keys(**kwargs)
 
     log.info(f"getStorKeys done, got {len(key_names)} keys")
 
