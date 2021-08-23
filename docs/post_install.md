@@ -60,3 +60,11 @@ Some HSDS integration tests expect specific HDF5 files to be loaded onto the ser
 4. Verify upload: `$ hsls -r -u test_user1 -p <passwd> /home/test_user1/test/tall.h5`
 5. Re-run the integration tests: `$ python testall.py --skip_unit`
 
+Some HSDS integration tests depend on traditional HDF5 files.  These files can be found here: 
+s3://hdf5.sample/data/hdf5test/.  If you are running HSDS with AWS S3 storage, set the 
+environment variable HDF5_SAMPLE_BUCKET to "hdf5.sample".
+If you are using Azure Blob storage, create a container, copy the files from the the S3 bucket to
+the location data/hdf5test in the container, and set the HDF5_SAMPLE_BUCKET environment variable
+to the container name.  Finally, if you are using Posix storage, create a directory under ROOT_DIR, 
+copy the files from the S3 bucket to data/hdf5test in that directory, and set HDF5_SAMPLE_BUCKET to the directory name.
+
