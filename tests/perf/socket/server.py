@@ -26,17 +26,17 @@ if use_shared_mem:
 else:
     shm_block = None
 
-print("creating rand arr")
-print(time.time())
+#print("creating rand arr")
+#print(time.time())
 arr = np.random.rand(nextent)
-print(time.time())
-print('to buffer')
+#print(time.time())
+#print('to buffer')
 if shm_block:
     shm_block.buf[:NUM_BYTES] = arr.tobytes()[:]
     buffer = shm_block.name.encode('ascii')
 else:
     buffer = arr.tobytes()
-print(time.time())
+#print(time.time())
 tmp_dir = tempfile.TemporaryDirectory()
 
 with socket.socket(socket_type, socket.SOCK_STREAM) as s:
