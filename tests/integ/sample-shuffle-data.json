@@ -1,0 +1,108 @@
+{
+    "sample-shuffle-data.h5": {
+        "/float32": {
+            "byteStreams": [
+                {
+                    "file_offset": 18184,
+                    "size": 400,
+                    "index": 0,
+                    "array_offset": [
+                        0
+                    ],
+                    "uuid": "1ace5c36-392d-46d2-89ec-4920522e7066"
+                }
+            ]
+        },
+        "/float64": {
+            "byteStreams": [
+                {
+                    "file_offset": 18584,
+                    "size": 800,
+                    "index": 0,
+                    "array_offset": [
+                        0
+                    ],
+                    "uuid": "1db9f35f-d9f6-4faa-9779-0da93f318f7b"
+                }
+            ]
+        },
+        "/int16": {
+            "byteStreams": [
+                {
+                    "file_offset": 4896,
+                    "size": 200,
+                    "index": 0,
+                    "array_offset": [
+                        0
+                    ],
+                    "uuid": "ab42b5f9-d8cd-4fa6-9c0a-24c77d935a3b"
+                }
+            ]
+        },
+        "/int32": {
+            "byteStreams": [
+                {
+                    "file_offset": 5096,
+                    "size": 400,
+                    "index": 0,
+                    "array_offset": [
+                        0
+                    ],
+                    "uuid": "d2e7fdb4-4fa7-47d6-9540-84b5cae4f5ba"
+                }
+            ]
+        },
+        "/int64": {
+            "byteStreams": [
+                {
+                    "file_offset": 17384,
+                    "size": 800,
+                    "index": 0,
+                    "array_offset": [
+                        0
+                    ],
+                    "uuid": "ca53ebca-b3bc-4da6-be5f-4c0ffb963c05"
+                }
+            ]
+        },
+        "/uint16": {
+            "byteStreams": [
+                {
+                    "file_offset": 3496,
+                    "size": 200,
+                    "index": 0,
+                    "array_offset": [
+                        0
+                    ],
+                    "uuid": "1bf9420e-48fc-4219-91ac-f07989c6cc5c"
+                }
+            ]
+        },
+        "/uint32": {
+            "byteStreams": [
+                {
+                    "file_offset": 3696,
+                    "size": 400,
+                    "index": 0,
+                    "array_offset": [
+                        0
+                    ],
+                    "uuid": "ffcb1537-0b49-4f1a-9f97-4281eec69081"
+                }
+            ]
+        },
+        "/uint64": {
+            "byteStreams": [
+                {
+                    "file_offset": 4096,
+                    "size": 800,
+                    "index": 0,
+                    "array_offset": [
+                        0
+                    ],
+                    "uuid": "f70cb9f8-1664-4bf8-98f4-681c2c9b90f9"
+                }
+            ]
+        }
+    }
+}
