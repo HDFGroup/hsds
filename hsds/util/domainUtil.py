@@ -11,7 +11,6 @@
 ##############################################################################
 
 import os.path as op
-import re
 from aiohttp.web_exceptions import HTTPBadRequest
 #
 # Domain utilities
@@ -111,16 +110,12 @@ def isValidHostDomain(id):
 
 def validateDomain(id):
     if not isinstance(id, str):
-        print("Expected string type")
         raise ValueError("Expected string type")
     if len(id) < 3:
-        print("too short")
         raise ValueError("Domain name too short")
     if id.find('/') == -1:
-        print("no /")
         raise ValueError("Domain names should include a '/'")
     if id[-1] == '/':
-        print("no end slash")
         raise ValueError("Slash at end not allowed")
 
 
@@ -208,7 +203,6 @@ def getDomainFromRequest(request, validate=True):
         else:
             domain = request.host
     if not domain:
-        print("ValueError(", "no domain", ")")
         raise ValueError("no domain")
 
     if domain[0] != '/':
@@ -237,9 +231,6 @@ def getDomainFromRequest(request, validate=True):
 
     if bucket and validate:
         if bucket.find('/') >= 0:
-            # TBD: why doesn't the folowing reg ex catch this as well?
-            raise ValueError(f"bucket name: {bucket} is not valid")
-        if not re.match("^[a-zA-Z0-9.-_]{1,255}$", bucket):
             raise ValueError(f"bucket name: {bucket} is not valid")
         if domain[0] == '/':
             domain = bucket + domain
