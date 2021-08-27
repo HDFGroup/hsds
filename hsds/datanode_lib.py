@@ -803,7 +803,7 @@ async def s3sync(app):
                 if obj_id not in pending_s3_write_tasks:
                     msg = f"s3sync - no pending task for {obj_id} in "
                     msg += "pending_s3_write_tasks"
-                    log.info()
+                    log.info(msg)
                 create_task = False
 
         elif time_since_dirty < 1.0:

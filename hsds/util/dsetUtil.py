@@ -117,12 +117,14 @@ def getShuffleFilter(dset_json):
     """ Return shuffle filter, or None """
     filters = getFilters(dset_json)
     for filter in filters:
-        if 'class' not in filter:
+        try:
+            if filter["class"] == "H5Z_FILTER_SHUFFLE":
+                log.debug(f"Shuffle filter is used: {filter}")
+                return filter
+        except KeyError:
             log.warn(f"filter option: {filter} with no class key")
             continue
-        filter_class = filter["class"]
-        if filter_class == 'H5Z_FILTER_SHUFFLE':
-            return filter
+    log.debug("Shuffle filter not used")
     return None
 
 
@@ -137,29 +139,30 @@ def getFilterOps(app, dset_json, item_size):
     compressionFilter = getCompressionFilter(dset_json)
     log.debug(f"got compressionFilter: {compressionFilter}")
 
-    if not compressionFilter:
-        return None
-
     filter_ops = {}
-    shuffleFilter = getShuffleFilter(dset_json)
 
-    if compressionFilter["class"] == 'H5Z_FILTER_DEFLATE':
-        filter_ops["compressor"] = 'zlib'  # blosc compressor
-        if shuffleFilter:
-            filter_ops["use_shuffle"] = True
+    shuffleFilter = getShuffleFilter(dset_json)
+    if shuffleFilter:
+        filter_ops["use_shuffle"] = True
+
+    if compressionFilter:
+        if compressionFilter["class"] == 'H5Z_FILTER_DEFLATE':
+            filter_ops["compressor"] = 'zlib'  # blosc compressor
+            if shuffleFilter:
+                filter_ops["use_shuffle"] = True
+            else:
+                # for HDF5-style compression, use shuffle only if it turned on
+                filter_ops['use_shuffle'] = False
         else:
-            # for HDF5-style compression, use shuffle only if it turned on
-            filter_ops['use_shuffle'] = False
-    else:
-        if "name" in compressionFilter and \
-                compressionFilter["name"] in blosc.list_compressors():
-            filter_ops["compressor"] = compressionFilter["name"]
+            if "name" in compressionFilter and \
+                    compressionFilter["name"] in blosc.list_compressors():
+                filter_ops["compressor"] = compressionFilter["name"]
+            else:
+                filter_ops["compressor"] = 'lz4'  # default to lz4
+        if "level" not in compressionFilter:
+            filter_ops['level'] = 5  # medium level
         else:
-            filter_ops["compressor"] = 'lz4'  # default to lz4
-    if "level" not in compressionFilter:
-        filter_ops['level'] = 5  # medium level
-    else:
-        filter_ops['level'] = int(compressionFilter["level"])
+            filter_ops['level'] = int(compressionFilter["level"])
 
     if filter_ops:
         filter_ops['item_size'] = item_size
@@ -167,8 +170,9 @@ def getFilterOps(app, dset_json, item_size):
             filter_ops['use_shuffle'] = False
         log.debug(f"save filter ops: {filter_ops} for {dset_id}")
         filter_map[dset_id] = filter_ops  # save
-
-    return filter_ops
+        return filter_ops
+    else:
+        return None
 
 
 def getHyperslabSelection(dsetshape, start=None, stop=None, step=None):

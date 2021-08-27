@@ -39,7 +39,7 @@ class ShuffleUtilTest(unittest.TestCase):
             self.assertEqual(data[i], unshuffled[i])
 
     def testTime(self):
-        arr = np.random.rand(1000,1000)
+        arr = np.random.rand(1000, 1000)
         now = time.time()
         data = arr.tobytes()
         shuffled = _shuffle(8, data)
@@ -50,14 +50,13 @@ class ShuffleUtilTest(unittest.TestCase):
 
         # this was taking ~0.04 s with an i7
         # without numba, time was 2.4s (60x slower)
-        #print("time:", elapsed)
-        self.assertTrue(elapsed < 0.1)
+        # print("time:", elapsed)
+        self.assertTrue(elapsed < 0.1, f"Elapsed time: {elapsed}")
 
         self.assertEqual(len(shuffled), len(unshuffled))
         self.assertEqual(data, unshuffled)
 
 
 if __name__ == '__main__':
-    #setup test files
-
+    # setup test files
     unittest.main()

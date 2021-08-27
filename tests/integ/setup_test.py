@@ -40,13 +40,15 @@ class SetupTest(unittest.TestCase):
         try:
             admin_username = config.get("admin_username")
             admin_passwd = config.get("admin_password")
-            print("using admin account:", admin_username, "admin_passwd: ", "*"*len(admin_passwd))
-            admin_headers = helper.getRequestHeaders(username=admin_username, password=admin_passwd)
+            print("using admin account:", admin_username, "admin_passwd: ",
+                  "*" * len(admin_passwd))
+            admin_headers = helper.getRequestHeaders(username=admin_username,
+                                                     password=admin_passwd)
         except KeyError:
             pass
 
         req = helper.getEndpoint() + '/'
-        params={"domain": home_domain}
+        params = {"domain": home_domain}
         print("req:", req)
         print("domain:", home_domain)
         rsp = self.session.get(req, params=params, headers=headers)
@@ -54,41 +56,50 @@ class SetupTest(unittest.TestCase):
 
         if rsp.status_code == 404:
             if not admin_headers:
-                print("/home folder doesn't exist, set ADMIN_USERNAME AND ADMIN_PASSWORD environment variableS to enable creation")
-                self.assertTrue(False)
+                self.assertTrue(
+                    False,
+                    "/home folder doesn't exist, set ADMIN_USERNAME and "
+                    "ADMIN_PASSWORD environment variables to enable creation")
             # Setup /home folder
             print("create home folder")
             body = {"folder": True}
-            rsp = self.session.put(req, data=json.dumps(body), params=params, headers=admin_headers)
+            rsp = self.session.put(req,
+                                   data=json.dumps(body),
+                                   params=params,
+                                   headers=admin_headers)
             print("put request status:", rsp.status_code)
             self.assertEqual(rsp.status_code, 201)
             # do the original request again
             rsp = self.session.get(req, params=params, headers=headers)
         elif rsp.status_code in (401, 403):
-            print(f"Authorization failure, verify password for {user_name} and set env variable for USER_PASSWORD")
+            print(f"Authorization failure, verify password for {user_name} and "
+                  "set env variable for USER_PASSWORD")
             self.assertTrue(False)
-        
-        # 
+
         print("got status code:", rsp.status_code)
         self.assertEqual(rsp.status_code, 200)
-        
+
         rspJson = json.loads(rsp.text)
         print("home folder json:", rspJson)
         for k in ("owner", "created", "lastModified"):
-             self.assertTrue(k in rspJson)
+            self.assertTrue(k in rspJson)
         self.assertFalse("root" in rspJson)  # no root -> folder
 
-        params={"domain": user_domain}
+        params = {"domain": user_domain}
         rsp = self.session.get(req, params=params, headers=headers)
         print(f"{user_domain} get status: {rsp.status_code}")
         if rsp.status_code == 404:
             if not admin_headers:
-                print(f"{user_domain} folder doesn't exist, set ADMIN_USERNAME and ADMIN_PASSWORD environment variable to enable creation")
+                print(f"{user_domain} folder doesn't exist, set ADMIN_USERNAME "
+                      "and ADMIN_PASSWORD environment variable to enable creation")
                 self.assertTrue(False)
             # Setup user home folder
             print("create user folder")
             body = {"folder": True, "owner": user_name}
-            rsp = self.session.put(req, data=json.dumps(body), params=params, headers=admin_headers)
+            rsp = self.session.put(req,
+                                   data=json.dumps(body),
+                                   params=params,
+                                   headers=admin_headers)
             self.assertEqual(rsp.status_code, 201)
             # do the original request again
             rsp = self.session.get(req, params=params, headers=headers)
@@ -104,6 +115,5 @@ class SetupTest(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    #setup test files
-
+    # setup test files
     unittest.main()
