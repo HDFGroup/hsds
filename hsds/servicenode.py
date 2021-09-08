@@ -141,7 +141,8 @@ async def init():
     if cors_domain:
         kwargs = {"allow_credentials": True,
                   "expose_headers": "*",
-                  "allow_headers": "*"}
+                  "allow_headers": "*",
+                  "allow_methods": ["POST", "PUT", "GET", "DELETE"]}
         cors_defaults = {cors_domain: aiohttp_cors.ResourceOptions(**kwargs)}
         cors = aiohttp_cors.setup(app, defaults=cors_defaults)
         for route in list(app.router.routes()):
