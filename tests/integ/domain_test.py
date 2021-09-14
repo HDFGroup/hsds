@@ -16,6 +16,9 @@ from os import path as pp
 import config
 import helper
 
+# Note - removed 'snappy'.  See: https://github.com/Blosc/python-blosc/issues/231
+
+EXPECTED_COMPRESSORS = ['blosclz', 'lz4', 'lz4hc', 'gzip', 'zstd']
 
 class DomainTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -90,8 +93,9 @@ class DomainTest(unittest.TestCase):
             limit = limits[k]
             self.assertTrue(isinstance(limit, int))
             self.assertTrue(limit > 0)
+            
         compressors = rspJson["compressors"]
-        for compressor in ['blosclz', 'lz4', 'lz4hc', 'snappy', 'gzip', 'zstd']:
+        for compressor in EXPECTED_COMPRESSORS:
             self.assertTrue(compressor in compressors)
 
         root_uuid = rspJson["root"]
@@ -296,7 +300,7 @@ class DomainTest(unittest.TestCase):
             self.assertTrue(isinstance(limit, int))
             self.assertTrue(limit > 0)
         compressors = rspJson["compressors"]
-        for compressor in ['blosclz', 'lz4', 'lz4hc', 'snappy', 'gzip', 'zstd']:
+        for compressor in EXPECTED_COMPRESSORS:
             self.assertTrue(compressor in compressors)
 
         # do a get on the new domain

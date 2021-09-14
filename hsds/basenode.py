@@ -268,10 +268,8 @@ async def update_dn_info(app):
     if "oio_proxy" in app:
         #  Using OpenIO consicience daemons
         await oio_update_dn_info(app)
-    elif "is_k8s" in app:
-        await k8s_update_dn_info(app)
     else:
-        # docker
+        # docker or kubernetes
         await docker_update_dn_info(app)
 
     # do a log if there has been a change in the dn nodes

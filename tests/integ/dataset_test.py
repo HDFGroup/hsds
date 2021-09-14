@@ -978,7 +978,7 @@ class DatasetTest(unittest.TestCase):
         root_uuid = rspJson["root"]
 
         compressors = rspJson["compressors"]
-        self.assertTrue(len(compressors) >= 6)
+        self.assertTrue(len(compressors) >= 5)
 
         for compressor in compressors:
 

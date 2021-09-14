@@ -11,7 +11,6 @@
 ##############################################################################
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
-from numcodecs import blosc
 
 from .. import hsds_logger as log
 
@@ -129,7 +128,7 @@ def getShuffleFilter(dset_json):
 
 
 def getFilterOps(app, dset_json, item_size):
-    """ Get the Deflate compression value """
+    """ Get list of filter operations to be used for this dataset """
     filter_map = app['filter_map']
     dset_id = dset_json['id']
     if dset_id in filter_map:
@@ -154,8 +153,7 @@ def getFilterOps(app, dset_json, item_size):
                 # for HDF5-style compression, use shuffle only if it turned on
                 filter_ops['use_shuffle'] = False
         else:
-            if "name" in compressionFilter and \
-                    compressionFilter["name"] in blosc.list_compressors():
+            if "name" in compressionFilter:
                 filter_ops["compressor"] = compressionFilter["name"]
             else:
                 filter_ops["compressor"] = 'lz4'  # default to lz4

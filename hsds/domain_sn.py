@@ -15,7 +15,6 @@
 from asyncio import CancelledError
 import asyncio
 import json
-import numcodecs as codecs
 import os.path as op
 import re
 import time
@@ -37,7 +36,7 @@ from .util.authUtil import validateUserPassword, getAclKeys
 from .util.domainUtil import getParentDomain, getDomainFromRequest
 from .util.domainUtil import isValidDomain, getBucketForDomain
 from .util.domainUtil import getPathForDomain
-from .util.storUtil import getStorKeys
+from .util.storUtil import getStorKeys, getCompressors
 from .util.boolparser import BooleanParser
 from .servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath
 from .servicenode_lib import getRootInfo
@@ -340,20 +339,6 @@ def getLimits():
     cfg_val = int(config.get("max_chunks_per_request"))
     limits["max_chunks_per_request"] = cfg_val
     return limits
-
-
-def getCompressors():
-    """ return available compressors """
-    compressors = codecs.blosc.list_compressors()
-    # replace zlib with the equivalent gzip since that is the h5py name
-    if "gzip" not in compressors and "zlib" in compressors:
-        for i in range(len(compressors)):
-            if compressors[i] == "zlib":
-                compressors[i] = "gzip"
-                break
-
-    return compressors
-
 
 async def get_domain_response(app, domain_json, bucket=None, verbose=False):
     rsp_json = {}

@@ -14,7 +14,6 @@
 #
 import asyncio
 import time
-import numcodecs as codecs
 import socket
 import os
 from aiohttp.web import run_app
@@ -23,6 +22,7 @@ from . import config
 from .util.lruCache import LruCache
 from .util.idUtil import isValidUuid, isSchema2Id, getCollectionForId
 from .util.idUtil import isRootObjId
+from . util.storUtil import setBloscThreads, getBloscThreads
 from .basenode import healthCheck, baseInit, preStop
 # from .util.httpUtil import release_http_client
 from . import hsds_logger as log
@@ -258,10 +258,10 @@ def create_app():
     blosc_nthreads = int(config.get("blosc_nthreads"))
     if blosc_nthreads > 0:
         log.debug(f"Setting blosc nthreads to: {blosc_nthreads}")
-        codecs.blosc.set_nthreads(blosc_nthreads)
+        setBloscThreads(blosc_nthreads)
     else:
         # let Blosc select thread count based on processor type
-        blosc_nthreads = codecs.blosc_get_nthreads()
+        blosc_nthreads = getBloscThreads()
         log.debug(f"Using default blosc nthreads: {blosc_nthreads}")
 
     # create the app object

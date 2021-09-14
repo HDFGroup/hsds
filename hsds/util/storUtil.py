@@ -41,6 +41,31 @@ except ImportError:
 from .. import config
 
 
+def getCompressors():
+    """ return available compressors """
+    compressors = codecs.blosc.list_compressors()
+    # replace zlib with the equivalent gzip since that is the h5py name
+    if "gzip" not in compressors and "zlib" in compressors:
+        for i in range(len(compressors)):
+            if compressors[i] == "zlib":
+                compressors[i] = "gzip"
+                break
+
+    return compressors
+
+
+def setBloscThreads(nthreads):
+    """ Set the number of threads blosc will use for compression """
+    codecs.blosc.set_nthreads(nthreads)
+
+
+def getBloscThreads():
+    """ Get the number of blosc threads to be used for compression """
+    nthreads = codecs.blosc_get_nthreads()
+
+    return nthreads
+
+
 def _shuffle(element_size, chunk):
     shuffler = codecs.Shuffle(element_size)
     arr = shuffler.encode(chunk)
