@@ -16,8 +16,26 @@ spec:
     spec:
       containers:
         -
+          name: head
+          image: "hdfgroup/hsds:v0.7.0beta5"
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "512M"
+            limits:
+              memory: "512M"
+          volumeMounts:
+          - name: config
+            mountPath: "/config"
+          ports:
+            -
+              containerPort: 5100
+          env:
+          - name: NODE_TYPE
+            value: head_node
+        -
           name: sn
-          image: "hdfgroup/hsds:v0.6.3i"
+          image: "hdfgroup/hsds:v0.7.0beta5"
           imagePullPolicy: IfNotPresent
           resources:
             requests:
@@ -38,11 +56,19 @@ spec:
             value: sn
           - name: PASSWORD_FILE
             value: /config/passwd.txt
-          - name: AWS_ROLE_ARN
-            value: arn:aws:iam::1234567890:role/eks-node-role
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: aws-auth-keys
+                key: aws_access_key_id
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: aws-auth-keys
+                key: aws_secret_access_key
         -
-          name: dn
-          image: "hdfgroup/hsds:v0.6.3i"
+          name: dn1
+          image: "hdfgroup/hsds:v0.7.0beta5"
           lifecycle:
             preStop:
               exec:
@@ -62,8 +88,148 @@ spec:
           env:
           - name: NODE_TYPE
             value: dn
-          - name: AWS_ROLE_ARN
-            value: arn:aws:iam::1234567890:role/eks-node-role
+          - name: DN_PORT
+            value: "6101"
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: aws-auth-keys
+                key: aws_access_key_id
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: aws-auth-keys
+                key: aws_secret_access_key
+        -
+          name: dn2
+          image: "hdfgroup/hsds:v0.7.0beta5"
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/usr/bin/curl", "-X", "DELETE", "http://127.0.0.1:6101/prestop"]
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "2G"
+            limits:
+              memory: "2G"
+          volumeMounts:
+          - name: config
+            mountPath: "/config"
+          ports:
+            -
+              containerPort: 6102
+          env:
+          - name: NODE_TYPE
+            value: dn
+          - name: DN_PORT
+            value: "6102"
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: aws-auth-keys
+                key: aws_access_key_id
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: aws-auth-keys
+                key: aws_secret_access_key
+        -
+          name: dn3
+          image: "hdfgroup/hsds:v0.7.0beta5"
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/usr/bin/curl", "-X", "DELETE", "http://127.0.0.1:6101/prestop"]
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "2G"
+            limits:
+              memory: "2G"
+          volumeMounts:
+          - name: config
+            mountPath: "/config"
+          ports:
+            -
+              containerPort: 6103
+          env:
+          - name: NODE_TYPE
+            value: dn
+          - name: DN_PORT
+            value: "6103"
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: aws-auth-keys
+                key: aws_access_key_id
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: aws-auth-keys
+                key: aws_secret_access_key
+        -
+          name: dn4
+          image: "hdfgroup/hsds:v0.7.0beta5"
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/usr/bin/curl", "-X", "DELETE", "http://127.0.0.1:6101/prestop"]
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "2G"
+            limits:
+              memory: "2G"
+          volumeMounts:
+          - name: config
+            mountPath: "/config"
+          ports:
+            -
+              containerPort: 6104
+          env:
+          - name: NODE_TYPE
+            value: dn
+          - name: DN_PORT
+            value: "6104"
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: aws-auth-keys
+                key: aws_access_key_id
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: aws-auth-keys
+                key: aws_secret_access_key
+        -
+          name: rangeget
+          image: "hdfgroup/hsds:v0.7.0beta5"
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "2G"
+            limits:
+              memory: "2G"
+          volumeMounts:
+          - name: config
+            mountPath: "/config"
+          ports:
+            -
+              containerPort: 6900
+          env:
+          - name: NODE_TYPE
+            value: rangeget
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: aws-auth-keys
+                key: aws_access_key_id
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: aws-auth-keys
+                key: aws_secret_access_key
       volumes:
       - name: accounts
         secret:
