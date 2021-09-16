@@ -31,7 +31,6 @@ install_requires = [
     'aiofiles',
     'chardet <= 3.0.4',
     'cryptography',
-    'kubernetes',
     'numcodecs',
     'numpy',
     'psutil',

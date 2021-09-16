@@ -23,11 +23,7 @@ RUN conda install --name hsds --yes \
         imagecodecs \
         hdf5plugin \
         numcodecs \
-        pip \
-        simplejson \
-        wheel \
-    && \
-    conda run -n hsds --no-capture-output pip install --no-cache-dir kubernetes
+        simplejson 
 RUN conda-pack -n hsds -o /tmp/hsds-env.tar \
     && mkdir -p /opt/env/hsds \
     && cd /opt/env/hsds \
