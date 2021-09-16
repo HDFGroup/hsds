@@ -68,7 +68,10 @@ Create Kubernetes Secrets
 -------------------------
 
 Kubernetes secrets are used in AWS to make sensitive information available to the service.
-HSDS on AWS utilizes the following secret: user-password: username/password list
+HSDS on AWS utilizes the following secrets:
+
+1. user-password -- username/password list
+2. aws-auth-keys -- AWS Access keys for HSDS IAM user
 
 HSDS accounts are set by creating the user-password secret (alternatively authentication using OpenID or Azure Active Directory can be used, but are not covered in this docuemnt).
 
@@ -79,7 +82,8 @@ To create the user-password secret, first create a text file with the desired us
 3. Add/change usernames/passwords that you want to use. **Note**: Do not keep the original example credentials.
 4. Go back to the hsds root directory: `cd ../..`
 
-Next, verify that you have set the AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables.
+Next, verify that you have set the AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables
+to the values used by the HSDS IAM user.
 
 Run the make_secrets script: `admin/kubernetes/k8s_make_secrets.sh`
 
