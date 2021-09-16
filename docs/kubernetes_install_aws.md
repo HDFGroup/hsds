@@ -10,13 +10,59 @@ the yaml files in hsds/admin/kubernetes and hsds/admin/config to customize the i
 Setup your AWS EKS Cluster
 --------------------------
 
-Here we will create a Kubernetes cluster and S3 bucket
+Here we will create a Kubernetes cluster and a S3 bucket
 
 1. Setup Kubernetes cluster with AWS EKS
 2. Install and configure kubectl on the machine being used for the installation
 3. Run `kubectl cluster-info` to verify connection to the cluster
 4. Create a bucket for HSDS, using AWS cli tools or AWS Management console (make sure it's in the same region as the cluster)
 5. If you are using a VPC, verify an endpoint for S3 is setup (see: <https://docs.aws.amazon.com/vpc/latest/userguide/vpc-endpoints-s3.html>).  This is important to avoid having to pay for egress charges between S3 and the Kubernetes cluster
+
+Create IAM Policy and User for HSDS
+-----------------------------------
+
+Best practice for cloud deployments is to limit the service to the minimum set of privileges 
+needed to function correctly.  This can be done by limiting access to AWS api's to just S3,
+and limiting resource access to just the S3 bucket to the bucket created above.
+
+To create a policy that enforces these restrictions, go to the AWS Management console, select the
+IAM service, select "Policies", and click the "Create Policy" button.
+
+In the JSON tab, edit the contents as in the example below (with "mybucket" replaced with the bucket
+name you will be using).
+
+
+    {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Sid": "VisualEditor0",
+                "Effect": "Allow",
+                "Action": [
+                    "s3:PutObject",
+                    "s3:GetObject",
+                    "s3:ListBucket",
+                    "s3:DeleteObject",
+                    "s3:GetObjectVersion"
+                ],
+                "Resource": [
+                    "arn:aws:s3:::mybucket",
+                    "arn:aws:s3:::mybucket/*"
+                ]
+            }
+        ]
+    }
+
+
+Save the policy using a description name (e.g. "hsds-policy").
+
+Next create an IAM user (e.g. "hsds-user") with just "Access-key programmatic access".  In the "Permissions" step, select the "Attach existing policies directly" option, and add just the policy
+created above.
+
+Note: the AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY values, you'll need them in the next step.
+
+Note: an alternative approach is to to create a node role for the cluster as described in [Amazon EKS node IAM role](https://docs.aws.amazon.com/eks/latest/userguide/create-node-role.html).
+
 
 Create Kubernetes Secrets
 -------------------------
@@ -56,40 +102,30 @@ Run the make_config map script to store the yaml settings as Kubernetes ConfigMa
 
 Run: `kubectl describe configmaps hsds-config` to verify the configmap entries.
 
-Create EKS Node IAM Role
-------------------------
-
-Create an IAM role as described in [Amazon EKS node IAM role](https://docs.aws.amazon.com/eks/latest/userguide/create-node-role.html).
-
-Add policies for AmazonEKSWorkerNodePolicy, AmazonEC2ContainerRegisteryReadOnly (if ACR will be used for images), 
-AmazonEKS_CNI_Policy, Amazon_EBS_CSI_Driver, and a policy for S3 access.  The AmazonS3FullAcces policy can be used,
-or (for greater security) a cosutom policy can be created that only allows access to the configured S3 Bucket.
-
-Modify the deployment yaml to include the role ARN.
-
-Apply the role to each Node Group in your cluster.
 
 Deploy HSDS to K8s
 ------------------
 
 If you need to build and deploy a custom HSDS image (e.g. you have made changes to the HSDS code), first build and deploy the code to ECR as described in section "Building a docker image and deploying to ECR" below.  Otherwise, the standard image from docker hub (<https://hub.docker.com/repository/docker/hdfgroup/hsds>) will be deployed.
 
-1. Create RBAC roles: `kubectl create -f admin/kubernetes/k8s_rbac.yml`
-2. Create HSDS service: `kubectl apply -f admin/kubernetes/k8s_service_lb.yml`
-3. This will create an external load balancer with an http endpoint with a public-ip.
+1. Create HSDS service: `kubectl apply -f admin/kubernetes/k8s_service_lb.yml`
+2. This will create an external load balancer with an http endpoint with a public-ip.
    Use kubectl to get the public-ip of the hsds service: `kubectl get service`
    You should see an entry similar to:
 
        NAME    TYPE           CLUSTER-IP     EXTERNAL-IP      PORT(S)        AGE
        hsds    LoadBalancer   10.0.242.109   20.36.17.252     80:30326/TCP   23
 
-   Note the public-ip (EXTERNAL-IP). This is where you can access the HSDS service externally. It may take some time for the EXTERNAL-IP to show up after the service deployment.
-4. Now we will deploy the HSDS containers. In ***k8s_deployment_aws.yml***, modify the image value if a custom build is being used.  E.g:
+   Note: the public-ip (EXTERNAL-IP). This is where you can access the HSDS service externally. It may take some time for the EXTERNAL-IP to show up after the service deployment.
+
+   Note: if the service will only be accessed by other pods in the cluster, you can replace 
+   "k8s_service_lb.yml" with "k8s_service.yml" in the kubectl command above.
+3. Now we will deploy the HSDS pod. In ***k8s_deployment_aws.yml***, modify the image value if a custom build is being used.  E.g:
     * image: '1234567.dkr.ecr.us-east-1.amazonaws.com/hsds:v1' to reflect the ecr repository for deployment
-5. Apply the deployment: `kubectl apply -f admin/kubernetes/k8s_deployment_aws.yml`
-6. Verify that the HSDS pod is running: `kubectl get pods`  a pod with a name starting with hsds should be displayed with status as "Running".
-7. Additional verification: Run (`kubectl describe pod hsds-xxxx`) and make sure everything looks OK
-8. To locally test that HSDS functioning
+4. Apply the deployment: `kubectl apply -f admin/kubernetes/k8s_deployment_aws.yml`
+5. Verify that the HSDS pod is running: `kubectl get pods`  a pod with a name starting with hsds should be displayed with status as "Running".
+6. Additional verification: Run (`kubectl describe pod hsds-xxxx`) and make sure everything looks OK
+7. To locally test that HSDS functioning
     * Create a forwarding port to the Kubernetes service `sudo kubectl port-forward hsds-1234 5101:5101` where 'hsds-1234' is the name of one of the HSDS pods. 
     * From a browser hit: <http://127.0.0.1:5101/about> and verify that "cluster_state" is "READY"
 
@@ -103,6 +139,8 @@ Cluster Scaling
 
 To scale up or down the number of HSDS pods, run:
 `kubectl scale --replicas=n deployment/hsds` where n is the number of pods desired.
+
+Note: Running two or more pods may result in inconsistent "read after write" results.  
 
 Building a docker image and deploying to ECR
 --------------------------------------------
