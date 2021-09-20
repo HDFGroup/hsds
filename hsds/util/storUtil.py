@@ -250,7 +250,8 @@ async def getStorBytes(app, key, filter_ops=None, offset=0,
     msg = f"getStorBytes({bucket}/{key}, offset={offset}, length: {length})"
     log.info(msg)
 
-    data_cache_page_size = int(config.get("data_cache_page_size"))
+    default_req_size = 128 * 1024 * 1024  # 128KB
+    data_cache_max_req_size = int(config.get("data_cache_max_req_size", default=default_req_size))
 
     shuffle = 0
     compressor = None
@@ -265,7 +266,7 @@ async def getStorBytes(app, key, filter_ops=None, offset=0,
 
     kwargs = {"bucket": bucket, "key": key,
               "offset": offset, "length": length}
-    if offset > 0 and use_proxy and length < data_cache_page_size:
+    if offset > 0 and use_proxy and length < data_cache_max_req_size:
         # use rangeget proxy
         data = await rangegetProxy(app, **kwargs)
     else:
