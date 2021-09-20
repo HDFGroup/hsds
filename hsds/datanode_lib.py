@@ -23,6 +23,7 @@ from .util.idUtil import isValidChunkId, getDataNodeUrl, isSchema2Id
 from .util.idUtil import getRootObjId, isRootObjId
 from .util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes
 from .util.storUtil import getStorBytes, isStorObj, deleteStorObj
+from .util.storUtil import getBucketFromStorURI, getKeyFromStorURI
 from .util.domainUtil import isValidDomain, getBucketForDomain
 from .util.attrUtil import getRequestCollectionName
 from .util.httpUtil import http_post
@@ -316,7 +317,16 @@ async def get_metadata_obj(app, obj_id, bucket=None):
     """
     log.info(f"get_metadata_obj: {obj_id} bucket: {bucket}")
     if isValidDomain(obj_id):
-        bucket = getBucketForDomain(obj_id)
+        domain_bucket = getBucketForDomain(obj_id)
+        if bucket and domain_bucket and bucket != domain_bucket:
+            msg = f"get_metadata_obj for domain: {obj_id} but bucket param was: {bucket}"
+            log.error(msg)
+            raise HTTPInternalServerError()
+        if not bucket:
+            bucket = domain_bucket
+
+    if not bucket:
+        log.warn("get_metadata_obj - bucket is None")
 
     # don't call validateInPartition since this is used to pull in
     # immutable data from other nodes
@@ -343,9 +353,12 @@ async def get_metadata_obj(app, obj_id, bucket=None):
             msg = f"s3 read request for {s3_key} was "
             msg += f"requested at: {read_start_time}"
             log.info(msg)
-            while time.time() - read_start_time < 2.0:
-                log.debug("waiting for pending s3 read, sleeping")
-                await asyncio.sleep(1)  # sleep for sub-second?
+            store_read_timeout = float(config.get("store_read_timeout", default=2.0))
+            log.debug(f"store_read_timeout: {store_read_timeout}")
+            store_read_sleep_interval = float(config.get("store_read_sleep_interval", default=0.1))
+            while time.time() - read_start_time < store_read_timeout:
+                log.debug(f"waiting for pending s3 read {s3_key}, sleeping")
+                await asyncio.sleep(store_read_sleep_interval)  # sleep for sub-second?
                 if obj_id in meta_cache:
                     log.info(f"object {obj_id} has arrived!")
                     obj_json = meta_cache[obj_id]
@@ -532,10 +545,25 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None,
         msg = f"unable to initiale chunk {chunk_id} for reference layouts "
         log.error(msg)
         raise HTTPInternalServerError()
-    if s3path and s3size == 0:
-        msg = f"Unexpected get_chunk parameter - s3path: {s3path} with size 0"
-        log.error(msg)
-        raise HTTPInternalServerError()
+
+    # validate arguments
+    if s3path:
+        if s3size == 0:
+            msg = f"Unexpected get_chunk parameter - s3path: {s3path} with size 0"
+            log.error(msg)
+            raise HTTPInternalServerError()
+        if bucket:
+            msg = "get_chunk - bucket arg should not be used with s3path"
+            log.error(msg)
+            raise HTTPInternalServerError()
+        log.debug(f"get_chunk - chunk_id: {chunk_id} s3path: {s3path}")
+        
+    else:
+        if not bucket:
+            msg = "get_chunk - bucket not set"
+            log.error(msg)
+            raise HTTPInternalServerError()
+        log.debug(f"get_chunk - chunk_id: {chunk_id} bucket: {bucket}")
 
     if "oio_proxy" in app or "is_k8s" in app:
         # TBD - rangeget proxy not supported on k8s yet
@@ -564,20 +592,10 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None,
     # also note - get deflate and shuffle will update the deflate and
     # shuffle map so that the s3sync will do the right thing
     filter_ops = getFilterOps(app, dset_json, item_size)
-    s3key = None
 
     if s3path:
-        if s3path.startswith("s3://"):
-            # trim off the s3:// if found
-            path = s3path[5:]
-        else:
-            path = s3path
-        index = path.find('/')   # split bucket and key
-        if index < 1:
-            log.error(f"s3path is invalid: {s3path}")
-            raise HTTPInternalServerError()
-        bucket = path[:index]
-        s3key = path[(index+1):]
+        bucket = getBucketFromStorURI(s3path)
+        s3key = getKeyFromStorURI(s3path)
         msg = f"Using s3path bucket: {bucket} and  s3key: {s3key} "
         msg += f"offset: {s3offset} length: {s3size}"
         log.debug(msg)
@@ -597,9 +615,13 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None,
             msg = f"s3 read request for {chunk_id} was requested at: "
             msg += f"{read_start_time}"
             log.info(msg)
-            while time.time() - read_start_time < 2.0:
+            store_read_timeout = float(config.get("store_read_timeout", default=2.0))
+            log.debug(f"store_read_timeout: {store_read_timeout}")
+            store_read_sleep_interval = float(config.get("store_read_sleep_interval", default=0.1))
+
+            while time.time() - read_start_time < store_read_timeout:
                 log.debug("waiting for pending s3 read, sleeping")
-                await asyncio.sleep(0.1)  # sleep for sub-second?
+                await asyncio.sleep(store_read_sleep_interval) 
                 if chunk_id in chunk_cache:
                     log.info(f"Chunk {chunk_id} has arrived!")
                     chunk_arr = chunk_cache[chunk_id]

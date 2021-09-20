@@ -226,7 +226,7 @@ class FolderCrawler:
             log.error(msg)
 
 
-async def get_collections(app, root_id):
+async def get_collections(app, root_id, bucket=None):
     """ Return the object ids for given root.
     """
 
@@ -236,6 +236,7 @@ async def get_collections(app, root_id):
     datatypes = {}
     lookup_ids = set()
     lookup_ids.add(root_id)
+    params = {"bucket": bucket}
 
     while lookup_ids:
         grp_id = lookup_ids.pop()
@@ -244,7 +245,7 @@ async def get_collections(app, root_id):
         log.debug("collection get LINKS: " + req)
         try:
             # throws 404 if doesn't exist
-            links_json = await http_get(app, req)
+            links_json = await http_get(app, req, params=params)
         except HTTPNotFound:
             log.warn(f"get_collection, group {grp_id} not found")
             continue
@@ -1508,6 +1509,10 @@ async def GET_Datasets(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
+    bucket = getBucketForDomain(domain)
+    if not bucket:
+        bucket = config.get("bucket_name")
+
     # verify the domain
     try:
         domain_json = await getDomainJson(app, domain)
@@ -1555,7 +1560,7 @@ async def GET_Datasets(request):
     obj_ids = []
     if "root" in domain_json or domain_json["root"]:
         # get the dataset collection list
-        collections = await get_collections(app, domain_json["root"])
+        collections = await get_collections(app, domain_json["root"], bucket=bucket)
         objs = collections["datasets"]
         obj_ids = getIdList(objs, marker=marker, limit=limit)
 
@@ -1599,6 +1604,10 @@ async def GET_Groups(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
+    bucket = getBucketForDomain(domain)
+    if not bucket:
+        bucket = config.get("bucket_name")
+
     # use reload to get authoritative domain json
     try:
         domain_json = await getDomainJson(app, domain, reload=True)
@@ -1640,7 +1649,7 @@ async def GET_Groups(request):
     obj_ids = []
     if "root" in domain_json or domain_json["root"]:
         # get the groups collection list
-        collections = await get_collections(app, domain_json["root"])
+        collections = await get_collections(app, domain_json["root"], bucket=bucket)
         objs = collections["groups"]
         obj_ids = getIdList(objs, marker=marker, limit=limit)
 
@@ -1681,6 +1690,10 @@ async def GET_Datatypes(request):
         msg = "Invalid domain"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+
+    bucket = getBucketForDomain(domain)
+    if not bucket:
+        bucket = config.get("bucket_name")
 
     # use reload to get authoritative domain json
     try:
@@ -1723,7 +1736,7 @@ async def GET_Datatypes(request):
     obj_ids = []
     if "root" in domain_json or domain_json["root"]:
         # get the groups collection list
-        collections = await get_collections(app, domain_json["root"])
+        collections = await get_collections(app, domain_json["root"], bucket=bucket)
         objs = collections["datatypes"]
         obj_ids = getIdList(objs, marker=marker, limit=limit)
 

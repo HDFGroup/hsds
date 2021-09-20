@@ -227,7 +227,7 @@ def getDomainFromRequest(request, validate=True):
         # prefix the domain with the bucket name
         bucket = app["bucket_name"]
     else:
-        pass  # no domain specified
+        pass  # no bucket specified
 
     if bucket and validate:
         if bucket.find('/') >= 0:

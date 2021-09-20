@@ -121,6 +121,46 @@ async def releaseStorageClient(app):
     if "storage_client" in app:
         del app["storage_client"]
 
+def _getURIParts(uri):
+    """ return tuple of (bucket, path) for given URI """
+    if uri.startswith("s3://"):
+        uri = uri[5:]
+    if uri.startswith('/'):
+        raise ValueError("invalid uri")
+    n = uri.find('/')
+    if n < 0:
+        raise ValueError("invalid uri")
+    fields = (uri[:n], uri[n:])
+    return fields
+
+def getBucketFromStorURI(uri):
+    """ Return a bucket name given a storage URI 
+        Examples:
+          s3://mybucket/folder/object.json  -> mybucket
+          mybucket/folder/object.json  -> mybucket
+          mybucket -> ValueError  # no slash
+          /mybucket/folder/object.json -> ValueError # not expecting abs path
+    """
+    fields = _getURIParts(uri)
+    bucket = fields[0]
+    if not bucket:
+        raise ValueError("invalid uri")
+    return bucket
+
+def getKeyFromStorURI(uri):
+    """ Return a key (path within a bucket) given a storage URI 
+        Examples:
+          s3://mybucket/folder/object.json  -> mybucket
+          mybucket/folder/object.json  -> mybucket
+          mybucket -> ValueError  # no slash
+          /mybucket/folder/object.json -> ValueError # not expecting abs path
+    """
+    fields = _getURIParts(uri)
+    path = fields[1]
+    if not path:
+        raise ValueError("invalid uri")
+    return path
+
 
 async def rangegetProxy(app, bucket=None, key=None, offset=0, length=0):
     """ fetch bytes from rangeget proxy

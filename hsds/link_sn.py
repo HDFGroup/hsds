@@ -23,6 +23,7 @@ from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain
 from .util.linkUtil import validateLinkName
 from .servicenode_lib import validateAction, getObjectJson
+from . import config
 from . import hsds_logger as log
 
 
@@ -65,6 +66,8 @@ async def GET_Links(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
+    if not bucket:
+        bucket = config.get("bucket_name")
 
     await validateAction(app, domain, group_id, username, "read")
 
@@ -141,6 +144,9 @@ async def GET_Link(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
+    if not bucket:
+        bucket = config.get("bucket_name")
+
     await validateAction(app, domain, group_id, username, "read")
 
     req = getDataNodeUrl(app, group_id)
@@ -249,6 +255,8 @@ async def PUT_Link(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
+    if not bucket:
+        bucket = config.get("bucket_name")
     await validateAction(app, domain, group_id, username, "create")
 
     # for hard links, verify that the referenced id exists and is in
@@ -335,6 +343,9 @@ async def DELETE_Link(request):
         raise HTTPBadRequest(reason=msg)
 
     bucket = getBucketForDomain(domain)
+    if not bucket:
+        bucket = config.get("bucket_name")
+        
     await validateAction(app, domain, group_id, username, "delete")
 
     req = getDataNodeUrl(app, group_id)

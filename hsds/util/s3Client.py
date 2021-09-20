@@ -247,6 +247,7 @@ class S3Client():
         if not bucket:
             log.error("get_object - bucket not set")
             raise HTTPInternalServerError()
+        log.debug(f"bucket: {bucket} type: {type(bucket)}")
 
         start_time = time.time()
         log.debug(f"s3Client.get_object({bucket}/{key}) start: {start_time}")
@@ -277,8 +278,8 @@ class S3Client():
                 # check for not found status
                 response_code = ce.response["Error"]["Code"]
                 if response_code in ("NoSuchKey", "404", 404):
-                    msg = f"s3_key: {key} not found "
-                    log.warn(msg)
+                    msg = f"s3_key: {bucket}/{key} not found "
+                    log.info(msg)
                     raise HTTPNotFound()
                 elif response_code == "NoSuchBucket":
                     msg = f"s3_bucket: {bucket} not found"
@@ -290,18 +291,18 @@ class S3Client():
                     raise HTTPForbidden()
                 else:
                     self._s3_stats_increment("error_count")
-                    msg = f"got unexpected ClientError on s3 get {key}: "
+                    msg = f"got unexpected ClientError on s3 get {bucket}/{key}: "
                     msg += f"{response_code}"
                     log.error(msg)
                     raise HTTPInternalServerError()
             except CancelledError as cle:
                 self._s3_stats_increment("error_count")
-                msg = f"CancelledError for get s3 obj {key}: {cle}"
+                msg = f"CancelledError for get s3 obj {bucket}/{key}: {cle}"
                 log.error(msg)
                 raise HTTPInternalServerError()
             except Exception as e:
                 self._s3_stats_increment("error_count")
-                msg = f"Unexpected Exception {type(e)} get s3 obj {key}: {e}"
+                msg = f"Unexpected Exception {type(e)} get s3 obj {bucket}/{key}: {e}"
                 log.error(msg)
                 raise HTTPInternalServerError()
         return data

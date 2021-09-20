@@ -86,6 +86,10 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr,
     chunk_sel: chunk-relative selection to write to
     np_arr: numpy array of data to be written
     """
+
+    if not bucket:
+        bucket = config.get("bucket_name")
+
     msg = f"write_chunk_hyperslab, chunk_id:{chunk_id}, slices:{slices}, "
     msg += f"bucket: {bucket}"
     log.info(msg)
@@ -198,9 +202,10 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr,
             params["s3offset"] = chunk_info["s3offset"]
             params["s3size"] = chunk_info["s3size"]
             log.debug(f"using chunk_map entry for {chunk_id}: {chunk_info}")
-    else:
-        # bucket only applied when s3path is not defined
-        params["bucket"] = bucket
+    
+    # bucket will be used to get dset json even when s3path is used for 
+    # the chunk data
+    params["bucket"] = bucket
 
     if chunk_arr is None:
 
@@ -312,7 +317,11 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index,
     arr: numpy array to store read bytes
     serverless: use lambda function
     """
-    msg = f"read_point_sel, chunk_id: {chunk_id}, serverless: {serverless}"
+
+    if not bucket:
+        bucket = config.get("bucket_name")
+
+    msg = f"read_point_sel, chunk_id: {chunk_id}, bucket: {bucket}"
     log.info(msg)
 
     partition_chunk_id = getChunkIdForPartition(chunk_id, dset_json)
@@ -361,9 +370,10 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index,
             params["s3path"] = chunk_info["s3path"]
             params["s3offset"] = chunk_info["s3offset"]
             params["s3size"] = chunk_info["s3size"]
-    elif bucket:
-        # bucket only applies if s3path not set
-        params["bucket"] = bucket
+   
+    # bucket will be used to get dset json even when s3path is used for 
+    # the chunk data
+    params["bucket"] = bucket
 
     if np_arr_rsp is None:
 
@@ -484,6 +494,10 @@ async def write_point_sel(app, chunk_id, dset_json, point_list, point_data,
       point_list: array of points to write
       point_data: index of arr element to update for a given point
     """
+
+    if not bucket:
+        bucket = config.get("bucket_name")
+
     msg = f"write_point_sel, chunk_id: {chunk_id}, points: {point_list}, "
     msg += f"data: {point_data}"
     log.info(msg)
@@ -537,8 +551,7 @@ async def write_point_sel(app, chunk_id, dset_json, point_list, point_data,
     params = {}
     params["action"] = "put"
     params["count"] = num_points
-    if bucket:
-        params["bucket"] = bucket
+    params["bucket"] = bucket
 
     json_rsp = await http_post(app, req, params=params, data=post_data)
     log.debug(f"post to {req} returned {json_rsp}")
@@ -579,9 +592,10 @@ async def read_chunk_query(app, chunk_id, dset_json, slices, query, limit,
             params["s3path"] = chunk_info["s3path"]
             params["s3offset"] = chunk_info["s3offset"]
             params["s3size"] = chunk_info["s3size"]
-    elif bucket:
-        # bucket only applies if s3path not set
-        params["bucket"] = bucket
+  
+    # bucket will be used to get dset json even when s3path is used for 
+    # the chunk data
+    params["bucket"] = bucket
 
     chunk_shape = getSelectionShape(chunk_sel)
     log.debug(f"chunk_shape: {chunk_shape}")
@@ -654,8 +668,13 @@ async def getPointData(app, dset_id, dset_json, points, bucket=None,
     """
     loop = asyncio.get_event_loop()
     num_points = len(points)
-    log.info(f"getPointData {dset_id} for {num_points} points")
+    log.info(f"getPointData {dset_id} for {num_points} points bucket: {bucket}")
     log.debug(f"points: {points}")
+    if not bucket:
+        msg = "Expected bucket param for getPointData"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
     chunk_dict = {}  # chunk ids to list of points in chunk
     datashape = dset_json["shape"]
     if datashape["class"] in ('H5S_NULL', 'H5S_SCALAR'):
@@ -961,9 +980,9 @@ async def doPutQuery(request, query_update, dset_json):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     query = params["query"]
-    bucket = None
-    if "bucket" in params:
-        bucket = params["bucket"]
+    domain = getDomainFromRequest(request)
+    bucket = getBucketForDomain(domain)
+     
     datashape = dset_json["shape"]
     dims = getShapeDims(datashape)
     num_rows = dims[0]
@@ -1104,8 +1123,7 @@ async def PUT_Value(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         log.info(f"append_dim: {append_dim}")
-    if "bucket" in params:
-        bucket = params["bucket"]
+   
     if "query" in params:
         if "append" in params:
             msg = "Query string can not be used with append parameter"

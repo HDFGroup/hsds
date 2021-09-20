@@ -46,16 +46,15 @@ def getHeadUrl(app):
         head_url = app["head_url"]
     else:
         head_port = config.get("head_port")
-        head_url = f"http://head:{head_port}"
+        if head_port:
+            if "KUBERNETES_SERVICE_HOST" in os.environ:
+                dns_name = "127.0.0.1"
+            else:
+                dns_name = "head"
+            head_url = f"http://{dns_name}:{head_port}"
+        else:
+            head_url = ""
         app["head_url"] = head_url
-    """
-
-    elif config.get("head_endpoint"):
-        head_url = config.get("head_endpoint")
-    else:
-        head_url = f"http://hsds_head:{head_port}"
-    log.debug(f"head_url: {head_url}")
-    """
     return head_url
 
 
@@ -268,8 +267,10 @@ async def update_dn_info(app):
     if "oio_proxy" in app:
         #  Using OpenIO consicience daemons
         await oio_update_dn_info(app)
+    elif "is_k8s" in app and not getHeadUrl(app):
+        await k8s_update_dn_info(app) 
     else:
-        # docker or kubernetes
+        # docker or kubernetes running with head container
         await docker_update_dn_info(app)
 
     # do a log if there has been a change in the dn nodes

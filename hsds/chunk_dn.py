@@ -69,8 +69,11 @@ async def PUT_Chunk(request):
     if "bucket" in params:
         bucket = params["bucket"]
         log.debug(f"PUT_Chunk using bucket: {bucket}")
-    else:
-        bucket = None
+    
+    if not bucket:
+        msg = "PUT_Chunk - bucket is None"
+        log.warn(msg)
+        raise HTTPInternalServerError(reason=msg)
 
     if query:
         chunk_init = False  # don't initalize new chunks on query update
@@ -207,6 +210,14 @@ async def GET_Chunk(request):
     Return data from requested chunk and selection
     """
     log.request(request)
+
+    bucket = None
+    s3path = None
+    s3offset = None
+    s3size = None
+    query = None
+    limit = 0
+
     app = request.app
     params = request.rel_url.query
 
@@ -228,17 +239,18 @@ async def GET_Chunk(request):
         raise HTTPInternalServerError()
     log.debug(f"request params: {params.keys()}")
 
-    bucket = None
-    s3path = None
-    s3offset = None
-    s3size = None
-    query = None
-    limit = 0
     if "s3path" in params:
         s3path = params["s3path"]
-        log.debug(f"GET_Chunk - using s3path: {s3path}")
-    elif "bucket" in params:
+        log.debug(f"GET_Chunk - using URI: {s3path}")
+    if "bucket" in params:
         bucket = params["bucket"]
+    if not bucket:
+        msg = "GET_Chunk - bucket is None"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    log.debug(f"GET_Chunk - using bucket: {bucket}")
+        
     if "s3offset" in params:
         try:
             s3offset = int(params["s3offset"])
@@ -261,7 +273,7 @@ async def GET_Chunk(request):
 
     dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
     dims = getChunkLayout(dset_json)
-    log.debug(f"got dims: {dims}")
+    log.debug(f"GET_Chunk - got dims: {dims}")
     rank = len(dims)
 
     # get chunk selection from query params
@@ -270,13 +282,15 @@ async def GET_Chunk(request):
         dim_slice = getSliceQueryParam(request, i, dims[i])
         selection.append(dim_slice)
     selection = tuple(selection)
-    log.debug(f"got selection: {selection}")
+    log.debug(f"GET_Chunk - got selection: {selection}")
 
-    kwargs = {"bucket": bucket,
-              "s3path": s3path,
-              "s3offset": s3offset,
-              "s3size": s3size,
-              "chunk_init": False}
+    kwargs = {"chunk_init": False}
+    if s3path:
+        kwargs["s3path"] = s3path
+        kwargs["s3offset"] = s3offset
+        kwargs["s3size"] = s3size   
+    else:
+        kwargs["bucket"] = bucket 
     chunk_arr = await get_chunk(app, chunk_id, dset_json, **kwargs)
     if chunk_arr is None:
         msg = f"chunk {chunk_id} not found"
@@ -348,6 +362,13 @@ async def POST_Chunk(request):
     else:
         log.info(f"POST Chunk get points - num_points: {num_points}")
 
+    if "bucket" not in params:
+        msg = "POST_Chunk - expected bucket param"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    bucket = params["bucket"]
+
     s3path = None
     s3offset = 0
     s3size = 0
@@ -356,12 +377,8 @@ async def POST_Chunk(request):
             log.error("s3path can not be used with put points POST request")
             raise HTTPBadRequest()
         s3path = params["s3path"]
-        log.debug(f"GET_Chunk - using s3path: {s3path}")
-        bucket = None
-    elif "bucket" in params:
-        bucket = params["bucket"]
-    else:
-        bucket = None
+        log.debug(f"POST_Chunk - using s3path: {s3path}")
+     
     if "s3offset" in params:
         try:
             s3offset = int(params["s3offset"])
@@ -372,7 +389,7 @@ async def POST_Chunk(request):
         try:
             s3size = int(params["s3size"])
         except ValueError:
-            log.error(f"invalid s3size params: {params['s3sieze']}")
+            log.error(f"invalid s3size params: {params['s3size']}")
             raise HTTPBadRequest()
 
     chunk_id = request.match_info.get('id')
@@ -453,11 +470,14 @@ async def POST_Chunk(request):
 
     point_arr = bytesToArray(input_bytes, point_dt, point_shape)
 
-    kwargs = {"bucket": bucket,
-              "s3path": s3path,
-              "s3offset": s3offset,
-              "s3size": s3size,
-              "chunk_init": chunk_init}
+    kwargs = {"chunk_init": chunk_init}
+    if s3path:
+        kwargs["s3path"] = s3path
+        kwargs["s3offset"] = s3offset
+        kwargs["s3size"] = s3size
+    else:
+        kwargs["bucket"] = bucket
+              
     chunk_arr = await get_chunk(app, chunk_id, dset_json, **kwargs)
     if chunk_arr is None:
         log.warn(f"chunk {chunk_id} not found")
@@ -527,8 +547,12 @@ async def DELETE_Chunk(request):
         raise HTTPBadRequest(reason=msg)
     if "bucket" in params:
         bucket = params["bucket"]
-    else:
-        bucket = None
+    
+    if not bucket:
+        msg = "DELETE_Chunk - bucket param not set"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
 
     try:
         validateInPartition(app, chunk_id)

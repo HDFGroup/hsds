@@ -61,10 +61,14 @@ async def GET_Links(request):
         marker = params["Marker"]
         log.info(f"GET_Links - using Marker: {marker}")
 
+    bucket = None
     if "bucket" in params:
         bucket = params["bucket"]
-    else:
-        bucket = None
+    
+    if not bucket:
+        msg = "GET_Links - no bucket param"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     group_json = await get_metadata_obj(app, group_id, bucket=bucket)
 
@@ -122,10 +126,13 @@ async def GET_Link(request):
 
     validateLinkName(link_title)
 
+    bucket = None
     if "bucket" in params:
         bucket = params["bucket"]
-    else:
-        bucket = None
+    if not bucket:
+        msg = "GET_Links - no bucket param"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     group_json = await get_metadata_obj(app, group_id, bucket=bucket)
     log.info(f"for id: {group_id} got group json: {group_json}")
@@ -190,6 +197,11 @@ async def PUT_Link(request):
         bucket = params["bucket"]
     else:
         bucket = None
+    
+    if not bucket:
+        msg = "GET_Links - no bucket param"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     group_json = await get_metadata_obj(app, group_id, bucket=bucket)
     if "links" not in group_json:
@@ -242,6 +254,10 @@ async def DELETE_Link(request):
         bucket = params["bucket"]
     else:
         bucket = None
+    if not bucket:
+        msg = "GET_Links - no bucket param"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     group_json = await get_metadata_obj(app, group_id, bucket=bucket)
     # TBD: Possible race condition
