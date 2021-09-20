@@ -651,6 +651,9 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None,
                     msg = f"expected to find {chunk_id} in "
                     msg += "pending_s3_read map"
                     log.warn(msg)
+                if chunk_bytes is None:
+                    msg = f"read {chunk_id} bucket: {bucket} returned None"
+                    raise ValueError(msg)
                 if layout_class == 'H5D_CONTIGUOUS_REF':
                     if len(chunk_bytes) < s3size:
                         # we may get less than expected bytes if this chunk
