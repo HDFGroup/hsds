@@ -633,20 +633,10 @@ def baseInit(node_type):
         # will set node_ip at registration time
     else:
         # check to see if we are running in a k8s cluster
-        try:
-            k8s_app_label = config.get("k8s_app_label")
-            if "KUBERNETES_SERVICE_HOST" in os.environ:
-                log.info("running in kubernetes")
-                if k8s_app_label:
-                    log.info("setting is_k8s to True")
-                    app["is_k8s"] = True
-                else:
-                    msg = "k8s_app_label not set, running in k8s single pod"
-                    log.info(msg)
-        except KeyError:
-            # guard against KeyError since k8s_app_label is a recent key
-            log.warn("expected to find key k8s_app_label in config")
-        if "is_k8s" not in app:
+        if "KUBERNETES_SERVICE_HOST" in os.environ:
+            log.info("running in kubernetes")
+            app["is_k8s"] = True
+        else:
             # check to see if we are running in a docker container
             proc_file = "/proc/self/cgroup"
             if os.path.isfile(proc_file):
@@ -657,6 +647,7 @@ def baseInit(node_type):
                         if len(fields) >= 3:
                             field = fields[2]
                             if field.startswith("/docker/"):
+                                log.info("running in docker")
                                 app["is_docker"] = True
 
     if "is_dcos" in app:
