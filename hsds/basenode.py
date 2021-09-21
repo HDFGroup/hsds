@@ -194,7 +194,7 @@ async def k8s_update_dn_info(app):
         dn_urls.append(f"http://{pod_ip}:{dn_port}")
     # call info on each dn container and get node ids
     dn_ids = []
-    for dn_url in app["dn_urls"]:
+    for dn_url in dn_urls:
         req = dn_url + "/info"
         log.debug(f"about to call: {req}")
         try:
