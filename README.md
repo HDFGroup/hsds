@@ -35,13 +35,16 @@ Quick Start
 
 Make sure you have Python 3, docker, docker-compose installed, then:
 
-   1. Setup password file: `$ cp admin/config/passwd.default admin/config/passwd.txt`
-   2. Create a directory the server will use to store data, and then set the ROOT_DIR environment variable to point to it: `$ export ROOT_DIR="~/hsds_data"`
-   3. Start server: `$ ./runall.sh`
-   4. Try making a request to the service: `$ curl http://localhost:5101/about` (should get back a json response)
-   5. Set environment variables for the admin password and username: `$ export ADMIN_PASSWORD=admin`, `$ export ADMIN_USERNAME=admin`
-   6. Run the test suite: `$ python testall.py --skip_unit`
-   7. (Optional) Post install setup (test data, home folders, cli tools, etc): [docs/post_install.md](docs/post_install.md)
+   1. Clone this repo: `$ git clone https://github.com/HDFGroup/hsds`
+   2. Go to the hsds directory: `$ cd hsds`
+   3. Run install: `$ python setup.py install`
+   4. Setup password file: `$ cp admin/config/passwd.default admin/config/passwd.txt`
+   5. Create a directory the server will use to store data, and then set the ROOT_DIR environment variable to point to it: `$ mkdir ~/hsds_data; export ROOT_DIR="${HOME}/hsds_data"`
+   6. Start server: `$ ./runall.sh`
+   7. Try making a request to the service: `$ curl http://localhost:5101/about` (should get back a json response)
+   8. Set environment variables for the admin password and username: `$ export ADMIN_PASSWORD=admin`, `$ export ADMIN_USERNAME=admin`
+   9. Run the test suite: `$ python testall.py --skip_unit`
+   10. (Optional) Post install setup (test data, home folders, cli tools, etc): [docs/post_install.md](docs/post_install.md)
 
 
 To shut down the server, run: `$ ./stopall.sh`
