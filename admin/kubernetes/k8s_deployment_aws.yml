@@ -37,7 +37,7 @@ spec:
           env:
           - name: NODE_TYPE
             value: sn
-          = name: HEAD_PORT
+          - name: HEAD_PORT
             value: null # no head container
           - name: PASSWORD_FILE
             value: /config/passwd.txt
@@ -73,7 +73,7 @@ spec:
           env:
           - name: NODE_TYPE
             value: dn
-          = name: HEAD_PORT
+          - name: HEAD_PORT
             value: null # no head container
           - name: AWS_ACCESS_KEY_ID
             valueFrom:
