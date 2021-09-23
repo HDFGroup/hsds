@@ -152,8 +152,6 @@ Cluster Scaling
 To scale up or down the number of HSDS pods, run:
 `kubectl scale --replicas=n deployment/hsds` where n is the number of pods desired.
 
-Note: Running two or more pods may result in inconsistent "read after write" results.  
-
 Building a docker image and deploying to ECR
 --------------------------------------------
 
