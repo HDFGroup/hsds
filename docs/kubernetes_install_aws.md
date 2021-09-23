@@ -112,6 +112,10 @@ Deploy HSDS to K8s
 
 If you need to build and deploy a custom HSDS image (e.g. you have made changes to the HSDS code), first build and deploy the code to ECR as described in section "Building a docker image and deploying to ECR" below.  Otherwise, the standard image from docker hub (<https://hub.docker.com/repository/docker/hdfgroup/hsds>) will be deployed.
 
+1. Create RBAC roles: kubectl create -f admin/kubernetes/k8s_rbac.yml
+
+   Note: The RBAC role enables kubernetes pods to find the internal IP addresses of other pods
+   running in the cluster.  This step can be skipped if only one pod will be used.
 1. Create HSDS service: `kubectl apply -f admin/kubernetes/k8s_service_lb.yml`
 2. This will create an external load balancer with an http endpoint with a public-ip.
    Use kubectl to get the public-ip of the hsds service: `kubectl get service`
@@ -124,8 +128,12 @@ If you need to build and deploy a custom HSDS image (e.g. you have made changes 
 
    Note: if the service will only be accessed by other pods in the cluster, you can replace 
    "k8s_service_lb.yml" with "k8s_service.yml" in the kubectl command above.
-3. Now we will deploy the HSDS pod. In ***k8s_deployment_aws.yml***, modify the image value if a custom build is being used.  E.g:
+3. Now we will deploy the HSDS pod. In ***k8s_deployment_aws.yml***, modify the image 
+   value if a custom build is being used.  E.g:
     * image: '1234567.dkr.ecr.us-east-1.amazonaws.com/hsds:v1' to reflect the ecr repository for deployment
+
+   Note: if just one pod will be used, this deployment: ***k8s_deployment_aws_singleton.yml****
+   can be used to provide multiple DN containers in one pod.
 4. Apply the deployment: `kubectl apply -f admin/kubernetes/k8s_deployment_aws.yml`
 5. Verify that the HSDS pod is running: `kubectl get pods`  a pod with a name starting with hsds should be displayed with status as "Running".
 6. Additional verification: Run (`kubectl describe pod hsds-xxxx`) and make sure everything looks OK
