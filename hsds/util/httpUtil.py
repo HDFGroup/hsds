@@ -160,7 +160,7 @@ async def http_get(app, url, params=None):
     url = get_http_std_url(url)
     status_code = None
     timeout = config.get("timeout")
-    # TBD: usse read_bufsize parameter to optimize read for large responses
+    # TBD: use read_bufsize parameter to optimize read for large responses
     try:
         async with client.get(url, params=params, timeout=timeout) as rsp:
             log.info(f"http_get status: {rsp.status} for req: {url}")
