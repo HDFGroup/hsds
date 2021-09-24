@@ -13,45 +13,109 @@
 # Kubernetes utility functions
 #
 
-from kubernetes import client as k8s_client
-from kubernetes import config as k8s_config
+
+import ssl
+import aiohttp
+from asyncio import CancelledError
+from aiohttp.web_exceptions import HTTPForbidden, HTTPNotFound, HTTPBadRequest
+from aiohttp.web_exceptions import HTTPServiceUnavailable, HTTPInternalServerError
+from aiohttp.client_exceptions import ClientError
 import urllib3
 from .. import hsds_logger as log
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+APISERVER = "https://kubernetes.default.svc"
+SERVICEACCOUNT = "/var/run/secrets/kubernetes.io/serviceaccount"
 
-def getPodIps(k8s_app_label, k8s_namespace=None):
-    """ Return list of IPs of all pods in the cluster with given app label
-       (and namespace if set)
-    """
+def _k8sGetNamespace():
+    """ Return namespace of current pod """
+    namespace = None
+    try:
+        with open(SERVICEACCOUNT+"/namespace") as f:
+            s = f.read()
+            if s:
+                namespace = s.strip()
+    except FileNotFoundError:
+        pass
+    
+    if not namespace:
+        log.error("Unable to read namespace - not running in Kubernetes?")
+        raise ValueError("Kubernetes namespace could not be determined")
 
-    # get the config from within the cluster and set it as the default config
-    # for all new clients
-    k8s_config.load_incluster_config()
-    c = k8s_client.Configuration()  # go and get a copy of the default config
-    c.verify_ssl = False  # set verify_ssl to false in that config
-    # make that config the default for all new clients
-    k8s_client.Configuration.set_default(c)
-    v1 = k8s_client.CoreV1Api()
-    if k8s_namespace:
-        # get pods for given namespace
-        log.debug(f"getting pods for namespace: {k8s_namespace}")
-        ret = v1.list_namespaced_pod(namespace=k8s_namespace)
-    else:
-        log.info("getting pods for all namespaces")
-        ret = v1.list_pod_for_all_namespaces(watch=False)
-    pod_ips = []
-    for i in ret.items:
-        pod_ip = i.status.pod_ip
-        if not pod_ip:
-            continue
-        labels = i.metadata.labels
-        if labels and "app" in labels and labels["app"] == k8s_app_label:
-            msg = f"found hsds pod with app label: {k8s_app_label} "
-            msg += f"- ip: {pod_ip}"
-            log.debug(msg)
-            pod_ips.append(pod_ip)
+def _k8sGetBearerToken():
+    """ Return kubernetes bearer token """
+    token = None
+    try:
+        with open(SERVICEACCOUNT+"/token") as f:
+            s = f.read()
+            if s:
+                token = s.strip()
+    except FileNotFoundError:
+        pass
+    
+    if not token:
+        log.error("Unable to read token - not running in Kubernetes?")
+        raise ValueError("Could not get Kubernetes auth token")
 
-    pod_ips.sort()  # for assigning node numbers
-    return pod_ips
+    return "Bearer " + token
+
+
+async def _k8sListPod():
+    """ Make http request to k8s to get info on all pods in 
+      the current namespace.  Return json dictionary """
+    namespace = _k8sGetNamespace()
+    cafile = SERVICEACCOUNT+"/ca.crt"
+    ssl_ctx = ssl.create_default_context(cafile=cafile)
+    token = _k8sGetBearerToken()
+    headers = {"Authorization": token}
+    conn = aiohttp.TCPConnector(ssl_context=ssl_ctx)
+    # TBD - save session for re-use
+
+    status_code = None
+    timeout = 0.5
+    url = f"{APISERVER}/api/v1/namespaces{namespace}/pods"
+    # TBD: use read_bufsize parameter to optimize read for large responses
+    try:
+        async with conn.get(url, headeers=headers, timeout=timeout) as rsp:
+            log.info(f"http_get status for k8s pods: {rsp.status} for req: {url}")
+            status_code = rsp.status
+            if rsp.status == 200:
+                # 200, so read the response
+                log.info(f"got podlist resonse: {rsp.json}")
+            elif status_code == 400:
+                log.warn(f"BadRequest to {url}")
+                raise HTTPBadRequest()
+            elif status_code == 403:
+                log.warn(f"Forbiden to access {url}")
+                raise HTTPForbidden()
+            elif status_code == 404:
+                log.warn(f"Object: {url} not found")
+                raise HTTPNotFound()
+            elif status_code == 503:
+                log.warn(f"503 error for http_get_Json {url}")
+                raise HTTPServiceUnavailable()
+            else:
+                log.error(f"request to {url} failed with code: {status_code}")
+                raise HTTPInternalServerError()
+
+    except ClientError as ce:
+        log.debug(f"ClientError: {ce}")
+        raise HTTPInternalServerError()
+    except CancelledError as cle:
+        log.error(f"CancelledError for http_get({url}): {cle}")
+        raise HTTPInternalServerError()
+
+    return ["127.0.0.1",]  # for test
+
+
+async def getPodIps(k8s_app_label):
+    log.info(f"getPodIps({k8s_app_label})")
+    pod_ips = await _k8sListPod()
+  
+    return pod_ips   
+    
+ 
+    
+    
+ 

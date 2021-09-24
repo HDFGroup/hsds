@@ -32,6 +32,7 @@ from .util.httpUtil import http_get, http_post, jsonResponse
 from .util.idUtil import createNodeId, getNodeNumber, getNodeCount
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from .util.authUtil import isAdminUser
+from .util.k8sClient import getPodIps
 from . import hsds_logger as log
 
 HSDS_VERSION = "0.7.0beta"
@@ -181,8 +182,7 @@ async def k8s_update_dn_info(app):
     k8s_app_label = config.get("k8s_app_label")
     k8s_namespace = config.get("k8s_namespace")
     # put import here to avoid k8s package dependency unless required
-    from .util.k8sClient import getPodIps
-    pod_ips = getPodIps(k8s_app_label, k8s_namespace=k8s_namespace)
+    pod_ips = await getPodIps(k8s_app_label, k8s_namespace=k8s_namespace)
     if not pod_ips:
         log.error("Expected to find at least one hsds pod")
         return
@@ -270,6 +270,11 @@ async def update_dn_info(app):
     elif "is_k8s" in app and not getHeadUrl(app):
         await k8s_update_dn_info(app) 
     else:
+        if "is_k8s" in app:
+            log.info("test get pod ips")
+            k8s_app_label = config.get("k8s_app_label")
+            await getPodIps(k8s_app_label)
+
         # docker or kubernetes running with head container
         await docker_update_dn_info(app)
 
