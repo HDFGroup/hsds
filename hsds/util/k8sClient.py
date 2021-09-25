@@ -73,6 +73,7 @@ async def _k8sListPod():
     headers = {"Authorization": token}
     conn = aiohttp.TCPConnector(ssl_context=ssl_ctx)
     session = aiohttp.ClientSession(connector=conn)
+    pod_json = None
     # TBD - save session for re-use
 
     status_code = None
@@ -86,7 +87,7 @@ async def _k8sListPod():
             if rsp.status == 200:
                 # 200, so read the response
                 pod_json = await rsp.json()
-                log.info(f"got podlist resonse: {pod_json}")
+                log.debug(f"got podlist resonse: {pod_json}")
             elif status_code == 400:
                 log.warn(f"BadRequest to {url}")
                 raise HTTPBadRequest()
@@ -110,13 +111,49 @@ async def _k8sListPod():
         log.error(f"CancelledError for http_get({url}): {cle}")
         raise HTTPInternalServerError()
 
-    return ["127.0.0.1",]  # for test
+    return pod_json
 
+def _k8sGetPodIPs(pod_json, k8s_app_label):
+    if not isinstance(pod_json, dict):
+        msg = f"_k8sGetPodIPs - unexpected type: {type(pod_json)}"
+        log.error(msg)
+        raise TypeError(msg)
+    if "items" not in pod_json:
+        msg = "_k98sGetPodIPS - no items key"
+        log.error(msg)
+        raise KeyError(msg)
+    items = pod_json["items"]
+    
+    for item in items:
+        if "metadata" not in item:
+            msg = "_k8sGetPodIPs - expected to find metadata key"
+            log.warn(msg)
+            continue
+        metadata = item["metaadata"]
+        log.debug(f"pod metadata: {metadata}")
+        if "labels" not in metadata:
+            msg = "_k8sGetPodIPs - expected to labels key in metadata"
+            log.warn(msg)
+            continue
+        labels = metadata["labels"]
+        if "app" not in labels:
+            msg = "_k8sGetPodIPs - no app label"
+            log.warn(msg)
+            continue
+        app_label = labels["app"]
+        if app_label != k8s_app_label:
+            msg = f"_k8sGetPodIPs - app_label: {app_label} not equal to: "
+            msg += f"{k8s_app_label}, skipping"
+            log.debug(msg)
+            continue
+    return ["127.0.0.1",] # test
+        
 
 async def getPodIps(k8s_app_label):
     log.info(f"getPodIps({k8s_app_label})")
-    pod_ips = await _k8sListPod()
-  
+    pod_json = await _k8sListPod()
+    pod_ips = _k8sGetPodIPs(pod_json, k8s_app_label)
+
     return pod_ips   
     
  
