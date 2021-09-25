@@ -42,6 +42,8 @@ def _k8sGetNamespace():
     if not namespace:
         log.error("Unable to read namespace - not running in Kubernetes?")
         raise ValueError("Kubernetes namespace could not be determined")
+    log.debug(f"k8s namespace: [{namespace}]")
+    return namespace
 
 def _k8sGetBearerToken():
     """ Return kubernetes bearer token """
@@ -70,19 +72,21 @@ async def _k8sListPod():
     token = _k8sGetBearerToken()
     headers = {"Authorization": token}
     conn = aiohttp.TCPConnector(ssl_context=ssl_ctx)
+    session = aiohttp.ClientSession(connector=conn)
     # TBD - save session for re-use
 
     status_code = None
     timeout = 0.5
-    url = f"{APISERVER}/api/v1/namespaces{namespace}/pods"
+    url = f"{APISERVER}/api/v1/namespaces/{namespace}/pods"
     # TBD: use read_bufsize parameter to optimize read for large responses
     try:
-        async with conn.get(url, headeers=headers, timeout=timeout) as rsp:
+        async with session.get(url, headers=headers, timeout=timeout) as rsp:
             log.info(f"http_get status for k8s pods: {rsp.status} for req: {url}")
             status_code = rsp.status
             if rsp.status == 200:
                 # 200, so read the response
-                log.info(f"got podlist resonse: {rsp.json}")
+                pod_json = await rsp.json()
+                log.info(f"got podlist resonse: {pod_json}")
             elif status_code == 400:
                 log.warn(f"BadRequest to {url}")
                 raise HTTPBadRequest()
