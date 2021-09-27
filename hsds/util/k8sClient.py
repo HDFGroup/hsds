@@ -205,7 +205,7 @@ async def _k8sListPod():
 
 
 async def getPodIps(k8s_app_label):
-    log.info(f"getPodIps({k8s_app_label})")
+    log.debug(f"getPodIps({k8s_app_label})")
     pod_json = await _k8sListPod()
     pod_ips = _k8sGetPodIPs(pod_json, k8s_app_label)
     log.info(f"gotPodIps: {pod_ips}")
