@@ -162,7 +162,6 @@ async def _k8sListPod():
     token = _k8sGetBearerToken()
     headers = {"Authorization": token}
     conn = aiohttp.TCPConnector(ssl_context=ssl_ctx)
-    session = aiohttp.ClientSession(connector=conn)
     pod_json = None
     # TBD - save session for re-use
 
