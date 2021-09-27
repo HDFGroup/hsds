@@ -62,6 +62,94 @@ def _k8sGetBearerToken():
 
     return "Bearer " + token
 
+def getIPKeys(metadata):
+    KEY_PATH = ("fieldsV1", "f:status", "f:podIPs")
+    pod_ips = []
+    if not isinstance(metadata, dict):
+        log.warn(f"expected list but got: {type(metadata)}")
+        return pod_ips
+    if "managedFields" not in metadata:
+        log.warn(f"expected managedFields key but got: {metadata.keys()}")
+        return pod_ips
+    managedFields = metadata["managedFields"]
+    if not isinstance(managedFields, list):
+        log.warn(f"expected managedFields to be list but got: {type(managedFields)}")
+        return pod_ips
+    log.debug(f"mangagedFields - {len(managedFields)} items")
+    for item in managedFields:
+        if not isinstance(item, dict):
+            log.warn(f"ignoring item type {type(item)}: {item}")
+            continue
+        for key in KEY_PATH:
+            log.debug(f"using key: {key}")
+            if key not in item:
+                log.warn(f"expected to find {key} key but got: {item.keys()}")
+                break
+            item = item[key]
+            log.debug(f"got obj type: {type(item)}")
+            log.debug(f"item: {item}")
+            if not isinstance(item, dict):
+                log.warn("not a dict")
+                break
+        # item should be a dict that looks like:
+        # {'.': {}, 'k:{"ip":"192.168.17.20"}': {'.': {}, 'f:ip': {}}}
+        # ip is burried in the key that starts with "k:"
+        if not isinstance(item, dict):
+            log.warn(f"expected podIPs to be dict but got: {type(item)}")
+            continue
+        for k in item:
+            log.debug(f"got podIPs key: {k}")
+            if k.startswith('k:{"ip":"'):
+                n = len('k:{"ip":"')
+                s = k[n:]
+                m = s.find('"')
+                if m < 0:
+                    log.warn(f"unexpected key: {k}")
+                    continue
+                ip = s[:m]
+                log.info(f"found pod ip: {ip}")
+                pod_ips.append(ip)
+    log.debug(f"getIPKeys  done: returning {pod_ips}")
+    return pod_ips
+
+
+def _k8sGetPodIPs(pod_json, k8s_app_label):
+    if not isinstance(pod_json, dict):
+        msg = f"_k8sGetPodIPs - unexpected type: {type(pod_json)}"
+        log.error(msg)
+        raise TypeError(msg)
+    if "items" not in pod_json:
+        msg = "_k98sGetPodIPS - no items key"
+        log.error(msg)
+        raise KeyError(msg)
+    items = pod_json["items"]
+    ipKeys = []
+
+    for item in items:
+        if "metadata" not in item:
+            msg = "_k8sGetPodIPs - expected to find metadata key"
+            log.warn(msg)
+            continue
+        metadata = item["metadata"]
+        #log.debug(f"pod metadata: {metadata}")
+        if "labels" not in metadata:
+            msg = "_k8sGetPodIPs - expected to labels key in metadata"
+            log.warn(msg)
+            continue
+        labels = metadata["labels"]
+        if "app" not in labels:
+            msg = "_k8sGetPodIPs - no app label"
+            log.warn(msg)
+            continue
+        app_label = labels["app"]
+        if app_label != k8s_app_label:
+            msg = f"_k8sGetPodIPs - app_label: {app_label} not equal to: "
+            msg += f"{k8s_app_label}, skipping"
+            log.debug(msg)
+            continue
+        ipKeys.extend(getIPKeys(metadata))
+    return ipKeys
+
 
 async def _k8sListPod():
     """ Make http request to k8s to get info on all pods in 
@@ -113,46 +201,12 @@ async def _k8sListPod():
 
     return pod_json
 
-def _k8sGetPodIPs(pod_json, k8s_app_label):
-    if not isinstance(pod_json, dict):
-        msg = f"_k8sGetPodIPs - unexpected type: {type(pod_json)}"
-        log.error(msg)
-        raise TypeError(msg)
-    if "items" not in pod_json:
-        msg = "_k98sGetPodIPS - no items key"
-        log.error(msg)
-        raise KeyError(msg)
-    items = pod_json["items"]
-    
-    for item in items:
-        if "metadata" not in item:
-            msg = "_k8sGetPodIPs - expected to find metadata key"
-            log.warn(msg)
-            continue
-        metadata = item["metaadata"]
-        log.debug(f"pod metadata: {metadata}")
-        if "labels" not in metadata:
-            msg = "_k8sGetPodIPs - expected to labels key in metadata"
-            log.warn(msg)
-            continue
-        labels = metadata["labels"]
-        if "app" not in labels:
-            msg = "_k8sGetPodIPs - no app label"
-            log.warn(msg)
-            continue
-        app_label = labels["app"]
-        if app_label != k8s_app_label:
-            msg = f"_k8sGetPodIPs - app_label: {app_label} not equal to: "
-            msg += f"{k8s_app_label}, skipping"
-            log.debug(msg)
-            continue
-    return ["127.0.0.1",] # test
-        
 
 async def getPodIps(k8s_app_label):
     log.info(f"getPodIps({k8s_app_label})")
     pod_json = await _k8sListPod()
     pod_ips = _k8sGetPodIPs(pod_json, k8s_app_label)
+    log.info(f"gotPodIps: {pod_ips}")
 
     return pod_ips   
     
