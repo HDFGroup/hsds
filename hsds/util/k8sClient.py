@@ -86,8 +86,8 @@ def getIPKeys(metadata):
                 log.warn(f"expected to find {key} key but got: {item.keys()}")
                 break
             item = item[key]
-            log.debug(f"got obj type: {type(item)}")
-            log.debug(f"item: {item}")
+            #log.debug(f"got obj type: {type(item)}")
+            #log.debug(f"item: {item}")
             if not isinstance(item, dict):
                 log.warn("not a dict")
                 break
@@ -167,37 +167,38 @@ async def _k8sListPod():
     status_code = None
     timeout = 0.5
     url = f"{APISERVER}/api/v1/namespaces/{namespace}/pods"
-    # TBD: use read_bufsize parameter to optimize read for large responses
-    try:
-        async with session.get(url, headers=headers, timeout=timeout) as rsp:
-            log.info(f"http_get status for k8s pods: {rsp.status} for req: {url}")
-            status_code = rsp.status
-            if rsp.status == 200:
-                # 200, so read the response
-                pod_json = await rsp.json()
-                log.debug(f"got podlist resonse: {pod_json}")
-            elif status_code == 400:
-                log.warn(f"BadRequest to {url}")
-                raise HTTPBadRequest()
-            elif status_code == 403:
-                log.warn(f"Forbiden to access {url}")
-                raise HTTPForbidden()
-            elif status_code == 404:
-                log.warn(f"Object: {url} not found")
-                raise HTTPNotFound()
-            elif status_code == 503:
-                log.warn(f"503 error for http_get_Json {url}")
-                raise HTTPServiceUnavailable()
-            else:
-                log.error(f"request to {url} failed with code: {status_code}")
-                raise HTTPInternalServerError()
+    async with aiohttp.ClientSession(connector=conn) as session:
+        # TBD: use read_bufsize parameter to optimize read for large responses
+        try:
+            async with session.get(url, headers=headers, timeout=timeout) as rsp:
+                log.info(f"http_get status for k8s pods: {rsp.status} for req: {url}")
+                status_code = rsp.status
+                if rsp.status == 200:
+                    # 200, so read the response
+                    pod_json = await rsp.json()
+                    # log.debug(f"got podlist resonse: {pod_json}")
+                elif status_code == 400:
+                    log.warn(f"BadRequest to {url}")
+                    raise HTTPBadRequest()
+                elif status_code == 403:
+                    log.warn(f"Forbiden to access {url}")
+                    raise HTTPForbidden()
+                elif status_code == 404:
+                    log.warn(f"Object: {url} not found")
+                    raise HTTPNotFound()
+                elif status_code == 503:
+                    log.warn(f"503 error for http_get_Json {url}")
+                    raise HTTPServiceUnavailable()
+                else:
+                    log.error(f"request to {url} failed with code: {status_code}")
+                    raise HTTPInternalServerError()
 
-    except ClientError as ce:
-        log.debug(f"ClientError: {ce}")
-        raise HTTPInternalServerError()
-    except CancelledError as cle:
-        log.error(f"CancelledError for http_get({url}): {cle}")
-        raise HTTPInternalServerError()
+        except ClientError as ce:
+            log.debug(f"ClientError: {ce}")
+            raise HTTPInternalServerError()
+        except CancelledError as cle:
+            log.error(f"CancelledError for http_get({url}): {cle}")
+            raise HTTPInternalServerError()
 
     return pod_json
 
