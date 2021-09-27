@@ -66,24 +66,26 @@ def getIPKeys(metadata):
     KEY_PATH = ("fieldsV1", "f:status", "f:podIPs")
     pod_ips = []
     if not isinstance(metadata, dict):
-        log.warn(f"expected list but got: {type(metadata)}")
+        log.warn(f"getIPKeys - expected list but got: {type(metadata)}")
         return pod_ips
     if "managedFields" not in metadata:
-        log.warn(f"expected managedFields key but got: {metadata.keys()}")
+        log.warn(f"getIPKeys - expected managedFields key but got: {metadata.keys()}")
         return pod_ips
     managedFields = metadata["managedFields"]
     if not isinstance(managedFields, list):
         log.warn(f"expected managedFields to be list but got: {type(managedFields)}")
         return pod_ips
-    log.debug(f"mangagedFields - {len(managedFields)} items")
+    #log.debug(f"mangagedFields - {len(managedFields)} items")
     for item in managedFields:
         if not isinstance(item, dict):
             log.warn(f"ignoring item type {type(item)}: {item}")
             continue
         for key in KEY_PATH:
-            log.debug(f"using key: {key}")
+            #log.debug(f"using key: {key}")
             if key not in item:
-                log.warn(f"expected to find {key} key but got: {item.keys()}")
+                # key not found, move on to next managedField
+                msg = f"getIPKeys - looking for {key} key but not present"
+                log.debug(msg)
                 break
             item = item[key]
             #log.debug(f"got obj type: {type(item)}")
@@ -98,7 +100,7 @@ def getIPKeys(metadata):
             log.warn(f"expected podIPs to be dict but got: {type(item)}")
             continue
         for k in item:
-            log.debug(f"got podIPs key: {k}")
+            #log.debug(f"got podIPs key: {k}")
             if k.startswith('k:{"ip":"'):
                 n = len('k:{"ip":"')
                 s = k[n:]
@@ -107,7 +109,7 @@ def getIPKeys(metadata):
                     log.warn(f"unexpected key: {k}")
                     continue
                 ip = s[:m]
-                log.info(f"found pod ip: {ip}")
+                log.debug(f"found pod ip: {ip}")
                 pod_ips.append(ip)
     log.debug(f"getIPKeys  done: returning {pod_ips}")
     return pod_ips
