@@ -880,11 +880,12 @@ def _getEvalStr(query, arr_name, field_names):
             ch_next = query[i+1]
         else:
             ch_next = None
-        if var_name and not ch.isalnum():
+        if var_name and not ch.isalnum() and not ch == '_':
             # end of variable
             if var_name not in field_names:
                 # invalid
-                msg = "unknown field name"
+                msg = f"query variable: {var_name}"
+                log.debug(f"field_names: {field_names}")
                 log.warn("Bad query: " + msg)
                 raise ValueError(msg)
             eval_str += arr_name + "['" + var_name + "']"
@@ -899,7 +900,7 @@ def _getEvalStr(query, arr_name, field_names):
         elif ch in ("'", '"'):
             end_quote_char = ch
             eval_str += ch
-        elif ch.isalpha():
+        elif ch.isalpha() or ch == '_':
             if ch == 'b' and ch_next in ("'", '"'):
                 eval_str += 'b'  # start of a byte string literal
             elif var_name is None:
@@ -956,6 +957,7 @@ def chunkQuery(chunk_id=None, chunk_layout=None, chunk_arr=None, slices=None,
     dset_dtype = chunk_arr.dtype
     log.debug(f"dtype: {dset_dtype}")
     log.debug(f"selection: {slices}")
+    log.debug(f"query: {query}")
 
     if rank != 1:
         msg = "Query operations only supported on one-dimensional datasets"

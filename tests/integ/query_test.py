@@ -56,7 +56,7 @@ class QueryTest(unittest.TestCase):
                 "class": "H5T_STRING",
                 "length": 8,
                 "strPad": "H5T_STR_NULLPAD" }
-        fields = (  {'name': 'symbol', 'type': fixed_str4_type},
+        fields = (  {'name': 'stock_symbol', 'type': fixed_str4_type},
                     {'name': 'date', 'type': fixed_str8_type},
                     {'name': 'open', 'type': 'H5T_STD_I32LE'},
                     {'name': 'close', 'type': 'H5T_STD_I32LE'} )
@@ -102,7 +102,7 @@ class QueryTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)  # write value
 
         # read first row with AAPL
-        params = {'query': "symbol == b'AAPL'" }
+        params = {'query': "stock_symbol == b'AAPL'" }
         params["Limit"] = 1
         rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -262,7 +262,7 @@ class QueryTest(unittest.TestCase):
                 "strPad": "H5T_STR_NULLPAD" }
 
         fields = ({'name': 'date', 'type': s10_type},
-                  {'name': 'symbol', 'type': s4_type},
+                  {'name': 'stock_symbol', 'type': s4_type},
                   {'name': 'sector', 'type': 'H5T_STD_I8LE'},
                   {'name': 'open', 'type': 'H5T_IEEE_F32LE'},
                   {'name': 'high', 'type': 'H5T_IEEE_F32LE'},
@@ -293,8 +293,8 @@ class QueryTest(unittest.TestCase):
 
         # read a selection
         req = self.endpoint + "/datasets/" + dset_id + "/value"
-        params = {'query': "symbol == b'AAPL'" } # query for AAPL
-        #params = {'query': "symbol == b'CVX'" } # query for CVX
+        params = {'query': "stock_symbol == b'AAPL'" } # query for AAPL
+        #params = {'query': "stock_symbol == b'CVX'" } # query for CVX
         #params["select"] = "[0:100]"
         params["nonstrict"] = 1 # enable SN to invoke lambda func
         rsp = self.session.get(req, params=params, headers=headers)
@@ -345,7 +345,7 @@ class QueryTest(unittest.TestCase):
                 "class": "H5T_STRING",
                 "length": 8,
                 "strPad": "H5T_STR_NULLPAD" }
-        fields = (  {'name': 'symbol', 'type': fixed_str4_type},
+        fields = (  {'name': 'stock_symbol', 'type': fixed_str4_type},
                     {'name': 'date', 'type': fixed_str8_type},
                     {'name': 'open', 'type': 'H5T_STD_I32LE'},
                     {'name': 'close', 'type': 'H5T_STD_I32LE'} )
@@ -391,7 +391,7 @@ class QueryTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)  # write value
 
         # set any rows with AAPL to have open of 999
-        params = {'query': "symbol == b'AAPL'" }
+        params = {'query': "stock_symbol == b'AAPL'" }
         update_value = {"open": 999}
         payload = {'value': update_value}
         rsp = self.session.put(req, params=params, data=json.dumps(update_value), headers=headers)
@@ -433,7 +433,7 @@ class QueryTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)  # write value
 
         # set just one row with AAPL to have open of 42
-        params = {'query': "symbol == b'AAPL'" }
+        params = {'query': "stock_symbol == b'AAPL'" }
         params["Limit"] = 1
         update_value = {"open": 999}
         payload = {'value': update_value}

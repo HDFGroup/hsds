@@ -266,6 +266,7 @@ async def GET_Chunk(request):
 
     if "query" in params:
         query = params["query"]
+        log.debug(f"got query: {query}")
     if "Limit" in params:
         limit = int(params["Limit"])
 
