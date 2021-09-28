@@ -166,12 +166,11 @@ async def _k8sListPod():
     # TBD - save session for re-use
 
     status_code = None
-    timeout = 0.5
     url = f"{APISERVER}/api/v1/namespaces/{namespace}/pods"
     async with aiohttp.ClientSession(connector=conn) as session:
         # TBD: use read_bufsize parameter to optimize read for large responses
         try:
-            async with session.get(url, headers=headers, timeout=timeout) as rsp:
+            async with session.get(url, headers=headers) as rsp:
                 log.info(f"http_get status for k8s pods: {rsp.status} for req: {url}")
                 status_code = rsp.status
                 if rsp.status == 200:
