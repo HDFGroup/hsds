@@ -1,3 +1,4 @@
+import os
 import sys
 import random
 import h5py
@@ -9,7 +10,7 @@ HSDS_FOLDER = "/nrel/nsrdb/"
 FILENAME = "v3/nsrdb_2000.h5" 
 SHAPE = (17568, 2018392)
 H5_PATH = "/wind_speed"
-OPTIONS = ("--hdf5", "--hsds")
+OPTIONS = ("--hdf5", "--hsds", "--ros3")
 
 index = None  
 
@@ -18,6 +19,13 @@ if len(sys.argv) < 2 or sys.argv[1] not in OPTIONS:
     sys.exit(0)
 if sys.argv[1] == "--hsds":
     f = h5pyd.File(HSDS_FOLDER+FILENAME, mode='r', use_cache=False, bucket=HSDS_BUCKET)
+elif sys.argv[1] == "--ros3":
+    secret_id = os.environ["AWS_ACCESS_KEY_ID"]
+    secret_id = secret_id.encode('utf-8')
+    secret_key = os.environ["AWS_SECRET_ACCESS_KEY"]
+    secret_key = secret_key.encode('utf-8')
+    s3Url = f"http://{HDF5_BUCKET}.s3.amazonaws.com/{FILENAME}"
+    f = h5py.File(s3Url, mode='r', driver='ros3', aws_region=b'us-west-2', secret_id=secret_id, secret_key=secret_key)
 else:
     # --hdf5
     f = h5py.File(FILENAME, mode='r')
