@@ -39,7 +39,6 @@ def getSession():
         # use requests_unixsocket to get a socket session
         # Expect endpoint in the form:
         #     http+unix://%2Ftmp%2Fsn_1.sock
-
         session = requests_unixsocket.Session()
     else:
         session = requests.Session()

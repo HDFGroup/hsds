@@ -17,6 +17,7 @@ import asyncio
 import json
 from socket import MSG_DONTWAIT
 import time
+from multiprocessing import shared_memory
 from asyncio import CancelledError
 import base64
 import numpy as np
@@ -1649,6 +1650,10 @@ async def GET_Value(request):
     rank = len(dims)
     layout = getChunkLayout(dset_json)
     log.debug(f"chunk layout: {layout}")
+    if "shm_name" in params and params["shm_name"]:
+        shm_name = params["shm_name"]
+    else:
+        shm_name = None
 
     await validateAction(app, domain, dset_id, username, "read")
 
@@ -1758,7 +1763,8 @@ async def GET_Value(request):
                                          slices,
                                          chunk_map=chunkinfo,
                                          bucket=bucket,
-                                         serverless=serverless)
+                                         serverless=serverless,
+                                         shm_name=shm_name)
         except CancelledError as ce:
             log.warn(f"Cancelled error on hyperslab read: {ce}")
             # TBD: what do return if client cancels
@@ -1855,21 +1861,19 @@ async def doQueryRead(request, chunk_ids, dset_json, slices, bucket=None,
 
 
 async def doHyperSlabRead(request, chunk_ids, dset_json, slices,
-                          chunk_map=None, bucket=None, serverless=False):
+                          chunk_map=None, bucket=None, serverless=False, shm_name=None):
     """ hyperslab read utility function """
     app = request.app
     loop = asyncio.get_event_loop()
     log.info(f"doHyperSlabRead - number of chunk_ids: {len(chunk_ids)}")
     log.debug(f"doHyperSlabRead - chunk_ids: {chunk_ids}")
-    cors_domain = config.get("cors_domain")
     log.debug("headers...")
     for k in request.headers:
         v = request.headers[k]
         log.debug(f"   {k}: {v}")
 
     accept_type = getAcceptType(request)
-    response_type = accept_type    # will adjust later if binary not possible
-
+    
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
     log.debug(f"item size: {item_size}")
@@ -1892,6 +1896,8 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices,
         log.warn(msg)
         raise HTTPRequestEntityTooLarge(request_size, max_request_size)
 
+    response_type = accept_type  # use JSON or binary per accept value
+    
     arr = np.zeros(np_shape, dtype=dset_dtype, order='C')
     tasks = []
     kwargs = {"chunk_map": chunk_map,
@@ -1910,6 +1916,42 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices,
 
     log.info(f"read_chunk_hyperslab gather complete, arr shape: {arr.shape}")
 
+    if shm_name:
+        log.debug(f"attaching to shared memory block: {shm_name}")
+        try:
+            shm = shared_memory.SharedMemory(name=shm_name)
+        except FileNotFoundError:
+            msg = f"no shared memory block with name: {shm_name} found"
+            log.warning(msg)
+            raise HTTPBadRequest(reason=msg)
+        except OSError as oe:
+            msg = f"Unexpected OSError: {oe.errno} attaching to shared memory block"
+            log.error(msg)
+            raise HTTPInternalServerError()
+        buffer = arrayToBytes(arr)
+        num_bytes = len(buffer)
+        if shm.size < num_bytes:
+            msg = f"unable to copy {num_bytes} to shared memory block of size: {shm.size}"
+            log.warning(msg)
+            raise HTTPRequestEntityTooLarge(num_bytes, shm.size)
+
+        # copy array data
+        shm.buf[:num_bytes] = buffer[:]
+        log.debug(f"copied {num_bytes} array data to shared memory name: {shm_name}")
+
+        # close shared memory block
+        # Note - since we are not calling shm.unlink (expecting the 
+        # client to do that), it's likely the resource tracker will complain on
+        # app exit.  This should be fixed in Python 3.9.  See: 
+        # https://bugs.python.org/issue39959
+        shm.close()
+
+        log.debug("GET Value - returning JSON data with shared memory buffer")
+        resp_json = {"shm_name": shm.name, "num_bytes": num_bytes}
+        resp_json["hrefs"] = get_hrefs(request, dset_json)
+        resp = await jsonResponse(request, resp_json)
+        return resp
+        
     if response_type == "binary":
         log.debug("preparing binary response")
         output_data = arrayToBytes(arr)
@@ -1924,22 +1966,14 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices,
             resp.headers['Content-Type'] = "application/octet-stream"
             resp.content_length = len(output_data)
 
-            # allow CORS
-            if cors_domain:
-                resp.headers['Access-Control-Allow-Origin'] = cors_domain
-                cors_methods = "GET, POST, DELETE, PUT, OPTIONS"
-                resp.headers['Access-Control-Allow-Methods'] = cors_methods
-                cors_headers = "Content-Type, api_key, Authorization"
-                resp.headers['Access-Control-Allow-Headers'] = cors_headers
             log.debug("prepare request")
             await resp.prepare(request)
             log.debug("write request")
             await resp.write(output_data)
-        except Exception as e:
-            log.error(f"Exception during binary data write: {e}")
-        finally:
             log.debug("write_eof")
             await resp.write_eof()
+        except Exception as e:
+            log.error(f"{type(e)} Exception during binary data write: {e}")
 
     else:
         log.debug("GET Value - returning JSON data")
@@ -2127,10 +2161,9 @@ async def POST_Value(request):
             resp.content_length = len(output_data)
             await resp.prepare(request)
             await resp.write(output_data)
+            await resp.write_eof()
         except Exception as e:
             log.error(f"Exception during binary data write: {e}")
-        finally:
-            await resp.write_eof()
     else:
         log.debug("POST Value - returning JSON data")
         rsp_json = {}

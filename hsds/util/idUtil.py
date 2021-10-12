@@ -432,33 +432,6 @@ def getObjPartition(id, count):
     return number
 
 
-def getPortFromUrl(url):
-    start = url.find('//')
-    if start == -1:
-        # no http prefix?
-        index = 0
-    port = None
-    dns = url[start:]
-    index = dns.find(':')
-    port_str = ""
-    if index > 0:
-        for i in range(index+1, len(dns)):
-            ch = dns[i]
-            if ch.isdigit():
-                port_str += ch
-            else:
-                break
-    if port_str:
-        port = int(port_str)
-    else:
-        if url.startswith("https"):
-            port = 443
-        else:
-            port = 80
-
-    return port
-
-
 def getNodeNumber(app):
     if app["node_type"] == "sn":
         log.error("node number if only for DN nodes")

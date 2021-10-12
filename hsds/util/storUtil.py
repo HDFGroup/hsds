@@ -24,7 +24,7 @@ from asyncio import CancelledError
 
 
 from .. import hsds_logger as log
-from .httpUtil import get_http_client
+from .httpUtil import http_get
 from .s3Client import S3Client
 try:
     from .azureBlobClient import AzureBlobClient
@@ -165,47 +165,42 @@ def getKeyFromStorURI(uri):
 async def rangegetProxy(app, bucket=None, key=None, offset=0, length=0):
     """ fetch bytes from rangeget proxy
     """
-    rangeget_port = config.get("rangeget_port")
-    if "is_docker" in app:
-        rangeget_host = "rangeget"
+    if "rangeget_url" in app:
+        req = app["rangeget_url"] + '/'
     else:
-        rangeget_host = "127.0.0.1"
-    req = f"http://{rangeget_host}:{rangeget_port}/"
-    client = get_http_client(app)
+        rangeget_port = config.get("rangeget_port")
+        if "is_docker" in app:
+            rangeget_host = "rangeget"
+        else:
+            rangeget_host = "127.0.0.1"
+        req = f"http://{rangeget_host}:{rangeget_port}/"
     log.debug(f"rangeGetProxy: {req}")
     params = {}
     params["bucket"] = bucket
     params["key"] = key
     params["offset"] = offset
     params["length"] = length
+
     try:
-        rsp = await client.get(req, params=params)
+        data = await http_get(app, req, params=params)
+        log.debug(f"rangeget request: {req}, read {len(data)} bytes")
+    except HTTPNotFound:
+        # external HDF5 file, should exist
+        log.warn(f"range get request not found for params: {params}")
+        raise
     except ClientError as ce:
-        log.error(f"Error for http_get({req}): {ce} ")
+        log.error(f"Error for rangeget({req}): {ce} ")
         raise HTTPInternalServerError()
     except CancelledError as cle:
-        log.warn(f"CancelledError for http_get({req}): {cle}")
+        log.warn(f"CancelledError for rangeget request({req}): {cle}")
         return None
 
-    log.debug(f"http_get {req} status: <{rsp.status}>")
-    if rsp.status == 200:
-        data = await rsp.read()  # read response as bytes
-        if not data:
-            log.warn(f"rangeget for: {bucket}{key} no data returned")
-            raise HTTPNotFound()
-        if len(data) != length:
-            msg = f"expected {length} bytes for rangeget {bucket}{key}, "
-            msg += f"but got: {len(data)}"
-            log.warn(msg)
-        return data
-
-    elif rsp.status == 404:
-        log.warn(f"rangeget for: {bucket}{key} not found")
-        raise HTTPNotFound()
-    else:
-        msg = f"request to {req} failed with code: {rsp.status}"
-        log.error(msg)
-        raise HTTPInternalServerError()
+    if len(data) != length:
+        msg = f"expected {length} bytes for rangeget {bucket}{key}, "
+        msg += f"but got: {len(data)}"
+        log.warn(msg)
+    return data
+    
 
 
 async def getStorJSONObj(app, key, bucket=None):

@@ -879,7 +879,7 @@ async def s3syncCheck(app):
             await asyncio.sleep(s3_sync_interval)
             continue
         else:
-            log.debug("s3sync - clusterstate is {}".format(app["node_state"]))
+            log.debug(f"s3sync - clusterstate is {app['node_state']}")
 
         update_count = await s3sync(app)
         if update_count:

@@ -1,25 +1,68 @@
 import os
 import sys
 import random
+import logging
+import time
 import h5py
 import h5pyd
+import numpy as np
 
 HSDS_BUCKET = "nrel-pds-hsds" 
 HDF5_BUCKET = "nrel-pds-nsrdb"
 HSDS_FOLDER = "/nrel/nsrdb/"
 FILENAME = "v3/nsrdb_2000.h5" 
-SHAPE = (17568, 2018392)
+NUM_COLS = 17568
+NUM_ROWS = 2018392
 H5_PATH = "/wind_speed"
 OPTIONS = ("--hdf5", "--hsds", "--ros3")
 
-index = None  
+# Note: currently the ros3 option needs the h5py build from conda-forge
 
-if len(sys.argv) < 2 or sys.argv[1] not in OPTIONS:
-    print(f"usage: python nsrdb_test.py {OPTIONS} [--index=n]")
+# parse command line args
+option = None  # one of OPTIONS
+index = None
+block = None
+log_level = logging.WARNING
+for narg in range(1, len(sys.argv)):
+    arg = sys.argv[narg]
+    if arg in OPTIONS:
+        option = arg
+    elif arg.startswith("--index="):
+        index = int(arg[len("--index="):])
+    elif arg.startswith("--block="):
+        block = int(arg[len("--block="):])
+    elif arg.startswith("--loglevel="):
+        level= arg[len("--loglevel="):]
+        if level == "debug":
+            log_level = logging.DEBUG
+        elif level == "info":
+            log_level = logging.INFO
+        elif level == "warning":
+            log_level = logging.WARNING
+        elif level == "error":
+            log_level = logging.ERROR
+        else:
+            print("unexpected log level:", log_level)
+            sys.exit(1)
+    else:
+        print(f"unexpected argument: {arg}")
+
+if option is None:
+    print(f"usage: python nsrdb_test.py {OPTIONS} [--index=n] [--block=n] [--loglevel={debug|info|warning|error}]")
     sys.exit(0)
-if sys.argv[1] == "--hsds":
-    f = h5pyd.File(HSDS_FOLDER+FILENAME, mode='r', use_cache=False, bucket=HSDS_BUCKET)
-elif sys.argv[1] == "--ros3":
+
+if index is None:
+    # choose a random index
+    index = random.randrange(0, NUM_COLS)
+if block is None:
+    # read entire column in one call
+    block = NUM_ROWS
+
+logging.basicConfig(format='%(asctime)s %(message)s', level=log_level)
+    
+if option == "--hsds":
+    f = h5pyd.File(HSDS_FOLDER+FILENAME, mode='r', use_cache=False, bucket=HSDS_BUCKET, retries=100)
+elif option == "--ros3":
     secret_id = os.environ["AWS_ACCESS_KEY_ID"]
     secret_id = secret_id.encode('utf-8')
     secret_key = os.environ["AWS_SECRET_ACCESS_KEY"]
@@ -29,17 +72,25 @@ elif sys.argv[1] == "--ros3":
 else:
     # --hdf5
     f = h5py.File(FILENAME, mode='r')
-if len(sys.argv) > 2 and sys.argv[2].startswith("--index="):
-    index = int(sys.argv[2][len("--index="):])
-else:
-    # choose a random index
-    index = random.randrange(0, SHAPE[0])
 
+# read dataset
 dset = f[H5_PATH]
 print(dset)
-arr = dset[index, :]
-print(f"{H5_PATH}[{index}:]: {arr}")
-print(f"{arr.min():4.2f}, {arr.max():4.2f}, {arr.mean():4.2f}")
+result = np.zeros((NUM_ROWS,), dtype=dset.dtype)
+# read by blocks
+num_blocks = -(-NUM_ROWS // block)  # integer ceiling
+for i in range(num_blocks):
+    start = i * block
+    end = start + block
+    if end > NUM_ROWS:
+        end = NUM_ROWS
+    ts = time.time()
+    arr = dset[index, start:end]
+    te = time.time()
+    result[start:end] = arr
+    print(f"    read[{start}:{end}]: {arr.min():4.2f}, {arr.max():4.2f}, {arr.mean():4.2f}, {te-ts:4.2f} s") 
+print(f"{H5_PATH}[{index}:]: {result}")
+print(f"{result.min()}, {result.max()}, {result.mean():4.2f}")
 
 
 

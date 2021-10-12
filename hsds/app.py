@@ -137,69 +137,67 @@ def main():
     # logging.debug("port:", port)
     if "--use_socket" in extra_args:
         use_socket = True
+        socket_dir = "%2Ftmp%2F"  # TBD - replace with temp dir
     else:
         use_socket = False
+        socket_dir = None
 
     if args.port == 0:
-        if use_socket:
-            sn_port = "/tmp/sn_1.sock"
-        else:
-            sn_port = find_free_port()
+        sn_port = 5101
     else:
-        if use_socket:
-            msg = "--port option can't be used with --use_socket"
-            logging.error(msg)
-            sys.exit(msg)
         sn_port = args.port
-    dn_ports = []
-    dn_urls_arg = ""
+
+    if use_socket:
+        sn_url = f"http+unix://{socket_dir}sn_1.sock"
+    else:
+        sn_url = "http://localhost:5101"
+
+    dn_urls = []
+
     for i in range(args.target_dn_count):
         if use_socket:
-            host = "unix"
-            dn_port = f"/tmp/dn_{(i+1)}.sock"
+            dn_url = f"http+unix://{socket_dir}dn_{(i+1)}.sock"
         else:
             dn_port = find_free_port()
-            host = "localhost:"
-        logging.debug(f"dn_port[{i}]",  dn_port)
-        dn_ports.append(dn_port)
+            dn_url = f"http://localhost:{dn_port}"
+            logging.debug(f"dn_port[{i}]",  dn_port)
+        logging.debug(f"dn_url: {dn_url}")
+        dn_urls.append(dn_url)
+        
+    # sort the ports so that node_number can be determined based on dn_url
+    dn_urls.sort()
+    dn_urls_arg = ""
+    for dn_url in dn_urls:
         if dn_urls_arg:
             dn_urls_arg += ','
-        dn_urls_arg += f"http://{host}:{dn_port}"
+        dn_urls_arg += dn_url
 
-    # sort the ports so that node_number can be determined based on dn_url
-    dn_ports.sort()
-
-    logging.debug("dn_ports:", dn_urls_arg)
+    logging.debug("dn_urls:", dn_urls)
     if use_socket:
-        rangeget_port = "/tmp/rangeget.sock"
+        rangeget_url = f"http+unix://{socket_dir}rangeget.sock"
     else:
         rangeget_port = find_free_port()
-    logging.debug("rangeget_port:", rangeget_port)
+        rangeget_url = f"http://localhost:{rangeget_port}"
+    logging.debug(f"rangeget_url:  {rangeget_url}")
 
     common_args = ["--standalone", ]
     if args.loglevel:
         print("setting log_level to:", args.loglevel)
         common_args.append(f"--log_level={args.loglevel}")
-    if use_socket:
-        common_args.append(f"--sn_socket={sn_port}")
-        common_args.append(f"--rangeget_socket={rangeget_port}")
-    else:
-        common_args.append(f"--sn_port={sn_port}")
-        common_args.append(f"--rangeget_port={rangeget_port}")
+    common_args.append(f"--sn_url={sn_url}")
+    common_args.append(f"--rangeget_url={rangeget_url}")
     common_args.append("--dn_urls="+dn_urls_arg)
+    if use_socket:
+        common_args.append("--use_socket")
     common_args.extend(extra_args)  # pass remaining args as config overrides
 
-    hsds_endpoint = "http://localhost"
-    if sn_port != 80:
-        hsds_endpoint += ":" + str(sn_port)
-    common_args.append(f"--hsds_endpoint={hsds_endpoint}")
-
-    logging.debug(f"host: {args.host}")
-    public_dns = f"http://{args.host}"
-    if sn_port != 80:
-        public_dns += ":" + str(sn_port)
-    logging.info(f"public_dns: {public_dns}")
-    common_args.append(f"--public_dns={public_dns}")
+    if not use_socket:
+        logging.debug(f"host: {args.host}")
+        public_dns = f"http://{args.host}"
+        if sn_port != 80:
+            public_dns += ":" + str(sn_port)
+        logging.info(f"public_dns: {public_dns}")
+        common_args.append(f"--public_dns={public_dns}")
 
     if args.root_dir is not None:
         logging.debug(f"arg.root_dir: {args.root_dir}")
@@ -240,10 +238,6 @@ def main():
         else:
             node_number = i - 2  # start with 0
             pargs = ["hsds-datanode", f"--log_prefix=dn{node_number+1} "]
-            if use_socket:
-                pargs.append(f"--dn_socket={dn_ports[node_number]}")
-            else:
-                pargs.append(f"--dn_port={dn_ports[node_number]}")
             pargs.append(f"--node_number={node_number}")
         logging.info(f"starting {pargs[0]}")
         pargs.extend(common_args)

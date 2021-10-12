@@ -199,7 +199,7 @@ class LruCache(object):
             self._hash[key] = node
             self._mem_size += node._mem_size
             msg = f"LRU {self._name} adding {node._mem_size} to cache, "
-            msg += "mem_size is now: {self._mem_size}"
+            msg += f"mem_size is now: {self._mem_size}"
             log.debug(msg)
             if node._isdirty:
                 self._dirty_size += node._mem_size

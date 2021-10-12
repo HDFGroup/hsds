@@ -14,13 +14,12 @@
 #
 import asyncio
 import time
-import os
-import socket
 from aiohttp.web import run_app
 from aiohttp.web import Application, StreamResponse
 from . import config
 from .util.lruCache import LruCache
 from .util.storUtil import getStorBytes, getStorObjStats
+from .util.httpUtil import isUnixDomainUrl, bindToSocket, getPortFromUrl
 from . import hsds_logger as log
 from aiohttp.web_exceptions import HTTPInternalServerError, HTTPNotFound
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotImplemented
@@ -269,26 +268,39 @@ def main():
     # range proxy doesn't care about health state of other nodes
     app['node_state'] = "READY"
 
-    rangeget_socket = config.getCmdLineArg("rangeget_socket")
-    if rangeget_socket:
-        # use a unix domain socket path
-        # first, make sure the socket does not already exist
-        log.info(f"Using socket {rangeget_socket}")
+    rangeget_url = config.getCmdLineArg("rangeget_url")
+    if rangeget_url:
+        print("got rangeget_url:", rangeget_url)
+        rangeget_port = getPortFromUrl(rangeget_url)
+    else:
+        print("using TCP")
+        # create TCP url based on port address
+        rangeget_port = int(config.get("rangeget_port"))
+        rangeget_url = f"http://localhost:{rangeget_port}"
+
+    if isUnixDomainUrl(rangeget_url):
         try:
-            os.unlink(rangeget_socket)
-        except OSError:
-            if os.path.exists(rangeget_socket):
-                raise
-        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        log.info("socket bind")
-        s.bind(rangeget_socket)
-        run_app(app, sock=s)
+            s = bindToSocket(rangeget_url)
+        except OSError as oe:
+            log.error(f"unable to find to socket: {oe}")
+            raise
+        except ValueError as ve:
+            log.error(f"unable to find to socket: {ve}")
+            raise
+        try:
+            run_app(app, sock=s, handle_signals=True)
+        except KeyboardInterrupt:
+            log.info("got keyboard interrupt")
+        except SystemExit:
+            log.info("got system exit")
+        except Exception as e:
+            log.error(f"got exception: {e}")
+        log.info("run_app done")
         # close socket?
     else:
         # Use TCP connection
-        port = int(config.get("rangeget_port"))
-        log.info(f"run_app on port: {port}")
-        run_app(app, port=port)
+        log.info(f"run_app on port: {rangeget_port}")
+        run_app(app, port=rangeget_port)
 
     log.info("run_app done")
 

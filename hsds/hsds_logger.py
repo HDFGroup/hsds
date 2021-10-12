@@ -24,7 +24,7 @@ config = {"log_level": "DEBUG", "prefix": ""}
 
 def _activeTaskCount():
     count = 0
-    for task in asyncio.Task.all_tasks():
+    for task in asyncio.all_tasks():
         if not task.done():
             count += 1
     return count
@@ -75,11 +75,11 @@ def request(req):
         return
     node_state = app["node_state"] if "node_state" in app else None
     if node_state != "READY":
-        warning(f"returning 503 - node_state: {node_state}")
+        warning(f"returnåing 503 - node_state: {node_state}")
         raise HTTPServiceUnavailable()
     if req.method in ("GET", "POST", "PUT", "DELETE"):
         req_count[req.method] += 1
-    num_tasks = len(asyncio.Task.all_tasks())
+    num_tasks = len(asyncio.all_tasks())
     active_tasks = _activeTaskCount()
     req_count["num_tasks"] = num_tasks
     if config["log_level"] == "DEBUG":

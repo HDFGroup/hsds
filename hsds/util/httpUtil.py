@@ -14,6 +14,8 @@
 # http-related helper functions
 #
 from asyncio import CancelledError
+import os
+import socket
 from aiohttp.web import json_response
 import simplejson
 from aiohttp import ClientSession, UnixConnector, TCPConnector
@@ -28,23 +30,61 @@ from .. import config
 
 
 def isOK(http_response):
+    """ return True for successful http_status codes """
     if http_response < 300:
         return True
     return False
 
 
 def getUrl(host, port):
+    """ return url for host and port """
     return f"http://{host}:{port}"
 
 
-def isUnixDomainUrl(url):
-    # return True if url is a Unix Socket domain
-    # e.g. http://unix:/tmp/dn_1.sock/about
+def getPortFromUrl(url):
+    """ Get Port number for given url """
     if not url:
         raise ValueError("url undefined")
-    if not url.startswith("http://"):
-        raise ValueError(f"invalid url: {url}")
-    if url.startswith("http://unix:"):
+    if url.startswith("http://"):
+        default_port = 80
+    elif url.startswith("https://"):
+        default_port = 443
+    elif url.startswith("http+unix://"):
+        # unix domain socket
+        return None
+    else:
+        raise ValueError(f"Invalid Url: {url}")
+
+    start = url.find('//')
+    port = None
+    dns = url[start:]
+    index = dns.find(':')
+    port_str = ""
+    if index > 0:
+        for i in range(index+1, len(dns)):
+            ch = dns[i]
+            if ch.isdigit():
+                port_str += ch
+            else:
+                break
+    if port_str:
+        port = int(port_str)
+    else:
+        port = default_port
+
+    return port
+
+def isUnixDomainUrl(url):
+    # return True if url is a Unix Socket domain
+    # e.g. http://unix:%2Ftmp%2Fdn_1.sock/about -> True
+    #      http://localhost:80 -> False
+    if not url:
+        raise ValueError("url undefined")
+    if not url.startswith("http"):
+        raise ValueError(f"invalid url, no http: {url}")
+    if url.startswith("http+unix:"):
+        if not url.startswith("http+unix://"):
+            raise ValueError(f"invalid socket url: {url}")   
         return True
     else:
         return False
@@ -52,15 +92,43 @@ def isUnixDomainUrl(url):
 
 def getSocketPath(url):
     # return socket path part of the url
-    # E.g. for "http://unix:/tmp/dn_1.sock/about" return "/tmp/dn_1.sock"
+    # E.g. for "http+unix://%2Ftmp%2Fdn_1.sock/about" return "/tmp/dn_1.sock"
     if not isUnixDomainUrl(url):
         return None
-    # url must start with http://unix:
-    start = len("http://unix:")
-    end = url.find(".sock")
-    if end < start:
-        raise ValueError(f"Invalid socket url: {url}")
-    return url[start:(end+5)]
+    # url must start with http+unix://:
+    skip = len("http+unix://")
+    chars = []
+    # TBD - replace with proper url-decode
+    for i in range(len(url)):
+        if skip:
+            skip -= 1  
+        elif url[i] == '/':
+            break
+        elif url[i] == '%' and url[i+1] == '2' and url[i+2] == 'F':
+            chars.append('/')
+            skip = 2
+        else:
+            chars.append(url[i])
+    return "".join(chars)
+
+def bindToSocket(url):
+    """
+    Bind to socket specified by http+unix url
+    """
+    if not isUnixDomainUrl(url):
+        raise ValueError(f"Invalid url for bindToSocket: {url}")
+    # use a unix domain socket path
+    path = getSocketPath(url)
+    log.debug(f"got socketpath: {path}")
+    # first, make sure the socket does not already exist
+    try:
+        os.unlink(path)
+    except OSError:
+        if os.path.exists(path):
+            raise
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.bind(path)
+    return s
 
 
 def get_http_std_url(url):
@@ -74,16 +142,22 @@ def get_http_std_url(url):
 
 def get_http_client(app, url=None, cache_client=True):
     """ get http client """
+    log.debug(f"get_http_client, url: {url}")
     if url is None or not isUnixDomainUrl(url):
         socket_path = None
     else:
         socket_path = getSocketPath(url)
-        socket_clients = app["socket_clients"]
+        log.debug(f"socket_path: {socket_path}")
+        
     if cache_client:
         if "client" in app and not socket_path:
             return app["client"]
-        if socket_path and socket_path in socket_clients:
-            return socket_clients[socket_path]
+        if socket_path:
+            if "socket_clients" not in app:
+                app["socket_clients"] = {}
+            socket_clients = app["socket_clients"]
+            if socket_path in socket_clients:
+                return socket_clients[socket_path]
 
     # first time call, create client interface
     # use shared client so that all client requests
@@ -94,9 +168,10 @@ def get_http_client(app, url=None, cache_client=True):
         client = ClientSession(connector=UnixConnector(path=socket_path))
         if cache_client:
             socket_clients[socket_path] = client
+        log.info(f"Socket Ready: {socket_path}")
     else:
         max_tcp_connections = int(config.get("max_tcp_connections"))
-        msg = "Initiating TCPConnector with limit "
+        msg = f"Initiating TCPConnector for {url} with limit "
         msg += f"{max_tcp_connections} connections"
         log.info(msg)
         kwargs = {"limit_per_host": max_tcp_connections}
@@ -268,11 +343,10 @@ async def http_put(app, url, data=None, params=None):
     client = get_http_client(app, url=url)
     url = get_http_std_url(url)
     if isinstance(data, bytes):
-        log.debug("setting http_post for binary")
+        log.debug("setting http_put for binary")
         kwargs = {"data": data}
     else:
         kwargs = {"json": data}
-    log.debug(f"kwargs: {kwargs}")
 
     rsp_json = None
     if params is not None:
@@ -334,7 +408,7 @@ async def http_delete(app, url, data=None, params=None):
         async with client.delete(url, **kwargs) as rsp:
             log.info(f"http_delete status: {rsp.status}")
             if rsp.status == 200:
-                pass  # expectred
+                pass  # expected
             elif rsp.status == 404:
                 log.info(f"NotFound response for DELETE for url: {url}")
             elif rsp.status == 503:

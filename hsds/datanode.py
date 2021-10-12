@@ -14,14 +14,14 @@
 #
 import asyncio
 import time
-import socket
-import os
 from aiohttp.web import run_app
 
 from . import config
 from .util.lruCache import LruCache
 from .util.idUtil import isValidUuid, isSchema2Id, getCollectionForId
 from .util.idUtil import isRootObjId
+from .util.httpUtil import isUnixDomainUrl, bindToSocket, getPortFromUrl
+from .util.httpUtil import release_http_client
 from . util.storUtil import setBloscThreads, getBloscThreads
 from .basenode import healthCheck, baseInit, preStop
 # from .util.httpUtil import release_http_client
@@ -218,8 +218,6 @@ async def bucketGC(app):
 
 
 async def start_background_tasks(app):
-    if "is_standalone" in app:
-        return
     loop = asyncio.get_event_loop()
 
     if "is_standalone" not in app:
@@ -234,6 +232,11 @@ async def start_background_tasks(app):
 
         # run root/dataset GC
         loop.create_task(bucketGC(app))
+
+async def on_shutdown(app):
+    """ Release any held resources """
+    log.info("on_shutdown")
+    await release_http_client(app)
 
 
 def create_app():
@@ -302,6 +305,7 @@ def create_app():
 
     # run background tasks
     app.on_startup.append(start_background_tasks)
+    app.on_shutdown.append(on_shutdown)
 
     return app
 
@@ -315,26 +319,44 @@ def main():
     app = create_app()
 
     # run app using either socket or tcp
-    dn_socket = config.getCmdLineArg("dn_socket")
-    if dn_socket:
-        # use a unix domain socket path
-        # first, make sure the socket does not already exist
-        log.info(f"Using socket {dn_socket}")
+    
+    if app["dn_urls"] and app["node_number"] >= 0:
+        dn_urls = app["dn_urls"]
+        node_number = app["node_number"]
+        if node_number >= len(dn_urls):
+            msg = f"Invalid node_number: {node_number} "
+            msg += f"must be less than {len(dn_urls)}"
+            msg += f" dn_urls: {dn_urls}"
+            raise ValueError(msg)
+        dn_url = dn_urls[node_number]
+        dn_port = getPortFromUrl(dn_url)
+    else:
+        dn_port = int(config.get("dn_port"))
+        dn_url = f"http://localhost:{dn_port}"
+
+    if isUnixDomainUrl(dn_url):
         try:
-            os.unlink(dn_socket)
-        except OSError:
-            if os.path.exists(dn_socket):
-                raise
-        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.bind(dn_socket)
-        run_app(app, sock=s)
+            s = bindToSocket(dn_url)
+        except OSError as oe:
+            log.error(f"unable to find to socket: {oe}")
+            raise
+        except ValueError as ve:
+            log.error(f"unable to find to socket: {ve}")
+            raise
+        try:
+            run_app(app, sock=s, handle_signals=True)
+        except KeyboardInterrupt:
+            log.info("got keyboard interrupt")
+        except SystemExit:
+            log.info("got system exit")
+        except Exception as e:
+            log.error(f"got exception: {e}")
         log.info("run_app done")
         # close socket?
     else:
         # Use TCP connection
-        port = int(config.get("dn_port"))
-        log.info(f"run_app on port: {port}")
-        run_app(app, port=port)
+        log.info(f"run_app on port: {dn_port}")
+        run_app(app, port=dn_port)
 
     log.info("datanode exiting")
 

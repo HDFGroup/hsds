@@ -171,6 +171,8 @@ async def oio_update_dn_info(app):
         log.debug(f"oio_get_dn_urls - adding address: {addr}")
         dn_urls.append("http://" + addr)
 
+    app["dn_urls"] = dn_urls
+
     log.info(f"done with oio_update_dn_info, got: {len(dn_urls)} dn urls")
 
 
@@ -267,7 +269,7 @@ async def update_dn_info(app):
         #  Using OpenIO consicience daemons
         await oio_update_dn_info(app)
     elif "is_k8s" in app and not getHeadUrl(app):
-        await k8s_update_dn_info(app) 
+        await k8s_update_dn_info(app)
     else:
         # docker or kubernetes running with head container
         await docker_update_dn_info(app)
@@ -539,7 +541,6 @@ async def info(request):
     log.response(request, resp=resp)
     return resp
 
-
 def baseInit(node_type):
     """Intitialize application and return app object"""
 
@@ -552,14 +553,20 @@ def baseInit(node_type):
     log.info("Application baseInit")
     app = Application()
 
+    app["node_state"] = "INITIALIZING"
+    app["node_number"] = -1
+    app["node_type"] = node_type
+    app["start_time"] = int(time.time())  # seconds after epoch
+    app['register_time'] = 0
+    app["max_task_count"] = config.get("max_task_count")
+
     is_standalone = config.getCmdLineArg("standalone")
 
     if is_standalone:
         log.info("running in standalone mode")
         app["is_standalone"] = True
 
-    # set a bunch of global state
-    if is_standalone:
+        # set node_number and node_id
         # for standalone, node_number will be passed on command line
         # create node_id based on the node_number
         node_number = config.getCmdLineArg("node_number")
@@ -573,6 +580,9 @@ def baseInit(node_type):
     else:
         # create node id based on uuid
         node_id = createNodeId(node_type)
+        node_port = config.get(node_type + "_port")
+        log.info(f"using node port: {node_port}")
+        app["node_port"] = node_port
 
     is_readonly = config.getCmdLineArg("readonly")
     if is_readonly:
@@ -582,13 +592,6 @@ def baseInit(node_type):
     log.info(f"setting node_id to: {node_id}")
     app["id"] = node_id
 
-    app["node_state"] = "INITIALIZING"
-    app["node_number"] = -1
-    app["node_type"] = node_type
-    app["start_time"] = int(time.time())  # seconds after epoch
-    app['register_time'] = 0
-    app["max_task_count"] = config.get("max_task_count")
-
     bucket_name = config.get("bucket_name")
     if bucket_name:
         log.info(f"using bucket: {bucket_name}")
@@ -597,30 +600,34 @@ def baseInit(node_type):
     app["bucket_name"] = bucket_name
     app["dn_urls"] = []
     app["dn_ids"] = []  # node ids for each dn_url
-    # map to path of Unix Domain sockets (if used)
-    app["socket_clients"] = {}
-
-    is_standalone = config.getCmdLineArg("standalone")
-
+     
     if is_standalone:
-        log.info("running in standalone mode")
-        app["is_standalone"] = True
-        # should have been passe a dn_urls arg
-        dn_urls_arg = config.getCmdLineArg("dn_urls")
-        if not dn_urls_arg:
-            log.warn("Expected dn_urls option for standalone mode")
-        else:
+        dn_urls_arg = config.getCmdLineArg("dn_urls")  
+        if dn_urls_arg:
             dn_urls = dn_urls_arg.split(',')
+            dn_urls.sort()
             dn_ids = []
             for i in range(len(dn_urls)):
                 dn_url = dn_urls[i]
-                if not dn_url.startswith("http://"):
-                    log.warn(f"Unexpected dn_url value: {dn_url}")
+                if not dn_url.startswith("http"):
+                    log.warn(f"Unexpected dn_url value: {dn_url}, type: {type(dn_url)}")
                 dn_id = createNodeId("dn", node_number=i)
                 dn_ids.append(dn_id)
-            app["dn_urls"] = dn_urls
-            app["dn_ids"] = dn_ids
+        else:
+            if node_type == "sn":
+                msg = "Expected dn_urls option for standalone mode"
+                log.error(msg)
+                raise ValueError(msg)
+            dn_urls = []
+            dn_ids = []
 
+        app["dn_urls"] = dn_urls
+        app["dn_ids"] = dn_ids
+        rangeget_url = config.getCmdLineArg("rangeget_url")
+        if rangeget_url:
+            log.debug(f"store rangeget_url: {rangeget_url}")
+            app["rangeget_url"] = rangeget_url
+        
         # check to see if we are running in a DCOS cluster
     elif "MARATHON_APP_ID" in os.environ:
         msg = "Found MARATHON_APP_ID environment variable, "
@@ -658,9 +665,8 @@ def baseInit(node_type):
             node_port = os.environ['PORT0']
     else:
         node_port = config.get(node_type + "_port")
-
-    log.info(f"using node port: {node_port}")
-    app["node_port"] = node_port
+        log.info(f"using node port: {node_port}")
+        app["node_port"] = node_port
 
     try:
         aws_iam_role = config.get("aws_iam_role")
@@ -700,5 +706,6 @@ def baseInit(node_type):
         app['node_state'] = "READY"
     else:
         app["custer_state"] = "WAITING"
+
 
     return app

@@ -282,6 +282,7 @@ Copy to buffer at given offset
 
 def copyBuffer(src, des, offset):
     # print(f"copyBuffer - src: {src} offset: {offset}")
+    # TBD: just do: des[offset:] = src[:]  ?
     for i in range(len(src)):
         des[i+offset] = src[i]
 
