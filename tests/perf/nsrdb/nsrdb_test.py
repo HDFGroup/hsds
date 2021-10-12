@@ -48,7 +48,7 @@ for narg in range(1, len(sys.argv)):
         print(f"unexpected argument: {arg}")
 
 if option is None:
-    print(f"usage: python nsrdb_test.py {OPTIONS} [--index=n] [--block=n] [--loglevel={debug|info|warning|error}]")
+    print(f"usage: python nsrdb_test.py {OPTIONS} [--index=n] [--block=n] [--loglevel=debug|info|warning|error]")
     sys.exit(0)
 
 if index is None:
