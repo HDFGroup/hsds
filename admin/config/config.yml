@@ -9,11 +9,7 @@ aws_region: us-east-1
 hsds_endpoint: http://hsds.hdf.test # used for hateos links in response
 aws_s3_gateway: null   # use endpoint for the region HSDS is running in, e.g. 'https://s3.amazonaws.com' for us-east-1
 aws_dynamodb_gateway: null # use for dynamodb endpint, e.g. 'https://dynamodb.us-east-1.amazonaws.com',
-aws_lambda_gateway: null  #  use lambda endpoint for region HSDS is running in.  See: https://docs.aws.amazon.com/general/latest/gr/lambda-service.html
 aws_dynamodb_users_table: null # set to table name if dynamodb is used to store usernames and passwords
-aws_lambda_chunkread_function: null  # name of aws lambda function for chunk reading
-aws_lambda_threshold: 4   # number of chunks per node per request to reach before using lambda
-aws_lambda_max_invoke: 1000  # max number of lambda functions to invoke simultaneously 
 azure_connection_string: null # use for connecting to Azure blob storage
 azure_resource_id: null  # resource id for use with Azure Active Directory
 azure_storage_account: null  # storage account to use on Azure
