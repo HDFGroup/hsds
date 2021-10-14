@@ -283,7 +283,6 @@ cfg["domain"] = DOMAIN
 cfg["bucket"] = BUCKET_NAME
 cfg["dsetid"] = DSET_ID
 cfg["dsettype"] = DSET_TYPE
-cfg["bucket_name"] = BUCKET_NAME
 cfg["block_size"] = block_size
 cfg["index"] = index
 cfg["num_rows"] = NUM_ROWS
