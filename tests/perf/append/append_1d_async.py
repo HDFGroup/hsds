@@ -3,11 +3,9 @@ import asyncio
 import sys
 import json
 import random
-import h5pyd
 import base64
 import logging
 import time
-import numpy as np
 from config import Config
 
 H5_PATH = "/data"
@@ -125,13 +123,12 @@ class DataAppender:
         logging.debug("DataFetcher - workers canceled")
 
     async def work(self):
-        max_retries = self.retries
         async with aiohttp.ClientSession() as session:
             sensor_id = await self._q.get()
             logging.info(f"work init, sensor_id: {sensor_id}")
             seq_num = 1
-            dsetid = await self.getDatasetId(session)
-            logging.info(f"got dsetid: {dsetid}")
+            dsetid = None
+            
             retry_count = 0
             sleep_time = SLEEP_TIME
             while True:
@@ -139,23 +136,30 @@ class DataAppender:
                 status_code = None
                 self._app["request_count"] += 1
                 try:
-                    status_code = await self.addrow(session, dsetid, sensor_id, seq_num)
-                except IOError as ioe:
-                    logging.error(f"got IOError: {ioe}")
+                    if not dsetid:
+                        # get the dataset id before we we start adding rows
+                        status_code, dsetid = await self.getDatasetId(session)
+                        if status_code == 200:
+                            logging.info(f"task: {sensor_id}: got dsetid: {dsetid}")
+                            self._app["success_count"] += 1
+                    else:
+                        status_code = await self.addrow(session, dsetid, sensor_id, seq_num)
+                        self._app["success_count"] += 1
+                        self._app["rows_added"] += 1
+                        seq_num += 1
+                        if self.max_rows > 0 and self._app["rows_added"] >= self.max_rows:
+                            logging.info(f"task: {sensor_id}: no more work to do")
+                            self._q.task_done()
+                            break
+                except Exception as e:
+                    logging.error(f"task: {sensor_id}: got Exception: {e}")
+
                 elapsed = time.time() - start_ts
-                msg = f"DataAppender - task {sensor_id} start: {start_ts:.3f} "
-                msg += f"elapsed: {elapsed:.3f}"
+                msg = f"DataAppender - task {sensor_id} start: {start_ts:.3f} elapsed: {elapsed:.3f}"
                 logging.info(msg)
 
                 if status_code == 200:
-                    self._app["success_count"] += 1
-                    self._app["rows_added"] += 1
-                    seq_num += 1
-                    if self.max_rows > 0 and self._app["rows_added"] >= self.max_rows:
-                        logging.info(f"no more work for task! {sensor_id}")
-                        self._q.task_done()
-
-                        break
+                    # success!, reset retry count and sleep time
                     retry_count = 0
                     sleep_time = SLEEP_TIME
 
@@ -167,14 +171,16 @@ class DataAppender:
                     if sleep_time > MAX_SLEEP_TIME:
                         sleep_time = MAX_SLEEP_TIME
                 else:
-                    logging.error(f"got status code: {status_code} retry: {retry_count}")
+                    logging.error(f"task: {sensor_id}: got status code: {status_code} retry: {retry_count}")
                     self._app["error_count"] += 1
                     retry_count += 1
-                    if retry_count > max_retries:
-                        # move on to another block
+                    if retry_count > self.retries:
+                        # quit this task
+                        logging.error(f"task: {sensor_id}: max retries exceeded")
                         self._q.task_done()
-                        retry_count = 0
-                        sleep_time = SLEEP_TIME
+                        break
+        logging.info(f"task: {sensor_id}: exiting")
+                        
 
     async def getDatasetId(self, session):
         headers = self.getHeaders()
@@ -185,9 +191,9 @@ class DataAppender:
         params["domain"] = self.domain
         logging.debug(f"get dataset by path: sending req: {req} {params}")
         status_code = 500
-        self._app["request_count"] += 1
         async with session.get(req, headers=headers, params=params) as rsp:
-            if rsp.status == 200:
+            status_code = rsp.status
+            if status_code == 200:
                 body = await rsp.text()
                 body_json = json.loads(body)
                 if "id" not in body_json:
@@ -195,13 +201,7 @@ class DataAppender:
                     logging.error(msg)
                     raise IOError(msg)
                 dsetid = body_json['id']
-                self._app["success_count"] += 1
-            else:
-                msg = f"got bad status code for get dataset: {rsp.status}"
-                logging.error(msg)
-                self._app["error_count"] += 1
-                raise IOError(msg)
-        return dsetid
+        return status_code, dsetid
 
 
     async def addrow(self, session, dsetid, sensor_id, seq_num):
@@ -248,7 +248,7 @@ for narg in range(1, len(sys.argv)):
         elif level == "error":
             log_level = logging.ERROR
         else:
-            print("unexpected log level:", log_level)
+            print("unexpected log level:", level)
             sys.exit(1)
     elif arg.startswith("--maxrows="):
         max_rows = int(arg[len("--maxrows="):])
