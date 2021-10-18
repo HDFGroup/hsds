@@ -271,6 +271,10 @@ for narg in range(1, len(sys.argv)):
 
 if not domain:
     usage()
+
+if domain.startswith("hdf5://"):
+    # just need the path part for REST API
+    domain = domain[len("hdf5:/"):]
  
 logging.basicConfig(format='%(asctime)s %(message)s', level=log_level)
     
