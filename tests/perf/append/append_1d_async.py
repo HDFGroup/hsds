@@ -109,6 +109,7 @@ class DataAppender:
          
 
     async def append(self):
+        """ startup append workers """
         workers = [asyncio.Task(self.work())
             for _ in range(self._max_tasks)]
         # When all work is done, exit.
@@ -143,6 +144,7 @@ class DataAppender:
                             logging.info(f"task: {sensor_id}: got dsetid: {dsetid}")
                             self._app["success_count"] += 1
                     else:
+                        # call addrow and update stats
                         status_code = await self.addrow(session, dsetid, sensor_id, seq_num)
                         self._app["success_count"] += 1
                         self._app["rows_added"] += 1
@@ -164,6 +166,7 @@ class DataAppender:
                     sleep_time = SLEEP_TIME
 
                 elif status_code == 503:
+                    # server overloaded - sleep for a bit
                     logging.warning(f"server too busy, sleeping for {sleep_time}")
                     self._app["error_count"] += 1
                     await asyncio.sleep(sleep_time)
@@ -171,6 +174,7 @@ class DataAppender:
                     if sleep_time > MAX_SLEEP_TIME:
                         sleep_time = MAX_SLEEP_TIME
                 else:
+                    # unexpected error - abort this task
                     logging.error(f"task: {sensor_id}: got status code: {status_code} retry: {retry_count}")
                     self._app["error_count"] += 1
                     retry_count += 1
@@ -183,6 +187,7 @@ class DataAppender:
                         
 
     async def getDatasetId(self, session):
+        """ Get the datset id for the dataset (hopefully) at H5_PATH """
         headers = self.getHeaders()
         dsetid = None
         req = f"{self.endpoint}/datasets/"
@@ -205,7 +210,7 @@ class DataAppender:
 
 
     async def addrow(self, session, dsetid, sensor_id, seq_num):
-        # [('timestamp', np.float64), ('sensor', np.int16), ('seq', np.int32), ('mtype', np.int16), ('value', np.float32)])
+        """ make up some random data and append to the dataset """
         now = time.time()
         mtype = random.randrange(0, 4)
         value = random.random() # range 0 - 1
@@ -213,6 +218,9 @@ class DataAppender:
 
         headers = self.getHeaders()
         req = f"{self.endpoint}/datasets/{dsetid}/value"
+        # the 'append' param enables the row to be added to 
+        # the end of the datset without explictly extending the
+        # dataspace
         payload = {'value': row, 'append': 1}
         
         params = {}
@@ -224,7 +232,9 @@ class DataAppender:
             status_code = rsp.status
         return status_code
         
-       
+#
+# Main
+#        
 
 # parse command line args
 domain = None

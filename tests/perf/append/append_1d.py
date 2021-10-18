@@ -13,11 +13,13 @@ CHUNK_LAYOUT = 262144  # 4 MB chunks
 sensor_seq = {}
 
 def usage():
+    """ usage message and quit """
     print("usage: python append_1d.py [--loglevel=debug|info|warning|error] [--maxrows=n] [--dump] filepath")
     print(" use hdf5:// prefix to denote use of HSDS domain rather than hdf5 filepath")
     sys.exit(0)
 
 def addRow(dset):
+    """ add a row to the datset """
     rows = dset.shape[0]
     now = time.time()
     sensor = random.randrange(0, 16)
@@ -35,6 +37,9 @@ def addRow(dset):
         dset[rows] = (now, sensor, sensor_seq[sensor], mtype, value)
     return True
 
+#
+# main
+# 
 
 # parse command line args
 log_level = logging.WARNING
@@ -73,8 +78,10 @@ if filepath is None:
     usage()
     
 
+# setup logging
 logging.basicConfig(format='%(asctime)s %(message)s', level=log_level)
-    
+
+# open file with h5py or h5pyd based on prefix    
 if filepath.startswith("hdf5://"):
     f = h5pyd.File(filepath, mode=mode)
 else:
@@ -101,6 +108,7 @@ start_ts = time.time()
 if maxrows==0:
     print("press ^C to quit")
 
+# append rows to maxrows (if not 0) is reached or user quits
 try:
     while True:
         if mode == 'r':
@@ -122,6 +130,7 @@ except KeyboardInterrupt:
 
 f.close()
 
+# print out stats
 if mode == 'a':
     end_ts = time.time()
     print(f"added {count} rows in {(end_ts-start_ts):8.4f} seconds")
