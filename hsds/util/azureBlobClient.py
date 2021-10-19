@@ -369,7 +369,7 @@ class AzureBlobClient():
         count = 0
         while True:
             kwargs = {"name_starts_with": prefix, "delimiter": deliminator,
-                      "results_per_pagae": CALLBACK_MAX_COUNT}
+                      "results_per_page": CALLBACK_MAX_COUNT}
             keyList = client.walk_blobs(**kwargs).\
                 by_page(continuation_token)
             key_names = {} if include_stats else []
