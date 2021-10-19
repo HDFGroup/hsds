@@ -529,7 +529,10 @@ def getUserPasswordFromRequest(request):
 
         # see if we've already validated this token
         user = _checkTokenCache(app, token)
-        if not user:
+        if user:
+            # set password to token value
+            pswd = token
+        else:
             # put import here to avoid jwt package dependency unless required
             from .jwtUtil import verifyBearerToken
             user, exp, roles = verifyBearerToken(app, token)
