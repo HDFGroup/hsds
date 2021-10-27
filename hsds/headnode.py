@@ -426,7 +426,7 @@ async def init():
 
     # configure log
     log.config["log_level"] = config.get("log_level")
-    if config.get("log_prefix"):
+    if config.get("log_prefix", default=""):
         log.config["prefix"] = config.get("log_prefix")
 
     app = Application()

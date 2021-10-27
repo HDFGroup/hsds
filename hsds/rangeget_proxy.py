@@ -238,7 +238,7 @@ def main():
       main - entrypoint for rangeget proxy
     """
     log.config["log_level"] = config.get("log_level")
-    if config.get("log_prefix"):
+    if config.get("log_prefix", default=""):
         log.config["prefix"] = config.get("log_prefix")
 
     log.info("rangeget_proxy start")

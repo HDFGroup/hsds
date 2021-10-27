@@ -546,7 +546,7 @@ def baseInit(node_type):
 
     # setup log config
     log.config["log_level"] = config.get("log_level")
-    if config.get("log_prefix"):
+    if config.get("log_prefix", default=""):
         log.config["prefix"] = config.get("log_prefix")
 
     # create the app object
