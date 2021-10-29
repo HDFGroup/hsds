@@ -21,22 +21,18 @@ spec:
           imagePullPolicy: IfNotPresent
           volumeMounts:
           - name: accounts
-            mountPath: "/config/passwd.txt"
-            subPath: passwd.txt
+            mountPath: "/config/"
           - name: config
-            mountPath: "/config/config.yml"
+            mountPath: "/config/"
             subPath: config.yml
-          - name: override
-            mountPath: "/config/override.yml"
-            subPath: override.yml
           ports:
             -
               containerPort: 5101
           env:
           - name: NODE_TYPE
             value: sn
-          - name: PASSWORD_FILE
-            value: /config/passwd.txt
+          - name: HEAD_PORT
++            value: "0" # no head container
           - name: AZURE_CONNECTION_STRING
             valueFrom:
               secretKeyRef:
@@ -77,15 +73,13 @@ spec:
           env:
           - name: NODE_TYPE
             value: dn
+          - name: HEAD_PORT
++            value: "0" # no head container
           - name: AZURE_CONNECTION_STRING
             valueFrom:
               secretKeyRef:
                 name: azure-conn-str
                 key: az_conn_str
-          - name: POD_IP
-            valueFrom:
-              fieldRef:
-                fieldPath: status.podIP
       volumes:
       - name: accounts
         secret:

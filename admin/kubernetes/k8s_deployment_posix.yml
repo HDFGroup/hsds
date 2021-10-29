@@ -23,40 +23,17 @@ spec:
           - name: data
             mountPath: "/data"
           - name: accounts
-            mountPath: "/config/passwd.txt"
-            subPath: passwd.txt
+            mountPath: "/config"
           - name: config
-            mountPath: "/config/config.yml"
-            subPath: config.yml
-          - name: override
-            mountPath: "/config/override.yml"
-            subPath: override.yml
+            mountPath: "/config/"
           ports:
             -
               containerPort: 5101
           env:
           - name: NODE_TYPE
             value: sn
-          - name: ROOT_DIR
-            value: /data
-          - name: BUCKET_NAME
-            value: hsds
-          - name: LOG_LEVEL
-            value: DEBUG
-          - name: SERVER_NAME
-            value: "Highly Scalable Data Service (HSDS)"
-          - name: HSDS_ENDPOINT
-            value: "http://hsds.hdf.test" # change to external DNS LB path
-          - name: GREETING
-            value: "Welcome to HSDS!"
-          - name: ABOUT
-            value: "HSDS is a webservice for HDF data"
-          - name: PASSWORD_FILE
-            value: /config/passwd.txt
-          - name: POD_IP
-            valueFrom:
-              fieldRef:
-                fieldPath: status.podIP
+          - name: HEAD_PORT
++            value: "0" # no head container
         -
           name: dn
           image: "hdfgroup/hsds"
@@ -74,18 +51,8 @@ spec:
           env:
           - name: NODE_TYPE
             value: dn
-          - name: ROOT_DIR
-            value: /data
-          - name: BUCKET_NAME
-            value: hsds
-          - name: LOG_LEVEL
-            value: DEBUG
-          - name: HSDS_ENDPOINT
-            value: http://hsds.hdf.test
-          - name: POD_IP
-            valueFrom:
-              fieldRef:
-                fieldPath: status.podIP
+          - name: HEAD_PORT
++            value: "0" # no head container
       volumes:
       - name: data
         hostPath:
@@ -98,6 +65,3 @@ spec:
       - name: hsds-config
         configMap:
           name: hsds-config
-      - name: hsds-override
-        configMap:
-          name: hsds-override
