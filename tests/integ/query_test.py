@@ -79,7 +79,6 @@ class QueryTest(unittest.TestCase):
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
-
         # write entire array
         value = [
             ("EBAY", "20170102", 3023, 3088),
@@ -172,6 +171,24 @@ class QueryTest(unittest.TestCase):
         params = {'query': "foobar" }
         rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 400)
+
+        # try boolean query
+        params = {'query': "(open > 3000) & (open < 3100)" }
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        #self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        self.assertTrue("index" in rspJson)
+        readData = rspJson["value"]
+        self.assertEqual(len(readData), 5)
+        for item in readData:
+            print(item)
+            self.assertTrue(item[2] > 3000)
+            self.assertTrue(item[2] < 3100)
+        indices = rspJson["index"]
+        self.assertEqual(indices, [0, 1, 3, 5, 11])
+
 
     def testChunkedRefIndirectDataset(self):
         print("testChunkedRefIndirectDatasetQuery", self.base_domain)

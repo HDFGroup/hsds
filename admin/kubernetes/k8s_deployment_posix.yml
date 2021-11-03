@@ -33,7 +33,7 @@ spec:
           - name: NODE_TYPE
             value: sn
           - name: HEAD_PORT
-+            value: "0" # no head container
+            value: "0" # no head container
         -
           name: dn
           image: "hdfgroup/hsds"
@@ -52,7 +52,7 @@ spec:
           - name: NODE_TYPE
             value: dn
           - name: HEAD_PORT
-+            value: "0" # no head container
+            value: "0" # no head container
       volumes:
       - name: data
         hostPath:
