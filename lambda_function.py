@@ -30,18 +30,18 @@ class HsdsLogger:
 
     def debug(self, msg):
         if self._log_level == "DEBUG":
-            print(f"DEUBG: {msg}")
+            print(f"DEBUG> {msg}")
 
     def info(self, msg):
         if self._log_level in ("INFO", "DEBUG"):
-            print(f"INFO: {msg}")
+            print(f"INFO> {msg}")
 
     def warn(self, msg):
         if self._log_level in ("WARN", "INFO", "DEBUG"):
-            print(f"WARN: {msg}")
+            print(f"WARN> {msg}")
 
     def error(self, msg):
-        print(f"ERROR: {msg}")
+        print(f"ERROR> {msg}")
 
 
 
