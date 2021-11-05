@@ -23,7 +23,7 @@ def eprint(*args, **kwargs):
 def debug(*args, **kwargs):
     # can't use log.debug since that calls back to cfg
     if "LOG_LEVEL" in os.environ and os.environ["LOG_LEVEL"] == "DEBUG":
-        print(*args, **kwargs)
+        print("DEBUG>", *args, **kwargs)
 
 
 def _has_unit(cfgval):
