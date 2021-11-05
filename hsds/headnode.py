@@ -424,10 +424,11 @@ def getActiveNodeCount(app, node_type):
 async def init():
     """Intitialize application and return app object """
 
-    # configure log
-    log.config["log_level"] = config.get("log_level")
-    if config.get("log_prefix", default=""):
-        log.config["prefix"] = config.get("log_prefix")
+    # setup log config
+    log_level = config.get("log_level")
+    prefix = config.get("log_prefix")
+    log_timestamps = config.get("log_timestamps", default=False)
+    log.setLogConfig(log_level, prefix=prefix, timestamps=log_timestamps)     
 
     app = Application()
 

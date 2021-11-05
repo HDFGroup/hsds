@@ -187,6 +187,8 @@ def main():
     common_args.append(f"--sn_url={sn_url}")
     common_args.append(f"--rangeget_url={rangeget_url}")
     common_args.append("--dn_urls="+dn_urls_arg)
+    # log output may come out of order, so always use timestamps
+    common_args.append("--log_timestamps=1")
     if use_socket:
         common_args.append("--use_socket")
     common_args.extend(extra_args)  # pass remaining args as config overrides

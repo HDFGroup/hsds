@@ -13,15 +13,53 @@
 # Simple looger for hsds
 #
 import asyncio
+import time
 from aiohttp.web_exceptions import HTTPServiceUnavailable
 from .util.domainUtil import getDomainFromRequest
+
+# Levels copied from python logging module
+DEBUG = 10
+INFO = 20
+WARNING = 30
+ERROR = 40
 
 req_count = {"GET": 0, "POST": 0, "PUT": 0, "DELETE": 0, "num_tasks": 0}
 log_count = {"DEBUG": 0, "INFO": 0, "WARN": 0, "ERROR": 0}
 # the following defaults will be adjusted by the app
-config = {"log_level": "DEBUG", "prefix": ""}
+config = {"log_level": DEBUG, "prefix": "", "timestamps": False}
 
+def _getLevelName(level):
+    if level == DEBUG:
+        name = "DEBUG"
+    elif level == INFO:
+        name = "INFO"
+    elif level == WARNING:
+        name = "WARN"
+    elif level == ERROR:
+        name = "ERROR"
+    else:
+        name = "????"
+    return name
 
+def setLogConfig(level, prefix=None, timestamps=None):
+    if level == "DEBUG":
+        config["log_level"] = DEBUG
+    elif level == "INFO":
+        config["log_level"] = INFO
+    elif level == "WARNING":
+        config["log_level"] = WARNING
+    elif level == "WARN":
+        config["log_level"] = WARNING
+    elif level == "ERROR":
+        config["log_level"] = ERROR
+    else:
+        raise ValueError(f"unexpected log_level: {level}")
+    if prefix is not None:
+        config["prefix"] = prefix
+    if timestamps is not None:
+        config["timestamps"] = timestamps
+    
+        
 def _activeTaskCount():
     count = 0
     for task in asyncio.all_tasks():
@@ -29,44 +67,59 @@ def _activeTaskCount():
             count += 1
     return count
 
+def _timestamp():
+
+    if config["timestamps"]:
+        now = time.time()
+        ts = f"{now:.3f} "
+    else:
+        ts = ""
+    
+    return ts
+
+def _logMsg(level, msg):
+    if config["log_level"] > level:
+        return  # ignore
+
+    ts = _timestamp()
+
+    prefix = config["prefix"]
+
+    level_name = _getLevelName(level)
+
+    print(f"{prefix}{ts}{level_name}> {msg}")
+
+    log_count[level_name] += 1
+        
+
 
 def debug(msg):
-    if config["log_level"] == "DEBUG":
-        print(config["prefix"] + "DEBUG> " + msg)
-        log_count["DEBUG"] += 1
-
-
+    _logMsg(DEBUG, msg)
+    
 def info(msg):
-    if config["log_level"] not in ("ERROR", "WARNING", "WARN"):
-        print(config["prefix"] + "INFO> " + msg)
-        log_count["INFO"] += 1
-
-
+    _logMsg(INFO, msg)
+     
 def warn(msg):
-    if config.get("log_level") != "ERROR":
-        print(config["prefix"] + "WARN> " + msg)
-        log_count["WARN"] += 1
-
-
+    _logMsg(WARNING,  msg)
+     
 def warning(msg):
-    if config.get("log_level") != "ERROR":
-        print(config["prefix"] + "WARN> " + msg)
-        log_count["WARN"] += 1
-
-
+    _logMsg(WARNING, msg)
+     
 def error(msg):
-    print(config["prefix"] + "ERROR> " + msg)
-    log_count["ERROR"] += 1
-
+    _logMsg(ERROR, msg)
+     
 
 def request(req):
     app = req.app
     domain = getDomainFromRequest(req, validate=False)
-    if domain is None:
-        print("REQ> {}: {}".format(req.method, req.path))
-    else:
-        print("REQ> {}: {} [{}]".format(req.method, req.path, domain))
+    prefix = config["prefix"]
+    ts = _timestamp()
 
+    msg = f"{prefix}{ts}REQ> {req.method}: {req.path}"
+    if domain:
+        msg += f" [{domain}]"
+    print(msg)
+ 
     INFO_METHODS = ("/about", "/register", "/info", "/nodeinfo",
                     "/nodestate", "/register")
     if req.path in INFO_METHODS:
@@ -82,7 +135,7 @@ def request(req):
     num_tasks = len(asyncio.all_tasks())
     active_tasks = _activeTaskCount()
     req_count["num_tasks"] = num_tasks
-    if config["log_level"] == "DEBUG":
+    if config["log_level"] == DEBUG:
         debug(f"num tasks: {num_tasks} active tasks: {active_tasks}")
 
     max_task_count = app["max_task_count"]
@@ -96,7 +149,7 @@ def response(req, resp=None, code=None, message=None):
     """
     Output "RSP..." to log on conclusion of request
     """
-    level = "INFO"
+    level = INFO
     if code is None:
         # rsp needs to be set otherwise
         code = resp.status
@@ -104,22 +157,15 @@ def response(req, resp=None, code=None, message=None):
         message = resp.reason
     if code > 399:
         if code < 500:
-            level = "WARN"
+            level = WARNING
         else:
-            level = "ERROR"
+            level = ERROR
 
     log_level = config["log_level"]
-    prefix = config["prefix"]
-
-    if log_level in ("DEBUG", "INFO"):
-        output_rsp = True
-    elif log_level == "WARN" and level != "INFO":
-        output_rsp = True
-    elif log_level == "ERROR" and level == "ERROR":
-        output_rsp = True
-    else:
-        output_rsp = False
-
-    if output_rsp:
+    
+    if log_level <= level:
+        prefix = config["prefix"]
+        ts = _timestamp()
+        
         s = "{}{} RSP> <{}> ({}): {}"
-        print(s.format(prefix, level, code, message, req.path))
+        print(s.format(prefix, ts, code, message, req.path))

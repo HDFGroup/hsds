@@ -545,9 +545,11 @@ def baseInit(node_type):
     """Intitialize application and return app object"""
 
     # setup log config
-    log.config["log_level"] = config.get("log_level")
-    if config.get("log_prefix", default=""):
-        log.config["prefix"] = config.get("log_prefix")
+    log_level = config.get("log_level")
+    prefix = config.get("log_prefix")
+    log_timestamps = config.get("log_timestamps", default=False)
+    log.setLogConfig(log_level, prefix=prefix, timestamps=log_timestamps)
+     
 
     # create the app object
     log.info("Application baseInit")

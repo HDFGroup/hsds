@@ -237,9 +237,11 @@ def main():
     """
       main - entrypoint for rangeget proxy
     """
-    log.config["log_level"] = config.get("log_level")
-    if config.get("log_prefix", default=""):
-        log.config["prefix"] = config.get("log_prefix")
+    # setup log config
+    log_level = config.get("log_level")
+    prefix = config.get("log_prefix")
+    log_timestamps = config.get("log_timestamps", default=False)
+    log.setLogConfig(log_level, prefix=prefix, timestamps=log_timestamps)
 
     log.info("rangeget_proxy start")
 

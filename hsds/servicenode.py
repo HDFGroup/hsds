@@ -229,9 +229,6 @@ def main():
         sn_port = int(config.get("sn_port"))
         sn_url = f"http://localhost:{sn_port}"
 
-    print("sn_url:", sn_url)
-    print("sn_port:", sn_port)
-
     if isUnixDomainUrl(sn_url):
         print("binding to socket:", sn_url)
         try:
