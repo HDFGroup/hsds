@@ -7,16 +7,14 @@ Introduction
 HSDS is a web service that implements a REST-based web service for HDF5 data stores.
 Data can be stored in either a POSIX files system, or using object based storage such as
 AWS S3, Azure Blob Storage, or OpenIO <openio.io>.
-HSDS can be run a single machine using Docker or on a cluster using Kubernetes (or AKS on Microsoft Azure)
-The commercial offering based on this code is known as Kita&trade;.
-More info at: <https://www.hdfgroup.org/solutions/hdf-kita/>.
+HSDS can be run a single machine using Docker or on a cluster using Kubernetes (or AKS on Microsoft Azure).
 
 Websites
 --------
 
-* Main website: <https://www.hdfgroup.org/kita>
+* Main website: <https://www.hdfgroup.org/solutions/highly-scalable-data-service-hsds/>
 * Source code: <https://github.com/HDFGroup/hsds>
-* Mailing list: kita@forum.hdfgroup.org <kita@forum.hdfgroup.org>
+* Mailing list: hsds@forum.hdfgroup.org <hsd@forum.hdfgroup.org>
 * Documentation: <http://h5serv.readthedocs.org> (For REST API)
 
 Other useful resources
@@ -123,29 +121,19 @@ HSDS is licensed under an APACHE 2.0 license.  See LICENSE in this directory.
 Integration with JupyterHub
 ---------------------------
 
-The HDF Group provides access to an HSDS instance that is integrated with JupyterLab: Kita&trade; Lab.  Kita&trade; Lab is a hosted Jupyter environment with these features:
+The HDF Group provides access to an HSDS instance that is integrated with JupyterLab: HDF Lab.  HDF Lab is a hosted Jupyter environment with these features:
 
 * Connection to a HSDS instance
 * Dedicated Xeon core per user
 * 10 GB Posix Disk
-* 100 GB S3 storage for HDF data
+* 200 GB S3 storage for HDF data
 * Sample programs and data files
 
-Sign up for Kita&trade; Lab here: <https://www.hdfgroup.org/hdfkitalab/>.
-
-AWS Marketplace
----------------
-
-The HDF Group provides an AWS Marketplace product, Kita&trade; Server, which provides simple installation of HSDS
-and related AWS resources.  Kita&trade; offers these features:
-
-* Stores usernames and passwords in a secure DynamoDB Table
-* Creates a AWS CloudWatch dashboard for service monitoring
-* Aggregates container logs to AWS CloudWatch
+Sign up for HDF Lab here: <https://www.hdfgroup.org/hdfkitalab/>.
 
 Azure Marketplace
 -----------------
 
-VM Offer for Azure Marektplace - coming soon
+VM Offer for Azure Marketplace. HSDS for Azure Marketplace provides an easy way to
+setup a Azure instance with HSDS.  See: <https://azuremarketplace.microsoft.com/en-us/marketplace/apps/thehdfgroup1616725197741.hsdsazurevm?tab=Overview> for more information.
 
-Kita&trade; Server for AWS Marketplace can be found here: <https://aws.amazon.com/marketplace/pp/B07K2MWS1G>.
