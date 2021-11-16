@@ -78,3 +78,8 @@ k8s_app_label: hsds  # The app label for k8s deployments
 k8s_namespace: null # Specifies if a the client should be limited to a specific namespace. Useful for some RBAC configurations.
 restart_policy: on-failure # Docker restart policy
 domain_req_max_objects_limit: 500  # maximum number of objects to return in GET domain request with use_cache
+# DEPRECATED - the remaining config values are not used in currently but kept for backward compatibility with older container images
+aws_lambda_chunkread_function: null  # name of aws lambda function for chunk reading
+aws_lambda_threshold: 4   # number of chunks per node per request to reach before using lambda
+aws_lambda_max_invoke: 1000  # max number of lambda functions to invoke simultaneously
+aws_lambda_gateway: null # use lambda endpoint for region HSDS is running in
