@@ -199,7 +199,7 @@ class FileClient():
             raise HTTPInternalServerError()
         except CancelledError as cle:
             # file_stats_increment(app, "error_count")
-            msg = f"CancelledError for put s3 obj {key}: {cle}"
+            msg = f"CancelledError for put file obj {key}: {cle}"
             log.error(msg)
             raise HTTPInternalServerError()
 
@@ -247,13 +247,13 @@ class FileClient():
 
         except CancelledError as cle:
             self._file_stats_increment("error_count")
-            msg = f"CancelledError deleting s3 obj {key}: {cle}"
+            msg = f"CancelledError deleting file obj {key}: {cle}"
             log.error(msg)
             raise HTTPInternalServerError()
 
         except Exception as e:
             self._file_stats_increment("error_count")
-            msg = f"Unexpected Exception {type(e)} deleting s3 obj {key}: {e}"
+            msg = f"Unexpected Exception {type(e)} deleting file obj {key}: {e}"
             log.error(msg)
             raise HTTPInternalServerError()
         await asyncio.sleep(0)  # for async compat
@@ -371,7 +371,7 @@ class FileClient():
         return key_names
 
     async def releaseClient(self):
-        """ release the client collection to s3
+        """ release the client collection
            (Used for cleanup on application exit)
         """
         await asyncio.sleep(0)  # for async compat
