@@ -75,6 +75,11 @@ def _load_cfg():
         if os.path.isfile(file_name):
             yml_file = file_name
             break
+        file_name = os.path.join(config_dir, "config.yaml") # Check for alt extension
+        debug("checking config path:", file_name)
+        if os.path.isfile(file_name):
+            yml_file = file_name
+            break
     if not yml_file:
         # use yaml file embedded in package
         package_dir = os.path.dirname(__file__)
