@@ -1478,6 +1478,22 @@ class ValueTest(unittest.TestCase):
         # get the dataset uuid
         dset1_uuid = self.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1")
 
+        # read fancy selection
+        """
+        params = {"select": "[0:4, 2,4,7]"}
+        req = helper.getEndpoint() + "/datasets/" + dset1_uuid + "/value"
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        print(rspJson)
+        self.assertTrue("value" in rspJson)
+        data = rspJson["value"]  # should be 4 x 4 array
+        for j in range(4):
+            row = data[j]
+            for i in (2,4,7):
+                self.assertEqual(row[i], i * j)
+
+        """
         # read all the dataset values
         req = helper.getEndpoint() + "/datasets/" + dset1_uuid + "/value"
         rsp = self.session.get(req, headers=headers)

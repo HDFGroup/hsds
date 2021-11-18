@@ -24,7 +24,7 @@ from .util.arrayUtil import bytesToArray, arrayToBytes
 from .util.idUtil import getS3Key, validateInPartition, isValidUuid
 from .util.storUtil import isStorObj, deleteStorObj
 from .util.hdf5dtype import createDataType
-from .util.dsetUtil import getSliceQueryParam, getChunkLayout
+from .util.dsetUtil import getSelectionList, getChunkLayout
 from .util.dsetUtil import getSelectionShape
 from .util.chunkUtil import getChunkIndex, getDatasetId, chunkQuery
 from .util.chunkUtil import chunkWriteSelection, chunkReadSelection
@@ -111,11 +111,11 @@ async def PUT_Chunk(request):
         itemsize = type_json["size"]
 
     # get chunk selection from query params
-    selection = []
-    for i in range(rank):
-        dim_slice = getSliceQueryParam(request, i, dims[i])
-        selection.append(dim_slice)
-    selection = tuple(selection)
+    if "select" in params:
+        select = params["select"]
+    else:
+        select = None # put for entire dataspace
+    selection = getSelectionList(select, dims)
     log.debug(f"got selection: {selection}")
 
     mshape = getSelectionShape(selection)
@@ -275,14 +275,14 @@ async def GET_Chunk(request):
     dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
     dims = getChunkLayout(dset_json)
     log.debug(f"GET_Chunk - got dims: {dims}")
-    rank = len(dims)
 
     # get chunk selection from query params
-    selection = []
-    for i in range(rank):
-        dim_slice = getSliceQueryParam(request, i, dims[i])
-        selection.append(dim_slice)
-    selection = tuple(selection)
+    if "select" in params:
+        select = params["select"]
+    else:
+        select = None # get slices for entire datashape
+    log.debug(f"using select string: {select}")
+    selection = getSelectionList(select, dims)
     log.debug(f"GET_Chunk - got selection: {selection}")
 
     kwargs = {"chunk_init": False}

@@ -13,7 +13,7 @@ import unittest
 import sys
 
 sys.path.append('../..')
-from hsds.util.dsetUtil import  getHyperslabSelection, getSelectionShape, ItemIterator
+from hsds.util.dsetUtil import  getHyperslabSelection, getSelectionShape, getSelectionList, ItemIterator
 
 class DsetUtilTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -122,6 +122,237 @@ class DsetUtilTest(unittest.TestCase):
             except StopIteration:
                 break
         self.assertEqual(count, 20)
+
+    def testSelectionList1D(self):
+        dims = [100,]
+
+        selection = getSelectionList("", dims)
+        self.assertEqual(len(selection), 1)
+        s1 = selection[0]
+        self.assertTrue(isinstance(s1, slice))
+        self.assertEqual(s1, slice(0, 100, 1))
+
+        selection = getSelectionList("[5]", dims)
+        self.assertEqual(len(selection), 1)
+        s1 = selection[0]
+        self.assertTrue(isinstance(s1, slice))
+        self.assertEqual(s1, slice(5, 6, 1))
+
+        selection = getSelectionList("[:]", dims)
+        self.assertEqual(len(selection), 1)
+        s1 = selection[0]
+        self.assertTrue(isinstance(s1, slice))
+        self.assertEqual(s1, slice(0, 100, 1))
+
+        selection = getSelectionList("[3:7]", dims)
+        self.assertEqual(len(selection), 1)
+        s1 = selection[0]
+        self.assertTrue(isinstance(s1, slice))
+        self.assertEqual(s1, slice(3,7,1))
+
+        selection = getSelectionList("[0:100]", dims)
+        self.assertEqual(len(selection), 1)
+        s1 = selection[0]
+        self.assertTrue(isinstance(s1, slice))
+        self.assertEqual(s1, slice(0,100,1))
+
+        selection = getSelectionList("[[3,4,7]]", dims)
+        self.assertEqual(len(selection), 1)
+        s1 = selection[0]
+        self.assertTrue(isinstance(s1, list))
+        self.assertEqual(s1, [3,4,7])
+
+        selection = getSelectionList("[30:70:5]", dims)
+        self.assertEqual(len(selection), 1)
+        s1 = selection[0]
+        self.assertTrue(isinstance(s1, slice))
+        self.assertEqual(s1, slice(30,70,5))
+
+        body = {"start": 3, "stop": 7}
+        selection = getSelectionList(body, dims)
+        self.assertEqual(len(selection), 1)
+        s1 = selection[0]
+        self.assertTrue(isinstance(s1, slice))
+        self.assertEqual(s1, slice(3,7,1))
+
+        body = {"start": 30, "stop": 70, "step": 5}
+        selection = getSelectionList(body, dims)
+        self.assertEqual(len(selection), 1)
+        s1 = selection[0]
+        self.assertTrue(isinstance(s1, slice))
+        self.assertEqual(s1, slice(30,70,5))
+
+    def testSelectionList2D(self):
+        dims = [50, 100,]
+
+        selection = getSelectionList("", dims)
+        self.assertEqual(len(selection), 2)
+        s1 = selection[0]
+        self.assertTrue(isinstance(s1, slice))
+        self.assertEqual(s1, slice(0, 50, 1))
+        s2 = selection[1]
+        self.assertTrue(isinstance(s2, slice))
+        self.assertEqual(s2, slice(0, 100, 1))
+
+        selection = getSelectionList("[5,40]", dims)
+        self.assertEqual(len(selection), 2)
+        s1 = selection[0]
+        self.assertTrue(isinstance(s1, slice))
+        self.assertEqual(s1, slice(5, 6, 1))
+        s2 = selection[1]
+        self.assertTrue(isinstance(s2, slice))
+        self.assertEqual(s2, slice(40, 41, 1))
+
+        selection = getSelectionList("[3:7,12]", dims)
+        self.assertEqual(len(selection), 2)
+        s1 = selection[0]
+        self.assertTrue(isinstance(s1, slice))
+        self.assertEqual(s1, slice(3,7,1))
+        s2 = selection[1]
+        self.assertTrue(isinstance(s2, slice))
+        self.assertEqual(s2, slice(12,13,1))
+
+        selection = getSelectionList("[:,[3,4,7]]", dims)
+        self.assertEqual(len(selection), 2)
+        s1 = selection[0]
+        self.assertTrue(isinstance(s1, slice))
+        self.assertEqual(s1, slice(0, dims[0], 1))
+        s2 = selection[1]
+        self.assertTrue(isinstance(s2, list))
+        self.assertEqual(s2, [3,4,7])
+
+        selection = getSelectionList("[1:20, 30:70:5]", dims)
+        self.assertEqual(len(selection), 2)
+        s1 = selection[0]
+        self.assertTrue(isinstance(s1, slice))
+        self.assertEqual(s1, slice(1,20,1))
+        s2 = selection[1]
+        self.assertTrue(isinstance(s2, slice))
+        self.assertEqual(s2, slice(30,70,5))
+
+        selection = getSelectionList("[0:50, 0:100]", dims)
+        self.assertEqual(len(selection), 2)
+        s1 = selection[0]
+        self.assertTrue(isinstance(s1, slice))
+        self.assertEqual(s1, slice(0,50,1))
+        s2 = selection[1]
+        self.assertTrue(isinstance(s2, slice))
+        self.assertEqual(s2, slice(0,100,1))
+
+        body = {"start": [3,5], "stop": [7,9]}
+        selection = getSelectionList(body, dims)
+        self.assertEqual(len(selection), 2)
+        s1 = selection[0]
+        self.assertTrue(isinstance(s1, slice))
+        self.assertEqual(s1, slice(3,7,1))
+        s2 = selection[1]
+        self.assertTrue(isinstance(s2, slice))
+        self.assertEqual(s2, slice(5,9,1))
+
+        body = {"start": [0,30], "stop": [10,70], "step": [1,5]}
+        selection = getSelectionList(body, dims)
+        self.assertEqual(len(selection), 2)
+        s1 = selection[0]
+        self.assertTrue(isinstance(s1, slice))
+        self.assertEqual(s1, slice(0,10,1))
+        s2 = selection[1]
+        self.assertTrue(isinstance(s2, slice))
+        self.assertEqual(s2, slice(30,70,5))
+
+
+
+    def testInvalidSelectionList(self):
+        dims = [50, 100,]
+
+        try:
+            # no bracket
+            getSelectionList("2", dims)
+            self.assertTrue(False)
+        except ValueError:
+            pass # expected
+
+        try:
+            # selection doesn't match dimension
+            getSelectionList("[2]", dims)
+            self.assertTrue(False)
+        except ValueError:
+            pass # expected
+
+        try:
+            # invalid character
+            getSelectionList("[2,x]", dims)
+            self.assertTrue(False)
+        except ValueError:
+            pass # expected
+
+        try:
+            # too many colons
+            getSelectionList("[6, 1:2:3:4]", dims)
+            self.assertTrue(False)
+        except ValueError:
+            pass # expected
+
+        try:
+            # out of bounds
+            getSelectionList("[2, 101]", dims)
+            self.assertTrue(False)
+        except ValueError:
+            pass # expected
+
+        try:
+            # out of bounds - range
+            getSelectionList("[2, 22:101]", dims)
+            self.assertTrue(False)
+        except ValueError:
+            pass # expected
+
+        try:
+            # out of bounds - coordinate list
+            getSelectionList("[2, [1,2,3,101]]", dims)
+            self.assertTrue(False)
+        except ValueError:
+            pass # expected
+
+        try:
+            # out of bounds - reversed selection
+            getSelectionList("[2, 50:20]", dims)
+            self.assertTrue(False)
+        except ValueError:
+            pass # expected
+
+        try:
+            # out of bounds - coordinate list non-increasing
+            getSelectionList("[2, [1,2,2]]", dims)
+            self.assertTrue(False)
+        except ValueError:
+            pass # expected
+
+        try:
+            # missing key
+            getSelectionList({"start": [30,40]}, dims)
+            self.assertTrue(False)
+        except KeyError:
+            pass # expected
+
+        try:
+            # out of bounds
+            getSelectionList({"start": [30,40], "stop": [2,101]}, dims)
+            self.assertTrue(False)
+        except ValueError:
+            pass # expected
+
+        try:
+            # wrong number of dimensions
+            getSelectionList({"start": [30,40], "stop": [2,7,101]}, dims)
+            self.assertTrue(False)
+        except ValueError:
+            pass # expected
+
+
+
+
+
+
 
 
 if __name__ == '__main__':
