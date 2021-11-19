@@ -283,6 +283,12 @@ class ChunkUtilTest(unittest.TestCase):
         selection = getHyperslabSelection(datashape, 12, 17)
         count = getNumChunks(selection, layout)
         self.assertEqual(count, 1)
+        selection = [(2,5,9,88),] # coord list
+        count = getNumChunks(selection, layout)
+        self.assertEqual(count, 2)
+        selection = [(1,12,23,34,45,56,67,78,89,90),] # coord list
+        count = getNumChunks(selection, layout)
+        self.assertEqual(count, 10)
 
         # try with different increment
         selection = getHyperslabSelection(datashape, 0, 10, 5)
@@ -316,6 +322,9 @@ class ChunkUtilTest(unittest.TestCase):
         selection = getHyperslabSelection(datashape, (39, 4), (47, 7))
         count = getNumChunks(selection, layout)
         self.assertEqual(count, 4)
+        selection = ((3,6,12,35), selection[1])
+        count = getNumChunks(selection, layout)
+        self.assertEqual(count, 6)
         # try with different increment
         selection = getHyperslabSelection(datashape, (39, 4), (47, 7), (3, 2))
         count = getNumChunks(selection, layout)
@@ -363,7 +372,6 @@ class ChunkUtilTest(unittest.TestCase):
             self.assertTrue(partition is not None)
             self.assertTrue(partition >= 0)
             self.assertTrue(partition < partition_count)
-
 
         selection = getHyperslabSelection(datashape, 20)
         chunk_ids = getChunkIds(dset_id, selection, layout)
@@ -751,6 +759,13 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[0].start, 0)
         self.assertEqual(sel[0].stop, 2)
         self.assertEqual(sel[0].step, 1)
+
+        # 1 D with coordinate selection
+        selection = ((32,39,61),)
+        chunk_ids = getChunkIds(dset_id, selection, layout)
+        print(chunk_ids)
+
+
 
         # 1-d with step
         selection = getHyperslabSelection(datashape, 42, 62, 4)

@@ -297,37 +297,50 @@ def getNumChunks(selection, layout):
     # do a quick check that we don't have a null selection space'
     # TBD: this needs to be revise to do the right think with stride > 1
     for s in selection:
-        if s.stop <= s.start:
-            log.debug("null selection")
-            return 0
+        if isinstance(s,slice):
+            if s.stop <= s.start:
+                log.debug("null selection")
+                return 0
+        else:
+            # coordinate list
+            if len(s) == 0:
+                return 0
     num_chunks = 1
     for i in range(len(selection)):
         s = selection[i]
-
-        if s.step > 1:
-            num_points = frac((s.stop-s.start), s.step)
-            w = num_points * s.step - (s.step - 1)
-        else:
-            w = s.stop - s.start  # selection width (>0)
-
         c = layout[i]   # chunk size
+        if isinstance(s, slice):
+            if s.step > 1:
+                num_points = frac((s.stop-s.start), s.step)
+                w = num_points * s.step - (s.step - 1)
+            else:
+                w = s.stop - s.start  # selection width (>0)
 
-        lc = frac(s.start, c) * c
+            lc = frac(s.start, c) * c
 
-        if s.start + w <= lc:
-            # looks like just we cross just one chunk along this deminsion
-            continue
+            if s.start + w <= lc:
+                # looks like we just cross one chunk along this dimension
+                continue
 
-        rc = ((s.start + w) // c) * c
-        m = rc - lc
-        if c > s.step:
-            count = m // c
+            rc = ((s.start + w) // c) * c
+            m = rc - lc
+            if c > s.step:
+                count = m // c
+            else:
+                count = m // s.step
+            if s.start < lc:
+                count += 1  # hit one chunk on the left
+            if s.start + w > rc:
+                count += 1  # hit one chunk on the right
         else:
-            count = m // s.step
-        if s.start < lc:
-            count += 1  # hit one chunk on the left
-        if s.start + w > rc:
-            count += 1  # hit one chunk on the right
+            # coordinate list
+            last_chunk = None
+            count = 0
+            for x in s:
+                this_chunk = x // c
+                if this_chunk != last_chunk:
+                    count += 1
+                    last_chunk = this_chunk
 
         num_chunks *= count
     return num_chunks
@@ -452,7 +465,7 @@ def getChunkIds(dset_id, selection, layout, dim=0,
     if prefix is None:
         # construct a prefix using "c-" with the uuid of the dset_id
         if not dset_id.startswith("d-"):
-            msg = "Bad Request: invalid dset id: {}".format(dset_id)
+            msg = f"Bad Request: invalid dset id: {dset_id}"
             log.warning(msg)
             raise ValueError(msg)
         prefix = "c-" + dset_id[2:] + '_'
@@ -464,7 +477,7 @@ def getChunkIds(dset_id, selection, layout, dim=0,
     c = layout[dim]
     log.debug(f"getChunkIds - layout: {layout}")
 
-    if s.step > c:
+    if isinstance(s, slice) and s.step > c:
         # chunks may not be contiguous,  skip along the selection and add
         # whatever chunks we land in
         for i in range(s.start, s.stop, s.step):
@@ -479,7 +492,7 @@ def getChunkIds(dset_id, selection, layout, dim=0,
                 # recursive call
                 getChunkIds(dset_id, selection, layout, dim+1,
                             chunk_id, chunk_ids)
-    else:
+    elif isinstance(s, slice):
         # get a contiguous set of chunks along the selection
         if s.step > 1:
             num_points = frac((s.stop-s.start), s.step)
@@ -501,6 +514,23 @@ def getChunkIds(dset_id, selection, layout, dim=0,
                 # recursive call
                 getChunkIds(dset_id, selection, layout, dim+1,
                             chunk_id, chunk_ids)
+    else:
+        # coordinate list
+        last_chunk_index = None
+        for coord in s:
+            chunk_index = coord // c
+            if chunk_index != last_chunk_index:
+                chunk_id = prefix + str(chunk_index)
+                if dim + 1 == rank:
+                    # add the chunk id
+                    chunk_ids.append(chunk_id)
+                else:
+                    chunk_id += '_' # dimension seperator
+                    getChunkIds(dset_id, selection, layout, dim+1,
+                                 chunk_id, chunk_ids)
+                last_chunk_index = chunk_index
+
+
     # got the complete list, return it!
     return chunk_ids
 
