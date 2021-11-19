@@ -183,7 +183,6 @@ class QueryTest(unittest.TestCase):
         readData = rspJson["value"]
         self.assertEqual(len(readData), 5)
         for item in readData:
-            print(item)
             self.assertTrue(item[2] > 3000)
             self.assertTrue(item[2] < 3100)
         indices = rspJson["index"]
