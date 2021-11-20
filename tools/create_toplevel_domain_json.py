@@ -28,7 +28,7 @@ from hsds import hsds_logger as log
 import asyncio
 import sys
 import time
-from aiobotocore import get_session
+from aiobotocore.session import get_session
 from aiohttp.client_exceptions import ClientOSError
 from hsds.util.domainUtil import validateDomain, getParentDomain
 from hsds.util.idUtil import getS3Key

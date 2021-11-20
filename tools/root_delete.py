@@ -12,7 +12,7 @@
 import asyncio
 import sys
 import os
-from aiobotocore import get_session
+from aiobotocore.session import get_session
 
 if "CONFIG_DIR" not in os.environ:
     os.environ["CONFIG_DIR"] = "../admin/config/"

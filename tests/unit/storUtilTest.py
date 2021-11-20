@@ -13,7 +13,7 @@ import asyncio
 import random
 import time
 import numpy as np
-from aiobotocore import get_session
+from aiobotocore.session import get_session
 import unittest
 import sys
 from aiohttp.web_exceptions import HTTPNotFound

@@ -11,7 +11,7 @@
 ##############################################################################
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 
-from aiobotocore import get_session
+from aiobotocore.session import get_session
 
 from .. import hsds_logger as log
 from .httpUtil import http_get

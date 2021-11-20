@@ -16,7 +16,7 @@ import os
 if "CONFIG_DIR" not in os.environ:
     os.environ["CONFIG_DIR"] = "../admin/config/"
 
-from aiobotocore import get_session
+from aiobotocore.session import get_session
 from hsds.util.storUtil import getStorKeys, isStorObj, releaseStorageClient
 from hsds import config
 
