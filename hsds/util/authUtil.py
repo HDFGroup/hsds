@@ -18,7 +18,7 @@ import subprocess
 import os.path as pp
 import datetime
 from botocore.exceptions import ClientError
-from aiobotocore import get_session
+from aiobotocore.session import get_session
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPUnauthorized
 from aiohttp.web_exceptions import HTTPForbidden, HTTPInternalServerError
 

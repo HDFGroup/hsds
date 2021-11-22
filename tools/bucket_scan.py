@@ -16,7 +16,7 @@ import os
 if "CONFIG_DIR" not in os.environ:
     os.environ["CONFIG_DIR"] = "../admin/config/"
 
-from aiobotocore import get_session
+from aiobotocore.session import get_session
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 from hsds.util.storUtil import releaseStorageClient, getStorKeys, getStorJSONObj
 from hsds.util.idUtil import getObjId

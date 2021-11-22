@@ -1,4 +1,4 @@
-from aiobotocore import get_session
+from aiobotocore.session import get_session
 from asyncio import CancelledError
 
 import datetime

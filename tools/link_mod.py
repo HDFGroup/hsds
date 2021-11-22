@@ -12,7 +12,7 @@
 import asyncio
 import sys
 import os
-from aiobotocore import get_session
+from aiobotocore.session import get_session
 from aiohttp.client_exceptions import ClientError
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 
