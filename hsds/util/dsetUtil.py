@@ -252,18 +252,23 @@ def getSelectionShape(selection):
       [(3,7,1)] -> [4]
       [(3, 7, 3)] -> [1]
       [(44, 52, 1), (48,52,1)] -> [8, 4]
+      [[1,2,7]] ->
     """
     shape = []
     rank = len(selection)
     for i in range(rank):
         s = selection[i]
-        extent = 0
-        if s.stop > s.start:
-            extent = s.stop - s.start
-        if s.step > 1 and extent > 0:
-            extent = (extent // s.step)
-        if (s.stop - s.start) % s.step != 0:
-            extent += 1
+        if isinstance(s,slice):
+            extent = 0
+            if s.stop > s.start:
+                extent = s.stop - s.start
+            if s.step > 1 and extent > 0:
+                extent = (extent // s.step)
+            if (s.stop - s.start) % s.step != 0:
+                extent += 1
+        else:
+            # coordinate list
+            extent = len(s)
         shape.append(extent)
     return shape
 
@@ -409,6 +414,8 @@ def getSelectionList(select, dims):
 
     if isinstance(select, dict):
         select = _getSelectionStringFromRequestBody(select)
+
+    print(f"getSelectionList({select}, {dims})")
 
     # convert selection to list by dimension
     elements = _getSelectElements(select)

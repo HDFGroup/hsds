@@ -564,6 +564,7 @@ def getChunkSelection(chunk_id, slices, layout):
     Return the intersection of the chunk with the given slices
     selection of the array.
     """
+    #print("getChunkSelection - chunk_id:", chunk_id, "slices:", slices)
     chunk_index = getChunkIndex(chunk_id)
     rank = len(layout)
     sel = []
@@ -571,23 +572,32 @@ def getChunkSelection(chunk_id, slices, layout):
         s = slices[dim]
         c = layout[dim]
         n = chunk_index[dim] * c
-        if s.start >= n + c:
-            return None  # null intersection
-        if s.stop < n:
-            return None  # null intersection
-        if s.stop > n + c:
-            stop = n + c
+        if isinstance(s, slice):
+            if s.start >= n + c:
+                return None  # null intersection
+            if s.stop < n:
+                return None  # null intersection
+            if s.stop > n + c:
+                stop = n + c
+            else:
+                stop = s.stop
+            w = n - s.start
+            if s.start < n:
+                start = frac(w, s.step) * s.step + s.start
+            else:
+                start = s.start
+            step = s.step
+            cs = slice(start, stop, step)
+            stop = slice_stop(cs)
+            sel.append(slice(start, stop, step))
         else:
-            stop = s.stop
-        w = n - s.start
-        if s.start < n:
-            start = frac(w, s.step) * s.step + s.start
-        else:
-            start = s.start
-        step = s.step
-        cs = slice(start, stop, step)
-        stop = slice_stop(cs)
-        sel.append(slice(start, stop, step))
+            # coord list
+            coords = [] 
+            for j in s:
+                if j >= n and j < n + c:
+                    coords.append(j)
+            sel.append(coords)
+
     return sel
 
 
@@ -603,18 +613,35 @@ def getChunkCoverage(chunk_id, slices, layout):
         s = chunk_sel[dim]
         w = layout[dim]
         offset = chunk_index[dim] * w
-        start = s.start - offset
-        if start < 0:
-            msg = "Unexpected chunk selection"
-            log.error(msg)
-            raise ValueError(msg)
-        stop = s.stop - offset
-        if stop > w:
-            msg = "Unexpected chunk selection"
-            log.error(msg)
-            raise ValueError(msg)
-        step = s.step
-        sel.append(slice(start, stop, step))
+
+        if isinstance(s, slice):
+            start = s.start - offset
+            if start < 0:
+                msg = "Unexpected chunk selection"
+                log.error(msg)
+                raise ValueError(msg)
+            stop = s.stop - offset
+            if stop > w:
+                msg = "Unexpected chunk selection"
+                log.error(msg)
+                raise ValueError(msg)
+            step = s.step
+            sel.append(slice(start, stop, step))
+        else:
+            coord = []
+            for j in s:
+                if j - offset < 0:
+                    msg = "Unexpected chunk selection"
+                    log.error(msg)
+                    raise ValueError(msg)
+                elif j - offset >= w:
+                    msg = "Unexpected chunk selection"
+                    log.error(msg)
+                    raise ValueError(msg)
+                coord.append(j - offset)
+            sel.append(tuple(coord))
+
+
     return sel
 
 

@@ -103,6 +103,16 @@ class ValueTest(unittest.TestCase):
         self.assertTrue("value" in rspJson)
         self.assertEqual(rspJson["value"], data)
 
+        # read coordinate selectioin
+        params = {"select": "[[0,1,3,7]]"}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        print(rspJson["value"])
+        self.assertEqual(rspJson["value"], [0,1,3,7])
+
         # read a selection
         params = {"select": "[2:8]"}  # read 6 elements, starting at index 2
         rsp = self.session.get(req, params=params, headers=headers)
@@ -1479,7 +1489,6 @@ class ValueTest(unittest.TestCase):
         dset1_uuid = self.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1")
 
         # read fancy selection
-        """
         params = {"select": "[0:4, 2,4,7]"}
         req = helper.getEndpoint() + "/datasets/" + dset1_uuid + "/value"
         rsp = self.session.get(req, params=params, headers=headers)
@@ -1493,7 +1502,7 @@ class ValueTest(unittest.TestCase):
             for i in (2,4,7):
                 self.assertEqual(row[i], i * j)
 
-        """
+        
         # read all the dataset values
         req = helper.getEndpoint() + "/datasets/" + dset1_uuid + "/value"
         rsp = self.session.get(req, headers=headers)
@@ -1596,6 +1605,41 @@ class ValueTest(unittest.TestCase):
         params["nonstrict"] = 1
         rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 400)
+
+    def testFancyIndexing(self):
+        domain = helper.getTestDomain("tall.h5")
+        print("testGetDomain", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        headers["Origin"] = "https://www.hdfgroup.org"  # test CORS
+        headers_bin_rsp = helper.getRequestHeaders(domain=domain)
+        headers_bin_rsp["accept"] = "application/octet-stream"
+
+        # verify domain exists
+        req = helper.getEndpoint() + '/'
+        rsp = self.session.get(req, headers=headers)
+        if rsp.status_code != 200:
+            print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
+            return  # abort rest of test
+        domainJson = json.loads(rsp.text)
+        root_uuid = domainJson["root"]
+        helper.validateId(root_uuid)
+
+        # get the dataset uuid
+        dset1_uuid = self.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1")
+
+        # read fancy selection
+        params = {"select": "[0:4, 2,4,7]"}
+        req = helper.getEndpoint() + "/datasets/" + dset1_uuid + "/value"
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        print(rspJson)
+        self.assertTrue("value" in rspJson)
+        data = rspJson["value"]  # should be 4 x 4 array
+        for j in range(4):
+            row = data[j]
+            for i in (2,4,7):
+                self.assertEqual(row[i], i * j)
 
 
     def testSharedMem(self):

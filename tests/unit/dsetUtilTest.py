@@ -82,6 +82,10 @@ class DsetUtilTest(unittest.TestCase):
         shape = getSelectionShape(sel)
         self.assertEqual(shape, [3,])
 
+        sel = [ [2,3,5,7,11]] # coordinate list
+        shape = getSelectionShape(sel)
+        self.assertEqual(shape, [5,])
+
     
     def testItemIterator(self):
         # 1-D case
