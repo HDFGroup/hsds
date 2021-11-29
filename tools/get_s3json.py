@@ -13,7 +13,7 @@ import asyncio
 import sys
 import os
 import json
-from aiobotocore import get_session
+from aiobotocore.session import get_session
 from aiohttp.client_exceptions import ClientOSError
 
 if "CONFIG_DIR" not in os.environ:

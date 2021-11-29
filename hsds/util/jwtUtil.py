@@ -192,7 +192,7 @@ def verifyBearerToken(app, token):
 
     if not username:
         log.warn("unable to retreive username from bearer token")
-        return None
+        raise HTTPUnauthorized()
 
     exp = None
     log.debug(f"decoded token: {jwt_decode}")

@@ -18,7 +18,7 @@ import datetime
 import json
 import time
 from aiobotocore.config import AioConfig
-from aiobotocore import get_session
+from aiobotocore.session import get_session
 from botocore.exceptions import ClientError
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPForbidden, HTTPBadRequest
