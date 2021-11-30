@@ -115,7 +115,11 @@ async def PUT_Chunk(request):
         select = params["select"]
     else:
         select = None # put for entire dataspace
-    selection = getSelectionList(select, dims)
+    try:
+        selection = getSelectionList(select, dims)
+    except ValueError as ve:
+        log.error(f"ValueError for select: {select}: {ve}")
+        raise HTTPInternalServerError()
     log.debug(f"got selection: {selection}")
 
     mshape = getSelectionShape(selection)
@@ -282,7 +286,11 @@ async def GET_Chunk(request):
     else:
         select = None # get slices for entire datashape
     log.debug(f"using select string: {select}")
-    selection = getSelectionList(select, dims)
+    try:
+        selection = getSelectionList(select, dims)
+    except ValueError as ve:
+        log.error(f"ValueError for select: {select}: {ve}")
+        raise HTTPInternalServerError()
     log.debug(f"GET_Chunk - got selection: {selection}")
 
     kwargs = {"chunk_init": False}

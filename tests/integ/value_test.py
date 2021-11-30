@@ -1489,19 +1489,18 @@ class ValueTest(unittest.TestCase):
         dset1_uuid = self.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1")
 
         # read fancy selection
-        params = {"select": "[0:4, 2,4,7]"}
+        params = {"select": "[0:4, [2,4,7]]"}
         req = helper.getEndpoint() + "/datasets/" + dset1_uuid + "/value"
         rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        print(rspJson)
         self.assertTrue("value" in rspJson)
-        data = rspJson["value"]  # should be 4 x 4 array
-        for j in range(4):
-            row = data[j]
-            for i in (2,4,7):
-                self.assertEqual(row[i], i * j)
-
+        data = rspJson["value"]  # should be 4 x 3 array
+        self.assertTrue(data[0], [0,0,0])
+        self.assertTrue(data[1], [2,4,7])
+        self.assertTrue(data[2], [4,8,14])
+        self.assertTrue(data[3], [6,12,21])
+         
         
         # read all the dataset values
         req = helper.getEndpoint() + "/datasets/" + dset1_uuid + "/value"
@@ -1628,18 +1627,17 @@ class ValueTest(unittest.TestCase):
         dset1_uuid = self.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1")
 
         # read fancy selection
-        params = {"select": "[0:4, 2,4,7]"}
+        params = {"select": "[1:3, [2,4,7]]"}
         req = helper.getEndpoint() + "/datasets/" + dset1_uuid + "/value"
         rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         print(rspJson)
         self.assertTrue("value" in rspJson)
-        data = rspJson["value"]  # should be 4 x 4 array
-        for j in range(4):
-            row = data[j]
-            for i in (2,4,7):
-                self.assertEqual(row[i], i * j)
+        data = rspJson["value"]  # should be 2 x 3 array
+        self.assertTrue(len(data),2)
+        self.assertTrue(data[0], [2,4,7])
+        self.assertTrue(data[1], [4,8,14])
 
 
     def testSharedMem(self):

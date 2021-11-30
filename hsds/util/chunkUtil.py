@@ -655,14 +655,25 @@ def getDataCoverage(chunk_id, slices, layout):
     for dim in range(rank):
         c = chunk_sel[dim]
         s = slices[dim]
-        if c.step != s.step:
-            msg = "expecting step for chunk selection to be the "
-            msg += "same as data selection"
-            raise ValueError(msg)
-        start = (c.start - s.start) // s.step
-        stop = frac((c.stop - s.start), s.step)
-        step = 1
-        sel.append(slice(start, stop, step))
+        if isinstance(s, slice):
+            if c.step != s.step:
+                msg = "expecting step for chunk selection to be the "
+                msg += "same as data selection"
+                raise ValueError(msg)
+            start = (c.start - s.start) // s.step
+            stop = frac((c.stop - s.start), s.step)
+            step = 1
+            sel.append(slice(start, stop, step))
+        else:
+            # coordinate selection
+            if isinstance(c, slice):
+                msg = "expecting coordinate chunk selection for data "
+                msg += "coord selection"
+                raise ValueError(msg)
+            start = c[0] - s[0]
+            stop = start + len(c)
+            step = 1
+            sel.append(slice(start,stop,step))
 
     return tuple(sel)
 

@@ -990,6 +990,18 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[0].stop, 7)
         self.assertEqual(sel[0].step, 1)
 
+        # test with coordinates
+        selection = ((23,28),)
+        chunk_ids = getChunkIds(dset_id, selection, layout)
+        self.assertEqual(len(chunk_ids), 1)
+
+        chunk_id = chunk_ids[0]
+        sel = getDataCoverage(chunk_id, selection, layout)
+        self.assertEqual(sel[0].start, 0)
+        self.assertEqual(sel[0].stop, 2)
+        self.assertEqual(sel[0].step, 1)
+
+
 
         # 2-d test
         dset_id = "d-12345678-1234-1234-1234-1234567890ab"
@@ -1033,6 +1045,29 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[0].step, 1)
         self.assertEqual(sel[1].start, 4)
         self.assertEqual(sel[1].stop, 12)
+        self.assertEqual(sel[1].step, 1)
+
+        # test with coordinates
+        selection = (slice(45,55,1), (23,28),)
+        chunk_ids = getChunkIds(dset_id, selection, layout)
+        self.assertEqual(len(chunk_ids), 2)
+
+        chunk_id = chunk_ids[0]
+        sel = getDataCoverage(chunk_id, selection, layout)
+        self.assertEqual(sel[0].start, 0)
+        self.assertEqual(sel[0].stop, 5)
+        self.assertEqual(sel[0].step, 1)
+        self.assertEqual(sel[1].start, 0)
+        self.assertEqual(sel[1].stop, 2)
+        self.assertEqual(sel[1].step, 1)
+
+        chunk_id = chunk_ids[1]
+        sel = getDataCoverage(chunk_id, selection, layout)
+        self.assertEqual(sel[0].start, 5)
+        self.assertEqual(sel[0].stop, 10)
+        self.assertEqual(sel[0].step, 1)
+        self.assertEqual(sel[1].start, 0)
+        self.assertEqual(sel[1].stop, 2)
         self.assertEqual(sel[1].step, 1)
 
         # 2-d test, non-regular chunks

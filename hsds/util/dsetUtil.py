@@ -414,9 +414,7 @@ def getSelectionList(select, dims):
 
     if isinstance(select, dict):
         select = _getSelectionStringFromRequestBody(select)
-
-    print(f"getSelectionList({select}, {dims})")
-
+        
     # convert selection to list by dimension
     elements = _getSelectElements(select)
     rank = len(elements)
@@ -514,16 +512,26 @@ def setSliceQueryParam(params, sel):
         sel_param = "["
         for i in range(rank):
             s = sel[i]
-            sel_param += str(s.start)
-            sel_param += ':'
-            sel_param += str(s.stop)
-            if s.step > 1:
+            if isinstance(s, slice):
+                sel_param += str(s.start)
                 sel_param += ':'
-                sel_param += str(s.step)
+                sel_param += str(s.stop)
+                if s.step > 1:
+                    sel_param += ':'
+                    sel_param += str(s.step)
+            else:
+                # coord selection
+                sel_param += '['
+                count = len(s)
+                for j in range(count):
+                    sel_param += str(s[j])
+                    if j < count - 1:
+                        sel_param += ','
+                sel_param += ']'
             if i < rank - 1:
                 sel_param += ','
         sel_param += ']'
-        log.debug("select query param: {}".format(sel_param))
+        log.debug(f"select query param: {sel_param}")
         params["select"] = sel_param
 
 
