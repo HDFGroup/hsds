@@ -1127,6 +1127,34 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel.stop, 10)
         self.assertEqual(sel.step, 1)
 
+        # 3-d test with coord
+        datashape = [792,1602,2976]
+        layout = (66,89,93)
+        selection = (slice(0,792,1), slice(520,521,1), slice(1401,1540,1)) 
+        chunk_ids = getChunkIds(dset_id, selection, layout)
+        chunk_id = chunk_ids[1]
+        sel = getDataCoverage(chunk_id, selection, layout)
+        print(f"{chunk_id}: {sel}")
+        self.assertEqual(sel[0], slice(0,66,1))
+        self.assertEqual(sel[1], slice(0,1,1))
+        self.assertEqual(sel[2], slice(87,139,1))
+
+
+
+        selection = (slice(0,792,1), slice(520,521,1), [1401,1501,1540])
+        chunk_ids = getChunkIds(dset_id, selection, layout)
+        print("coord sel")
+        chunk_id = chunk_ids[1]
+        sel = getDataCoverage(chunk_id, selection, layout)
+        print(f"{chunk_id}: {sel}")
+        self.assertEqual(sel[0], slice(0,66,1))
+        self.assertEqual(sel[1], slice(0,1,1))
+        self.assertEqual(sel[2], slice(1,3,1))
+        
+         
+
+
+
     def testGetChunkId(self):
         # getChunkIds(dset_id, selection, layout, dim=0, prefix=None, chunk_ids=None):
         dset_id = "d-12345678-1234-1234-1234-1234567890ab"
@@ -1279,6 +1307,8 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(arr.tolist(), [[2.0, 3.0, 4.0, 5.0]])
         arr = chunkReadSelection(chunk_arr, slices=((slice(0,3,1),slice(2,3,1))))
         self.assertEqual(arr.tolist(), [[3.0],[4.0],[5.0]])
+        arr = chunkReadSelection(chunk_arr, slices=((slice(0,1,1),[0,3])) )
+        self.assertEqual(arr.tolist(), [[1.0,4.0]])
 
     def testChunkWriteSelection(self):
         chunk_arr = np.zeros((8,))

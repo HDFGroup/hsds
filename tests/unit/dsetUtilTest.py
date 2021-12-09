@@ -86,6 +86,10 @@ class DsetUtilTest(unittest.TestCase):
         shape = getSelectionShape(sel)
         self.assertEqual(shape, [5,])
 
+        sel = [ slice(0,100,1), slice(50,51,1), [23,35,56] ]
+        shape = getSelectionShape(sel)
+        self.assertEqual(shape, [100,1,3])
+
     
     def testItemIterator(self):
         # 1-D case

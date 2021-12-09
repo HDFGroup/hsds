@@ -165,7 +165,9 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr,
     layout = getChunkLayout(dset_json)
 
     chunk_sel = getChunkCoverage(chunk_id, slices, layout)
+    log.debug(f"read_chunk_hyperslab - chunk_sel: {chunk_sel}")
     data_sel = getDataCoverage(chunk_id, slices, layout)
+    log.debug(f"read_chunk_hyperslab - data_sel: {data_sel}")
 
     # pass dset json and selection as query params
     params = {}
@@ -227,7 +229,10 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr,
             log.warn(f"CancelledError for http_get({req}): {cle}")
             return
 
-    if array_data is not None:
+    if array_data is None:
+        log.debug(f"No data returned for chunk: {chunk_id}")
+    else:
+        log.debug(f"got data for chunk: {chunk_id}")
         # convert binary data to numpy array
         try:
             chunk_arr = bytesToArray(array_data, dt, chunk_shape)
@@ -245,6 +250,7 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr,
 
     log.info(f"chunk_arr shape: {chunk_arr.shape}")
     log.info(f"data_sel: {data_sel}")
+    log.info(f"np_arr shape: {np_arr.shape}")
 
     np_arr[data_sel] = chunk_arr
 

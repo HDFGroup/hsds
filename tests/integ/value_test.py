@@ -103,7 +103,7 @@ class ValueTest(unittest.TestCase):
         self.assertTrue("value" in rspJson)
         self.assertEqual(rspJson["value"], data)
 
-        # read coordinate selectioin
+        # read coordinate selection
         params = {"select": "[[0,1,3,7]]"}
         rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -305,13 +305,28 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(rspJson["value"], json_data)
 
         # read a selection
-        params = {"select": "[3:4,2:8]"}  # read 6 elements, starting at index 2
+        params = {"select": "[3:4,2:8]"}  # read 3 elements, 
         rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
         self.assertEqual(rspJson["value"], [json_data[3][2:8], ])
+
+        # write a coordinate selection 
+        json_data = [[120,121,122],]
+        payload = {'value': json_data}
+        params = {"select": "[3:4,[0,2,5]]"}  # write 3 elements
+        rsp = self.session.put(req, data=json.dumps(payload), params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], [[120,121,122],])
+
 
     def testPut2DDatasetBinary(self):
         # Test PUT value for 2d dataset
@@ -396,6 +411,24 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(len(data), 6*4)
         for i in range(6):
             self.assertEqual(data[i*4], 3*10 + i+2)
+
+        # write a coordinate selection 
+        json_data = [[120,121,122],]
+        bin_data = bytearray(4*3)
+        bin_data[0] = 120
+        bin_data[4] = 121
+        bin_data[8] = 122
+        params = {"select": "[3:4,[0,2,5]]"}  # write 3 elements
+        rsp = self.session.put(req, data=bin_data, params=params, headers=headers_bin_req)
+        self.assertEqual(rsp.status_code, 200)
+
+        rsp = self.session.get(req, params=params, headers=headers_bin_rsp)
+        self.assertEqual(rsp.status_code, 200)
+        data = rsp.content
+        self.assertEqual(len(data),12)
+        self.assertEqual(data, bin_data)
+         
+         
 
     def testPutSelection1DDataset(self):
         """Test PUT value with selection for 1d dataset"""

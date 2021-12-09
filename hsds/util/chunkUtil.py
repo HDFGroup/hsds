@@ -472,10 +472,10 @@ def getChunkIds(dset_id, selection, layout, dim=0,
     rank = len(selection)
     if chunk_ids is None:
         chunk_ids = []
-    log.debug(f"getChunkIds - selection: {selection}")
+    #log.debug(f"getChunkIds - selection: {selection}")
     s = selection[dim]
     c = layout[dim]
-    log.debug(f"getChunkIds - layout: {layout}")
+    #log.debug(f"getChunkIds - layout: {layout}")
 
     if isinstance(s, slice) and s.step > c:
         # chunks may not be contiguous,  skip along the selection and add
@@ -652,6 +652,8 @@ def getDataCoverage(chunk_id, slices, layout):
     chunk_sel = getChunkSelection(chunk_id, slices, layout)
     rank = len(layout)
     sel = []
+    #print(f'getDataCoverage - chunk_id: {chunk_id} slices: {slices} layout: {layout}')
+    #print("chunk_sel:", chunk_sel)
     for dim in range(rank):
         c = chunk_sel[dim]
         s = slices[dim]
@@ -670,7 +672,14 @@ def getDataCoverage(chunk_id, slices, layout):
                 msg = "expecting coordinate chunk selection for data "
                 msg += "coord selection"
                 raise ValueError(msg)
-            start = c[0] - s[0]
+            if len(c) < 1:
+                msg = "expected at least one chunk coordinate"
+                raise ValueError(msg)
+            start = 0
+            for i in range(len(s)):
+                if s[i] >= c[0]:
+                    break
+                start += 1
             stop = start + len(c)
             step = 1
             sel.append(slice(start,stop,step))
