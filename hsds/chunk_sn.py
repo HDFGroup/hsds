@@ -1540,7 +1540,6 @@ async def GET_Value(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
-    slices = tuple(slices)
     log.debug(f"GET Value selection: {slices}")
 
     np_shape = getSelectionShape(slices)

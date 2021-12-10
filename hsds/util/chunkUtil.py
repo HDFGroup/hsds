@@ -653,7 +653,6 @@ def getDataCoverage(chunk_id, slices, layout):
     rank = len(layout)
     sel = []
     #print(f'getDataCoverage - chunk_id: {chunk_id} slices: {slices} layout: {layout}')
-    #print("chunk_sel:", chunk_sel)
     for dim in range(rank):
         c = chunk_sel[dim]
         s = slices[dim]
