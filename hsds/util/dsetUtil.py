@@ -434,7 +434,7 @@ def getSelectionList(select, dims):
                 except ValueError:
                     raise ValueError(f"Invalid coordinate for dim {dim}")
                 if coord < 0 or coord >= extent:
-                    raise ValueError(f"out of range coordinate for dim {dim}")
+                    raise ValueError(f"out of range coordinate for dim {dim}, {coord} not in range: 0-{extent-1} ")
                 if last_coord != None and coord <= last_coord:
                     raise ValueError("coordinates must be increasing")
                 last_coord = coord
