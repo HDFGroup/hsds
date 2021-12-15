@@ -10,6 +10,7 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import unittest
+import logging
 import sys
 import json
 import numpy as np
@@ -26,7 +27,6 @@ class ChunkUtilTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(ChunkUtilTest, self).__init__(*args, **kwargs)
         # main
-
 
     def testGuessChunk(self):
 
@@ -283,6 +283,12 @@ class ChunkUtilTest(unittest.TestCase):
         selection = getHyperslabSelection(datashape, 12, 17)
         count = getNumChunks(selection, layout)
         self.assertEqual(count, 1)
+        selection = [(2,5,9,88),] # coord list
+        count = getNumChunks(selection, layout)
+        self.assertEqual(count, 2)
+        selection = [(1,12,23,34,45,56,67,78,89,90),] # coord list
+        count = getNumChunks(selection, layout)
+        self.assertEqual(count, 10)
 
         # try with different increment
         selection = getHyperslabSelection(datashape, 0, 10, 5)
@@ -316,6 +322,9 @@ class ChunkUtilTest(unittest.TestCase):
         selection = getHyperslabSelection(datashape, (39, 4), (47, 7))
         count = getNumChunks(selection, layout)
         self.assertEqual(count, 4)
+        selection = ((3,6,12,35), selection[1])
+        count = getNumChunks(selection, layout)
+        self.assertEqual(count, 6)
         # try with different increment
         selection = getHyperslabSelection(datashape, (39, 4), (47, 7), (3, 2))
         count = getNumChunks(selection, layout)
@@ -363,7 +372,6 @@ class ChunkUtilTest(unittest.TestCase):
             self.assertTrue(partition is not None)
             self.assertTrue(partition >= 0)
             self.assertTrue(partition < partition_count)
-
 
         selection = getHyperslabSelection(datashape, 20)
         chunk_ids = getChunkIds(dset_id, selection, layout)
@@ -630,6 +638,17 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[0].stop, 31)
         self.assertEqual(sel[0].step, 15)
 
+        # test with coordinate
+        selection = ((12,13,33),)
+        chunk_ids = getChunkIds(dset_id, selection, layout)
+        self.assertEqual(len(chunk_ids), 2)
+        chunk_id = chunk_ids[0]
+        sel = getChunkSelection(chunk_id, selection, layout)
+        self.assertEqual(sel[0], [12,13])
+        chunk_id = chunk_ids[1]
+        sel = getChunkSelection(chunk_id, selection, layout)
+        self.assertEqual(sel[0], [33,])
+
         # 2-d test
         datashape = [100,100]
         layout = (10,10)
@@ -672,6 +691,27 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[1].start, 50)
         self.assertEqual(sel[1].stop, 58)
         self.assertEqual(sel[1].step, 1)
+
+        # test with coordinate
+        selection = (slice(35,45,1), (12,13,33),)
+        chunk_ids = getChunkIds(dset_id, selection, layout)
+        self.assertEqual(len(chunk_ids), 4)
+        chunk_id = chunk_ids[0]
+        sel = getChunkSelection(chunk_id, selection, layout)
+        self.assertEqual(sel[0], slice(35,40,1))
+        self.assertEqual(sel[1], [12,13])
+        chunk_id = chunk_ids[1]
+        sel = getChunkSelection(chunk_id, selection, layout)
+        self.assertEqual(sel[0], slice(35,40,1))
+        self.assertEqual(sel[1], [33,])
+        chunk_id = chunk_ids[2]
+        sel = getChunkSelection(chunk_id, selection, layout)
+        self.assertEqual(sel[0], slice(40,45,1))
+        self.assertEqual(sel[1], [12,13])
+        chunk_id = chunk_ids[3]
+        sel = getChunkSelection(chunk_id, selection, layout)
+        self.assertEqual(sel[0], slice(40,45,1))
+        self.assertEqual(sel[1], [33,])
 
         # 1-d test with fractional chunks
         datashape = [104,]
@@ -752,6 +792,14 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[0].stop, 2)
         self.assertEqual(sel[0].step, 1)
 
+        # 1 D with coordinate selection
+        selection = ((32,39,61),)
+        chunk_ids = getChunkIds(dset_id, selection, layout)
+        self.assertEqual(len(chunk_ids), 2)
+        chunk_id = chunk_ids[0]
+        sel = getChunkCoverage(chunk_id, selection, layout)
+        self.assertEqual(sel[0], (2,9))
+    
         # 1-d with step
         selection = getHyperslabSelection(datashape, 42, 62, 4)
         chunk_ids = getChunkIds(dset_id, selection, layout)
@@ -851,6 +899,24 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[1].stop, 2)
         self.assertEqual(sel[1].step, 1)
 
+        # 2-d test wiith coordinates
+        selection = (slice(15,25,1), (62,69))
+        chunk_ids = getChunkIds(dset_id, selection, layout)
+        self.assertEqual(len(chunk_ids), 2)
+        chunk_id = chunk_ids[0]
+        sel = getChunkCoverage(chunk_id, selection, layout)
+        self.assertEqual(sel[0].start, 5)
+        self.assertEqual(sel[0].stop, 10)
+        self.assertEqual(sel[0].step, 1)
+        self.assertEqual(sel[1], (2,9))
+        chunk_id = chunk_ids[1]
+        sel = getChunkCoverage(chunk_id, selection, layout)
+        self.assertEqual(sel[0].start, 0)
+        self.assertEqual(sel[0].stop, 5)
+        self.assertEqual(sel[0].step, 1)
+        self.assertEqual(sel[1], (2,9))
+
+
 
         # 1-d test with fractional chunks
         datashape = [104,]
@@ -924,6 +990,18 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[0].stop, 7)
         self.assertEqual(sel[0].step, 1)
 
+        # test with coordinates
+        selection = ((23,28),)
+        chunk_ids = getChunkIds(dset_id, selection, layout)
+        self.assertEqual(len(chunk_ids), 1)
+
+        chunk_id = chunk_ids[0]
+        sel = getDataCoverage(chunk_id, selection, layout)
+        self.assertEqual(sel[0].start, 0)
+        self.assertEqual(sel[0].stop, 2)
+        self.assertEqual(sel[0].step, 1)
+
+
 
         # 2-d test
         dset_id = "d-12345678-1234-1234-1234-1234567890ab"
@@ -967,6 +1045,29 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[0].step, 1)
         self.assertEqual(sel[1].start, 4)
         self.assertEqual(sel[1].stop, 12)
+        self.assertEqual(sel[1].step, 1)
+
+        # test with coordinates
+        selection = (slice(45,55,1), (23,28),)
+        chunk_ids = getChunkIds(dset_id, selection, layout)
+        self.assertEqual(len(chunk_ids), 2)
+
+        chunk_id = chunk_ids[0]
+        sel = getDataCoverage(chunk_id, selection, layout)
+        self.assertEqual(sel[0].start, 0)
+        self.assertEqual(sel[0].stop, 5)
+        self.assertEqual(sel[0].step, 1)
+        self.assertEqual(sel[1].start, 0)
+        self.assertEqual(sel[1].stop, 2)
+        self.assertEqual(sel[1].step, 1)
+
+        chunk_id = chunk_ids[1]
+        sel = getDataCoverage(chunk_id, selection, layout)
+        self.assertEqual(sel[0].start, 5)
+        self.assertEqual(sel[0].stop, 10)
+        self.assertEqual(sel[0].step, 1)
+        self.assertEqual(sel[1].start, 0)
+        self.assertEqual(sel[1].stop, 2)
         self.assertEqual(sel[1].step, 1)
 
         # 2-d test, non-regular chunks
@@ -1025,6 +1126,34 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel.start, 8)
         self.assertEqual(sel.stop, 10)
         self.assertEqual(sel.step, 1)
+
+        # 3-d test with coord
+        datashape = [792,1602,2976]
+        layout = (66,89,93)
+        selection = (slice(0,792,1), slice(520,521,1), slice(1401,1540,1)) 
+        chunk_ids = getChunkIds(dset_id, selection, layout)
+        chunk_id = chunk_ids[1]
+        sel = getDataCoverage(chunk_id, selection, layout)
+        print(f"{chunk_id}: {sel}")
+        self.assertEqual(sel[0], slice(0,66,1))
+        self.assertEqual(sel[1], slice(0,1,1))
+        self.assertEqual(sel[2], slice(87,139,1))
+
+
+
+        selection = (slice(0,792,1), slice(520,521,1), [1401,1501,1540])
+        chunk_ids = getChunkIds(dset_id, selection, layout)
+        print("coord sel")
+        chunk_id = chunk_ids[1]
+        sel = getDataCoverage(chunk_id, selection, layout)
+        print(f"{chunk_id}: {sel}")
+        self.assertEqual(sel[0], slice(0,66,1))
+        self.assertEqual(sel[1], slice(0,1,1))
+        self.assertEqual(sel[2], slice(1,3,1))
+        
+         
+
+
 
     def testGetChunkId(self):
         # getChunkIds(dset_id, selection, layout, dim=0, prefix=None, chunk_ids=None):
@@ -1178,6 +1307,8 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(arr.tolist(), [[2.0, 3.0, 4.0, 5.0]])
         arr = chunkReadSelection(chunk_arr, slices=((slice(0,3,1),slice(2,3,1))))
         self.assertEqual(arr.tolist(), [[3.0],[4.0],[5.0]])
+        arr = chunkReadSelection(chunk_arr, slices=((slice(0,1,1),[0,3])) )
+        self.assertEqual(arr.tolist(), [[1.0,4.0]])
 
     def testChunkWriteSelection(self):
         chunk_arr = np.zeros((8,))
@@ -1396,23 +1527,6 @@ class ChunkUtilTest(unittest.TestCase):
             row = chunk_arr[index]
             self.assertEqual(row[0], b'AAPL')
             self.assertEqual(row[2], 999)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 if __name__ == '__main__':

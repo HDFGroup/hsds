@@ -85,7 +85,7 @@ async def validateAction(app, domain, obj_id, username, action):
 
     obj_json = None
     if obj_id in meta_cache:
-        log.debug(f"validdateAction - found {obj_id} in meta_cache")
+        log.debug(f"validateAction - found {obj_id} in meta_cache")
         obj_json = meta_cache[obj_id]
     else:
         # fetch from DN

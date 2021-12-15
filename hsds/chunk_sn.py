@@ -31,7 +31,7 @@ from .util.idUtil import isValidUuid, getDataNodeUrl, getNodeCount
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain
 from .util.hdf5dtype import getItemSize, createDataType
-from .util.dsetUtil import getSliceQueryParam, setSliceQueryParam
+from .util.dsetUtil import getSelectionList, setSliceQueryParam  
 from .util.dsetUtil import getFillValue, isExtensible
 from .util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout
 from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId
@@ -165,7 +165,9 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr,
     layout = getChunkLayout(dset_json)
 
     chunk_sel = getChunkCoverage(chunk_id, slices, layout)
+    log.debug(f"read_chunk_hyperslab - chunk_sel: {chunk_sel}")
     data_sel = getDataCoverage(chunk_id, slices, layout)
+    log.debug(f"read_chunk_hyperslab - data_sel: {data_sel}")
 
     # pass dset json and selection as query params
     params = {}
@@ -227,7 +229,10 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr,
             log.warn(f"CancelledError for http_get({req}): {cle}")
             return
 
-    if array_data is not None:
+    if array_data is None:
+        log.debug(f"No data returned for chunk: {chunk_id}")
+    else:
+        log.debug(f"got data for chunk: {chunk_id}")
         # convert binary data to numpy array
         try:
             chunk_arr = bytesToArray(array_data, dt, chunk_shape)
@@ -245,6 +250,7 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr,
 
     log.info(f"chunk_arr shape: {chunk_arr.shape}")
     log.info(f"data_sel: {data_sel}")
+    log.info(f"np_arr shape: {np_arr.shape}")
 
     np_arr[data_sel] = chunk_arr
 
@@ -837,10 +843,19 @@ async def doPutQuery(request, query_update, dset_json):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
-    slices = []
-    dim_slice = getSliceQueryParam(request, 0, dims[0])
-    slices.append(dim_slice)
-    msg = f"doPutQuery - got dim_slice: {dim_slice}, type: {type(dim_slice)}"
+    if "select" in params:
+        select = params["select"]
+    else:
+        select = None
+    try:
+        slices = getSelectionList(select, dims)
+    except ValueError as ve:
+        msg = str(ve)
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+     
+
+    msg = f"doPutQuery - got dim_slice: {slices[0]}"
     log.info(msg)
 
     layout = getChunkLayout(dset_json)
@@ -1165,11 +1180,25 @@ async def PUT_Value(request):
         np_shape = tuple(np_shape)
 
     elif points is None:
-        for dim in range(rank):
-            # if the selection region is invalid here, it's really invalid
-            kwargs = {"body": body_json}
-            dim_slice = getSliceQueryParam(request, dim, dims[dim], **kwargs)
-            slices.append(dim_slice)
+        if body_json and "start" in body_json and "stop" in body_json:
+            try:
+                slices = getSelectionList(body_json, dims)
+            except ValueError as ve:
+                msg = str(ve)
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+        else:
+            if "select" in params:
+                select = params["select"]
+            else:
+                select = None  # will get slices for entire datashape
+            try:
+                slices = getSelectionList(select, dims)
+            except ValueError as ve:
+                msg = str(ve)
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+
         # The selection parameters will determine expected put value shape
         log.debug(f"PUT Value selection: {slices}")
         # not point selection, get hyperslab selection shape
@@ -1487,14 +1516,15 @@ async def GET_Value(request):
 
     slices = None  # selection for read
 
-    # Get query parameter for selection
-    if isExtensible:
-        slices = []
+    # Get query parameter for selection 
+    if "select" in params:
+        select = params["select"]
+    else:
+        select = None
+    if isExtensible and select:
         try:
-            for dim in range(rank):
-                dim_slice = getSliceQueryParam(request, dim, dims[dim])
-                slices.append(dim_slice)
-        except HTTPBadRequest:
+            slices = getSelectionList(select, dims)
+        except ValueError:
             # exception might be due to us having stale version of dims,
             # so use refresh
             kwargs = {"bucket": bucket, "refresh": True}
@@ -1503,12 +1533,13 @@ async def GET_Value(request):
             slices = None  # retry below
 
     if slices is None:
-        slices = []
-        for dim in range(rank):
-            dim_slice = getSliceQueryParam(request, dim, dims[dim])
-            slices.append(dim_slice)
+        try:
+            slices = getSelectionList(select, dims)
+        except ValueError as ve:
+            msg = str(ve)
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
 
-    slices = tuple(slices)
     log.debug(f"GET Value selection: {slices}")
 
     np_shape = getSelectionShape(slices)

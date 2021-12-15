@@ -297,37 +297,50 @@ def getNumChunks(selection, layout):
     # do a quick check that we don't have a null selection space'
     # TBD: this needs to be revise to do the right think with stride > 1
     for s in selection:
-        if s.stop <= s.start:
-            log.debug("null selection")
-            return 0
+        if isinstance(s,slice):
+            if s.stop <= s.start:
+                log.debug("null selection")
+                return 0
+        else:
+            # coordinate list
+            if len(s) == 0:
+                return 0
     num_chunks = 1
     for i in range(len(selection)):
         s = selection[i]
-
-        if s.step > 1:
-            num_points = frac((s.stop-s.start), s.step)
-            w = num_points * s.step - (s.step - 1)
-        else:
-            w = s.stop - s.start  # selection width (>0)
-
         c = layout[i]   # chunk size
+        if isinstance(s, slice):
+            if s.step > 1:
+                num_points = frac((s.stop-s.start), s.step)
+                w = num_points * s.step - (s.step - 1)
+            else:
+                w = s.stop - s.start  # selection width (>0)
 
-        lc = frac(s.start, c) * c
+            lc = frac(s.start, c) * c
 
-        if s.start + w <= lc:
-            # looks like just we cross just one chunk along this deminsion
-            continue
+            if s.start + w <= lc:
+                # looks like we just cross one chunk along this dimension
+                continue
 
-        rc = ((s.start + w) // c) * c
-        m = rc - lc
-        if c > s.step:
-            count = m // c
+            rc = ((s.start + w) // c) * c
+            m = rc - lc
+            if c > s.step:
+                count = m // c
+            else:
+                count = m // s.step
+            if s.start < lc:
+                count += 1  # hit one chunk on the left
+            if s.start + w > rc:
+                count += 1  # hit one chunk on the right
         else:
-            count = m // s.step
-        if s.start < lc:
-            count += 1  # hit one chunk on the left
-        if s.start + w > rc:
-            count += 1  # hit one chunk on the right
+            # coordinate list
+            last_chunk = None
+            count = 0
+            for x in s:
+                this_chunk = x // c
+                if this_chunk != last_chunk:
+                    count += 1
+                    last_chunk = this_chunk
 
         num_chunks *= count
     return num_chunks
@@ -452,19 +465,19 @@ def getChunkIds(dset_id, selection, layout, dim=0,
     if prefix is None:
         # construct a prefix using "c-" with the uuid of the dset_id
         if not dset_id.startswith("d-"):
-            msg = "Bad Request: invalid dset id: {}".format(dset_id)
+            msg = f"Bad Request: invalid dset id: {dset_id}"
             log.warning(msg)
             raise ValueError(msg)
         prefix = "c-" + dset_id[2:] + '_'
     rank = len(selection)
     if chunk_ids is None:
         chunk_ids = []
-    log.debug(f"getChunkIds - selection: {selection}")
+    #log.debug(f"getChunkIds - selection: {selection}")
     s = selection[dim]
     c = layout[dim]
-    log.debug(f"getChunkIds - layout: {layout}")
+    #log.debug(f"getChunkIds - layout: {layout}")
 
-    if s.step > c:
+    if isinstance(s, slice) and s.step > c:
         # chunks may not be contiguous,  skip along the selection and add
         # whatever chunks we land in
         for i in range(s.start, s.stop, s.step):
@@ -479,7 +492,7 @@ def getChunkIds(dset_id, selection, layout, dim=0,
                 # recursive call
                 getChunkIds(dset_id, selection, layout, dim+1,
                             chunk_id, chunk_ids)
-    else:
+    elif isinstance(s, slice):
         # get a contiguous set of chunks along the selection
         if s.step > 1:
             num_points = frac((s.stop-s.start), s.step)
@@ -501,6 +514,23 @@ def getChunkIds(dset_id, selection, layout, dim=0,
                 # recursive call
                 getChunkIds(dset_id, selection, layout, dim+1,
                             chunk_id, chunk_ids)
+    else:
+        # coordinate list
+        last_chunk_index = None
+        for coord in s:
+            chunk_index = coord // c
+            if chunk_index != last_chunk_index:
+                chunk_id = prefix + str(chunk_index)
+                if dim + 1 == rank:
+                    # add the chunk id
+                    chunk_ids.append(chunk_id)
+                else:
+                    chunk_id += '_' # dimension seperator
+                    getChunkIds(dset_id, selection, layout, dim+1,
+                                 chunk_id, chunk_ids)
+                last_chunk_index = chunk_index
+
+
     # got the complete list, return it!
     return chunk_ids
 
@@ -534,6 +564,7 @@ def getChunkSelection(chunk_id, slices, layout):
     Return the intersection of the chunk with the given slices
     selection of the array.
     """
+    #print("getChunkSelection - chunk_id:", chunk_id, "slices:", slices)
     chunk_index = getChunkIndex(chunk_id)
     rank = len(layout)
     sel = []
@@ -541,23 +572,32 @@ def getChunkSelection(chunk_id, slices, layout):
         s = slices[dim]
         c = layout[dim]
         n = chunk_index[dim] * c
-        if s.start >= n + c:
-            return None  # null intersection
-        if s.stop < n:
-            return None  # null intersection
-        if s.stop > n + c:
-            stop = n + c
+        if isinstance(s, slice):
+            if s.start >= n + c:
+                return None  # null intersection
+            if s.stop < n:
+                return None  # null intersection
+            if s.stop > n + c:
+                stop = n + c
+            else:
+                stop = s.stop
+            w = n - s.start
+            if s.start < n:
+                start = frac(w, s.step) * s.step + s.start
+            else:
+                start = s.start
+            step = s.step
+            cs = slice(start, stop, step)
+            stop = slice_stop(cs)
+            sel.append(slice(start, stop, step))
         else:
-            stop = s.stop
-        w = n - s.start
-        if s.start < n:
-            start = frac(w, s.step) * s.step + s.start
-        else:
-            start = s.start
-        step = s.step
-        cs = slice(start, stop, step)
-        stop = slice_stop(cs)
-        sel.append(slice(start, stop, step))
+            # coord list
+            coords = [] 
+            for j in s:
+                if j >= n and j < n + c:
+                    coords.append(j)
+            sel.append(coords)
+
     return sel
 
 
@@ -573,18 +613,35 @@ def getChunkCoverage(chunk_id, slices, layout):
         s = chunk_sel[dim]
         w = layout[dim]
         offset = chunk_index[dim] * w
-        start = s.start - offset
-        if start < 0:
-            msg = "Unexpected chunk selection"
-            log.error(msg)
-            raise ValueError(msg)
-        stop = s.stop - offset
-        if stop > w:
-            msg = "Unexpected chunk selection"
-            log.error(msg)
-            raise ValueError(msg)
-        step = s.step
-        sel.append(slice(start, stop, step))
+
+        if isinstance(s, slice):
+            start = s.start - offset
+            if start < 0:
+                msg = "Unexpected chunk selection"
+                log.error(msg)
+                raise ValueError(msg)
+            stop = s.stop - offset
+            if stop > w:
+                msg = "Unexpected chunk selection"
+                log.error(msg)
+                raise ValueError(msg)
+            step = s.step
+            sel.append(slice(start, stop, step))
+        else:
+            coord = []
+            for j in s:
+                if j - offset < 0:
+                    msg = "Unexpected chunk selection"
+                    log.error(msg)
+                    raise ValueError(msg)
+                elif j - offset >= w:
+                    msg = "Unexpected chunk selection"
+                    log.error(msg)
+                    raise ValueError(msg)
+                coord.append(j - offset)
+            sel.append(tuple(coord))
+
+
     return sel
 
 
@@ -595,17 +652,36 @@ def getDataCoverage(chunk_id, slices, layout):
     chunk_sel = getChunkSelection(chunk_id, slices, layout)
     rank = len(layout)
     sel = []
+    #print(f'getDataCoverage - chunk_id: {chunk_id} slices: {slices} layout: {layout}')
     for dim in range(rank):
         c = chunk_sel[dim]
         s = slices[dim]
-        if c.step != s.step:
-            msg = "expecting step for chunk selection to be the "
-            msg += "same as data selection"
-            raise ValueError(msg)
-        start = (c.start - s.start) // s.step
-        stop = frac((c.stop - s.start), s.step)
-        step = 1
-        sel.append(slice(start, stop, step))
+        if isinstance(s, slice):
+            if c.step != s.step:
+                msg = "expecting step for chunk selection to be the "
+                msg += "same as data selection"
+                raise ValueError(msg)
+            start = (c.start - s.start) // s.step
+            stop = frac((c.stop - s.start), s.step)
+            step = 1
+            sel.append(slice(start, stop, step))
+        else:
+            # coordinate selection
+            if isinstance(c, slice):
+                msg = "expecting coordinate chunk selection for data "
+                msg += "coord selection"
+                raise ValueError(msg)
+            if len(c) < 1:
+                msg = "expected at least one chunk coordinate"
+                raise ValueError(msg)
+            start = 0
+            for i in range(len(s)):
+                if s[i] >= c[0]:
+                    break
+                start += 1
+            stop = start + len(c)
+            step = 1
+            sel.append(slice(start,stop,step))
 
     return tuple(sel)
 

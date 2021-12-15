@@ -252,18 +252,23 @@ def getSelectionShape(selection):
       [(3,7,1)] -> [4]
       [(3, 7, 3)] -> [1]
       [(44, 52, 1), (48,52,1)] -> [8, 4]
+      [[1,2,7]] ->
     """
     shape = []
     rank = len(selection)
     for i in range(rank):
         s = selection[i]
-        extent = 0
-        if s.stop > s.start:
-            extent = s.stop - s.start
-        if s.step > 1 and extent > 0:
-            extent = (extent // s.step)
-        if (s.stop - s.start) % s.step != 0:
-            extent += 1
+        if isinstance(s,slice):
+            extent = 0
+            if s.stop > s.start:
+                extent = s.stop - s.start
+            if s.step > 1 and extent > 0:
+                extent = (extent // s.step)
+            if (s.stop - s.start) % s.step != 0:
+                extent += 1
+        else:
+            # coordinate list
+            extent = len(s)
         shape.append(extent)
     return shape
 
@@ -312,136 +317,182 @@ def getQueryParameter(request, query_name, body=None, default=None):
             raise HTTPBadRequest(reason=msg)
     return val
 
-
-def getSliceQueryParam(request, dim, extent, body=None):
-    """
-    Helper method - return slice for dim based on query params
-
-    Query arg should be in the form: [<dim1>, <dim2>, ... , <dimn>]
-        brackets are optional for one dimensional arrays.
-         Each dimension, valid formats are:
-            single integer: n
-            start and end: n:m
-            start, end, and stride: n:m:s
-    """
-    # Get optional query parameters for given dim
-    log.debug("getSliceQueryParam: " + str(dim) + ", " + str(extent))
-    params = request.rel_url.query
-
-    start = 0
-    stop = extent
-    step = 1
-
-    if body and "start" in body:
-        # look for start params in body JSON
-        start_val = body["start"]
-        if isinstance(start_val, (list, tuple)):
-            if len(start_val) < dim:
-                msg = "Not enough dimensions supplied to body start key"
-                log.arn(msg)
-                raise HTTPBadRequest(reason=msg)
-            start = start_val[dim]
-        else:
-            start = start_val
-
-    if body and "stop" in body:
-        stop_val = body["stop"]
-        if isinstance(stop_val, (list, tuple)):
-            if len(stop_val) < dim:
-                msg = "Not enough dimensions supplied to body stop key"
-                log.arn(msg)
-                raise HTTPBadRequest(reason=msg)
-            stop = stop_val[dim]
-        else:
-            stop = stop_val
-    if body and "step" in body:
+def _getSelectionStringFromRequestBody(body):
+    """ Join start, stop, and (optionally) stop keys 
+         to create an equivalent selection string """
+    if "start" not in body:
+        raise KeyError("no start key")
+    start_val = body["start"]
+    if not isinstance(start_val, (list, tuple)):
+        start_val =  [start_val,]
+    rank = len(start_val)
+    if "stop" not in body:
+        raise KeyError("no stop key")
+    stop_val = body["stop"]
+    if not isinstance(stop_val, (list, tuple)):
+        stop_val = [stop_val,]
+    if len(stop_val) != rank:
+        raise ValueError("start and stop values have different ranks")
+    if "step" in body:
         step_val = body["step"]
-        if isinstance(step_val, (list, tuple)):
-            if len(step_val) < dim:
-                msg = "Not enough dimensions supplied to body step key"
-                log.arn(msg)
-                raise HTTPBadRequest(reason=msg)
-            step = step_val[dim]
-        else:
-            step = step_val
+        if not isinstance(step_val, (list, tuple)):
+            step_val = [step_val,]
+        if len(step_val) != rank:
+            raise ValueError("step values have differnt rank from start and stop selections")
+    else:
+        step_val = None
+    selection = []
+    selection.append('[')
+    for i in range(rank):
+        dim_sel = f"{start_val[i]}:{stop_val[i]}"
+        if step_val:
+            dim_sel += f":{step_val[i]}"
+        selection.append(dim_sel)
+        if i+1 < rank:
+            selection.append(',')
+    selection.append(']')
+    return "".join(selection)
 
-    if "select" in params:
-        query = params["select"]
-        log.debug("select query value:" + query)
-
-        if not query.startswith('['):
-            msg = "Bad Request: selection query missing start bracket"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        if not query.endswith(']'):
-            msg = "Bad Request: selection query missing end bracket"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-
-        # now strip out brackets
-        query = query[1:-1]
-
-        query_array = query.split(',')
-        if dim >= len(query_array):
-            msg = "Not enough dimensions supplied to query argument"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        dim_query = query_array[dim].strip()
-
-        if dim_query.find(':') < 0:
-            # just a number - return stop = start + 1 for this value
-            try:
-                start = int(dim_query)
-            except ValueError:
-                msg = "Bad Request: invalid selection parameter "
-                msg += f"(can't convert to int) for dimension: {dim}"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-            stop = start + 1
-        elif dim_query == ':':
-            # select everything
+def _getSelectElements(select):
+    """ helper method - return array of queries for each 
+       dimension """
+    select = select[1:-1] # strip brackets
+    query_array = []
+    dim_query = []
+    coord_list = False
+    for ch in select:
+        if ch.isspace():
+            # ignore
             pass
+        elif ch == ',':
+            if coord_list:
+                dim_query.append(ch)
+            else:
+                if len(dim_query) == 0:
+                    # empty dimension
+                    raise ValueError("invalid query")
+                query_array.append("".join(dim_query))
+                dim_query = [] # reset
+        elif ch == '[':
+            if coord_list:
+                # can't have nested coordinates
+                raise ValueError("invalid query")
+            coord_list = True
+            dim_query.append(ch)
+        elif ch == ']':
+            if not coord_list:
+                # close bracket with no open
+                raise ValueError("invalid query")
+            dim_query.append(ch)
+            coord_list = False
+        elif ch == ':':
+            if coord_list:
+                # range not allowed in coord list
+                raise ValueError("invalid query")
+            dim_query.append(ch)
         else:
-            fields = dim_query.split(":")
-            log.debug("got fields: {}".format(fields))
-            if len(fields) > 3:
-                msg = "Bad Request: Too many ':' seperators for "
-                msg += f"dimension: {dim}"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-            try:
-                if fields[0]:
+            dim_query.append(ch)
+    if not dim_query:
+        #empty dimension
+        raise ValueError("invalid query")
+    query_array.append("".join(dim_query))
+    
+    return query_array
+
+
+def getSelectionList(select, dims):
+    """ Return tuple of slices and/or coordinate list for the given selection """
+    select_list = []
+
+    if select is None or len(select) == 0:
+        """ Return set of slices covering data space"""
+        slices = []
+        for extent in dims:
+            s = slice(0, extent, 1)
+            slices.append(s)
+        return tuple(slices)
+
+    if isinstance(select, dict):
+        select = _getSelectionStringFromRequestBody(select)
+        
+    # convert selection to list by dimension
+    elements = _getSelectElements(select)
+    rank = len(elements)
+    if len(dims) != rank:
+        raise ValueError("invalid rank for selection")
+    for dim in range(rank):
+        extent = dims[dim]
+        element = elements[dim]
+        if element.startswith('['):
+            # list of coordinates
+            fields = element[1:-1].split(',')
+            coords = []
+            last_coord = None
+            for field in fields:
+                try:
+                    coord = int(field)
+                except ValueError:
+                    raise ValueError(f"Invalid coordinate for dim {dim}")
+                if coord < 0 or coord >= extent:
+                    raise ValueError(f"out of range coordinate for dim {dim}, {coord} not in range: 0-{extent-1} ")
+                if last_coord != None and coord <= last_coord:
+                    raise ValueError("coordinates must be increasing")
+                last_coord = coord
+                coords.append(coord)
+            select_list.append(coords)
+        elif element == ":":
+            s = slice(0, extent, 1)
+            select_list.append(s)
+        elif element.find(':') >= 0:
+            fields = element.split(':')
+            if len(fields) not in (2,3):
+                raise ValueError(f"Invalid selection format for dim {dim}")
+            if len(fields[0]) == 0:
+                start = 0
+            else:
+                try:
                     start = int(fields[0])
-                if fields[1]:
+                except ValueError:
+                    raise ValueError(f"Invalid selection - start value for dim {dim}")
+                if start < 0 or start >= extent:
+                    raise ValueError(f"Invalid selection - start value out of range for dim {dim}")
+            if len(fields[1]) == 0:
+                stop = extent
+            else:
+                try:
                     stop = int(fields[1])
-                if len(fields) > 2 and fields[2]:
-                    step = int(fields[2])
+                except ValueError:
+                    raise ValueError(f"Invalid selection - stop value for dim {dim}")
+                if stop < 0 or stop > extent or stop <= start:
+                    raise ValueError(f"Invalid selection - stop value out of range for dim {dim}")
+            if len(fields) == 3:
+                # get step value
+                if len(fields[2]) == 0:
+                    step = 1
+                else:
+                    try:
+                        step = int(fields[2])
+                    except ValueError:
+                        raise ValueError(f"Invalid selection - step value for dim {dim}")
+                    if step <= 0:
+                        raise ValueError(f"Invalid selection - step value out of range for dim {dim}")
+            else:
+                step = 1
+            s = slice(start, stop, step)
+            select_list.append(s)
+        else:
+            # expect single coordinate value
+            try:
+                index = int(element)
             except ValueError:
-                msg = "Bad Request: invalid selection parameter "
-                msg += f"(can't convert to int) for dimension: {dim}"
-                log.info(msg)
-                raise HTTPBadRequest(reason=msg)
-    log.debug("start: {}, stop: {}, step: {}".format(start, stop, step))
-    # now, validate whaterver start/stop/step values we got
-    if start < 0 or start > extent:
-        msg = "Bad Request: Invalid selection start parameter "
-        msg += f"for dimension: {dim}"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    if stop > extent:
-        msg = "Bad Request: Invalid selection stop parameter for "
-        msg += f"dimension: {dim}"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    if step <= 0:
-        msg = "Bad Request: invalid selection step parameter for "
-        msg += f"dimension: {dim}"
-        log.debug(msg)
-        raise HTTPBadRequest(reason=msg)
-    s = slice(start, stop, step)
-    msg = f"dim query[{dim}] returning: start:{start} stop:{stop} step:{step}"
-    log.debug(msg)
-    return s
+                raise ValueError(f"Invalid selection - index value for dim {dim}")
+            if index < 0 or index >= extent:
+                raise ValueError(f"Invalid selection - index value out of range for dim {dim}")
+            
+            s = slice(index, index+1, 1)
+            select_list.append(s)
+    # end dimension loop
+    return tuple(select_list) 
 
 
 def setSliceQueryParam(params, sel):
@@ -461,16 +512,26 @@ def setSliceQueryParam(params, sel):
         sel_param = "["
         for i in range(rank):
             s = sel[i]
-            sel_param += str(s.start)
-            sel_param += ':'
-            sel_param += str(s.stop)
-            if s.step > 1:
+            if isinstance(s, slice):
+                sel_param += str(s.start)
                 sel_param += ':'
-                sel_param += str(s.step)
+                sel_param += str(s.stop)
+                if s.step > 1:
+                    sel_param += ':'
+                    sel_param += str(s.step)
+            else:
+                # coord selection
+                sel_param += '['
+                count = len(s)
+                for j in range(count):
+                    sel_param += str(s[j])
+                    if j < count - 1:
+                        sel_param += ','
+                sel_param += ']'
             if i < rank - 1:
                 sel_param += ','
         sel_param += ']'
-        log.debug("select query param: {}".format(sel_param))
+        log.debug(f"select query param: {sel_param}")
         params["select"] = sel_param
 
 
