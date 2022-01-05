@@ -1020,7 +1020,10 @@ class DatasetTest(unittest.TestCase):
             self.assertTrue('class' in filter)
             self.assertTrue('id' in filter)
             self.assertTrue('name' in filter)
-            self.assertEqual(filter['name'], compressor)
+            if compressor == "deflate":
+                self.assertTrue(filter['name'] in ("deflate", "gzip"))
+            else:
+                self.assertEqual(filter['name'], compressor)
              
     def testCompressionFilterOptionDataset(self):
         # test Dataset with creation property list
@@ -1078,6 +1081,33 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue('name' in filter)
         self.assertEqual(filter['name'], 'lz4')
 
+    def testInvalidCompressionFilter(self):
+        # test invalid compressor fails at dataset creation time
+        # test Dataset with creation property list
+        domain = self.base_domain + "/testCompressionFilter.h5"
+        helper.setupDomain(domain)
+
+        print("testInvalidCompressionFilter", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        # get domain
+        req = helper.getEndpoint() + '/'
+        rsp = self.session.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        bad_compressors = ("shrink-o-rama", "scaleoffet")
+        for compressor_name in bad_compressors:
+            # create the dataset
+            req = self.endpoint + "/datasets"
+            compressor =  {'class': 'H5Z_FILTER_USER', 'name': compressor_name, 'level': 5}
+
+            payload = {'type': 'H5T_IEEE_F32LE', 'shape': [40, 80]}
+            payload['creationProperties'] = { 'filters': [compressor,] }
+            req = self.endpoint + "/datasets"
+            rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+            self.assertEqual(rsp.status_code, 400)  # create dataset
+        
 
     def testInvalidFillValue(self):
         # test Dataset with simple type and fill value that is incompatible with the type

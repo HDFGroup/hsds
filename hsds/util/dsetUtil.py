@@ -77,6 +77,8 @@ def getFilterItem(key):
     """
     Return filter code, id, and name, based on an id, a name or a code.
     """
+    if key == "deflate":
+        key = "gzip"  # use gzip as equivalent
     for item in FILTER_DEFS:
         for i in range(3):
             if key == item[i]:

@@ -28,6 +28,7 @@ from .util.authUtil import getUserPasswordFromRequest, aclCheck
 from .util.authUtil import validateUserPassword
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain, getPathForDomain, verifyRoot
+from .util.storUtil import getFilters
 from .util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson
 from .util.hdf5dtype import getItemSize
 from .servicenode_lib import getDomainJson, getObjectJson, getPathForObjectId
@@ -1047,6 +1048,9 @@ async def POST_Dataset(request):
             # refer to https://hdf5-json.readthedocs.io/en/latest/bnf/\
             # filters.html#grammar-token-filter_list
             f_in = creationProperties["filters"]
+            supported_filters = getFilters(include_compressors=True)
+            log.debug(f"supported_compressors: {supported_filters}")
+
             log.debug(f"filters provided in creationProperties: {f_in}")
 
             if not isinstance(f_in, list):
@@ -1060,6 +1064,11 @@ async def POST_Dataset(request):
                     item = getFilterItem(filter)
                     if not item:
                         msg = f"filter {filter} not recognized"
+                        log.warn(msg)
+                        raise HTTPBadRequest(reason=msg)
+                    
+                    if item['name'] not in supported_filters:
+                        msg = f"filter {filter} is not supported"
                         log.warn(msg)
                         raise HTTPBadRequest(reason=msg)
                     f_out.append(item)
@@ -1089,6 +1098,11 @@ async def POST_Dataset(request):
                         raise HTTPBadRequest(reason=msg)
                     if "name" not in filter:
                         filter["name"] = item["name"]
+                    if filter["name"] not in supported_filters:
+                        msg = f"filter {filter} is not supported"
+                        log.warn(msg)
+                        raise HTTPBadRequest(reason=msg)
+
                     f_out.append(filter)
                 else:
                     msg = f"Unexpected type for filter: {filter}"
