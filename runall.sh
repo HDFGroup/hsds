@@ -35,7 +35,6 @@ fi
 
 if [[ $# -gt 0 ]] ; then
   if [[ $1 == "--no-docker" ]] ; then
-    [[ -z $LOG_DIR ]] && echo "need to set LOG_DIR environment variable"  && exit 1
     export NO_DOCKER=1
 
     if [[ $# -gt 1 ]] ; then
@@ -61,8 +60,9 @@ if [[ -z $SN_CORES ]] ; then
   export SN_CORES=1
 fi
 
-CONFIG_FILE="admin/config/config.yml"
-OVERRIDE_FILE="admin/config/override.yml"
+CONFIG_DIR="admin/config"
+CONFIG_FILE="${CONFIG_DIR}/config.yml"
+OVERRIDE_FILE="${CONFIG_DIR}/override.yml"
 
 # get config values
 config_value "LOG_LEVEL" && export LOG_LEVEL=$rv
@@ -87,17 +87,17 @@ config_value "RANGEGET_PORT" && export RANGEGET_PORT=$rv
 config_value "RANGEGET_RAM" && export RANGEGET_RAM=$rv
 
 if [[ ${NO_DOCKER} ]]; then
-   # setup extra envs needed when not using docker
-    export TARGET_SN_COUNT=$SN_CORES
-    export TARGET_DN_COUNT=$DN_CORES
-    export HEAD_ENDPOINT=http://localhost:5100
-    export PYTHONUNBUFFERED="1"
-    [[ -z ${SN_PORT} ]] && export SN_PORT=80
-    [[ -z ${PASSWORD_FILE} ]] && export PASSWORD_FILE=${PWD}/admin/config/passwd.txt
-    [[ -z ${CONFIG_DIR} ]] && export CONFIG_DIR=${PWD}/admin/config/
-    # TBD - this script needs updating to run multiple SN, DN nodes
-    export SN_CORES=1
-    export DN_CORES=1
+  # setup extra envs needed when not using docker
+  export PYTHONUNBUFFERED="1"
+  if [[ -z ${SOCKET_DIR} ]] ; then
+    # this is the directory that will be used for socket file and log files
+    export SOCKET_DIR=/tmp/hs
+  fi
+  if [[ ! -d ${SOCKET_DIR} ]]; then
+    echo "creating directory ${SOCKET_DIR}"
+    mkdir ${SOCKET_DIR}
+  fi
+  echo "no_docker option - using socket directory: ${SOCKET_DIR}"
 else
     # check that docker-compose is available
     docker-compose --version >/dev/null || exit 1
@@ -105,7 +105,6 @@ else
       export COMPOSE_PROJECT_NAME=hsds  # use "hsds_" as prefix for container names
     fi
 fi
-
 
 [[ -z ${BUCKET_NAME} ]] && echo "No default bucket set - did you mean to export BUCKET_NAME?"
 
@@ -133,7 +132,6 @@ else
       mkdir ${ROOT_DIR}/${BUCKET_NAME}
   fi
 fi
- 
 
 if [[ -z ${PUBLIC_DNS} ]] ; then
   if [[ ${HSDS_ENDPOINT} == "https://"* ]] ; then
@@ -158,14 +156,8 @@ fi
 
 if [[ $NO_DOCKER ]] ; then
   echo "no docker startup"
-  echo "starting head node"
-  hsds-headnode >${LOG_DIR}/head.log 2>&1 &
-  sleep 1
-  echo "starting service node"
-  hsds-servicenode >${LOG_DIR}/sn.log 2>&1 &
-  sleep 1
-  echo "starting data node"
-  hsds-datanode >${LOG_DIR}/dn.log 2>&1 &
+  hsds --root_dir ${ROOT_DIR} --logfile hs.log  --socket_dir ${SOCKET_DIR} --loglevel ${LOG_LEVEL} --config_dir=${CONFIG_DIR} --count=${DN_CORES}
+  # this will run until server is killed by ^C
 else
   if [[ $# -eq 1 ]] && [[ $1 == "--stop" ]]; then
     # use the compose file to shutdown the sevice
@@ -176,24 +168,24 @@ else
     echo "Running docker-compose -f ${COMPOSE_FILE} up"
     docker-compose -f ${COMPOSE_FILE} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}
   fi
-fi
 
-# wait for the server to be ready
-for i in {1..120}
-do
-  STATUS_CODE=`curl -s -o /dev/null -w "%{http_code}" http://localhost:${SN_PORT}/about`
-  if [[ $STATUS_CODE == "200" ]]; then
-    echo "service ready!"
-    break
-  else
-    echo "${i}: waiting for server startup (status: ${STATUS_CODE}) "
-    sleep 1
+  # wait for the server to be ready
+  for i in {1..120}
+  do
+    STATUS_CODE=`curl -s -o /dev/null -w "%{http_code}" http://localhost:${SN_PORT}/about`
+    if [[ $STATUS_CODE == "200" ]]; then
+      echo "service ready!"
+      break
+    else
+      echo "${i}: waiting for server startup (status: ${STATUS_CODE}) "
+      sleep 1
+    fi
+  done
+
+  if [[ $STATUS_CODE != "200" ]]; then
+    echo "service failed to start"
+    echo "SN_1 logs:"
+    docker logs --tail 100 hsds_sn_1
+    exit 1
   fi
-done
-
-if [[ $STATUS_CODE != "200" ]]; then
-  echo "service failed to start"
-  echo "SN_1 logs:"
-  docker logs --tail 100 hsds_sn_1
-  exit 1
 fi

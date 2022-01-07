@@ -62,6 +62,11 @@ def _load_cfg():
     config_dirs = []
     # check if there is a command line option for config directory
     config_dir = getCmdLineArg("config-dir")
+    # check cmdLineArg with underline
+    if not config_dir:
+        config_dir = getCmdLineArg("config_dir")
+    print("got config_dir:", config_dir)
+
     if config_dir:
         config_dirs.append(config_dir)
     if not config_dirs and "CONFIG_DIR" in os.environ:
@@ -97,8 +102,11 @@ def _load_cfg():
     yml_override = None
     if "CONFIG_OVERRIDE_PATH" in os.environ:
         override_yml_filepath = os.environ["CONFIG_OVERRIDE_PATH"]
+    elif config_dir and os.path.isfile(os.path.join(config_dir, "override.yml")):
+        override_yml_filepath = os.path.join(config_dir, "override.yml")
     else:
         override_yml_filepath = "/config/override.yml"
+    print("override file path:", override_yml_filepath)
     if os.path.isfile(override_yml_filepath):
         debug(f"loading override configuation: {override_yml_filepath}")
         try:
