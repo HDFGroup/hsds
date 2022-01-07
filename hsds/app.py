@@ -142,6 +142,8 @@ def main():
                         default='')
     parser.add_argument('--hs_password', type=str,  dest='hs_password',
                         help="password for hs_username", default='')
+    parser.add_argument('--password_file', type=str, dest='password_file',
+                        help="location of hsds password file",  default='')
 
     parser.add_argument('--logfile', default='',
                         type=str, dest='logfile',
@@ -188,34 +190,33 @@ def main():
 
     print("set logging to:", log_level)
     logging.basicConfig(level=log_level)
-    
-
-
 
     userConfig = UserConfig()
 
     # set username based on command line, .hscfg, $USER, or $JUPYTERHUB_USER
     if args.hs_username:
+        username = args.hs_username
+    elif "HS_USERNAME" in userConfig:
         username = userConfig["HS_USERNAME"]
     else:
-        username = userConfig["HS_USERNAME"]
-    if not username:
-        if "USER" in os.environ:
-            username = os.environ["USER"]
-        elif "JUPYTERHUB_USER" in os.environ:
-            username = os.environ["JUPYTERHUB_USER"]
-        else:
-            username = "hs_user"
-    kwargs["username"] = username
+        username = None
 
     # get password based on command line or .hscfg
     if args.hs_password:
         password = args.hs_password
-    else:
+    elif "HS_PASSWORD" in userConfig:
         password = userConfig["HS_PASSWORD"]
-    if not password:
+    else:
         password = "1234"
-    kwargs["password"] = password
+
+    if username:
+        kwargs["username"] = username
+        kwargs["password"] = password
+
+    if args.password_file:
+        if not os.path.isfile(args.password_file):
+            sys.exit(f"password file: {args.password_file} not found")
+        kwargs["password_file"] = args.password_file
 
     # choose a tmp directory for socket if one is not provided
     if args.socket_dir:

@@ -98,6 +98,13 @@ if [[ ${NO_DOCKER} ]]; then
     mkdir ${SOCKET_DIR}
   fi
   echo "no_docker option - using socket directory: ${SOCKET_DIR}"
+  if [[ -f "admin/config/passwd.txt" ]]; then
+     export PASSWORD_FILE="admin/config/passwd.txt"
+  else
+     export PASSWORD_FILE="admin/config/passwd.default"
+  fi
+  echo "using password file: ${PASSWORD_FILE}"
+     
 else
     # check that docker-compose is available
     docker-compose --version >/dev/null || exit 1
@@ -156,7 +163,7 @@ fi
 
 if [[ $NO_DOCKER ]] ; then
   echo "no docker startup"
-  hsds --root_dir ${ROOT_DIR} --logfile hs.log  --socket_dir ${SOCKET_DIR} --loglevel ${LOG_LEVEL} --config_dir=${CONFIG_DIR} --count=${DN_CORES}
+  hsds --root_dir ${ROOT_DIR} --password_file ${PASSWORD_FILE} --logfile hs.log  --socket_dir ${SOCKET_DIR} --loglevel ${LOG_LEVEL} --config_dir=${CONFIG_DIR} --count=${DN_CORES}
   # this will run until server is killed by ^C
 else
   if [[ $# -eq 1 ]] && [[ $1 == "--stop" ]]; then

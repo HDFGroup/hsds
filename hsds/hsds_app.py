@@ -40,7 +40,7 @@ class HsdsApp:
     Class to initiate and manage sub-process HSDS service
     """
 
-    def __init__(self, username=None, password=None, logger=None, log_level=None, dn_count=1, logfile=None, socket_dir=None, config_dir=None):
+    def __init__(self, username=None, password=None, password_file=None, logger=None, log_level=None, dn_count=1, logfile=None, socket_dir=None, config_dir=None):
         """
         Initializer for class
         """
@@ -67,6 +67,7 @@ class HsdsApp:
         self._dn_count = dn_count
         self._username = username
         self._password = password
+        self._password_file = password_file
         self._logfile = logfile
         self._loglevel = log_level
         self._ready = False
@@ -177,7 +178,6 @@ class HsdsApp:
         common_args.append(f"--rangeget_url={self._rangeget_url}")
         common_args.append(f"--hsds_endpoint={self._endpoint}")
         #common_args.append("--server_name=Direct Connect (HSDS)")
-        common_args.append("--password_file=")
         common_args.append("--use_socket")
         if self._config_dir:
             common_args.append(f"--config-dir={self._config_dir}")
@@ -196,6 +196,9 @@ class HsdsApp:
                     pargs.append(f"--hs_username={self._username}")
                 if self._password:
                     pargs.append(f"--hs_password={self._password}")
+                if self._password_file:
+                    pargs.append(f"--password_file={self._password_file}")
+                    print("password_file:", self._password_file)
                 pargs.append(f"--sn_url={self._endpoint}")
                 pargs.append("--logfile=sn1.log")
             elif i == 1:
