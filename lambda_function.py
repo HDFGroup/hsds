@@ -1,6 +1,7 @@
  
 import multiprocessing
 import os 
+import json
 import time
 import requests_unixsocket
 
@@ -197,7 +198,6 @@ def lambda_handler(event, context):
             print("READY! use endpoint:", hsds.endpoint)
 
     result = invoke(hsds, method, req, params=params, headers=headers, body=body)
-    print(f"got result: {result}")
     hsds.check_processes()
     hsds.stop()
     return result
