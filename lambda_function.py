@@ -1,6 +1,11 @@
  
 import multiprocessing
 import os 
+import requests_unixsocket
+
+
+from hsds.hsds_app import HsdsApp
+
 
 # note: see https://aws.amazon.com/blogs/compute/parallel-processing-in-python-with-aws-lambda/
 
@@ -52,6 +57,49 @@ def getEventBody(event):
     if "body" in event:
         body = event["body"]
     return body
+
+def invoke(hsds, method, path, params=None, headers=None, body=None):
+        # invoke given request
+        req = hsds.endpoint + path
+        print(f"make_request: {req}")
+        result = {}
+        with requests_unixsocket.Session() as s:
+            try:
+                if method == "GET":
+                    rsp = s.get(req, params=params, headers=headers)
+                elif method == "POST":
+                    rsp = s.post(req, params=params, headers=headers, data=body)
+                elif method == "PUT":
+                    rsp = s.put(req, params=params, headers=headers, data=body)
+                elif method == "DELETE":
+                    rsp = s.delete(req, params=params, headers=headers)
+                else:
+                    msg = f"Unexpected request method: {method}"
+                    print(msg)
+                    raise ValueError(msg)
+
+                print(f"got status_code: {rsp.status_code} from req: {req}")
+
+                # TBD - return dataset data in base64
+                result["isBase64Encoded"] = False
+                result["statusCode"] = rsp.status_code
+                # convert case-insisitive headers to dict
+                result["headers"] =  json.dumps(dict(rsp.headers))
+            
+                #print_process_output(processes)
+                if rsp.status_code == 200:
+                    print(f"rsp.text: {rsp.text}")
+                    result["body"] = rsp.text
+                else:
+                    result["body"] = "{}" 
+
+            except Exception as e:
+                print(f"got exception: {e}, quitting")
+            except KeyboardInterrupt:
+                print("got KeyboardInterrupt, quitting")
+            finally:
+                print("request done")  
+        return result 
 
 
 def lambda_handler(event, context):
@@ -134,7 +182,7 @@ def lambda_handler(event, context):
     hsds = HsdsApp(username=function_name, password="lambda", dn_count=target_dn_count, readonly=readonly)
     hsds.run()
 
-    result = hsds.invoke(method, req, params=params, headers=headers, body=body)
+    result = invoke(hsds, method, req, params=params, headers=headers, body=body)
     print(f"got result: {result}")
     hsds.check_processes()
     hsds.stop()

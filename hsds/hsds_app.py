@@ -40,7 +40,10 @@ class HsdsApp:
     Class to initiate and manage sub-process HSDS service
     """
 
-    def __init__(self, username=None, password=None, password_file=None, logger=None, log_level=None, dn_count=1, logfile=None, socket_dir=None, config_dir=None):
+    def __init__(self, username=None, 
+                password=None, password_file=None, logger=None, 
+                log_level=None, dn_count=1, logfile=None, 
+                socket_dir=None, config_dir=None, readonly=False):
         """
         Initializer for class
         """
@@ -70,6 +73,7 @@ class HsdsApp:
         self._password_file = password_file
         self._logfile = logfile
         self._loglevel = log_level
+        self._readonly = readonly
         self._ready = False
         self._config_dir = config_dir
 
@@ -177,8 +181,10 @@ class HsdsApp:
         common_args.append(f"--dn_urls={dn_urls_arg}")
         common_args.append(f"--rangeget_url={self._rangeget_url}")
         common_args.append(f"--hsds_endpoint={self._endpoint}")
-        #common_args.append("--server_name=Direct Connect (HSDS)")
+        common_args.append("--server_name=Direct Connect (HSDS)")
         common_args.append("--use_socket")
+        if self._readonly:
+            common_args.append("--readonly")
         if self._config_dir:
             common_args.append(f"--config-dir={self._config_dir}")
         if self._loglevel:
