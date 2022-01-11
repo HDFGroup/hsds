@@ -30,6 +30,10 @@ config_value() {
 # script to startup hsds service
 if [[ $# -eq 1 ]] && ([[ $1 == "-h" ]] || [[ $1 == "--help" ]]); then
    echo "Usage: runall.sh [--no-docker] [--stop] [--config] [count] "
+   echo "  --no-docker: run server as set of processes rather than Docker containers"
+   echo "  --stop: shutdown the server (Docker only)"
+   echo "  --config: view config options"
+   echo "  count: set number of DN processes/containers (default is 4)"
    exit 1
 fi
 
@@ -52,7 +56,7 @@ fi
 if [[ ${CORES} ]] ; then
   export DN_CORES=${CORES}
 else
-  export DN_CORES=1
+  export DN_CORES=4
 fi
 
 if [[ -z $SN_CORES ]] ; then
@@ -65,6 +69,10 @@ CONFIG_FILE="${CONFIG_DIR}/config.yml"
 OVERRIDE_FILE="${CONFIG_DIR}/override.yml"
 
 # get config values
+if [[ ${PRINT_CONFIG} ]]; then
+   echo "Config values.."
+   echo "  Modify by setting corresponding environment variable or setting in admin/config/override.yml"
+fi
 config_value "LOG_LEVEL" && export LOG_LEVEL=$rv
 config_value "AWS_S3_GATEWAY" && export AWS_S3_GATEWAY=$rv
 config_value "AWS_IAM_ROLE" && export AWS_IAM_ROLE=$rv
@@ -72,6 +80,7 @@ config_value "AWS_ACCESS_KEY_ID" && export AWS_ACCESS_KEY_ID=$rv
 config_value "AWS_SECRET_ACCESS_KEY" && export AWS_SECRET_ACCESS_KEY=$rv
 config_value "AWS_REGION" && export AWS_REGION=$rv
 config_value "AZURE_CONNECTION_STRING" && export AZURE_CONNECTION_STRING=$rv
+config_value "SOCKET_DIR" && export SOCKET_DIR=$rv
 config_value "ROOT_DIR" && export ROOT_DIR=$rv
 config_value "BUCKET_NAME" && export BUCKET_NAME=$rv
 config_value "HSDS_ENDPOINT" && export HSDS_ENDPOINT=$rv
@@ -97,7 +106,7 @@ if [[ ${NO_DOCKER} ]]; then
     echo "creating directory ${SOCKET_DIR}"
     mkdir ${SOCKET_DIR}
   fi
-  echo "no_docker option - using socket directory: ${SOCKET_DIR}"
+  echo "--no_docker option specified - using directory: ${SOCKET_DIR} for socket and log files"
   if [[ -f "admin/config/passwd.txt" ]]; then
      export PASSWORD_FILE="admin/config/passwd.txt"
   else
@@ -119,13 +128,13 @@ fi
 
 if [[ ${AWS_S3_GATEWAY} ]]; then
   COMPOSE_FILE="admin/docker/docker-compose.aws.yml"
-  echo "AWS_S3_GATEWAY set, using ${COMPOSE_FILE}"
+  echo "AWS_S3_GATEWAY set, using ${BUCKET_NAME} S3 Bucket (verify that this bucket exists)"
 elif [[ ${AZURE_CONNECTION_STRING} ]]; then
   COMPOSE_FILE="admin/docker/docker-compose.azure.yml"
-  echo "AZURE_CONNECTION_STRING set, using ${COMPOSE_FILE}"
+  echo "AZURE_CONNECTION_STRING set, using ${BUCKET_NAME} Azure Strorage Container (verify that the container exsits)"
 else 
   COMPOSE_FILE="admin/docker/docker-compose.posix.yml"
-  echo "no AWS or AZURE env set, using ${COMPOSE_FILE}"
+  echo "no AWS or AZURE env set, using POSIX strorage"
   if [[ -z ${ROOT_DIR} ]]; then
     export ROOT_DIR=$PWD/data
     echo "no ROOT_DIR env set, using $ROOT_DIR directory for storage"
