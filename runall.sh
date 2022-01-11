@@ -172,7 +172,17 @@ fi
 
 if [[ $NO_DOCKER ]] ; then
   echo "no docker startup"
-  hsds --root_dir ${ROOT_DIR} --password_file ${PASSWORD_FILE} --logfile hs.log  --socket_dir ${SOCKET_DIR} --loglevel ${LOG_LEVEL} --config_dir=${CONFIG_DIR} --count=${DN_CORES}
+  if [[ $AWS_S3_GATEWAY ]] || [[ $AZURE_CONNECTION_STRING ]]; then
+    if [[ $AWS_S3_GATEWAY ]]; then
+      echo "Using S3 Gateway"
+    else
+      echo "Using Azure connection string"
+    fi
+    hsds --bucket_name ${BUCKET_NAME} --password_file ${PASSWORD_FILE} --logfile hs.log  --socket_dir ${SOCKET_DIR} --loglevel ${LOG_LEVEL} --config_dir=${CONFIG_DIR} --count=${DN_CORES}
+  else
+    echo "Using posix storage: ${ROOT_DIR}"
+    hsds --root_dir ${ROOT_DIR} --password_file ${PASSWORD_FILE} --logfile hs.log  --socket_dir ${SOCKET_DIR} --loglevel ${LOG_LEVEL} --config_dir=${CONFIG_DIR} --count=${DN_CORES}
+  fi
   # this will run until server is killed by ^C
 else
   if [[ $# -eq 1 ]] && [[ $1 == "--stop" ]]; then
