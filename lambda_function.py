@@ -1,8 +1,8 @@
  
 import multiprocessing
 import os 
+import time
 import requests_unixsocket
-
 
 from hsds.hsds_app import HsdsApp
 
@@ -181,6 +181,20 @@ def lambda_handler(event, context):
     # instantiate hsdsapp object
     hsds = HsdsApp(username=function_name, password="lambda", dn_count=target_dn_count, readonly=readonly)
     hsds.run()
+
+    # wait for server to startup
+    waiting_on_ready = True
+
+    while waiting_on_ready:
+        try:
+            time.sleep(0.1)   
+            hsds.check_processes()
+        except Exception as e:
+            print(f"got exception: {e}")
+            break
+        if hsds.ready:
+            waiting_on_ready = False
+            print("READY! use endpoint:", hsds.endpoint)
 
     result = invoke(hsds, method, req, params=params, headers=headers, body=body)
     print(f"got result: {result}")
