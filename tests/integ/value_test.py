@@ -110,7 +110,6 @@ class ValueTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
-        print(rspJson["value"])
         self.assertEqual(rspJson["value"], [0,1,3,7])
 
         # read a selection

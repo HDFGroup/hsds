@@ -29,6 +29,7 @@ install_requires = [
     'aiobotocore',
     'aiohttp_cors',
     'aiofiles',
+    'botocore==1.23.24', # getting import error: 'is_valid_ipv6_endpoint_url' from 'botocore.endpoint' without this on lambda
     'chardet <= 3.0.4',
     'cryptography',
     'numcodecs',

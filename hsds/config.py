@@ -65,15 +65,15 @@ def _load_cfg():
     # check cmdLineArg with underline
     if not config_dir:
         config_dir = getCmdLineArg("config_dir")
-    print("got config_dir:", config_dir)
-
+    
     if config_dir:
         config_dirs.append(config_dir)
     if not config_dirs and "CONFIG_DIR" in os.environ:
         config_dirs.append(os.environ["CONFIG_DIR"])
         debug(f"got environment override for config-dir: {config_dirs[0]}")
     if not config_dirs:
-        config_dirs = [".", "/config", "/etc/hsds/"]  # default locations
+        debug("set default location for config dirs")
+        config_dirs = ["./", "/config", "/etc/hsds/"]  # default locations
     for config_dir in config_dirs:
         file_name = os.path.join(config_dir, "config.yml")
         debug("checking config path:", file_name)
@@ -88,6 +88,8 @@ def _load_cfg():
     if not yml_file:
         # use yaml file embedded in package
         package_dir = os.path.dirname(__file__)
+        debug("loading package config.yml with package_dir:", package_dir)
+
         yml_file = os.path.join(package_dir, "../config/config.yml")
     debug(f"_load_cfg with '{yml_file}'")
     try:
@@ -106,7 +108,7 @@ def _load_cfg():
         override_yml_filepath = os.path.join(config_dir, "override.yml")
     else:
         override_yml_filepath = "/config/override.yml"
-    print("override file path:", override_yml_filepath)
+    debug("override file path:", override_yml_filepath)
     if os.path.isfile(override_yml_filepath):
         debug(f"loading override configuation: {override_yml_filepath}")
         try:
