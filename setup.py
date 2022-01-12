@@ -22,15 +22,15 @@ classifiers = [
     'Topic :: Scientific/Engineering',
     ]
 
-
+# aiohttp == 3.8.1
+# aiobotocore==2.1.0
+# botocore==1.23.24
+# # 'botocore==1.23.24',  getting import error: 'is_valid_ipv6_endpoint_url' from 'botocore.endpoint' without this on lambda
 install_requires = [
-    # 'urllib3 <= 1.25.11',  # required by botocore
-    'aiohttp <= 3.7.5',
+    'aiohttp',
     'aiobotocore',
     'aiohttp_cors',
     'aiofiles',
-    'botocore==1.23.24', # getting import error: 'is_valid_ipv6_endpoint_url' from 'botocore.endpoint' without this on lambda
-    'chardet <= 3.0.4',
     'cryptography',
     'numcodecs',
     'numpy',
