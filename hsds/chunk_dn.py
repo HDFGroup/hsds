@@ -32,7 +32,7 @@ from .util.chunkUtil import chunkWritePoints, chunkReadPoints
 from .datanode_lib import get_metadata_obj, get_chunk, save_chunk
 
 from . import hsds_logger as log
-import config
+from . import config
 
 
 async def PUT_Chunk(request):
