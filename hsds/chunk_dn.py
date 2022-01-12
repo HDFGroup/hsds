@@ -32,6 +32,7 @@ from .util.chunkUtil import chunkWritePoints, chunkReadPoints
 from .datanode_lib import get_metadata_obj, get_chunk, save_chunk
 
 from . import hsds_logger as log
+import config
 
 
 async def PUT_Chunk(request):
@@ -198,7 +199,7 @@ async def PUT_Chunk(request):
 
         # chunk update successful
         resp = {}
-    if is_dirty:
+    if is_dirty or config.get("write_zero_chunks", default=False):
         save_chunk(app, chunk_id, dset_json, bucket=bucket)
         status_code = 201
     else:
