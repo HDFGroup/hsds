@@ -22,12 +22,7 @@ classifiers = [
     'Topic :: Scientific/Engineering',
     ]
 
-# aiohttp == 3.8.1
-# aiobotocore==2.1.0
-# botocore==1.23.24
-# # 'botocore==1.23.24',  getting import error: 'is_valid_ipv6_endpoint_url' from 'botocore.endpoint' without this on lambda
 install_requires = [
-    'aiohttp',
     'aiobotocore',
     'aiohttp_cors',
     'aiofiles',
@@ -39,7 +34,8 @@ install_requires = [
     'pytz',
     'pyyaml',
     'requests-unixsocket',
-    'simplejson'
+    'simplejson',
+    'aiohttp==3.7.4.post0'
     ]
 
 
