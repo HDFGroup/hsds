@@ -28,7 +28,7 @@ def _enqueue_output(out, queue, loglevel):
                 elif loglevel == logging.ERROR:
                     if level != "ERROR":
                         put_line = False
-
+        put_line = True
         if put_line:
             queue.put(line)
     logging.debug("enqueu_output close()")
@@ -119,7 +119,6 @@ class HsdsApp:
     def print_process_output(self):
         """ print any queue output from sub-processes
         """
-        # print("print_process_output")
         if self._logfile:
             f = open(self._logfile, "a")
         else:
@@ -176,8 +175,6 @@ class HsdsApp:
         # TODO: don't modify parent process env, use os.environ.copy(), set, and popen(env=)
 
         common_args = ["--standalone", ]
-        # print("setting log_level to:", args.loglevel)
-        # common_args.append(f"--log_level={args.loglevel}")
         common_args.append(f"--dn_urls={dn_urls_arg}")
         common_args.append(f"--rangeget_url={self._rangeget_url}")
         common_args.append(f"--hsds_endpoint={self._endpoint}")
@@ -204,7 +201,9 @@ class HsdsApp:
                     pargs.append(f"--hs_password={self._password}")
                 if self._password_file:
                     pargs.append(f"--password_file={self._password_file}")
-                    print("password_file:", self._password_file)
+                else:
+                    pargs.append("--password_file=")
+
                 pargs.append(f"--sn_url={self._endpoint}")
                 pargs.append("--logfile=sn1.log")
             elif i == 1:

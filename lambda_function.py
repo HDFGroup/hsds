@@ -3,6 +3,7 @@ import multiprocessing
 import os 
 import json
 import time
+import logging
 import requests_unixsocket
 
 from hsds.hsds_app import HsdsApp
@@ -105,6 +106,22 @@ def invoke(hsds, method, path, params=None, headers=None, body=None):
 
 def lambda_handler(event, context):
     # setup logging
+    if "LOG_LEVEL" in os.environ:
+        log_level_cfg = os.environ["LOG_LEVEL"]
+    else:
+        log_level_cfg = "INFO"
+    
+    if log_level_cfg == "DEBUG":
+        log_level = logging.DEBUG
+    elif log_level_cfg == "INFO":
+        log_level = logging.INFO
+    elif log_level_cfg in ("WARN", "WARNING"):
+        log_level = logging.WARN
+    elif log_level_cfg == "ERROR":
+        log_level = logging.ERROR
+    else:
+        print(f"unsupported log_level: {log_level_cfg}, using INFO instead")
+        log_level = logging.INFO
    
     # process event data
     function_name = context.function_name
@@ -140,7 +157,6 @@ def lambda_handler(event, context):
             readonly = True
         else:
             readonly = False
-
     else:
         print(f"unexpected method: {method}")
         readonly = False
@@ -180,7 +196,10 @@ def lambda_handler(event, context):
         print(f"setting dn count to: {target_dn_count}")
 
     # instantiate hsdsapp object
-    hsds = HsdsApp(username=function_name, password="lambda", dn_count=target_dn_count, readonly=readonly)
+    hsds = HsdsApp(username=function_name, 
+                   password="lambda", 
+                   dn_count=target_dn_count, 
+                   readonly=readonly)
     hsds.run()
 
     # wait for server to startup
