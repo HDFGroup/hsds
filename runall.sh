@@ -64,7 +64,9 @@ if [[ -z $SN_CORES ]] ; then
   export SN_CORES=1
 fi
 
-CONFIG_DIR="admin/config"
+if [[ -z $CONFIG_DIR ]] ; then
+  export CONFIG_DIR="admin/config"
+fi
 CONFIG_FILE="${CONFIG_DIR}/config.yml"
 OVERRIDE_FILE="${CONFIG_DIR}/override.yml"
 
@@ -131,10 +133,10 @@ if [[ ${AWS_S3_GATEWAY} ]]; then
   echo "AWS_S3_GATEWAY set, using ${BUCKET_NAME} S3 Bucket (verify that this bucket exists)"
 elif [[ ${AZURE_CONNECTION_STRING} ]]; then
   COMPOSE_FILE="admin/docker/docker-compose.azure.yml"
-  echo "AZURE_CONNECTION_STRING set, using ${BUCKET_NAME} Azure Strorage Container (verify that the container exsits)"
+  echo "AZURE_CONNECTION_STRING set, using ${BUCKET_NAME} Azure Storage Container (verify that the container exsits)"
 else 
   COMPOSE_FILE="admin/docker/docker-compose.posix.yml"
-  echo "no AWS or AZURE env set, using POSIX strorage"
+  echo "no AWS or AZURE env set, using POSIX storage"
   if [[ -z ${ROOT_DIR} ]]; then
     export ROOT_DIR=$PWD/data
     echo "no ROOT_DIR env set, using $ROOT_DIR directory for storage"

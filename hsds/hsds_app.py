@@ -178,7 +178,7 @@ class HsdsApp:
         common_args.append(f"--dn_urls={dn_urls_arg}")
         common_args.append(f"--rangeget_url={self._rangeget_url}")
         common_args.append(f"--hsds_endpoint={self._endpoint}")
-        common_args.append("--server_name=Direct Connect (HSDS)")
+        # common_args.append("--server_name=Direct Connect (HSDS)")
         common_args.append("--use_socket")
         if self._readonly:
             common_args.append("--readonly")

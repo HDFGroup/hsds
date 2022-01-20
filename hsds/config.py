@@ -87,10 +87,18 @@ def _load_cfg():
             break
     if not yml_file:
         # use yaml file embedded in package
+        # TBD: is there a more elegant way to get the directory
+        # where config.yml gets placed in the setup data_files list?
         package_dir = os.path.dirname(__file__)
-        debug("loading package config.yml with package_dir:", package_dir)
-
-        yml_file = os.path.join(package_dir, "../config/config.yml")
+        while package_dir != '/':
+            s = os.path.join(package_dir, "config/config.yml")
+            if os.path.isfile(s):
+                yml_file = s
+                break
+            package_dir = os.path.dirname(package_dir)
+            
+        if not yml_file:
+            raise FileNotFoundError("unable to load config.yml")
     debug(f"_load_cfg with '{yml_file}'")
     try:
         with open(yml_file, "r") as f:

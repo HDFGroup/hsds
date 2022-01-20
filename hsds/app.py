@@ -237,10 +237,14 @@ def main():
         logfile = None
     if logfile:
         kwargs["logfile"] = logfile
+    config_dir = None
     if args.config_dir:
         if not os.path.isdir(args.config_dir):
-            sys.exit("config_dir not found")
-        kwargs["config_dir"] = args.config_dir
+            print(f"config_dir: {args.config_dir} not found")
+        else:
+            config_dir = args.config_dir
+    if config_dir:
+        kwargs["config_dir"] = config_dir
     if args.dn_count:
         kwargs["dn_count"] = args.dn_count
 

@@ -52,9 +52,7 @@ setup(name='hsds',
       extras_require={'azure': ['azure', 'azure-storage-blob']},
       zip_safe=False,
       classifiers=classifiers,
-      data_files = [
-        ('./config', ['admin/config/config.yml',]),
-      ],
+      data_files=[('config', ['admin/config/config.yml',])],
       entry_points={'console_scripts': [
           'hsds = hsds.app:main',
           'hsds-datanode = hsds.datanode:main',
