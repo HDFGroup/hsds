@@ -13,9 +13,9 @@ Setup your AWS EKS Cluster
 Here we will create a Kubernetes cluster and a S3 bucket
 
 1. Setup Kubernetes cluster with AWS EKS - see <https://docs.aws.amazon.com/eks/latest/userguide/getting-started.html> for instructions
-2. In the AWS Management Console page for your cluster, go to Networking/Advanced and set the CIDR block to use the
-IP address of the machine you will run kubectl from.  This will avoid exposing the Kuberentes API to the outside world
-3. Install and configure kubectl on the machine being used for the installation
+2. Install and configure kubectl on the machine being used for the installation
+3. In the AWS Management Console page for your cluster, go to Networking/Advanced and set the CIDR block to use the
+IP address of the machine used above.  This will avoid exposing the Kuberentes API to the outside world
 4. Run `kubectl cluster-info` to verify connection to the cluster
 5. Create a bucket for HSDS, using AWS cli tools or AWS Management console (make sure it's in the same region as the cluster)
 6. If you are using a VPC, verify an endpoint for S3 is setup (see: <https://docs.aws.amazon.com/vpc/latest/userguide/vpc-endpoints-s3.html>).  This is important to avoid having to pay for egress charges between S3 and the Kubernetes cluster
