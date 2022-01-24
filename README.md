@@ -35,7 +35,7 @@ Make sure you have Python 3, Pip, and git installed, then:
 
    1. Clone this repo: `$ git clone https://github.com/HDFGroup/hsds`
    2. Go to the hsds directory: `$ cd hsds`
-   3. Run install: `$ python setup.py install`
+   3. Run install: `$ python setup.py install`  OR install from pypi: `$ pip install hsds`
    4. Setup password file: `$ cp admin/config/passwd.default admin/config/passwd.txt`
    5. Create a directory the server will use to store data, and then set the ROOT_DIR environment variable to point to it: `$ mkdir ~/hsds_data; export ROOT_DIR="${HOME}/hsds_data"`
    6. Start server: `$ ./runall.sh --no-docker`
