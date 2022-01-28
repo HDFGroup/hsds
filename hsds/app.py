@@ -10,48 +10,15 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import argparse
-import sys
-import time
 import os
-import subprocess
-import socket
-import queue
-import threading
-from contextlib import closing
+import json
+import sys
 import logging
+import time
+import uuid
 
-
-def find_free_port():
-    # note use the --unix-socket <path> option with curl for sockets
-
-    with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
-        s.bind(('127.0.0.1', 0))
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        return s.getsockname()[1]
-
-
-def print_process_output(queues):
-    while True:
-        got_output = False
-        for q in queues:
-            try:
-                line = q.get_nowait()  # or q.get(timeout=.1)
-            except queue.Empty:
-                pass  # no output on this queue yet
-            else:
-                print(line.decode("utf-8").strip())
-                got_output = True
-        if not got_output:
-            break  # all queues empty for now
-
-
-def enqueue_output(out, queue):
-    for line in iter(out.readline, b''):
-        queue.put(line)
-    logging.debug("enqueu_output close()")
-    out.close()
-
-
+from .hsds_app import HsdsApp
+ 
 _HELP_USAGE = "Starts hsds a REST-based service for HDF5 data."
 
 _HELP_EPILOG = """Examples:
@@ -67,6 +34,91 @@ _HELP_EPILOG = """Examples:
 
   hsds --bucket-dir ./data/hsds.test
 """
+
+
+class UserConfig:
+    """
+    User Config state
+    """
+    def __init__(self, config_file=None, **kwargs):
+        self._cfg = {}
+        if config_file:
+            self._config_file = config_file
+        elif os.path.isfile(".hscfg"):
+            self._config_file = ".hscfg"
+        else:
+            self._config_file = os.path.expanduser("~/.hscfg")
+        # process config file if found
+        if os.path.isfile(self._config_file):
+            line_number = 0
+            with open(self._config_file) as f:
+                for line in f:
+                    line_number += 1
+                    s = line.strip()
+                    if not s:
+                        continue
+                    if s[0] == '#':
+                        # comment line
+                        continue
+                    index = line.find('=')
+                    if index <= 0:
+                        print("config file: {} line: {} is not valid".format(self._config_file, line_number))
+                        continue
+                    k = line[:index].strip()
+                    v = line[(index+1):].strip()
+                    if v and v.upper() != "NONE":
+                        self._cfg[k] = v
+        # override any config values with environment variable if found
+        for k in self._cfg.keys():
+            if k.upper() in os.environ:
+                self._cfg[k] = os.environ[k.upper()]
+
+        # finally update any values that are passed in to the constructor
+        for k in kwargs.keys():
+            self._cfg[k.upper()] = kwargs[k]
+
+    def __getitem__(self, name):
+        """ Get a config item  """
+
+        # Load a variable from environment. It would have only been loaded in
+        # __init__ if it was also specified in the config file.
+        env_name = name.upper()
+        if name not in self._cfg and env_name in os.environ:
+            self._cfg[name] = os.environ[env_name]
+
+        return self._cfg[name]
+
+    def __setitem__(self, name, obj):
+        """ set config item """
+        self._cfg[name] = obj
+
+    def __delitem__(self, name):
+        """ Delete option. """
+        del self._cfg[name]
+
+    def __len__(self):
+        return len(self._cfg)
+
+    def __iter__(self):
+        """ Iterate over config names """
+        keys = self._cfg.keys()
+        for key in keys:
+            yield key
+
+    def __contains__(self, name):
+        return name in self._cfg or name.upper() in os.environ
+
+    def __repr__(self):
+        return json.dumps(self._cfg)
+
+    def keys(self):
+        return self._cfg.keys()
+
+    def get(self, name, default=None):
+        if name in self:
+            return self[name]
+        else:
+            return default
 
 
 def main():
@@ -90,6 +142,8 @@ def main():
                         default='')
     parser.add_argument('--hs_password', type=str,  dest='hs_password',
                         help="password for hs_username", default='')
+    parser.add_argument('--password_file', type=str, dest='password_file',
+                        help="location of hsds password file",  default='')
 
     parser.add_argument('--logfile', default='',
                         type=str, dest='logfile',
@@ -101,14 +155,23 @@ def main():
                         type=int, dest='port',
                         help='Service node port')
     parser.add_argument('--count', default=1, type=int,
-                        dest='target_dn_count',
+                        dest='dn_count',
                         help='Number of dn sub-processes to create.')
+    parser.add_argument('--socket_dir', default='',
+                        type=str, dest='socket_dir',
+                        help="directory for socket endpoint")
+    parser.add_argument("--config_dir", default='',
+                        type=str, dest="config_dir",
+                        help="directory for config data")
 
     args, extra_args = parser.parse_known_args()
+
+    kwargs = {} # options to pass to hsdsapp
 
     # setup logging
     if args.loglevel:
         log_level_cfg = args.loglevel
+        kwargs["log_level"] = args.loglevel
     elif "LOG_LEVEL" in os.environ:
         log_level_cfg = os.environ["LOG_LEVEL"]
     else:
@@ -128,148 +191,85 @@ def main():
     print("set logging to:", log_level)
     logging.basicConfig(level=log_level)
 
-    logging.debug("args:", args)
-    logging.debug("extra_args:", extra_args)
-    logging.debug("count:", args.target_dn_count)
-    logging.debug("port:", args.port)
-    logging.debug("hs_username:", args.hs_username)
-    # port = find_free_port()
-    # logging.debug("port:", port)
-    if "--use_socket" in extra_args:
-        use_socket = True
-        socket_dir = "%2Ftmp%2F"  # TBD - replace with temp dir
+    userConfig = UserConfig()
+
+    # set username based on command line, .hscfg, $USER, or $JUPYTERHUB_USER
+    if args.hs_username:
+        username = args.hs_username
+    elif "HS_USERNAME" in userConfig:
+        username = userConfig["HS_USERNAME"]
     else:
-        use_socket = False
-        socket_dir = None
+        username = None
 
-    if args.port == 0:
-        sn_port = 5101
+    # get password based on command line or .hscfg
+    if args.hs_password:
+        password = args.hs_password
+    elif "HS_PASSWORD" in userConfig:
+        password = userConfig["HS_PASSWORD"]
     else:
-        sn_port = args.port
+        password = "1234"
 
-    if use_socket:
-        sn_url = f"http+unix://{socket_dir}sn_1.sock"
+    if username:
+        kwargs["username"] = username
+        kwargs["password"] = password
+
+    if args.password_file:
+        if not os.path.isfile(args.password_file):
+            sys.exit(f"password file: {args.password_file} not found")
+        kwargs["password_file"] = args.password_file
+
+    # choose a tmp directory for socket if one is not provided
+    if args.socket_dir:
+        socket_dir = args.socket_dir
     else:
-        sn_url = "http://localhost:5101"
+        tmp_dir = "/tmp"  # TBD: will this work on windows?
+        rand_name = uuid.uuid4().hex[:8]
+        socket_dir = f"{tmp_dir}/hs{rand_name}/"
+    kwargs["socket_dir"] = socket_dir
 
-    dn_urls = []
-
-    for i in range(args.target_dn_count):
-        if use_socket:
-            dn_url = f"http+unix://{socket_dir}dn_{(i+1)}.sock"
-        else:
-            dn_port = find_free_port()
-            dn_url = f"http://localhost:{dn_port}"
-            logging.debug(f"dn_port[{i}]",  dn_port)
-        logging.debug(f"dn_url: {dn_url}")
-        dn_urls.append(dn_url)
-        
-    # sort the ports so that node_number can be determined based on dn_url
-    dn_urls.sort()
-    dn_urls_arg = ""
-    for dn_url in dn_urls:
-        if dn_urls_arg:
-            dn_urls_arg += ','
-        dn_urls_arg += dn_url
-
-    logging.debug("dn_urls:", dn_urls)
-    if use_socket:
-        rangeget_url = f"http+unix://{socket_dir}rangeget.sock"
-    else:
-        rangeget_port = find_free_port()
-        rangeget_url = f"http://localhost:{rangeget_port}"
-    logging.debug(f"rangeget_url:  {rangeget_url}")
-
-    common_args = ["--standalone", ]
-    if args.loglevel:
-        print("setting log_level to:", args.loglevel)
-        common_args.append(f"--log_level={args.loglevel}")
-    common_args.append(f"--sn_url={sn_url}")
-    common_args.append(f"--rangeget_url={rangeget_url}")
-    common_args.append("--dn_urls="+dn_urls_arg)
-    # log output may come out of order, so always use timestamps
-    common_args.append("--log_timestamps=1")
-    if use_socket:
-        common_args.append("--use_socket")
-    common_args.extend(extra_args)  # pass remaining args as config overrides
-
-    if not use_socket:
-        logging.debug(f"host: {args.host}")
-        public_dns = f"http://{args.host}"
-        if sn_port != 80:
-            public_dns += ":" + str(sn_port)
-        logging.info(f"public_dns: {public_dns}")
-        common_args.append(f"--public_dns={public_dns}")
-
-    if args.root_dir is not None:
-        logging.debug(f"arg.root_dir: {args.root_dir}")
-        root_dir = os.path.expanduser(args.root_dir)
-        if not os.path.isdir(root_dir):
-            msg = "Error - directory used in --root-dir option doesn't exist"
-            logging.error(msg)
-            sys.exit(msg)
-        common_args.append(f"--root_dir={root_dir}")
-        logging.debug("root_dir:", root_dir)
-    else:
-        bucket_name = args.bucket_name[0]
-        common_args.append(f"--bucket_name={bucket_name}")
-
-    # create handle for log file if specified
     if args.logfile:
-        pout = open(args.logfile, 'w')
-    else:
-        pout = subprocess.PIPE   # will pipe to parent
-
-    # Start apps
-    logging.debug("Creating subprocesses")
-    processes = []
-    queues = []
-
-    # create processes for count dn nodes, sn node, and rangeget node
-    for i in range(args.target_dn_count+2):
-        if i == 0:
-            # args for service node
-            pargs = ["hsds-servicenode", "--log_prefix=sn "]
-            if args.hs_username:
-                pargs.append(f"--hs_username={args.hs_username}")
-            if args.hs_password:
-                pargs.append(f"--hs_password={args.hs_password}")
-        elif i == 1:
-            # args for rangeget node
-            pargs = ["hsds-rangeget", "--log_prefix=rg "]
+        if os.path.isabs(args.logfile):
+            logfile = args.logfile
         else:
-            node_number = i - 2  # start with 0
-            pargs = ["hsds-datanode", f"--log_prefix=dn{node_number+1} "]
-            pargs.append(f"--node_number={node_number}")
-        logging.info(f"starting {pargs[0]}")
-        pargs.extend(common_args)
-        p = subprocess.Popen(pargs, bufsize=0, shell=False, stdout=pout)
-        processes.append(p)
-        if not args.logfile:
-            # setup queue so we can check on process output without blocking
-            q = queue.Queue()
-            t = threading.Thread(target=enqueue_output, args=(p.stdout, q))
-            queues.append(q)
-            t.daemon = True  # thread dies with the program
-            t.start()
+            # use filename in the socket directory
+            logfile = os.path.join(socket_dir, args.logfile)
+    else:
+        logfile = None
+    if logfile:
+        kwargs["logfile"] = logfile
+    config_dir = None
+    if args.config_dir:
+        if not os.path.isdir(args.config_dir):
+            print(f"config_dir: {args.config_dir} not found")
+        else:
+            config_dir = args.config_dir
+    if config_dir:
+        kwargs["config_dir"] = config_dir
+    if args.dn_count:
+        kwargs["dn_count"] = args.dn_count
 
-    try:
-        while True:
-            print_process_output(queues)
-            time.sleep(0.1)
-            for p in processes:
-                if p.poll() is not None:
-                    result = p.communicate()
-                    msg = f"process {p.args[0]} ended, result: {result}"
-                    logging.error(msg)
-                    break
-    except Exception as e:
-        print(f"got exception: {e}, quitting")
-    except KeyboardInterrupt:
-        print("got KeyboardInterrupt, quitting")
-    finally:
-        for p in processes:
-            if p.poll() is None:
-                logging.info(f"killing {p.args[0]}")
-                p.terminate()
-        processes = []
+    app = HsdsApp(**kwargs)
+    app.run()
+
+    waiting_on_ready = True
+
+    while True:
+        try:
+            time.sleep(1)   
+            app.check_processes()
+        except KeyboardInterrupt:
+            print("got keyboard interrupt")
+            break
+        except Exception as e:
+            print(f"got exception: {e}")
+            break
+        if waiting_on_ready and app.ready:
+            waiting_on_ready = False
+            print("")
+            print("READY! use endpoint:", app.endpoint)
+            print("")
+
+    print("shutting down server")
+    app.stop()
+    
+    

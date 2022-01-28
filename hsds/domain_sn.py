@@ -827,7 +827,7 @@ async def doFlush(app, root_id, bucket=None):
             if task.exception():
                 exception_type = type(task.exception())
                 msg = f"doFlush - task had exception: {exception_type}"
-                log.warn()
+                log.warn(msg)
                 failed_count += 1
             else:
                 json_rsp = task.result()

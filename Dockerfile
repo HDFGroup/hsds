@@ -8,22 +8,8 @@ RUN conda update conda -y && \
 RUN conda install --name hsds --yes \
         pip \
         wheel \
-        curl \
-        psutil \
-        numpy \
-        pytz \
-        requests \
-        aiobotocore \
-        azure-storage-blob \
-        aiofiles \
-        aiohttp \
-        aiohttp-cors \
-        pyjwt \
-        pyyaml \
-        imagecodecs \
-        hdf5plugin \
-        numcodecs \
-        simplejson 
+        curl
+         
 RUN conda-pack -n hsds -o /tmp/hsds-env.tar \
     && mkdir -p /opt/env/hsds \
     && cd /opt/env/hsds \
@@ -31,9 +17,6 @@ RUN conda-pack -n hsds -o /tmp/hsds-env.tar \
     && rm /tmp/hsds-env.tar
 RUN /opt/env/hsds/bin/conda-unpack
 
-#
-#
-#
 
 FROM debian:buster-slim AS hsds
 LABEL maintainer="Aleksandar Jelenak <help@hdfgroup.org>"
@@ -46,7 +29,7 @@ COPY . /usr/local/src/hsds-src
 COPY admin/config/config.yml /etc/hsds/
 COPY entrypoint.sh  /
 RUN /bin/bash -c "source /opt/env/hsds/bin/activate \
-    && pip install /usr/local/src/hsds-src/ --no-deps \
+    && pip install /usr/local/src/hsds-src/ \
     && rm -rf /usr/local/src/hsds-src"
 
 EXPOSE 5100-5999

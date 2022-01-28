@@ -1,36 +1,20 @@
 FROM public.ecr.aws/lambda/python:3.8
 RUN yum -y install git
-RUN pip install \ 
-  	psutil \
-        numpy \
-        pytz \
-        requests \
-        requests-unixsocket \
-        aiobotocore \
-        aiofiles \
-        aiohttp \
-        aiohttp-cors \
-        pyjwt \
-        pyyaml \
-        pip \
-        simplejson \
-        wheel \
-        numcodecs
 
 
 # Install numcodecs from the specific commit since we need the brand new shuffle codec...
 #RUN DISABLE_NUMCODECS_AVX2=1 CFLAGS=-DHAVE_UNISTD_H \
 #`    pip install --no-cache-dir \
-#    git+https://github.com/zarr-developers/numcodecs.git@d16d1eac5198166a24726ffe808e3dcfcab9700d#egg=numcodecs 
+#    git+https://github.com/zarr-developers/numcodecs.git@d16d1eac5198166a24726ffe808e3dcfcab9700d#egg=numcodecs
 
 LABEL maintainer="John Readey <help@hdfgroup.org>"
 
 # Install HSDS
-RUN mkdir /usr/local/src/hsds-src/ /usr/local/src/hsds/ /etc/hsds/
-COPY . /usr/local/src/hsds-src
+RUN mkdir  /usr/local/src/hsds/ /etc/hsds/
+COPY . /usr/local/src/hsds
 COPY admin/config/config.yml /etc/hsds/
-RUN /bin/bash  -c "pip install /usr/local/src/hsds-src/ --no-deps"
+COPY entrypoint.sh  /
+RUN /bin/bash -c "pip install /usr/local/src/hsds"
 
 COPY lambda_function.py   ./
 CMD ["lambda_function.lambda_handler"]
-

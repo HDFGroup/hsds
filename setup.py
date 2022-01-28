@@ -22,14 +22,10 @@ classifiers = [
     'Topic :: Scientific/Engineering',
     ]
 
-
 install_requires = [
-    # 'urllib3 <= 1.25.11',  # required by botocore
-    'aiohttp <= 3.7.5',
     'aiobotocore',
     'aiohttp_cors',
     'aiofiles',
-    'chardet <= 3.0.4',
     'cryptography',
     'numcodecs',
     'numpy',
@@ -38,12 +34,13 @@ install_requires = [
     'pytz',
     'pyyaml',
     'requests-unixsocket',
-    'simplejson'
+    'simplejson',
+    'aiohttp>=3.7.4'
     ]
 
 
 setup(name='hsds',
-      version='0.7.0',
+      version='0.7.0b11',
       description='HDF REST API',
       url='http://github.com/HDFGroup/hsds',
       author='John Readey',
@@ -55,9 +52,7 @@ setup(name='hsds',
       extras_require={'azure': ['azure', 'azure-storage-blob']},
       zip_safe=False,
       classifiers=classifiers,
-      data_files = [
-        ('./config', ['admin/config/config.yml',]),
-      ],
+      data_files=[('config', ['admin/config/config.yml',])],
       entry_points={'console_scripts': [
           'hsds = hsds.app:main',
           'hsds-datanode = hsds.datanode:main',

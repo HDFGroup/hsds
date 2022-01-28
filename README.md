@@ -31,21 +31,23 @@ Other useful resources
 Quick Start
 -------------
 
-Make sure you have Python 3, docker, docker-compose installed, then:
+Make sure you have Python 3, Pip, and git installed, then:
 
    1. Clone this repo: `$ git clone https://github.com/HDFGroup/hsds`
    2. Go to the hsds directory: `$ cd hsds`
-   3. Run install: `$ python setup.py install`
+   3. Run install: `$ python setup.py install`  OR install from pypi: `$ pip install hsds`
    4. Setup password file: `$ cp admin/config/passwd.default admin/config/passwd.txt`
    5. Create a directory the server will use to store data, and then set the ROOT_DIR environment variable to point to it: `$ mkdir ~/hsds_data; export ROOT_DIR="${HOME}/hsds_data"`
-   6. Start server: `$ ./runall.sh`
-   7. Try making a request to the service: `$ curl http://localhost:5101/about` (should get back a json response)
-   8. Set environment variables for the admin password and username: `$ export ADMIN_PASSWORD=admin`, `$ export ADMIN_USERNAME=admin`
-   9. Run the test suite: `$ python testall.py --skip_unit`
-   10. (Optional) Post install setup (test data, home folders, cli tools, etc): [docs/post_install.md](docs/post_install.md)
+   6. Start server: `$ ./runall.sh --no-docker`
+   7. In a new shell, set the environment variable HSDS_ENDPOINT to the string displayed.  E.g.: `$ export HSDS_ENDPOINT=http+unix://%2Ftmp%2Fhs%2Fsn_1.sock`
+   8. Run the test suite: `$ python testall.py`  
+   9. (Optional) Post install setup (test data, home folders, cli tools, etc): [docs/post_install.md](docs/post_install.md)
+   10. (Optional) Install the h5pyd package for an h5py compatible api and tool suite:  https://github.com/HDFGroup/h5pyd
 
 
-To shut down the server, run: `$ ./stopall.sh`
+To shut down the server, and the server was started with the --no-docker option, just control-C.
+
+If using docker, run: `$ ./stopall.sh`
     
 Note: passwords can (and should for production use) be modified by changing values in hsds/admin/config/password.txt and rebuilding the docker image.  Alternatively, an external identity provider such as Azure Active Directory or KeyCloak can be used.  See: [docs/azure_ad_setup.md](docs/azure_ad_setup.md) for Azure AD setup instructions or [docs/keycloak_setup.md](docs/keycloak_setup.md) for KeyCloak.
 

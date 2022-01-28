@@ -51,7 +51,18 @@ def getCompressors():
                 compressors[i] = "gzip"
                 break
 
+    # add deflate as a synonym for gzip
+    if "gzip" in compressors:
+        compressors.append("deflate")
+
     return compressors
+
+def getFilters(include_compressors=True):
+    """ return list of other supported filters """
+    filters = ["shuffle",]
+    if include_compressors:
+        filters.extend(getCompressors())
+    return filters
 
 
 def setBloscThreads(nthreads):

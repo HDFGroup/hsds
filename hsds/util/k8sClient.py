@@ -141,7 +141,7 @@ def _k8sGetPodIPs(pod_json, k8s_app_label):
         labels = metadata["labels"]
         if "app" not in labels:
             msg = "_k8sGetPodIPs - no app label"
-            log.warn(msg)
+            log.debug(msg)
             continue
         app_label = labels["app"]
         if app_label != k8s_app_label:

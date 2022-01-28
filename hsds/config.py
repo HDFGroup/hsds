@@ -62,13 +62,18 @@ def _load_cfg():
     config_dirs = []
     # check if there is a command line option for config directory
     config_dir = getCmdLineArg("config-dir")
+    # check cmdLineArg with underline
+    if not config_dir:
+        config_dir = getCmdLineArg("config_dir")
+    
     if config_dir:
         config_dirs.append(config_dir)
     if not config_dirs and "CONFIG_DIR" in os.environ:
         config_dirs.append(os.environ["CONFIG_DIR"])
         debug(f"got environment override for config-dir: {config_dirs[0]}")
     if not config_dirs:
-        config_dirs = [".", "/config", "/etc/hsds/"]  # default locations
+        debug("set default location for config dirs")
+        config_dirs = ["./", "/config", "/etc/hsds/"]  # default locations
     for config_dir in config_dirs:
         file_name = os.path.join(config_dir, "config.yml")
         debug("checking config path:", file_name)
@@ -82,8 +87,18 @@ def _load_cfg():
             break
     if not yml_file:
         # use yaml file embedded in package
+        # TBD: is there a more elegant way to get the directory
+        # where config.yml gets placed in the setup data_files list?
         package_dir = os.path.dirname(__file__)
-        yml_file = os.path.join(package_dir, "../config/config.yml")
+        while package_dir != '/':
+            s = os.path.join(package_dir, "config/config.yml")
+            if os.path.isfile(s):
+                yml_file = s
+                break
+            package_dir = os.path.dirname(package_dir)
+            
+        if not yml_file:
+            raise FileNotFoundError("unable to load config.yml")
     debug(f"_load_cfg with '{yml_file}'")
     try:
         with open(yml_file, "r") as f:
@@ -97,8 +112,11 @@ def _load_cfg():
     yml_override = None
     if "CONFIG_OVERRIDE_PATH" in os.environ:
         override_yml_filepath = os.environ["CONFIG_OVERRIDE_PATH"]
+    elif config_dir and os.path.isfile(os.path.join(config_dir, "override.yml")):
+        override_yml_filepath = os.path.join(config_dir, "override.yml")
     else:
         override_yml_filepath = "/config/override.yml"
+    debug("override file path:", override_yml_filepath)
     if os.path.isfile(override_yml_filepath):
         debug(f"loading override configuation: {override_yml_filepath}")
         try:

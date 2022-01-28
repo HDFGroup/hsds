@@ -83,3 +83,4 @@ aws_lambda_chunkread_function: null  # name of aws lambda function for chunk rea
 aws_lambda_threshold: 4   # number of chunks per node per request to reach before using lambda
 aws_lambda_max_invoke: 1000  # max number of lambda functions to invoke simultaneously
 aws_lambda_gateway: null # use lambda endpoint for region HSDS is running in
+write_zero_chunks: False # write chunk to storage even when it's all zeros (or in general equial to the fill value)
