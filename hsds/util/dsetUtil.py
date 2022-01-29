@@ -358,6 +358,8 @@ def _getSelectionStringFromRequestBody(body):
 def _getSelectElements(select):
     """ helper method - return array of queries for each 
        dimension """
+    if isinstance(select, list) or isinstance(select, tuple):
+        return select  # already listified
     select = select[1:-1] # strip brackets
     query_array = []
     dim_query = []
@@ -425,9 +427,14 @@ def getSelectionList(select, dims):
     for dim in range(rank):
         extent = dims[dim]
         element = elements[dim]
-        if element.startswith('['):
+        is_list = isinstance(element, list)
+        is_str = isinstance(element, str)
+        if is_list or (is_str and element.startswith('[')):
             # list of coordinates
-            fields = element[1:-1].split(',')
+            if is_str:
+                fields = element[1:-1].split(',')
+            else:
+                fields = element
             coords = []
             last_coord = None
             for field in fields:
@@ -445,7 +452,7 @@ def getSelectionList(select, dims):
         elif element == ":":
             s = slice(0, extent, 1)
             select_list.append(s)
-        elif element.find(':') >= 0:
+        elif is_str and element.find(':') >= 0:
             fields = element.split(':')
             if len(fields) not in (2,3):
                 raise ValueError(f"Invalid selection format for dim {dim}")
