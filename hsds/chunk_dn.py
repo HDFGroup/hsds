@@ -156,17 +156,20 @@ async def PUT_Chunk(request):
                       "slices": selection,
                       "query": query,
                       "query_update": query_update,
-                      "limit": limit,
-                      "return_json": True}
-            resp = chunkQuery(**kwargs)
+                      "limit": limit}
+            rsp_arr = chunkQuery(**kwargs)
         except TypeError as te:
             log.warn(f"chunkQuery - TypeError: {te}")
             raise HTTPBadRequest()
         except ValueError as ve:
             log.warn(f"chunkQuery - ValueError: {ve}")
             raise HTTPBadRequest()
-        if query_update and resp is not None:
+        num_hits = rsp_arr.shape[0]
+        if query_update and num_hits > 0:
             is_dirty = True
+        # chunk update successful
+        # TBD - return 404 if num_hits is zero?
+        resp = {}
     else:
         # regular chunk update
 
@@ -274,6 +277,7 @@ async def GET_Chunk(request):
         log.debug(f"got query: {query}")
     if "Limit" in params:
         limit = int(params["Limit"])
+        log.debug(f"limit: {limit}")
 
     dset_id = getDatasetId(chunk_id)
 
@@ -315,19 +319,23 @@ async def GET_Chunk(request):
                       "chunk_arr": chunk_arr,
                       "slices": selection,
                       "query": query,
-                      "limit": limit,
-                      "return_json": True}
-            read_resp = chunkQuery(**kwargs)
+                      "limit": limit}
+            output_arr = chunkQuery(**kwargs)
         except TypeError as te:
             log.warn(f"chunkQuery - TypeError: {te}")
             raise HTTPBadRequest()
         except ValueError as ve:
             log.warn(f"chunkQuery - ValueError: {ve}")
             raise HTTPBadRequest()
+        if output_arr is None or output_arr.shape[0] == 0:
+            # no mathces to query
+            msg = f"chunk {chunk_id} no results for query: {query}"
+            log.debug(msg)
+            raise HTTPNotFound()
     else:
         # read selected data from chunk
         output_arr = chunkReadSelection(chunk_arr, slices=selection)
-        read_resp = arrayToBytes(output_arr)
+    read_resp = arrayToBytes(output_arr)
 
     # write response
     if isinstance(read_resp, bytes):
@@ -345,6 +353,7 @@ async def GET_Chunk(request):
             await resp.write_eof()
     else:
         # JSON response
+        # TBD: this case should no longer be relevant
         resp = json_response(read_resp)
 
     return resp

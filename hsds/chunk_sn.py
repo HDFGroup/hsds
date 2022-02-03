@@ -31,13 +31,13 @@ from .util.idUtil import isValidUuid, getDataNodeUrl, getNodeCount
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain
 from .util.hdf5dtype import getItemSize, createDataType
-from .util.dsetUtil import getSelectionList, setSliceQueryParam  
-from .util.dsetUtil import getFillValue, isExtensible
-from .util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout
+from .util.dsetUtil import getSelectionList, setSliceQueryParam, isNullSpace  
+from .util.dsetUtil import getFillValue, isExtensible, getDsetRank
+from .util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout 
 from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId
 from .util.chunkUtil import getChunkIndex, getChunkSuffix
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
-from .util.chunkUtil import getChunkIdForPartition
+from .util.chunkUtil import getChunkIdForPartition, getQueryDtype
 from .util.arrayUtil import bytesArrayToList, jsonToArray, getShapeDims
 from .util.arrayUtil import getNumElements, arrayToBytes, bytesToArray
 from .util.arrayUtil import squeezeArray
@@ -436,15 +436,15 @@ async def write_point_sel(app, chunk_id, dset_json, point_list, point_data,
     log.debug(f"post to {req} returned {json_rsp}")
 
 
-async def read_chunk_query(app, chunk_id, dset_json, slices, query, limit,
-                           rsp_dict, chunk_map=None, bucket=None):
+async def read_chunk_query(app, chunk_id, dset_json, slices, query, 
+                           rsp_dict, limit=0, chunk_map=None, bucket=None):
     """ read the chunk selection from the DN
     chunk_id: id of chunk to write to
     chunk_sel: chunk-relative selection to read from
     np_arr: numpy array to store read bytes
     """
     msg = f"read_chunk_query, chunk_id: {chunk_id}, slices: {slices}, "
-    msg += f"query: {query}"
+    msg += f"query: {query} limit: {limit}"
     log.info(msg)
     chunk_rsp = None
 
@@ -464,7 +464,7 @@ async def read_chunk_query(app, chunk_id, dset_json, slices, query, limit,
     if chunk_map:
         if chunk_id not in chunk_map:
             # no data, don't return any results
-            chunk_rsp = {"index": [], "value": []}
+            chunk_rsp = None
         else:
             chunk_info = chunk_map[chunk_id]
             params["s3path"] = chunk_info["s3path"]
@@ -484,9 +484,13 @@ async def read_chunk_query(app, chunk_id, dset_json, slices, query, limit,
     log.debug("GET chunk req: " + req)
     try:
         chunk_rsp = await http_get(app, req, params=params)
+        log.debug(f"got {len(chunk_rsp)} bytes from query: {query} on chunk: {chunk_id}")
     except HTTPNotFound:
         # no data, don't return any results
-        chunk_rsp = {"index": [], "value": []}
+        log.debug(f"no results from query: {query} on chunk: {chunk_id}")
+        chunk_rsp = None
+
+    log.debug(f'read_chunk_query got rsp: {chunk_rsp} for chunk_id {chunk_id}')
 
     rsp_dict[chunk_id] = chunk_rsp
 
@@ -498,7 +502,6 @@ async def getPointData(app, dset_id, dset_json, points, bucket=None):
     loop = asyncio.get_event_loop()
     num_points = len(points)
     log.info(f"getPointData {dset_id} for {num_points} points bucket: {bucket}")
-    log.debug(f"points: {points}")
     if not bucket:
         msg = "Expected bucket param for getPointData"
         log.warn(msg)
@@ -506,7 +509,7 @@ async def getPointData(app, dset_id, dset_json, points, bucket=None):
 
     chunk_dict = {}  # chunk ids to list of points in chunk
     datashape = dset_json["shape"]
-    if datashape["class"] in ('H5S_NULL', 'H5S_SCALAR'):
+    if getDsetRank(dset_json) == 0:
         msg = "H5S_NULL, H5S_SCALAR shape classes can not be used with "
         msg += "point selection"
         log.error(msg)
@@ -1058,18 +1061,22 @@ async def PUT_Value(request):
     item_size = getItemSize(type_json)
     log.debug(f"item size: {item_size}")
 
+    """
     if query and request_type != "json":
         msg = "Only JSON is supported for query updates"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
     await validateAction(app, domain, dset_id, username, "update")
+    """
 
+    
     if query:
         # divert here if we are doing a put query
         put_query_rsp = await doPutQuery(request, body, dset_json)
         resp = await jsonResponse(request, put_query_rsp)
         return resp
+    
 
     dset_dtype = createDataType(type_json)  # np datatype
     binary_data = None
@@ -1455,6 +1462,57 @@ def get_hrefs(request, dset_json):
     return hrefs
 
 
+async def get_slices(request, dset_json, bucket=None):
+    """ Get desired slices from selection query param string or json value.
+       If select is none or empty, slices for entire datashape will be 
+       returned.
+       Refretch dims if the dataset is extensible 
+    """
+    app = request.app
+    params = request.rel_url.query
+    if "select" in params:
+        select = params["select"]
+    else:
+        select = None
+    dset_id = dset_json['id']
+    datashape = dset_json["shape"]
+    if datashape["class"] == 'H5S_NULL':
+        msg = "Null space datasets can not be used as target for GET value"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    
+    dims = getShapeDims(datashape)  # throws 400 for HS_NULL dsets
+    maxdims = getDsetMaxDims(dset_json)
+
+    # refetch the dims if the dataset is extensible and requestor hasn't
+    # provided an explicit region
+    if isExtensible(dims, maxdims) and (select is None or not select):
+        kwargs = {"bucket": bucket, "refresh": True}
+        dset_json = await getObjectJson(app, dset_id, **kwargs)
+        dims = getShapeDims(dset_json["shape"])
+
+    slices = None  # selection for read
+    if isExtensible and select:
+        try:
+            slices = getSelectionList(select, dims)
+        except ValueError:
+            # exception might be due to us having stale version of dims,
+            # so use refresh
+            kwargs = {"bucket": bucket, "refresh": True}
+            dset_json = await getObjectJson(app, dset_id, **kwargs)
+            dims = getShapeDims(dset_json["shape"])
+            slices = None  # retry below
+
+    if slices is None:
+        try:
+            slices = getSelectionList(select, dims)
+        except ValueError as ve:
+            msg = str(ve)
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    return slices
+    
+
 async def GET_Value(request):
     """
     Handler for GET /<dset_uuid>/value request
@@ -1487,17 +1545,13 @@ async def GET_Value(request):
     bucket = getBucketForDomain(domain)
 
     # get state for dataset from DN.
-    dset_json = await getObjectJson(app, dset_id, bucket=bucket)
+    dset_json = await getObjectJson(app, dset_id, bucket=bucket)   
 
-    datashape = dset_json["shape"]
-    if datashape["class"] == 'H5S_NULL':
+    if isNullSpace(dset_json):
         msg = "Null space datasets can not be used as target for GET value"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    dims = getShapeDims(datashape)  # throws 400 for HS_NULL dsets
-    maxdims = getDsetMaxDims(dset_json)
-    rank = len(dims)
     layout = getChunkLayout(dset_json)
     log.debug(f"chunk layout: {layout}")
     if "shm_name" in params and params["shm_name"]:
@@ -1507,114 +1561,9 @@ async def GET_Value(request):
 
     await validateAction(app, domain, dset_id, username, "read")
 
-    # refetch the dims if the dataset is extensible and requestor hasn't
-    # provided an explicit region
-    if isExtensible(dims, maxdims) and "select" not in params:
-        kwargs = {"bucket": bucket, "refresh": True}
-        dset_json = await getObjectJson(app, dset_id, **kwargs)
-        dims = getShapeDims(dset_json["shape"])
-
-    slices = None  # selection for read
-
     # Get query parameter for selection 
-    if "select" in params:
-        select = params["select"]
-    else:
-        select = None
-    if isExtensible and select:
-        try:
-            slices = getSelectionList(select, dims)
-        except ValueError:
-            # exception might be due to us having stale version of dims,
-            # so use refresh
-            kwargs = {"bucket": bucket, "refresh": True}
-            dset_json = await getObjectJson(app, dset_id, **kwargs)
-            dims = getShapeDims(dset_json["shape"])
-            slices = None  # retry below
-
-    if slices is None:
-        try:
-            slices = getSelectionList(select, dims)
-        except ValueError as ve:
-            msg = str(ve)
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-
+    slices = await get_slices(request, dset_json, bucket=bucket)
     log.debug(f"GET Value selection: {slices}")
-
-    np_shape = getSelectionShape(slices)
-    log.debug("selection shape:" + str(np_shape))
-
-    npoints = getNumElements(np_shape)
-    log.debug(f"selection num elements: {npoints}")
-
-    num_chunks = getNumChunks(slices, layout)
-    log.debug(f"num_chunks: {num_chunks}")
-
-    max_chunks = int(config.get('max_chunks_per_request'))
-    if num_chunks > max_chunks:
-        msg = "GET value request too large"
-        log.warn(msg)
-        raise HTTPRequestEntityTooLarge(num_chunks, max_chunks)
-
-    chunk_ids = getChunkIds(dset_id, slices, layout)
-    # Get information about where chunks are located
-    #   Will be None except for H5D_CHUNKED_REF_INDIRECT type
-    chunkinfo = await getChunkInfoMap(app,
-                                      dset_id,
-                                      dset_json,
-                                      chunk_ids,
-                                      bucket=bucket)
-    log.debug(f"chunkinfo_map: {chunkinfo}")
-
-    if request.method == "OPTIONS":
-        # skip doing any big data load for options request
-        resp = await jsonResponse(request,  None)
-    elif "query" in params:
-        if rank > 1:
-            msg = "Query string is not supported for multidimensional arrays"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        try:
-            resp = await doQueryRead(request,
-                                     chunk_ids,
-                                     dset_json,
-                                     slices,
-                                     bucket=bucket)
-        except CancelledError as ce:
-            log.warn(f"Cancelled error on query read: {ce}")
-            # TBD: what do return if client cancels
-            resp = await jsonResponse(request, None)
-    else:
-        try:
-            resp = await doHyperSlabRead(request,
-                                         chunk_ids,
-                                         dset_json,
-                                         slices,
-                                         chunk_map=chunkinfo,
-                                         bucket=bucket,
-                                         shm_name=shm_name)
-        except CancelledError as ce:
-            log.warn(f"Cancelled error on hyperslab read: {ce}")
-            # TBD: what do return if client cancels
-            resp = await jsonResponse(request, None)
-    log.response(request, resp=resp)
-    return resp
-
-
-async def doQueryRead(request, chunk_ids, dset_json, slices, bucket=None):
-    """ query read utility function """
-    app = request.app
-    params = request.rel_url.query
-    query = params["query"]
-    log.info(f"Query request: {query}")
-    loop = asyncio.get_event_loop()
-
-    dset_id = dset_json["id"]
-    type_json = dset_json["type"]
-    item_size = getItemSize(type_json)
-
-    log.debug(f"item size: {item_size}")
 
     limit = 0
     if "Limit" in params:
@@ -1625,117 +1574,24 @@ async def doQueryRead(request, chunk_ids, dset_json, slices, bucket=None):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
-    tasks = []
-    node_count = getNodeCount(app)
-    if node_count == 0:
-        log.warn("query read request with no active dn nodes")
-        raise HTTPServiceUnavailable()
-    chunk_index = 0
-    resp_index = []
-    resp_value = []
-    num_chunks = len(chunk_ids)
-    log.info(f"doQueryRead with {num_chunks} chunks")
-    # Get information about where chunks are located
-    #   Will be None except for H5D_CHUNKED_REF_INDIRECT type
-    chunk_map = await getChunkInfoMap(app,
-                                      dset_id,
-                                      dset_json,
-                                      chunk_ids,
-                                      bucket=bucket)
-    log.debug(f"chunkinfo_map: {chunk_map}")
-
-    while chunk_index < num_chunks:
-        next_chunks = chunk_ids[chunk_index:]
-        chunk_index = num_chunks
-        
-        log.debug(f"doQueryRead - next batch of chunk ids: {next_chunks}")
-        
-        dn_rsp = {}  # dictionary keyed by chunk_id
-        kwargs = {"chunk_map": chunk_map,
-                  "bucket": bucket}
-
-        for chunk_id in next_chunks:
-
-            task = asyncio.ensure_future(read_chunk_query(app,
-                                                          chunk_id,
-                                                          dset_json,
-                                                          slices,
-                                                          query,
-                                                          limit,
-                                                          dn_rsp,
-                                                          **kwargs))
-            tasks.append(task)
-        await asyncio.gather(*tasks, loop=loop)
-
-        for chunk_id in next_chunks:
-            chunk_rsp = dn_rsp[chunk_id]
-            resp_index.extend(chunk_rsp["index"])
-            resp_value.extend(chunk_rsp["value"])
-        # trim response if we're over limit
-        if limit > 0 and len(resp_index) > limit:
-            resp_index = resp_index[0:limit]
-            resp_value = resp_index[0:limit]
-            break  # don't need any more DN queries
-    resp_json = {"index": resp_index, "value": resp_value}
-    resp_json["hrefs"] = get_hrefs(request, dset_json)
-    resp = await jsonResponse(request, resp_json)
-    return resp
-
-
-async def doHyperSlabRead(request, chunk_ids, dset_json, slices,
-                          chunk_map=None, bucket=None, shm_name=None):
-    """ hyperslab read utility function """
-    app = request.app
-    loop = asyncio.get_event_loop()
-    log.info(f"doHyperSlabRead - number of chunk_ids: {len(chunk_ids)}")
-    log.debug(f"doHyperSlabRead - chunk_ids: {chunk_ids}")
-    log.debug("headers...")
-    for k in request.headers:
-        v = request.headers[k]
-        log.debug(f"   {k}: {v}")
-
-    accept_type = getAcceptType(request)
-    
-    type_json = dset_json["type"]
-    item_size = getItemSize(type_json)
-    log.debug(f"item size: {item_size}")
-    dset_dtype = createDataType(type_json)  # np datatype
-
-    # create array to hold response data
-    np_shape = getSelectionShape(slices)
-    log.debug(f"selection shape: {np_shape}")
-
-    # check that the array size is reasonable
-    request_size = np.prod(np_shape)
-    if item_size == 'H5T_VARIABLE':
-        request_size *= 512  # random guess of avg item_size
+    if "query" in params:
+        query = params["query"]
     else:
-        request_size *= item_size
-    log.debug(f"request_size: {request_size}")
-    max_request_size = int(config.get("max_request_size"))
-    if request_size >= max_request_size:
-        msg = "GET value request too large"
-        log.warn(msg)
-        raise HTTPRequestEntityTooLarge(request_size, max_request_size)
+        query = None
 
-    response_type = accept_type  # use JSON or binary per accept value
-    
-    arr = np.zeros(np_shape, dtype=dset_dtype, order='C')
-    tasks = []
-    kwargs = {"chunk_map": chunk_map,
-              "bucket": bucket}
+    arr = await getHyperSlabData(app, 
+                           dset_id,
+                           dset_json, 
+                           slices, 
+                           query=query,
+                           bucket=bucket,
+                           limit=limit,
+                           method=request.method)
 
-    for chunk_id in chunk_ids:
-        task = asyncio.ensure_future(read_chunk_hyperslab(app,
-                                                          chunk_id,
-                                                          dset_json,
-                                                          slices,
-                                                          arr,
-                                                          **kwargs))
-        tasks.append(task)
-    await asyncio.gather(*tasks, loop=loop)
-
-    log.info(f"read_chunk_hyperslab gather complete, arr shape: {arr.shape}")
+    if arr is None:
+        # no array (OPTION request?)  Return empty json response
+        resp = await jsonResponse(request, {})
+        return resp
 
     if shm_name:
         log.debug(f"attaching to shared memory block: {shm_name}")
@@ -1773,6 +1629,7 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices,
         resp = await jsonResponse(request, resp_json)
         return resp
         
+    response_type = getAcceptType(request)
     if response_type == "binary":
         log.debug("preparing binary response")
         output_data = arrayToBytes(arr)
@@ -1802,14 +1659,19 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices,
         if "reduce_dim" in params and params["reduce_dim"]:
             arr = squeezeArray(arr)
         resp_json = {}
-        data = arr.tolist()
         params = request.rel_url.query
         if "ignore_nan" in params and params["ignore_nan"]:
             ignore_nan = True
         else:
             ignore_nan = False
+        if isinstance(arr, np.ndarray):
+            # test
+            data = arr.tolist()
+            
 
-        json_data = bytesArrayToList(data)
+            json_data = bytesArrayToList(data)
+        else:
+            json_data = [1,2,3] # test
         datashape = dset_json["shape"]
 
         if datashape["class"] == 'H5S_SCALAR':
@@ -1820,7 +1682,222 @@ async def doHyperSlabRead(request, chunk_ids, dset_json, slices,
         resp_json["hrefs"] = get_hrefs(request, dset_json)
         resp = await jsonResponse(request, resp_json, ignore_nan=ignore_nan)
     return resp
+     
 
+async def doQueryRead(app, query, chunk_ids, dset_json, slices, bucket=None, limit=0):
+    """ query read utility function """
+    log.info(f"doQueryRead: query: {query}, slices: {slices} limit: {limit}")
+    loop = asyncio.get_event_loop()
+
+    dset_id = dset_json["id"]
+    type_json = dset_json["type"]
+    if getDsetRank(dset_json) > 1:
+            msg = "Query string is not supported for multidimensional arrays"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+    log.debug(f"type_json: {type_json}")
+    dset_dtype = createDataType(type_json)
+    log.debug(f"dset_dtype: {dset_dtype}")
+    item_size = dset_dtype.itemsize
+
+    log.debug(f"item size: {item_size}")
+
+    query_dtype = getQueryDtype(dset_dtype)
+
+    tasks = []
+    node_count = getNodeCount(app)
+    if node_count == 0:
+        log.warn("query read request with no active dn nodes")
+        raise HTTPServiceUnavailable()
+    chunk_index = 0
+    num_chunks = len(chunk_ids)
+    log.info(f"doQueryRead with {num_chunks} chunks")
+    # Get information about where chunks are located
+    #   Will be None except for H5D_CHUNKED_REF_INDIRECT type
+    chunk_map = await getChunkInfoMap(app,
+                                      dset_id,
+                                      dset_json,
+                                      chunk_ids,
+                                      bucket=bucket)
+    log.debug(f"chunkinfo_map: {chunk_map}")
+    num_hits = 0
+    dn_rsp = {}  # dictionary keyed by chunk_id
+    while chunk_index < num_chunks:
+        next_chunks = chunk_ids[chunk_index:]
+        chunk_index = num_chunks
+        
+        log.debug(f"doQueryRead - next batch of chunk ids: {next_chunks}")
+        
+        
+        kwargs = {"chunk_map": chunk_map,
+                  "bucket": bucket}
+        if limit > 0:
+            kwargs["limit"] = limit
+
+        for chunk_id in next_chunks:
+            task = asyncio.ensure_future(read_chunk_query(app,
+                                                          chunk_id,
+                                                          dset_json,
+                                                          slices,
+                                                          query,
+                                                          dn_rsp,
+                                                          **kwargs))
+            tasks.append(task)
+        await asyncio.gather(*tasks, loop=loop)
+
+        for chunk_id in next_chunks:
+            array_data = dn_rsp[chunk_id]
+            if array_data is None or len(array_data) == 0:
+                continue
+            if limit > 0 and num_hits >= limit:
+                # we can just discard this result
+                dn_rsp[chunk_id] = None
+
+            # TBD: this needs to be fixed up for variable length dtypes
+            nrows = len(array_data) // query_dtype.itemsize
+            log.debug(f"doQueryRead: {nrows} rows returned")
+            # convert to ndarray
+            try:
+                chunk_arr = bytesToArray(array_data, query_dtype, [nrows,])
+            except ValueError as ve:
+                log.warn(f"bytesToArray ValueError: {ve}")
+                raise HTTPBadRequest()
+
+            num_hits += nrows 
+            log.debug(f"doQueryRead: num_hits after rsp for chunk_id: {chunk_id}: {num_hits}")
+            # trim response if we're over limit
+            if limit > 0 and num_hits > limit:
+                log.debug(f"doQueryRead: limit rows for chunk_id: {chunk_id} to: {(num_hits-limit)}")
+                chunk_arr = chunk_arr[:(num_hits - limit)]
+                num_hits = limit
+            
+            # replace bytes with ndarray
+            dn_rsp[chunk_id] = chunk_arr
+        if limit > 0 and num_hits >= limit:
+            # don't need to iterate through any more chunks
+            break
+
+    # construct an ndarray to return combined result
+    resp_arr = np.zeros((num_hits,), dtype=query_dtype)  
+    next_row = 0
+    for chunk_id in chunk_ids:
+        if chunk_id not in dn_rsp:
+            continue
+        chunk_arr = dn_rsp[chunk_id]
+        if chunk_arr is None:
+            continue
+        chunk_rows = chunk_arr.shape[0]
+        resp_arr[next_row:(next_row+chunk_rows)] = chunk_arr
+        next_row += chunk_rows
+        if next_row == num_hits:
+            break
+    log.info(f"returning {num_hits} rows for query: {query}")
+    log.debug(f"resp_arr: {resp_arr}")
+    
+    return resp_arr
+
+
+async def doHyperSlabRead(app, chunk_ids, dset_json, slices,
+                          chunk_map=None, bucket=None, shm_name=None):
+    """ hyperslab read utility function """
+    loop = asyncio.get_event_loop()
+    log.info(f"doHyperSlabRead - number of chunk_ids: {len(chunk_ids)}")
+    log.debug(f"doHyperSlabRead - chunk_ids: {chunk_ids}")
+    log.debug("headers...")
+     
+    type_json = dset_json["type"]
+    item_size = getItemSize(type_json)
+    log.debug(f"item size: {item_size}")
+    dset_dtype = createDataType(type_json)  # np datatype
+
+    # create array to hold response data
+    np_shape = getSelectionShape(slices)
+    log.debug(f"selection shape: {np_shape}")
+
+    # check that the array size is reasonable
+    request_size = np.prod(np_shape)
+    if item_size == 'H5T_VARIABLE':
+        request_size *= 512  # random guess of avg item_size
+    else:
+        request_size *= item_size
+    log.debug(f"request_size: {request_size}")
+    max_request_size = int(config.get("max_request_size"))
+    if request_size >= max_request_size:
+        msg = "GET value request too large"
+        log.warn(msg)
+        raise HTTPRequestEntityTooLarge(request_size, max_request_size)
+  
+    arr = np.zeros(np_shape, dtype=dset_dtype, order='C')
+    tasks = []
+    kwargs = {"chunk_map": chunk_map,
+              "bucket": bucket}
+
+    for chunk_id in chunk_ids:
+        task = asyncio.ensure_future(read_chunk_hyperslab(app,
+                                                          chunk_id,
+                                                          dset_json,
+                                                          slices,
+                                                          arr,
+                                                          **kwargs))
+        tasks.append(task)
+    await asyncio.gather(*tasks, loop=loop)
+
+    log.info(f"read_chunk_hyperslab gather complete, arr shape: {arr.shape}")
+    return arr
+
+    
+
+async def getHyperSlabData(app, dset_id, dset_json, slices, query=None, bucket=None, limit=0, method="GET"):
+    """ Read selected slices and return numpy array """
+    np_shape = getSelectionShape(slices)
+    log.debug(f"selection shape: {str(np_shape)}")
+
+    npoints = getNumElements(np_shape)
+    log.debug(f"selection num elements: {npoints}")
+
+    layout = getChunkLayout(dset_json)
+
+    num_chunks = getNumChunks(slices, layout)
+    log.debug(f"num_chunks: {num_chunks}")
+    
+    max_chunks = int(config.get('max_chunks_per_request'))
+    if num_chunks > max_chunks:
+        msg = "GET value request too large"
+        log.warn(msg)
+        raise HTTPRequestEntityTooLarge(num_chunks, max_chunks)
+
+    chunk_ids = getChunkIds(dset_id, slices, layout)
+    # Get information about where chunks are located
+    #   Will be None except for H5D_CHUNKED_REF_INDIRECT type
+    chunkinfo = await getChunkInfoMap(app,
+                                      dset_id,
+                                      dset_json,
+                                      chunk_ids,
+                                      bucket=bucket)
+    log.debug(f"chunkinfo_map: {chunkinfo}")
+
+    if method == "OPTIONS":
+        # skip doing any big data load for options request
+        return None
+
+    if query:
+        arr = await doQueryRead(app,
+                                query,
+                                chunk_ids,
+                                dset_json,
+                                slices,
+                                limit=limit,
+                                bucket=bucket)
+        
+    else:
+        arr = await doHyperSlabRead(app,
+                                    chunk_ids,
+                                    dset_json,
+                                    slices,
+                                    chunk_map=chunkinfo,
+                                    bucket=bucket)
+    return arr
 
 async def POST_Value(request):
     """
@@ -1901,19 +1978,25 @@ async def POST_Value(request):
 
     # read body data
     num_points = None
+    slices = None
     point_dt = np.dtype('u8')  # use unsigned long for point index
     if request_type == "json":
         body = await request.json()
-        if "points" not in body:
-            msg = "Expected points key in request body"
+        if "points" in body:
+            points = body["points"]
+            if not isinstance(points, list):
+                msg = "POST Value expected list of points"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            num_points = len(points)
+        elif "select" in body:
+            select = body["select"]
+            slices = getSelectionList(select, dims)
+            log.debug(f"got slices: {slices}")
+        else:
+            msg = "Expected points or select key in request body"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        points = body["points"]
-        if not isinstance(points, list):
-            msg = "POST Value expected list of points"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        num_points = len(points)
 
     else:
         # read binary data
@@ -1941,7 +2024,10 @@ async def POST_Value(request):
             points = points.reshape((num_points, rank))
 
     kwargs = {"bucket": bucket}
-    arr_rsp = await getPointData(app, dset_id, dset_json, points, **kwargs)
+    if slices:
+        arr_rsp = await getHyperSlabData(app, dset_id, dset_json, slices, **kwargs)
+    else:
+        arr_rsp = await getPointData(app, dset_id, dset_json, points, **kwargs)
 
     log.debug(f"arr shape: {arr_rsp.shape}")
 
@@ -1970,6 +2056,7 @@ async def POST_Value(request):
         log.debug(f"got rsp data {len(data)} points")
         json_data = bytesArrayToList(data)
         rsp_json["value"] = json_data
+        rsp_json["hrefs"] = get_hrefs(request, dset_json)
         resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp

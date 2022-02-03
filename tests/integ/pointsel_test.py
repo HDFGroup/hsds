@@ -1072,6 +1072,87 @@ class PointSelTest(unittest.TestCase):
         rsp = self.session.post(req, data=json.dumps(body), headers=headers)
         # point select not supported on zero-dimensional datasets
         self.assertEqual(rsp.status_code, 400)
+
+    def testSelect1DDataset(self):
+        # Test select query for 1d dataset using POST
+        print("testSelect1DDataset", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + '/'
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create dataset
+        data = {"type": "H5T_STD_I32LE", "shape": 10}
+
+        req = self.endpoint + '/datasets'
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        dset_id = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_id))
+
+        # add an attribute
+        attr_payload = {'type': 'H5T_STD_I32LE', 'value': 42}
+        attr_name = "attr1"
+        req = self.endpoint + '/datasets/' + dset_id + "/attributes/" + attr_name
+        rsp = self.session.put(req, data=json.dumps(attr_payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # created
+
+        # link new dataset as 'dset1d'
+        name = "dset1d"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": dset_id}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # write to the dset
+        req = self.endpoint + "/datasets/" + dset_id + "/value"
+        data = list(range(10))  # write 0-9
+        payload = {'value': data}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # read coordinate selection
+        req = self.endpoint + "/datasets/" + dset_id + "/value"
+        select = [[0,1,3,7],]
+        body = {"select": select}
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], [0,1,3,7])
+        """
+        # read a selection
+        params = {"select": "[2:8]"}  # read 6 elements, starting at index 2
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], list(range(2, 8)))
+
+        # read one element.  cf test for PR #84
+        params = {"select": "[3]"}  # read 4th element
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], [3])
+
+        # try to read beyond the bounds of the array
+        params = {"select": "[2:18]"}  # read 6 elements, starting at index 2
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+        """
+
          
 
 

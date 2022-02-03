@@ -36,6 +36,8 @@ class QueryTest(unittest.TestCase):
         print("testSimpleQuery", self.base_domain)
 
         headers = helper.getRequestHeaders(domain=self.base_domain)
+        headers_bin_rsp = helper.getRequestHeaders(domain=self.base_domain)
+        headers_bin_rsp["accept"] = "application/octet-stream"
         req = self.endpoint + '/'
 
         # Get root uuid
@@ -100,94 +102,98 @@ class QueryTest(unittest.TestCase):
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
 
-        # read first row with AAPL
-        params = {'query': "stock_symbol == b'AAPL'" }
-        params["Limit"] = 1
-        rsp = self.session.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        #self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("value" in rspJson)
-        self.assertTrue("index" in rspJson)
-        readData = rspJson["value"]
-        self.assertEqual(len(readData), 1)
-        item = readData[0]
-        self.assertEqual(item, ["AAPL", "20170102", 3054, 2933])
-        self.assertEqual(item[0], "AAPL")
-        indices = rspJson["index"]
-        self.assertEqual(indices, [1])
-        del params["Limit"]
+        def verifyQueryRsp(rsp, expected_indices=None, expect_bin=None):
+            ROW_BYTES=28  # 8 + 4 + 8 + 4 + 4
+            self.assertEqual(rsp.status_code, 200)
+            data = None
+            if rsp.headers['Content-Type'] == "application/octet-stream":
+                if expect_bin is False:
+                    self.assertTrue(False)
+                bin_data = rsp.content 
+                self.assertEqual(len(bin_data) % ROW_BYTES, 0)
+                # assemble binary response to a python list
+                nrows = len(bin_data) // ROW_BYTES
+                data = []
+                for i in range(nrows):
+                    x = bin_data[i*ROW_BYTES:(i+1)*ROW_BYTES]
+                    index = int.from_bytes(x[0:8], "little", signed=False)
+                    symbol = x[8:12].decode('ascii')
+                    date_str = x[12:20].decode('ascii')
+                    open = int.from_bytes(x[20:24], "little")
+                    close = int.from_bytes(x[24:28], "little")
+                    row = [index, symbol, date_str, open, close]
+                    data.append(row)                
+            else:
+                if expect_bin is True:
+                    self.assertTrue(False)
+                rspJson = json.loads(rsp.text)
+                self.assertTrue("hrefs" in rspJson)
+                self.assertTrue("value" in rspJson)
+                data = rspJson["value"]
 
-        # get back rows for AAPL
-        rsp = self.session.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("value" in rspJson)
-        self.assertTrue("index" in rspJson)
-        readData = rspJson["value"]
-        self.assertEqual(len(readData), 4)
-        for item in readData:
-            self.assertEqual(item[0], "AAPL")
-        indices = rspJson["index"]
-        self.assertEqual(indices, [1,4,7,10])
+            index_set = set()
+            expected_count = None
+            if expected_indices:
+                for index in expected_indices:
+                    index_set.add(index)
+                expected_count = len(expected_indices)
+            for item in data:
+                self.assertEqual(len(item), 5)  # index + 4 fields
+                index = item[0]
+                index_set.add(index)
+                expected = value[index]
+                for i in range(4):
+                    self.assertEqual(item[i+1], expected[i])
+            # indices should be unique
+            self.assertEqual(len(index_set), len(data))
+            # check we got the expected number of results
+            if expected_count is not None:
+                self.assertEqual(len(data), expected_count)
+        
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        
+        for query_headers in (headers, headers_bin_rsp):
+            if "accept" in query_headers and query_headers["accept"] == "application/octet-stream":
+                expect_bin = True
+            else:
+                expect_bin = False
+            # read first row with AAPL
+            params = {'query': "stock_symbol == b'AAPL'", "Limit": 1 }
+            expected_indices=(1,)
+            rsp = self.session.get(req, params=params, headers=query_headers)
+            verifyQueryRsp(rsp, expected_indices=expected_indices, expect_bin=expect_bin)     
 
-        # combine with a selection
-        params["select"] = "[2:12]"
-        rsp = self.session.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        #self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("value" in rspJson)
-        self.assertTrue("index" in rspJson)
-        readData = rspJson["value"]
-        self.assertEqual(len(readData), 3)
-        for item in readData:
-            self.assertEqual(item[0], "AAPL")
-        indices = rspJson["index"]
-        self.assertEqual(indices, [4,7,10])
+            # read all rows with APPL
+            params = {'query': "stock_symbol == b'AAPL'" }
+            rsp = self.session.get(req, params=params, headers=query_headers)
+            #self.assertTrue("hrefs" in rspJson)
+            verifyQueryRsp(rsp, expected_indices=(1,4,7,10), expect_bin=expect_bin)
 
-        # combine with Limit
-        params["Limit"] = 2
-        rsp = self.session.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        #self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("value" in rspJson)
-        self.assertTrue("index" in rspJson)
-        readData = rspJson["value"]
-        self.assertEqual(len(readData), 2)
-        for item in readData:
-            self.assertEqual(item[0], "AAPL")
-        indices = rspJson["index"]
-        self.assertEqual(indices, [4,7])
+            params["select"] = "[2:12]"
+            rsp = self.session.get(req, params=params, headers=query_headers)
+            verifyQueryRsp(rsp, expected_indices=(4,7,10), expect_bin=expect_bin)
+         
+            # combine with Limit
+            params["Limit"] = 2
+            rsp = self.session.get(req, params=params, headers=query_headers)
+            verifyQueryRsp(rsp, expected_indices=(4,7), expect_bin=expect_bin)
+         
+            # try bad Limit
+            params["Limit"] = "abc"
+            rsp = self.session.get(req, params=params, headers=query_headers)
+            self.assertEqual(rsp.status_code, 400)
 
-        # try bad Limit
-        params["Limit"] = "abc"
-        rsp = self.session.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 400)
+            # try invalid query string
+            params = {'query': "foobar" }
+            rsp = self.session.get(req, params=params, headers=query_headers)
+            self.assertEqual(rsp.status_code, 400)
 
-        # try invalid query string
-        params = {'query': "foobar" }
-        rsp = self.session.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 400)
-
-        # try boolean query
-        params = {'query': "(open > 3000) & (open < 3100)" }
-        rsp = self.session.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        #self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("value" in rspJson)
-        self.assertTrue("index" in rspJson)
-        readData = rspJson["value"]
-        self.assertEqual(len(readData), 5)
-        for item in readData:
-            self.assertTrue(item[2] > 3000)
-            self.assertTrue(item[2] < 3100)
-        indices = rspJson["index"]
-        self.assertEqual(indices, [0, 1, 3, 5, 11])
-
+            # try boolean query
+            params = {'query': "(open > 3000) & (open < 3100)" }
+            rsp = self.session.get(req, params=params, headers=query_headers)
+            self.assertEqual(rsp.status_code, 200)
+            verifyQueryRsp(rsp, expected_indices=(0, 1, 3, 5, 11), expect_bin=expect_bin)
+         
 
     def testChunkedRefIndirectDataset(self):
         print("testChunkedRefIndirectDatasetQuery", self.base_domain)
@@ -321,18 +327,15 @@ class QueryTest(unittest.TestCase):
 
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        #self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
-        self.assertTrue("index" in rspJson)
         readData = rspJson["value"]
         self.assertEqual(len(readData), 8813)
         item = readData[0]
-        self.assertEqual(item[0], "1980.12.12")
-
-        self.assertEqual(item[1], "AAPL")
-        indices = rspJson["index"]
-        self.assertEqual(len(indices), 8813)
-        self.assertEqual(indices[0], 128912)
+        self.assertEqual(item[0], 128912)
+        self.assertEqual(item[1], "1980.12.12")
+        self.assertEqual(item[2], "AAPL")
+         
 
          
 
@@ -484,10 +487,6 @@ class QueryTest(unittest.TestCase):
                 self.assertEqual(mod_item[2], 999)
             else:
                 self.assertEqual(orig_item[2], mod_item[2])
-
-
-
-
 
 
 if __name__ == '__main__':

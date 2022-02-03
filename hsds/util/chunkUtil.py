@@ -1013,32 +1013,46 @@ def _getEvalStr(query, arr_name, field_names):
     return eval_str
 
 
+def getQueryDtype(dt):
+    """ make a dtype for query response """
+    field_names = dt.names
+    #  make up a index field name that doesn't conflict with existing names
+    index_name = "index"
+    for i in range(len(field_names)):
+        if index_name in field_names:
+            index_name = "_" + index_name
+        else:
+            break
+
+    dt_fields = [(index_name, 'uint64'),]
+    for i in range(len(dt)):
+        dt_fields.append((dt.names[i], dt[i]))
+    query_dt = np.dtype(dt_fields)
+    
+    return query_dt
+
 def chunkQuery(chunk_id=None, chunk_layout=None, chunk_arr=None, slices=None,
-               query=None, query_update=None, limit=0, return_json=False):
+                query=None, query_update=None, limit=0):
     """
     Run query on chunk and selection
     """
-    log.debug(f"chunkQuery - chunk_id: {chunk_id}")
+    log.debug(f"chunkQuery - chunk_id: {chunk_id} query: {query} slices: {slices}, limit: {limit}")
 
     if not isinstance(chunk_arr, np.ndarray):
         raise TypeError("unexpected array type")
-
-    if limit and not isinstance(limit, int):
-        raise TypeError("unexpected limit")
 
     dims = chunk_arr.shape
 
     rank = len(dims)
 
-    dset_dtype = chunk_arr.dtype
-    log.debug(f"dtype: {dset_dtype}")
-    log.debug(f"selection: {slices}")
-    log.debug(f"query: {query}")
+    dset_dt = chunk_arr.dtype
+    log.debug(f"dtype: {dset_dt}")
 
     if rank != 1:
         msg = "Query operations only supported on one-dimensional datasets"
         log.error(msg)
         raise ValueError(msg)
+    
     if not slices:
         slices = [slice(0, dims[0], 1), ]
     if len(slices) != rank:
@@ -1046,13 +1060,11 @@ def chunkQuery(chunk_id=None, chunk_layout=None, chunk_arr=None, slices=None,
         log.error(msg)
         raise ValueError(msg)
     slices = tuple(slices)
-
+    
     chunk_coord = getChunkCoordinate(chunk_id, chunk_layout)
 
-    values = []
-    indices = []
     # do query selection
-    field_names = list(dset_dtype.fields.keys())
+    field_names = dset_dt.names
 
     if query_update:
         replace_mask = [None, ] * len(field_names)
@@ -1068,15 +1080,72 @@ def chunkQuery(chunk_id=None, chunk_layout=None, chunk_arr=None, slices=None,
         replace_mask = None
 
     x = chunk_arr[slices]
-    # log.debug(f"chunkQuery - x: {x}")
+    log.debug(f"chunkQuery - x: {x}")
     eval_str = _getEvalStr(query, "x", field_names)
     log.debug(f"chunkQuery - eval_str: {eval_str}, {x.shape[0]} rows ")
-    where_result = np.where(eval(eval_str))
-    log.debug(f"chunkQuery - where_result: {where_result}")
-    where_result_index = where_result[0]
-    log.debug(f"chunkQuery - where_result index: {where_result_index}")
-    log.debug(f"chunkQuery - boolean selection: {x[where_result_index]}")
+    where_indices = np.where(eval(eval_str))
+    log.debug(f"chunkQuery - where_indices: {where_indices}")
+    if not isinstance(where_indices, tuple):
+        log.warn(f"expected where_indices of tuple but got: {type(where_indices)}")
+        return None
+    if len(where_indices) == 0:
+        log.warn("chunkQuery - got empty tuple where result")
+        return None
+    
+    where_indices = where_indices[0]
+    log.debug(f"where_indices: {where_indices}") 
+    if not isinstance(where_indices, np.ndarray):
+        log.warn(f"expected where_indices of ndarray but got: {type(where_indices)}")
+        return None
+    nrows = where_indices.shape[0]
+    log.debug(f"chunkQuery - {nrows} found")
+
+    
+    if limit > 0 and nrows > limit:
+        # truncate to limit rows
+        log.debug(f"limiting  response to {limit} rows")
+        where_indices = where_indices[:limit]
+        nrows = limit
+
+    where_result =  x[where_indices].copy()
+    log.debug(f"where_result: {where_result}")
+
+    if replace_mask and nrows > 0:
+        log.debug(f"apply replace_mask: {replace_mask}")
+        for i in range(len(field_names)):
+            field = field_names[i]
+            if replace_mask[i] is not None:
+                where_result[field] = replace_mask[i]
+
+    # adjust the index to correspond with the dataset
     s = slices[0]
+    start = s.start + chunk_coord[0]
+    if start > 0:
+        # can just increment every value by same amount
+        log.debug(f"adjust start index by: {start}")
+        where_indices += start
+    if s.step and s.step > 1:
+        log.debug(f"adjust start index  using step value: {s.step}")
+        for i in range(nrows):
+            where_indices[i] = where_indices[i] + (s.step-1)*i
+
+    log.debug(f"chunkQuery - adjusted where_indices: {where_indices}")
+
+    dt_rsp = getQueryDtype(dset_dt)
+    # construct response array
+    rsp_arr = np.zeros((nrows,), dtype=dt_rsp)
+    for field in field_names:
+        rsp_arr[field] = where_result[field]
+    index_name = dt_rsp.names[0]
+    log.debug(f"rsp_arr: {rsp_arr}")
+    rsp_arr[index_name] = where_indices
+    log.debug(f"rsp_arr after apply where_indices: {rsp_arr}")
+    log.debug("chunkQuery returning")
+
+    return rsp_arr
+
+    """
+    
     count = 0
     for index in where_result_index:
         # log.debug(f"chunkQuery - index: {index}")
@@ -1127,3 +1196,5 @@ def chunkQuery(chunk_id=None, chunk_layout=None, chunk_arr=None, slices=None,
 
     log.debug(f"chunkQuery returning: {count} rows")
     return result
+    """
+    

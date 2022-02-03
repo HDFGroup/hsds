@@ -174,6 +174,28 @@ def getFilterOps(app, dset_json, item_size):
     else:
         return None
 
+def getDsetRank(dset_json):
+    """ Get rank returning 0 for sclar or NULL datashapes """
+    datashape = dset_json["shape"]
+    if datashape["class"] == 'H5S_NULL':
+        return 0
+    if datashape["class"] == 'H5S_SCALAR':
+        return 0
+    if "dims" not in datashape:
+        log.warn(f"expected to find dims key in shape_json: {datashape}")
+        return 0
+    dims = datashape["dims"]
+    rank = len(dims)
+    return rank
+
+def isNullSpace(dset_json):
+    """ Return true if this dataset is a null dataspace """
+    datashape = dset_json["shape"]
+    if datashape["class"] == 'H5S_NULL':
+        return True
+    else:
+        return False
+
 
 def getHyperslabSelection(dsetshape, start=None, stop=None, step=None):
     """
@@ -591,6 +613,7 @@ def getDsetMaxDims(dset_json):
         log.error("Unexpected shape class: {}".format(shape_json['class']))
         raise HTTPInternalServerError()
     return maxdims
+
 
 
 def getChunkLayout(dset_json):
