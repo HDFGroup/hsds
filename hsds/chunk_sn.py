@@ -76,6 +76,68 @@ def _isNonStrict(params):
     return retval
 
 
+def get_hrefs(request, dset_json):
+    """
+    Convience function to set up hrefs for GET
+    """
+    hrefs = []
+    dset_id = dset_json["id"]
+    dset_uri = f"/datasets/{dset_id}"
+    self_uri = f"{dset_uri}/value"
+    hrefs.append({'rel': 'self', 'href': getHref(request, self_uri)})
+    root_uri = '/groups/' + dset_json["root"]
+    hrefs.append({'rel': 'root', 'href': getHref(request, root_uri)})
+    hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
+    hrefs.append({'rel': 'owner', 'href': getHref(request, dset_uri)})
+    return hrefs
+    
+
+async def get_slices(app, select, dset_json, bucket=None):
+    """ Get desired slices from selection query param string or json value.
+       If select is none or empty, slices for entire datashape will be 
+       returned.
+       Refretch dims if the dataset is extensible 
+    """
+    
+    dset_id = dset_json['id']
+    datashape = dset_json["shape"]
+    if datashape["class"] == 'H5S_NULL':
+        msg = "Null space datasets can not be used as target for GET value"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    
+    dims = getShapeDims(datashape)  # throws 400 for HS_NULL dsets
+    maxdims = getDsetMaxDims(dset_json)
+
+    # refetch the dims if the dataset is extensible and request or hasn't
+    # provided an explicit region
+    if isExtensible(dims, maxdims) and (select is None or not select):
+        kwargs = {"bucket": bucket, "refresh": True}
+        dset_json = await getObjectJson(app, dset_id, **kwargs)
+        dims = getShapeDims(dset_json["shape"])
+
+    slices = None  # selection for read
+    if isExtensible and select:
+        try:
+            slices = getSelectionList(select, dims)
+        except ValueError:
+            # exception might be due to us having stale version of dims,
+            # so use refresh
+            kwargs = {"bucket": bucket, "refresh": True}
+            dset_json = await getObjectJson(app, dset_id, **kwargs)
+            dims = getShapeDims(dset_json["shape"])
+            slices = None  # retry below
+
+    if slices is None:
+        try:
+            slices = getSelectionList(select, dims)
+        except ValueError as ve:
+            msg = str(ve)
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    return slices
+
+
 async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr,
                                 bucket=None):
     """ write the chunk selection to the DN
@@ -845,18 +907,14 @@ async def doPutQuery(request, query_update, dset_json):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
-    if "select" in params:
-        select = params["select"]
-    else:
-        select = None
+    select = params.get("select")
     try:
-        slices = getSelectionList(select, dims)
+        slices = await get_slices(app, select, dset_json, bucket=bucket)
     except ValueError as ve:
         msg = str(ve)
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
      
-
     msg = f"doPutQuery - got dim_slice: {slices[0]}"
     log.info(msg)
 
@@ -1062,7 +1120,8 @@ async def PUT_Value(request):
     if query:
         # divert here if we are doing a put query
         # returns array data like a GET query request
-        slices = await get_slices(request, dset_json, bucket=bucket)
+        select = params.get("select")
+        slices = await get_slices(app, select, dset_json, bucket=bucket)
         if "Limit" in params:
             try:
                 limit = int(params["Limit"])
@@ -1226,28 +1285,15 @@ async def PUT_Value(request):
 
     elif points is None:
         if body_json and "start" in body_json and "stop" in body_json:
-            try:
-                slices = getSelectionList(body_json, dims)
-            except ValueError as ve:
-                msg = str(ve)
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
+            slices = await get_slices(app, body_json, dset_json, bucket=bucket)
         else:
-            if "select" in params:
-                select = params["select"]
-            else:
-                select = None  # will get slices for entire datashape
-            try:
-                slices = getSelectionList(select, dims)
-            except ValueError as ve:
-                msg = str(ve)
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
+            select = params.get("select")
+            slices = await get_slices(app, select, dset_json, bucket=bucket)
 
         # The selection parameters will determine expected put value shape
         log.debug(f"PUT Value selection: {slices}")
         # not point selection, get hyperslab selection shape
-        np_shape = getSelectionShape(slices)
+        np_shape =  getSelectionShape(slices)
         num_elements = getNumElements(np_shape)
     else:
         # point update
@@ -1481,73 +1527,6 @@ async def PUT_Value(request):
     resp_json = {}
     resp = await jsonResponse(request, resp_json)
     return resp
-
-
-def get_hrefs(request, dset_json):
-    """
-    Convience function to set up hrefs for GET
-    """
-    hrefs = []
-    dset_id = dset_json["id"]
-    dset_uri = f"/datasets/{dset_id}"
-    self_uri = f"{dset_uri}/value"
-    hrefs.append({'rel': 'self', 'href': getHref(request, self_uri)})
-    root_uri = '/groups/' + dset_json["root"]
-    hrefs.append({'rel': 'root', 'href': getHref(request, root_uri)})
-    hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
-    hrefs.append({'rel': 'owner', 'href': getHref(request, dset_uri)})
-    return hrefs
-
-
-async def get_slices(request, dset_json, bucket=None):
-    """ Get desired slices from selection query param string or json value.
-       If select is none or empty, slices for entire datashape will be 
-       returned.
-       Refretch dims if the dataset is extensible 
-    """
-    app = request.app
-    params = request.rel_url.query
-    if "select" in params:
-        select = params["select"]
-    else:
-        select = None
-    dset_id = dset_json['id']
-    datashape = dset_json["shape"]
-    if datashape["class"] == 'H5S_NULL':
-        msg = "Null space datasets can not be used as target for GET value"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    
-    dims = getShapeDims(datashape)  # throws 400 for HS_NULL dsets
-    maxdims = getDsetMaxDims(dset_json)
-
-    # refetch the dims if the dataset is extensible and requestor hasn't
-    # provided an explicit region
-    if isExtensible(dims, maxdims) and (select is None or not select):
-        kwargs = {"bucket": bucket, "refresh": True}
-        dset_json = await getObjectJson(app, dset_id, **kwargs)
-        dims = getShapeDims(dset_json["shape"])
-
-    slices = None  # selection for read
-    if isExtensible and select:
-        try:
-            slices = getSelectionList(select, dims)
-        except ValueError:
-            # exception might be due to us having stale version of dims,
-            # so use refresh
-            kwargs = {"bucket": bucket, "refresh": True}
-            dset_json = await getObjectJson(app, dset_id, **kwargs)
-            dims = getShapeDims(dset_json["shape"])
-            slices = None  # retry below
-
-    if slices is None:
-        try:
-            slices = getSelectionList(select, dims)
-        except ValueError as ve:
-            msg = str(ve)
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-    return slices
     
 
 async def GET_Value(request):
@@ -1599,7 +1578,8 @@ async def GET_Value(request):
     await validateAction(app, domain, dset_id, username, "read")
 
     # Get query parameter for selection 
-    slices = await get_slices(request, dset_json, bucket=bucket)
+    select = params.get("select")
+    slices = await get_slices(app, select, dset_json, bucket=bucket)
     log.debug(f"GET Value selection: {slices}")
 
     limit = 0
@@ -1611,10 +1591,7 @@ async def GET_Value(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
-    if "query" in params:
-        query = params["query"]
-    else:
-        query = None
+    query = params.get("query")
 
     arr = await getHyperSlabData(app, 
                            dset_id,
@@ -2025,7 +2002,7 @@ async def POST_Value(request):
             num_points = len(points)
         elif "select" in body:
             select = body["select"]
-            slices = getSelectionList(select, dims)
+            slices = await get_slices(app, select, dset_json, bucket=bucket)
             log.debug(f"got slices: {slices}")
         else:
             msg = "Expected points or select key in request body"

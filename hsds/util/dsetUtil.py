@@ -429,6 +429,11 @@ def _getSelectElements(select):
 def getSelectionList(select, dims):
     """ Return tuple of slices and/or coordinate list for the given selection """
     select_list = []
+    print(f"getSelectionList({select}, {dims}")
+
+
+    if isinstance(select, dict):
+        select = _getSelectionStringFromRequestBody(select)
 
     if select is None or len(select) == 0:
         """ Return set of slices covering data space"""
@@ -437,9 +442,7 @@ def getSelectionList(select, dims):
             s = slice(0, extent, 1)
             slices.append(s)
         return tuple(slices)
-
-    if isinstance(select, dict):
-        select = _getSelectionStringFromRequestBody(select)
+    
         
     # convert selection to list by dimension
     elements = _getSelectElements(select)

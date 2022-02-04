@@ -1078,6 +1078,9 @@ class PointSelTest(unittest.TestCase):
         print("testSelect1DDataset", self.base_domain)
 
         headers = helper.getRequestHeaders(domain=self.base_domain)
+        headers_bin_rsp = helper.getRequestHeaders(domain=self.base_domain)
+        headers_bin_rsp["accept"] = "application/octet-stream"
+
         req = self.endpoint + '/'
 
         # Get root uuid
@@ -1128,33 +1131,150 @@ class PointSelTest(unittest.TestCase):
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
         self.assertEqual(rspJson["value"], [0,1,3,7])
-        """
+
+        # read coordinate selection with binary response
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers_bin_rsp)
+        self.assertEqual(rsp.status_code, 200)
+        
+        data = rsp.content
+        expect_count = len(select[0])
+        self.assertEqual(len(data), expect_count * 4)
+        for i in range(len(data)):
+            if i%4 != 0:
+                self.assertEqual(data[i], 0)
+            elif i==0:
+                self.assertEqual(data[i], 0)
+            elif i==4:
+                self.assertEqual(data[i], 1)
+            elif i==8:
+                self.assertEqual(data[i], 3)
+            elif i==12:
+                self.assertEqual(data[i], 7)
+            else:
+                self.assertTrue(False) # unexpected
+        
         # read a selection
-        params = {"select": "[2:8]"}  # read 6 elements, starting at index 2
-        rsp = self.session.get(req, params=params, headers=headers)
+        body = {"select": "[2:8]"}  # read 6 elements, starting at index 2
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
         self.assertEqual(rspJson["value"], list(range(2, 8)))
 
+        # read with binary response
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers_bin_rsp)
+        self.assertEqual(rsp.status_code, 200)
+        expect_count = len(select[0])
+        data = rsp.content
+        expect_count = 6
+        self.assertEqual(len(data), expect_count * 4)
+        for i in range(len(data)):
+            if i%4 != 0:
+                self.assertEqual(data[i], 0)
+            else:
+                self.assertEqual(data[i], i//4 + 2)
+             
         # read one element.  cf test for PR #84
-        params = {"select": "[3]"}  # read 4th element
-        rsp = self.session.get(req, params=params, headers=headers)
+        body = {"select": "[3]"}  # read 4th element
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
         self.assertEqual(rspJson["value"], [3])
 
+        # read with binary response
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers_bin_rsp)
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(rsp.content, b'\x03\x00\x00\x00')  
+
         # try to read beyond the bounds of the array
-        params = {"select": "[2:18]"}  # read 6 elements, starting at index 2
-        rsp = self.session.get(req, params=params, headers=headers)
+        body = {"select": "[2:18]"}  # read 6 elements, starting at index 2
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
         self.assertEqual(rsp.status_code, 400)
-        """
 
-         
 
+    def testSelect2DDataset(self):
+        """Test Select query  for 2d dataset"""
+        print("testSelect2DDataset", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        headers_bin_rsp = helper.getRequestHeaders(domain=self.base_domain)
+        headers_bin_rsp["accept"] = "application/octet-stream"
+        req = self.endpoint + '/'
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create dataset
+        num_col = 8
+        num_row = 4
+        data = {"type": "H5T_STD_I32LE", "shape": [num_row, num_col]}
+
+        req = self.endpoint + '/datasets'
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        dset_id = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_id))
+
+        # link new dataset as 'dset1d'
+        name = "dset2d"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": dset_id}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # write to the dset
+        json_data = []
+        for i in range(num_row):
+            row = []
+            for j in range(num_col):
+                row.append(i*10 + j)
+            json_data.append(row)
+        req = self.endpoint + "/datasets/" + dset_id + "/value"
+        payload = {'value': json_data}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # read a selection
+        body = {"select": "[3:4,2:8]"}  # read 3 elements, 
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], [json_data[3][2:8],])
+
+        # read selection with binary response
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers_bin_rsp)
+        self.assertEqual(rsp.status_code, 200)
+        data = rsp.content
+        self.assertEqual(len(data), 6*4)
+        for i in range(6):
+            n = int.from_bytes(data[i*4:(i+1)*4], "little")
+            self.assertEqual(n, i+32)
+
+        # read a coordinate selection 
+        body = {"select": "[3:4,[0,2,5]]"}  # read 3 elements
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], [[30,32,35],])
+
+        # read a coordinate selection with binary response
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers_bin_rsp)
+        self.assertEqual(rsp.status_code, 200)
+        data = rsp.content
+        self.assertEqual(len(data), 3*4)
+        self.assertEqual(data, b'\x1e\x00\x00\x00 \x00\x00\x00#\x00\x00\x00')
 
 
 if __name__ == '__main__':
