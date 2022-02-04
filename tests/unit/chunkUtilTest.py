@@ -27,10 +27,13 @@ class ChunkUtilTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(ChunkUtilTest, self).__init__(*args, **kwargs)
         # main
+        logging.getLogger().setLevel(logging.ERROR)
+ 
 
     def testGuessChunk(self):
 
         typesize = 'H5T_VARIABLE'
+        logging.debug('hello')
 
         shape = {"class": 'H5S_NULL' }
         layout = guessChunk(shape, typesize)
@@ -1134,7 +1137,6 @@ class ChunkUtilTest(unittest.TestCase):
         chunk_ids = getChunkIds(dset_id, selection, layout)
         chunk_id = chunk_ids[1]
         sel = getDataCoverage(chunk_id, selection, layout)
-        print(f"{chunk_id}: {sel}")
         self.assertEqual(sel[0], slice(0,66,1))
         self.assertEqual(sel[1], slice(0,1,1))
         self.assertEqual(sel[2], slice(87,139,1))
@@ -1143,10 +1145,8 @@ class ChunkUtilTest(unittest.TestCase):
 
         selection = (slice(0,792,1), slice(520,521,1), [1401,1501,1540])
         chunk_ids = getChunkIds(dset_id, selection, layout)
-        print("coord sel")
         chunk_id = chunk_ids[1]
         sel = getDataCoverage(chunk_id, selection, layout)
-        print(f"{chunk_id}: {sel}")
         self.assertEqual(sel[0], slice(0,66,1))
         self.assertEqual(sel[1], slice(0,1,1))
         self.assertEqual(sel[2], slice(1,3,1))
@@ -1442,51 +1442,45 @@ class ChunkUtilTest(unittest.TestCase):
         result = chunkQuery(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, query="symbol == b'AAPL'")
         self.assertTrue(isinstance(result, np.ndarray))
         result_dtype = result.dtype
-        self.assertEqual(len(result_dtype), 2)
+        self.assertEqual(len(result_dtype), 5)
         self.assertEqual(result_dtype[0], np.dtype("u8"))
-        self.assertEqual(len(result_dtype[1]), 4)
-        self.assertEqual(len(result), 4)
+        for i in range(1,5):
+            self.assertEqual(result_dtype[i], chunk_dtype[i-1])
         expected_indexes = (1201,1204,1207,1210)  # rows above with AAPL as symbol
         for i in range(4):
             item = result[i]
-            self.assertEqual(len(item), 2)  # index and row values
+            self.assertEqual(len(item), 5)  # index and row values
             index = int(item[0])
             self.assertEqual(index, expected_indexes[i])
-            row = item[1]
             chunk_index = index % chunk_layout[0]
             expected_row = chunk_arr[chunk_index]
-            self.assertEqual(len(row), 4)
-            self.assertEqual(row[0], b"AAPL")
-            self.assertEqual(row, expected_row)
-
+            for j in range(1,5):
+                self.assertEqual(item[j], expected_row[j-1])
+             
         # return JSON
-        result = chunkQuery(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, query="symbol == b'AAPL'", return_json=True)
-        json_str = json.dumps(result)  # test we can jsonfy the result
-        self.assertTrue(len(json_str) > 100)
-        self.assertTrue("index" in result)
-        indexes = result["index"]
-        self.assertTrue("value" in result)
-        values = result["value"]
+        result = chunkQuery(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, query="symbol == b'AAPL'")
+        self.assertTrue(isinstance(result, np.ndarray))
+        self.assertEqual(result.shape[0],4)
+        self.assertEqual(len(result.dtype), 5)
+
         for i in range(4):
-            index = indexes[i]
+            row = result[i]
+            index = int(row[0])
             self.assertEqual(index, expected_indexes[i])
-            row = values[i]
             chunk_index = index % chunk_layout[0]
             expected_row = chunk_arr[chunk_index]
-            self.assertEqual(len(row), 4)
-            self.assertEqual(row[0], "AAPL")  # note - string, not bytes
-            for i in range(2,4):
-                self.assertEqual(row[i], expected_row[i])
+            self.assertEqual(len(row), 5)
+            self.assertEqual(row[1], b'AAPL') 
+             
         # read just one row back
         result = chunkQuery(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, query="symbol == b'AAPL'", limit=1)
         self.assertTrue(isinstance(result, np.ndarray))
         self.assertEqual(len(result), 1)
         item = result[0]
-        self.assertEqual(len(item), 2)
+        self.assertEqual(len(item), 5)
         index = item[0]
         self.assertEqual(index, 1201)
-        row = item[1]
-        self.assertEqual(row, chunk_arr[1])
+        self.assertEqual(item[1], b'AAPL')
 
         # query with no limit and selection
         slices = (slice(2,12,1),)
@@ -1519,17 +1513,11 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(len(result), 4)
         for i in range(4):
             item = result[i]
-            index = int(item[0]) - 1200
-            row = item[1]
-            self.assertEqual(row[0], b'AAPL')
-            self.assertEqual(row[2], 999)
-            # original array should have been modified
-            row = chunk_arr[index]
-            self.assertEqual(row[0], b'AAPL')
-            self.assertEqual(row[2], 999)
+            self.assertEqual(item[1], b'AAPL')
+            self.assertEqual(item[3], 999)
+             
 
 
 if __name__ == '__main__':
-    #setup test files
-
+     
     unittest.main()

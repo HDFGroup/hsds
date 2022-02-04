@@ -101,12 +101,10 @@ async def PUT_Chunk(request):
 
     # TBD - does this work with linked datasets?
     dims = getChunkLayout(dset_json)
-    log.debug(f"got dims: {dims}")
     rank = len(dims)
 
     type_json = dset_json["type"]
     dt = createDataType(type_json)
-    log.debug(f"dtype: {dt}")
     itemsize = 'H5T_VARIABLE'
     if "size" in type_json:
         itemsize = type_json["size"]
@@ -121,10 +119,8 @@ async def PUT_Chunk(request):
     except ValueError as ve:
         log.error(f"ValueError for select: {select}: {ve}")
         raise HTTPInternalServerError()
-    log.debug(f"got selection: {selection}")
 
     mshape = getSelectionShape(selection)
-    log.debug(f"mshape: {mshape}")
     num_elements = 1
     for extent in mshape:
         num_elements *= extent
@@ -158,6 +154,7 @@ async def PUT_Chunk(request):
                       "query_update": query_update,
                       "limit": limit}
             rsp_arr = chunkQuery(**kwargs)
+            log.debug(f"query_update returned: {len(rsp_arr)} rows")
         except TypeError as te:
             log.warn(f"chunkQuery - TypeError: {te}")
             raise HTTPBadRequest()
@@ -167,6 +164,24 @@ async def PUT_Chunk(request):
         num_hits = rsp_arr.shape[0]
         if query_update and num_hits > 0:
             is_dirty = True
+            # save chunk
+            save_chunk(app, chunk_id, dset_json, bucket=bucket)
+            status_code = 201
+            # stream back response array
+            read_resp = arrayToBytes(rsp_arr)
+ 
+            try:
+                resp = StreamResponse()
+                resp.headers['Content-Type'] = "application/octet-stream"
+                resp.content_length = len(read_resp)
+                await resp.prepare(request)
+                await resp.write(read_resp)
+            except Exception as e:
+                log.error(f"Exception during binary data write: {e}")
+                raise HTTPInternalServerError()
+            finally:
+                await resp.write_eof()
+            return
         # chunk update successful
         # TBD - return 404 if num_hits is zero?
         resp = {}

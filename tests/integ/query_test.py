@@ -418,13 +418,13 @@ class QueryTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
-        self.assertTrue("index" in rspJson)
         readData = rspJson["value"]
         self.assertEqual(len(readData), 4)
+        indicies = []
         for item in readData:
-            self.assertEqual(item[0], "AAPL")
-        indices = rspJson["index"]
-        self.assertEqual(indices, [1,4,7,10])
+            indicies.append(item[0])
+            self.assertEqual(item[1], "AAPL")
+        self.assertEqual(indicies, [1,4,7,10])
 
         # read values and verify the expected changes where made
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
@@ -461,14 +461,10 @@ class QueryTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
-        self.assertTrue("index" in rspJson)
         readData = rspJson["value"]
         self.assertEqual(len(readData), 1)
-        for item in readData:
-            self.assertEqual(item[0], "AAPL")
-        indices = rspJson["index"]
-        self.assertEqual(indices, [1])
-
+        self.assertEqual(readData[0], [1, 'AAPL', '20170102', 999, 2933])
+         
         # read values and verify the expected changes where made
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         rsp = self.session.get(req, headers=headers)

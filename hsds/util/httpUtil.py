@@ -346,6 +346,7 @@ async def http_put(app, url, data=None, params=None):
         log.debug("setting http_put for binary")
         kwargs = {"data": data}
     else:
+        log.debug("setting http_put for json")
         kwargs = {"json": data}
 
     rsp_json = None
@@ -373,16 +374,20 @@ async def http_put(app, url, data=None, params=None):
                 msg = f"PUT request error for url: {url} status: {rsp.status}"
                 log.error(msg)
                 raise HTTPInternalServerError()
-
-            rsp_json = await rsp.json()
-            log.debug(f"http_put({url}) response: {rsp_json}")
+            if isBinaryResponse(rsp):
+                # return binary data
+                retval = await rsp.read()  # read response as bytes
+                log.debug(f"http_put({url}): return {len(retval)} bytes")
+            else:
+                retval = await rsp.json()
+                log.debug(f"http_put({url}) response: {rsp_json}")
     except ClientError as ce:
         log.error(f"ClientError for http_put({url}): {ce} ")
         raise HTTPInternalServerError()
     except CancelledError as cle:
         log.error(f"CancelledError for http_put({url}): {cle}")
         raise HTTPInternalServerError()
-    return rsp_json
+    return retval
 
 
 async def http_delete(app, url, data=None, params=None):
