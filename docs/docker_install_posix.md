@@ -20,7 +20,7 @@ Export environment variables as shown in "Sample .bashrc" below.
 13. Create the file **admin/config/override.yml** for deployment specific settings (see "Sample override.yml")
 14. Start the service `$./runall.sh <n>` where n is the number of containers desired (defaults to 1)
 15. Run `$ docker ps` and verify that the containers are running: hsds_head, hsds_sn_[1-n], hsds_dn_[1-n]
-16. Go to <http://hsds.hdf.test/about> and verify that "cluster_state" is "READY" (might need to give it a minute or two)
+16. Go to <http://hsds.hdf.test:5101/about> and verify that "state" is "READY" (might need to give it a minute or two)
 17. Perform post install configuration.   See: [Post Install Configuration](post_install.md)
 
 

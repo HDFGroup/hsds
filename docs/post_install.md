@@ -14,7 +14,7 @@ To set up folders in this fashion, follow the following steps:
 
 1. Install h5py: `$ pip install h5py`
 2. Install h5pyd (Python client SDK): `$ pip install h5pyd`
-3. Run `$ hsconfigure`.  Answer prompts for HSDS endpoint, username, and password.  These will become the defaults for hs commands and the h5pyd package
+3. Run `$ hsconfigure`.  Answer prompts for HSDS endpoint, username, and password.  Leave the prompt for API_KEY empty.  These will become the defaults for hs commands and the h5pyd package
 4. Create a top-level home folder if one does not already exists: `$ hstouch -u admin -p <admin_passwd> /home/`
 5. Setup home folders for each username that will need to create domains: `$ hstouch -u admin -p <admin_passd> -o <username> /home/<username>/`
 6. Run HSDS integration tests, and/or h5pyd tests if desired.  See the relevant sections below
