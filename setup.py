@@ -59,5 +59,6 @@ setup(name='hsds',
           'hsds-servicenode = hsds.servicenode:main',
           'hsds-headnode = hsds.headnode:main',
           'hsds-rangeget = hsds.rangeget_proxy:main', 
+          'hsds-node = hsds.node_runner:main'
           ]}
 )

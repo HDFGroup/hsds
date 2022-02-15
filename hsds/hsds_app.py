@@ -43,7 +43,8 @@ class HsdsApp:
     def __init__(self, username=None, 
                 password=None, password_file=None, logger=None, 
                 log_level=None, dn_count=1, logfile=None, 
-                socket_dir=None, config_dir=None, readonly=False):
+                socket_dir=None, config_dir=None, readonly=False,
+                islambda=False):
         """
         Initializer for class
         """
@@ -74,6 +75,7 @@ class HsdsApp:
         self._logfile = logfile
         self._loglevel = log_level
         self._readonly = readonly
+        self._islambda = islambda
         self._ready = False
         self._config_dir = config_dir
 
@@ -178,6 +180,12 @@ class HsdsApp:
         common_args.append(f"--dn_urls={dn_urls_arg}")
         common_args.append(f"--rangeget_url={self._rangeget_url}")
         common_args.append(f"--hsds_endpoint={self._endpoint}")
+        if self._islambda:
+            # base boto packages installed in AWS image conflicting with aiobotocore
+            # see: https://github.com/aio-libs/aiobotocore/issues/862
+            # This command line argument will tell the sub-processes to remove
+            # sitepackage libs from their path before importing aiobotocore
+            common_args.append(f"--removesitepackages")
         # common_args.append("--server_name=Direct Connect (HSDS)")
         common_args.append("--use_socket")
         if self._readonly:
@@ -193,8 +201,10 @@ class HsdsApp:
             if i == 0:
                 # args for service node
                 pargs = [py_exe,
-                         os.path.join(cmd_dir, "hsds-servicenode"),
+                         os.path.join(cmd_dir, "hsds-node"),
+                         "--node_type=sn",
                          "--log_prefix=sn "]
+
                 if self._username:
                     pargs.append(f"--hs_username={self._username}")
                 if self._password:
@@ -210,11 +220,13 @@ class HsdsApp:
                 # args for rangeget node
                 pargs = [py_exe,
                          os.path.join(cmd_dir, "hsds-rangeget"),
+                         "--node_type=rn",
                          "--log_prefix=rg "]
             else:
                 node_number = i - 2  # start with 0
                 pargs = [py_exe,
                          os.path.join(cmd_dir, "hsds-datanode"),
+                         "--node_type=dn",
                          f"--log_prefix=dn{node_number+1} "]
                 pargs.append(f"--dn_urls={dn_urls_arg}")
                 pargs.append(f"--node_number={node_number}")
