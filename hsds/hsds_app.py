@@ -185,7 +185,7 @@ class HsdsApp:
             # see: https://github.com/aio-libs/aiobotocore/issues/862
             # This command line argument will tell the sub-processes to remove
             # sitepackage libs from their path before importing aiobotocore
-            common_args.append(f"--removesitepackages")
+            common_args.append("--removesitepackages")
         # common_args.append("--server_name=Direct Connect (HSDS)")
         common_args.append("--use_socket")
         if self._readonly:

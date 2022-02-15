@@ -10,6 +10,7 @@ from . import headnode
 def removeSitePackages():
 
     # site_packages = "/var/lang/lib/python3.9/site-packages"
+    # but this is removing: "/home/sbx_user1051/.local/lib/python3.9/site-packages" on lambda?
     site_packages = site.getusersitepackages()
     if not site_packages:
         return
