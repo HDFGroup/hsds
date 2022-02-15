@@ -6,20 +6,6 @@ import time
 import logging
 import requests_unixsocket
 
-"""
-
-print(f"python version: {sys.version}")
-print(f"sys path: {sys.path}")
-site_packages = "/var/lang/lib/python3.9/site-packages"
-try:
-    sys.path.remove(site_packages)
-except ValueError as ve:
-    print(f"site_package remove error: {ve}")
-else:
-    sys.path.insert(0, site_packages)
-    for dist in pkg_resources.find_distributions(site_packages, True):
-        pkg_resources.working_set.add(dist, site_packages, False, replace=True)
-"""
 
 from hsds.hsds_app import HsdsApp
 
@@ -213,6 +199,7 @@ def lambda_handler(event, context):
     # instantiate hsdsapp object
     hsds = HsdsApp(username=function_name, 
                    password="lambda", 
+                   islambda=True,
                    dn_count=target_dn_count, 
                    readonly=readonly)
     hsds.run()

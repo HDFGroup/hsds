@@ -30,9 +30,9 @@ def main():
         raise ValueError("no node_type argument found")
     if node_type not in ("sn","dn", "head", "rn"):
         raise ValueError(f"Unexpected node type: {node_type}")
+    print(f"hsds node main for node_type: {node_type}")
     print(f"python version: {sys.version}")
     print(f"sys path: {sys.path}")
-    print("node_type:", node_type)
     if config.getCmdLineArg("removesitepackages"):
         removeSitePackages()
      

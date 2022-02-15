@@ -219,13 +219,13 @@ class HsdsApp:
             elif i == 1:
                 # args for rangeget node
                 pargs = [py_exe,
-                         os.path.join(cmd_dir, "hsds-rangeget"),
+                         os.path.join(cmd_dir, "hsds-node"),
                          "--node_type=rn",
                          "--log_prefix=rg "]
             else:
                 node_number = i - 2  # start with 0
                 pargs = [py_exe,
-                         os.path.join(cmd_dir, "hsds-datanode"),
+                         os.path.join(cmd_dir, "hsds-node"),
                          "--node_type=dn",
                          f"--log_prefix=dn{node_number+1} "]
                 pargs.append(f"--dn_urls={dn_urls_arg}")
