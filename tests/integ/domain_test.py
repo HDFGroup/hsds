@@ -1084,6 +1084,7 @@ class DomainTest(unittest.TestCase):
             self.assertEqual(item["class"], "domain")
             self.assertTrue("lastModified" in item)
             self.assertFalse("size" in item)
+            self.assertFalse("compressors" in item)
 
         # try getting the first 4 domains
         params = {"domain": folder+'/', "Limit": 4}
