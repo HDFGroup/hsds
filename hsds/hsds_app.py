@@ -1,5 +1,7 @@
 import os
 import sys
+from pathlib import Path
+import site
 import signal
 import subprocess
 import time
@@ -34,6 +36,26 @@ def _enqueue_output(out, queue, loglevel):
     logging.debug("enqueu_output close()")
     out.close()
 
+def get_cmd_dir():
+    """ return directory for hsds shortcuts """
+    hsds_shortcut = "hsds-servicenode"
+    user_bin_dir = os.path.join(site.getuserbase(), "bin")
+    if os.path.isdir(user_bin_dir):
+        logging.debug(f"userbase bin_dir: {user_bin_dir}")
+        if os.path.isfile(os.path.join(user_bin_dir, hsds_shortcut)):
+            logging.info(f"using cmd_dir: {user_bin_dir}")
+            return user_bin_dir
+    sys_bin_dir = os.path.join(sys.exec_prefix, "bin")
+    if os.path.isdir(sys_bin_dir):
+        logging.debug(f"sys bin_dir: {sys_bin_dir}")
+        if os.path.isfile(os.path.join(sys_bin_dir, hsds_shortcut)):
+            logging.info(f"using cmd_dir: {sys_bin_dir}")
+            return sys_bin_dir
+    # fall back to just use __file__.parent
+    bin_dir = Path(__file__).parent
+    logging.info(f"no userbase or syspath found - using: {bin_dir}")
+    return bin_dir
+    
 
 class HsdsApp:
     """
@@ -55,6 +77,7 @@ class HsdsApp:
         self._tempdir = tempfile.TemporaryDirectory()
         tmp_dir = self._tempdir.name
         """
+         
         # create a random dirname if one is not supplied
         if socket_dir:
             if socket_dir[-1] != '/':
@@ -78,6 +101,7 @@ class HsdsApp:
         self._islambda = islambda
         self._ready = False
         self._config_dir = config_dir
+        self._cmd_dir = get_cmd_dir()
 
         if logger is None:
             self.log = logging
@@ -204,7 +228,6 @@ class HsdsApp:
                          os.path.join(cmd_dir, "hsds-node"),
                          "--node_type=sn",
                          "--log_prefix=sn "]
-
                 if self._username:
                     pargs.append(f"--hs_username={self._username}")
                 if self._password:
