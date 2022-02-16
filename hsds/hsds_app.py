@@ -9,6 +9,7 @@ import uuid
 import queue
 import threading
 import logging
+from shutil import which
 
 
 def _enqueue_output(out, queue, loglevel):
@@ -36,26 +37,37 @@ def _enqueue_output(out, queue, loglevel):
     logging.debug("enqueu_output close()")
     out.close()
 
+
 def get_cmd_dir():
-    """ return directory for hsds shortcuts """
+    """Return directory where hsds console shortcuts are."""
     hsds_shortcut = "hsds-servicenode"
+
     user_bin_dir = os.path.join(site.getuserbase(), "bin")
     if os.path.isdir(user_bin_dir):
         logging.debug(f"userbase bin_dir: {user_bin_dir}")
         if os.path.isfile(os.path.join(user_bin_dir, hsds_shortcut)):
             logging.info(f"using cmd_dir: {user_bin_dir}")
             return user_bin_dir
+
+    logging.debug(f"looking for {hsds_shortcut} in PATH env var folders")
+    cmd = which(hsds_shortcut, mode=os.F_OK | os.R_OK)
+    if cmd is not None:
+        cmd_dir = os.path.dirname(cmd)
+        logging.info(f"using cmd_dir: {cmd_dir}")
+        return cmd_dir
+
     sys_bin_dir = os.path.join(sys.exec_prefix, "bin")
     if os.path.isdir(sys_bin_dir):
         logging.debug(f"sys bin_dir: {sys_bin_dir}")
         if os.path.isfile(os.path.join(sys_bin_dir, hsds_shortcut)):
             logging.info(f"using cmd_dir: {sys_bin_dir}")
             return sys_bin_dir
+
     # fall back to just use __file__.parent
     bin_dir = Path(__file__).parent
     logging.info(f"no userbase or syspath found - using: {bin_dir}")
     return bin_dir
-    
+
 
 class HsdsApp:
     """
@@ -77,7 +89,7 @@ class HsdsApp:
         self._tempdir = tempfile.TemporaryDirectory()
         tmp_dir = self._tempdir.name
         """
-         
+
         # create a random dirname if one is not supplied
         if socket_dir:
             if socket_dir[-1] != '/':
@@ -255,12 +267,14 @@ class HsdsApp:
                 pargs.append(f"--node_number={node_number}")
             # logging.info(f"starting {pargs[0]}")
             pargs.extend(common_args)
-            p = subprocess.Popen(pargs, bufsize=1, universal_newlines=True, shell=False, stdout=pout)
+            p = subprocess.Popen(pargs, bufsize=1, universal_newlines=True,
+                                 shell=False, stdout=pout)
             self._processes.append(p)
             # setup queue so we can check on process output without blocking
             q = queue.Queue()
             loglevel = self.log.root.level
-            t = threading.Thread(target=_enqueue_output, args=(p.stdout, q, loglevel))
+            t = threading.Thread(
+                target=_enqueue_output, args=(p.stdout, q, loglevel))
             self._queues.append(q)
             t.daemon = True  # thread dies with the program
             t.start()
