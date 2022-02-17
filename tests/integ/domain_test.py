@@ -1059,12 +1059,9 @@ class DomainTest(unittest.TestCase):
             rsp = self.session.put(req, data=json.dumps(attr_payload), headers=headers)
             self.assertEqual(rsp.status_code, 201)  # created
 
-        headers = helper.getRequestHeaders()
-        params = {"domain": folder+'/'}
-        if config.get("bucket_name"):
-            params["bucket"] = config.get("bucket_name")
+        headers = helper.getRequestHeaders(domain=folder+'/')
         req = helper.getEndpoint() + '/domains'
-        rsp = self.session.get(req, headers=headers, params=params)
+        rsp = self.session.get(req, headers=headers) # , params=params)
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers['content-type'], 'application/json; charset=utf-8')
         rspJson = json.loads(rsp.text)

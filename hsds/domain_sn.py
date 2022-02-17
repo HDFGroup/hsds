@@ -434,12 +434,16 @@ async def get_domains(request):
         log.warn("get_domains called with no active DN nodes")
         raise HTTPServiceUnavailable()
 
-    # if there is no domain passed in, get a list of top level domains
-    if "domain" not in request.rel_url.query:
+    # allow domain with / to indicate a folder
+    prefix = None
+    try:
+        prefix = getDomainFromRequest(request, validate=False, allow_dns=False)
+    except ValueError:
+        pass # igore
+    if not prefix:
+        # if there is no domain passed in, get a list of top level domains
         prefix = '/'
-    else:
-        prefix = request.rel_url.query["domain"]
-
+     
     if "pattern" not in request.rel_url.query:
         pattern = None
         regex = None
