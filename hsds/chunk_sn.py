@@ -2004,6 +2004,7 @@ async def POST_Value(request):
             num_points = len(points)
         elif "select" in body:
             select = body["select"]
+            log.debug(f"select: {select}")
             slices = await get_slices(app, select, dset_json, bucket=bucket)
             log.debug(f"got slices: {slices}")
         else:
