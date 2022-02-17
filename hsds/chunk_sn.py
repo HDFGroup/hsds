@@ -1579,6 +1579,8 @@ async def GET_Value(request):
 
     # Get query parameter for selection 
     select = params.get("select")
+    if select:
+        log.debug(f"select query param: {select}")
     slices = await get_slices(app, select, dset_json, bucket=bucket)
     log.debug(f"GET Value selection: {slices}")
 

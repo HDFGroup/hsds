@@ -162,6 +162,13 @@ class DsetUtilTest(unittest.TestCase):
             self.assertTrue(isinstance(s1, slice))
             self.assertEqual(s1, slice(3,7,1))
 
+        for select in ("[:4]", [":4",]):
+            selection = getSelectionList(select, dims)
+            self.assertEqual(len(selection), 1)
+            s1 = selection[0]
+            self.assertTrue(isinstance(s1, slice))
+            self.assertEqual(s1, slice(0,4,1))
+
         for select in ("[0:100]", ["0:100",]):
             selection = getSelectionList(select, dims)
             self.assertEqual(len(selection), 1)
