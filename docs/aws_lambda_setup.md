@@ -82,3 +82,30 @@ Building the Lambda Image
 
 If you wish to build the Lambda image from source, clone this repository and run the script: "lambda_build.sh".  This will create a docker image that you can then push to ECR.
 
+API Gateway
+===========
+
+Amazon API Gateway is the service for managing HTTP endpoints.  By forwarding http requests to AWS Lambda, 
+API Gateway can be used to provide web server functionality without the need to provision a server instance.
+When API Gateway is used with the HSDS Lambda function, the functionality of HSDS will be available for HSDS 
+clients such as h5pyd and HDF REST VOL (to the clients it will be the same as connecting with a regular HSDS
+instance).
+
+To setup API Gateway with HSDS Lambda, follow these steps:
+
+1. In the AWS Management Console, select the API Gateway service for you desired region
+2. Click the "Create API" button
+3. Click the "Build" button in the "HTTP API" type box
+4. Click the "Add Integration" button
+5. In the drop down, choose "Lambda"
+6. Leave the "Version" as 2.0
+7. In the "Lambda function" box, chose the HSDS Lambda function you created earlier and click the "Add Integration" button 
+8. Enter an API name and click "Next"
+9. In the "Configure routes" page, use "$default" for the "ANY" method, click "Next"
+10. In the "Configure stages", accept the defaults, click "Next"
+11. In the "Review and Create" page, click "Create"
+12. Upon successful creation of the gateway, you will see a "Invoke URL".  Entering that url in a browser and adding "/about" should return the contents of the about method
+13. The same "Invoke URL" can be used as the endpoint for HSDS clients.  By default that expected username will be the name of the lamba function and that password will be "lambda"
+
+
+

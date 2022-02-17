@@ -185,7 +185,7 @@ def getDomainForHost(host_value):
     return domain
 
 
-def getDomainFromRequest(request, validate=True):
+def getDomainFromRequest(request, validate=True, allow_dns=True):
     # print("gotDomainFromRequest:", request, "validate=", validate)
     app = request.app
     domain = None
@@ -194,13 +194,13 @@ def getDomainFromRequest(request, validate=True):
     if "domain" in params:
         domain = params["domain"]
     else:
-        if 'host' in params:
+        if 'host' in params and allow_dns:
             domain = params['host']
         elif "X-Hdf-domain" in request.headers:
             domain = request.headers['X-Hdf-domain']
-        elif "X-Forwarded-Host" in request.headers:
+        elif "X-Forwarded-Host" in request.headers and allow_dns:
             domain = request.headers["X-Forwarded-Host"]
-        else:
+        elif allow_dns:
             domain = request.host
     if not domain:
         raise ValueError("no domain")

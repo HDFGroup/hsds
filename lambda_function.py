@@ -6,6 +6,7 @@ import time
 import logging
 import requests_unixsocket
 
+
 from hsds.hsds_app import HsdsApp
 
 
@@ -198,6 +199,7 @@ def lambda_handler(event, context):
     # instantiate hsdsapp object
     hsds = HsdsApp(username=function_name, 
                    password="lambda", 
+                   islambda=True,
                    dn_count=target_dn_count, 
                    readonly=readonly)
     hsds.run()

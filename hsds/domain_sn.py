@@ -186,11 +186,10 @@ class FolderCrawler:
                 domain_rsp = await get_domain_response(self._app,
                                                        domain_json,
                                                        **kwargs)
-                if "limits" in domain_rsp:
-                    # don't return limits for multi-domain responses
-                    del domain_rsp["limits"]
-                if "version" in domain_rsp:
-                    del domain_rsp["version"]
+                for k in ("limits", "version", "compressors"):
+                    if k in domain_rsp:
+                        # don't return given key for multi-domain responses
+                        del domain_rsp[k]
                 msg = f"FolderCrawler - {domain} get domain_rsp: {domain_rsp}"
                 log.debug(msg)
                 # mixin domain name
@@ -435,12 +434,16 @@ async def get_domains(request):
         log.warn("get_domains called with no active DN nodes")
         raise HTTPServiceUnavailable()
 
-    # if there is no domain passed in, get a list of top level domains
-    if "domain" not in request.rel_url.query:
+    # allow domain with / to indicate a folder
+    prefix = None
+    try:
+        prefix = getDomainFromRequest(request, validate=False, allow_dns=False)
+    except ValueError:
+        pass # igore
+    if not prefix:
+        # if there is no domain passed in, get a list of top level domains
         prefix = '/'
-    else:
-        prefix = request.rel_url.query["domain"]
-
+     
     if "pattern" not in request.rel_url.query:
         pattern = None
         regex = None
