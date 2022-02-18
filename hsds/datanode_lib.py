@@ -377,8 +377,11 @@ async def get_metadata_obj(app, obj_id, bucket=None):
             try:
                 obj_json = await getStorJSONObj(app, s3_key, bucket=bucket)
                 # read complete - remove from pending map
-                elapsed_time = time.time() - pending_s3_read[obj_id]
-                log.info(f"s3 read for {obj_id} took {elapsed_time}")
+                if obj_id in pending_s3_read:
+                    elapsed_time = time.time() - pending_s3_read[obj_id]
+                    log.info(f"s3 read for {obj_id} took {elapsed_time}")
+                else:
+                    log.warn(f"s3 read complete but pending object: {obj_id} not found")
                 meta_cache[obj_id] = obj_json  # add to cache
             except HTTPNotFound:
                 msg = f"HTTPNotFound for {obj_id} bucket:{bucket} "
