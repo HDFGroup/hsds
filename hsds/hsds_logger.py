@@ -128,7 +128,7 @@ def request(req):
         return
     node_state = app["node_state"] if "node_state" in app else None
     if node_state != "READY":
-        warning(f"returnåing 503 - node_state: {node_state}")
+        warning(f"returning 503 - node_state: {node_state}")
         raise HTTPServiceUnavailable()
     if req.method in ("GET", "POST", "PUT", "DELETE"):
         req_count[req.method] += 1
