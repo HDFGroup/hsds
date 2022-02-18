@@ -877,12 +877,17 @@ async def s3syncCheck(app):
     s3_sync_interval = config.get("s3_sync_interval")
 
     while True:
+        """
+        # removing this code block so we don't block writes when state is
+        # waiting or terminating
         if app["node_state"] != "READY":
             log.info("s3sync - clusterstate is not ready, sleeping")
             await asyncio.sleep(s3_sync_interval)
             continue
         else:
             log.debug(f"s3sync - clusterstate is {app['node_state']}")
+        """
+        log.debug(f"s3sync - clusterstate is {app['node_state']}")
 
         update_count = await s3sync(app)
         if update_count:
