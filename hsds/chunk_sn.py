@@ -14,6 +14,7 @@
 # handles dataset /value requests
 #
 import asyncio
+import time
 from multiprocessing import shared_memory
 from asyncio import CancelledError
 import base64
@@ -985,6 +986,108 @@ async def doPutQuery(request, query_update, dset_json):
     log.debug(f"doPutQuery - done returning {count} values")
     return resp_json
 
+class ChunkCrawler:
+    def __init__(self, app, chunk_ids, dset_json=None, chunk_map=None, 
+                 bucket=None, slices=None, shm_name=None, arr=None):
+
+        max_tasks_per_node = config.get("max_tasks_per_node_per_request", default=16)
+        log.info(f"ChunkCrawler.__init__  {len(chunk_ids)} chunks")
+        log.debug(f"ChunkCrawler - chunk_ids: {chunk_ids}")
+
+        self._app = app
+        self._slices = slices
+        self._chunk_ids = chunk_ids
+        self._chunk_map = chunk_map
+        self._dset_json = dset_json
+        self._arr = arr
+        self._status_map = {}  # map of chunk_ids to status code
+        self._q = asyncio.Queue()
+        
+        for chunk_id in chunk_ids:
+            self._q.put_nowait(chunk_id)
+
+        self._bucket = bucket
+        max_tasks = max_tasks_per_node * getNodeCount(app)
+        if len(chunk_ids) > max_tasks:
+            self._max_tasks = max_tasks
+        else:
+            self._max_tasks = len(chunk_ids)
+
+    def get_status(self):
+        if len(self._status_map) != len(self._chunk_ids):
+            msg = "get_status code while cralwer not complete"
+            log.error(msg)
+            raise ValueError(msg)
+        for chunk_id in self._chunk_ids:
+            if chunk_id not in self._status_map:
+                msg = f"excpected to find chunk_id {chunk_id} in ChunkCrawler status_map"
+                log.error(msg)
+                raise KeyError(msg)
+            chunk_status = self._status_map[chunk_id]
+            if chunk_status != 200:
+                return chunk_status
+        return 200 # all good
+            
+    async def crawl(self):
+        workers = [asyncio.Task(self.work())
+                   for _ in range(self._max_tasks)]
+        # When all work is done, exit.
+        msg = f"ChunkCrawler max_tasks {self._max_tasks} = await queue.join "
+        msg += f"- count: {len(self._chunk_ids)}"
+        log.info(msg)
+        await self._q.join()
+        msg = f"ChunkCrawler - join complete - count: {len(self._chunk_ids)}"
+        log.info(msg)
+
+        for w in workers:
+            w.cancel()
+        log.debug("ChunkCrawler - workers canceled")
+
+    async def work(self):
+        """ Process chunk ids from queue till we are done"""
+        while True:
+            start = time.time()
+            chunk_id = await self._q.get()
+            await self.fetch(chunk_id)
+            self._q.task_done()
+            elapsed = time.time() - start
+            msg = f"ChunkCrawler - task {chunk_id} start: {start:.3f} "
+            msg += f"elapsed: {elapsed:.3f}"
+            log.debug(msg)
+
+    async def fetch(self, chunk_id):
+        """ fetch the indicated chunk and update status map 
+        """
+        msg = f"ChunkCrawler - hyperslab get for chunk: {chunk_id} bucket: "
+        msg += f"{self._bucket}"
+        log.debug(msg)
+        try: 
+            await read_chunk_hyperslab(self._app,
+                                chunk_id,
+                                self._dset_json,
+                                self._slices,
+                                self._arr,
+                                chunk_map=self._chunk_map,
+                                bucket=self._bucket)
+            self._status_map[chunk_id] = 200
+        except ClientError as ce:
+            self._status_map[chunk_id] = 500
+            log.error(f"ClientError {type(ce)} for read_chunk_hyperslab({chunk_id}): {ce} ")
+        except CancelledError as cle:
+            self._status_map[chunk_id] = 503
+            log.warn(f"CancelledError for read_chunk_hyperslab({chunk_id}): {cle}")
+        except HTTPBadRequest as hbr:
+            self._status_map[chunk_id] = 400
+            log.error(f"HTTPBadRequest for read_chunk_hyperslab({chunk_id}): {hbr} ")
+        except HTTPNotFound as nfe:
+            self._status_map[chunk_id] = 404
+            log.error(f"HTTPNotFoundRequest for read_chunk_hyperslab({chunk_id}): {nfe} ")
+        except Exception as e:
+            self._status_map[chunk_id] = 500
+            log.error(f"Unexpected exception {type(e)} for read_chunk_hyperslab({chunk_id}): {e} ")
+
+        log.info(f"ChunkCrawler - worker status for chunk {chunk_id}: {self._status_map[chunk_id]}")
+
 
 async def PUT_Value(request):
     """
@@ -1814,7 +1917,6 @@ async def doQueryRead(app, query, chunk_ids, dset_json, slices, query_update=Non
 async def doHyperSlabRead(app, chunk_ids, dset_json, slices,
                           chunk_map=None, bucket=None, shm_name=None):
     """ hyperslab read utility function """
-    loop = asyncio.get_event_loop()
     log.info(f"doHyperSlabRead - number of chunk_ids: {len(chunk_ids)}")
     log.debug(f"doHyperSlabRead - chunk_ids: {chunk_ids}")
      
@@ -1841,21 +1943,19 @@ async def doHyperSlabRead(app, chunk_ids, dset_json, slices,
         raise HTTPRequestEntityTooLarge(request_size, max_request_size)
   
     arr = np.zeros(np_shape, dtype=dset_dtype, order='C')
-    tasks = []
-    kwargs = {"chunk_map": chunk_map,
-              "bucket": bucket}
 
-    for chunk_id in chunk_ids:
-        task = asyncio.ensure_future(read_chunk_hyperslab(app,
-                                                          chunk_id,
-                                                          dset_json,
-                                                          slices,
-                                                          arr,
-                                                          **kwargs))
-        tasks.append(task)
-    await asyncio.gather(*tasks, loop=loop)
+    crawler = ChunkCrawler(app, chunk_ids, dset_json=dset_json,
+                           chunk_map=chunk_map,
+                           bucket=bucket,
+                           slices=slices,
+                           shm_name=shm_name,
+                           arr=arr)
+    await crawler.crawl()
 
-    log.info(f"read_chunk_hyperslab gather complete, arr shape: {arr.shape}")
+    crawler_status = crawler.get_status()
+
+
+    log.info(f"doHyperSlabRead complete: status:  {crawler_status}")
     return arr
 
     

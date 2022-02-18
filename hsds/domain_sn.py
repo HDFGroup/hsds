@@ -206,7 +206,7 @@ class FolderCrawler:
             else:
                 log.warn(f"FolderCrawler - no domain found for {domain}")
         except HTTPNotFound:
-            # One of the dmains not found, but continue through the list
+            # One of the domains not found, but continue through the list
             log.warn(f"fetch result - not found error for: {domain}")
         except HTTPGone:
             log.warn(f"fetch result - domain: {domain} has been deleted")
