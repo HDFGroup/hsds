@@ -1698,6 +1698,12 @@ async def GET_Value(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
+    if "ignore_nan" in params and params["ignore_nan"]:
+        ignore_nan = True
+    else:
+        ignore_nan = False
+    log.debug(f"ignore nan: {ignore_nan}")
+
     content_length = None
     query = params.get("query")
     if query:
@@ -1828,14 +1834,7 @@ async def GET_Value(request):
             if "reduce_dim" in params and params["reduce_dim"]:
                 arr = squeezeArray(arr)
             resp_json = {}
-            params = request.rel_url.query
-            if "ignore_nan" in params and params["ignore_nan"]:
-                ignore_nan = True
-            else:
-                ignore_nan = False
-            # tbd
-            log.debug(f"ingore nan: {ignore_nan}")
-             
+         
             data = arr.tolist()
             json_data = bytesArrayToList(data)
          
@@ -1853,7 +1852,7 @@ async def GET_Value(request):
             await resp.write(resp_body)
         resp = await resp.write_eof()
     except Exception as e:
-        log.error(f"{type(e)} Exception during binary data write: {e}")
+        log.error(f"{type(e)} Exception during data write: {e}")
         raise
 
     return resp
@@ -2070,7 +2069,7 @@ async def getHyperSlabData(app, dset_id, dset_json, slices, query=None, query_up
 
 async def POST_Value(request):
     """
-    Handler for POST /<dset_uuid>/value request - point selection
+    Handler for POST /<dset_uuid>/value request - point selection or hyperslab read
     """
     log.request(request)
 
@@ -2104,6 +2103,12 @@ async def POST_Value(request):
 
     accept_type = getAcceptType(request)
     response_type = accept_type  # will adjust later if binary not possible
+
+    params = request.rel_url.query
+    if "ignore_nan" in params and params["ignore_nan"]:
+        ignore_nan = True
+    else:
+        ignore_nan = False
 
     request_type = "json"
     if "Content-Type" in request.headers:
@@ -2146,18 +2151,19 @@ async def POST_Value(request):
     await validateAction(app, domain, dset_id, username, "read")
 
     # read body data
-    num_points = None
-    slices = None
+    slices = None  # this will be set for hyperslab selection
+    points = None  # this will be set for point selection
     point_dt = np.dtype('u8')  # use unsigned long for point index
     if request_type == "json":
         body = await request.json()
         if "points" in body:
-            points = body["points"]
-            if not isinstance(points, list):
+            points_list = body["points"]
+            if not isinstance(points_list, list):
                 msg = "POST Value expected list of points"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
-            num_points = len(points)
+            points = np.asarray(points_list, dtype=point_dt)
+            log.debug(f"get {len(points)} points from json request")
         elif "select" in body:
             select = body["select"]
             log.debug(f"select: {select}")
@@ -2167,7 +2173,6 @@ async def POST_Value(request):
             msg = "Expected points or select key in request body"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-
     else:
         # read binary data
         binary_data = await request_read(request)
@@ -2182,51 +2187,124 @@ async def POST_Value(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         num_points = request.content_length // point_dt.itemsize
-        log.debug(f"got {num_points} num_points")
         points = np.fromstring(binary_data, dtype=point_dt)
+        # reshape the data based on the rank (num_points x rank)
         if rank > 1:
-            if num_points % rank != 0:
-                msg = "Number of points is not consistent with dataset rank"
+            if len(points) % rank != 0:
+                msg = "Number of point values is not consistent with dataset rank"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
-            num_points //= rank
+            num_points = len(points) // rank
             # conform to point index shape
             points = points.reshape((num_points, rank))
+            
+    if points is not None:
+        log.debug(f"got {len(points)} num_points")
 
-    kwargs = {"bucket": bucket}
+    # get expected content_length
+    item_size = getItemSize(type_json)
+    log.debug(f"item size: {item_size}")
+
+    # get the shape of the response array
     if slices:
-        arr_rsp = await getHyperSlabData(app, dset_id, dset_json, slices, **kwargs)
+        # hyperslab post
+        np_shape = getSelectionShape(slices)
     else:
-        arr_rsp = await getPointData(app, dset_id, dset_json, points, **kwargs)
+        # point selection
+        np_shape = [len(points),]
 
-    log.debug(f"arr shape: {arr_rsp.shape}")
+    log.debug(f"selection shape: {np_shape}")
 
-    if response_type == "binary":
-        output_data = arr_rsp.tobytes()
-        msg = f"POST Value - returning {len(output_data)} bytes binary data"
-        log.debug(msg)
+    # check that the array size is reasonable
+    request_size = np.prod(np_shape)
+    if item_size == 'H5T_VARIABLE':
+        request_size *= 512  # random guess of avg item_size
+    else:
+        request_size *= item_size
+    log.debug(f"request_size: {request_size}")
+    max_request_size = int(config.get("max_request_size"))
+    if request_size >= max_request_size:
+        msg = "GET value request too large"
+        log.warn(msg)
+        raise HTTPRequestEntityTooLarge(request_size, max_request_size)
+    if item_size != 'H5T_VARIABLE':
+        # this is the exact number of bytes to be returned
+        content_length = request_size
+    else:
+        # don't put content_length in response headers
+        content_length = None
 
-        # write response
-        try:
-            resp = StreamResponse()
-            if config.get("http_compression"):
-                log.debug("enabling http_compression")
-                resp.enable_compression()
+    if points is not None:
+        # validate content of points input array
+        for i in range(len(points)):
+            point = points[i]
+            if rank == 1:
+                if point < 0 or point >= dims[0]:
+                    msg = f"POST Value point: {point} is not within the bounds "
+                    msg += "of the dataset"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
+            else:
+                if len(point) != rank:
+                    msg = "POST Value point value did not match dataset rank"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
+                for i in range(rank):
+                    if point[i] < 0 or point[i] >= dims[i]:
+                        msg = f"POST Value point: {point} is not within the "
+                        msg += "bounds of the dataset"
+                        log.warn(msg)
+                        raise HTTPBadRequest(reason=msg)
+
+    # write response
+    try:
+        resp = StreamResponse()
+        if config.get("http_compression"):
+            log.debug("enabling http_compression")
+            resp.enable_compression()
+        if response_type == "binary":
             resp.headers['Content-Type'] = "application/octet-stream"
-            resp.content_length = len(output_data)
-            await resp.prepare(request)
+            if content_length is None:
+                log.debug("content_length could not be determined")
+            else:
+                resp.content_length = content_length
+        else:
+            resp.headers['Content-Type'] = "application/json"
+        log.debug("prepare request")
+        await resp.prepare(request)
+
+        if slices:
+            arr_rsp = await getHyperSlabData(app, dset_id, dset_json, slices, bucket=bucket)
+        else:
+            arr_rsp = await getPointData(app, dset_id, dset_json, points, bucket=bucket)
+
+        if not isinstance(arr_rsp, np.ndarray):
+            msg = f"GET_Value - Expected ndarray but got: {type(arr_rsp)}"
+            raise HTTPInternalServerError()
+
+        log.debug(f"arr shape: {arr_rsp.shape}")
+
+        if response_type == "binary":
+            log.debug("preparing binary response")
+            output_data = arr_rsp.tobytes()
+            msg = f"POST Value - returning {len(output_data)} bytes binary data"
+            log.debug(msg)
             await resp.write(output_data)
-            await resp.write_eof()
-        except Exception as e:
-            log.error(f"Exception during binary data write: {e}")
-    else:
-        log.debug("POST Value - returning JSON data")
-        rsp_json = {}
-        data = arr_rsp.tolist()
-        log.debug(f"got rsp data {len(data)} points")
-        json_data = bytesArrayToList(data)
-        rsp_json["value"] = json_data
-        rsp_json["hrefs"] = get_hrefs(request, dset_json)
-        resp = await jsonResponse(request, rsp_json)
+        else:
+            log.debug("POST Value - returning JSON data")
+            resp_json = {}
+            data = arr_rsp.tolist()
+            log.debug(f"got rsp data {len(data)} points")
+            json_data = bytesArrayToList(data)
+            resp_json["value"] = json_data
+            resp_json["hrefs"] = get_hrefs(request, dset_json)
+            resp_body = await jsonResponse(resp, resp_json, ignore_nan=ignore_nan, body_only=True)
+            log.debug(f"jsonResponse returned: {resp_body}")
+            resp_body = resp_body.encode('utf-8')
+            await resp.write(resp_body)
+        # finalize response
+        resp = await resp.write_eof()
+    except Exception as e:
+        log.error(f"{type(e)} Exception during response write")
     log.response(request, resp=resp)
     return resp
