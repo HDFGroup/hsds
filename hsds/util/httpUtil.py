@@ -440,13 +440,17 @@ async def http_delete(app, url, data=None, params=None):
     return rsp_json
 
 
-async def jsonResponse(request, data, status=200, ignore_nan=False):
+async def jsonResponse(resp, data, status=200, ignore_nan=False, body_only=False):
     """
     Helper function, create a response object using the provided
     JSON data
     """
+    # tbd - remove resp parameter - not used
     text = simplejson.dumps(data, ignore_nan=ignore_nan)
-    return json_response(text=text, headers={}, status=status)
+    if body_only:
+        return text
+    else:
+        return json_response(text=text, headers={}, status=status)
 
 
 def getHref(request, uri, query=None, domain=None):

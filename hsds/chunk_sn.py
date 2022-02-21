@@ -36,7 +36,7 @@ from .util.dsetUtil import getSelectionList, setSliceQueryParam, isNullSpace
 from .util.dsetUtil import getFillValue, isExtensible, getDsetRank
 from .util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout 
 from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId
-from .util.chunkUtil import getChunkIndex, getChunkSuffix
+from .util.chunkUtil import getChunkIndex, getChunkSuffix, _getEvalStr
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
 from .util.chunkUtil import getChunkIdForPartition, getQueryDtype
 from .util.arrayUtil import bytesArrayToList, jsonToArray, getShapeDims
@@ -1231,7 +1231,7 @@ async def PUT_Value(request):
             except ValueError:
                 msg = "Limit param must be positive int"
                 log.warning(msg)
-                raise HTTPBadRequest(msg=msg)
+                raise HTTPBadRequest(reason=msg)
         else:
             limit = 0
          
@@ -1665,6 +1665,8 @@ async def GET_Value(request):
 
     # get state for dataset from DN.
     dset_json = await getObjectJson(app, dset_id, bucket=bucket)   
+    type_json = dset_json["type"]
+    dset_dtype = createDataType(type_json)
 
     if isNullSpace(dset_json):
         msg = "Null space datasets can not be used as target for GET value"
@@ -1696,9 +1698,65 @@ async def GET_Value(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
+    content_length = None
     query = params.get("query")
+    if query:
+        # verify that query is valid
+        try:  
+            _getEvalStr(query, "x", dset_dtype.names)
+        except ValueError as ve:
+            msg = f"get query ValueError: {ve}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    else:
+        # for non query requests with non-variable types we can fetch 
+        # the expected response bytes lenght now
+        item_size = getItemSize(type_json)
+        log.debug(f"item size: {item_size}")
 
-    arr = await getHyperSlabData(app, 
+        # get the shape of the response array
+        np_shape = getSelectionShape(slices)
+        log.debug(f"selection shape: {np_shape}")
+
+        # check that the array size is reasonable
+        request_size = np.prod(np_shape)
+        if item_size == 'H5T_VARIABLE':
+            request_size *= 512  # random guess of avg item_size
+        else:
+            request_size *= item_size
+        log.debug(f"request_size: {request_size}")
+        max_request_size = int(config.get("max_request_size"))
+        if request_size >= max_request_size:
+            msg = "GET value request too large"
+            log.warn(msg)
+            raise HTTPRequestEntityTooLarge(request_size, max_request_size)
+        if item_size != 'H5T_VARIABLE':
+            # this is the exact number of bytes to be returned
+            content_length = request_size
+
+    if shm_name:
+        response_type = "json"
+    else:
+        response_type = getAcceptType(request)
+
+    # write response
+    try:
+        resp = StreamResponse()
+        if config.get("http_compression"):
+            log.debug("enabling http_compression")
+            resp.enable_compression()
+        if response_type == "binary":
+            resp.headers['Content-Type'] = "application/octet-stream"
+            if content_length is None:
+                log.debug("content_length could not be determined")
+            else:
+                resp.content_length = content_length
+        else:
+            resp.headers['Content-Type'] = "application/json"
+        log.debug("prepare request")
+        await resp.prepare(request)
+
+        arr = await getHyperSlabData(app, 
                            dset_id,
                            dset_json, 
                            slices, 
@@ -1707,99 +1765,97 @@ async def GET_Value(request):
                            limit=limit,
                            method=request.method)
 
-    if arr is None:
-        # no array (OPTION request?)  Return empty json response
-        resp = await jsonResponse(request, {})
-        return resp
+        if arr is None:
+            # no array (OPTION request?)  Return empty json response
+            resp = await resp.write_eof()
+            return resp
 
-    if shm_name:
-        log.debug(f"attaching to shared memory block: {shm_name}")
-        try:
-            shm = shared_memory.SharedMemory(name=shm_name)
-        except FileNotFoundError:
-            msg = f"no shared memory block with name: {shm_name} found"
-            log.warning(msg)
-            raise HTTPBadRequest(reason=msg)
-        except OSError as oe:
-            msg = f"Unexpected OSError: {oe.errno} attaching to shared memory block"
-            log.error(msg)
+        if not isinstance(arr, np.ndarray):
+            msg = f"GET_Value - Expected ndarray but got: {type(arr)}"
             raise HTTPInternalServerError()
-        buffer = arrayToBytes(arr)
-        num_bytes = len(buffer)
-        if shm.size < num_bytes:
-            msg = f"unable to copy {num_bytes} to shared memory block of size: {shm.size}"
-            log.warning(msg)
-            raise HTTPRequestEntityTooLarge(num_bytes, shm.size)
 
-        # copy array data
-        shm.buf[:num_bytes] = buffer[:]
-        log.debug(f"copied {num_bytes} array data to shared memory name: {shm_name}")
+        if shm_name:
+            log.debug(f"attaching to shared memory block: {shm_name}")
+            try:
+                shm = shared_memory.SharedMemory(name=shm_name)
+            except FileNotFoundError:
+                msg = f"no shared memory block with name: {shm_name} found"
+                log.warning(msg)
+                raise HTTPBadRequest(reason=msg)
+            except OSError as oe:
+                msg = f"Unexpected OSError: {oe.errno} attaching to shared memory block"
+                log.error(msg)
+                raise HTTPInternalServerError()
+            buffer = arrayToBytes(arr)
+            num_bytes = len(buffer)
+            if shm.size < num_bytes:
+                msg = f"unable to copy {num_bytes} to shared memory block of size: {shm.size}"
+                log.warning(msg)
+                raise HTTPRequestEntityTooLarge(num_bytes, shm.size)
 
-        # close shared memory block
-        # Note - since we are not calling shm.unlink (expecting the 
-        # client to do that), it's likely the resource tracker will complain on
-        # app exit.  This should be fixed in Python 3.9.  See: 
-        # https://bugs.python.org/issue39959
-        shm.close()
+            # copy array data
+            shm.buf[:num_bytes] = buffer[:]
+            log.debug(f"copied {num_bytes} array data to shared memory name: {shm_name}")
 
-        log.debug("GET Value - returning JSON data with shared memory buffer")
-        resp_json = {"shm_name": shm.name, "num_bytes": num_bytes}
-        resp_json["hrefs"] = get_hrefs(request, dset_json)
-        resp = await jsonResponse(request, resp_json)
-        return resp
+            # close shared memory block
+            # Note - since we are not calling shm.unlink (expecting the 
+            # client to do that), it's likely the resource tracker will complain on
+            # app exit.  This should be fixed in Python 3.9.  See: 
+            # https://bugs.python.org/issue39959
+            shm.close()
+
+            log.debug("GET Value - returning JSON data with shared memory buffer")
+            resp_json = {"shm_name": shm.name, "num_bytes": num_bytes}
+            resp_json["hrefs"] = get_hrefs(request, dset_json)
+            resp_body = await jsonResponse(resp, resp_json, body_only=True)
+            await resp.write(resp_body)
+            resp = await resp.write_eof()
+            return resp
         
-    response_type = getAcceptType(request)
-    if response_type == "binary":
-        log.debug("preparing binary response")
-        output_data = arrayToBytes(arr)
-        log.debug(f"got {len(output_data)} bytes for resp")
-
-        # write response
-        try:
-            resp = StreamResponse()
-            if config.get("http_compression"):
-                log.debug("enabling http_compression")
-                resp.enable_compression()
-            resp.headers['Content-Type'] = "application/octet-stream"
-            resp.content_length = len(output_data)
-
-            log.debug("prepare request")
-            await resp.prepare(request)
+        if response_type == "binary":
+            log.debug("preparing binary response")
+            output_data = arrayToBytes(arr)
+            log.debug(f"got {len(output_data)} bytes for resp")
             log.debug("write request")
             await resp.write(output_data)
-            log.debug("write_eof")
-            await resp.write_eof()
-        except Exception as e:
-            log.error(f"{type(e)} Exception during binary data write: {e}")
-
-    else:
-        log.debug("GET Value - returning JSON data")
-        params = request.rel_url.query
-        if "reduce_dim" in params and params["reduce_dim"]:
-            arr = squeezeArray(arr)
-        resp_json = {}
-        params = request.rel_url.query
-        if "ignore_nan" in params and params["ignore_nan"]:
-            ignore_nan = True
-        else:
-            ignore_nan = False
-        if isinstance(arr, np.ndarray):
-            # test
-            data = arr.tolist()
             
+            #except Exception as e:
+            #log.error(f"{type(e)} Exception during binary data write: {e}")
 
+        else:
+            log.debug("GET Value - returning JSON data")
+            params = request.rel_url.query
+            if "reduce_dim" in params and params["reduce_dim"]:
+                arr = squeezeArray(arr)
+            resp_json = {}
+            params = request.rel_url.query
+            if "ignore_nan" in params and params["ignore_nan"]:
+                ignore_nan = True
+            else:
+                ignore_nan = False
+            # tbd
+            log.debug(f"ingore nan: {ignore_nan}")
+             
+            data = arr.tolist()
             json_data = bytesArrayToList(data)
-        else:
-            json_data = [1,2,3] # test
-        datashape = dset_json["shape"]
+         
+            datashape = dset_json["shape"]
 
-        if datashape["class"] == 'H5S_SCALAR':
-            # convert array response to value
-            resp_json["value"] = json_data[0]
-        else:
-            resp_json["value"] = json_data
-        resp_json["hrefs"] = get_hrefs(request, dset_json)
-        resp = await jsonResponse(request, resp_json, ignore_nan=ignore_nan)
+            if datashape["class"] == 'H5S_SCALAR':
+                # convert array response to value
+                resp_json["value"] = json_data[0]
+            else:
+                resp_json["value"] = json_data
+            resp_json["hrefs"] = get_hrefs(request, dset_json)
+            resp_body = await jsonResponse(resp, resp_json, ignore_nan=ignore_nan, body_only=True)
+            log.debug(f"jsonResponse returned: {resp_body}")
+            resp_body = resp_body.encode('utf-8')
+            await resp.write(resp_body)
+        resp = await resp.write_eof()
+    except Exception as e:
+        log.error(f"{type(e)} Exception during binary data write: {e}")
+        raise
+
     return resp
      
 
