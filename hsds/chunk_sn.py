@@ -1853,7 +1853,7 @@ async def GET_Value(request):
         resp = await resp.write_eof()
     except Exception as e:
         log.error(f"{type(e)} Exception during data write: {e}")
-        raise
+        raise HTTPInternalServerError()
 
     return resp
      
@@ -2197,7 +2197,7 @@ async def POST_Value(request):
             num_points = len(points) // rank
             # conform to point index shape
             points = points.reshape((num_points, rank))
-            
+
     if points is not None:
         log.debug(f"got {len(points)} num_points")
 
@@ -2306,5 +2306,7 @@ async def POST_Value(request):
         resp = await resp.write_eof()
     except Exception as e:
         log.error(f"{type(e)} Exception during response write")
+        raise HTTPInternalServerError()
+    
     log.response(request, resp=resp)
     return resp
