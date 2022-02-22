@@ -280,7 +280,7 @@ async def http_post(app, url, data=None, params=None):
     """
     Helper function  - async HTTP POST
     """
-    log.info(f"http_post('{url}', {data})")
+    log.info(f"http_post('{url}', {len(data)} bytes)")
     client = get_http_client(app, url=url)
     url = get_http_std_url(url)
     if isinstance(data, bytes):

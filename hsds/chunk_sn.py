@@ -210,7 +210,16 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr,
     if not bucket:
         bucket = config.get("bucket_name")
 
-    msg = f"read_chunk_hyperslab, chunk_id: {chunk_id}, slices: {slices}, "
+    msg = f"read_chunk_hyperslab, chunk_id: {chunk_id}, slices: ["
+    for s in slices:
+        if isinstance(s, slice):
+            msg += f"{s},"
+        else:
+            if len(s) > 5:
+                # avoid large output lines
+                msg += f"[{s[0]}, {s[1]}, ..., {s[-2]}, {s[-1]}],"
+            else:
+                msg += f"{s},"
     msg += f"bucket: {bucket}"
     log.info(msg)
     if chunk_map and chunk_id not in chunk_map:
@@ -1815,7 +1824,7 @@ async def GET_Value(request):
             resp_json["hrefs"] = get_hrefs(request, dset_json)
             resp_body = await jsonResponse(resp, resp_json, body_only=True)
             await resp.write(resp_body)
-            resp = await resp.write_eof()
+            await resp.write_eof()
             return resp
         
         if response_type == "binary":
@@ -1850,7 +1859,7 @@ async def GET_Value(request):
             log.debug(f"jsonResponse returned: {resp_body}")
             resp_body = resp_body.encode('utf-8')
             await resp.write(resp_body)
-        resp = await resp.write_eof()
+        await resp.write_eof()
     except Exception as e:
         log.error(f"{type(e)} Exception during data write: {e}")
         raise HTTPInternalServerError()
@@ -1993,9 +2002,8 @@ async def doHyperSlabRead(app, chunk_ids, dset_json, slices,
     log.debug(f"request_size: {request_size}")
     max_request_size = int(config.get("max_request_size"))
     if request_size >= max_request_size:
-        msg = "GET value request too large"
+        msg = f"Attempting to fetch {request_size} bytes (greater than {max_request_size} limit"
         log.warn(msg)
-        raise HTTPRequestEntityTooLarge(request_size, max_request_size)
   
     arr = np.zeros(np_shape, dtype=dset_dtype, order='C')
 
@@ -2030,9 +2038,8 @@ async def getHyperSlabData(app, dset_id, dset_json, slices, query=None, query_up
     
     max_chunks = int(config.get('max_chunks_per_request'))
     if num_chunks > max_chunks:
-        msg = "GET value request too large"
+        msg = f"num_chunks over {max_chunks} limit, but will attempt to fetch with crawler"
         log.warn(msg)
-        raise HTTPRequestEntityTooLarge(num_chunks, max_chunks)
 
     chunk_ids = getChunkIds(dset_id, slices, layout)
     # Get information about where chunks are located
@@ -2303,7 +2310,7 @@ async def POST_Value(request):
             resp_body = resp_body.encode('utf-8')
             await resp.write(resp_body)
         # finalize response
-        resp = await resp.write_eof()
+        await resp.write_eof()
     except Exception as e:
         log.error(f"{type(e)} Exception during response write")
         raise HTTPInternalServerError()
