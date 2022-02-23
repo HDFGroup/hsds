@@ -1833,10 +1833,6 @@ async def GET_Value(request):
             log.debug(f"got {len(output_data)} bytes for resp")
             log.debug("write request")
             await resp.write(output_data)
-            
-            #except Exception as e:
-            #log.error(f"{type(e)} Exception during binary data write: {e}")
-
         else:
             log.debug("GET Value - returning JSON data")
             params = request.rel_url.query
@@ -2186,8 +2182,8 @@ async def POST_Value(request):
         if len(binary_data) != request.content_length:
             msg = f"Read {len(binary_data)} bytes, expecting: "
             msg += f"{request.content_length}"
-            log.error(msg)
-            raise HTTPInternalServerError()
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
         if request.content_length % point_dt.itemsize != 0:
             msg = f"Content length: {request.content_length} not "
             msg += f"divisible by element size: {item_size}"
