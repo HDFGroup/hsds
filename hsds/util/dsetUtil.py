@@ -564,7 +564,7 @@ def setSliceQueryParam(params, sel):
         sel_param += ']'
         log.debug(f"select query param: {sel_param}")
         if len(sel_param) > 500:
-            log.warning(f"select param is {len(sel)} characters long")
+            log.warning(f"select param is {len(sel_param)} characters long")
         params["select"] = sel_param
 
 
