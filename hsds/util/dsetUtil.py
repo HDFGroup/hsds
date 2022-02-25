@@ -526,7 +526,7 @@ def getSelectionList(select, dims):
     return tuple(select_list) 
 
 
-def setSliceQueryParam(params, sel):
+def getSliceQueryParam(sel):
     """
     Helper method - set query parameter for given shape + selection
 
@@ -565,7 +565,7 @@ def setSliceQueryParam(params, sel):
         log.debug(f"select query param: {sel_param}")
         if len(sel_param) > 500:
             log.warning(f"select param is {len(sel_param)} characters long")
-        params["select"] = sel_param
+        return sel_param
 
 
 def setChunkDimQueryParam(params, dims):

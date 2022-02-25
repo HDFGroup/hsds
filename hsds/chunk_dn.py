@@ -19,7 +19,7 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPNotFound
 from aiohttp.web import json_response, StreamResponse
 
-from .util.httpUtil import request_read
+from .util.httpUtil import request_read, getContentType
 from .util.arrayUtil import bytesToArray, arrayToBytes
 from .util.idUtil import getS3Key, validateInPartition, isValidUuid
 from .util.storUtil import isStorObj, deleteStorObj
@@ -112,6 +112,7 @@ async def PUT_Chunk(request):
     # get chunk selection from query params
     if "select" in params:
         select = params["select"]
+        log.debug(f"PUT_Chunk got select param: {select}")
     else:
         select = None # put for entire dataspace
     try:
@@ -119,6 +120,7 @@ async def PUT_Chunk(request):
     except ValueError as ve:
         log.error(f"ValueError for select: {select}: {ve}")
         raise HTTPInternalServerError()
+    log.debug(f"PUT_Chunk slices: {selection}")
 
     mshape = getSelectionShape(selection)
     num_elements = 1
@@ -260,7 +262,7 @@ async def GET_Chunk(request):
         msg = f"invalid partition for obj id: {chunk_id}"
         log.error(msg)
         raise HTTPInternalServerError()
-    log.debug(f"request params: {params.keys()}")
+    log.debug(f"GET_Chunk - request params: {params.keys()}")
 
     if "s3path" in params:
         s3path = params["s3path"]
@@ -298,6 +300,7 @@ async def GET_Chunk(request):
 
     dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
     dims = getChunkLayout(dset_json)
+    log.debug(f"GET_Chunk - dset_json: {dset_json}")
     log.debug(f"GET_Chunk - got dims: {dims}")
 
     # get chunk selection from query params
@@ -305,7 +308,8 @@ async def GET_Chunk(request):
         select = params["select"]
     else:
         select = None # get slices for entire datashape
-    log.debug(f"using select string: {select}")
+    if select is not None:
+        log.debug(f"GET_Chunk - using select string: {select}")
     try:
         selection = getSelectionList(select, dims)
     except ValueError as ve:
@@ -350,10 +354,12 @@ async def GET_Chunk(request):
     else:
         # read selected data from chunk
         output_arr = chunkReadSelection(chunk_arr, slices=selection)
-    read_resp = arrayToBytes(output_arr)
+    
 
     # write response
-    if isinstance(read_resp, bytes):
+    if output_arr is not None:
+        log.debug(f"GET_Chunk - returning arr: {output_arr}")
+        read_resp = arrayToBytes(output_arr)
 
         try:
             resp = StreamResponse()
@@ -381,14 +387,24 @@ async def POST_Chunk(request):
     log.request(request)
     app = request.app
     params = request.rel_url.query
+    content_type = getContentType(request)
 
     put_points = False
+    select = None # for hyperslab/fancy selection
     num_points = 0
-    if "count" not in params:
-        log.warn("expected count param")
-        raise HTTPBadRequest()
+
     if "count" in params:
-        num_points = int(params["count"])
+        try:
+            num_points = int(params["count"])
+        except ValueError:
+            msg = f"expected int for count param but got: {params['clount']}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    else:
+        if content_type == "binary":
+            msg = "expected count query param for binary POST chunks request"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
 
     if "action" in params and params["action"] == "put":
         log.info(f"POST Chunk put points - num_points: {num_points}")
@@ -457,16 +473,7 @@ async def POST_Chunk(request):
         msg = "POST Value with no body"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-
-    content_type = "application/octet-stream"
-    if "Content-Type" in request.headers:
-        # client should use "application/octet-stream" for binary transfer
-        content_type = request.headers["Content-Type"]
-    if content_type != "application/octet-stream":
-        msg = f"Unexpected content_type: {content_type}"
-        log.error(msg)
-        raise HTTPBadRequest(reason=msg)
-
+     
     dset_id = getDatasetId(chunk_id)
 
     dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
@@ -475,34 +482,43 @@ async def POST_Chunk(request):
 
     type_json = dset_json["type"]
     dset_dtype = createDataType(type_json)
+    output_arr = None
+    chunk_init = False # will be set to True for setting points
 
-    # create a numpy array for incoming points
-    input_bytes = await request_read(request)
-    actual = request.content_length
-    if len(input_bytes) != actual:
-        msg = f"Read {len(input_bytes)} bytes, expecting: {actual}"
-        log.error(msg)
-        raise HTTPInternalServerError()
+    if content_type == "binary":
+        # create a numpy array for incoming points
+        input_bytes = await request_read(request)
+        actual = request.content_length
+        if len(input_bytes) != actual:
+            msg = f"Read {len(input_bytes)} bytes, expecting: {actual}"
+            log.error(msg)
+            raise HTTPInternalServerError()
 
-    if rank == 1:
-        coord_type_str = "uint64"
+        if rank == 1:
+            coord_type_str = "uint64"
+        else:
+            coord_type_str = f"({rank},)uint64"
+
+        if put_points:
+            # create a numpy array with the following type:
+            #       (coord1, coord2, ...) | dset_dtype
+            type_fields = [("coord", np.dtype(coord_type_str)),
+                           ("value", dset_dtype)]
+            point_dt = np.dtype(type_fields)
+            point_shape = (num_points,)
+            chunk_init = True
+        else:
+            point_dt = np.dtype('uint64')
+            point_shape = (num_points, rank)
+        point_arr = bytesToArray(input_bytes, point_dt, point_shape)
     else:
-        coord_type_str = f"({rank},)uint64"
-
-    if put_points:
-        # create a numpy array with the following type:
-        #       (coord1, coord2, ...) | dset_dtype
-        type_fields = [("coord", np.dtype(coord_type_str)),
-                       ("value", dset_dtype)]
-        point_dt = np.dtype(type_fields)
-        point_shape = (num_points,)
-        chunk_init = True
-    else:
-        point_dt = np.dtype('uint64')
-        point_shape = (num_points, rank)
-        chunk_init = False
-
-    point_arr = bytesToArray(input_bytes, point_dt, point_shape)
+        # fancy/hyperslab selection
+        body = await request.json()
+        if "select" not in body:
+            log.warn("expected 'select' key in body of POST_Value request")
+            raise HTTPBadRequest()
+        select = body["select"]
+        log.debug(f"POST_Chunk - using select string: {select}")
 
     kwargs = {"chunk_init": chunk_init}
     if s3path:
@@ -528,10 +544,19 @@ async def POST_Chunk(request):
         except ValueError as ve:
             log.warn(f"got value error from chunkWritePoints: {ve}")
             raise HTTPBadRequest()
-        # write empty response
-        resp = json_response({})
         # lazily write chunk to storage
         save_chunk(app, chunk_id, dset_json, bucket=bucket)
+    elif select:
+        # hyperslab/fancy read selection
+        try:
+            selection = getSelectionList(select, dims)
+        except ValueError as ve:
+            log.error(f"ValueError for select: {select}: {ve}")
+            raise HTTPInternalServerError()
+        log.debug(f"GET_Chunk - got selection: {selection}")
+        # read selected data from chunk
+        output_arr = chunkReadSelection(chunk_arr, slices=selection)
+
     else:
         # read points
         try:
@@ -543,6 +568,11 @@ async def POST_Chunk(request):
         except ValueError as ve:
             log.warn(f"got value error from chunkReadPoints: {ve}")
             raise HTTPBadRequest()
+        
+    if output_arr is None:
+        # write empty response
+        resp = json_response({})
+    else:
         output_data = arrayToBytes(output_arr)
         # write response
         try:

@@ -75,6 +75,7 @@ chaos_die: 0           # if > 0, have nodes randomly die after n seconds (for te
 standalone_app: false   # True when run as a single application
 blosc_nthreads: 2  # number of threads to use for blosc compression.  Set to 0 to have blosc auto-determine thread count
 http_compression: false  # Use HTTP compression 
+http_max_url_length: 512 # Limit http request url + params to be less than this
 k8s_app_label: hsds  # The app label for k8s deployments
 k8s_namespace: null # Specifies if a the client should be limited to a specific namespace. Useful for some RBAC configurations.
 restart_policy: on-failure # Docker restart policy

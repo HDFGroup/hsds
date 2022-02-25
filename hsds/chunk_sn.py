@@ -19,20 +19,20 @@ from multiprocessing import shared_memory
 from asyncio import CancelledError
 import base64
 import numpy as np
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound
+from aiohttp.web_exceptions import HTTPException, HTTPBadRequest, HTTPNotFound
 from aiohttp.web_exceptions import HTTPRequestEntityTooLarge
 from aiohttp.web_exceptions import HTTPConflict, HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPServiceUnavailable
 from aiohttp.client_exceptions import ClientError
 from aiohttp.web import StreamResponse
 
-from .util.httpUtil import getHref, getAcceptType, http_get, http_put
+from .util.httpUtil import getHref, getAcceptType, getContentType, http_get, http_put
 from .util.httpUtil import http_post, request_read, jsonResponse
 from .util.idUtil import isValidUuid, getDataNodeUrl, getNodeCount
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain
 from .util.hdf5dtype import getItemSize, createDataType
-from .util.dsetUtil import getSelectionList, setSliceQueryParam, isNullSpace  
+from .util.dsetUtil import getSelectionList, getSliceQueryParam, isNullSpace  
 from .util.dsetUtil import getFillValue, isExtensible, getDsetRank
 from .util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout 
 from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId
@@ -50,9 +50,6 @@ from . import hsds_logger as log
 CHUNK_REF_LAYOUTS = ('H5D_CONTIGUOUS_REF',
                      'H5D_CHUNKED_REF',
                      'H5D_CHUNKED_REF_INDIRECT')
-
-EXPECTED_CONTENT_TYPES = ("application/json", "application/octet-stream")
-
 
 def _isNonStrict(params):
     """
@@ -179,7 +176,8 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr,
     data = arrayToBytes(arr_chunk)
     # pass itemsize, type, dimensions, and selection as query params
     params = {}
-    setSliceQueryParam(params, chunk_sel)
+    select = getSliceQueryParam(chunk_sel)
+    params["select"] = select
     if bucket:
         params["bucket"] = bucket
 
@@ -261,7 +259,8 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr,
 
     chunk_arr = None
     array_data = None
-    setSliceQueryParam(params, chunk_sel)
+    select = getSliceQueryParam(chunk_sel)
+    # params["select"] = select
     if chunk_map:
         if chunk_id not in chunk_map:
             msg = f"{chunk_id} not found in chunk_map, returning default arr"
@@ -279,27 +278,40 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, slices, np_arr,
     params["bucket"] = bucket
 
     if chunk_arr is None:
-
         req = getDataNodeUrl(app, chunk_id)
         req += "/chunks/" + chunk_id
         log.debug("GET chunk req: " + req)
-        try:
-            array_data = await http_get(app, req, params=params)
-            log.debug(f"http_get {req}, read {len(array_data)} bytes")
-        except HTTPNotFound:
-            if "s3path" in params:
-                s3path = params["s3path"]
-                # external HDF5 file, should exist
-                log.warn(f"s3path: {s3path} for S3 range get not found")
-                raise
-            # no data, return zero array
-            chunk_arr = defaultChunk()
-        except ClientError as ce:
-            log.error(f"Error for http_get({req}): {ce} ")
-            raise HTTPInternalServerError()
-        except CancelledError as cle:
-            log.warn(f"CancelledError for http_get({req}): {cle}")
-            return
+        # use post if the select param is long
+        max_select_len = config.get("http_max_url_length", default=512)
+        max_select_len //= 2 # use up to half the alloted url length for select
+        if len(select) > max_select_len:
+            # send as post request
+            try:
+                log.debug(f"select param is {len(select)} characters - using POST")
+                body = {"select": select}
+                array_data = await http_post(app, req, data=body, params=params)
+                log.debug(f"http_post {req}, returned {len(array_data)} bytes")
+            except HTTPNotFound:
+                if "s3path" in params:
+                    s3path = params["s3path"]
+                    # external HDF5 file, should exist
+                    log.warn(f"s3path: {s3path} for S3 range get not found")
+                    raise
+                # no data, return zero array
+                chunk_arr = defaultChunk()
+        else:
+            try:
+                params["select"] = select  # set select as query param
+                array_data = await http_get(app, req, params=params)
+                log.debug(f"http_get {req}, returned {len(array_data)} bytes")
+            except HTTPNotFound:
+                if "s3path" in params:
+                    s3path = params["s3path"]
+                    # external HDF5 file, should exist
+                    log.warn(f"s3path: {s3path} for S3 range get not found")
+                    raise
+                # no data, return zero array
+                chunk_arr = defaultChunk()
 
     if array_data is None:
         log.debug(f"No data returned for chunk: {chunk_id}")
@@ -549,7 +561,8 @@ async def read_chunk_query(app, chunk_id, dset_json, slices, query, rsp_dict,
 
     chunk_shape = getSelectionShape(chunk_sel)
     log.debug(f"chunk_shape: {chunk_shape}")
-    setSliceQueryParam(params, chunk_sel)
+    select = getSliceQueryParam(chunk_sel)
+    params["select"] = select
  
     req = getDataNodeUrl(app, chunk_id)
     req += "/chunks/" + chunk_id
@@ -860,7 +873,8 @@ async def write_chunk_query(app, chunk_id, dset_json, slices, query,
 
     chunk_shape = getSelectionShape(chunk_sel)
     log.debug(f"chunk_shape: {chunk_shape}")
-    setSliceQueryParam(params, chunk_sel)
+    select = getSliceQueryParam(chunk_sel)
+    params["select"] = select
     try:
         dn_rsp = await http_put(app, req, data=query_update, params=params)
     except HTTPNotFound:
@@ -1011,6 +1025,7 @@ class ChunkCrawler:
         self._arr = arr
         self._status_map = {}  # map of chunk_ids to status code
         self._q = asyncio.Queue()
+        self._fail_count = 0
         
         for chunk_id in chunk_ids:
             self._q.put_nowait(chunk_id)
@@ -1033,8 +1048,10 @@ class ChunkCrawler:
                 log.error(msg)
                 raise KeyError(msg)
             chunk_status = self._status_map[chunk_id]
-            if chunk_status != 200:
+            if chunk_status not in (200, 201):
+                log.info(f"returning chunk_status: {chunk_status} for chunk: {chunk_id}")
                 return chunk_status
+        
         return 200 # all good
             
     async def crawl(self):
@@ -1091,6 +1108,9 @@ class ChunkCrawler:
         except HTTPNotFound as nfe:
             self._status_map[chunk_id] = 404
             log.error(f"HTTPNotFoundRequest for read_chunk_hyperslab({chunk_id}): {nfe} ")
+        except HTTPInternalServerError as ise:
+            self._status_map[chunk_id] = 500
+            log.error(f"HTTPInternalServerError for read_chunk_hyperslab({chunk_id}): {ise} ")
         except Exception as e:
             self._status_map[chunk_id] = 500
             log.error(f"Unexpected exception {type(e)} for read_chunk_hyperslab({chunk_id}): {e} ")
@@ -1160,20 +1180,10 @@ async def PUT_Value(request):
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
 
-    request_type = "json"
-    if "Content-Type" in request.headers:
-        # client should use "application/octet-stream" for binary transfer
-        content_type = request.headers["Content-Type"]
-        if content_type not in EXPECTED_CONTENT_TYPES:
-            msg = f"Unknown content_type: {content_type}"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        if content_type == "application/octet-stream":
-            log.debug("PUT value - request_type is binary")
-            request_type = "binary"
-        else:
-            log.debug("PUT value - request type is json")
-
+    request_type = getContentType(request)
+     
+    log.debug(f"PUT value - request_type is {request_type}")
+         
     if not request.has_body:
         msg = "PUT Value with no body"
         log.warn(msg)
@@ -1771,7 +1781,8 @@ async def GET_Value(request):
         log.debug("prepare request")
         await resp.prepare(request)
 
-        arr = await getHyperSlabData(app, 
+        try:
+            arr = await getHyperSlabData(app, 
                            dset_id,
                            dset_json, 
                            slices, 
@@ -1779,10 +1790,15 @@ async def GET_Value(request):
                            bucket=bucket,
                            limit=limit,
                            method=request.method)
+        except HTTPException as he:
+            # close the response stream
+            log.error(f"got {type(he)} exception doing getHyperSlabData: {he}")
+            await resp.write_eof()
+            raise HTTPInternalServerError()
 
         if arr is None:
             # no array (OPTION request?)  Return empty json response
-            resp = await resp.write_eof()
+            await resp.write_eof()
             return resp
 
         if not isinstance(arr, np.ndarray):
@@ -2014,7 +2030,13 @@ async def doHyperSlabRead(app, chunk_ids, dset_json, slices,
     crawler_status = crawler.get_status()
 
 
-    log.info(f"doHyperSlabRead complete: status:  {crawler_status}")
+    log.info(f"doHyperSlabRead complete - status:  {crawler_status}")
+    if crawler_status == 400:
+        log.info(f"doHyperSlabRead raising BadRequest error:  {crawler_status}")
+        raise HTTPBadRequest()
+    if crawler_status not in  (200, 201):
+        log.info(f"doHyperSlabRead raising HTTPInternalServerError for status:  {crawler_status}")
+        raise HTTPInternalServerError()
     return arr
 
     
@@ -2113,20 +2135,9 @@ async def POST_Value(request):
     else:
         ignore_nan = False
 
-    request_type = "json"
-    if "Content-Type" in request.headers:
-        # client should use "application/octet-stream" for binary transfer
-        content_type = request.headers["Content-Type"]
-        if content_type not in EXPECTED_CONTENT_TYPES:
-            msg = f"Unknown content_type: {content_type}"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        if content_type == "application/octet-stream":
-            log.debug("POST value - request_type is binary")
-            request_type = "binary"
-        else:
-            log.debug("POST value - request type is json")
-
+    request_type = getContentType(request)
+    log.debug("POST value - request_type is {request_type}")
+           
     if not request.has_body:
         msg = "POST Value with no body"
         log.warn(msg)

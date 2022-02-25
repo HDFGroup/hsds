@@ -303,12 +303,16 @@ async def http_post(app, url, data=None, params=None):
                 pass  # also ok
             elif rsp.status == 204:  # no data
                 return None
+            elif rsp.status == 400:
+                msg = f"POST  request HTTPBadRequest error for url: {url}"
+                log.warn(msg)
+                raise HTTPBadRequest()
             elif rsp.status == 404:
-                msg = f"POST  reqest HTTPNotFound error for url: {url}"
+                msg = f"POST  request HTTPNotFound error for url: {url}"
                 log.info(msg)
                 raise HTTPNotFound()
             elif rsp.status == 410:
-                log.info(f"POST  reqest HTTPGone error for url: {url}")
+                log.info(f"POST  request HTTPGone error for url: {url}")
                 raise HTTPGone()
             elif rsp.status == 503:
                 log.warn(f"503 error for http_get_Json {url}")
@@ -500,6 +504,26 @@ def getAcceptType(request):
         else:
             accept_type = "binary"
     return accept_type
+
+def getContentType(request):
+    """
+    Get the content type from request headers.  
+    Default to json if not specified
+    """
+    if "Content-Type" in request.headers:
+        # client should use "application/octet-stream" for binary transfer
+        content_type = request.headers["Content-Type"]
+        if content_type == "application/octet-stream":
+            request_type = "binary"
+        elif content_type == "application/json":
+            request_type = "json"
+        else:
+            msg = f"Unknown content_type: {content_type}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    else:
+        request_type = "json"
+    return request_type
 
 
 def isBinaryResponse(rsp):

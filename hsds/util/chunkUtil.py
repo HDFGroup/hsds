@@ -1052,6 +1052,7 @@ def chunkQuery(chunk_id=None, chunk_layout=None, chunk_arr=None, slices=None,
     
     if not slices:
         slices = [slice(0, dims[0], 1), ]
+    log.debug(f"chunkQuery slices: {slices}")
     if len(slices) != rank:
         msg = "Selection rank does not match shape rank"
         log.error(msg)
