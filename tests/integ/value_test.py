@@ -1525,7 +1525,6 @@ class ValueTest(unittest.TestCase):
         req = helper.getEndpoint() + "/datasets/" + dset1_uuid + "/value"
         rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
-        print('rsp.text:', rsp.text)
         rspJson = json.loads(rsp.text)
         self.assertTrue("value" in rspJson)
         data = rspJson["value"]  # should be 4 x 3 array
@@ -1534,7 +1533,6 @@ class ValueTest(unittest.TestCase):
         self.assertTrue(data[2], [4,8,14])
         self.assertTrue(data[3], [6,12,21])
          
-        
         # read all the dataset values
         req = helper.getEndpoint() + "/datasets/" + dset1_uuid + "/value"
         rsp = self.session.get(req, headers=headers)

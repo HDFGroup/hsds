@@ -263,7 +263,7 @@ async def GET_Chunk(request):
         log.error(msg)
         raise HTTPInternalServerError()
     log.debug(f"GET_Chunk - request params: {params.keys()}")
-
+     
     if "s3path" in params:
         s3path = params["s3path"]
         log.debug(f"GET_Chunk - using URI: {s3path}")

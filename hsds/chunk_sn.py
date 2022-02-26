@@ -1764,6 +1764,8 @@ async def GET_Value(request):
     else:
         response_type = getAcceptType(request)
 
+    resp_json = {"status": 200}  # will over-write if there's a problem
+    arr = None
     # write response
     try:
         resp = StreamResponse()
@@ -1793,36 +1795,36 @@ async def GET_Value(request):
         except HTTPException as he:
             # close the response stream
             log.error(f"got {type(he)} exception doing getHyperSlabData: {he}")
-            await resp.write_eof()
-            raise HTTPInternalServerError()
+            resp_json["status"] = he.status_code
+            # can't raise a HTTPException here since write is in progress 
 
         if arr is None:
             # no array (OPTION request?)  Return empty json response
-            await resp.write_eof()
-            return resp
+            log.warn("got None response from getHyperSlabData")
 
-        if not isinstance(arr, np.ndarray):
+        elif not isinstance(arr, np.ndarray):
             msg = f"GET_Value - Expected ndarray but got: {type(arr)}"
-            raise HTTPInternalServerError()
-
-        if shm_name:
+            resp_json["status"] = 500
+        elif shm_name:
+            shm = None
             log.debug(f"attaching to shared memory block: {shm_name}")
             try:
                 shm = shared_memory.SharedMemory(name=shm_name)
             except FileNotFoundError:
                 msg = f"no shared memory block with name: {shm_name} found"
                 log.warning(msg)
-                raise HTTPBadRequest(reason=msg)
+                resp_json["status"] = 400
             except OSError as oe:
                 msg = f"Unexpected OSError: {oe.errno} attaching to shared memory block"
                 log.error(msg)
-                raise HTTPInternalServerError()
-            buffer = arrayToBytes(arr)
-            num_bytes = len(buffer)
-            if shm.size < num_bytes:
-                msg = f"unable to copy {num_bytes} to shared memory block of size: {shm.size}"
-                log.warning(msg)
-                raise HTTPRequestEntityTooLarge(num_bytes, shm.size)
+                resp_json["status"] = 400
+            if shm is not None:
+                buffer = arrayToBytes(arr)
+                num_bytes = len(buffer)
+                if shm.size < num_bytes:
+                    msg = f"unable to copy {num_bytes} to shared memory block of size: {shm.size}"
+                    log.warning(msg)
+                    resp_json["status"] = 413  # Payload too larger error
 
             # copy array data
             shm.buf[:num_bytes] = buffer[:]
@@ -1836,25 +1838,30 @@ async def GET_Value(request):
             shm.close()
 
             log.debug("GET Value - returning JSON data with shared memory buffer")
-            resp_json = {"shm_name": shm.name, "num_bytes": num_bytes}
+            resp_json["shm_name"] = shm.name
+            resp_json["num_bytes"] = num_bytes
             resp_json["hrefs"] = get_hrefs(request, dset_json)
-            resp_body = await jsonResponse(resp, resp_json, body_only=True)
-            await resp.write(resp_body)
-            await resp.write_eof()
-            return resp
-        
-        if response_type == "binary":
-            log.debug("preparing binary response")
-            output_data = arrayToBytes(arr)
-            log.debug(f"got {len(output_data)} bytes for resp")
-            log.debug("write request")
-            await resp.write(output_data)
+            # resp_body = await jsonResponse(resp, resp_json, body_only=True)
+            resp_json = resp_json.encode('utf-8')
+            await resp.write(resp_json)
+        elif response_type == "binary":
+            if resp_json["status"] != 200:
+                # write json with status_code
+                #resp_json = resp_json.encode('utf-8')
+                #await resp.write(resp_json)
+                log.warn(f"GET Value - got error status: {resp_json['status']}")
+            else:
+                log.debug("preparing binary response")
+                output_data = arrayToBytes(arr)
+                log.debug(f"got {len(output_data)} bytes for resp")
+                log.debug("write request")
+                await resp.write(output_data)
         else:
+            # return json
             log.debug("GET Value - returning JSON data")
             params = request.rel_url.query
             if "reduce_dim" in params and params["reduce_dim"]:
                 arr = squeezeArray(arr)
-            resp_json = {}
          
             data = arr.tolist()
             json_data = bytesArrayToList(data)
