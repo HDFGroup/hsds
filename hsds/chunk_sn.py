@@ -531,6 +531,7 @@ async def read_chunk_query(app, chunk_id, dset_json, slices, query, rsp_dict,
         msg += f", query_update: {query_update}"
     log.info(msg)
     chunk_rsp = None
+    max_retries = config.get("dn_max_retires", default=3)
 
     partition_chunk_id = getChunkIdForPartition(chunk_id, dset_json)
     if partition_chunk_id != chunk_id:
@@ -566,21 +567,51 @@ async def read_chunk_query(app, chunk_id, dset_json, slices, query, rsp_dict,
  
     req = getDataNodeUrl(app, chunk_id)
     req += "/chunks/" + chunk_id
-    try:
-        if query_update:
-            log.debug(f"PUT chunk req: {req}, data: {query_update}")
-            chunk_rsp = await http_put(app, req, data=query_update, params=params)
-        else:
-            log.debug(f"GET chunk req: {req}")
-            chunk_rsp = await http_get(app, req, params=params)
-            log.debug(f"got {len(chunk_rsp)} bytes from query: {query} on chunk: {chunk_id}")
-    except HTTPNotFound:
-        # no data, don't return any results
-        log.debug(f"no results from query: {query} on chunk: {chunk_id}")
-        chunk_rsp = None
-
-    rsp_dict[chunk_id] = chunk_rsp
-
+    retry = 0
+    status = None
+    while retry < max_retries:
+        if retry > 0:
+            sleep_time = 1
+            log.warn(f"read_chunk_query - sleeping for {sleep_time} before retrying request")
+            time.sleep(sleep_time)
+        try:
+            if query_update:
+                log.debug(f"PUT chunk req: {req}, data: {query_update}")
+                chunk_rsp = await http_put(app, req, data=query_update, params=params)
+            else:
+                log.debug(f"GET chunk req: {req}")
+                chunk_rsp = await http_get(app, req, params=params)
+                log.debug(f"got {len(chunk_rsp)} bytes from query: {query} on chunk: {chunk_id}")
+            rsp_dict[chunk_id] = chunk_rsp
+            status = 200
+        except HTTPNotFound:
+            # no data, don't return any results
+            log.debug(f"no results from query: {query} on chunk: {chunk_id}")
+            rsp_dict[chunk_id] = None  
+            status = 404
+        except ClientError as ce:
+            log.error(f"ClientError {type(ce)} for read_chunk_query({chunk_id}): {ce} ")
+            status = 500
+        except CancelledError as cle:
+            log.warn(f"CancelledError for read_chunk_query({chunk_id}): {cle}")
+            status = 500
+        except HTTPBadRequest as hbr:
+            rsp_dict[chunk_id] = 400
+            log.error(f"HTTPBadRequest for read_chunk_query({chunk_id}): {hbr} ")
+        except HTTPInternalServerError as ise:
+            status = 500
+            log.error(f"HTTPInternalServerError for read_chunk_query({chunk_id}): {ise} ")
+        except Exception as e:
+            status = 500
+            log.error(f"Unexpected exception {type(e)} for read_chunk_query({chunk_id}): {e} ")
+        if chunk_id in rsp_dict:
+            # got a result, break from retry loop
+            break
+        retry += 1
+    if chunk_id not in rsp_dict:
+        log.error(f"read_chunk_query - max retries exceeded for chunk: {chunk_id}")
+        # return the status code
+        rsp_dict[chunk_id] = status
 
 async def getPointData(app, dset_id, dset_json, points, bucket=None):
     """
@@ -1087,34 +1118,45 @@ class ChunkCrawler:
         msg = f"ChunkCrawler - hyperslab get for chunk: {chunk_id} bucket: "
         msg += f"{self._bucket}"
         log.debug(msg)
-        try: 
-            await read_chunk_hyperslab(self._app,
+        max_retries = config.get("dn_max_retires", default=3)
+        retry = 0
+        status_code = None
+        while retry < max_retries:
+            try: 
+                await read_chunk_hyperslab(self._app,
                                 chunk_id,
                                 self._dset_json,
                                 self._slices,
                                 self._arr,
                                 chunk_map=self._chunk_map,
                                 bucket=self._bucket)
-            self._status_map[chunk_id] = 200
-        except ClientError as ce:
-            self._status_map[chunk_id] = 500
-            log.error(f"ClientError {type(ce)} for read_chunk_hyperslab({chunk_id}): {ce} ")
-        except CancelledError as cle:
-            self._status_map[chunk_id] = 503
-            log.warn(f"CancelledError for read_chunk_hyperslab({chunk_id}): {cle}")
-        except HTTPBadRequest as hbr:
-            self._status_map[chunk_id] = 400
-            log.error(f"HTTPBadRequest for read_chunk_hyperslab({chunk_id}): {hbr} ")
-        except HTTPNotFound as nfe:
-            self._status_map[chunk_id] = 404
-            log.error(f"HTTPNotFoundRequest for read_chunk_hyperslab({chunk_id}): {nfe} ")
-        except HTTPInternalServerError as ise:
-            self._status_map[chunk_id] = 500
-            log.error(f"HTTPInternalServerError for read_chunk_hyperslab({chunk_id}): {ise} ")
-        except Exception as e:
-            self._status_map[chunk_id] = 500
-            log.error(f"Unexpected exception {type(e)} for read_chunk_hyperslab({chunk_id}): {e} ")
-
+                log.debug(f"read_chunk_hyperslab - got 200 status for chunk_id: {chunk_id}")
+                status_code = 200
+            except ClientError as ce:
+                status_code = 500
+                log.error(f"ClientError {type(ce)} for read_chunk_hyperslab({chunk_id}): {ce} ")
+            except CancelledError as cle:
+                status_code = 503
+                log.warn(f"CancelledError for read_chunk_hyperslab({chunk_id}): {cle}")
+            except HTTPBadRequest as hbr:
+                status_code = 400
+                log.error(f"HTTPBadRequest for read_chunk_hyperslab({chunk_id}): {hbr} ")
+            except HTTPNotFound as nfe:
+                status_code = 404
+                log.error(f"HTTPNotFoundRequest for read_chunk_hyperslab({chunk_id}): {nfe} ")
+            except HTTPInternalServerError as ise:
+                status_code = 500
+                log.error(f"HTTPInternalServerError for read_chunk_hyperslab({chunk_id}): {ise} ")
+            except Exception as e:
+                status_code = 500
+                log.error(f"Unexpected exception {type(e)} for read_chunk_hyperslab({chunk_id}): {e} ")
+            retry += 1
+            if status_code == 200 or retry == max_retries:
+                break
+            sleep_time = 1
+            log.warn(f"read_chunk_hyperslab - sleeping for {sleep_time}")
+            time.sleep(sleep_time)
+        self._status_map[chunk_id] = status_code
         log.info(f"ChunkCrawler - worker status for chunk {chunk_id}: {self._status_map[chunk_id]}")
 
 
@@ -1841,9 +1883,9 @@ async def GET_Value(request):
             resp_json["shm_name"] = shm.name
             resp_json["num_bytes"] = num_bytes
             resp_json["hrefs"] = get_hrefs(request, dset_json)
-            # resp_body = await jsonResponse(resp, resp_json, body_only=True)
-            resp_json = resp_json.encode('utf-8')
-            await resp.write(resp_json)
+            resp_body = await jsonResponse(resp, resp_json, body_only=True)
+            resp_body = resp_body.encode('utf-8')
+            await resp.write(resp_body)
         elif response_type == "binary":
             if resp_json["status"] != 200:
                 # write json with status_code
@@ -1908,7 +1950,6 @@ async def doQueryRead(app, query, chunk_ids, dset_json, slices, query_update=Non
     if node_count == 0:
         log.warn("query read request with no active dn nodes")
         raise HTTPServiceUnavailable()
-    chunk_index = 0
     num_chunks = len(chunk_ids)
     log.info(f"doQueryRead with {num_chunks} chunks")
     # Get information about where chunks are located
@@ -1921,12 +1962,21 @@ async def doQueryRead(app, query, chunk_ids, dset_json, slices, query_update=Non
     #log.debug(f"chunkinfo_map: {chunk_map}")
     num_hits = 0
     dn_rsp = {}  # dictionary keyed by chunk_id
-    while chunk_index < num_chunks:
-        next_chunks = chunk_ids[chunk_index:]
-        chunk_index = num_chunks
+    max_tasks_per_node = config.get("max_tasks_per_node_per_request", default=16)
+    max_tasks = max_tasks_per_node * getNodeCount(app)
+
+    start_index = 0
+    while start_index < num_chunks:
+        end_index = start_index + max_tasks
+        if end_index > num_chunks:
+            end_index = num_chunks
+        msg = f"doQueryRead - getting chunk ids for {start_index} to "
+        msg += f"{end_index} out of {num_chunks}"
+        log.debug(msg)
+        next_chunks = chunk_ids[start_index:end_index]
+        start_index = end_index
         
         log.debug(f"doQueryRead - next batch of chunk ids: {next_chunks}")
-        
         
         kwargs = {"chunk_map": chunk_map,
                   "bucket": bucket}
@@ -1947,6 +1997,9 @@ async def doQueryRead(app, query, chunk_ids, dset_json, slices, query_update=Non
         await asyncio.gather(*tasks, loop=loop)
 
         for chunk_id in next_chunks:
+            if isinstance(dn_rsp[chunk_id], int):
+                log.error(f"doQueryRead got status: {dn_rsp[chunk_id]}")
+                raise HTTPInternalServerError()
             array_data = dn_rsp[chunk_id]
             if array_data is None or len(array_data) == 0:
                 continue
