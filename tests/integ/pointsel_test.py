@@ -225,6 +225,7 @@ class PointSelTest(unittest.TestCase):
 
         points = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,97,98]
         num_points = len(points)
+        print("num_points:", num_points)
         arr_points = np.asarray(points, dtype='u8')  # must use unsigned 64-bit int
         data = arr_points.tobytes()
 
@@ -235,6 +236,7 @@ class PointSelTest(unittest.TestCase):
         self.assertEqual(len(rsp_data), num_points*4)
         arr_rsp = np.frombuffer(rsp_data, dtype='i4')
         rsp_values = arr_rsp.tolist()
+        print("got:", len(rsp_values))
         expected_result = [97, 96, 94, 92, 88, 86, 82, 80, 76, 70, 68, 62, 58, 56, 52, 46, 40, 38, 32, 28, 26, 20, 16, 2, 1]
         self.assertEqual(rsp_values, expected_result)
 
