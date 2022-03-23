@@ -13,6 +13,7 @@ from shutil import which
 
 # maximum number of characters if socket directory is given
 # Exceeding this can cause errors - see: https://github.com/HDFGroup/hsds/issues/129
+# Underlying issue is reported here: https://bugs.python.org/issue32958
 MAX_SOCKET_DIR_PATH_LEN=64
 
 
@@ -87,23 +88,19 @@ class HsdsApp:
         Initializer for class
         """
 
-        """
-        # Using tempdir is causing a unicode exception
-        # See: https://bugs.python.org/issue32958
-        self._tempdir = tempfile.TemporaryDirectory()
-        tmp_dir = self._tempdir.name
-        """
-
         # create a random dirname if one is not supplied
-        if socket_dir:
-            if len(socket_dir) > MAX_SOCKET_DIR_PATH_LEN:
-                raise ValueError(f"length of socket_dir must be less than: {MAX_SOCKET_DIR_PATH_LEN}")
-            if socket_dir[-1] != '/':
-                socket_dir += '/'
-        else:
-            tmp_dir = "/tmp"  # TBD: will this work on windows?
+        if not socket_dir:
+            if 'TEMP' in os.environ['TEMP']:
+                # This should be set at least on Windows
+                tmp_dir = os.environ['TEMP']
+            else:
+                tmp_dir = "/tmp"  # TBD: will this work on windows?   
             rand_name = uuid.uuid4().hex[:8]
-            socket_dir = f"{tmp_dir}/hs{rand_name}/"  # TBD: use temp dir
+            socket_dir = os.path.join(tmp_dir, f"hs{rand_name}/")  
+        if len(socket_dir) > MAX_SOCKET_DIR_PATH_LEN:
+            raise ValueError(f"length of socket_dir must be less than: {MAX_SOCKET_DIR_PATH_LEN}")
+        if socket_dir[-1] != '/':
+            socket_dir += '/' 
         self._dn_urls = []
         self._socket_paths = []
         self._processes = []
