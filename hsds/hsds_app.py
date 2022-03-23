@@ -5,16 +5,10 @@ import site
 import signal
 import subprocess
 import time
-import uuid
 import queue
 import threading
 import logging
 from shutil import which
-
-# maximum number of characters if socket directory is given
-# Exceeding this can cause errors - see: https://github.com/HDFGroup/hsds/issues/129
-# Underlying issue is reported here: https://bugs.python.org/issue32958
-MAX_SOCKET_DIR_PATH_LEN=63
 
 
 def _enqueue_output(out, queue, loglevel):
@@ -90,17 +84,7 @@ class HsdsApp:
 
         # create a random dirname if one is not supplied
         if not socket_dir:
-            if 'TEMP' in os.environ['TEMP']:
-                # This should be set at least on Windows
-                tmp_dir = os.environ['TEMP']
-            else:
-                tmp_dir = "/tmp"  # TBD: will this work on windows?   
-            rand_name = uuid.uuid4().hex[:8]
-            socket_dir = os.path.join(tmp_dir, f"hs{rand_name}/")  
-        if len(socket_dir) > MAX_SOCKET_DIR_PATH_LEN:
-            raise ValueError(f"length of socket_dir must be less than: {MAX_SOCKET_DIR_PATH_LEN}")
-        if socket_dir[-1] != '/':
-            socket_dir += '/' 
+            raise ValueError("socket_dir not set")
         self._dn_urls = []
         self._socket_paths = []
         self._processes = []
@@ -130,8 +114,10 @@ class HsdsApp:
 
         # url-encode any slashed in the socket dir
         socket_url = ""
+        if not socket_dir.endswith(os.path.sep):
+            socket_dir += os.path.sep
         for ch in socket_dir:
-            if ch == '/':
+            if ch == '/' or ch == '\\':
                 socket_url += "%2F"
             else:
                 socket_url += ch
@@ -235,12 +221,21 @@ class HsdsApp:
             common_args.append(f"--log_level={self._loglevel}")
 
         py_exe = sys.executable
-        cmd_dir = os.path.join(sys.exec_prefix, "bin")
+        cmd_path = os.path.join(sys.exec_prefix, "bin")
+        cmd_path = os.path.join(cmd_path, "hsds-node")
+        if not os.path.isfile(cmd_path):
+            # search corresponding location for windows installs
+            cmd_path = os.path.join(sys.exec_prefix, "Scripts")
+            cmd_path = os.path.join(cmd_path, "hsds-node-script.py")
+            if not os.path.isfile(cmd_path):
+                raise FileNotFoundError("can't find hsds-node executable")
+        print("using cmd_path:", cmd_path)
+
         for i in range(count):
             if i == 0:
                 # args for service node
                 pargs = [py_exe,
-                         os.path.join(cmd_dir, "hsds-node"),
+                         cmd_path,
                          "--node_type=sn",
                          "--log_prefix=sn "]
                 if self._username:
@@ -257,13 +252,13 @@ class HsdsApp:
             elif i == 1:
                 # args for rangeget node
                 pargs = [py_exe,
-                         os.path.join(cmd_dir, "hsds-node"),
+                         cmd_path,
                          "--node_type=rn",
                          "--log_prefix=rg "]
             else:
                 node_number = i - 2  # start with 0
                 pargs = [py_exe,
-                         os.path.join(cmd_dir, "hsds-node"),
+                         cmd_path,
                          "--node_type=dn",
                          f"--log_prefix=dn{node_number+1} "]
                 pargs.append(f"--dn_urls={dn_urls_arg}")
@@ -285,7 +280,7 @@ class HsdsApp:
 
         # wait to sockets are initialized
         start_ts = time.time()
-        SLEEP_TIME = 0.1  # time to sleep between checking on socket connection
+        SLEEP_TIME = 1  # time to sleep between checking on socket connection
         MAX_INIT_TIME = 10.0  # max time to wait for socket to be initialized
 
         while True:
@@ -315,9 +310,12 @@ class HsdsApp:
             return
         now = time.time()
         logging.info(f"hsds app stop at {now}")
+        os.kill(signal.CTRL_C_EVENT, 0)
+        """
         for p in self._processes:
             logging.info(f"sending SIGINT to {p.args[0]}")
-            p.send_signal(signal.SIGINT)
+            #p.send_signal(signal.SIGINT)
+        """    
         # wait for sub-proccesses to exit
         SLEEP_TIME = 0.1  # time to sleep between checking on process state
         MAX_WAIT_TIME = 10.0  # max time to wait for sub-process to terminate

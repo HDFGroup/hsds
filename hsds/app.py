@@ -35,6 +35,10 @@ _HELP_EPILOG = """Examples:
   hsds --bucket-dir ./data/hsds.test
 """
 
+# maximum number of characters if socket directory is given
+# Exceeding this can cause errors - see: https://github.com/HDFGroup/hsds/issues/129
+# Underlying issue is reported here: https://bugs.python.org/issue32958
+MAX_SOCKET_DIR_PATH_LEN=63
 
 class UserConfig:
     """
@@ -220,11 +224,24 @@ def main():
 
     # choose a tmp directory for socket if one is not provided
     if args.socket_dir:
-        socket_dir = args.socket_dir
+        socket_dir = os.path.abspath(args.socket_dir)
+        if not os.path.isdir(socket_dir):
+            raise FileNotFoundError(f"directory: {socket_dir} not found")
     else:
-        tmp_dir = "/tmp"  # TBD: will this work on windows?
+        if 'TMP' in os.environ:
+            # This should be set at least on Windows
+            tmp_dir = os.environ['TMP']
+            print("set tmp_dir:", tmp_dir)
+        else:
+            tmp_dir = "/tmp"  
+        if not os.path.isdir(tmp_dir):
+            raise FileNotFoundError(f"directory {tmp_dir} not found")
         rand_name = uuid.uuid4().hex[:8]
-        socket_dir = f"{tmp_dir}/hs{rand_name}/"
+        socket_dir = os.path.join(tmp_dir, f"hs{rand_name}")  
+        print("using socket dir:", socket_dir)
+        if len(socket_dir) > MAX_SOCKET_DIR_PATH_LEN:
+            raise ValueError(f"length of socket_dir must be less than: {MAX_SOCKET_DIR_PATH_LEN}") 
+        os.mkdir(socket_dir)
     kwargs["socket_dir"] = socket_dir
 
     if args.logfile:
