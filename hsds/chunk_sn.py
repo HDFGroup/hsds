@@ -1841,9 +1841,9 @@ async def GET_Value(request):
             resp_json["shm_name"] = shm.name
             resp_json["num_bytes"] = num_bytes
             resp_json["hrefs"] = get_hrefs(request, dset_json)
-            # resp_body = await jsonResponse(resp, resp_json, body_only=True)
-            resp_json = resp_json.encode('utf-8')
-            await resp.write(resp_json)
+            resp_body = await jsonResponse(resp, resp_json, body_only=True)
+            resp_body = resp_body.encode('utf-8')
+            await resp.write(resp_body)
         elif response_type == "binary":
             if resp_json["status"] != 200:
                 # write json with status_code

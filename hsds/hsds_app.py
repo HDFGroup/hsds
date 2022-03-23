@@ -11,6 +11,10 @@ import threading
 import logging
 from shutil import which
 
+# maximum number of characters if socket directory is given
+# Exceeding this can cause errors - see: https://github.com/HDFGroup/hsds/issues/129
+MAX_SOCKET_DIR_PATH_LEN=64
+
 
 def _enqueue_output(out, queue, loglevel):
     for line in iter(out.readline, b''):
@@ -92,6 +96,8 @@ class HsdsApp:
 
         # create a random dirname if one is not supplied
         if socket_dir:
+            if len(socket_dir) > MAX_SOCKET_DIR_PATH_LEN:
+                raise ValueError(f"length of socket_dir must be less than: {MAX_SOCKET_DIR_PATH_LEN}")
             if socket_dir[-1] != '/':
                 socket_dir += '/'
         else:
