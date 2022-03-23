@@ -14,7 +14,7 @@ from shutil import which
 # maximum number of characters if socket directory is given
 # Exceeding this can cause errors - see: https://github.com/HDFGroup/hsds/issues/129
 # Underlying issue is reported here: https://bugs.python.org/issue32958
-MAX_SOCKET_DIR_PATH_LEN=64
+MAX_SOCKET_DIR_PATH_LEN=63
 
 
 def _enqueue_output(out, queue, loglevel):
