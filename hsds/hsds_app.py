@@ -76,15 +76,17 @@ class HsdsApp:
     def __init__(self, username=None, 
                 password=None, password_file=None, logger=None, 
                 log_level=None, dn_count=1, logfile=None, 
-                socket_dir=None, config_dir=None, readonly=False,
+                socket_dir=None, host=None, sn_port=None, config_dir=None, readonly=False,
                 islambda=False):
         """
         Initializer for class
         """
 
         # create a random dirname if one is not supplied
-        if not socket_dir:
-            raise ValueError("socket_dir not set")
+        if not socket_dir and not host:
+            raise ValueError("socket_dir or host needs to be set")
+        if host and not sn_port:
+            raise ValueError("sn_port not set")
         self._dn_urls = []
         self._socket_paths = []
         self._processes = []
@@ -107,33 +109,46 @@ class HsdsApp:
         else:
             self.log = logger
 
-        if not os.path.isdir(socket_dir):
+        if socket_dir is not None and not os.path.isdir(socket_dir):
             os.mkdir(socket_dir)
 
-        self.log.debug(f"HsdsApp init - Using socketdir: {socket_dir}")
-
         # url-encode any slashed in the socket dir
-        socket_url = ""
-        if not socket_dir.endswith(os.path.sep):
-            socket_dir += os.path.sep
-        for ch in socket_dir:
-            if ch == '/' or ch == '\\':
-                socket_url += "%2F"
-            else:
-                socket_url += ch
+        if socket_dir:
+            if not socket_dir.endswith(os.path.sep):
+                socket_dir += os.path.sep
+            self.log.debug(f"HsdsApp init - Using socketdir: {socket_dir}")
+            socket_url = ""
+            for ch in socket_dir:
+                if ch == '/' or ch == '\\':
+                    socket_url += "%2F"
+                else:
+                    socket_url += ch
+            sn_url = f"http+unix://{socket_url}sn_1.sock"
 
-        for i in range(dn_count):
-            socket_name = f"dn_{(i+1)}.sock"
-            dn_url = f"http+unix://{socket_url}{socket_name}"
-            self._dn_urls.append(dn_url)
-            self._socket_paths.append(f"{socket_dir}{socket_name}")
+            for i in range(dn_count):
+                socket_name = f"dn_{(i+1)}.sock"
+                dn_url = f"http+unix://{socket_url}{socket_name}"
+                self._dn_urls.append(dn_url)
+                self._socket_paths.append(f"{socket_dir}{socket_name}")
+            self._socket_paths.append(f"{socket_dir}sn_1.sock")
+            self._socket_paths.append(f"{socket_dir}rangeget.sock")
+            rangeget_url = f"http+unix://{socket_url}rangeget.sock"
+        else:
+            # setup TCP/IP endpoints
+            sn_url = f"http://{host}:{sn_port}"
+            dn_port = 6101  # TBD: pull this from config
+            for i in range(dn_count):
+                dn_url = f"http://{host}:{dn_port+i}"
+                self._dn_urls.append(dn_url)
+            rangeget_port = 6900  # TBD: pull from config
+            rangeget_url = f"http://{host}:{rangeget_port}"
+
 
         # sort the ports so that node_number can be determined based on dn_url
         self._dn_urls.sort()
-        self._endpoint = f"http+unix://{socket_url}sn_1.sock"
-        self._socket_paths.append(f"{socket_dir}sn_1.sock")
-        self._rangeget_url = f"http+unix://{socket_url}rangeget.sock"
-        self._socket_paths.append(f"{socket_dir}rangeget.sock")
+        self._endpoint = sn_url 
+        self._rangeget_url = rangeget_url
+        print("endpoint:", self._endpoint)
 
     @property
     def endpoint(self):
@@ -212,7 +227,8 @@ class HsdsApp:
             # sitepackage libs from their path before importing aiobotocore
             common_args.append("--removesitepackages")
         # common_args.append("--server_name=Direct Connect (HSDS)")
-        common_args.append("--use_socket")
+        if len(self._socket_paths) > 0:
+            common_args.append("--use_socket")
         if self._readonly:
             common_args.append("--readonly")
         if self._config_dir:
@@ -285,9 +301,14 @@ class HsdsApp:
 
         while True:
             ready = 0
-            for socket_path in self._socket_paths:
-                if os.path.exists(socket_path):
-                    ready += 1
+            if len(self._socket_paths) > 0:
+                for socket_path in self._socket_paths:
+                    if os.path.exists(socket_path):
+                        ready += 1
+            else:
+                if time.time() > start_ts + 5:
+                    # TBD - put a real ready check here
+                    ready = count
             if ready == count:
                 self.log.info("all processes ready!")
                 break
@@ -310,12 +331,14 @@ class HsdsApp:
             return
         now = time.time()
         logging.info(f"hsds app stop at {now}")
-        os.kill(signal.CTRL_C_EVENT, 0)
-        """
-        for p in self._processes:
-            logging.info(f"sending SIGINT to {p.args[0]}")
-            #p.send_signal(signal.SIGINT)
-        """    
+        if hasattr(signal, "CTRL_C_EVENT"):
+            # windows style
+            os.kill(signal.CTRL_C_EVENT, 0)
+        else:
+            for p in self._processes:
+                logging.info(f"sending SIGINT to {p.args[0]}")
+                p.send_signal(signal.SIGINT)
+          
         # wait for sub-proccesses to exit
         SLEEP_TIME = 0.1  # time to sleep between checking on process state
         MAX_WAIT_TIME = 10.0  # max time to wait for sub-process to terminate

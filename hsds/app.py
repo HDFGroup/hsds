@@ -138,9 +138,9 @@ def main():
     group.add_argument(
         '--bucket_name', nargs=1, type=str, dest='bucket_name',
         help='Name of the bucket to use (e.g., "hsds.test").')
-    parser.add_argument('--host', default='localhost',
+    parser.add_argument('--host', default='',
                         type=str, dest='host',
-                        help="host address for service node")
+                        help="host name for url")
     parser.add_argument('--hs_username', type=str,  dest='hs_username',
                         help="username to be added to list of valid users",
                         default='')
@@ -222,38 +222,47 @@ def main():
             sys.exit(f"password file: {args.password_file} not found")
         kwargs["password_file"] = args.password_file
 
-    # choose a tmp directory for socket if one is not provided
-    if args.socket_dir:
-        socket_dir = os.path.abspath(args.socket_dir)
-        if not os.path.isdir(socket_dir):
-            raise FileNotFoundError(f"directory: {socket_dir} not found")
-    else:
-        if 'TMP' in os.environ:
-            # This should be set at least on Windows
-            tmp_dir = os.environ['TMP']
-            print("set tmp_dir:", tmp_dir)
+
+    if args.host:
+        # use TCP connect
+        kwargs["host"] = args.host
+        # sn_port only relevant for TCP connections
+        if args.port:
+            kwargs["sn_port"] = args.port
         else:
-            tmp_dir = "/tmp"  
-        if not os.path.isdir(tmp_dir):
-            raise FileNotFoundError(f"directory {tmp_dir} not found")
-        rand_name = uuid.uuid4().hex[:8]
-        socket_dir = os.path.join(tmp_dir, f"hs{rand_name}")  
-        print("using socket dir:", socket_dir)
-        if len(socket_dir) > MAX_SOCKET_DIR_PATH_LEN:
-            raise ValueError(f"length of socket_dir must be less than: {MAX_SOCKET_DIR_PATH_LEN}") 
-        os.mkdir(socket_dir)
-    kwargs["socket_dir"] = socket_dir
+            kwargs["sn_port"] = 5101  # TBD - use config
+    else:
+        # choose a tmp directory for socket if one is not provided
+        if args.socket_dir:
+            socket_dir = os.path.abspath(args.socket_dir)
+            if not os.path.isdir(socket_dir):
+                raise FileNotFoundError(f"directory: {socket_dir} not found")
+        else:
+            if 'TMP' in os.environ:
+                # This should be set at least on Windows
+                tmp_dir = os.environ['TMP']
+                print("set tmp_dir:", tmp_dir)
+            else:
+                tmp_dir = "/tmp"  
+            if not os.path.isdir(tmp_dir):
+                raise FileNotFoundError(f"directory {tmp_dir} not found")
+            rand_name = uuid.uuid4().hex[:8]
+            socket_dir = os.path.join(tmp_dir, f"hs{rand_name}")  
+            print("using socket dir:", socket_dir)
+            if len(socket_dir) > MAX_SOCKET_DIR_PATH_LEN:
+                raise ValueError(f"length of socket_dir must be less than: {MAX_SOCKET_DIR_PATH_LEN}") 
+            os.mkdir(socket_dir)
+        kwargs["socket_dir"] = socket_dir
 
     if args.logfile:
-        if os.path.isabs(args.logfile):
-            logfile = args.logfile
-        else:
-            # use filename in the socket directory
-            logfile = os.path.join(socket_dir, args.logfile)
+        logfile = os.path.abspath(args.logfile)
+    elif args.host:
+        logfile = os.path.abspath("hs.log")
     else:
-        logfile = None
-    if logfile:
-        kwargs["logfile"] = logfile
+        socket_dir = os.path.abspath(args.socket_dir)
+        logfile = os.path.join(socket_dir, "hs.log")
+    print("logfile:", logfile)
+    kwargs["logfile"] = logfile
     config_dir = None
     if args.config_dir:
         if not os.path.isdir(args.config_dir):
