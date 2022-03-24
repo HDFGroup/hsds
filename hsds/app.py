@@ -222,7 +222,6 @@ def main():
             sys.exit(f"password file: {args.password_file} not found")
         kwargs["password_file"] = args.password_file
 
-
     if args.host:
         # use TCP connect
         kwargs["host"] = args.host
@@ -263,6 +262,10 @@ def main():
         logfile = os.path.join(socket_dir, "hs.log")
     print("logfile:", logfile)
     kwargs["logfile"] = logfile
+
+    if args.root_dir:
+        kwargs["root_dir"] = args.root_dir
+        
     config_dir = None
     if args.config_dir:
         if not os.path.isdir(args.config_dir):
@@ -271,6 +274,7 @@ def main():
             config_dir = args.config_dir
     if config_dir:
         kwargs["config_dir"] = config_dir
+    
     if args.dn_count:
         kwargs["dn_count"] = args.dn_count
 

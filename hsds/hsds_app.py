@@ -75,7 +75,7 @@ class HsdsApp:
 
     def __init__(self, username=None, 
                 password=None, password_file=None, logger=None, 
-                log_level=None, dn_count=1, logfile=None, 
+                log_level=None, dn_count=1, logfile=None, root_dir=None,
                 socket_dir=None, host=None, sn_port=None, config_dir=None, readonly=False,
                 islambda=False):
         """
@@ -111,6 +111,13 @@ class HsdsApp:
 
         if socket_dir is not None and not os.path.isdir(socket_dir):
             os.mkdir(socket_dir)
+
+        if root_dir:
+            if not os.path.isdir(root_dir):
+                raise FileNotFoundError(f"storage directory: '{root_dir}' not found")
+            self._root_dir = os.path.abspath(root_dir)
+        else:
+            self._root_dir = None
 
         # url-encode any slashed in the socket dir
         if socket_dir:
@@ -232,7 +239,9 @@ class HsdsApp:
         if self._readonly:
             common_args.append("--readonly")
         if self._config_dir:
-            common_args.append(f"--config-dir={self._config_dir}")
+            common_args.append(f"--config_dir={self._config_dir}")
+        if self._root_dir:
+            common_args.append(f"--root_dir={self._root_dir}")
         if self._loglevel:
             common_args.append(f"--log_level={self._loglevel}")
 
