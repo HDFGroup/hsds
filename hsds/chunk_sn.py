@@ -36,7 +36,7 @@ from .util.dsetUtil import getSelectionList, getSliceQueryParam, isNullSpace
 from .util.dsetUtil import getFillValue, isExtensible, getDsetRank
 from .util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout 
 from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId
-from .util.chunkUtil import getChunkIndex, getChunkSuffix, _getEvalStr
+from .util.chunkUtil import getChunkIndex, getChunkSuffix, checkQuery
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
 from .util.chunkUtil import getChunkIdForPartition, getQueryDtype
 from .util.arrayUtil import bytesArrayToList, jsonToArray, getShapeDims
@@ -1726,11 +1726,8 @@ async def GET_Value(request):
     content_length = None
     query = params.get("query")
     if query:
-        # verify that query is valid
-        try:  
-            _getEvalStr(query, "x", dset_dtype.names)
-        except ValueError as ve:
-            msg = f"get query ValueError: {ve}"
+        if not checkQuery(query, dset_dtype):
+            msg = f"query: {query} is not valid"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
     else:
