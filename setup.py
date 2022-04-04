@@ -35,7 +35,7 @@ install_requires = [
     'pyyaml',
     'requests-unixsocket',
     'simplejson',
-    'aiohttp>=3.7.4'
+    'aiohttp==3.8.1'
     ]
 
 
