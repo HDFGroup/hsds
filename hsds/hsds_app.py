@@ -12,29 +12,35 @@ from shutil import which
 
 
 def _enqueue_output(out, queue, loglevel):
-    for line in iter(out.readline, b''):
-        # filter lines by loglevel
-        words = line.split()
-        put_line = True
+    try:
+        for line in iter(out.readline, b''):
+            # filter lines by loglevel
+            words = line.split()
+            put_line = True
 
-        if loglevel != logging.DEBUG:
-            if len(words) >= 2:
-                # format should be "node_name log_level> msg"
-                level = words[1][:-1]
-                if loglevel == logging.INFO:
-                    if level == "DEBUG":
-                        put_line = False
-                elif loglevel == logging.WARN or loglevel == logging.WARNING:
-                    if not level.startswith("WARN") and level != "ERROR":
-                        put_line = False
-                elif loglevel == logging.ERROR:
-                    if level != "ERROR":
-                        put_line = False
-        put_line = True
-        if put_line:
-            queue.put(line)
-    logging.debug("enqueu_output close()")
-    out.close()
+            if loglevel != logging.DEBUG:
+                if len(words) >= 2:
+                    # format should be "node_name log_level> msg"
+                    level = words[1][:-1]
+                    if loglevel == logging.INFO:
+                        if level == "DEBUG":
+                            put_line = False
+                    elif loglevel == logging.WARN or loglevel == logging.WARNING:
+                        if not level.startswith("WARN") and level != "ERROR":
+                            put_line = False
+                    elif loglevel == logging.ERROR:
+                        if level != "ERROR":
+                            put_line = False
+            put_line = True
+            if put_line:
+                queue.put(line)
+        logging.debug("_enqueue_output close()")
+        out.close()
+    except ValueError as ve:
+        logging.warn(f"_enqueue_output - ValueError (handle closed?): {ve}")
+    except Exception as e:
+        logging.error(f"_enqueue_output - Unexpected exception {type(e)}: {e}")
+
 
 
 def get_cmd_dir():

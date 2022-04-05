@@ -23,7 +23,7 @@ classifiers = [
     ]
 
 install_requires = [
-    'aiobotocore',
+    'aiobotocore==2.1.0',
     'aiohttp_cors',
     'aiofiles',
     'cryptography',
