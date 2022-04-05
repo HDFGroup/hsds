@@ -1,0 +1,1 @@
+hsds --root_dir data --host localhost --port 5101 --password_file admin/config/passwd.txt --logfile hs.log   --loglevel DEBUG  --config_dir=admin/config --count=4  

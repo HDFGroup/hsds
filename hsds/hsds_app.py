@@ -5,7 +5,6 @@ import site
 import signal
 import subprocess
 import time
-import uuid
 import queue
 import threading
 import logging
@@ -13,29 +12,35 @@ from shutil import which
 
 
 def _enqueue_output(out, queue, loglevel):
-    for line in iter(out.readline, b''):
-        # filter lines by loglevel
-        words = line.split()
-        put_line = True
+    try:
+        for line in iter(out.readline, b''):
+            # filter lines by loglevel
+            words = line.split()
+            put_line = True
 
-        if loglevel != logging.DEBUG:
-            if len(words) >= 2:
-                # format should be "node_name log_level> msg"
-                level = words[1][:-1]
-                if loglevel == logging.INFO:
-                    if level == "DEBUG":
-                        put_line = False
-                elif loglevel == logging.WARN or loglevel == logging.WARNING:
-                    if not level.startswith("WARN") and level != "ERROR":
-                        put_line = False
-                elif loglevel == logging.ERROR:
-                    if level != "ERROR":
-                        put_line = False
-        put_line = True
-        if put_line:
-            queue.put(line)
-    logging.debug("enqueu_output close()")
-    out.close()
+            if loglevel != logging.DEBUG:
+                if len(words) >= 2:
+                    # format should be "node_name log_level> msg"
+                    level = words[1][:-1]
+                    if loglevel == logging.INFO:
+                        if level == "DEBUG":
+                            put_line = False
+                    elif loglevel == logging.WARN or loglevel == logging.WARNING:
+                        if not level.startswith("WARN") and level != "ERROR":
+                            put_line = False
+                    elif loglevel == logging.ERROR:
+                        if level != "ERROR":
+                            put_line = False
+            put_line = True
+            if put_line:
+                queue.put(line)
+        logging.debug("_enqueue_output close()")
+        out.close()
+    except ValueError as ve:
+        logging.warn(f"_enqueue_output - ValueError (handle closed?): {ve}")
+    except Exception as e:
+        logging.error(f"_enqueue_output - Unexpected exception {type(e)}: {e}")
+
 
 
 def get_cmd_dir():
@@ -76,28 +81,18 @@ class HsdsApp:
 
     def __init__(self, username=None, 
                 password=None, password_file=None, logger=None, 
-                log_level=None, dn_count=1, logfile=None, 
-                socket_dir=None, config_dir=None, readonly=False,
+                log_level=None, dn_count=1, logfile=None, root_dir=None,
+                socket_dir=None, host=None, sn_port=None, config_dir=None, readonly=False,
                 islambda=False):
         """
         Initializer for class
         """
 
-        """
-        # Using tempdir is causing a unicode exception
-        # See: https://bugs.python.org/issue32958
-        self._tempdir = tempfile.TemporaryDirectory()
-        tmp_dir = self._tempdir.name
-        """
-
         # create a random dirname if one is not supplied
-        if socket_dir:
-            if socket_dir[-1] != '/':
-                socket_dir += '/'
-        else:
-            tmp_dir = "/tmp"  # TBD: will this work on windows?
-            rand_name = uuid.uuid4().hex[:8]
-            socket_dir = f"{tmp_dir}/hs{rand_name}/"  # TBD: use temp dir
+        if not socket_dir and not host:
+            raise ValueError("socket_dir or host needs to be set")
+        if host and not sn_port:
+            raise ValueError("sn_port not set")
         self._dn_urls = []
         self._socket_paths = []
         self._processes = []
@@ -120,31 +115,53 @@ class HsdsApp:
         else:
             self.log = logger
 
-        if not os.path.isdir(socket_dir):
+        if socket_dir is not None and not os.path.isdir(socket_dir):
             os.mkdir(socket_dir)
 
-        self.log.debug(f"HsdsApp init - Using socketdir: {socket_dir}")
+        if root_dir:
+            if not os.path.isdir(root_dir):
+                raise FileNotFoundError(f"storage directory: '{root_dir}' not found")
+            self._root_dir = os.path.abspath(root_dir)
+        else:
+            self._root_dir = None
 
         # url-encode any slashed in the socket dir
-        socket_url = ""
-        for ch in socket_dir:
-            if ch == '/':
-                socket_url += "%2F"
-            else:
-                socket_url += ch
+        if socket_dir:
+            if not socket_dir.endswith(os.path.sep):
+                socket_dir += os.path.sep
+            self.log.debug(f"HsdsApp init - Using socketdir: {socket_dir}")
+            socket_url = ""
+            for ch in socket_dir:
+                if ch == '/' or ch == '\\':
+                    socket_url += "%2F"
+                else:
+                    socket_url += ch
+            sn_url = f"http+unix://{socket_url}sn_1.sock"
 
-        for i in range(dn_count):
-            socket_name = f"dn_{(i+1)}.sock"
-            dn_url = f"http+unix://{socket_url}{socket_name}"
-            self._dn_urls.append(dn_url)
-            self._socket_paths.append(f"{socket_dir}{socket_name}")
+            for i in range(dn_count):
+                socket_name = f"dn_{(i+1)}.sock"
+                dn_url = f"http+unix://{socket_url}{socket_name}"
+                self._dn_urls.append(dn_url)
+                self._socket_paths.append(f"{socket_dir}{socket_name}")
+            self._socket_paths.append(f"{socket_dir}sn_1.sock")
+            self._socket_paths.append(f"{socket_dir}rangeget.sock")
+            rangeget_url = f"http+unix://{socket_url}rangeget.sock"
+        else:
+            # setup TCP/IP endpoints
+            sn_url = f"http://{host}:{sn_port}"
+            dn_port = 6101  # TBD: pull this from config
+            for i in range(dn_count):
+                dn_url = f"http://{host}:{dn_port+i}"
+                self._dn_urls.append(dn_url)
+            rangeget_port = 6900  # TBD: pull from config
+            rangeget_url = f"http://{host}:{rangeget_port}"
+
 
         # sort the ports so that node_number can be determined based on dn_url
         self._dn_urls.sort()
-        self._endpoint = f"http+unix://{socket_url}sn_1.sock"
-        self._socket_paths.append(f"{socket_dir}sn_1.sock")
-        self._rangeget_url = f"http+unix://{socket_url}rangeget.sock"
-        self._socket_paths.append(f"{socket_dir}rangeget.sock")
+        self._endpoint = sn_url 
+        self._rangeget_url = rangeget_url
+        print("endpoint:", self._endpoint)
 
     @property
     def endpoint(self):
@@ -223,21 +240,33 @@ class HsdsApp:
             # sitepackage libs from their path before importing aiobotocore
             common_args.append("--removesitepackages")
         # common_args.append("--server_name=Direct Connect (HSDS)")
-        common_args.append("--use_socket")
+        if len(self._socket_paths) > 0:
+            common_args.append("--use_socket")
         if self._readonly:
             common_args.append("--readonly")
         if self._config_dir:
-            common_args.append(f"--config-dir={self._config_dir}")
+            common_args.append(f"--config_dir={self._config_dir}")
+        if self._root_dir:
+            common_args.append(f"--root_dir={self._root_dir}")
         if self._loglevel:
             common_args.append(f"--log_level={self._loglevel}")
 
         py_exe = sys.executable
-        cmd_dir = os.path.join(sys.exec_prefix, "bin")
+        cmd_path = os.path.join(sys.exec_prefix, "bin")
+        cmd_path = os.path.join(cmd_path, "hsds-node")
+        if not os.path.isfile(cmd_path):
+            # search corresponding location for windows installs
+            cmd_path = os.path.join(sys.exec_prefix, "Scripts")
+            cmd_path = os.path.join(cmd_path, "hsds-node-script.py")
+            if not os.path.isfile(cmd_path):
+                raise FileNotFoundError("can't find hsds-node executable")
+        print("using cmd_path:", cmd_path)
+
         for i in range(count):
             if i == 0:
                 # args for service node
                 pargs = [py_exe,
-                         os.path.join(cmd_dir, "hsds-node"),
+                         cmd_path,
                          "--node_type=sn",
                          "--log_prefix=sn "]
                 if self._username:
@@ -254,13 +283,13 @@ class HsdsApp:
             elif i == 1:
                 # args for rangeget node
                 pargs = [py_exe,
-                         os.path.join(cmd_dir, "hsds-node"),
+                         cmd_path,
                          "--node_type=rn",
                          "--log_prefix=rg "]
             else:
                 node_number = i - 2  # start with 0
                 pargs = [py_exe,
-                         os.path.join(cmd_dir, "hsds-node"),
+                         cmd_path,
                          "--node_type=dn",
                          f"--log_prefix=dn{node_number+1} "]
                 pargs.append(f"--dn_urls={dn_urls_arg}")
@@ -282,14 +311,19 @@ class HsdsApp:
 
         # wait to sockets are initialized
         start_ts = time.time()
-        SLEEP_TIME = 0.1  # time to sleep between checking on socket connection
+        SLEEP_TIME = 1  # time to sleep between checking on socket connection
         MAX_INIT_TIME = 10.0  # max time to wait for socket to be initialized
 
         while True:
             ready = 0
-            for socket_path in self._socket_paths:
-                if os.path.exists(socket_path):
-                    ready += 1
+            if len(self._socket_paths) > 0:
+                for socket_path in self._socket_paths:
+                    if os.path.exists(socket_path):
+                        ready += 1
+            else:
+                if time.time() > start_ts + 5:
+                    # TBD - put a real ready check here
+                    ready = count
             if ready == count:
                 self.log.info("all processes ready!")
                 break
@@ -312,9 +346,14 @@ class HsdsApp:
             return
         now = time.time()
         logging.info(f"hsds app stop at {now}")
-        for p in self._processes:
-            logging.info(f"sending SIGINT to {p.args[0]}")
-            p.send_signal(signal.SIGINT)
+        if hasattr(signal, "CTRL_C_EVENT"):
+            # windows style
+            os.kill(signal.CTRL_C_EVENT, 0)
+        else:
+            for p in self._processes:
+                logging.info(f"sending SIGINT to {p.args[0]}")
+                p.send_signal(signal.SIGINT)
+          
         # wait for sub-proccesses to exit
         SLEEP_TIME = 0.1  # time to sleep between checking on process state
         MAX_WAIT_TIME = 10.0  # max time to wait for sub-process to terminate

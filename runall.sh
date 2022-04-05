@@ -184,7 +184,7 @@ else
     exit 0  # can quit now
   else
     echo "Running docker-compose -f ${COMPOSE_FILE} up"
-    docker-compose -f ${COMPOSE_FILE} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}
+    echo "docker-compose -f ${COMPOSE_FILE} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}"
   fi
 
   # wait for the server to be ready
