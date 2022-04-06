@@ -33,10 +33,10 @@ from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain
 from .util.hdf5dtype import getItemSize, createDataType
 from .util.dsetUtil import getSelectionList, getSliceQueryParam, isNullSpace  
-from .util.dsetUtil import getFillValue, isExtensible, getDsetRank
+from .util.dsetUtil import getFillValue, isExtensible
 from .util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout 
 from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId
-from .util.chunkUtil import getChunkIndex, getChunkSuffix, _getEvalStr
+from .util.chunkUtil import getChunkIndex, getChunkSuffix, checkQuery
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
 from .util.chunkUtil import getChunkIdForPartition, getQueryDtype
 from .util.arrayUtil import bytesArrayToList, jsonToArray, getShapeDims
@@ -1292,20 +1292,13 @@ async def PUT_Value(request):
     item_size = getItemSize(type_json)
     
     if query:
-        # this can only be used with compound types
-        if type_json['class'] != 'H5T_COMPOUND':
-            msg = "Query param can only be used with compound types"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        # verify that query is valid
-        try:
-            _getEvalStr(query, "x", dset_dtype.names)
-        except ValueError as ve:
-            msg = f"get query ValueError: {ve}"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
         # divert here if we are doing a put query
         # returns array data like a GET query request
+        if not checkQuery(query, dset_dtype):
+            msg = f"query: {query} is not valid"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        
         select = params.get("select")
         slices = await get_slices(app, select, dset_json, bucket=bucket)
         if "Limit" in params:
@@ -1360,6 +1353,7 @@ async def PUT_Value(request):
         log.response(request, resp=resp)
         return resp
 
+    # Resume regular PUT_Value processing without query update
     dset_dtype = createDataType(type_json)  # np datatype
     binary_data = None
     np_shape = None  # expected shape of input data
@@ -1790,15 +1784,8 @@ async def GET_Value(request):
     content_length = None
     query = params.get("query")
     if query:
-        if type_json['class'] != 'H5T_COMPOUND':
-            msg = "Query param can only be used with compound types"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        # verify that query is valid
-        try:  
-            _getEvalStr(query, "x", dset_dtype.names)
-        except ValueError as ve:
-            msg = f"get query ValueError: {ve}"
+        if not checkQuery(query, dset_dtype):
+            msg = f"query: {query} is not valid"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
     else:
