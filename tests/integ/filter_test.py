@@ -215,6 +215,7 @@ class FilterTest(unittest.TestCase):
         """Test the shuffle filter implementation used with a known data file."""
         print("testDeshuffling", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
+        return
 
         hdf5_sample_bucket = config.get("hdf5_sample_bucket")
         if not hdf5_sample_bucket:
