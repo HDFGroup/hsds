@@ -160,7 +160,7 @@ async def bucketScan(app):
             except HTTPInternalServerError as ise:
                 msg = "bucketScan - HTTPInternalServer error scanning "
                 msg += f"{root_id}: {ise}"
-                log.error()
+                log.error(msg)
             except Exception as e:
                 msg = "bucketScan - Unexpected exception scanning "
                 msg += f"{root_id}: {e}"
