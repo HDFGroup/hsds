@@ -1036,10 +1036,10 @@ class ChunkCrawler:
     def __init__(self, app, chunk_ids, dset_json=None, chunk_map=None, 
                  bucket=None, slices=None, arr=None,
                  query=None, query_update=None, limit=0, points=None,
-                 action="fetch"):
+                 action=None):
 
         max_tasks_per_node = config.get("max_tasks_per_node_per_request", default=16)
-        log.info(f"ChunkCrawler.__init__  {len(chunk_ids)} chunks")
+        log.info(f"ChunkCrawler.__init__  {len(chunk_ids)} chunks, action={action}")
         log.debug(f"ChunkCrawler - chunk_ids: {chunk_ids}")
 
         self._app = app
