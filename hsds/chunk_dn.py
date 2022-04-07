@@ -358,7 +358,7 @@ async def GET_Chunk(request):
 
     # write response
     if output_arr is not None:
-        log.debug(f"GET_Chunk - returning arr: {output_arr}")
+        log.debug(f"GET_Chunk - returning arr: {output_arr.shape}")
         read_resp = arrayToBytes(output_arr)
 
         try:
