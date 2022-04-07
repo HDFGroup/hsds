@@ -427,7 +427,6 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(len(data),12)
         self.assertEqual(data, bin_data)
          
-         
 
     def testPutSelection1DDataset(self):
         """Test PUT value with selection for 1d dataset"""

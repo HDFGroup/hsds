@@ -346,7 +346,7 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, np_arr,
         log.debug(f"No data returned for chunk: {chunk_id}")
     else:
         log.debug(f"got data for chunk: {chunk_id}")
-        log.debug(f"data: {array_data}")
+        log.debug(f"data: {len(array_data)} bytes")
         if query is not None or query_update is not None:
             # TBD: this needs to be fixed up for variable length dtypes
             nrows = len(array_data) // query_dtype.itemsize
@@ -972,8 +972,7 @@ async def doPutQuery(request, query_update, dset_json):
     log.debug(f"doPutQuery - num_chunks: {num_chunks}")
     max_chunks = int(config.get('max_chunks_per_request'))
     if num_chunks > max_chunks:
-        log.warn(f"doPutQuery - too many chunks: {num_chunks}, {max_chunks}")
-        raise HTTPRequestEntityTooLarge(num_chunks, max_chunks)
+        log.warn(f"doPutQuery - chunk count: {num_chunks}, greater than {max_chunks}")
 
     dset_id = dset_json["id"]
 
@@ -1035,8 +1034,9 @@ async def doPutQuery(request, query_update, dset_json):
 
 class ChunkCrawler:
     def __init__(self, app, chunk_ids, dset_json=None, chunk_map=None, 
-                 bucket=None, slices=None, shm_name=None, arr=None,
-                 query=None, query_update=None, limit=0):
+                 bucket=None, slices=None, arr=None,
+                 query=None, query_update=None, limit=0, points=None,
+                 action="fetch"):
 
         max_tasks_per_node = config.get("max_tasks_per_node_per_request", default=16)
         log.info(f"ChunkCrawler.__init__  {len(chunk_ids)} chunks")
@@ -1048,6 +1048,7 @@ class ChunkCrawler:
         self._chunk_map = chunk_map
         self._dset_json = dset_json
         self._arr = arr
+        self._points = points
         self._query = query
         self._query_update = query_update
         self._hits = 0
@@ -1055,6 +1056,7 @@ class ChunkCrawler:
         self._status_map = {}  # map of chunk_ids to status code
         self._q = asyncio.Queue()
         self._fail_count = 0
+        self._action = action
         
         for chunk_id in chunk_ids:
             self._q.put_nowait(chunk_id)
@@ -1106,17 +1108,18 @@ class ChunkCrawler:
             if self._limit > 0 and self._hits >= self._limit:
                 log.debug("ChunkCrawler - max hits exceeded, skipping fetch for chunk: {chunk_id}")
             else:
-                await self.fetch(chunk_id)
+                await self.do_work(chunk_id)
+                
             self._q.task_done()
             elapsed = time.time() - start
             msg = f"ChunkCrawler - task {chunk_id} start: {start:.3f} "
             msg += f"elapsed: {elapsed:.3f}"
             log.debug(msg)
 
-    async def fetch(self, chunk_id):
+    async def do_work(self, chunk_id):
         """ fetch the indicated chunk and update status map 
         """
-        msg = f"ChunkCrawler - hyperslab get for chunk: {chunk_id} bucket: "
+        msg = f"ChunkCrawler - do_work for chunk: {chunk_id} bucket: "
         msg += f"{self._bucket}"
         log.debug(msg)
         max_retries = config.get("dn_max_retires", default=3)
@@ -1124,7 +1127,8 @@ class ChunkCrawler:
         status_code = None
         while retry < max_retries:
             try: 
-                await read_chunk_hyperslab(self._app,
+                if self._action == "read_chunk_hyperslab":
+                    await read_chunk_hyperslab(self._app,
                                 chunk_id,
                                 self._dset_json,
                                 self._arr,
@@ -1133,9 +1137,67 @@ class ChunkCrawler:
                                 limit=self._limit,
                                 chunk_map=self._chunk_map,
                                 bucket=self._bucket)
-                log.debug(f"read_chunk_hyperslab - got 200 status for chunk_id: {chunk_id}")
- 
-                status_code = 200
+                    log.debug(f"read_chunk_hyperslab - got 200 status for chunk_id: {chunk_id}")
+                    status_code = 200
+                elif self._action == "write_chunk_hyperslab":
+                    await write_chunk_hyperslab(self._app,
+                                chunk_id,
+                                self._dset_json,
+                                self._slices,
+                                self._arr,
+                                bucket=self._bucket)
+                    log.debug(f"write_chunk_hyperslab - got 200 status for chunk_id: {chunk_id}")
+                    status_code = 200
+                elif self._action == "read_point_sel":
+                    if not isinstance(self._points, dict):
+                        log.error("ChunkCrawler - expected dict for points")
+                        status_code = 500
+                        break
+                    if chunk_id not in self._points:
+                        log.error(f"ChunkCrawler - read_point_sel, no entry for chunk: {chunk_id}")
+                        status_code = 500
+                        break
+                    item = self._points[chunk_id]
+                    point_list = item["indices"]
+                    point_data = item["points"]
+
+                    await read_point_sel(self._app, 
+                                         chunk_id, 
+                                         self._dset_json, 
+                                         point_list, 
+                                         point_data,
+                                         self._arr,
+                                         chunk_map=self._chunk_map,
+                                         bucket=self._bucket)
+                    log.debug(f"read_point_sel - got 200 status for chunk_id: {chunk_id}")
+                    status_code = 200
+                elif self._action == "write_point_sel":
+                    if not isinstance(self._points, dict):
+                        log.error("ChunkCrawler - expected dict for points")
+                        status_code = 500
+                        break
+                    if chunk_id not in self._points:
+                        log.error(f"ChunkCrawler - read_point_sel, no entry for chunk: {chunk_id}")
+                        status_code = 500
+                        break
+                    item = self._points[chunk_id]
+                    log.debug(f"item[{chunk_id}]: {item}")
+                    point_list = item["indices"]
+                    point_data = item["points"]
+
+                    await write_point_sel(self._app, 
+                                         chunk_id, 
+                                         self._dset_json, 
+                                         point_list, 
+                                         point_data,
+                                         bucket=self._bucket)
+                    log.debug(f"read_point_sel - got 200 status for chunk_id: {chunk_id}")
+                    status_code = 200
+                else:
+                    log.error(f"ChunkCrawler - unexpected action: {self._action}")
+                    status_code = 500
+                    break
+
             except ClientError as ce:
                 status_code = 500
                 log.error(f"ClientError {type(ce)} for read_chunk_hyperslab({chunk_id}): {ce} ")
@@ -1158,8 +1220,10 @@ class ChunkCrawler:
             if status_code == 200 or retry == max_retries:
                 break
             sleep_time = 1
-            log.warn(f"read_chunk_hyperslab - sleeping for {sleep_time}")
+            log.warn(f"ChunkCrawler.doWork - sleeping for {sleep_time}")
             time.sleep(sleep_time)
+
+        # save status_code    
         self._status_map[chunk_id] = status_code
         if self._query is not None and status_code == 200:
             item = self._chunk_map[chunk_id]
@@ -1167,7 +1231,7 @@ class ChunkCrawler:
                 query_rsp = item['query_rsp']
                 self._hits += len(query_rsp)
         log.info(f"ChunkCrawler - worker status for chunk {chunk_id}: {self._status_map[chunk_id]}")
-
+           
 
 async def PUT_Value(request):
     """
@@ -1175,7 +1239,6 @@ async def PUT_Value(request):
     """
     log.request(request)
     app = request.app
-    loop = asyncio.get_event_loop()
     bucket = None
     body = None
     query = None
@@ -1575,7 +1638,7 @@ async def PUT_Value(request):
             slices[append_dim] = slice(lb, ub, 1)
 
     slices = tuple(slices)  # no more edits to slices
-
+    crawler_status = None  # will be set below
     if points is None:
         # for hyperslab selection, verify the input shape matches the
         # selection
@@ -1605,8 +1668,7 @@ async def PUT_Value(request):
         log.debug(f"num_chunks: {num_chunks}")
         max_chunks = int(config.get('max_chunks_per_request'))
         if num_chunks > max_chunks:
-            log.warn(f"PUT value too many chunks: {num_chunks}, {max_chunks}")
-            raise HTTPRequestEntityTooLarge(num_chunks, max_chunks)
+            log.warn(f"PUT value chunk count: {num_chunks} exceeds max_chunks: {max_chunks}")
 
         try:
             chunk_ids = getChunkIds(dset_id, slices, layout)
@@ -1615,25 +1677,17 @@ async def PUT_Value(request):
             raise HTTPInternalServerError()
         log.debug(f"chunk_ids: {chunk_ids}")
 
-        tasks = []
-        node_count = getNodeCount(app)
-        if node_count == 0:
-            log.warn("write_chunk_hyperslab request with no active dn nodes")
-            raise HTTPServiceUnavailable()
-        task_batch_size = node_count * 10
-        for chunk_id in chunk_ids:
-            task = asyncio.ensure_future(write_chunk_hyperslab(app,
-                                                               chunk_id,
-                                                               dset_json,
-                                                               slices,
-                                                               arr,
-                                                               bucket=bucket))
-            tasks.append(task)
-            if len(tasks) == task_batch_size:
-                await asyncio.gather(*tasks, loop=loop)
-                tasks = []
-        if tasks:
-            await asyncio.gather(*tasks, loop=loop)
+        crawler = ChunkCrawler(app, 
+                           chunk_ids, 
+                           dset_json=dset_json,
+                           bucket=bucket,
+                           slices=slices,
+                           arr=arr,
+                           action="write_chunk_hyperslab")
+        await crawler.crawl()
+
+        crawler_status = crawler.get_status()
+
     else:
         #
         # Do point PUT
@@ -1673,36 +1727,43 @@ async def PUT_Value(request):
             if chunk_id not in chunk_dict:
                 point_list = [point, ]
                 point_data = [value, ]
-                chunk_dict[chunk_id] = {"points": point_list,
-                                        "values": point_data}
+                chunk_dict[chunk_id] = {"indices": point_list,
+                                        "points": point_data}
             else:
                 item = chunk_dict[chunk_id]
-                point_list = item["points"]
+                point_list = item["indices"]
                 point_list.append(point)
-                point_data = item["values"]
+                point_data = item["points"]
                 point_data.append(value)
 
         num_chunks = len(chunk_dict)
         log.debug(f"num_chunks: {num_chunks}")
         max_chunks = int(config.get('max_chunks_per_request'))
         if num_chunks > max_chunks:
-            msg = "PUT value request too large"
+            msg = f"PUT value request with more than {max_chunks} chunks"
             log.warn(msg)
-            raise HTTPRequestEntityTooLarge(num_chunks, max_chunks)
-        tasks = []
-        for chunk_id in chunk_dict.keys():
-            item = chunk_dict[chunk_id]
-            point_list = item["points"]
-            point_data = item["values"]
-            task = asyncio.ensure_future(write_point_sel(app,
-                                                         chunk_id,
-                                                         dset_json,
-                                                         point_list,
-                                                         point_data,
-                                                         bucket=bucket))
-            tasks.append(task)
-        await asyncio.gather(*tasks, loop=loop)
 
+        chunk_ids = list(chunk_dict.keys())
+        chunk_ids.sort()    
+
+        crawler = ChunkCrawler(app, 
+                           chunk_ids, 
+                           dset_json=dset_json,
+                           bucket=bucket,
+                           points=chunk_dict,
+                           action="write_point_sel")
+        await crawler.crawl()
+
+        crawler_status = crawler.get_status()
+
+    if crawler_status == 400:
+        log.info(f"doWriteSelection raising BadRequest error:  {crawler_status}")
+        raise HTTPBadRequest()
+    if crawler_status not in  (200, 201):
+        log.info(f"doWriteSelection raising HTTPInternalServerError for status:  {crawler_status}")
+        raise HTTPInternalServerError() 
+    
+    # write successful
     resp_json = {}
     resp = await jsonResponse(request, resp_json)
     return resp
@@ -1953,7 +2014,7 @@ async def doReadSelection(app, chunk_ids, dset_json,
                           bucket=None, 
                           shm_name=None,
                           limit=0):
-    """ hyperslab read utility function """
+    """ read selection utility function """
     log.info(f"doReadSelection - number of chunk_ids: {len(chunk_ids)}")
     log.debug(f"doReadSelection - chunk_ids: {chunk_ids}")
      
@@ -2003,15 +2064,17 @@ async def doReadSelection(app, chunk_ids, dset_json,
         if fill_value is not None:
             arr[...] = fill_value
 
-    crawler = ChunkCrawler(app, chunk_ids, dset_json=dset_json,
+    crawler = ChunkCrawler(app, 
+                           chunk_ids, 
+                           dset_json=dset_json,
                            chunk_map=chunk_map,
                            bucket=bucket,
                            slices=slices,
-                           shm_name=shm_name,
                            query=query,
                            query_update=query_update,
                            limit=limit,
-                           arr=arr)
+                           arr=arr,
+                           action="read_chunk_hyperslab")
     await crawler.crawl()
 
     crawler_status = crawler.get_status()
@@ -2051,8 +2114,8 @@ async def doReadSelection(app, chunk_ids, dset_json,
             if start >= nrows:
                 log.debug(f"got {nrows} rows for query, quitting")
                 break
-
     return arr
+
 
 async def getSelectionData(app, dset_id, dset_json, slices=None, points=None, query=None, query_update=None, bucket=None, limit=0, method="GET"):
     """ Read selected slices and return numpy array """
@@ -2126,15 +2189,15 @@ async def getSelectionData(app, dset_id, dset_json, slices=None, points=None, qu
         return None
 
     arr = await doReadSelection(app,
-                                    chunk_ids,
-                                    dset_json,
-                                    slices=slices,
-                                    points=points,
-                                    query=query,
-                                    query_update=query_update,
-                                    limit=limit,
-                                    chunk_map=chunkinfo,
-                                    bucket=bucket)
+                                chunk_ids,
+                                dset_json,
+                                slices=slices,
+                                points=points,
+                                query=query,
+                                query_update=query_update,
+                                limit=limit,
+                                chunk_map=chunkinfo,
+                                bucket=bucket)
 
     return arr
 

@@ -743,7 +743,6 @@ class PointSelTest(unittest.TestCase):
                 self.assertEqual(ret_values[i], 0)
 
 
-
     def testPut2DDataset(self):
         # Test writing with point selection for 2d dataset
         print("testPut2DDataset", self.base_domain)
