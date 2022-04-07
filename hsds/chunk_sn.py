@@ -1075,7 +1075,7 @@ class ChunkCrawler:
             raise ValueError(msg)
         for chunk_id in self._chunk_ids:
             if chunk_id not in self._status_map:
-                msg = f"excpected to find chunk_id {chunk_id} in ChunkCrawler status_map"
+                msg = f"expected to find chunk_id {chunk_id} in ChunkCrawler status_map"
                 log.error(msg)
                 raise KeyError(msg)
             chunk_status = self._status_map[chunk_id]
