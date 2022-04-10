@@ -145,6 +145,9 @@ async def PUT_Chunk(request):
             log.error("expected one-dimensional array for PUT query")
             raise HTTPInternalServerError()
         query_update = await request.json()
+        if not query_update:
+            log.warn("PUT_Chunk with query but no query update")
+            raise HTTPBadRequest()
         log.debug(f"query_update: {query_update}")
         # TBD - send back binary response to SN node
         try:
@@ -164,29 +167,26 @@ async def PUT_Chunk(request):
             log.warn(f"chunkQuery - ValueError: {ve}")
             raise HTTPBadRequest()
         num_hits = rsp_arr.shape[0]
-        if query_update and num_hits > 0:
+        if num_hits > 0:
             is_dirty = True
             # save chunk
             save_chunk(app, chunk_id, dset_json, bucket=bucket)
             status_code = 201
-            # stream back response array
-            read_resp = arrayToBytes(rsp_arr)
+        # stream back response array
+        read_resp = arrayToBytes(rsp_arr)
  
-            try:
-                resp = StreamResponse()
-                resp.headers['Content-Type'] = "application/octet-stream"
-                resp.content_length = len(read_resp)
-                await resp.prepare(request)
-                await resp.write(read_resp)
-            except Exception as e:
-                log.error(f"Exception during binary data write: {e}")
-                raise HTTPInternalServerError()
-            finally:
-                await resp.write_eof()
-            return
-        # chunk update successful
-        # TBD - return 404 if num_hits is zero?
-        resp = {}
+        try:
+            resp = StreamResponse()
+            resp.headers['Content-Type'] = "application/octet-stream"
+            resp.content_length = len(read_resp)
+            await resp.prepare(request)
+            await resp.write(read_resp)
+        except Exception as e:
+            log.error(f"Exception during binary data write: {e}")
+            raise HTTPInternalServerError()
+        finally:
+            await resp.write_eof()
+        return
     else:
         # regular chunk update
 

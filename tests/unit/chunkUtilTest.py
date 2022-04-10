@@ -1493,6 +1493,11 @@ class ChunkUtilTest(unittest.TestCase):
             index = item[0]
             self.assertEqual(index, expected_indexes[i])
 
+        # query for row that doesn't exist
+        result = chunkQuery(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, query="symbol == b'XYZ'")
+        self.assertTrue(isinstance(result, np.ndarray))
+        self.assertEqual(len(result), 0)
+        
         # try bad Limit
         try:
             chunkQuery(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, query="symbol == b'AAPL'", limit="foobar")

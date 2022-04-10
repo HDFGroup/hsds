@@ -29,7 +29,6 @@ class QueryTest(unittest.TestCase):
         if self.session:
             self.session.close()
 
-        # main
 
     def testSimpleQuery(self):
         # Test query value for 1d dataset
@@ -65,7 +64,8 @@ class QueryTest(unittest.TestCase):
         datatype = {'class': 'H5T_COMPOUND', 'fields': fields }
 
         num_elements = 12
-        payload = {'type': datatype, 'shape': num_elements}
+        maxdims = 20  # to verify we don't search elements off the dataset
+        payload = {'type': datatype, 'shape': num_elements, 'maxdims': maxdims }
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
@@ -193,7 +193,12 @@ class QueryTest(unittest.TestCase):
             rsp = self.session.get(req, params=params, headers=query_headers)
             self.assertEqual(rsp.status_code, 200)
             verifyQueryRsp(rsp, expected_indices=(0, 1, 3, 5, 11), expect_bin=expect_bin)
-         
+
+            # query for a zero sector field (should return none)
+            params = {'query': "open == 0" } # query for zero sector
+            rsp = self.session.get(req, params=params, headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+            verifyQueryRsp(rsp, expected_indices=(), expect_bin=False)
 
     def testChunkedRefIndirectDataset(self):
         print("testChunkedRefIndirectDatasetQuery", self.base_domain)
@@ -316,14 +321,7 @@ class QueryTest(unittest.TestCase):
         # read a selection
         req = self.endpoint + "/datasets/" + dset_id + "/value"
         params = {'query': "stock_symbol == b'AAPL'" } # query for AAPL
-        #params = {'query': "stock_symbol == b'CVX'" } # query for CVX
-        #params["select"] = "[0:100]"
-        params["nonstrict"] = 1 # enable SN to invoke lambda func
         rsp = self.session.get(req, params=params, headers=headers)
-
-        if rsp.status_code == 404:
-            print("s3object: {} not found, skipping hyperslab read chunk reference indirect test".format(s3path))
-            return
 
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
@@ -335,9 +333,7 @@ class QueryTest(unittest.TestCase):
         self.assertEqual(item[0], 128912)
         self.assertEqual(item[1], "1980.12.12")
         self.assertEqual(item[2], "AAPL")
-         
 
-         
 
     def testPutQuery(self):
         # Test PUT query for 1d dataset
@@ -371,7 +367,8 @@ class QueryTest(unittest.TestCase):
         datatype = {'class': 'H5T_COMPOUND', 'fields': fields }
 
         num_elements = 12
-        payload = {'type': datatype, 'shape': num_elements}
+        maxdims = 12  # to verify we don't search elements off the dataset
+        payload = {'type': datatype, 'shape': num_elements} #, 'maxdims': maxdims}
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
@@ -386,7 +383,6 @@ class QueryTest(unittest.TestCase):
         payload = {"id": dset_uuid}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
-
 
         # write entire array
         value = [
@@ -483,6 +479,18 @@ class QueryTest(unittest.TestCase):
                 self.assertEqual(mod_item[2], 999)
             else:
                 self.assertEqual(orig_item[2], mod_item[2])
+
+        # update zero value open rows (shouldn't find any)
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        params = {'query': "open == 0" }
+        update_value = {"open": -999}
+        payload = {'value': update_value}
+        rsp = self.session.put(req, params=params, data=json.dumps(update_value), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        readData = rspJson["value"]
+        self.assertEqual(len(readData), 0)
 
 
 if __name__ == '__main__':

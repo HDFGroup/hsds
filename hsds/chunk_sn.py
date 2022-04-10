@@ -343,7 +343,10 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, np_arr,
 
     # process response            
     if array_data is None:
-        log.debug(f"No data returned for chunk: {chunk_id}")
+        log.debug(f"read_chunk_hyperslab - No data returned for chunk: {chunk_id}")
+    elif not isinstance(array_data, bytes):
+        log.warn(f"read_chunk_hyperslab - expected bytes but got: {array_data}")
+        raise HTTPInternalServerError()
     else:
         log.debug(f"got data for chunk: {chunk_id}")
         log.debug(f"data: {len(array_data)} bytes")

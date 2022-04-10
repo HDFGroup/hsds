@@ -20,7 +20,6 @@ print("dset chunks:", dset.chunks)
 print("chunk_size:", np.prod(dset.chunks)*dset.dtype.itemsize)
 
 table = f["chunk_list"]
-now = int(time.time())
 if "POD_NAME" in os.environ:
     pod_name = os.environ["POD_NAME"]
 else:
@@ -28,6 +27,7 @@ else:
 condition = "start == 0" 
 
 while True:
+    now = int(time.time())
     update_val = {"start": now, "status": -1, "pos": pod_name}
 
     # query for row with 0 start value and update it to now
