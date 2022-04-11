@@ -28,5 +28,6 @@ for s in dset.iter_chunks():
     nrow = s[0].stop - s[0].start
     ncol = s[1].stop - s[1].start
     entry = (0, 0, 0, x, y, nrow, ncol, "")
+    print('append:', entry)
     table.append([entry,])
     

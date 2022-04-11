@@ -3,7 +3,11 @@ import sys
 import time
 import numpy as np
 import h5pyd
+import logging
 
+loglevel = logging.DEBUG
+logging.basicConfig(format='%(asctime)s %(message)s', level=loglevel)
+    
 
 if len(sys.argv) == 1 or sys.argv[1] in ("-h", "--help"):
     print("usage: python hs_write.py domain")
@@ -12,8 +16,25 @@ if len(sys.argv) == 1 or sys.argv[1] in ("-h", "--help"):
 domain = sys.argv[1]
  
 print("domain:", domain)
+
+if "HS_USERNAME" in os.environ:
+    hs_username = os.environ["HS_USERNAME"]
+else:
+    hs_username = None
+
+if "HS_PASSWORD" in os.environ:
+    hs_password = os.environ["HS_PASSWORD"]
+else:
+    hs_password = None
+
+if "HS_ENDPOINT" in os.environ:
+    hs_endpoint = os.environ["HS_ENDPOINT"]
+else:
+    hs_endpoint = None
+
+
  
-f = h5pyd.File(domain, 'a')
+f = h5pyd.File(domain, 'a', username=hs_username, password=hs_password, endpoint=hs_endpoint)
 dset = f["dset"]
 print("dset:", dset)
 print("dset chunks:", dset.chunks)
@@ -46,7 +67,8 @@ while True:
     arr = np.random.rand(nrow, ncol)
     x = entry['x']
     y = entry['y']
-    dset[y:y+nrow, x:x+ncol] = arr
+    print(f"dset[{x}:{x+nrow}, {y}:{y+ncol}] = arr")
+    dset[x:x+nrow, y:y+ncol] = arr
     entry['done'] = int(time.time())
     entry['status'] = 1
     table[index] = entry
