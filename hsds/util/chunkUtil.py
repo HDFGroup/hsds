@@ -1160,6 +1160,8 @@ def chunkQuery(chunk_id=None, chunk_layout=None, chunk_arr=None, slices=None,
     index_name = dt_rsp.names[0]
     rsp_arr[index_name] = where_indices
     log.debug(f"chunkQuery returning {len(rsp_arr)} rows")
+    for i in range(len(rsp_arr)):
+        log.debug(f"   {i}: {rsp_arr[i]}")
 
     return rsp_arr
     

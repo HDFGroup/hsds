@@ -1558,7 +1558,8 @@ async def PUT_Value(request):
         # binary, fixed item_size
         if num_elements*item_size != len(binary_data):
             msg = f"Expected: {num_elements*item_size} bytes, "
-            msg += f"but got: {len(binary_data)}"
+            msg += f"but got: {len(binary_data)}, "
+            msg += f"num_elements: {num_elements}, item_size: {item_size}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         arr = np.fromstring(binary_data, dtype=dset_dtype)
