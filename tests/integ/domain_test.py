@@ -86,7 +86,7 @@ class DomainTest(unittest.TestCase):
         self.assertFalse("domain_objs" in rspJson) # should only show if getobjs query param is used
 
         limits = rspJson["limits"]
-        limit_keys = ("min_chunk_size", "max_chunk_size", "max_request_size", "max_chunks_per_request")
+        limit_keys = ("min_chunk_size", "max_chunk_size", "max_request_size")
 
         for k in limit_keys:
             self.assertTrue(k in limits)
@@ -292,7 +292,7 @@ class DomainTest(unittest.TestCase):
         rsp = self.session.put(req, headers=headers)
         self.assertEqual(rsp.status_code, 409)
 
-        limit_keys = ("min_chunk_size", "max_chunk_size", "max_request_size", "max_chunks_per_request")
+        limit_keys = ("min_chunk_size", "max_chunk_size", "max_request_size")
         limits = rspJson["limits"]
         for k in limit_keys:
             self.assertTrue(k in limits)

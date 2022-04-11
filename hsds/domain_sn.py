@@ -336,8 +336,7 @@ def getLimits():
     limits["min_chunk_size"] = int(config.get("min_chunk_size"))
     limits["max_chunk_size"] = int(config.get("max_chunk_size"))
     limits["max_request_size"] = int(config.get("max_request_size"))
-    cfg_val = int(config.get("max_chunks_per_request"))
-    limits["max_chunks_per_request"] = cfg_val
+     
     return limits
 
 async def get_domain_response(app, domain_json, bucket=None, verbose=False):
