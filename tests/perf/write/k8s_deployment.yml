@@ -17,7 +17,7 @@ spec:
       containers:
         -
           name: write
-          image: hdfgroup/hswrite_test:v0.1
+          image: hdfgroup/hswritetest:v0.1
           imagePullPolicy: IfNotPresent
           resources:
             requests:
