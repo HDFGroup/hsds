@@ -11,7 +11,7 @@ echo -n ${HS_USERNAME} > /tmp/hs_username
 echo -n ${HS_PASSWORD} > /tmp/hs_password
 
 # create the secret
-kubectl create secret generic hs-perf-keys   \
+kubectl --namespace hsperf create secret generic hs-perf-keys   \
                                             --from-file=/tmp/hs_username \
                                             --from-file=/tmp/hs_password  
 
