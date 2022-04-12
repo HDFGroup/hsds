@@ -14,9 +14,14 @@ if [[ -z $HS_WRITE_TEST_DOMAIN ]] ; then
   echo "HS_WRITE_TEST_DOMAIN not set" 
   exit 1
 fi
+if [[ -z $HS_BUCKET ]]; then
+  export HS_BUCKET=
+fi
+
 docker run  \
   -e HS_ENDPOINT=${HS_ENDPOINT} \
   -e HS_USERNAME=${HS_USERNAME} \
   -e HS_PASSWORD=${HS_PASSWORD} \
+  -e HS_BUCKET=${HS_BUCKET} \
   -e HS_WRITE_TEST_DOMAIN=${HS_WRITE_TEST_DOMAIN} \
   -it hdfgroup/hswritetest
