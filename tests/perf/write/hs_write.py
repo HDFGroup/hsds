@@ -5,13 +5,23 @@ import numpy as np
 import h5pyd
 import logging
 
-loglevel = logging.DEBUG
-logging.basicConfig(format='%(asctime)s %(message)s', level=loglevel)
-    
-
 if len(sys.argv) == 1 or sys.argv[1] in ("-h", "--help"):
     print("usage: python hs_write.py domain")
     sys.exit(1)
+
+if 'LOG_LEVEL' in os.environ:
+    level_env = os.environ['LOG_LEVEL']
+    if level_env == "DEBUG":
+        loglevel = logging.DEBUG
+    elif level_env == "INFO":
+        loglevel = logging.INFO
+    elif level_env == "WARNING":
+        loglevel = logging.WARNING
+    else:
+        loglevel = logging.ERROR
+else:
+    loglevel = logging.ERROR
+logging.basicConfig(format='%(asctime)s %(message)s', level=loglevel)
 
 domain = sys.argv[1]
  
