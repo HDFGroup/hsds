@@ -50,7 +50,7 @@ for row in cursor:
 
 print("-----------")
 if len(pod_counts) > 0:
-    print("pod counts:")
+    print(f"pod counts ({len(pod_counts)} pods):")
     for k in pod_counts:
         print(f"    {k}: {pod_counts[k]}") 
     print("----------")
