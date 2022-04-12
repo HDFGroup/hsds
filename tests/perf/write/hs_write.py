@@ -32,8 +32,6 @@ if "HS_ENDPOINT" in os.environ:
 else:
     hs_endpoint = None
 
-
- 
 f = h5pyd.File(domain, 'a', username=hs_username, password=hs_password, endpoint=hs_endpoint)
 dset = f["dset"]
 print("dset:", dset)
@@ -41,15 +39,17 @@ print("dset chunks:", dset.chunks)
 print("chunk_size:", np.prod(dset.chunks)*dset.dtype.itemsize)
 
 table = f["chunk_list"]
-if "POD_NAME" in os.environ:
-    pod_name = os.environ["POD_NAME"]
+if "HOSTNAME" in os.environ:
+    pod_name = os.environ["HOSTNAME"]
+    print(f"pod_name: {pod_name}")
 else:
     pod_name = ""
+    print("no pod_name")
 condition = "start == 0" 
 
 while True:
     now = int(time.time())
-    update_val = {"start": now, "status": -1, "pos": pod_name}
+    update_val = {"start": now, "status": -1, "pod": pod_name}
 
     # query for row with 0 start value and update it to now
     indices = table.update_where(condition, update_val, limit=1)
