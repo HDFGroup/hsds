@@ -23,12 +23,18 @@ complete_count = 0
 inprogress_count = 0
 pending_count = 0
 pod_counts = {}
+start_time = None
+finish_time = None
 for row in cursor:
     line = ""
     for name in table.dtype.names:
         line += str(row[name])
         line += '\t'
     status = row['status']
+    if row['start'] > 0 and (start_time is None or start_time > row['start']):
+        start_time = row['start']
+    if row['done'] > 0 and (finish_time is None or finish_time < row['done']):
+        finish_time = row['done']
     pod_name = row['pod'].decode('ascii')
     if pod_name:
         if pod_name not in pod_counts:
@@ -52,6 +58,9 @@ if len(pod_counts) > 0:
 print(f"pending:     {pending_count}")
 print(f"complete:    {complete_count}")
 print(f"in progress: {inprogress_count}")
+
+if start_time is not None and finish_time is not None:
+    print(f"elapsed time: {(finish_time - start_time):.2f} s")
  
  
     
