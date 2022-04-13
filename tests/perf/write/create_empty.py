@@ -21,7 +21,7 @@ if filepath.startswith("hdf5://"):
 else:
     f = h5py.File(filepath, 'w')
 
-chunks = [800, 800] # 4.8 MB/chunk
+chunks = [700, 700] # 3.7 MB/chunk
 if chunks[0] > nrows:
     chunks[0] = nrows
 if chunks[1] > ncols:

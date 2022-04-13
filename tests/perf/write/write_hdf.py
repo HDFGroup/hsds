@@ -11,9 +11,6 @@ try:
 except ModuleNotFoundError:
     pass # ignore
 
-if len(sys.argv) == 1 or sys.argv[1] in ("-h", "--help"):
-    print("usage: python hs_write.py filepath")
-    sys.exit(1)
 
 def getNextChunkTableIndex(chunk_table):
     ''' Get first row of chunk table where start field is 0.
@@ -47,9 +44,14 @@ def getNextChunkTableIndex(chunk_table):
                     break
     return index
 
+
 #
 # Main
 #
+
+if len(sys.argv) == 1 or sys.argv[1] in ("-h", "--help"):
+    print("usage: python hs_write.py filepath")
+    sys.exit(1)
 
 if 'LOG_LEVEL' in os.environ:
     level_env = os.environ['LOG_LEVEL']
@@ -65,7 +67,12 @@ else:
     loglevel = logging.ERROR
 logging.basicConfig(format='%(asctime)s %(message)s', level=loglevel)
 
-filepath = sys.argv[1]
+if sys.argv[1] == "-v":
+    verbose = True
+    filepath = sys.argv[2]
+else:
+    verbose = False
+    filepath = sys.argv[1]
  
 print("filepath:", filepath)
 
@@ -101,7 +108,7 @@ else:
     pod_name = ""
     print("no pod_name")
 
-
+print("writing data...")
 while True:
     index = getNextChunkTableIndex(table)
     
@@ -115,6 +122,8 @@ while True:
     x = entry['x']
     y = entry['y']
     dset[x:x+nrow, y:y+ncol] = arr
+    if verbose:
+        print(f"wrote dset[{x}:{x+nrow}, {y}:{y+ncol}]")
     entry['done'] = time.time()
     entry['status'] = 1
     table[index] = entry

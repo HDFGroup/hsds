@@ -19,11 +19,11 @@ spec:
         - name: HS_ENDPOINT
           value: http://hsds.hdflab.svc.cluster.local
         - name: HS_WRITE_TEST_DOMAIN
-          value: /home/perftest/write.h5
+          value: hdf5://home/perftest/write.h5
         - name: HS_BUCKET
-          value: hdflab-test 
+          value:  
         - name: LOG_LEVEL
-          value: ERROR
+          value: WARNING
         - name: HS_USERNAME
           valueFrom:
             secretKeyRef:
