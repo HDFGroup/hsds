@@ -4,7 +4,7 @@ ENV HS_ENDPOINT=
 RUN pip install numpy
 RUN pip install git+https://github.com/HDFGroup/h5pyd
 RUN mkdir /app
-COPY hs_write.py /app
+COPY write_hdf.py /app
 COPY entrypoint.sh /
 WORKDIR /app
 ENTRYPOINT ["/entrypoint.sh"]

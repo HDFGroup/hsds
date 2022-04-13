@@ -1,52 +1,66 @@
 import sys
 import h5pyd
+import h5py
 
 if len(sys.argv) == 1 or sys.argv[1] in ("-h", "--help"):
-    print("usage: python get_status.py domain")
+    print("usage: python get_status.py [-v] filepath")
     sys.exit(1)
 
-domain = sys.argv[1]
+if sys.argv[1] == '-v':
+    verbose = True
+    filepath = sys.argv[2]
+else:
+    filepath = sys.argv[1]
+    verbose = False
  
-print("domain:", domain)
+print("filepath:", filepath)
  
-f = h5pyd.File(domain)
+if filepath.startswith('hdf5://'):
+    f = h5pyd.File(filepath)
+else:
+    f = h5py.File(filepath)
  
-table = f["chunk_list"]
+chunk_table = f["chunk_list"]
+pod_counts = {}
 
-header = ""
-for name in table.dtype.names:
-    header += name
-    header += '\t'
-print(header)
-cursor = table.create_cursor()
+if verbose:
+    header = ""
+    for name in chunk_table.dtype.names:
+        header += name
+        header += '\t'
+    print(header)
+    
 complete_count = 0
 inprogress_count = 0
 pending_count = 0
-pod_counts = {}
 start_time = None
 finish_time = None
-for row in cursor:
-    line = ""
-    for name in table.dtype.names:
-        line += str(row[name])
-        line += '\t'
-    status = row['status']
-    if row['start'] > 0 and (start_time is None or start_time > row['start']):
-        start_time = row['start']
-    if row['done'] > 0 and (finish_time is None or finish_time < row['done']):
-        finish_time = row['done']
-    pod_name = row['pod'].decode('ascii')
-    if pod_name:
-        if pod_name not in pod_counts:
-            pod_counts[pod_name] = 0
-        pod_counts[pod_name] += 1
-    if status == -1:
-        inprogress_count += 1
-    elif status == 1:
-        complete_count += 1
-    else:
-        pending_count += 1
-    print(line)
+for s in chunk_table.iter_chunks():
+    arr = chunk_table[s]
+    for i in range(len(arr)):
+        row = arr[i]
+        line = ""
+        for name in chunk_table.dtype.names:
+            line += str(row[name])
+            line += '\t'
+        status = row['status']
+        if row['start'] > 0 and (start_time is None or start_time > row['start']):
+            start_time = row['start']
+        if row['done'] > 0 and (finish_time is None or finish_time < row['done']):
+            finish_time = row['done']
+        pod_name = row['pod'].decode('ascii')
+        if pod_name:
+            if pod_name not in pod_counts:
+                pod_counts[pod_name] = 0
+            pod_counts[pod_name] += 1
+        if status == -1:
+            inprogress_count += 1
+        elif status == 1:
+            complete_count += 1
+        else:
+            pending_count += 1
+        if verbose:
+            print(line)
 
 print("-----------")
 if len(pod_counts) > 0:

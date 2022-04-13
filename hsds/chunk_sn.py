@@ -1203,22 +1203,22 @@ class ChunkCrawler:
 
             except ClientError as ce:
                 status_code = 500
-                log.error(f"ClientError {type(ce)} for read_chunk_hyperslab({chunk_id}): {ce} ")
+                log.error(f"ClientError {type(ce)} for {self._action}({chunk_id}): {ce} ")
             except CancelledError as cle:
                 status_code = 503
-                log.warn(f"CancelledError for read_chunk_hyperslab({chunk_id}): {cle}")
+                log.warn(f"CancelledError for {self._action}({chunk_id}): {cle}")
             except HTTPBadRequest as hbr:
                 status_code = 400
-                log.error(f"HTTPBadRequest for read_chunk_hyperslab({chunk_id}): {hbr} ")
+                log.error(f"HTTPBadRequest for {self._action}({chunk_id}): {hbr} ")
             except HTTPNotFound as nfe:
                 status_code = 404
-                log.error(f"HTTPNotFoundRequest for read_chunk_hyperslab({chunk_id}): {nfe} ")
+                log.error(f"HTTPNotFoundRequest for {self._action}({chunk_id}): {nfe} ")
             except HTTPInternalServerError as ise:
                 status_code = 500
-                log.error(f"HTTPInternalServerError for read_chunk_hyperslab({chunk_id}): {ise} ")
+                log.error(f"HTTPInternalServerError for {self._action}({chunk_id}): {ise} ")
             except Exception as e:
                 status_code = 500
-                log.error(f"Unexpected exception {type(e)} for read_chunk_hyperslab({chunk_id}): {e} ")
+                log.error(f"Unexpected exception {type(e)} for {self._action}({chunk_id}): {e} ")
             retry += 1
             if status_code == 200 or retry == max_retries:
                 break

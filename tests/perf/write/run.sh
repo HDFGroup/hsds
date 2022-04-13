@@ -24,4 +24,4 @@ docker run  \
   -e HS_PASSWORD=${HS_PASSWORD} \
   -e HS_BUCKET=${HS_BUCKET} \
   -e HS_WRITE_TEST_DOMAIN=${HS_WRITE_TEST_DOMAIN} \
-  -it hdfgroup/hswritetest
+  -d hdfgroup/hswritetest
