@@ -42,6 +42,9 @@ def getNextChunkTableIndex(chunk_table):
                     # write back updated row
                     chunk_table[index] = row  
                     break
+            if index > -1:
+                # found a chunk to write to
+                break
     return index
 
 
