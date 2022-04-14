@@ -15,6 +15,7 @@
 #
 import asyncio
 import time
+import random
 from multiprocessing import shared_memory
 from asyncio import CancelledError
 import base64
@@ -861,7 +862,8 @@ class ChunkCrawler:
         msg = f"ChunkCrawler - do_work for chunk: {chunk_id} bucket: "
         msg += f"{self._bucket}"
         log.debug(msg)
-        max_retries = config.get("dn_max_retires", default=3)
+        max_retries = config.get("dn_max_retries", default=3)
+        retry_exp = config.get("dn_retry_backoff_exp", 0.1)
         retry = 0
         status_code = None
         while retry < max_retries:
@@ -939,7 +941,7 @@ class ChunkCrawler:
 
             except ClientError as ce:
                 status_code = 500
-                log.error(f"ClientError {type(ce)} for {self._action}({chunk_id}): {ce} ")
+                log.warn(f"ClientError {type(ce)} for {self._action}({chunk_id}): {ce} ")
             except CancelledError as cle:
                 status_code = 503
                 log.warn(f"CancelledError for {self._action}({chunk_id}): {cle}")
@@ -948,19 +950,23 @@ class ChunkCrawler:
                 log.error(f"HTTPBadRequest for {self._action}({chunk_id}): {hbr} ")
             except HTTPNotFound as nfe:
                 status_code = 404
-                log.error(f"HTTPNotFoundRequest for {self._action}({chunk_id}): {nfe} ")
+                log.info(f"HTTPNotFoundRequest for {self._action}({chunk_id}): {nfe} ")
+                break
             except HTTPInternalServerError as ise:
                 status_code = 500
-                log.error(f"HTTPInternalServerError for {self._action}({chunk_id}): {ise} ")
+                log.warn(f"HTTPInternalServerError for {self._action}({chunk_id}): {ise} ")
             except Exception as e:
                 status_code = 500
                 log.error(f"Unexpected exception {type(e)} for {self._action}({chunk_id}): {e} ")
             retry += 1
-            if status_code == 200 or retry == max_retries:
+            if status_code == 200:
                 break
-            sleep_time = 1
-            log.warn(f"ChunkCrawler.doWork - sleeping for {sleep_time}")
-            time.sleep(sleep_time)
+            if retry == max_retries:
+                log.error(f"ChunkCrawler action: {self._action} failed after: {retry} retries")
+            else:
+                sleep_time = retry_exp * 2 ** retry + random.uniform(0, 0.1)
+                log.warn(f"ChunkCrawler.doWork retry: {retry} - sleeping for {sleep_time:.2f}")
+                await asyncio.sleep(sleep_time)
 
         # save status_code    
         self._status_map[chunk_id] = status_code
