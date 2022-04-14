@@ -22,7 +22,7 @@ import numpy as np
 from aiohttp.web_exceptions import HTTPException, HTTPBadRequest, HTTPNotFound
 from aiohttp.web_exceptions import HTTPRequestEntityTooLarge
 from aiohttp.web_exceptions import HTTPConflict, HTTPInternalServerError
-from aiohttp.web_exceptions import HTTPServiceUnavailable
+#from aiohttp.web_exceptions import HTTPServiceUnavailable
 from aiohttp.client_exceptions import ClientError
 from aiohttp.web import StreamResponse
 
@@ -165,7 +165,7 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr,
         msg += f"{len(data)} bytes"
         log.debug(msg)
     except ClientError as ce:
-        log.error(f"Error for http_put({req}): {ce} ")
+        log.error(f"ClientError for http_put({req}): {ce} ")
         raise HTTPInternalServerError()
     except CancelledError as cle:
         log.warn(f"CancelledError for http_put({req}): {cle}")
@@ -569,102 +569,6 @@ async def write_point_sel(app, chunk_id, dset_json, point_list, point_data,
     log.debug(f"post to {req} returned {json_rsp}")
 
 
-async def read_chunk_query(app, chunk_id, dset_json, slices, query, rsp_dict,
-                           query_update=None, limit=0, chunk_map=None, bucket=None):
-    """ read the chunk selection from the DN
-    chunk_id: id of chunk to write to
-    chunk_sel: chunk-relative selection to read from
-    np_arr: numpy array to store read bytes
-    """
-    msg = f"read_chunk_query, chunk_id: {chunk_id}, slices: {slices}, "
-    msg += f"query: {query} limit: {limit}"
-    if query_update:
-        msg += f", query_update: {query_update}"
-    log.info(msg)
-    chunk_rsp = None
-    max_retries = config.get("dn_max_retires", default=3)
-
-    partition_chunk_id = getChunkIdForPartition(chunk_id, dset_json)
-    if partition_chunk_id != chunk_id:
-        log.debug(f"using partition_chunk_id: {partition_chunk_id}")
-        chunk_id = partition_chunk_id  # replace the chunk_id
-
-    layout = getChunkLayout(dset_json)
-    chunk_sel = getChunkCoverage(chunk_id, slices, layout)
-
-    # pass query as param
-    params = {}
-    params["query"] = query
-    if limit > 0:
-        params["Limit"] = limit
-    if chunk_map:
-        if chunk_id not in chunk_map:
-            # no data, don't return any results
-            chunk_rsp = None
-        else:
-            chunk_info = chunk_map[chunk_id]
-            params["s3path"] = chunk_info["s3path"]
-            params["s3offset"] = chunk_info["s3offset"]
-            params["s3size"] = chunk_info["s3size"]
-  
-    # bucket will be used to get dset json even when s3path is used for 
-    # the chunk data
-    params["bucket"] = bucket
-
-    chunk_shape = getSelectionShape(chunk_sel)
-    log.debug(f"chunk_shape: {chunk_shape}")
-    select = getSliceQueryParam(chunk_sel)
-    params["select"] = select
- 
-    req = getDataNodeUrl(app, chunk_id)
-    req += "/chunks/" + chunk_id
-    retry = 0
-    status = None
-    while retry < max_retries:
-        if retry > 0:
-            sleep_time = 1
-            log.warn(f"read_chunk_query - sleeping for {sleep_time} before retrying request")
-            time.sleep(sleep_time)
-        try:
-            if query_update:
-                log.debug(f"PUT chunk req: {req}, data: {query_update}")
-                chunk_rsp = await http_put(app, req, data=query_update, params=params)
-            else:
-                log.debug(f"GET chunk req: {req}")
-                chunk_rsp = await http_get(app, req, params=params)
-                log.debug(f"got {len(chunk_rsp)} bytes from query: {query} on chunk: {chunk_id}")
-            rsp_dict[chunk_id] = chunk_rsp
-            status = 200
-        except HTTPNotFound:
-            # no data, don't return any results
-            log.debug(f"no results from query: {query} on chunk: {chunk_id}")
-            rsp_dict[chunk_id] = None  
-            status = 404
-        except ClientError as ce:
-            log.error(f"ClientError {type(ce)} for read_chunk_query({chunk_id}): {ce} ")
-            status = 500
-        except CancelledError as cle:
-            log.warn(f"CancelledError for read_chunk_query({chunk_id}): {cle}")
-            status = 500
-        except HTTPBadRequest as hbr:
-            rsp_dict[chunk_id] = 400
-            log.error(f"HTTPBadRequest for read_chunk_query({chunk_id}): {hbr} ")
-        except HTTPInternalServerError as ise:
-            status = 500
-            log.error(f"HTTPInternalServerError for read_chunk_query({chunk_id}): {ise} ")
-        except Exception as e:
-            status = 500
-            log.error(f"Unexpected exception {type(e)} for read_chunk_query({chunk_id}): {e} ")
-        if chunk_id in rsp_dict:
-            # got a result, break from retry loop
-            break
-        retry += 1
-    if chunk_id not in rsp_dict:
-        log.error(f"read_chunk_query - max retries exceeded for chunk: {chunk_id}")
-        # return the status code
-        rsp_dict[chunk_id] = status
-
-
 async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, bucket=None):
     """
     Get info for chunk locations (for reference layouts)
@@ -866,174 +770,6 @@ def get_chunk_selections(chunk_map, chunk_ids, slices, dset_json):
         log.debug(f"get_chunk_selections - data_sel: {data_sel}")
         item["data_sel"] = data_sel
      
-
-async def write_chunk_query(app, chunk_id, dset_json, slices, query,
-                            query_update, limit, bucket=None):
-    """ update the chunk selection from the DN based on query string
-    chunk_id: id of chunk to write to
-    chunk_sel: chunk-relative selection to read from
-    np_arr: numpy array to store read bytes
-    """
-    # TBD = see if this code can be merged with the read_chunk_query function
-    msg = f"write_chunk_query, chunk_id: {chunk_id}, slices: {slices}, "
-    msg += f"query: {query}, query_update: {query_update}"
-    log.info(msg)
-    partition_chunk_id = getChunkIdForPartition(chunk_id, dset_json)
-    if partition_chunk_id != chunk_id:
-        log.debug(f"using partition_chunk_id: {partition_chunk_id}")
-        chunk_id = partition_chunk_id  # replace the chunk_id
-
-    req = getDataNodeUrl(app, chunk_id)
-    req += "/chunks/" + chunk_id
-    log.debug("PUT chunk req: " + req)
-
-    layout = getChunkLayout(dset_json)
-    chunk_sel = getChunkCoverage(chunk_id, slices, layout)
-
-    # pass query as param
-    params = {}
-    params["query"] = query
-    if limit > 0:
-        params["Limit"] = limit
-    if bucket:
-        params["bucket"] = bucket
-
-    chunk_shape = getSelectionShape(chunk_sel)
-    log.debug(f"chunk_shape: {chunk_shape}")
-    select = getSliceQueryParam(chunk_sel)
-    params["select"] = select
-    try:
-        dn_rsp = await http_put(app, req, data=query_update, params=params)
-    except HTTPNotFound:
-        # no data, don't return any results
-        dn_rsp = {"index": [], "value": []}
-
-    return dn_rsp
-
-
-async def doPutQuery(request, query_update, dset_json):
-    """
-    Helper function for PUT queries
-    """
-    app = request.app
-    params = request.rel_url.query
-    if not isinstance(query_update, dict):
-        msg = "Expected dict type for PUT query body, but "
-        msg += f"got: {type(query_update)}"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    query = params["query"]
-    domain = getDomainFromRequest(request)
-    bucket = getBucketForDomain(domain)
-     
-    datashape = dset_json["shape"]
-    dims = getShapeDims(datashape)
-    num_rows = dims[0]
-    log.debug(f"doPutQuery - num_rows: {num_rows}")
-
-    type_json = dset_json["type"]
-    log.debug(f"doPutQuery - type json: {type_json}")
-
-    if type_json["class"] != 'H5T_COMPOUND':
-        msg = "Expected compound type for PUT query operation"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-
-    fields = type_json["fields"]
-    field_names = set()
-    for field in fields:
-        field_names.add(field['name'])
-    for key in query_update:
-        if key not in field_names:
-            msg = f"Unknown fieldname: {key} in update body"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-
-    limit = 0
-    if "Limit" in params:
-        try:
-            limit = int(params["Limit"])
-        except ValueError:
-            msg = "Invalid Limit query param"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-
-    select = params.get("select")
-    try:
-        slices = await get_slices(app, select, dset_json, bucket=bucket)
-    except ValueError as ve:
-        msg = str(ve)
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-     
-    msg = f"doPutQuery - got dim_slice: {slices[0]}"
-    log.info(msg)
-
-    layout = getChunkLayout(dset_json)
-
-    num_chunks = getNumChunks(slices, layout)
-    log.debug(f"doPutQuery - num_chunks: {num_chunks}")
-    max_chunks = int(config.get('max_chunks_per_request'))
-    if num_chunks > max_chunks:
-        log.warn(f"doPutQuery - chunk count: {num_chunks}, greater than {max_chunks}")
-
-    dset_id = dset_json["id"]
-
-    try:
-        chunk_ids = getChunkIds(dset_id, slices, layout)
-    except ValueError:
-        log.warn("doPutQuery - getChunkIds failed")
-        raise HTTPInternalServerError()
-    log.debug(f"doPutQuery - chunk_ids: {chunk_ids}")
-
-    node_count = getNodeCount(app)
-    if node_count == 0:
-        log.warn("PutQuery request with no active dn nodes")
-        raise HTTPServiceUnavailable()
-    resp_index = []
-    resp_value = []
-    chunk_index = 0
-    num_chunks = len(chunk_ids)
-    count = 0
-
-    while chunk_index < num_chunks:
-        next_chunks = []
-        for i in range(node_count):
-            next_chunks.append(chunk_ids[chunk_index])
-            chunk_index += 1
-            if chunk_index >= num_chunks:
-                break
-        log.debug(f"doPutQuery - next chunk ids: {next_chunks}")
-        # run query on DN nodes
-        # do write_chunks sequentially do avoid exceeding the limit value
-        for chunk_id in next_chunks:
-            dn_rsp = await write_chunk_query(app,
-                                             chunk_id,
-                                             dset_json,
-                                             slices,
-                                             query,
-                                             query_update,
-                                             limit,
-                                             bucket=bucket)
-            log.debug(f"write_chunk_query: {dn_rsp}")
-            num_hits = len(dn_rsp["index"])
-            count += num_hits
-            msg = f"doPutQuery - got {num_hits} for chunk_id: {chunk_id}, "
-            msg += f"total: {count}"
-            log.debug(msg)
-            resp_index.extend(dn_rsp["index"])
-            resp_value.extend(dn_rsp["value"])
-            if limit > 0 and count >= limit:
-                log.debug(f"doPutQuery - reached limit: {limit}")
-                break
-        if limit > 0 and count >= limit:
-            # break out of outer loop
-            break
-
-    resp_json = {"index": resp_index, "value": resp_value}
-    resp_json["hrefs"] = get_hrefs(request, dset_json)
-    log.debug(f"doPutQuery - done returning {count} values")
-    return resp_json
 
 class ChunkCrawler:
     def __init__(self, app, chunk_ids, dset_json=None, chunk_map=None, 
