@@ -1,0 +1,13 @@
+version: '2'
+services:
+  hswritetest:
+    image: hdfgroup/hswritetest
+    restart: "no"
+    mem_limit: 128m
+    environment:
+      - HS_ENDPOINT=${HS_ENDPOINT}
+      - HS_USERNAME=${HS_USERNAME}
+      - HS_PASSWORD=${HS_PASSWORD}
+      - HS_BUCKET=${HS_BUCKET}
+      - HS_WRITE_TEST_DOMAIN=${HS_WRITE_TEST_DOMAIN}
+      
