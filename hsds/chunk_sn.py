@@ -23,7 +23,6 @@ import numpy as np
 from aiohttp.web_exceptions import HTTPException, HTTPBadRequest, HTTPNotFound
 from aiohttp.web_exceptions import HTTPRequestEntityTooLarge
 from aiohttp.web_exceptions import HTTPConflict, HTTPInternalServerError
-#from aiohttp.web_exceptions import HTTPServiceUnavailable
 from aiohttp.client_exceptions import ClientError
 from aiohttp.web import StreamResponse
 
