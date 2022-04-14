@@ -1530,9 +1530,6 @@ async def GET_Datasets(request):
         else:
             log.error(f"Unexpected error: {ce.code}")
             raise HTTPInternalServerError()
-        msg = "domain not found"
-        log.warn(msg)
-        raise HTTPNotFound()
 
     if 'owner' not in domain_json:
         log.error("No owner key found in domain")
