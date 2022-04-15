@@ -22,7 +22,7 @@ from aiohttp.web_exceptions import  HTTPBadRequest, HTTPNotFound
 from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.client_exceptions import ClientError
 
-from .util.httpUtil import http_get, http_put, http_post
+from .util.httpUtil import http_get, http_put, http_post, get_http_client
 from .util.idUtil import  getDataNodeUrl, getNodeCount
 from .util.hdf5dtype import  createDataType
 from .util.dsetUtil import getFillValue, getSliceQueryParam  
@@ -40,7 +40,7 @@ CHUNK_REF_LAYOUTS = ('H5D_CONTIGUOUS_REF',
 
 
 async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr,
-                                bucket=None):
+                                bucket=None, client=None):
     """ write the chunk selection to the DN
     chunk_id: id of chunk to write to
     chunk_sel: chunk-relative selection to write to
@@ -85,7 +85,7 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr,
         params["bucket"] = bucket
 
     try:
-        json_rsp = await http_put(app, req, data=data, params=params)
+        json_rsp = await http_put(app, req, data=data, params=params, client=client)
         msg = f"got rsp: {json_rsp} for put binary request: {req}, "
         msg += f"{len(data)} bytes"
         log.debug(msg)
@@ -98,7 +98,7 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr,
 
 async def read_chunk_hyperslab(app, chunk_id, dset_json, np_arr,
                                query=None, query_update=None, limit=0,
-                               chunk_map=None, bucket=None):
+                               chunk_map=None, bucket=None, client=None):
     """ read the chunk selection from the DN
     chunk_id: id of chunk to write to
     chunk_sel: chunk-relative selection to read from
@@ -251,13 +251,13 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, np_arr,
         log.debug(f"read_chunk_hyperslab - {method} chunk req: {req}")
         log.debug(f"params: {params}")
         if method == 'GET':
-            array_data = await http_get(app, req, params=params)
+            array_data = await http_get(app, req, params=params, client=client)
             log.debug(f"http_get {req}, returned {len(array_data)} bytes")
         elif method == 'PUT':
-            array_data = await http_put(app, req, data=body, params=params)
+            array_data = await http_put(app, req, data=body, params=params, client=client)
             log.debug(f"http_put {req}, returned {len(array_data)} bytes")
         else:  # POST
-            array_data = await http_post(app, req, data=body, params=params)
+            array_data = await http_post(app, req, data=body, params=params, client=client)
             log.debug(f"http_post {req}, returned {len(array_data)} bytes")
     except HTTPNotFound:
         if query is None and "s3path" in params:
@@ -317,7 +317,7 @@ async def read_chunk_hyperslab(app, chunk_id, dset_json, np_arr,
 
 
 async def read_point_sel(app, chunk_id, dset_json, point_list, point_index,
-                         np_arr, chunk_map=None, bucket=None):
+                         np_arr, chunk_map=None, bucket=None, client=None):
     """
     Read point selection
     --
@@ -392,7 +392,7 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index,
         req += "/chunks/" + chunk_id
         log.debug(f"GET chunk req: {req}")
         try:
-            kwargs = {"params": params, "data": post_data}
+            kwargs = {"params": params, "data": post_data, "client": client}
             rsp_data = await http_post(app, req, **kwargs)
             msg = f"got rsp for http_post({req}): {len(rsp_data)} bytes"
             log.debug(msg)
@@ -421,7 +421,7 @@ async def read_point_sel(app, chunk_id, dset_json, point_list, point_index,
 
 
 async def write_point_sel(app, chunk_id, dset_json, point_list, point_data,
-                          bucket=None):
+                          bucket=None, client=None):
     """
     Write point selection
     --
@@ -490,7 +490,7 @@ async def write_point_sel(app, chunk_id, dset_json, point_list, point_data,
     params["count"] = num_points
     params["bucket"] = bucket
 
-    json_rsp = await http_post(app, req, params=params, data=post_data)
+    json_rsp = await http_post(app, req, params=params, data=post_data, client=client)
     log.debug(f"post to {req} returned {json_rsp}")
 
 class ChunkCrawler:
@@ -565,21 +565,35 @@ class ChunkCrawler:
 
     async def work(self):
         """ Process chunk ids from queue till we are done"""
+        client = None
         while True:
-            start = time.time()
-            chunk_id = await self._q.get()
-            if self._limit > 0 and self._hits >= self._limit:
-                log.debug("ChunkCrawler - max hits exceeded, skipping fetch for chunk: {chunk_id}")
-            else:
-                await self.do_work(chunk_id)
+            try:
+                start = time.time()
+                chunk_id = await self._q.get()
+                if self._limit > 0 and self._hits >= self._limit:
+                    log.debug("ChunkCrawler - max hits exceeded, skipping fetch for chunk: {chunk_id}")
+                else:
+                    if client is None:
+                        url = getDataNodeUrl(self._app, chunk_id) + "/chunks/" + chunk_id
+                        client = get_http_client(self._app, url=url, cache_client=False)
+                    await self.do_work(chunk_id, client=client)
                 
-            self._q.task_done()
-            elapsed = time.time() - start
-            msg = f"ChunkCrawler - task {chunk_id} start: {start:.3f} "
-            msg += f"elapsed: {elapsed:.3f}"
-            log.debug(msg)
+                self._q.task_done()
+                elapsed = time.time() - start
+                msg = f"ChunkCrawler - task {chunk_id} start: {start:.3f} "
+                msg += f"elapsed: {elapsed:.3f}"
+                log.debug(msg)
+            except asyncio.CancelledError:
+                log.debug("ChunkCrawler - worker has been cancelled")
+                # release the client if set
+                if client:
+                    log.debug("ChunkCrawler - closing http client session")
+                    await client.close()
+                # raise the exception so worker is truly cancelled
+                raise
 
-    async def do_work(self, chunk_id):
+
+    async def do_work(self, chunk_id, client=None):
         """ fetch the indicated chunk and update status map 
         """
         msg = f"ChunkCrawler - do_work for chunk: {chunk_id} bucket: "
@@ -600,7 +614,8 @@ class ChunkCrawler:
                                 query_update=self._query_update,
                                 limit=self._limit,
                                 chunk_map=self._chunk_map,
-                                bucket=self._bucket)
+                                bucket=self._bucket,
+                                client=client)
                     log.debug(f"read_chunk_hyperslab - got 200 status for chunk_id: {chunk_id}")
                     status_code = 200
                 elif self._action == "write_chunk_hyperslab":
@@ -609,7 +624,8 @@ class ChunkCrawler:
                                 self._dset_json,
                                 self._slices,
                                 self._arr,
-                                bucket=self._bucket)
+                                bucket=self._bucket,
+                                client=client)
                     log.debug(f"write_chunk_hyperslab - got 200 status for chunk_id: {chunk_id}")
                     status_code = 200
                 elif self._action == "read_point_sel":
@@ -632,7 +648,8 @@ class ChunkCrawler:
                                          point_data,
                                          self._arr,
                                          chunk_map=self._chunk_map,
-                                         bucket=self._bucket)
+                                         bucket=self._bucket,
+                                         client=client)
                     log.debug(f"read_point_sel - got 200 status for chunk_id: {chunk_id}")
                     status_code = 200
                 elif self._action == "write_point_sel":
@@ -654,7 +671,8 @@ class ChunkCrawler:
                                          self._dset_json, 
                                          point_list, 
                                          point_data,
-                                         bucket=self._bucket)
+                                         bucket=self._bucket,
+                                         client=client)
                     log.debug(f"read_point_sel - got 200 status for chunk_id: {chunk_id}")
                     status_code = 200
                 else:

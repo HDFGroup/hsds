@@ -226,12 +226,13 @@ async def request_read(request) -> bytes:
     return request._read_bytes
 
 
-async def http_get(app, url, params=None):
+async def http_get(app, url, params=None, client=None):
     """
     Helper function  - async HTTP GET
     """
     log.info(f"http_get('{url}')")
-    client = get_http_client(app, url=url)
+    if client is None:
+        client = get_http_client(app, url=url)
     url = get_http_std_url(url)
     status_code = None
     timeout = config.get("timeout")
@@ -276,12 +277,13 @@ async def http_get(app, url, params=None):
     return retval
 
 
-async def http_post(app, url, data=None, params=None):
+async def http_post(app, url, data=None, params=None, client=None):
     """
     Helper function  - async HTTP POST
     """
     log.info(f"http_post('{url}', {len(data)} bytes)")
-    client = get_http_client(app, url=url)
+    if client is None:
+        client = get_http_client(app, url=url)
     url = get_http_std_url(url)
     if isinstance(data, bytes):
         log.debug("setting http_post for binary")
@@ -339,12 +341,13 @@ async def http_post(app, url, data=None, params=None):
     return retval
 
 
-async def http_put(app, url, data=None, params=None):
+async def http_put(app, url, data=None, params=None, client=None):
     """
     Helper function  - async HTTP PUT
     """
     log.info(f"http_put('{url}')")
-    client = get_http_client(app, url=url)
+    if client is None:
+        client = get_http_client(app, url=url)
     url = get_http_std_url(url)
     if isinstance(data, bytes):
         log.debug("setting http_put for binary")
@@ -394,13 +397,14 @@ async def http_put(app, url, data=None, params=None):
     return retval
 
 
-async def http_delete(app, url, data=None, params=None):
+async def http_delete(app, url, data=None, params=None, client=None):
     """
     Helper function  - async HTTP DELETE
     """
     # TBD - do we really need a data param?
     log.info(f"http_delete('{url}')")
-    client = get_http_client(app, url=url)
+    if client is None:
+        client = get_http_client(app, url=url)
     url = get_http_std_url(url)
 
     rsp_json = None
