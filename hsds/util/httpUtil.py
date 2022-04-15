@@ -267,10 +267,10 @@ async def http_get(app, url, params=None):
                 raise HTTPInternalServerError()
 
     except ClientError as ce:
-        log.debug(f"ClientError: {ce}")
+        log.warn(f"ClientError: {ce}")
         raise HTTPInternalServerError()
     except CancelledError as cle:
-        log.error(f"CancelledError for http_get({url}): {cle}")
+        log.warn(f"CancelledError for http_get({url}): {cle}")
         raise HTTPInternalServerError()
 
     return retval
@@ -330,10 +330,10 @@ async def http_post(app, url, data=None, params=None):
                 log.debug(f"http_post({url}) response: {retval}")
 
     except ClientError as ce:
-        log.error(f"Error for http_post({url}): {ce} ")
+        log.warn(f"ClientError for http_post({url}): {ce} ")
         raise HTTPInternalServerError()
     except CancelledError as cle:
-        log.error(f"CancelledError for http_post({url}): {cle}")
+        log.warn(f"CancelledError for http_post({url}): {cle}")
         raise HTTPInternalServerError()
 
     return retval
@@ -386,10 +386,10 @@ async def http_put(app, url, data=None, params=None):
                 retval = await rsp.json()
                 log.debug(f"http_put({url}) response: {rsp_json}")
     except ClientError as ce:
-        log.error(f"ClientError for http_put({url}): {ce} ")
+        log.warn(f"ClientError for http_put({url}): {ce} ")
         raise HTTPInternalServerError()
     except CancelledError as cle:
-        log.error(f"CancelledError for http_put({url}): {cle}")
+        log.warn(f"CancelledError for http_put({url}): {cle}")
         raise HTTPInternalServerError()
     return retval
 
@@ -432,13 +432,13 @@ async def http_delete(app, url, data=None, params=None):
             # rsp_json = await rsp.json()
             # log.debug(f"http_delete({url}) response: {rsp_json}")
     except ClientError as ce:
-        log.error(f"ClientError for http_delete({url}): {ce} ")
+        log.warn(f"ClientError for http_delete({url}): {ce} ")
         raise HTTPInternalServerError()
     except CancelledError as cle:
-        log.error(f"CancelledError for http_delete({url}): {cle}")
+        log.warn(f"CancelledError for http_delete({url}): {cle}")
         raise HTTPInternalServerError()
     except ConnectionResetError as cre:
-        log.error(f"ConnectionResetError for http_delete({url}): {cre}")
+        log.warn(f"ConnectionResetError for http_delete({url}): {cre}")
         raise HTTPInternalServerError()
 
     return rsp_json
