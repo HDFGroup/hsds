@@ -631,6 +631,9 @@ def baseInit(node_type):
             app["rangeget_url"] = rangeget_url
         
         # check to see if we are running in a DCOS cluster
+    elif "IS_DOCKER" in os.environ:
+        log.info("running in docker")
+        app["is_docker"] = True
     elif "MARATHON_APP_ID" in os.environ:
         msg = "Found MARATHON_APP_ID environment variable, "
         msg += "setting is_dcos to True"
@@ -639,24 +642,18 @@ def baseInit(node_type):
     elif "OIO_PROXY" in os.environ:
         app["oio_proxy"] = os.environ["OIO_PROXY"]
         # will set node_ip at registration time
+    elif "KUBERNETES_SERVICE_HOST" in os.environ:
+        # indicates we are running in a k8s cluster 
+        log.info("running in kubernetes")
+        app["is_k8s"] = True
     else:
-        # check to see if we are running in a k8s cluster
-        if "KUBERNETES_SERVICE_HOST" in os.environ:
-            log.info("running in kubernetes")
-            app["is_k8s"] = True
-        else:
-            # check to see if we are running in a docker container
-            proc_file = "/proc/self/cgroup"
-            if os.path.isfile(proc_file):
-                with open(proc_file) as f:
-                    first_line = f.readline()
-                    if first_line:
-                        fields = first_line.split(':')
-                        if len(fields) >= 3:
-                            field = fields[2]
-                            if field.startswith("/docker/"):
-                                log.info("running in docker")
-                                app["is_docker"] = True
+        # check the root inode - high values indicate
+        # we are running in a container
+        if os.path.isdir('/'):
+            stat = os.stat('/')
+            if stat and stat.st_ino > 10:
+                log.info("running in docker based on inode number")
+                app["is_docker"] = True
 
     if "is_dcos" in app:
         if "PORT0" not in os.environ:
