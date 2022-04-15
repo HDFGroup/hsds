@@ -494,6 +494,8 @@ async def write_point_sel(app, chunk_id, dset_json, point_list, point_data,
     log.debug(f"post to {req} returned {json_rsp}")
 
 class ChunkCrawler:
+    """ ChunkCrawler class is instanted by chunk_sn request handlers to dispatch per-chunk
+    requests to DN nodes.  Asyncio.Task is used to setup workers to parallelize DN requests. """
     def __init__(self, app, chunk_ids, dset_json=None, chunk_map=None, 
                  bucket=None, slices=None, arr=None,
                  query=None, query_update=None, limit=0, points=None,

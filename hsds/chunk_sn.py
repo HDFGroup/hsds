@@ -222,7 +222,12 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
         chunktable_json = await getObjectJson(app, chunktable_id, **kwargs)
         #log.debug(f"chunktable_json: {chunktable_json}")
         chunktable_dims = getShapeDims(chunktable_json["shape"])
-        # TBD: verify chunktable type
+        chunktable_layout = chunktable_json["layout"]
+        if chunktable_layout.get("class") == 'H5D_CHUNKED_REF_INDIRECT':
+            # We don't support recursive chunked_ref_indirect classes
+            msg = "chunktable layout: H5D_CHUNKED_REF_INDIRECT is invalid"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
 
         if len(chunktable_dims) != rank:
             msg = "Rank of chunktable should be same as the dataset"
@@ -246,6 +251,8 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
             arr_points[i] = indx
         msg = f"got chunktable points: {arr_points}, calling getSelectionData"
         log.debug(msg)
+        # this call won't lead to a circular loop of calls since we've checked
+        # that the chunktable layout is not H5D_CHUNKED_REF_INDIRECT
         point_data = await getSelectionData(app, 
                                             chunktable_id, 
                                             chunktable_json,
