@@ -531,6 +531,11 @@ class ChunkCrawler:
         else:
             self._max_tasks = len(chunk_ids)
 
+        # create one ClientSession per dn_url
+        if "cc_clients" not in app:
+            app["cc_clients"] = {}
+        self._clients = app["cc_clients"]
+
     def get_status(self):
         if len(self._status_map) != len(self._chunk_ids):
             msg = "get_status code while cralwer not complete"
@@ -565,7 +570,6 @@ class ChunkCrawler:
 
     async def work(self):
         """ Process chunk ids from queue till we are done"""
-        client = None
         while True:
             try:
                 start = time.time()
@@ -573,9 +577,13 @@ class ChunkCrawler:
                 if self._limit > 0 and self._hits >= self._limit:
                     log.debug("ChunkCrawler - max hits exceeded, skipping fetch for chunk: {chunk_id}")
                 else:
-                    if client is None:
-                        url = getDataNodeUrl(self._app, chunk_id) + "/chunks/" + chunk_id
-                        client = get_http_client(self._app, url=url, cache_client=False)
+                    dn_url = getDataNodeUrl(self._app, chunk_id)
+                    if dn_url not in self._clients:
+                        client = get_http_client(self._app, url=dn_url, cache_client=False)
+                        log.info(f"creating new SessionClient for dn_url: {dn_url}")
+                        self._clients[dn_url] = client
+                    else:
+                        client = self._clients[dn_url]
                     await self.do_work(chunk_id, client=client)
                 
                 self._q.task_done()
@@ -585,10 +593,6 @@ class ChunkCrawler:
                 log.debug(msg)
             except asyncio.CancelledError:
                 log.debug("ChunkCrawler - worker has been cancelled")
-                # release the client if set
-                if client:
-                    log.debug("ChunkCrawler - closing http client session")
-                    await client.close()
                 # raise the exception so worker is truly cancelled
                 raise
 
