@@ -538,7 +538,7 @@ class ChunkCrawler:
 
     def get_status(self):
         if len(self._status_map) != len(self._chunk_ids):
-            msg = "get_status code while cralwer not complete"
+            msg = "get_status code while crawler not complete"
             log.error(msg)
             raise ValueError(msg)
         for chunk_id in self._chunk_ids:
@@ -554,8 +554,8 @@ class ChunkCrawler:
         return 200 # all good
             
     async def crawl(self):
-        workers = [asyncio.Task(self.work())
-                   for _ in range(self._max_tasks)]
+        workers = [asyncio.Task(self.work(), name=f"cc_task_{i}")
+                   for i in range(self._max_tasks)]
         # When all work is done, exit.
         msg = f"ChunkCrawler max_tasks {self._max_tasks} = await queue.join "
         msg += f"- count: {len(self._chunk_ids)}"
@@ -570,6 +570,8 @@ class ChunkCrawler:
 
     async def work(self):
         """ Process chunk ids from queue till we are done"""
+        this_task = asyncio.current_task()
+        log.info(f"ChunkCrawler - work method for task: {this_task.get_name()}")
         while True:
             try:
                 start = time.time()
