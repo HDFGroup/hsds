@@ -40,7 +40,6 @@ store_read_timeout: 1  # time to cancel storage read request if no response
 store_read_sleep_interval: 0.1  # time to sleep between checking on read request
 max_pending_write_requests: 20  # maxium number of inflight write requests
 flush_sleep_interval: 1  # time to wait between checking on dirty objects
-max_chunks_per_request: 1000  # maximum number of chunks to be serviced by one request
 min_chunk_size: 1m  # 1 MB
 max_chunk_size: 4m # 4 MB
 max_request_size: 100m  # 100 MB - should be no smaller than client_max_body_size in nginx tmpl (if using nginx)
@@ -80,11 +79,12 @@ k8s_app_label: hsds  # The app label for k8s deployments
 k8s_namespace: null # Specifies if a the client should be limited to a specific namespace. Useful for some RBAC configurations.
 restart_policy: on-failure # Docker restart policy
 domain_req_max_objects_limit: 500  # maximum number of objects to return in GET domain request with use_cache
+dn_max_retries: 3  # number of time to retry DN requests
+dn_retry_backoff_exp: 0.1  # backoff factor for retries
 # DEPRECATED - the remaining config values are not used in currently but kept for backward compatibility with older container images
 aws_lambda_chunkread_function: null  # name of aws lambda function for chunk reading
 aws_lambda_threshold: 4   # number of chunks per node per request to reach before using lambda
 aws_lambda_max_invoke: 1000  # max number of lambda functions to invoke simultaneously
 aws_lambda_gateway: null # use lambda endpoint for region HSDS is running in
 write_zero_chunks: False # write chunk to storage even when it's all zeros (or in general equial to the fill value)
-dn_max_retries: 3  # number of time to retry DN requests
-dn_retry_backoff_exp: 0.1  # backoff factor for retries
+max_chunks_per_request: 1000  # maximum number of chunks to be serviced by one request
