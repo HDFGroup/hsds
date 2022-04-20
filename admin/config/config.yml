@@ -47,6 +47,7 @@ max_chunks_per_folder: 0 # max number of chunks per s3 folder. 0 for unlimiited
 max_task_count: 100  # maximum number of concurrent tasks before server will return 503 error
 max_tasks_per_node_per_request: 16 # maximum number of inflight tasks to to each node per request
 aio_max_pool_connections: 64  # number of connections to keep in conection pool for aiobotocore requests
+client_pool_count: 10 # pool count for SessionClient 
 metadata_mem_cache_size: 128m  # 128 MB - metadata cache size per DN node
 metadata_mem_cache_expire: 3600  # expire cache items after one hour
 chunk_mem_cache_size: 128m  # 128 MB - chunk cache size per DN node
@@ -81,6 +82,7 @@ restart_policy: on-failure # Docker restart policy
 domain_req_max_objects_limit: 500  # maximum number of objects to return in GET domain request with use_cache
 dn_max_retries: 3  # number of time to retry DN requests
 dn_retry_backoff_exp: 0.1  # backoff factor for retries
+
 # DEPRECATED - the remaining config values are not used in currently but kept for backward compatibility with older container images
 aws_lambda_chunkread_function: null  # name of aws lambda function for chunk reading
 aws_lambda_threshold: 4   # number of chunks per node per request to reach before using lambda

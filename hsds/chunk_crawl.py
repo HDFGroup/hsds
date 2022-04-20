@@ -502,6 +502,7 @@ class ChunkCrawler:
                  action=None):
 
         max_tasks_per_node = config.get("max_tasks_per_node_per_request", default=16)
+        client_pool_count = config.get("client_pool_count", default=10)
         log.info(f"ChunkCrawler.__init__  {len(chunk_ids)} chunks, action={action}")
         log.debug(f"ChunkCrawler - chunk_ids: {chunk_ids}")
 
@@ -530,6 +531,12 @@ class ChunkCrawler:
             self._max_tasks = max_tasks
         else:
             self._max_tasks = len(chunk_ids)
+
+        if self._max_tasks >= client_pool_count:
+            self._client_pool = 1
+        else:
+            self._client_pool = client_pool_count - self._max_tasks
+        log.info(f"ChunkCrawler - client_pool count: {self._client_pool}")
 
         # create one ClientSession per dn_url
         if "cc_clients" not in app:
@@ -573,6 +580,8 @@ class ChunkCrawler:
         this_task = asyncio.current_task()
         task_name = this_task.get_name()
         log.info(f"ChunkCrawler - work method for task: {task_name}")
+        client_name = f"{task_name}.{random.randrange(0,self._client_pool)}"
+        log.info(f"ChunkCrawler - client_name: {client_name}")
         while True:
             try:
                 start = time.time()
@@ -580,13 +589,13 @@ class ChunkCrawler:
                 if self._limit > 0 and self._hits >= self._limit:
                     log.debug("ChunkCrawler - max hits exceeded, skipping fetch for chunk: {chunk_id}")
                 else:
-                    if task_name not in self._clients:
+                    if client_name not in self._clients:
                         dn_url = getDataNodeUrl(self._app, chunk_id)
                         client = get_http_client(self._app, url=dn_url, cache_client=False)
-                        log.info(f"ChunkCrawler - creating new SessionClient for task: {task_name}")
-                        self._clients[task_name] = client
+                        log.info(f"ChunkCrawler - creating new SessionClient for task: {client_name}")
+                        self._clients[client_name] = client
                     else:
-                        client = self._clients[task_name]
+                        client = self._clients[client_name]
                     await self.do_work(chunk_id, client=client)
                 
                 self._q.task_done()
