@@ -571,7 +571,8 @@ class ChunkCrawler:
     async def work(self):
         """ Process chunk ids from queue till we are done"""
         this_task = asyncio.current_task()
-        log.info(f"ChunkCrawler - work method for task: {this_task.get_name()}")
+        task_name = this_task.get_name()
+        log.info(f"ChunkCrawler - work method for task: {task_name}")
         while True:
             try:
                 start = time.time()
@@ -579,13 +580,13 @@ class ChunkCrawler:
                 if self._limit > 0 and self._hits >= self._limit:
                     log.debug("ChunkCrawler - max hits exceeded, skipping fetch for chunk: {chunk_id}")
                 else:
-                    dn_url = getDataNodeUrl(self._app, chunk_id)
-                    if dn_url not in self._clients:
+                    if task_name not in self._clients:
+                        dn_url = getDataNodeUrl(self._app, chunk_id)
                         client = get_http_client(self._app, url=dn_url, cache_client=False)
-                        log.info(f"creating new SessionClient for dn_url: {dn_url}")
-                        self._clients[dn_url] = client
+                        log.info(f"ChunkCrawler - creating new SessionClient for task: {task_name}")
+                        self._clients[task_name] = client
                     else:
-                        client = self._clients[dn_url]
+                        client = self._clients[task_name]
                     await self.do_work(chunk_id, client=client)
                 
                 self._q.task_done()

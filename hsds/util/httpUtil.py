@@ -139,6 +139,20 @@ def get_http_std_url(url):
     url = "http://127.0.0.1" + url[(index+5):]
     return url
 
+def get_base_url(url):
+    """ return protocal+dns+port part of url.
+    Returns just url if a non-standard protocol is given. """
+    n = len(url)
+    for protocol in ("http://", "https://", "http+unix://"): 
+        if url.startswith(protocol):
+            start = len(protocol)
+            n = url.find('/', start) 
+            if n < 0:
+                n = len(url)
+            break   
+    s = url[:n]
+    return s
+        
 
 def get_http_client(app, url=None, cache_client=True):
     """ get http client """
