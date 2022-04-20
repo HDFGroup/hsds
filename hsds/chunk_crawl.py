@@ -23,6 +23,7 @@ from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.client_exceptions import ClientError
 
 from .util.httpUtil import http_get, http_put, http_post, get_http_client
+from .util.httpUtil import isUnixDomainUrl
 from .util.idUtil import  getDataNodeUrl, getNodeCount
 from .util.hdf5dtype import  createDataType
 from .util.dsetUtil import getFillValue, getSliceQueryParam  
@@ -84,16 +85,11 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr,
     if bucket:
         params["bucket"] = bucket
 
-    try:
-        json_rsp = await http_put(app, req, data=data, params=params, client=client)
-        msg = f"got rsp: {json_rsp} for put binary request: {req}, "
-        msg += f"{len(data)} bytes"
-        log.debug(msg)
-    except ClientError as ce:
-        log.error(f"ClientError for http_put({req}): {ce} ")
-        raise HTTPInternalServerError()
-    except CancelledError as cle:
-        log.warn(f"CancelledError for http_put({req}): {cle}")
+    json_rsp = await http_put(app, req, data=data, params=params, client=client)
+    msg = f"got rsp: {json_rsp} for put binary request: {req}, "
+    msg += f"{len(data)} bytes"
+    log.debug(msg)
+   
 
 
 async def read_chunk_hyperslab(app, chunk_id, dset_json, np_arr,
@@ -589,13 +585,18 @@ class ChunkCrawler:
                 if self._limit > 0 and self._hits >= self._limit:
                     log.debug("ChunkCrawler - max hits exceeded, skipping fetch for chunk: {chunk_id}")
                 else:
-                    if client_name not in self._clients:
-                        dn_url = getDataNodeUrl(self._app, chunk_id)
-                        client = get_http_client(self._app, url=dn_url, cache_client=False)
-                        log.info(f"ChunkCrawler - creating new SessionClient for task: {client_name}")
-                        self._clients[client_name] = client
+                    dn_url = getDataNodeUrl(self._app, chunk_id)
+                    if isUnixDomainUrl(dn_url):
+                        # need a client per url for unix sockets
+                        client = get_http_client(self._app, url=dn_url, cache_client=True)
                     else:
-                        client = self._clients[client_name]
+                        # create a pool of clients and store the handles in the app dict
+                        if client_name not in self._clients:
+                            client = get_http_client(self._app, url=dn_url, cache_client=False)
+                            log.info(f"ChunkCrawler - creating new SessionClient for task: {client_name}")
+                            self._clients[client_name] = client
+                        else:
+                            client = self._clients[client_name]
                     await self.do_work(chunk_id, client=client)
                 
                 self._q.task_done()
