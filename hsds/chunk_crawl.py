@@ -18,11 +18,12 @@ import time
 import random
 from asyncio import CancelledError
 import numpy as np
-from aiohttp.web_exceptions import  HTTPBadRequest, HTTPNotFound
+from aiohttp.web_exceptions import  HTTPBadRequest, HTTPNotFound, HTTPServiceUnavailable
 from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.client_exceptions import ClientError
 
 from .util.httpUtil import http_get, http_put, http_post, get_http_client
+from .util.httpUtil import isUnixDomainUrl
 from .util.idUtil import  getDataNodeUrl, getNodeCount
 from .util.hdf5dtype import  createDataType
 from .util.dsetUtil import getFillValue, getSliceQueryParam  
@@ -84,16 +85,11 @@ async def write_chunk_hyperslab(app, chunk_id, dset_json, slices, arr,
     if bucket:
         params["bucket"] = bucket
 
-    try:
-        json_rsp = await http_put(app, req, data=data, params=params, client=client)
-        msg = f"got rsp: {json_rsp} for put binary request: {req}, "
-        msg += f"{len(data)} bytes"
-        log.debug(msg)
-    except ClientError as ce:
-        log.error(f"ClientError for http_put({req}): {ce} ")
-        raise HTTPInternalServerError()
-    except CancelledError as cle:
-        log.warn(f"CancelledError for http_put({req}): {cle}")
+    json_rsp = await http_put(app, req, data=data, params=params, client=client)
+    msg = f"got rsp: {json_rsp} for put binary request: {req}, "
+    msg += f"{len(data)} bytes"
+    log.debug(msg)
+   
 
 
 async def read_chunk_hyperslab(app, chunk_id, dset_json, np_arr,
@@ -502,6 +498,7 @@ class ChunkCrawler:
                  action=None):
 
         max_tasks_per_node = config.get("max_tasks_per_node_per_request", default=16)
+        client_pool_count = config.get("client_pool_count", default=10)
         log.info(f"ChunkCrawler.__init__  {len(chunk_ids)} chunks, action={action}")
         log.debug(f"ChunkCrawler - chunk_ids: {chunk_ids}")
 
@@ -530,6 +527,12 @@ class ChunkCrawler:
             self._max_tasks = max_tasks
         else:
             self._max_tasks = len(chunk_ids)
+
+        if self._max_tasks >= client_pool_count:
+            self._client_pool = 1
+        else:
+            self._client_pool = client_pool_count - self._max_tasks
+        log.info(f"ChunkCrawler - client_pool count: {self._client_pool}")
 
         # create one ClientSession per dn_url
         if "cc_clients" not in app:
@@ -571,7 +574,10 @@ class ChunkCrawler:
     async def work(self):
         """ Process chunk ids from queue till we are done"""
         this_task = asyncio.current_task()
-        log.info(f"ChunkCrawler - work method for task: {this_task.get_name()}")
+        task_name = this_task.get_name()
+        log.info(f"ChunkCrawler - work method for task: {task_name}")
+        client_name = f"{task_name}.{random.randrange(0,self._client_pool)}"
+        log.info(f"ChunkCrawler - client_name: {client_name}")
         while True:
             try:
                 start = time.time()
@@ -580,12 +586,17 @@ class ChunkCrawler:
                     log.debug("ChunkCrawler - max hits exceeded, skipping fetch for chunk: {chunk_id}")
                 else:
                     dn_url = getDataNodeUrl(self._app, chunk_id)
-                    if dn_url not in self._clients:
-                        client = get_http_client(self._app, url=dn_url, cache_client=False)
-                        log.info(f"creating new SessionClient for dn_url: {dn_url}")
-                        self._clients[dn_url] = client
+                    if isUnixDomainUrl(dn_url):
+                        # need a client per url for unix sockets
+                        client = get_http_client(self._app, url=dn_url, cache_client=True)
                     else:
-                        client = self._clients[dn_url]
+                        # create a pool of clients and store the handles in the app dict
+                        if client_name not in self._clients:
+                            client = get_http_client(self._app, url=dn_url, cache_client=False)
+                            log.info(f"ChunkCrawler - creating new SessionClient for task: {client_name}")
+                            self._clients[client_name] = client
+                        else:
+                            client = self._clients[client_name]
                     await self.do_work(chunk_id, client=client)
                 
                 self._q.task_done()
@@ -694,14 +705,17 @@ class ChunkCrawler:
                 log.warn(f"CancelledError for {self._action}({chunk_id}): {cle}")
             except HTTPBadRequest as hbr:
                 status_code = 400
-                log.error(f"HTTPBadRequest for {self._action}({chunk_id}): {hbr} ")
+                log.error(f"HTTPBadRequest for {self._action}({chunk_id}): {hbr}")
             except HTTPNotFound as nfe:
                 status_code = 404
-                log.info(f"HTTPNotFoundRequest for {self._action}({chunk_id}): {nfe} ")
+                log.info(f"HTTPNotFoundRequest for {self._action}({chunk_id}): {nfe}")
                 break
             except HTTPInternalServerError as ise:
                 status_code = 500
-                log.warn(f"HTTPInternalServerError for {self._action}({chunk_id}): {ise} ")
+                log.warn(f"HTTPInternalServerError for {self._action}({chunk_id}): {ise}")
+            except HTTPServiceUnavailable as sue:
+                status_code = 503
+                log.warn(f"HTTPServiceUnavailable for {self._action}({chunk_id}): {sue}")
             except Exception as e:
                 status_code = 500
                 log.error(f"Unexpected exception {type(e)} for {self._action}({chunk_id}): {e} ")

@@ -865,8 +865,12 @@ async def s3sync(app):
 
         for root_id in root_ids:
             bucket = notify_ids[root_id]
-            await notify_root(app, root_id, bucket=bucket)
-            del notify_ids[root_id]
+            try:
+                await notify_root(app, root_id, bucket=bucket)
+                del notify_ids[root_id]
+            except HTTPServiceUnavailable:
+                # this can happen if we go into a WAITING state
+                log.warning(f"got HTTPServiceUnavailable exception try to notify root_id: {root_id}")
         log.info("root notify complete")
 
     # return number of objects written
@@ -889,12 +893,17 @@ async def s3syncCheck(app):
         """
         log.debug(f"s3sync - clusterstate is {app['node_state']}")
 
-        update_count = await s3sync(app)
-        if update_count:
-            log.info(f"s3syncCheck {update_count} objects updated")
+        update_count = 0
+        try:
+            update_count = await s3sync(app)
+            if update_count:
+                log.info(f"s3syncCheck {update_count} objects updated")
+        except Exception as e:
+            # catch any exception so don't prematurely end the s3sync task
+            log.warn(f"s3syncCheck - got {type(e)} exception: {e}")
 
         pending_s3_write_tasks = app["pending_s3_write_tasks"]
-        log.debug(f"pending_write_tasks: {pending_s3_write_tasks}")
+        log.debug(f"pending_write_tasks count: {len(pending_s3_write_tasks)}")
         dirty_ids = app["dirty_ids"]
         log.debug(f"dirty_ids: {dirty_ids}")
 

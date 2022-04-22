@@ -201,7 +201,7 @@ async def k8s_update_dn_info(app):
         try:
             rsp_json = await http_get(app, req)
             if "node" not in rsp_json:
-                log.error("Unexepected response from info (no node key)")
+                log.error("Unexpected response from info (no node key)")
                 continue
             node_json = rsp_json["node"]
             if "id" not in node_json:
@@ -216,7 +216,9 @@ async def k8s_update_dn_info(app):
 
     # save to global
     app["dn_urls"] = dn_urls
+    log.debug(f"k8s_update_dn_info - dn_urls: {dn_urls}")
     app["dn_ids"] = dn_ids
+    log.debug(f"k8s_udpdate_dn_info - dn_ids: {dn_ids}")
 
 
 async def docker_update_dn_info(app):
@@ -309,8 +311,7 @@ def updateReadyState(app):
         node_number = getNodeNumber(app)
         if app["node_number"] != node_number:
             old_number = app["node_number"]
-            msg = f"node_number has changed - old value was {old_number} "
-            msg += f"new number is {node_number}"
+            msg = f"node_number is {old_number}, should be: {node_number}"
             log.info(msg)
             meta_cache = app["meta_cache"]
             chunk_cache = app["chunk_cache"]
@@ -318,7 +319,7 @@ def updateReadyState(app):
             if dirty_cache_count > 0:
                 # set the node state to waiting till the chunk cache have
                 # been flushed
-                msg = f"Waiting on {dirty_cache_count} cache items to be "
+                msg = f"updateReadyState /Waiting on {dirty_cache_count} cache items to be "
                 msg += "flushed"
                 log.info(msg)
                 if app["node_state"] == "READY":
@@ -328,8 +329,8 @@ def updateReadyState(app):
                 # flush remaining items from cache
                 meta_cache.clearCache()
                 chunk_cache.clearCache()
-                msg = f"setting node_number to: {node_number}, node_state "
-                msg += "to READY"
+                msg = f"setting node_number to: {node_number} (old value: {old_number}), "
+                msg += "node_state to READY"
                 log.info(msg)
                 app["node_number"] = node_number
                 app["node_state"] = "READY"

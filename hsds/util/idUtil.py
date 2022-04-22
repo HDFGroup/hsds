@@ -438,11 +438,11 @@ def getNodeNumber(app):
         raise ValueError()
 
     dn_ids = app["dn_ids"]
-    # log.debug(f"getNodeNumber(from dn_ids: {dn_ids}")
+    log.debug(f"getNodeNumber(from dn_ids: {dn_ids})")
     for i in range(len(dn_ids)):
         dn_id = dn_ids[i]
         if dn_id == app["id"]:
-            # log.debug(f"returning nodeNumber: {i}")
+            log.debug(f"returning nodeNumber: {i}")
             return i
     log.error("getNodeNumber, no matching id")
     return -1
@@ -450,6 +450,7 @@ def getNodeNumber(app):
 
 def getNodeCount(app):
     dn_urls = app["dn_urls"]
+    log.debug(f"getNodeCount for dn_urls: {dn_urls}")
     dn_node_count = len(dn_urls)
     return dn_node_count
 
