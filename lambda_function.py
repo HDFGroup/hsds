@@ -5,6 +5,7 @@ import json
 import time
 import logging
 import requests_unixsocket
+import uuid
 
 
 from hsds.hsds_app import HsdsApp
@@ -196,12 +197,17 @@ def lambda_handler(event, context):
         target_dn_count = - (-cpu_count // 2)
         print(f"setting dn count to: {target_dn_count}")
 
+    tmp_dir = "/tmp"
+    rand_name = uuid.uuid4().hex[:8]
+    socket_dir = f"{tmp_dir}/hs{rand_name}/"
+
     # instantiate hsdsapp object
     hsds = HsdsApp(username=function_name, 
                    password="lambda", 
                    islambda=True,
                    dn_count=target_dn_count, 
-                   readonly=readonly)
+                   readonly=readonly
+                   socket_dir=socket_dir)
     hsds.run()
 
     # wait for server to startup
