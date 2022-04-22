@@ -903,7 +903,7 @@ async def s3syncCheck(app):
             log.warn(f"s3syncCheck - got {type(e)} exception: {e}")
 
         pending_s3_write_tasks = app["pending_s3_write_tasks"]
-        log.debug(f"pending_write_tasks: {pending_s3_write_tasks}")
+        log.debug(f"pending_write_tasks count: {len(pending_s3_write_tasks)}")
         dirty_ids = app["dirty_ids"]
         log.debug(f"dirty_ids: {dirty_ids}")
 
