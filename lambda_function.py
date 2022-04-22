@@ -206,7 +206,7 @@ def lambda_handler(event, context):
                    password="lambda", 
                    islambda=True,
                    dn_count=target_dn_count, 
-                   readonly=readonly
+                   readonly=readonly,
                    socket_dir=socket_dir)
     hsds.run()
 
