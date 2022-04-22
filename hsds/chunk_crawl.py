@@ -18,7 +18,7 @@ import time
 import random
 from asyncio import CancelledError
 import numpy as np
-from aiohttp.web_exceptions import  HTTPBadRequest, HTTPNotFound
+from aiohttp.web_exceptions import  HTTPBadRequest, HTTPNotFound, HTTPServiceUnavailable
 from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.client_exceptions import ClientError
 
@@ -705,14 +705,17 @@ class ChunkCrawler:
                 log.warn(f"CancelledError for {self._action}({chunk_id}): {cle}")
             except HTTPBadRequest as hbr:
                 status_code = 400
-                log.error(f"HTTPBadRequest for {self._action}({chunk_id}): {hbr} ")
+                log.error(f"HTTPBadRequest for {self._action}({chunk_id}): {hbr}")
             except HTTPNotFound as nfe:
                 status_code = 404
-                log.info(f"HTTPNotFoundRequest for {self._action}({chunk_id}): {nfe} ")
+                log.info(f"HTTPNotFoundRequest for {self._action}({chunk_id}): {nfe}")
                 break
             except HTTPInternalServerError as ise:
                 status_code = 500
-                log.warn(f"HTTPInternalServerError for {self._action}({chunk_id}): {ise} ")
+                log.warn(f"HTTPInternalServerError for {self._action}({chunk_id}): {ise}")
+            except HTTPServiceUnavailable as sue:
+                status_code = 503
+                log.warn(f"HTTPServiceUnavailable for {self._action}({chunk_id}): {sue}")
             except Exception as e:
                 status_code = 500
                 log.error(f"Unexpected exception {type(e)} for {self._action}({chunk_id}): {e} ")
