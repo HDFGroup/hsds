@@ -146,7 +146,6 @@ async def init():
         cors_defaults = {cors_domain: aiohttp_cors.ResourceOptions(**kwargs)}
         cors = aiohttp_cors.setup(app, defaults=cors_defaults)
         for route in list(app.router.routes()):
-            log.info(f"CORS add route: {route}")
             cors.add(route)
 
     return app

@@ -468,7 +468,7 @@ async def removeKeys(app, objid):
     #
     # Note: not re-entrant!  Only one removeKeys an be run at a time
     # per app.
-    log.debug(f"removeKeys: {objid}")
+    log.info(f"removeKeys: {objid}")
     if not isSchema2Id(objid):
         log.warn("ignoring non-schema2 id")
         raise KeyError("Invalid key")
