@@ -27,12 +27,12 @@ spec:
         - name: HS_USERNAME
           valueFrom:
             secretKeyRef:
-              name: hs-perf-keys
+              name: h5user-cred
               key: hs_username
         - name: HS_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: hs-perf-keys
+              name: h5user-cred
               key: hs_password
       restartPolicy: Never
   backoffLimit: 4

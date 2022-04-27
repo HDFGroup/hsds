@@ -10,8 +10,13 @@ fi
 echo -n ${HS_USERNAME} > /tmp/hs_username
 echo -n ${HS_PASSWORD} > /tmp/hs_password
 
+if [[ -z ${K8S_NAMESPACE} ]]; then
+   echo "K8S_NAMESPACE not set using default namespace"
+   K8S_NAMESPACE="default"
+fi
+
 # create the secret
-kubectl --namespace hsperf create secret generic hs-perf-keys   \
+kubectl --namespace ${K8S_NAMESPACE} create secret generic h5user-cred   \
                                             --from-file=/tmp/hs_username \
                                             --from-file=/tmp/hs_password  
 
