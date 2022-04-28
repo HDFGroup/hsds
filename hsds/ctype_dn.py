@@ -23,7 +23,6 @@ from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
 from .datanode_lib import delete_metadata_obj, check_metadata_obj
 from . import hsds_logger as log
 
-
 async def GET_Datatype(request):
     """HTTP GET method to return JSON for /groups/
     """
@@ -149,7 +148,12 @@ async def DELETE_Datatype(request):
     if "bucket" in params:
         bucket = params["bucket"]
     else:
-        bucket = None
+        bucket = app["bucket_name"]
+
+    if not bucket:
+        msg = "DELETE_Datatype - bucket not set"
+        log.error(msg)
+        raise HTTPBadRequest(reason=msg)
 
     # verify the id  exist
     obj_found = await check_metadata_obj(app, ctype_id)

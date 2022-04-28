@@ -184,9 +184,8 @@ def get_gc_count(app):
 async def bucketGC(app):
     """ remove objects from db for any deleted root groups or datasets
     """
-    log.info("bucketGC start")
     async_sleep_time = int(config.get("async_sleep_time"))
-    log.info("async_sleep_time: {}".format(async_sleep_time))
+    log.info(f"bucketGC start - async_sleep_time: {async_sleep_time}")
 
     # update/initialize root object before starting GC
 

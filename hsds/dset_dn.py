@@ -23,7 +23,6 @@ from .datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj
 from .datanode_lib import save_metadata_obj, delete_metadata_obj
 from . import hsds_logger as log
 
-
 async def GET_Dataset(request):
     """HTTP GET method to return JSON for /groups/
     """
@@ -33,7 +32,7 @@ async def GET_Dataset(request):
     dset_id = get_obj_id(request)
 
     if not isValidUuid(dset_id, obj_class="dataset"):
-        log.error("Unexpected type_id: {}".format(dset_id))
+        log.error(f"Unexpected dataset_id: {dset_id}")
         raise HTTPInternalServerError()
     if "bucket" in params:
         bucket = params["bucket"]
@@ -171,7 +170,12 @@ async def DELETE_Dataset(request):
     if "bucket" in params:
         bucket = params["bucket"]
     else:
-        bucket = None
+        bucket = app["bucket_name"]
+
+    if not bucket:
+        msg = "DELETE_Dataset - bucket not set"
+        log.error(msg)
+        raise HTTPBadRequest(reason=msg)
 
     # verify the id  exist
     obj_found = await check_metadata_obj(app, dset_id, bucket=bucket)

@@ -1269,6 +1269,9 @@ async def DELETE_Domain(request):
         root_id = domain_json["root"]
         req = getDataNodeUrl(app, root_id)
         req += "/groups/" + root_id
+        params = {}
+        if bucket:
+            params["bucket"] = bucket
         await http_delete(app, req, params=params)
 
     # remove from domain cache if present

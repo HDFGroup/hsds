@@ -230,7 +230,12 @@ async def DELETE_Group(request):
     if "bucket" in params:
         bucket = params["bucket"]
     else:
-        bucket = None
+        bucket = app["bucket_name"]
+
+    if not bucket:
+        msg = "DELETE_Group - bucket not set"
+        log.error(msg)
+        raise HTTPBadRequest(reason=msg)
 
     log.info(f"DELETE group: {group_id} bucket: {bucket}")
 
@@ -240,7 +245,7 @@ async def DELETE_Group(request):
         log.debug(f"delete called on non-exsistet obj: {group_id}")
         raise HTTPNotFound()
 
-    log.debug("deleting group: {}".format(group_id))
+    log.debug(f"deleting group: {group_id}, bucket:{bucket}")
 
     if "Notify" in params and not params["Notify"]:
         notify = False

@@ -73,9 +73,12 @@ async def notify_root(app, root_id, bucket=None):
     """ flag to write to S3
     """
 
-    log.info(f"notify_root: {root_id}")
+    log.info(f"notify_root: {root_id}, bucket={bucket}")
     if not isValidUuid(root_id) or not isSchema2Id(root_id):
         log.error(f"unexpected call to notify with invalid id: {root_id}")
+        return
+    if not bucket:
+        log.error("notify_root - bucket not set")
         return
     notify_req = getDataNodeUrl(app, root_id) + "/roots/" + root_id
     log.info(f"Notify: {notify_req} [{bucket}]")
@@ -488,6 +491,13 @@ async def delete_metadata_obj(app, obj_id, notify=True,
     log.info(f"delete_meta_data_obj: {obj_id} notify: {notify}")
     if isValidDomain(obj_id):
         bucket = getBucketForDomain(obj_id)
+        log.debug(f"delete_meta_data_obj: using bucket: {bucket}")
+
+    if not bucket:
+        log.error("delete_metadata_obj - bucket not set")
+        raise HTTPInternalServerError()
+
+    log.info(f"delete_meta_obj - using bucket:{bucket}")
 
     try:
         validateInPartition(app, obj_id)
@@ -805,7 +815,7 @@ async def s3sync(app, s3_age_time=0):
             log.warn(msg)
         bucket = item[1]
         if not bucket:
-            if "bucket_name" in app and app["bucket_name"]:
+            if app["bucket_name"]:
                 bucket = app["bucket_name"]
             else:
                 msg = f"can not determine bucket for s3sync obj_id: {obj_id}"
@@ -904,7 +914,7 @@ async def s3syncCheck(app):
             s3_age_time = 0
             log.debug("s3sync - nodestate is TERMINATING, set s3_age_time to 0")
         else:
-            log.debug(f"s3sync - clusterstate is {node_state}, using s3_age_time of: {s3_age_time}")
+            log.debug(f"s3sync - nodestate is {node_state}, using s3_age_time of: {s3_age_time}")
 
         update_count = 0
         try:

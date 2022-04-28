@@ -684,12 +684,11 @@ def baseInit(node_type):
 
     if is_standalone:
         # can go straight to ready state
-        msg = "setting cluster_state to inital state of READY for standalone"
+        msg = "setting node_state to inital state of READY for standalone"
         log.info(msg)
-        app["cluster_state"] = "READY"
         app['node_state'] = "READY"
     else:
-        app["custer_state"] = "WAITING"
+        app['node_state'] = "WAITING"
 
 
     return app

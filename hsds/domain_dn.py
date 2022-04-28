@@ -165,7 +165,7 @@ async def DELETE_Domain(request):
     if domain_json:
         log.debug("got domain json")
     # delete domain
-    await delete_metadata_obj(app, domain, notify=True)
+    await delete_metadata_obj(app, domain, notify=True, bucket=bucket)
 
     json_rsp = {"domain": domain}
 
