@@ -522,8 +522,11 @@ async def delete_metadata_obj(app, obj_id, notify=True,
     if isValidUuid(obj_id) and isSchema2Id(obj_id):
         if isRootObjId(obj_id):
             # add to gc ids so sub-objects will be deleted
-            gc_ids = app["gc_ids"]
-            log.info(f"adding root id: {obj_id} for GC cleanup")
+            gc_buckets = app["gc_buckets"]
+            if bucket not in gc_buckets:
+                gc_buckets[bucket] = set()
+            gc_ids = gc_buckets[bucket]
+            log.info(f"adding root id: {bucket}/{obj_id} for GC cleanup")
             gc_ids.add(obj_id)
         elif notify:
             root_id = getRootObjId(obj_id)
@@ -734,8 +737,11 @@ def save_chunk(app, chunk_id, dset_json, bucket=None):
     item_size = getItemSize(dset_json['type'])
 
     chunk_cache = app["chunk_cache"]
-    chunk_cache.setDirty(chunk_id)
-    log.info(f"chunk cache dirty count: {chunk_cache.dirtyCount}")
+    try:
+        chunk_cache.setDirty(chunk_id)
+        log.info(f"chunk cache dirty count: {chunk_cache.dirtyCount}")
+    except KeyError:
+        log.warn(f"save_chunk {chunk_id} not found in chunk_cache, setDirty failed")
 
     # will store filter options into app['filter_map']
     getFilterOps(app, dset_json, item_size)
@@ -746,7 +752,7 @@ def save_chunk(app, chunk_id, dset_json, bucket=None):
     dirty_ids[chunk_id] = (now, bucket)
 
 
-async def s3sync(app):
+async def s3sync(app, s3_age_time=0):
     """ Periodic method that writes dirty objects in
         the metadata cache to S3
     """
@@ -755,6 +761,7 @@ async def s3sync(app):
     pending_s3_write = app["pending_s3_write"]
     pending_s3_write_tasks = app["pending_s3_write_tasks"]
     s3_sync_task_timeout = config.get("s3_sync_task_timeout")
+    
     dirty_count = len(dirty_ids)
     if not dirty_count:
         log.info("s3sync nothing to update")
@@ -781,7 +788,7 @@ async def s3sync(app):
 
     update_count = 0
     s3sync_start = time.time()
-
+    
     log.info(f"s3sync - processing {len(dirty_ids)} dirty_ids")
     for obj_id in dirty_ids:
         if len(pending_s3_write_tasks) >= max_pending_write_requests:
@@ -834,7 +841,7 @@ async def s3sync(app):
                     log.info(msg)
                 create_task = False
 
-        elif time_since_dirty < 1.0:
+        elif time_since_dirty < s3_age_time:
             msg = f"s3sync - obj {obj_id} last written {time_since_dirty:.3f} "
             msg += "seconds ago, waiting to age"
             log.debug(msg)
@@ -879,23 +886,29 @@ async def s3sync(app):
 
 async def s3syncCheck(app):
     s3_sync_interval = config.get("s3_sync_interval")
+    s3_age_time = config.get("s3_age_time", default=1)
+    if app["node_state"] != "TERMINATING":
+        s3_dirty_age_to_write = config.get("s3_dirty_age_to_write", default=20)
+        log.debug(f"s3sync - s3_dirty_age_to_write is {s3_dirty_age_to_write}")
+    else:
+        log.info("s3sync - node is terminating, using s3_dirty_age_to_write of 0")
+        s3_dirty_age_to_write = 0
 
     while True:
-        """
-        # removing this code block so we don't block writes when state is
-        # waiting or terminating
-        if app["node_state"] != "READY":
-            log.info("s3sync - clusterstate is not ready, sleeping")
+        node_state = app["node_state"]
+        if node_state == "INITIALIZING":
+            log.info("s3sync - nodestate is INITIALIZING, sleeping")
             await asyncio.sleep(s3_sync_interval)
             continue
+        elif node_state == "TERMINATING":
+            s3_age_time = 0
+            log.debug("s3sync - nodestate is TERMINATING, set s3_age_time to 0")
         else:
-            log.debug(f"s3sync - clusterstate is {app['node_state']}")
-        """
-        log.debug(f"s3sync - clusterstate is {app['node_state']}")
+            log.debug(f"s3sync - clusterstate is {node_state}, using s3_age_time of: {s3_age_time}")
 
         update_count = 0
         try:
-            update_count = await s3sync(app)
+            update_count = await s3sync(app, s3_age_time=s3_age_time)
             if update_count:
                 log.info(f"s3syncCheck {update_count} objects updated")
         except Exception as e:

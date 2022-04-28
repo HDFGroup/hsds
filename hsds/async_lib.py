@@ -447,8 +447,13 @@ async def objDeleteCallback(app, s3keys):
     if "objDelete_prefix" not in app or not app["objDelete_prefix"]:
         log.error("Unexpected objDeleteCallback")
         raise ValueError("Invalid objDeleteCallback")
+    if "objDelete_bucket" not in app:
+        log.error("Expecte to find objDelete_bucket key for objDeleteCallback")
+        raise ValueError("Invalid objDeleteCallback")
+    
 
     prefix = app["objDelete_prefix"]
+    bucket = app["objDelete_bucket"]
     prefix_len = len(prefix)
     for s3key in s3keys:
         if not s3key.startswith(prefix):
@@ -456,19 +461,19 @@ async def objDeleteCallback(app, s3keys):
             raise ValueError("invalid s3key for objDeleteCallback")
         full_key = prefix + s3key[prefix_len:]
         log.info(f"removeKeys - objDeleteCallback deleting key: {full_key}")
-        await deleteStorObj(app, full_key)
+        await deleteStorObj(app, full_key, bucket=bucket)
 
     log.info("objDeleteCallback complete")
 
 
-async def removeKeys(app, objid):
+async def removeKeys(app, objid, bucket=None):
     """ delete all keys for given root or dataset id"""
     # iterate through all s3 keys under the given root or dataset id
     #  and delete them
     #
     # Note: not re-entrant!  Only one removeKeys an be run at a time
     # per app.
-    log.info(f"removeKeys: {objid}")
+    log.info(f"removeKeys: {objid}, bucket: {bucket}")
     if not isSchema2Id(objid):
         log.warn("ignoring non-schema2 id")
         raise KeyError("Invalid key")
@@ -491,9 +496,11 @@ async def removeKeys(app, objid):
         log.error(msg)
         # just continue and reset
     app["objDelete_prefix"] = s3prefix
+    app["objDelete_bucket"] = bucket
     try:
         kwargs = {"prefix": s3prefix,
                   "include_stats": False,
+                  "bucket": bucket,
                   "callback": objDeleteCallback}
         await getStorKeys(app, **kwargs)
     except ClientError as ce:
@@ -513,3 +520,4 @@ async def removeKeys(app, objid):
 
     # reset the prefix
     app["objDelete_prefix"] = None
+    app["objDelete_bucket"] = None

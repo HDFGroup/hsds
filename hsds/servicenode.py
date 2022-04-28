@@ -13,12 +13,13 @@
 # service node of hsds cluster
 #
 import asyncio
+import time
 from collections import deque
 from aiohttp.web import run_app
 import aiohttp_cors
 from .util.lruCache import LruCache
 from .util.httpUtil import isUnixDomainUrl, bindToSocket, getPortFromUrl
-from .util.httpUtil import release_http_client
+from .util.httpUtil import release_http_client, jsonResponse
 
 from . import config
 from .basenode import healthCheck,  baseInit
@@ -150,7 +151,6 @@ async def init():
 
     return app
 
-
 async def start_background_tasks(app):
     if "is_standalone" in app:
        return  # don't need health check
@@ -160,7 +160,31 @@ async def start_background_tasks(app):
 async def on_shutdown(app):
     """ Release any held resources """
     log.info("on_shutdown")
+    # finally release any http_clients
     await release_http_client(app)
+
+    log.info("on_shutdown - done")
+
+async def preStop(request):
+    """ HTTP Method used by K8s to signal the container is shutting down
+    """
+
+    log.request(request)
+    app = request.app
+    
+    shutdown_start = time.time()
+    log.warn(f"preStop request calling on_shutdown at {shutdown_start:.2f}")
+    await on_shutdown(app)
+    shutdown_elapse_time = time.time() - shutdown_start
+    msg = f"shutdown took: {shutdown_elapse_time:.2f} seconds"
+    if shutdown_elapse_time > 2.0:
+        # 2.0 is the default grace period for kubernetes
+        log.warn(msg)
+    else:
+        log.info(msg)
+    resp = await jsonResponse(request, {})
+    log.response(request, resp=resp)
+    return resp
 
 def create_app():
     """Create servicenode aiohttp application

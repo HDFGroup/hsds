@@ -135,8 +135,8 @@ def _k8sGetPodIPs(pod_json, k8s_app_label):
         metadata = item["metadata"]
         #log.debug(f"pod metadata: {metadata}")
         if "labels" not in metadata:
-            msg = "_k8sGetPodIPs - expected to labels key in metadata"
-            log.warn(msg)
+            msg = "_k8sGetPodIPs - no labels key in metadata"
+            log.debug(msg)
             continue
         labels = metadata["labels"]
         if "app" not in labels:

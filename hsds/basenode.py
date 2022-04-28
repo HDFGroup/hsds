@@ -37,10 +37,8 @@ from . import hsds_logger as log
 
 HSDS_VERSION = "0.7.0beta"
 
-
 def getVersion():
     return HSDS_VERSION
-
 
 def getHeadUrl(app):
     if "head_url" in app:
@@ -397,20 +395,6 @@ async def healthCheck(app):
             msg += f"doHealthCheck: {e}"
             log.error(msg)
         await asyncio.sleep(sleep_secs)
-
-
-async def preStop(request):
-    """ HTTP Method used by K8s to signal the container is shutting down
-    """
-
-    log.request(request)
-    app = request.app
-    app["node_state"] = "TERMINATING"
-    log.warn("preStop request setting node_state to TERMINATING")
-
-    resp = await jsonResponse(request, {})
-    log.response(request, resp=resp)
-    return resp
 
 
 async def about(request):

@@ -21,10 +21,9 @@ from .util.lruCache import LruCache
 from .util.idUtil import isValidUuid, isSchema2Id, getCollectionForId
 from .util.idUtil import isRootObjId
 from .util.httpUtil import isUnixDomainUrl, bindToSocket, getPortFromUrl
-from .util.httpUtil import release_http_client
+from .util.httpUtil import jsonResponse, release_http_client
 from . util.storUtil import setBloscThreads, getBloscThreads
-from .basenode import healthCheck, baseInit, preStop
-# from .util.httpUtil import release_http_client
+from .basenode import healthCheck, baseInit
 from . import hsds_logger as log
 from .domain_dn import GET_Domain, PUT_Domain, DELETE_Domain, PUT_ACL
 from .group_dn import GET_Group, POST_Group, DELETE_Group, PUT_Group
@@ -172,6 +171,15 @@ async def bucketScan(app):
     # shouldn't ever get here
     log.error("bucketScan terminating unexpectedly")
 
+def get_gc_count(app):
+    """ Return number of items in gc queue """
+    count = 0
+    gc_buckets = app["gc_buckets"]
+    for bucket in gc_buckets:
+        log.debug(f"gc_count - getting count for bucket: {bucket}")
+        gc_ids = gc_buckets[bucket]
+        count += len(gc_ids)
+    return count
 
 async def bucketGC(app):
     """ remove objects from db for any deleted root groups or datasets
@@ -183,32 +191,35 @@ async def bucketGC(app):
     # update/initialize root object before starting GC
 
     while True:
-        if app["node_state"] != "READY":
+        if app["node_state"] not in ("READY", "TERMINATING"):
             log.info("bucketGC - waiting for Node state to be READY")
             await asyncio.sleep(async_sleep_time)
             continue  # wait for READY state
-
-        gc_ids = app["gc_ids"]
-        while len(gc_ids) > 0:
-            obj_id = gc_ids.pop()
-            log.info(f"got gc id: {obj_id}")
-            if not isValidUuid(obj_id):
-                log.error(f"bucketGC - got unexpected gc id: {obj_id}")
-                continue
-            if not isSchema2Id(obj_id):
-                log.warn(f"bucketGC - ignoring v1 id: {obj_id}")
-                continue
-            if getCollectionForId(obj_id) == "groups":
-                if not isRootObjId(obj_id):
-                    log.error(f"bucketGC - unexpected non-root id: {obj_id}")
+        
+        gc_buckets = app["gc_buckets"]
+        for bucket in gc_buckets:
+            log.debug(f"bucketGC - getting keys for bucket: {bucket}")
+            gc_ids = gc_buckets[bucket]
+            while len(gc_ids) > 0:
+                obj_id = gc_ids.pop()
+                log.info(f"got gc id: {obj_id}")
+                if not isValidUuid(obj_id):
+                    log.error(f"bucketGC - got unexpected gc id: {bucket}/{obj_id}")
                     continue
-                log.info(f"bucketGC - delete root objs: {obj_id}")
-                await removeKeys(app, obj_id)
-            elif getCollectionForId(obj_id) == "datasets":
-                log.info(f"bucketGC - delete dataset: {obj_id}")
-                await removeKeys(app, obj_id)
-            else:
-                log.error(f"bucketGC - unexpected obj_id class: {obj_id}")
+                if not isSchema2Id(obj_id):
+                    log.warn(f"bucketGC - ignoring v1 id: {bucket}/{obj_id}")
+                    continue
+                if getCollectionForId(obj_id) == "groups":
+                    if not isRootObjId(obj_id):
+                        log.error(f"bucketGC - unexpected non-root id: {bucket}/{obj_id}")
+                        continue
+                    log.info(f"bucketGC - delete root objs: {bucket}/{obj_id}")
+                    await removeKeys(app, obj_id, bucket=bucket)
+                elif getCollectionForId(obj_id) == "datasets":
+                    log.info(f"bucketGC - delete dataset: {bucket}/{obj_id}")
+                    await removeKeys(app, obj_id, bucket=bucket)
+                else:
+                    log.error(f"bucketGC - unexpected obj_id class: {bucket}/{obj_id}")
 
         log.info(f"bucketGC - sleep: {async_sleep_time}")
         await asyncio.sleep(async_sleep_time)
@@ -232,11 +243,6 @@ async def start_background_tasks(app):
 
         # run root/dataset GC
         loop.create_task(bucketGC(app))
-
-async def on_shutdown(app):
-    """ Release any held resources """
-    log.info("on_shutdown")
-    await release_http_client(app)
 
 
 def create_app():
@@ -294,7 +300,7 @@ def create_app():
     # map of root_id to bucket name for pending root scans
     app['root_scan_ids'] = {}
     # set of root or dataset ids for deletion
-    app['gc_ids'] = set()
+    app['gc_buckets'] = {}
     app['objDelete_prefix'] = None  # used by async_lib removeKeys
 
     # TODO - there's nothing to prevent the deflate_map from getting
@@ -305,9 +311,66 @@ def create_app():
 
     # run background tasks
     app.on_startup.append(start_background_tasks)
+    # set method to run when app is being terminated
     app.on_shutdown.append(on_shutdown)
 
     return app
+
+async def on_shutdown(app):
+    """ Release any held resources """
+    log.info("on_shutdown - setting node_state to TERMINATING")
+    app["node_state"] = "TERMINATING"
+    s3_sync_interval = config.get("s3_sync_interval")
+    sleep_interval = float(s3_sync_interval) / 4.0
+    pending_s3_write_tasks = app["pending_s3_write_tasks"]
+
+    # wait for s3sync queue to drain
+    while True:
+        pending_write_count = len(pending_s3_write_tasks)
+        if pending_write_count == 0:
+            log.debug("on_shutdown - no pending write tasks")
+            break
+        msg = f"on_shutdown - waiting on {pending_write_count} write tasks "
+        msg += f"sleeping for {sleep_interval:.2f}"
+        log.warning(msg)
+        await asyncio.sleep(sleep_interval)
+
+    # wait on gc tasks to complete
+    while True:
+        gc_count = get_gc_count(app)
+        if gc_count == 0:
+            log.debug("on_shutdown - no gc items")
+            break
+        msg = f"on_shutdown - waiting on {gc_count} gc tasks "
+        msg += f"sleeping for {sleep_interval:.2f}"
+        log.warning(msg)
+        await asyncio.sleep(sleep_interval)
+    
+    # finally release any http_clients
+    await release_http_client(app)
+
+    log.info("on_shutdown - done")
+
+async def preStop(request):
+    """ HTTP Method used by K8s to signal the container is shutting down
+    """
+
+    log.request(request)
+    app = request.app
+    
+    shutdown_start = time.time()
+    log.warn(f"preStop request calling on_shutdown at {shutdown_start:.2f}")
+    await on_shutdown(app)
+    shutdown_elapse_time = time.time() - shutdown_start
+    msg = f"shutdown took: {shutdown_elapse_time:.2f} seconds"
+    if shutdown_elapse_time > 2.0:
+        # 2.0 is the default grace period for kubernetes
+        log.warn(msg)
+    else:
+        log.info(msg)
+    resp = await jsonResponse(request, {})
+    log.response(request, resp=resp)
+    return resp
 
 
 #
