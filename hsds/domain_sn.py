@@ -300,7 +300,7 @@ async def getDomainObjects(app, root_id, include_attrs=False, bucket=None):
     if len(crawler._obj_dict) >= max_objects_limit:
         msg = "getDomainObjects - too many objects:  "
         msg += f"{len(crawler._obj_dict)}, returning None"
-        log.info()
+        log.info(msg)
         return None
     else:
         msg = f"getDomainObjects returning: {len(crawler._obj_dict)} objects"
