@@ -20,12 +20,12 @@ if filepath.startswith('hdf5://'):
 else:
     f = h5py.File(filepath)
  
-chunk_table = f["chunk_list"]
+task_table = f["task_list"]
 pod_counts = {}
 
 if verbose:
     header = ""
-    for name in chunk_table.dtype.names:
+    for name in task_table.dtype.names:
         header += name
         header += '\t'
     print(header)
@@ -35,12 +35,12 @@ inprogress_count = 0
 pending_count = 0
 start_time = None
 finish_time = None
-for s in chunk_table.iter_chunks():
-    arr = chunk_table[s]
+for s in task_table.iter_chunks():
+    arr = task_table[s]
     for i in range(len(arr)):
         row = arr[i]
         line = ""
-        for name in chunk_table.dtype.names:
+        for name in task_table.dtype.names:
             line += str(row[name])
             line += '\t'
         status = row['status']

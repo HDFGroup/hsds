@@ -1,7 +1,7 @@
 version: '2'
 services:
   hswritetest:
-    image: hdfgroup/hswritetest
+    image: hdfgroup/hswritetest:latest
     restart: "no"
     mem_limit: 128m
     environment:

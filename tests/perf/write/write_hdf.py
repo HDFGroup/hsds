@@ -9,7 +9,7 @@ try:
     # probably don't need this for running in Docker or k8s
     import h5py
 except ModuleNotFoundError:
-    pass # ignore
+    logging.info("no hy5py")
 
 
 def getNextChunkTableIndex(chunk_table):
@@ -103,7 +103,7 @@ print("dset:", dset)
 print("dset chunks:", dset.chunks)
 print("chunk_size:", np.prod(dset.chunks)*dset.dtype.itemsize)
 
-table = f["chunk_list"]
+table = f["task_list"]
 if "HOSTNAME" in os.environ:
     pod_name = os.environ["HOSTNAME"]
     print(f"pod_name: {pod_name}")
@@ -118,6 +118,7 @@ while True:
     if index < 0:
         print("no more chunks")
         break
+    print(f"got index: {index}")
     entry = table[index]
     nrow = entry['nrow']
     ncol = entry['ncol']
