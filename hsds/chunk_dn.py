@@ -206,12 +206,13 @@ async def PUT_Chunk(request):
             log.debug(f"expect content_length: {num_elements*itemsize}")
         log.debug(f"actual content_length: {request.content_length}")
 
-        expected = num_elements*itemsize
         actual = request.content_length
-        if itemsize != 'H5T_VARIABLE' and expected != actual:
-            msg = f"Expected content_length of: {expected}, but got: {actual}"
-            log.error(msg)
-            raise HTTPBadRequest(reason=msg)
+        if itemsize != 'H5T_VARIABLE':
+            expected = num_elements*itemsize
+            if expected != actual:
+                msg = f"Expected content_length of: {expected}, but got: {actual}"
+                log.error(msg)
+                raise HTTPBadRequest(reason=msg)
 
         # create a numpy array for incoming data
         input_bytes = await request_read(request)
