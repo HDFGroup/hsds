@@ -53,7 +53,7 @@ def getNextChunkTableIndex(chunk_table):
 #
 
 if len(sys.argv) == 1 or sys.argv[1] in ("-h", "--help"):
-    print("usage: python hs_write.py filepath")
+    print("usage: python hs_write.py filepath [numtasks]")
     sys.exit(1)
 
 if 'LOG_LEVEL' in os.environ:
@@ -76,6 +76,12 @@ if sys.argv[1] == "-v":
 else:
     verbose = False
     filepath = sys.argv[1]
+
+if len(sys.argv) > 2:
+    numtasks = int(sys.argv[2])
+else:
+    # will run as long as there are tasks to pick up
+    numtasks = None
  
 print("filepath:", filepath)
 
@@ -102,6 +108,8 @@ dset = f["dset"]
 print("dset:", dset)
 print("dset chunks:", dset.chunks)
 print("chunk_size:", np.prod(dset.chunks)*dset.dtype.itemsize)
+if numtasks:
+    print("num tasks:", numtasks)
 
 table = f["task_list"]
 if "HOSTNAME" in os.environ:
@@ -131,6 +139,10 @@ while True:
     entry['done'] = time.time()
     entry['status'] = 1
     table[index] = entry
+    if numtasks:
+        numtasks -= 1
+        break
+
 
 f.close()
 print("done!")
