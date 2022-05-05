@@ -129,6 +129,8 @@ class LruCache(object):
             log.warning(f"LRU {self._name} removing dirty node: {key}")
             self._dirty_set.remove(key)
             self._dirty_size -= node._mem_size
+            if self._dirty_size < 0:
+                self._dirty_size = 0
 
     def __len__(self):
         """ Number of nodes in the cache """
@@ -181,8 +183,9 @@ class LruCache(object):
             if node._isdirty:
                 self._dirty_size += mem_delta
             node._last_access = time.time()
-            msg = f"LRU {self._name} updated node: {key} "
-            msg += f"[was {old_size} bytes now {node._mem_size} bytes]"
+            msg = f"LRU {self._name} updated node: {key}, "
+            msg += f"was {old_size} bytes now {node._mem_size} bytes, "
+            msg += f"dirty_size: {self._dirty_size}"
             log.debug(msg)
         else:
             node = Node(key, data, mem_size=mem_size)
@@ -203,7 +206,7 @@ class LruCache(object):
             log.debug(msg)
             if node._isdirty:
                 self._dirty_size += node._mem_size
-                msg = f"LRU {self._name} dirty size is now: {self._dirty_size}"
+                msg = f"LRU {self._name} dirty_size is now: {self._dirty_size}"
                 log.debug(msg)
 
             msg = f"LRU {self._name} added new node: {key} "
@@ -259,6 +262,7 @@ class LruCache(object):
             log.debug(f"LRU {self._name} removing node: {node._id}")
             self.__delitem__(node._id)
             node = next_node
+        self._dirty_size = 0
         # done clearCache
 
     def consistencyCheck(self):
@@ -323,6 +327,7 @@ class LruCache(object):
         node = self._moveToFront(key)
         if not node._isdirty:
             self._dirty_size += node._mem_size
+            log.debug(f"LRU {self._name} - update dirty_size to: {self._dirty_size}")
         node._isdirty = True
 
         self._dirty_set.add(key)
@@ -337,6 +342,7 @@ class LruCache(object):
         node = self._moveToFront(key)
         if node._isdirty:
             self._dirty_size -= node._mem_size
+        log.debug(f"LRU {self._name} dirty_size: {self._dirty_size}")
         node._isdirty = False
 
         if key in self._dirty_set:
@@ -382,6 +388,13 @@ class LruCache(object):
     @property
     def memUsed(self):
         return self._mem_size
+
+    @property
+    def memFree(self):
+        memFree = self._mem_target - self._dirty_size
+        if memFree < 0:
+            memFree = 0
+        return memFree
 
     @property
     def memTarget(self):

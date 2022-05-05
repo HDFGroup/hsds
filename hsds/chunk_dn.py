@@ -16,7 +16,7 @@
 #
 import numpy as np
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
-from aiohttp.web_exceptions import HTTPNotFound
+from aiohttp.web_exceptions import HTTPNotFound, HTTPServiceUnavailable
 from aiohttp.web import json_response, StreamResponse
 
 from .util.httpUtil import request_read, getContentType
@@ -95,6 +95,14 @@ async def PUT_Chunk(request):
 
     log.debug(f"PUT_Chunk - id: {chunk_id}")
 
+    # verify we have at least min_chunk_size free in the chunk cache
+    # otherwise, have the client try a bit later
+    chunk_cache = app["chunk_cache"]
+    min_chunk_size = int(config.get("min_chunk_size"))
+    if chunk_id not in chunk_cache and chunk_cache.memFree < min_chunk_size:
+        log.warn(f"PUT_Chunk {chunk_id} - not enough room in chunk cache - return 503 ")
+        raise HTTPServiceUnavailable()
+
     dset_id = getDatasetId(chunk_id)
 
     dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
@@ -102,12 +110,15 @@ async def PUT_Chunk(request):
     # TBD - does this work with linked datasets?
     dims = getChunkLayout(dset_json)
     rank = len(dims)
-
+  
     type_json = dset_json["type"]
     dt = createDataType(type_json)
-    itemsize = 'H5T_VARIABLE'
     if "size" in type_json:
         itemsize = type_json["size"]
+    else:
+        itemsize  = 'H5T_VARIABLE'
+
+    # TBD - cancel pending read if present?
 
     # get chunk selection from query params
     if "select" in params:
@@ -170,7 +181,7 @@ async def PUT_Chunk(request):
         if num_hits > 0:
             is_dirty = True
             # save chunk
-            save_chunk(app, chunk_id, dset_json, bucket=bucket)
+            save_chunk(app, chunk_id, dset_json, chunk_arr, bucket=bucket)
             status_code = 201
         # stream back response array
         read_resp = arrayToBytes(rsp_arr)
@@ -220,7 +231,7 @@ async def PUT_Chunk(request):
         # chunk update successful
         resp = {}
     if is_dirty or config.get("write_zero_chunks", default=False):
-        save_chunk(app, chunk_id, dset_json, bucket=bucket)
+        save_chunk(app, chunk_id, dset_json, chunk_arr, bucket=bucket)
         status_code = 201
     else:
         status_code = 200
@@ -545,7 +556,7 @@ async def POST_Chunk(request):
             log.warn(f"got value error from chunkWritePoints: {ve}")
             raise HTTPBadRequest()
         # lazily write chunk to storage
-        save_chunk(app, chunk_id, dset_json, bucket=bucket)
+        save_chunk(app, chunk_id, dset_json, chunk_arr, bucket=bucket)
     elif select:
         # hyperslab/fancy read selection
         try:

@@ -81,7 +81,8 @@ k8s_app_label: hsds  # The app label for k8s deployments
 k8s_namespace: null # Specifies if a the client should be limited to a specific namespace. Useful for some RBAC configurations.
 restart_policy: on-failure # Docker restart policy
 domain_req_max_objects_limit: 500  # maximum number of objects to return in GET domain request with use_cache
-dn_max_retries: 3  # number of time to retry DN requests
+# the following two values with give backof times of approx: 0.2, 0.4, 0.8, 1.6, 3.2, 6.4, 12.8
+dn_max_retries: 7  # number of time to retry DN requests
 dn_retry_backoff_exp: 0.1  # backoff factor for retries
 
 # DEPRECATED - the remaining config values are not used in currently but kept for backward compatibility with older container images

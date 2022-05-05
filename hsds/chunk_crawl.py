@@ -618,6 +618,7 @@ class ChunkCrawler:
         log.debug(msg)
         max_retries = config.get("dn_max_retries", default=3)
         retry_exp = config.get("dn_retry_backoff_exp", 0.1)
+        log.debug(f"ChunkCrawler - retry_exp: {retry_exp:.3f}")
         retry = 0
         status_code = None
         while retry < max_retries:
@@ -726,7 +727,7 @@ class ChunkCrawler:
                 log.error(f"ChunkCrawler action: {self._action} failed after: {retry} retries")
             else:
                 sleep_time = retry_exp * 2 ** retry + random.uniform(0, 0.1)
-                log.warn(f"ChunkCrawler.doWork retry: {retry} - sleeping for {sleep_time:.2f}")
+                log.warn(f"ChunkCrawler.doWork - retry: {retry}, sleeping for {sleep_time:.2f}")
                 await asyncio.sleep(sleep_time)
 
         # save status_code    

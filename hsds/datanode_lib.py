@@ -555,7 +555,6 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None,
     """
     # if the chunk cache has too many dirty items, wait till items
     # get flushed to S3
-    MAX_WAIT_TIME = 10.0  # TBD - make this a config
     chunk_cache = app['chunk_cache']
     if chunk_init and s3offset > 0:
         msg = f"unable to initiale chunk {chunk_id} for reference layouts "
@@ -696,6 +695,17 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None,
                 if chunk_id in pending_s3_read:
                     del pending_s3_read[chunk_id]
 
+        if chunk_arr is not None:
+            # check that there's room in the cache before adding it
+            if chunk_id in  chunk_cache or chunk_cache.memFree >= chunk_arr.size:
+                chunk_cache[chunk_id] = chunk_arr  # store in cache
+            else:
+                # no room in the cache, just skip caching
+                msg = "getChunk, cache utilization: "
+                msg += f"{chunk_cache.cacheUtilizationPercent}, "
+                msg += "skip cache for chunk_id {chunk_id}"
+                log.warn(msg)
+
         if chunk_arr is None and chunk_init:
             log.debug(f"Initializing chunk {chunk_id}")
             fill_value = getFillValue(dset_json)
@@ -709,32 +719,10 @@ async def get_chunk(app, chunk_id, dset_json, bucket=None, s3path=None,
                 chunk_arr = np.zeros(dims, dtype=dt, order='C')
         else:
             log.debug(f"Chunk {chunk_id} not found")
-
-        if chunk_arr is not None:
-            # check that there's room in the cache before adding it
-            if chunk_cache.memTarget - chunk_cache.memDirty < chunk_arr.size:
-                # no room in the cache, wait till space is freed by
-                # the s3sync task
-                wait_start = time.time()
-                free_space = 0
-                while free_space < chunk_arr.size:
-                    msg = "getChunk, cache utilization: "
-                    msg += f"{chunk_cache.cacheUtilizationPercent}, "
-                    msg += "sleeping till items are flushed"
-                    log.warn(msg)
-                    if time.time() - wait_start > MAX_WAIT_TIME:
-                        msg = f"unable to save chunk {chunk_id} to "
-                        msg += "cache returning 503 error"
-                        log.warn(msg)
-                        raise HTTPServiceUnavailable()
-                    await asyncio.sleep(1)
-                    free_space = chunk_cache.memTarget - chunk_cache.memDirty
-
-            chunk_cache[chunk_id] = chunk_arr  # store in cache
+    
     return chunk_arr
 
-
-def save_chunk(app, chunk_id, dset_json, bucket=None):
+def save_chunk(app, chunk_id, dset_json, chunk_arr, bucket=None):
     """ Persist the given chunk """
     log.info(f"save_chunk {chunk_id} bucket={bucket}")
 
@@ -745,17 +733,26 @@ def save_chunk(app, chunk_id, dset_json, bucket=None):
         raise HTTPInternalServerError()
 
     item_size = getItemSize(dset_json['type'])
-
-    chunk_cache = app["chunk_cache"]
-    try:
-        chunk_cache.setDirty(chunk_id)
-        log.info(f"chunk cache dirty count: {chunk_cache.dirtyCount}")
-    except KeyError:
-        log.warn(f"save_chunk {chunk_id} not found in chunk_cache, setDirty failed")
-
     # will store filter options into app['filter_map']
     getFilterOps(app, dset_json, item_size)
 
+    chunk_cache = app["chunk_cache"]
+    if chunk_id not in chunk_cache:
+        # check that we have enough room to store the chunk
+        # TBD: there could be issues with the free space calculation
+        # not working precisely with variable types
+        log.debug(f"chunk_cache free space: {chunk_cache.memFree}")
+        if chunk_cache.memFree < chunk_arr.size:
+            msg = f"unable to save chunk: {chunk_id}, "
+            msg += f"chunk_cache free space: {chunk_cache.memFree}, "
+            msg += f"chunk_size:{chunk_arr.size}"
+            log.warn(msg)
+            raise HTTPServiceUnavailable()
+
+    chunk_cache[chunk_id] = chunk_arr
+    chunk_cache.setDirty(chunk_id)
+    log.debug(f"chunk cache dirty count: {chunk_cache.dirtyCount}")
+    
     # async write to S3
     dirty_ids = app["dirty_ids"]
     now = time.time()
@@ -897,6 +894,7 @@ async def s3sync(app, s3_age_time=0):
 async def s3syncCheck(app):
     s3_sync_interval = config.get("s3_sync_interval")
     s3_age_time = config.get("s3_age_time", default=1)
+    last_update = time.time()
     if app["node_state"] != "TERMINATING":
         s3_dirty_age_to_write = config.get("s3_dirty_age_to_write", default=20)
         log.debug(f"s3sync - s3_dirty_age_to_write is {s3_dirty_age_to_write}")
@@ -932,10 +930,16 @@ async def s3syncCheck(app):
 
         if update_count > 0:
             log.debug("s3syncCheck short sleep")
+            last_update = time.time()
             # give other tasks a chance to run
             await asyncio.sleep(0)
         else:
+            last_update_delta = time.time() - last_update
+            if last_update_delta > s3_sync_interval:
+                sleep_time = s3_sync_interval
+            else:
+                sleep_time = last_update_delta
             msg = "s3syncCheck no objects to write, "
-            msg += f"sleeping for {s3_sync_interval}"
+            msg += f"sleeping for {sleep_time:.2f}"
             log.info(msg)
-            await asyncio.sleep(s3_sync_interval)
+            await asyncio.sleep(sleep_time)

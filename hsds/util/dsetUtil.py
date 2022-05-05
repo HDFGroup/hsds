@@ -617,7 +617,6 @@ def getDsetMaxDims(dset_json):
     return maxdims
 
 
-
 def getChunkLayout(dset_json):
     """ Get chunk layout.  Throw 500 if used with non-H5D_CHUNKED layout
     """
