@@ -23,7 +23,7 @@ _HELP_USAGE = "Starts hsds a REST-based service for HDF5 data."
 
 _HELP_EPILOG = """Examples:
 
-- with openio/sds data storage:
+- with minio data storage:
 
   hsds --s3-gateway http://localhost:6007 --access-key-id demo:demo
       --secret-access-key DEMO_PASS --password-file ./admin/config/passwd.txt

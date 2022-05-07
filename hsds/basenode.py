@@ -24,8 +24,6 @@ from aiohttp.web import Application
 from aiohttp.web_exceptions import HTTPNotFound, HTTPGone
 from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPServiceUnavailable
-from aiohttp.client_exceptions import ClientError
-from asyncio import CancelledError
 
 from . import config
 from .util.httpUtil import http_get, http_post, jsonResponse
@@ -97,82 +95,6 @@ async def get_info(app, url):
         log.warn(f"uncaught exception in get_info: {e}")
 
     return rsp_json
-
-
-async def oio_update_dn_info(app):
-    """ talk to conscience to get DN info """
-    oio_proxy = app["oio_proxy"]
-    if "HOST_IP" not in os.environ:
-        log.error("expected to find HOST_IP env variable")
-        return
-
-    node_ip = os.environ["HOST_IP"]
-    node_type = app["node_type"]
-    if node_type not in ("sn", "dn"):
-        log.error("unexpected node type")
-        return
-    service_name = "hdf" + node_type
-    req = oio_proxy + "/v3.0/OPENIO/conscience/register"
-
-    body = {
-        "addr": node_ip + ":" + str(app["node_port"]),
-        "tags": {"stat.cpu": 100, "tag.up": True},
-        "type": service_name
-    }
-    log.debug(f"conscience register: body: {body}")
-    try:
-        await http_post(app, req, data=body)
-    except ClientError as client_exception:
-        msg = "got ClientError registering with oio_proxy: "
-        msg += f"{client_exception} and body {body}"
-        log.error(msg)
-        return
-    except CancelledError as cancelled_exception:
-        msg = "got CancelledError registering with oio_proxy: "
-        msg += f"{cancelled_exception} and body {body}"
-        log.error(msg)
-        return
-    log.info("oio registration successful")
-
-    # get list of DN containers
-    req = oio_proxy + "/v3.0/OPENIO/conscience/list?type=hdfdn"
-    try:
-        dn_node_list = await http_get(app, req)
-    except ClientError as client_exception:
-        msg = "got ClientError listing dn nodes with oio_proxy: "
-        msg += f"{client_exception}"
-        log.error(msg)
-        return
-    except CancelledError as cancelled_exception:
-        msg = "got CancelledError listing dn nodes with oio_proxy: "
-        msg += f"{cancelled_exception}"
-        log.error(msg)
-        return
-    except BaseException as error:
-        log.error(f"A BaseException occurred: {error}")
-        return
-    log.info(f"got {len(dn_node_list)} conscience list items")
-    # create map keyed by dn addr
-    dn_urls = []
-    for dn_node in dn_node_list:
-        log.debug(f"checking dn conscience list item: {dn_node}")
-        if "addr" not in dn_node:
-            log.warn(f"conscience list item with no addr: {dn_node}")
-            continue
-        addr = dn_node["addr"]
-        if "score" not in dn_node:
-            log.warn(f'conscience list item with no score key: {dn_node}')
-            continue
-        if dn_node["score"] <= 0:
-            log.debug(f"zero score - skipping conscience list addr: {addr}")
-            continue
-        log.debug(f"oio_get_dn_urls - adding address: {addr}")
-        dn_urls.append("http://" + addr)
-
-    app["dn_urls"] = dn_urls
-
-    log.info(f"done with oio_update_dn_info, got: {len(dn_urls)} dn urls")
-
 
 async def k8s_update_dn_info(app):
     """ update dn urls by querying k8s api.
@@ -265,10 +187,7 @@ async def update_dn_info(app):
 
     id_set_pre = get_dn_id_set(app)
 
-    if "oio_proxy" in app:
-        #  Using OpenIO consicience daemons
-        await oio_update_dn_info(app)
-    elif "is_k8s" in app and not getHeadUrl(app):
+    if "is_k8s" in app and not getHeadUrl(app):
         await k8s_update_dn_info(app)
     else:
         # docker or kubernetes running with head container
@@ -624,9 +543,6 @@ def baseInit(node_type):
         msg += "setting is_dcos to True"
         log.info(msg)
         app["is_dcos"] = True
-    elif "OIO_PROXY" in os.environ:
-        app["oio_proxy"] = os.environ["OIO_PROXY"]
-        # will set node_ip at registration time
     elif "KUBERNETES_SERVICE_HOST" in os.environ:
         # indicates we are running in a k8s cluster 
         log.info("running in kubernetes")
