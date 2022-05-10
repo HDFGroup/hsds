@@ -10,15 +10,19 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import unittest
+import logging
 import sys
 
 sys.path.append('../..')
-from hsds.util.dsetUtil import  getHyperslabSelection, getSelectionShape, getSelectionList, ItemIterator
+from hsds.util.dsetUtil import getHyperslabSelection, getSelectionShape
+from hsds.util.dsetUtil import getSelectionList, ItemIterator, getSelectionPagination
 
 class DsetUtilTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(DsetUtilTest, self).__init__(*args, **kwargs)
         # main
+        self.logger = logging.getLogger()
+        self.logger.setLevel(logging.WARNING)
 
     def testGetHyperslabSelection(self):
         # getHyperslabSelection(dsetshape, start, stop, step)
@@ -90,7 +94,124 @@ class DsetUtilTest(unittest.TestCase):
         shape = getSelectionShape(sel)
         self.assertEqual(shape, [100,1,3])
 
+    def testGetSelectionPagination(self):
+        itemsize = 4  # will use 4 for most tests
+
+        # 1D case
+
+        datashape = [200,]
+        max_request_size = 120
+        select = [(slice(0,20)),]  # 80 byte selection
+        # should return one page equivalent to original selection
+        pages = getSelectionPagination(select, datashape, itemsize, max_request_size)
+        self.assertEqual(len(pages), 1)
+        page = pages[0]
+        self.assertEqual(len(page), 1)
+        s = page[0]
+        self.assertEqual(s.start, 0)
+        self.assertEqual(s.stop, 20)
+            
+        select = [(slice(0,200)),]  # 800 byte selection
+        # should create 7 pages
+        pages = getSelectionPagination(select, datashape, itemsize, max_request_size)
+        self.assertEqual(len(pages), 7)
+        start = 0
+        # verify pages are contiguous
+        for page in pages:
+            self.assertEqual(len(page), 1)
+            s = page[0]
+            self.assertTrue(isinstance(s, slice))
+            self.assertEqual(s.start, start)
+            self.assertEqual(s.step, 1)
+            self.assertTrue(s.stop > s.start)
+            start = s.stop
+        self.assertEqual(s.stop, 200)
+
+        select = [(slice(0,200, 8)),]  # 80 byte selection
+        # should create 1 page
+        pages = getSelectionPagination(select, datashape, itemsize, max_request_size)
+        self.assertEqual(len(pages), 1)
+        page = pages[0]
+        self.assertEqual(len(page), 1)
+        s = page[0]
+        self.assertTrue(isinstance(s, slice))
+        self.assertEqual(s.start, 0)
+        self.assertEqual(s.stop, 200)
+        self.assertEqual(s.step, 8)
+
+        select = [(slice(0, 195, 4)),]  # 156 byte selection
+        # should create 2 pages
+        pages = getSelectionPagination(select, datashape, itemsize, max_request_size)
+        self.assertEqual(len(pages), 2)
+        start = 0
+        for page in pages:
+            self.assertEqual(len(page), 1)
+            s = page[0]
+            self.assertTrue(isinstance(s, slice))
+            self.assertEqual(s.start, start)
+            self.assertEqual(s.start % 4, 0)  # start value always falls in step intervals
+            self.assertEqual(s.step, 4)
+            self.assertTrue(s.stop > s.start+4)
+            start = s.stop
+
+
+        coords = []
+        for i in range(50):
+            coords.append(i*4)
+        select = [coords,]  # 160 byte coordinate selection
+        pages = getSelectionPagination(select, datashape, itemsize, max_request_size)
+        self.assertEqual(len(pages), 2)
+        for page in pages:
+            self.assertEqual(len(page), 1)
+            s = page[0]
+            self.assertTrue(isinstance(s, tuple))
+            self.assertTrue(len(s) > 20)
+
+        # 2D case
+
+        datashape = [200,300]
+        max_request_size = 1000
+        select = [(slice(0,10)), (slice(0,20))]  # 800 byte selection
+        # should return one page equivalent to original selection
+        pages = getSelectionPagination(select, datashape, itemsize, max_request_size)
+        self.assertEqual(len(pages), 1)
+        page = pages[0]
+        self.assertEqual(len(page), 2)
+         
+        for i in range(2):
+            self.assertEqual(page[i].start, select[i].start)
+            self.assertEqual(page[i].stop, select[i].stop)
+
+        select = [(slice(20,60)), (slice(0,20))]  # 3200 byte selection
+        # should return one page equivalent to original selection
+        pages = getSelectionPagination(select, datashape, itemsize, max_request_size)
+        self.assertEqual(len(pages), 4)
+        start = 20
+        for page in pages:
+            self.assertEqual(len(page), 2)
+            self.assertEqual(page[0].start, start)
+            # second dimension shouldn't change
+            self.assertEqual(page[1].start, select[1].start)
+            self.assertEqual(page[1].stop, select[1].stop)
+            start = page[0].stop
+        self.assertEqual(start, select[0].stop)
+
+        select = [(40,), (slice(0,300))]  # 1200 byte selection
+        pages = getSelectionPagination(select, datashape, itemsize, max_request_size)
+        self.assertEqual(len(pages), 2)
+        start = 0
+
+        # pagination should happen along the second dimension,
+        # since there's only one coordinate in the first
+        for page in pages:
+            self.assertEqual(len(page), 2)
+            self.assertEqual(page[1].start, start)
+            # second dimension shouldn't change
+            self.assertEqual(page[0], (40,))
+            start = page[1].stop
+        self.assertEqual(start, select[1].stop)
     
+
     def testItemIterator(self):
         # 1-D case
         datashape = [10,]
@@ -374,12 +495,6 @@ class DsetUtilTest(unittest.TestCase):
             self.assertTrue(False)
         except ValueError:
             pass # expected
-
-
-
-
-
-
 
 
 if __name__ == '__main__':
