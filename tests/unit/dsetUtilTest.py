@@ -98,7 +98,7 @@ class DsetUtilTest(unittest.TestCase):
         itemsize = 4  # will use 4 for most tests
 
         # 1D case
-
+        
         datashape = [200,]
         max_request_size = 120
         select = [(slice(0,20)),]  # 80 byte selection
@@ -114,7 +114,7 @@ class DsetUtilTest(unittest.TestCase):
         select = [(slice(0,200)),]  # 800 byte selection
         # should create 7 pages
         pages = getSelectionPagination(select, datashape, itemsize, max_request_size)
-        self.assertEqual(len(pages), 7)
+        self.assertEqual(len(pages), 8)
         start = 0
         # verify pages are contiguous
         for page in pages:
@@ -124,6 +124,8 @@ class DsetUtilTest(unittest.TestCase):
             self.assertEqual(s.start, start)
             self.assertEqual(s.step, 1)
             self.assertTrue(s.stop > s.start)
+            count = s.stop - s.start
+            self.assertTrue(count*itemsize < max_request_size)
             start = s.stop
         self.assertEqual(s.stop, 200)
 
@@ -140,7 +142,7 @@ class DsetUtilTest(unittest.TestCase):
         self.assertEqual(s.step, 8)
 
         select = [(slice(0, 195, 4)),]  # 156 byte selection
-        # should create 2 pages
+        # should create 4 pages
         pages = getSelectionPagination(select, datashape, itemsize, max_request_size)
         self.assertEqual(len(pages), 2)
         start = 0
@@ -152,6 +154,8 @@ class DsetUtilTest(unittest.TestCase):
             self.assertEqual(s.start % 4, 0)  # start value always falls in step intervals
             self.assertEqual(s.step, 4)
             self.assertTrue(s.stop > s.start+4)
+            count = (s.stop - s.start) // 4
+            self.assertTrue(count*itemsize < max_request_size)
             start = s.stop
 
 
@@ -160,12 +164,18 @@ class DsetUtilTest(unittest.TestCase):
             coords.append(i*4)
         select = [coords,]  # 160 byte coordinate selection
         pages = getSelectionPagination(select, datashape, itemsize, max_request_size)
+        print("pages:", pages)
         self.assertEqual(len(pages), 2)
         for page in pages:
             self.assertEqual(len(page), 1)
             s = page[0]
             self.assertTrue(isinstance(s, tuple))
+            count = len(s)
+            print("count:", count)
             self.assertTrue(len(s) > 20)
+            self.assertTrue(count*itemsize <= max_request_size)
+            
+
 
         # 2D case
 
@@ -210,6 +220,25 @@ class DsetUtilTest(unittest.TestCase):
             self.assertEqual(page[0], (40,))
             start = page[1].stop
         self.assertEqual(start, select[1].stop)
+        itemsize = 2
+        datashape = (1300, 1300, 1300)
+        max_request_size = 100*1024*1024
+        select = [(slice(0,1300)), (slice(0,1300)), (slice(0,1300))]  # 4.1GB selection
+        pages = getSelectionPagination(select, datashape, itemsize, max_request_size)
+        self.assertEqual(len(pages), 44)
+        start = 0
+        for page in pages:
+            print(page)
+            self.assertEqual(len(page), 3)
+            self.assertEqual(page[0].start, start)
+            self.assertEqual(page[1], slice(0, 1300))
+            self.assertEqual(page[2], slice(0, 1300))
+            page_size = (page[0].stop - page[0].start) * 1300 * 1300 * 2
+            self.assertTrue(page_size < max_request_size)
+            start = page[0].stop
+
+        
+
     
 
     def testItemIterator(self):

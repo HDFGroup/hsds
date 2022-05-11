@@ -535,15 +535,18 @@ def getSelectionPagination(select, dims, itemsize, max_request_size):
     """ 
     Paginate a select tupe into multiple selects where each 
         select requires less than max_request_size bytes """
+    msg = f"getSelectionPagination - select: {select}, dims: {dims}, "
+    msg += f"itemsize: {itemsize}, max_request_size: {max_request_size}"
+    log.debug(msg)
     select_shape = getSelectionShape(select)
+    log.debug(f"getSelectionPagination - select_shape: {select_shape}")
     select_size = np.prod(select_shape) * itemsize
-    log.debug(f"select_size: {select_size}")
+    log.debug(f"getSelectionPagination - select_size: {select_size}")
     if select_size <= max_request_size:
         # No need to paginate, just return select as as a one item tuple
+        log.debug("getSelectionPagination - not needed")
         return (select,)
-    # get the desired number of pages by doing fractional dev with ceil
-    page_count =  -(-select_size // max_request_size)
-    log.debug(f"page_count: {page_count}")
+
     # get pagination dimension - first dimension with > 1 extent
     rank = len(dims)
     paginate_dim = None
@@ -558,10 +561,6 @@ def getSelectionPagination(select, dims, itemsize, max_request_size):
                 step = 1
             if s.stop > s.start:
                 paginate_extent = s.stop - s.start
-            #if step > 1:
-            #    paginate_extent //= step
-            #if (s.stop - s.start) % step != 0:
-            #    paginate_extent += 1
         else:
             # coordinate list
             paginate_extent = len(s)
@@ -572,15 +571,29 @@ def getSelectionPagination(select, dims, itemsize, max_request_size):
         msg = "unable to determine pagination dimension"
         log.warn(msg)
         raise ValueError(msg)
+    log.debug(f"getSelectionPagination - using pagination dimension: {paginate_dim}")
+    
+    # get the approx bytes per page by doing fractional dev with ceil
+    page_count = select_size // max_request_size
+    page_count += 1  # round up by one
+    log.debug(f"getSelectionPagination - page_count: {page_count}")
+    page_size =  select_size // page_count
+    log.debug(f"getSelectionPagination - page_size: {page_size}")
+    
     s = select[paginate_dim]
     #log.debug(f"pagination dim: {paginate_dim} select: {s} paginate_extent: {paginate_extent}")
+    #page_extent = -(-max_request_size // page_size)
+    #log.debug(f"getSelectionPagination - page_extent: {page_extent}")
+    #page_count = -(-paginate_extent // page_extent)
     if paginate_extent < page_count:
         msg = f"select pagination unable to paginate select dim: {paginate_dim} into {page_count} pages"
         log.warn(msg)
         raise ValueError(msg)
-    paginate_slices = []
     page_extent = paginate_extent // page_count
-    log.debug(f"page_extent: {page_extent}")
+    if page_extent < 1:
+        page_extent = 1
+    log.debug(f"getSelectionPagination - page_extent: {page_extent}")
+    paginate_slices = []
     if isinstance(s,slice):
         start = s.start
         if s.step and s.stop > 1:
@@ -588,9 +601,7 @@ def getSelectionPagination(select, dims, itemsize, max_request_size):
         else:
             step = 1
          
-        for i in range(page_count):
-            if start >= s.stop:
-                break
+        while start < s.stop:
             stop = start + page_extent
             if stop % step != 0:
                 # adjust to fall on step boundry
@@ -599,26 +610,24 @@ def getSelectionPagination(select, dims, itemsize, max_request_size):
                 log.debug(f"post-step adjust stop: {stop}")
             if stop > s.stop:
                 stop = s.stop
-            if i == page_count - 1:
-                # adjust the last slice to match the original selection
-                stop = s.stop
             paginate_slices.append(slice(start, stop, step))
             start = stop
     else:
         # coordinate list
         start = 0 # first index
-        for i in range(page_count):
-            if start >= len(s):
-                break
+        while start < len(s):
             stop = start + page_extent
             if stop > len(s):
                 stop = len(s)
-            elif i == rank-1:
-                stop = len(s)  # don't leve any stray coordinates
+            log.debug(f"page_coord s[{start}:{stop}]")
             page_coord = s[start:stop]
-            paginate_slices.append(tuple(page_coord[start:stop]))
+            log.debug(f"page coords: {page_coord}")
+            paginate_slices.append(tuple(page_coord))
+            start = stop
+    # adjust page count to number to actual pagination
+    page_count = len(paginate_slices)
         
-    #log.debug(f"got paginate_slices: {paginate_slices}")
+    log.debug(f"got {page_count} paginate_slices")
     # return paginated selection list using paginate_slices for pagination
     # dimension, original selection for each other dimension
     pagination = []
@@ -797,7 +806,7 @@ def isExtensible(dims, maxdims):
     """
     if maxdims is None or len(dims) == 0:
         return False
-    log.debug("isExtensible - dims: {} maxdims: {}".format(dims, maxdims))
+    log.debug(f"isExtensible - dims: {dims} maxdims: {maxdims}")
     rank = len(dims)
     if len(maxdims) != rank:
         raise ValueError("rank of maxdims does not match dataset")

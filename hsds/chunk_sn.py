@@ -28,7 +28,7 @@ from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain
 from .util.hdf5dtype import getItemSize, createDataType
 from .util.dsetUtil import getSelectionList, isNullSpace  
-from .util.dsetUtil import getFillValue, isExtensible
+from .util.dsetUtil import getFillValue, isExtensible, getSelectionPagination
 from .util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout 
 from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId
 from .util.chunkUtil import getChunkIndex, getChunkSuffix, checkQuery
@@ -46,6 +46,8 @@ from . import hsds_logger as log
 CHUNK_REF_LAYOUTS = ('H5D_CONTIGUOUS_REF',
                      'H5D_CHUNKED_REF',
                      'H5D_CHUNKED_REF_INDIRECT')
+
+VARIABLE_AVG_ITEM_SIZE = 512  # guess at avg variable type length
 
 
 def get_hrefs(request, dset_json):
@@ -122,7 +124,7 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
 
     datashape = dset_json["shape"]
     datatype = dset_json["type"]
-    if datashape["class"] == 'H5S_NULL':
+    if isNullSpace(dset_json):
         log.error("H5S_NULL shape class used with reference chunk layout")
         raise HTTPInternalServerError()
     dims = getShapeDims(datashape)
@@ -895,6 +897,11 @@ async def GET_Value(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
+    datashape = dset_json["shape"] 
+    dims = getShapeDims(datashape)
+    log.debug(f"dset shape: {dims}")
+    rank = len(dims)
+
     layout = getChunkLayout(dset_json)
     log.debug(f"chunk layout: {layout}")
     if "shm_name" in params and params["shm_name"]:
@@ -927,46 +934,54 @@ async def GET_Value(request):
         ignore_nan = False
     log.debug(f"ignore nan: {ignore_nan}")
 
-    content_length = None
     query = params.get("query")
     if query:
         if not checkQuery(query, dset_dtype):
             msg = f"query: {query} is not valid"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-    else:
-        # for non query requests with non-variable types we can fetch 
-        # the expected response bytes length now
-        item_size = getItemSize(type_json)
-        log.debug(f"item size: {item_size}")
-
-        # get the shape of the response array
-        np_shape = getSelectionShape(slices)
-        log.debug(f"selection shape: {np_shape}")
-
-        # check that the array size is reasonable
-        request_size = np.prod(np_shape)
-        if item_size == 'H5T_VARIABLE':
-            request_size *= 512  # random guess of avg item_size
-        else:
-            request_size *= item_size
-        log.debug(f"request_size: {request_size}")
-        max_request_size = int(config.get("max_request_size"))
-        if request_size >= max_request_size:
-            msg = "GET value request too large"
-            log.warn(msg)
-            raise HTTPRequestEntityTooLarge(request_size, max_request_size)
-        if item_size != 'H5T_VARIABLE':
-            # this is the exact number of bytes to be returned
-            content_length = request_size
 
     if shm_name:
         response_type = "json"
     else:
         response_type = getAcceptType(request)
 
+    if response_type == "binary" and rank > 0:
+        stream_pagination = True
+        log.debug("use stream_pagination")
+    else:
+        stream_pagination = False 
+        log.debug("no stream_pagination")
+    
+    # for non query requests with non-variable types we can fetch 
+    # the expected response bytes length now
+    item_size = getItemSize(type_json)
+    log.debug(f"item size: {item_size}")
+
+    # get the shape of the response array
+    np_shape = getSelectionShape(slices)
+    log.debug(f"selection shape: {np_shape}")
+
+    # check that the array size is reasonable
+    request_size = np.prod(np_shape)
+    if item_size == 'H5T_VARIABLE':
+        request_size *= VARIABLE_AVG_ITEM_SIZE  # random guess of avg item_size
+    else:
+        request_size *= item_size
+    log.debug(f"request_size: {request_size}")
+    max_request_size = int(config.get("max_request_size"))
+    if request_size >= max_request_size and not stream_pagination:
+        msg = "GET value request too large"
+        log.warn(msg)
+        raise HTTPRequestEntityTooLarge(request_size, max_request_size)
+    if item_size != 'H5T_VARIABLE' and not query:
+        # this is the exact number of bytes to be returned
+        content_length = request_size
+    else:
+        content_length = None
+
+    
     resp_json = {"status": 200}  # will over-write if there's a problem
-    arr = None
     # write response
     try:
         resp = StreamResponse()
@@ -983,6 +998,64 @@ async def GET_Value(request):
             resp.headers['Content-Type'] = "application/json"
         log.debug("prepare request")
         await resp.prepare(request)
+
+        if stream_pagination:
+            # example
+            # get binary data a page at a time and write back to response
+            if item_size == 'H5T_VARIABLE':
+                page_item_size = VARIABLE_AVG_ITEM_SIZE  # random guess of avg item_size
+            else:
+                page_item_size = item_size
+            pages = getSelectionPagination(slices, dims, page_item_size, (max_request_size // 2))
+            log.debug(f"getSelectionPagination returned: {len(pages)} pages")
+            bytes_streamed = 0
+            try:
+                for page_number in range(len(pages)):
+                    page = pages[page_number]
+                    log.info(f"streaming data for page: {page_number+1} of {len(pages)}, selection: {page}")
+                    arr = await getSelectionData(app,
+                           dset_id,
+                           dset_json, 
+                           page, 
+                           query=query,
+                           bucket=bucket,
+                           limit=limit,
+                           method=request.method)
+
+                    if arr is None or np.prod(arr.shape) == 0:
+                        log.warn(f"no data returend for streaming page: {page_number}")
+                        continue
+
+                    log.debug("preparing binary response")
+                    output_data = arrayToBytes(arr)
+                    log.debug(f"got {len(output_data)} bytes for resp")
+                    bytes_streamed += len(output_data)
+                    log.debug("write request")
+                    await resp.write(output_data)
+
+                    if query and limit > 0:
+                        query_rows = arr.shape[0]
+                        log.debug(f"streaming page {page_number} returned {query_rows} rows")
+                        limit -= query_rows
+                        if limit <= 0:
+                            log.debug("skipping remaining pages, query limit reached")
+                            break
+
+            except HTTPException as he:
+                # close the response stream
+                log.error(f"got {type(he)} exception doing getSelectionData: {he}")
+                resp_json["status"] = he.status_code
+                # can't raise a HTTPException here since write is in progress
+                # 
+            finally:
+                log.info(f"streaming data for {len(pages)} pages complete, {bytes_streamed} bytes written")
+                await resp.write_eof()
+                return resp
+
+        # 
+        # non-paginated response
+        #
+                          
 
         try:
             arr = await getSelectionData(app, 

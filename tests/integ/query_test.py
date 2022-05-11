@@ -321,6 +321,7 @@ class QueryTest(unittest.TestCase):
         # read a selection
         req = self.endpoint + "/datasets/" + dset_id + "/value"
         params = {'query': "stock_symbol == b'AAPL'" } # query for AAPL
+        params['select'] = "[0:1000000]" # search over just first 1MM rows
         rsp = self.session.get(req, params=params, headers=headers)
 
         self.assertEqual(rsp.status_code, 200)
@@ -328,7 +329,7 @@ class QueryTest(unittest.TestCase):
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
         readData = rspJson["value"]
-        self.assertEqual(len(readData), 8813)
+        self.assertEqual(len(readData), 3902)
         item = readData[0]
         self.assertEqual(item[0], 128912)
         self.assertEqual(item[1], "1980.12.12")
