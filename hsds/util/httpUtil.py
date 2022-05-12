@@ -214,7 +214,7 @@ async def release_http_client(app):
         app["socket_clients"] = {}
 
 
-async def request_read(request) -> bytes:
+async def request_read(request, count=None) -> bytes:
     """
     Replacement for aiohttp Request.read using our max request limit
     Read request body if present.
@@ -226,7 +226,11 @@ async def request_read(request) -> bytes:
         body = bytearray()
         max_request_size = int(config.get("max_request_size"))
         while True:
-            chunk = await request._payload.readany()
+            if count is not None:
+                chunk = await request._payload.readexactly(count)
+                count -= len(chunk)
+            else:
+                chunk = await request._payload.readany()
             body.extend(chunk)
             body_size = len(body)
             if body_size >= max_request_size:
@@ -235,6 +239,8 @@ async def request_read(request) -> bytes:
                         actual_size=body_size
                     )
             if not chunk:
+                break
+            if count is not None and count <= 0:
                 break
         request._read_bytes = bytes(body)
     return request._read_bytes

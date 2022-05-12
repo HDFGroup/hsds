@@ -16,6 +16,7 @@
 from multiprocessing import shared_memory
 import base64
 import numpy as np
+from asyncio import IncompleteReadError
 from aiohttp.web_exceptions import HTTPException, HTTPBadRequest
 from aiohttp.web_exceptions import HTTPRequestEntityTooLarge
 from aiohttp.web_exceptions import HTTPConflict, HTTPInternalServerError
@@ -439,6 +440,7 @@ async def PUT_Value(request):
     type_json = dset_json["type"]
     dset_dtype = createDataType(type_json)
     item_size = getItemSize(type_json)
+    max_request_size = int(config.get("max_request_size"))
     
     if query:
         # divert here if we are doing a put query
@@ -491,12 +493,12 @@ async def PUT_Value(request):
             except Exception as e:
                 log.error(f"Exception during binary data write: {e}")
         else:
-            log.debug("POST Value - returning JSON data")
+            log.debug("PUT Value query - returning JSON data")
             rsp_json = {}
             data = arr_rsp.tolist()
             log.debug(f"got rsp data {len(data)} points")
-            json_data = bytesArrayToList(data)
-            rsp_json["value"] = json_data
+            json_query_data = bytesArrayToList(data)
+            rsp_json["value"] = json_query_data
             rsp_json["hrefs"] = get_hrefs(request, dset_json)
             resp = await jsonResponse(request, rsp_json)
         log.response(request, resp=resp)
@@ -505,10 +507,33 @@ async def PUT_Value(request):
     # Resume regular PUT_Value processing without query update
     dset_dtype = createDataType(type_json)  # np datatype
     binary_data = None
-    np_shape = None  # expected shape of input data
     points = None  # used for point selection writes
     np_shape = []  # shape of incoming data
     slices = []    # selection area to write to
+
+    # body could also contain a point selection specifier
+    if body and "points" in body:
+        if append_rows:
+            msg = "points not valid with append update"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+        json_points = body["points"]
+        num_points = len(json_points)
+        if rank == 1:
+            point_shape = (num_points,)
+            log.info(f"rank 1: point_shape: {point_shape}")
+        else:
+            point_shape = (num_points, rank)
+            log.info(f"rank >1: point_shape: {point_shape}")
+        try:
+            # use uint64 so we can address large array extents
+            dt = np.dtype(np.uint64)
+            points = jsonToArray(point_shape, dt, json_points)
+        except ValueError:
+            msg = "Bad Request: point list not valid for dataset shape"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
 
     if append_rows:
         # shape must be extensible
@@ -533,13 +558,9 @@ async def PUT_Value(request):
         dims = getShapeDims(dset_json["shape"])
 
     if request_type == "json":
-        body_json = body
-    else:
-        body_json = None
-
-    if request_type == "json":
         if "value" in body:
             json_data = body["value"]
+            
         elif "value_base64" in body:
             base64_data = body["value_base64"]
             base64_data = base64_data.encode("ascii")
@@ -548,55 +569,37 @@ async def PUT_Value(request):
             msg = "PUT value has no value or value_base64 key in body"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-
-        # body could also contain a point selection specifier
-        if "points" in body:
-            if append_rows:
-                msg = "points not valid with packet update"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-
-            json_points = body["points"]
-            num_points = len(json_points)
-            if rank == 1:
-                point_shape = (num_points,)
-                log.info(f"rank 1: point_shape: {point_shape}")
-            else:
-                point_shape = (num_points, rank)
-                log.info(f"rank >1: point_shape: {point_shape}")
-            try:
-                # use uint64 so we can address large array extents
-                dt = np.dtype(np.uint64)
-                points = jsonToArray(point_shape, dt, json_points)
-            except ValueError:
-                msg = "Bad Request: point list not valid for dataset shape"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
     else:
         # read binary data
         log.info(f"request content_length: {request.content_length}")
-        max_request_size = int(config.get("max_request_size"))
+
         if isinstance(request.content_length, int):
             if request.content_length >= max_request_size:
-                msg = f"Request size too large: {request.content_length} "
-                msg += f"max: {max_request_size}"
-                log.warn(msg)
-                raise HTTPRequestEntityTooLarge(request.content_length,
+                if item_size == 'H5T_VARIABLE':
+                    msg = f"Request size {request.content_length} too large "
+                    msg += f"for variable length data, max: {max_request_size}"
+                    log.warn(msg)
+                    raise HTTPRequestEntityTooLarge(request.content_length,
                                                 max_request_size)
+                else:
+                    log.info(f"will paginate over large request with {request.content_length} bytes")     
 
-        try:
-            binary_data = await request_read(request)
-        except HTTPRequestEntityTooLarge as tle:
-            msg = "Got HTTPRequestEntityTooLarge exception during "
-            msg += f"binary read: {tle})"
-            log.warn(msg)
-            raise  # re-throw
+        if item_size == 'H5T_VARIABLE':
+            # read the request data now
+            # TBD: support streaming for variable types
+            try:
+                binary_data = await request_read(request)
+            except HTTPRequestEntityTooLarge as tle:
+                msg = "Got HTTPRequestEntityTooLarge exception during "
+                msg += f"binary read: {tle})"
+                log.warn(msg)
+                raise  # re-throw
 
-        if len(binary_data) != request.content_length:
-            msg = f"Read {len(binary_data)} bytes, expecting: "
-            msg += f"{request.content_length}"
-            log.error(msg)
-            raise HTTPBadRequest(reason=msg)
+            if len(binary_data) != request.content_length:
+                msg = f"Read {len(binary_data)} bytes, expecting: "
+                msg += f"{request.content_length}"
+                log.error(msg)
+                raise HTTPBadRequest(reason=msg)
 
     if append_rows:
         for i in range(rank):
@@ -609,11 +612,12 @@ async def PUT_Value(request):
                     dims[i] = 1  # need a non-zero extent for all dimensionas
                 np_shape.append(dims[i])
                 slices.append(slice(0, dims[i], 1))
+        log.debug(f"np_shape based on append_rows: {np_shape}")
         np_shape = tuple(np_shape)
 
     elif points is None:
-        if body_json and "start" in body_json and "stop" in body_json:
-            slices = await get_slices(app, body_json, dset_json, bucket=bucket)
+        if body and "start" in body and "stop" in body:
+            slices = await get_slices(app, body, dset_json, bucket=bucket)
         else:
             select = params.get("select")
             slices = await get_slices(app, select, dset_json, bucket=bucket)
@@ -645,6 +649,8 @@ async def PUT_Value(request):
             msg += f"num_elements: {num_elements}, item_size: {item_size}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
+        if num_elements*item_size > max_request_size:
+            log.warn(f"read {num_elements*item_size} bytes, greater than {max_request_size}")
         arr = np.fromstring(binary_data, dtype=dset_dtype)
         try:
             arr = arr.reshape(np_shape)  # conform to selection shape
@@ -661,10 +667,8 @@ async def PUT_Value(request):
         except ValueError as ve:
             log.warn(f"bytesToArray value error: {ve}")
             raise HTTPBadRequest()
-    else:
-        #
-        # data is json
-        #
+    elif request_type == "json":
+        # get array from json input
         try:
             msg = "input data doesn't match selection"
             arr = jsonToArray(np_shape, dset_dtype, json_data)
@@ -678,6 +682,8 @@ async def PUT_Value(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         log.debug(f"got json arr: {arr.shape}")
+    else:
+        log.debug("will using streaming for request data")
 
     if append_rows:
         # extend the shape of the dataset
@@ -727,53 +733,74 @@ async def PUT_Value(request):
     slices = tuple(slices)  # no more edits to slices
     crawler_status = None  # will be set below
     if points is None:
-        # for hyperslab selection, verify the input shape matches the
-        # selection
-        np_index = 0
-        for dim in range(len(arr.shape)):
-            data_extent = arr.shape[dim]
-            selection_extent = 1
-            if np_index < len(np_shape):
-                selection_extent = np_shape[np_index]
-            if selection_extent == data_extent:
-                np_index += 1
-                continue  # good
-            if data_extent == 1:
-                continue  # skip singleton selection
-            if selection_extent == 1:
-                np_index += 1
-                continue  # skip singleton selection
-
-            # selection/data mismatch!
-            msg = "data shape doesn't match selection shape"
-            msg += "--data shape: " + str(arr.shape)
-            msg += "--selection shape: " + str(np_shape)
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-
-        num_chunks = getNumChunks(slices, layout)
-        log.debug(f"num_chunks: {num_chunks}")
+        if arr is not None:
+            # make a one page list to handle the write in one chunk crawler run
+            # (larger write request should user binary streaming)
+            pages = (slices,)
+            log.debug(f"non-streaming data, setting page list to: {slices}")
+        else:
+            pages = getSelectionPagination(slices, dims, item_size, max_request_size)
+            log.debug(f"getSelectionPagination returned: {len(pages)} pages")
+        bytes_streamed = 0
         max_chunks = int(config.get('max_chunks_per_request'))
-        if num_chunks > max_chunks:
-            log.warn(f"PUT value chunk count: {num_chunks} exceeds max_chunks: {max_chunks}")
 
-        try:
-            chunk_ids = getChunkIds(dset_id, slices, layout)
-        except ValueError:
-            log.warn("getChunkIds failed")
-            raise HTTPInternalServerError()
-        log.debug(f"chunk_ids: {chunk_ids}")
+        for page_number in range(len(pages)):
+            page = pages[page_number]
+            log.info(f"streaming data for page: {page_number+1} of {len(pages)}, selection: {page}")
+            num_chunks = getNumChunks(page, layout)
+            log.debug(f"num_chunks: {num_chunks}")
+            if num_chunks > max_chunks:
+                log.warn(f"PUT value chunk count: {num_chunks} exceeds max_chunks: {max_chunks}")
+            select_shape = getSelectionShape(page)
+            log.debug(f"got select_shape: {select_shape} for page: {page}")
+            num_bytes = np.prod(select_shape) * item_size
+            if arr is None:
+                # read page of data from input streaam
+                try:
+                    page_bytes = await request_read(request, count=num_bytes)
+                except HTTPRequestEntityTooLarge as tle:
+                    msg = "Got HTTPRequestEntityTooLarge exception during "
+                    msg += f"binary read: {tle})"
+                    log.warn(msg)
+                    raise  # re-throw
+                except IncompleteReadError as ire:
+                    msg = "Got asyncio.IncompleteReadError during binary "
+                    msg += f"read: {ire}"
+                    log.warn(msg)
+                    raise  HTTPBadRequest(reason=msg)
+                log.debug(f"read {len(page_bytes)} for page: {page_number+1}")
+                bytes_streamed += len(page_bytes)
+                try:
+                    arr = bytesToArray(page_bytes, dset_dtype, np_shape)
+                except ValueError as ve:
+                    log.warn(f"bytesToArray value error for page: {page_number+1}: {ve}")
+                    raise HTTPBadRequest(reason=msg)
 
-        crawler = ChunkCrawler(app, 
-                           chunk_ids, 
-                           dset_json=dset_json,
-                           bucket=bucket,
-                           slices=slices,
-                           arr=arr,
-                           action="write_chunk_hyperslab")
-        await crawler.crawl()
+            try:
+                chunk_ids = getChunkIds(dset_id, page, layout)
+            except ValueError:
+                log.warn("getChunkIds failed")
+                raise HTTPInternalServerError()
+            log.debug(f"chunk_ids: {chunk_ids}")
+            if len(chunk_ids) > max_chunks:
+                log.warn(f"got {len(chunk_ids)} for page: {page_number+1}.  max_chunks: {max_chunks} ")
 
-        crawler_status = crawler.get_status()
+            crawler = ChunkCrawler(app, 
+                        chunk_ids, 
+                        dset_json=dset_json,
+                        bucket=bucket,
+                        slices=page,
+                        arr=arr,
+                        action="write_chunk_hyperslab")
+            await crawler.crawl()
+
+            crawler_status = crawler.get_status()
+
+            if crawler_status not in (200,201):
+                log.warn(f"crawler failed for page: {page_number+1} with status: {crawler_status}")
+            else:
+                log.info("crawler write_chunk_hyperslab successful")
+
 
     else:
         #
@@ -1006,7 +1033,7 @@ async def GET_Value(request):
                 page_item_size = VARIABLE_AVG_ITEM_SIZE  # random guess of avg item_size
             else:
                 page_item_size = item_size
-            pages = getSelectionPagination(slices, dims, page_item_size, (max_request_size // 2))
+            pages = getSelectionPagination(slices, dims, page_item_size, max_request_size)
             log.debug(f"getSelectionPagination returned: {len(pages)} pages")
             bytes_streamed = 0
             try:
