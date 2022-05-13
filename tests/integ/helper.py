@@ -97,7 +97,7 @@ def getRequestHeaders(domain=None, username=None, bucket=None, password=None, **
         username = config.get("user_name")
         if password is None:
             password = config.get("user_password")
-    elif username == config.get("user2_name"):
+    elif password is None and username == config.get("user2_name"):
         if password is None:
             password = config.get("user2_password")
     headers = dict()
@@ -145,16 +145,16 @@ def getDNSDomain(domain):
     return dns_domain
 
 
-def setupDomain(domain, folder=False):
+def setupDomain(domain, folder=False, username=None, password=None):
     """Create domain (and parent domain if needed)"""
     endpoint = config.get("hsds_endpoint")
-    headers = getRequestHeaders(domain=domain)
+    headers = getRequestHeaders(domain=domain, username=username, password=password)
     req = endpoint + "/"
     with getSession() as session:
         rsp = session.get(req, headers=headers)
         if rsp.status_code == 200:
             return  # already have domain
-        if rsp.status_code != 404:
+        if rsp.status_code not in (404, 410):
             # something other than "not found"
             raise ValueError(f"Unexpected get domain error: {rsp.status_code}")
         parent_domain = getParentDomain(domain)
