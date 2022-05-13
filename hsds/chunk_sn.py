@@ -570,7 +570,7 @@ async def PUT_Value(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
     else:
-        # read binary data
+        # read binary data from request
         log.info(f"request content_length: {request.content_length}")
 
         if isinstance(request.content_length, int):
@@ -746,7 +746,7 @@ async def PUT_Value(request):
 
         for page_number in range(len(pages)):
             page = pages[page_number]
-            log.info(f"streaming data for page: {page_number+1} of {len(pages)}, selection: {page}")
+            log.info(f"streaming request data for page: {page_number+1} of {len(pages)}, selection: {page}")
             num_chunks = getNumChunks(page, layout)
             log.debug(f"num_chunks: {num_chunks}")
             if num_chunks > max_chunks:
@@ -754,8 +754,9 @@ async def PUT_Value(request):
             select_shape = getSelectionShape(page)
             log.debug(f"got select_shape: {select_shape} for page: {page}")
             num_bytes = np.prod(select_shape) * item_size
-            if arr is None:
-                # read page of data from input streaam
+            if arr is None or page_number > 0:
+                log.debug(f"page: {page_number} reading {num_bytes} from request stream")
+                # read page of data from input stream
                 try:
                     page_bytes = await request_read(request, count=num_bytes)
                 except HTTPRequestEntityTooLarge as tle:
@@ -771,10 +772,13 @@ async def PUT_Value(request):
                 log.debug(f"read {len(page_bytes)} for page: {page_number+1}")
                 bytes_streamed += len(page_bytes)
                 try:
-                    arr = bytesToArray(page_bytes, dset_dtype, np_shape)
+                    arr = bytesToArray(page_bytes, dset_dtype, select_shape)
                 except ValueError as ve:
-                    log.warn(f"bytesToArray value error for page: {page_number+1}: {ve}")
+                    msg = f"bytesToArray value error for page: {page_number+1}: {ve}"
+                    log.warn(msg)
                     raise HTTPBadRequest(reason=msg)
+                if len(select_shape) == 2:
+                    log.debug(f"arr test value[0,0]: {arr[0,0]}")    
 
             try:
                 chunk_ids = getChunkIds(dset_id, page, layout)
@@ -800,7 +804,7 @@ async def PUT_Value(request):
                 log.warn(f"crawler failed for page: {page_number+1} with status: {crawler_status}")
             else:
                 log.info("crawler write_chunk_hyperslab successful")
-
+            
 
     else:
         #
@@ -1039,7 +1043,7 @@ async def GET_Value(request):
             try:
                 for page_number in range(len(pages)):
                     page = pages[page_number]
-                    log.info(f"streaming data for page: {page_number+1} of {len(pages)}, selection: {page}")
+                    log.info(f"streaming response data for page: {page_number+1} of {len(pages)}, selection: {page}")
                     arr = await getSelectionData(app,
                            dset_id,
                            dset_json, 

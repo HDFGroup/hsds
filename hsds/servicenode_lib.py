@@ -183,7 +183,7 @@ async def getObjectJson(app, obj_id, bucket=None, refresh=False,
         obj_json = await http_get(app, req, params=params)
         meta_cache[obj_id] = obj_json
     if obj_json is None:
-        msg = f"Object: {obj_id} not found"
+        msg = f"Object: {obj_id} not found, req: {req}, params: {params}"
         log.warn(msg)
         raise HTTPNotFound()
     return obj_json

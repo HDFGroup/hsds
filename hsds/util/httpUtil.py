@@ -219,31 +219,30 @@ async def request_read(request, count=None) -> bytes:
     Replacement for aiohttp Request.read using our max request limit
     Read request body if present.
 
-    Returns bytes object with full request content.
+    Returns bytes object with full request content,
+       or next count bytes if count is set
     """
-    log.debug("request_read")
-    if request._read_bytes is None:
-        body = bytearray()
-        max_request_size = int(config.get("max_request_size"))
-        while True:
-            if count is not None:
-                chunk = await request._payload.readexactly(count)
-                count -= len(chunk)
-            else:
-                chunk = await request._payload.readany()
-            body.extend(chunk)
-            body_size = len(body)
-            if body_size >= max_request_size:
-                raise HTTPRequestEntityTooLarge(
-                        max_size=max_request_size,
-                        actual_size=body_size
-                    )
-            if not chunk:
-                break
-            if count is not None and count <= 0:
-                break
-        request._read_bytes = bytes(body)
-    return request._read_bytes
+    log.debug(f"request_read - count: {count}")
+    body = bytearray()
+    max_request_size = int(config.get("max_request_size"))
+    while True:
+        if count is not None:
+            chunk = await request._payload.readexactly(count)
+            count -= len(chunk)
+        else:
+            chunk = await request._payload.readany()
+        body.extend(chunk)
+        body_size = len(body)
+        if body_size >= max_request_size:
+            raise HTTPRequestEntityTooLarge(
+                    max_size=max_request_size,
+                    actual_size=body_size
+                )
+        if not chunk:
+            break
+        if count is not None and count <= 0:
+            break
+    return bytes(body)
 
 
 async def http_get(app, url, params=None, client=None):
@@ -269,16 +268,16 @@ async def http_get(app, url, params=None, client=None):
                 else:
                     retval = await rsp.json()
             elif status_code == 400:
-                log.warn(f"BadRequest to {url}")
+                log.info(f"BadRequest to {url}")
                 raise HTTPBadRequest()
             elif status_code == 403:
-                log.warn(f"Forbiden to access {url}")
+                log.info(f"Forbiden to access {url}")
                 raise HTTPForbidden()
             elif status_code == 404:
-                log.warn(f"Object: {url} not found")
+                log.info(f"Object: {url} not found")
                 raise HTTPNotFound()
             elif status_code == 410:
-                log.warn(f"Object: {url} removed")
+                log.info(f"Object: {url} removed")
                 raise HTTPGone()
             elif status_code == 503:
                 log.warn(f"503 error for http_get_Json {url}")
@@ -327,7 +326,7 @@ async def http_post(app, url, data=None, params=None, client=None):
                 return None
             elif rsp.status == 400:
                 msg = f"POST  request HTTPBadRequest error for url: {url}"
-                log.warn(msg)
+                log.info(msg)
                 raise HTTPBadRequest()
             elif rsp.status == 404:
                 msg = f"POST  request HTTPNotFound error for url: {url}"

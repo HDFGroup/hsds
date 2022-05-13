@@ -101,16 +101,16 @@ class DsetUtilTest(unittest.TestCase):
         
         datashape = [200,]
         max_request_size = 120
-        select = [(slice(0,20)),]  # 80 byte selection
+        select = [(slice(20,40)),]  # 80 byte selection
         # should return one page equivalent to original selection
         pages = getSelectionPagination(select, datashape, itemsize, max_request_size)
         self.assertEqual(len(pages), 1)
         page = pages[0]
         self.assertEqual(len(page), 1)
         s = page[0]
-        self.assertEqual(s.start, 0)
-        self.assertEqual(s.stop, 20)
-            
+        self.assertEqual(s.start, 20)
+        self.assertEqual(s.stop, 40)
+    
         select = [(slice(0,200)),]  # 800 byte selection
         # should create 7 pages
         pages = getSelectionPagination(select, datashape, itemsize, max_request_size)
@@ -220,15 +220,16 @@ class DsetUtilTest(unittest.TestCase):
             self.assertEqual(page[0], (40,))
             start = page[1].stop
         self.assertEqual(start, select[1].stop)
+
         itemsize = 2
         datashape = (1300, 1300, 1300)
         max_request_size = 100*1024*1024
-        select = [(slice(0,1300)), (slice(0,1300)), (slice(0,1300))]  # 4.1GB selection
+
+        select = [(slice(200, 400)), (slice(0,1300)), (slice(0,1300))] #644 MB selection
         pages = getSelectionPagination(select, datashape, itemsize, max_request_size)
-        self.assertEqual(len(pages), 44)
-        start = 0
+        self.assertEqual(len(pages), 8)
+        start = 200
         for page in pages:
-            print(page)
             self.assertEqual(len(page), 3)
             self.assertEqual(page[0].start, start)
             self.assertEqual(page[1], slice(0, 1300))
@@ -237,9 +238,20 @@ class DsetUtilTest(unittest.TestCase):
             self.assertTrue(page_size < max_request_size)
             start = page[0].stop
 
-        
+        select = [(slice(0,1300)), (slice(0,1300)), (slice(0,1300))]  # 4.1GB selection
+        pages = getSelectionPagination(select, datashape, itemsize, max_request_size)
+        self.assertEqual(len(pages), 44)
+        start = 0
+        for page in pages:
+            #print(page)
+            self.assertEqual(len(page), 3)
+            self.assertEqual(page[0].start, start)
+            self.assertEqual(page[1], slice(0, 1300))
+            self.assertEqual(page[2], slice(0, 1300))
+            page_size = (page[0].stop - page[0].start) * 1300 * 1300 * 2
+            self.assertTrue(page_size < max_request_size)
+            start = page[0].stop
 
-    
 
     def testItemIterator(self):
         # 1-D case
