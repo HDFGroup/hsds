@@ -40,7 +40,7 @@ spec:
           lifecycle:
             preStop:
               exec:
-                command: ["/usr/bin/curl", "-X", "DELETE", "http://127.0.0.1:6101/prestop"]
+                command: ["/sbin/killall5", "-15"]
           imagePullPolicy: IfNotPresent
           volumeMounts:
           - name: data
