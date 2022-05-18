@@ -120,7 +120,8 @@ def set_stat(jsn, items, selectfunc, hiswdth=64, lab='histogram'):
    sumsmax, sumsmin = sumsnp.max(), sumsnp.min() 
    sumall = sumsnp.sum() 
    fstr = "%15s |%s      [%0.1fGB sz, %0.1fMB stdv]" 
-   print "\n\n%s : min=%.1f, max=%.1f total=%.0f (GB)\n%s" % (lab, sumsmin/gb, sumsmax/gb, sumall/gb, '-'*(hiswdth+15))
+   # Todo fix syntax of statement
+   #print ("\n\n%s : min=%.1f, max=%.1f total=%.0f (GB)\n%s" % (lab, sumsmin/gb, sumsmax/gb, sumall/gb, '-'*(hiswdth+15))
    for i, s in enumerate(sums): 
       nx = int(round((sums[i] / (sumsmax*1.2))*hiswdth))
       hst = '*'*nx
