@@ -15,9 +15,9 @@ import numpy as np
 import time
 
 # set to 0 to use h5pyd/HSDS
-USE_H5PY=0
+USE_H5PY=1
 
-NCOLS=12000
+NCOLS=1200
 NROWS=2200
 CHUNKS=(1500, 275)
 
@@ -26,8 +26,7 @@ if USE_H5PY:
     FILE_NAME = "bigfile.h5"
 else:
     import h5pyd as h5py
-    # FILE_NAME = "/home/test_user1/stream/bigfile.h5"
-    FILE_NAME = "/home/john/bigfile.h5"
+    FILE_NAME = "/home/h5user/stream/bigfile.h5"
 
 dt = np.dtype('u8')
 
