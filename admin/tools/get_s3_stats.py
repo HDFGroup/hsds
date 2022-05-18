@@ -58,7 +58,7 @@ def get_remote_info_json(jfname):
       return { 'num global attr' : glbs, 'num vars' : len(di['variables'].keys()), 'num dims' : \
                len(di['dimensions'].keys()), 'ave attrs per var' : nat / len(di['variables'].keys()), \
                'dims sizes' : dims }
-   except Exception, e:
+   except Exception as e:
       logging.warn("WARN get_remote_info_json on %s : %s, update S3 bucket" % (jfname, str(e)))
       return {}
 
@@ -68,7 +68,7 @@ def get_remote_size(rfname):
       rfo = urllib.urlopen(rfname)
       cl = rfo.info().getheaders("Content-Length")[0]
       return float(cl)
-   except Exception, e:
+   except Exception as e:
       logging.warn("WARN get_remote_size on %s failed : %s" % (rfname, str(e)))
       return None
 #get_remote_size
