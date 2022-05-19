@@ -30,7 +30,7 @@ def ndarray_compare(arr1, arr2):
         if not isinstance(arr1, np.void) and not isinstance(arr2, np.void):
             return arr1 == arr2
         if isinstance(arr1, np.void) and not isinstance(arr2, np.void):
-            if aar1.size == 0 and not arr2:
+            if arr1.size == 0 and not arr2:
                 return True
             else:
                 return False
