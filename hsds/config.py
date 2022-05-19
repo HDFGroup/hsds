@@ -12,6 +12,7 @@
 import os
 import sys
 import yaml
+from pkg_resources import resource_filename
 
 cfg = {}
 
@@ -65,7 +66,7 @@ def _load_cfg():
     # check cmdLineArg with underline
     if not config_dir:
         config_dir = getCmdLineArg("config_dir")
-    
+
     if config_dir:
         config_dirs.append(config_dir)
     if not config_dirs and "CONFIG_DIR" in os.environ:
@@ -80,23 +81,16 @@ def _load_cfg():
         if os.path.isfile(file_name):
             yml_file = file_name
             break
-        file_name = os.path.join(config_dir, "config.yaml") # Check for alt extension
+        # Check for alt extension
+        file_name = os.path.join(config_dir, "config.yaml")
         debug("checking config path:", file_name)
         if os.path.isfile(file_name):
             yml_file = file_name
             break
     if not yml_file:
         # use yaml file embedded in package
-        # TBD: is there a more elegant way to get the directory
-        # where config.yml gets placed in the setup data_files list?
-        package_dir = os.path.dirname(__file__)
-        while package_dir != '/':
-            s = os.path.join(package_dir, "config/config.yml")
-            if os.path.isfile(s):
-                yml_file = s
-                break
-            package_dir = os.path.dirname(package_dir)
-            
+        yml_file = resource_filename('admin', "config/config.yml")
+
         if not yml_file:
             raise FileNotFoundError("unable to load config.yml")
     debug(f"_load_cfg with '{yml_file}'")
@@ -180,5 +174,5 @@ def get(x, default=None):
         if default is not None:
             cfg[x] = default
         else:
-            raise KeyError(f"config value {x} not found")
+            return None
     return cfg[x]
