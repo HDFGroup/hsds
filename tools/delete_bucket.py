@@ -51,7 +51,7 @@ async def deleteAll(app):
         await deleteStorObj(app, key)
 
     print("deleted!")
-    log.info("closing storage connections")
+    print("closing storage connections")
     await releaseStorageClient(app)
 
 

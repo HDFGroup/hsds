@@ -91,7 +91,7 @@ class BooleanParserTest(unittest.TestCase):
 
         try:
             BooleanParser("1 + 1 = 2")
-            self.assertTrue(false)  # expected exception
+            self.assertTrue(False)  # expected exception
         except Exception:
             pass # expected - malformed exception
 

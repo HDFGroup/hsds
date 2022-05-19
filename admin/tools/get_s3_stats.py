@@ -58,7 +58,7 @@ def get_remote_info_json(jfname):
       return { 'num global attr' : glbs, 'num vars' : len(di['variables'].keys()), 'num dims' : \
                len(di['dimensions'].keys()), 'ave attrs per var' : nat / len(di['variables'].keys()), \
                'dims sizes' : dims }
-   except Exception, e:
+   except Exception as e:
       logging.warn("WARN get_remote_info_json on %s : %s, update S3 bucket" % (jfname, str(e)))
       return {}
 
@@ -68,7 +68,7 @@ def get_remote_size(rfname):
       rfo = urllib.urlopen(rfname)
       cl = rfo.info().getheaders("Content-Length")[0]
       return float(cl)
-   except Exception, e:
+   except Exception as e:
       logging.warn("WARN get_remote_size on %s failed : %s" % (rfname, str(e)))
       return None
 #get_remote_size
@@ -120,12 +120,13 @@ def set_stat(jsn, items, selectfunc, hiswdth=64, lab='histogram'):
    sumsmax, sumsmin = sumsnp.max(), sumsnp.min() 
    sumall = sumsnp.sum() 
    fstr = "%15s |%s      [%0.1fGB sz, %0.1fMB stdv]" 
-   print "\n\n%s : min=%.1f, max=%.1f total=%.0f (GB)\n%s" % (lab, sumsmin/gb, sumsmax/gb, sumall/gb, '-'*(hiswdth+15))
+   
+   #print(("\n\n%s : min=%.1f, max=%.1f total=%.0f (GB)\n%s" % (lab, sumsmin/gb, sumsmax/gb, sumall/gb, '-'*(hiswdth+15)))
    for i, s in enumerate(sums): 
       nx = int(round((sums[i] / (sumsmax*1.2))*hiswdth))
       hst = '*'*nx
       hst += ' '*(hiswdth-nx)
-      print fstr % (lables[i], hst, sums[i]/gb, stds[i]/mb)
+      print(fstr % (lables[i], hst, sums[i]/gb, stds[i]/mb))
 #set_stat
 
 #---------------------------------------------------------------------------------
@@ -137,7 +138,7 @@ def summarize_size(jsn, n):
    set_stat(jsn, exprs, select_experiment, lab='scenarios')
    logging.info('building stats for variables ...')
    set_stat(jsn, vrs, select_var, lab='variables')
-   print 'Number of files: ', n
+   print('Number of files: ', n)
 #summarize_size
 
 #---------------------------------------------------------------------------------
@@ -158,6 +159,6 @@ if __name__ == '__main__':
    
       summarize_size(jsn, nfiles)
       for k, v, in eginfo.items(): 
-         print k, '=', v
+         print(k, '=', v)
 #__main__
 
