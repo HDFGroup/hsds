@@ -15,7 +15,7 @@ import sys
 
 PYTHON_CMD = "python3"
 
-unit_tests = ('array_util_test', 'chunk_til_test', 'domain_util_test',
+unit_tests = ('array_util_test', 'chunk_util_test', 'domain_util_test',
               'dset_util_test', 'hdf5_dtype_test', 'id_util_test', 'lru_cache_test',
               'shuffle_test')
 
