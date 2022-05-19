@@ -180,5 +180,5 @@ def get(x, default=None):
         if default is not None:
             cfg[x] = default
         else:
-            raise KeyError(f"config value {x} not found")
+            return None
     return cfg[x]
