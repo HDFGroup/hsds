@@ -24,9 +24,19 @@ LABEL maintainer="Aleksandar Jelenak <help@hdfgroup.org>"
 COPY --from=hsds-base /opt/env/hsds /opt/env/hsds
 
 # Install HSDS
-RUN mkdir /usr/local/src/hsds-src/ /usr/local/src/hsds/ /etc/hsds/
-COPY . /usr/local/src/hsds-src
+RUN mkdir /usr/local/src/hsds-src/ \
+          /usr/local/src/hsds-src/hsds/ \
+          /usr/local/src/hsds-src/admin/ \
+          /usr/local/src/hsds-src/admin/config/ \
+          /usr/local/src/hsds-src/hsds/util/ \
+           /usr/local/src/hsds/ \
+           /etc/hsds/ 
+
+COPY setup.py /usr/local/src/hsds-src
+COPY hsds/*.py /usr/local/src/hsds-src/hsds
+COPY hsds/util/*.py /usr/local/src/hsds-src/hsds/util
 COPY admin/config/config.yml /etc/hsds/
+COPY admin/config/config.yml /usr/local/src/hsds-src/admin/config/
 COPY entrypoint.sh  /
 RUN /bin/bash -c "source /opt/env/hsds/bin/activate \
     && pip install /usr/local/src/hsds-src/ \
