@@ -189,6 +189,10 @@ def get_http_client(app, url=None, cache_client=True):
         msg += f"{max_tcp_connections} connections"
         log.info(msg)
         kwargs = {"limit_per_host": max_tcp_connections}
+        # not yet supported in this aiohttp version
+        #read_buf_size = config.get("read_buf_size", default=10*1024*1024)
+        #log.debug(f"setting read_buf_size to: {read_buf_size}")
+        #kwargs['read_bufsize'] = read_buf_size
         client = ClientSession(connector=TCPConnector(**kwargs))
         if cache_client:
             app['client'] = client

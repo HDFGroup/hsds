@@ -133,14 +133,20 @@ def _k8sGetPodIPs(pod_json, k8s_app_label):
             log.warn(msg)
             continue
         metadata = item["metadata"]
-        #log.debug(f"pod metadata: {metadata}")
+        #import json
+        #log.debug(f"pod metadata: {json.dumps(metadata)}")
+        if "name" not in metadata:
+            log.warn("_k8sGetPodIPs - metadata item with no name key")
+            continue
+        pod_name = metadata["name"]
+        log.debug(f"_k8sGetPodIPs - processing metadata for pod: {pod_name}")
         if "labels" not in metadata:
-            msg = "_k8sGetPodIPs - no labels key in metadata"
+            msg = f"_k8sGetPodIPs - no labels key in metadata for pod: {pod_name}"
             log.debug(msg)
             continue
         labels = metadata["labels"]
         if "app" not in labels:
-            msg = "_k8sGetPodIPs - no app label"
+            msg = f"_k8sGetPodIPs - no app label for pod: {pod_name}"
             log.debug(msg)
             continue
         app_label = labels["app"]
@@ -149,6 +155,11 @@ def _k8sGetPodIPs(pod_json, k8s_app_label):
             msg += f"{k8s_app_label}, skipping"
             log.debug(msg)
             continue
+        if "deletionTimestamp" in metadata and metadata["deletionTimestamp"]:
+            log.info(f"_k8sGetPodIPs - pod {pod_name} is terminating, ignoring")
+            continue
+        ip_keys = getIPKeys(metadata)
+        log.debug(f"_k8sGetPodIPs - pod {pod_name} adding ip keys: {ip_keys}")
         ipKeys.extend(getIPKeys(metadata))
     return ipKeys
 
