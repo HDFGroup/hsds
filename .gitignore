@@ -4,5 +4,7 @@
 *.DS_STORE
 *.log
 *.vscode
-passwd.txt
 *.egg-info
+admin/config/passwd.txt
+admin/config/groups.txt
+data/

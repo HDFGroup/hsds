@@ -5,7 +5,6 @@ name: Python package
 
 on:
   push:
-    branches: [ master ]
   pull_request:
     branches: [ master ]
 
@@ -43,7 +42,31 @@ jobs:
       shell: bash
       run: |
         pip install -e .
-    - name: Test with pytest
+    - name: Run unit tests
       shell: bash
       run: |
         pytest
+    - name: Run integration tests
+      shell: bash
+      env:
+        ADMIN_PASSWORD: admin
+        ADMIN_USERNAME: admin
+        USER_NAME: test_user1
+        USER_PASSWORD: test
+        USER2_NAME: test_user2
+        USER2_PASSWORD: test
+      run: |
+        mkdir data &&
+        mkdir data/hsdstest &&
+        cp admin/config/groups.default admin/config/groups.txt &&
+        cp admin/config/passwd.default admin/config/passwd.txt &&
+        echo "ADMIN_PASSWORD=admin" >> $GITHUB_ENV &&
+        echo "ADMIN_USERNAME=admin" >> $GITHUB_ENV &&
+        echo "USER_NAME=test_user1" >> $GITHUB_ENV &&
+        echo "USER_PASSWORD=test" >> $GITHUB_ENV &&
+        echo "USER2_NAME=test_user2" >> $GITHUB_ENV &&
+        echo "USER2_PASSWORD=test" >> $GITHUB_ENV &&
+        hsds --root_dir data --host localhost --port 5101 --password_file admin/config/passwd.txt --logfile hs.log   --loglevel DEBUG  --config_dir=admin/config --count=4 &
+        sleep 10 # let the nodes get ready &&
+        pytest tests/integ/setup_test.py
+        pytest tests/integ
