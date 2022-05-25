@@ -14,8 +14,7 @@ import json
 import math
 import sys
 import time
-sys.path.append("../../integ")
-import helper
+from tests.integ import helper 
 import config
 
 # Test the binary PUTs and GETs work for request larger than 
