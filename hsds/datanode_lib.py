@@ -789,6 +789,8 @@ async def s3sync(app, s3_age_time=0):
             log.info(f"write_s3_obj callback result: {obj_id}")
         except HTTPInternalServerError as hse:
             log.error(f"write_s3_obj callback got 500: {hse}")
+        except HTTPNotFound as nfe:
+            log.error(f"write_s3_obj callback got 404: {nfe}")
         except Exception as e:
             msg = f"write_s3_obj callback unexpected exception {type(e)}: {e}"
             log.error(msg)
