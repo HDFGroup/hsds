@@ -16,7 +16,6 @@ from asyncio import CancelledError
 import asyncio
 import json
 import os.path as op
-import re
 import time
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
@@ -38,6 +37,7 @@ from .util.domainUtil import isValidDomain, getBucketForDomain
 from .util.domainUtil import getPathForDomain
 from .util.storUtil import getStorKeys, getCompressors
 from .util.boolparser import BooleanParser
+from .util.globparser import globmatch
 from .servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath
 from .servicenode_lib import getRootInfo
 from .basenode import getVersion
@@ -445,11 +445,9 @@ async def get_domains(request):
      
     if "pattern" not in request.rel_url.query:
         pattern = None
-        regex = None
     else:
         pattern = request.rel_url.query["pattern"]
-        log.info(f"get_domains - using regex pattern: {pattern}")
-        regex = re.compile(pattern)
+        log.info(f"get_domains - using glob pattern: {pattern}")
 
     if "query" not in request.rel_url.query:
         query = None
@@ -528,12 +526,20 @@ async def get_domains(request):
                 s3key = s3key[:-1]
             log.debug(f"get_domains - got s3key: {s3key}")
             domain = "/" + s3key[:-1]
-            if regex:
+            if pattern:
                 # do a pattern match on the basename
                 basename = op.basename(domain)
-                if not regex.match(basename):
+                log.debug(f"get_domains: checking {basename} against pattern: {pattern}")
+                try:
+                    got_match = globmatch(basename, pattern)
+                except ValueError as ve:
+                    log.warn(f"get_domains, invalid query pattern {pattern}, ValueError: {ve}")
+                    raise HTTPBadRequest(reason="invalid query pattern")
+                if got_match:
+                    log.debug("get_domains - got_match")
+                else:
                     msg = f"get_domains - {basename} did not match "
-                    msg += f"regex: {pattern}"
+                    msg += f"pattern: {pattern}"
                     log.debug(msg)
                     continue
 
