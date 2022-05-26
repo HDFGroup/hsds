@@ -100,7 +100,7 @@ def globmatch(item, pattern):
     # count '*' without backslash
     asterix_index = None
     for i in range(len(pattern)):
-        if pattern[i] == '*' and (i==0 or pattern[i-1] != '\\'):
+        if pattern[i] == '*' and (i==0 or pattern[i-1] != '['):
             if asterix_index is not None:
                 raise ValueError("only one asterisk allowed in glob pattern")
             asterix_index = i  

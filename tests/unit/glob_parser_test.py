@@ -30,6 +30,9 @@ class GlobParserTest(unittest.TestCase):
         self.assertTrue(globmatch("abc123xyz", "abc*xyz"))
         self.assertTrue(globmatch("abc123xyz", "abc*yz"))
         self.assertTrue(globmatch("abc123xyz", "abc*z"))
+        self.assertTrue(globmatch("a*c", "a[*]c"))
+        self.assertFalse(globmatch("abc", "a[*]c"))
+
 
         self.assertFalse(globmatch("abc123", "*124"))
         self.assertTrue(globmatch("ab7", "ab[0-9]"))
@@ -58,6 +61,8 @@ class GlobParserTest(unittest.TestCase):
         self.assertFalse(globmatch("abc", "ab[?]"))
         self.assertFalse(globmatch("abc", "ab[0-9]"))
         self.assertTrue(globmatch("ab7", "ab[0-9]"))
+        self.assertTrue(globmatch("abc123", "[a-c][a-c][a-c][1-3][1-3][1-3]"))
+        self.assertFalse(globmatch("abx123", "[a-c][a-c][a-c][1-3][1-3][1-3]"))
 
         # test expected ValueError exceptions
         bad_patterns = ("[", "ab[", "ab[-c]", "ab]", "*ab*", "ab[12]", "ab[12-34]", "ab[c]]")
