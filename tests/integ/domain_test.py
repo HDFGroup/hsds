@@ -1116,8 +1116,8 @@ class DomainTest(unittest.TestCase):
             self.assertTrue(pp.basename(name) in basenames[4:8])
             self.assertTrue(name != params["Marker"])
 
-        # try using a regex pattern
-        pattern = "domain_[0,2,4,6]\.h5"
+        # try using a glob pattern
+        pattern = "domain_[0-3].h5"
         params = {"domain": folder+'/', "pattern": pattern}
         rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -1128,7 +1128,21 @@ class DomainTest(unittest.TestCase):
         for item in domains:
             self.assertTrue("name" in item)
             name = item["name"]
-            self.assertTrue(pp.basename(name) in ("domain_0.h5", "domain_2.h5", "domain_4.h5", "domain_6.h5"))
+            self.assertTrue(pp.basename(name) in ("domain_0.h5", "domain_1.h5", "domain_2.h5", "domain_3.h5"))
+
+        # try using a glob pattern with wildcard
+        pattern = "domain_*.h5"
+        params = {"domain": folder+'/', "pattern": pattern}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("domains" in rspJson)
+        domains = rspJson["domains"]
+        self.assertEqual(len(domains), 8)
+        for item in domains:
+            self.assertTrue("name" in item)
+            name = item["name"]
+            self.assertTrue(pp.basename(name) in basenames)
 
         # use reg ex with attribute specification
         query = "attr1 > 7"
