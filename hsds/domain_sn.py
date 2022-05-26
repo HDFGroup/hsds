@@ -573,7 +573,7 @@ async def get_domains(request):
         try:
             parser = BooleanParser(query)
         except IndexError as ie:
-            log.warn(f"get_domains - domaing query syntax error: {ie}")
+            log.warn(f"get_domains - domain query syntax error: {ie}")
             raise HTTPBadRequest(reason="Invalid query expression")
         attr_names = parser.getVariables()
         log.info(f"get_domains - query variables: {attr_names}")
