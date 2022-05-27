@@ -1029,34 +1029,6 @@ def getQueryDtype(dt):
     
     return query_dt
 
-def checkQuery(query, dset_dt):
-    """ Verify the query syntax - raise exception if invalid
-    """
-    log.debug(f"checkQuery - query: {query}")
-    field_names = dset_dt.names
-    try:
-        eval_str = _getEvalStr(query, "x", field_names)
-    except ValueError as ve:
-        log.warn(f"checkQuery - get ValueError: {ve}")
-        return False
-    log.debug(f"checkQuery - got eval_str: {eval_str}")
-    x = np.zeros((4,), dtype=dset_dt)
-    log.debug(f"checkQuery - created temp array: {x}")
-    try:
-        where_indices = np.where(eval(eval_str))
-    except SyntaxError as se:
-        log.warn(f"checkQuery - SyntaxError: {se}")
-        return False
-    except Exception as e:
-        log.error(f"checkQuery - unexpected exception: {e}")
-        return False
-    where_indices = where_indices[0]
-    if not isinstance(where_indices, np.ndarray):
-        log.warn(f"checkQuery - expected where_indices of ndarray but got: {type(where_indices)}")
-        return False
-     
-    return True  # looks ok
-
 def chunkQuery(chunk_id=None, chunk_layout=None, chunk_arr=None, slices=None,
                 query=None, query_update=None, limit=0):
     """

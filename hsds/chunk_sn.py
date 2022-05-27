@@ -32,13 +32,14 @@ from .util.dsetUtil import getSelectionList, isNullSpace
 from .util.dsetUtil import getFillValue, isExtensible, getSelectionPagination
 from .util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout 
 from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId
-from .util.chunkUtil import getChunkIndex, getChunkSuffix, checkQuery
+from .util.chunkUtil import getChunkIndex, getChunkSuffix
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
 from .util.chunkUtil import getQueryDtype
 from .util.arrayUtil import bytesArrayToList, jsonToArray, getShapeDims
 from .util.arrayUtil import getNumElements, arrayToBytes, bytesToArray
 from .util.arrayUtil import squeezeArray
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
+from .util.boolparser import BooleanParser
 from .servicenode_lib import getObjectJson, validateAction
 from .chunk_crawl import ChunkCrawler
 from . import config
@@ -445,11 +446,22 @@ async def PUT_Value(request):
     if query:
         # divert here if we are doing a put query
         # returns array data like a GET query request
-        if not checkQuery(query, dset_dtype):
+        log.debug(f"got query: {query}")
+        try:
+            parser = BooleanParser(query)
+        except Exception:
             msg = f"query: {query} is not valid"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        
+
+        field_names = set(dset_dtype.names)
+        variables = parser.getVariables()
+        for variable in variables:
+            if variable not in field_names:
+                msg = f"query variable {variable} not valid"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+
         select = params.get("select")
         slices = await get_slices(app, select, dset_json, bucket=bucket)
         if "Limit" in params:
@@ -967,11 +979,22 @@ async def GET_Value(request):
 
     query = params.get("query")
     if query:
-        if not checkQuery(query, dset_dtype):
+        log.debug(f"got query: {query}")
+        try:
+            parser = BooleanParser(query)
+        except Exception:
             msg = f"query: {query} is not valid"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
+        field_names = set(dset_dtype.names)
+        variables = parser.getVariables()
+        for variable in variables:
+            if variable not in field_names:
+                msg = f"query variable {variable} not valid"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+         
     if shm_name:
         response_type = "json"
     else:
