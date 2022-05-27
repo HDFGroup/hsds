@@ -183,10 +183,19 @@ class QueryTest(unittest.TestCase):
             rsp = self.session.get(req, params=params, headers=query_headers)
             self.assertEqual(rsp.status_code, 400)
 
-            # try invalid query string
-            params = {'query': "foobar" }
-            rsp = self.session.get(req, params=params, headers=query_headers)
-            self.assertEqual(rsp.status_code, 400)
+            # try invalid query strings
+            queries = ("foobar", 
+                       "open @ 12", 
+                       "gloop < blag", 
+                       "x = 12",
+                       "open > 12; close < 40",
+                       "import os; print(os.environ['FOO'])",
+                       "i = 2")
+            for query in queries:
+                print("query:", query)
+                params = {'query': query }
+                rsp = self.session.get(req, params=params, headers=query_headers)
+                self.assertEqual(rsp.status_code, 400)
 
             # try boolean query
             params = {'query': "(open > 3000) & (open < 3100)" }
