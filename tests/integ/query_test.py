@@ -192,7 +192,6 @@ class QueryTest(unittest.TestCase):
                        "import os; print(os.environ['FOO'])",
                        "i = 2")
             for query in queries:
-                print("query:", query)
                 params = {'query': query }
                 rsp = self.session.get(req, params=params, headers=query_headers)
                 self.assertEqual(rsp.status_code, 400)

@@ -29,6 +29,7 @@ from .util.dsetUtil import getSelectionShape
 from .util.chunkUtil import getChunkIndex, getDatasetId, chunkQuery
 from .util.chunkUtil import chunkWriteSelection, chunkReadSelection
 from .util.chunkUtil import chunkWritePoints, chunkReadPoints
+from .util.boolparser import BooleanParser
 from .datanode_lib import get_metadata_obj, get_chunk, save_chunk
 
 from . import hsds_logger as log
@@ -155,6 +156,20 @@ async def PUT_Chunk(request):
         if rank != 1:
             log.error("expected one-dimensional array for PUT query")
             raise HTTPInternalServerError()
+        try:
+            parser = BooleanParser(query)
+        except Exception as e:
+            msg = f"query: {query} is not valid, got exception: {e}"
+            log.error(msg)
+            raise HTTPInternalServerError()
+        try:
+            eval_str = parser.getEvalStr()
+        except Exception as e:
+            msg = f"query: {query} unable to get eval str, got exception: {e}"
+            log.error(msg)
+            raise HTTPInternalServerError()
+        log.debug(f"got eval str: {eval_str} for query: {query}")
+
         query_update = await request.json()
         if not query_update:
             log.warn("PUT_Chunk with query but no query update")
@@ -166,7 +181,7 @@ async def PUT_Chunk(request):
                       "chunk_layout": dims,
                       "chunk_arr": chunk_arr,
                       "slices": selection,
-                      "query": query,
+                      "query": eval_str,
                       "query_update": query_update,
                       "limit": limit}
             rsp_arr = chunkQuery(**kwargs)
@@ -304,6 +319,7 @@ async def GET_Chunk(request):
     if "query" in params:
         query = params["query"]
         log.debug(f"got query: {query}")
+
     if "Limit" in params:
         limit = int(params["Limit"])
         log.debug(f"limit: {limit}")
@@ -343,13 +359,29 @@ async def GET_Chunk(request):
         raise HTTPNotFound()
 
     if query:
+
+        try:
+            parser = BooleanParser(query)
+        except Exception as e:
+            msg = f"query: {query} is not valid, got exception: {e}"
+            log.error(msg)
+            raise HTTPInternalServerError()
+        try:
+            eval_str = parser.getEvalStr()
+        except Exception as e:
+            msg = f"query: {query} unable to get eval str, got exception: {e}"
+            log.error(msg)
+            raise HTTPInternalServerError()
+        log.debug(f"got eval str: {eval_str} for query: {query}")
+
+
         # run given query
         try:
             kwargs = {"chunk_id": chunk_id,
                       "chunk_layout": dims,
                       "chunk_arr": chunk_arr,
                       "slices": selection,
-                      "query": query,
+                      "query": eval_str,
                       "limit": limit}
             output_arr = chunkQuery(**kwargs)
         except TypeError as te:

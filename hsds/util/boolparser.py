@@ -13,7 +13,7 @@ Usage:
 
 
 class TokenType:
-    NUM, STR, VAR, GT, GTE, LT, LTE, EQ, NEQ, LP, RP, AND, OR = range(13)
+    NUM, STR, BYTE, VAR, GT, GTE, LT, LTE, EQ, NEQ, LP, RP, AND, OR = range(14)
 
 
 class TreeNode:
@@ -95,7 +95,7 @@ class Tokenizer:
                     self.tokens[i] = t[1:-1]  # strip quotes
                 elif len(t) > 3 and t[0] == 'b' and t[1] == SINGLE_QUOTE and t[-1] == SINGLE_QUOTE:
                     # binary string
-                    self.tokenTypes.append(TokenType.STR)
+                    self.tokenTypes.append(TokenType.BYTE)
                     self.tokens[i] = t[2:-1]  # strip quotes and 'b'
                 else:
                     try:
@@ -186,7 +186,7 @@ class BooleanParser:
                 n = TreeNode(tokenType)
                 n.value = float(self.tokenizer.next())
                 return n
-            elif tokenType == TokenType.STR or tokenType == TokenType.VAR:
+            elif tokenType in (TokenType.STR, TokenType.BYTE, TokenType.VAR):
                 n = TreeNode(tokenType)
                 n.value = self.tokenizer.next()
                 return n
@@ -202,14 +202,12 @@ class BooleanParser:
         return self.evaluateRecursive(self.root, variable_dict)
 
     def evaluateRecursive(self, treeNode, variable_dict):
-        if treeNode.tokenType == TokenType.NUM:
+        if treeNode.tokenType in (TokenType.NUM, TokenType.STR, TokenType.BYTE):  
             return treeNode.value
-        if treeNode.tokenType == TokenType.STR:
-            # strip off outer quotes for evaluation
-            return treeNode.value
+
         if treeNode.tokenType == TokenType.VAR:
             return variable_dict.get(treeNode.value)
-
+         
         left = self.evaluateRecursive(treeNode.left, variable_dict)
         right = self.evaluateRecursive(treeNode.right, variable_dict)
 
@@ -238,6 +236,8 @@ class BooleanParser:
         if treeNode.tokenType == TokenType.STR:
             # add quotes for evaluation
             return f"'{treeNode.value}'"
+        if treeNode.tokenType == TokenType.BYTE:
+            return f"b'{treeNode.value}'"
         if treeNode.tokenType == TokenType.VAR:
             return treeNode.value
 

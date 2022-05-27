@@ -25,13 +25,20 @@ class BooleanParserTest(unittest.TestCase):
 
     def testExpressions(self):
 
+        p = BooleanParser('x1 < 42')
+        variables = p.getVariables()
+        self.assertEqual(len(variables), 1)
+        self.assertTrue("x1" in variables)
+        self.assertTrue(p.evaluate({'x1': 24}))
+        eval_str = p.getEvalStr()
+        self.assertEqual(eval_str, "x1 < 42.0")
+
         p = BooleanParser('x1 == "hi" AND y2 > 42')
         variables = p.getVariables()
         self.assertEqual(len(variables), 2)
         self.assertTrue("x1" in variables)
         self.assertTrue("y2" in variables)
         self.assertTrue(p.evaluate({'x1': 'hi', 'y2': 43}))
-
         eval_str = p.getEvalStr()
         self.assertEqual(eval_str, "(x1 == 'hi') & (y2 > 42.0)")
 
@@ -74,7 +81,7 @@ class BooleanParserTest(unittest.TestCase):
         self.assertTrue(p.evaluate({'x': "bye"}))
         self.assertFalse(p.evaluate({'x': "aloha"}))
         eval_str = p.getEvalStr()
-        self.assertEqual(eval_str, "(x == 'hi') | (x == 'bye')")
+        self.assertEqual(eval_str, "(x == 'hi') | (x == b'bye')")
 
         # do lexigraphical comparison
         p = BooleanParser('x1 >= "cat" AND x1 <= "pig"')
