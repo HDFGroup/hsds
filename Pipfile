@@ -1,0 +1,24 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+aiobotocore = "==2.1.0"
+aiofiles = "*"
+cryptography = "*"
+numcodecs = "*"
+numpy = "*"
+psutil = "*"
+pytz = "*"
+requests-unixsocket = "*"
+simplejson = "*"
+aiohttp = "==3.8.1"
+aiohttp_cors = "*"
+PyJWT = "*"
+PyYAML = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.10"
