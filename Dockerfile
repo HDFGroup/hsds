@@ -10,9 +10,9 @@ RUN mkdir /usr/local/src/hsds/ \
           /usr/local/src/hsds/hsds/util/ \
            /etc/hsds/ 
 
-COPY setup.py /usr/local/src/hsds
-COPY hsds/*.py /usr/local/src/hsds/hsds
-COPY hsds/util/*.py /usr/local/src/hsds/hsds/util
+COPY setup.py /usr/local/src/hsds/
+COPY hsds/*.py /usr/local/src/hsds/hsds/
+COPY hsds/util/*.py /usr/local/src/hsds/hsds/util/
 COPY admin/config/config.yml /etc/hsds/
 COPY admin/config/config.yml /usr/local/src/hsds/admin/config/
 COPY entrypoint.sh  /
