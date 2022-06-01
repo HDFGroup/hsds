@@ -754,7 +754,7 @@ async def PUT_Value(request):
             pages = getSelectionPagination(slices, dims, item_size, max_request_size)
             log.debug(f"getSelectionPagination returned: {len(pages)} pages")
         bytes_streamed = 0
-        max_chunks = int(config.get('max_chunks_per_request'))
+        max_chunks = int(config.get('max_chunks_per_request', default=1000))
 
         for page_number in range(len(pages)):
             page = pages[page_number]
@@ -868,7 +868,7 @@ async def PUT_Value(request):
 
         num_chunks = len(chunk_dict)
         log.debug(f"num_chunks: {num_chunks}")
-        max_chunks = int(config.get('max_chunks_per_request'))
+        max_chunks = int(config.get('max_chunks_per_request', default=1000))
         if num_chunks > max_chunks:
             msg = f"PUT value request with more than {max_chunks} chunks"
             log.warn(msg)
@@ -1344,7 +1344,7 @@ async def getSelectionData(app, dset_id, dset_json, slices=None, points=None, qu
         num_chunks = getNumChunks(slices, layout)
         log.debug(f"num_chunks: {num_chunks}")
     
-        max_chunks = int(config.get('max_chunks_per_request'))
+        max_chunks = int(config.get('max_chunks_per_request', default=1000))
         if num_chunks > max_chunks:
             msg = f"num_chunks over {max_chunks} limit, but will attempt to fetch with crawler"
             log.warn(msg)
