@@ -1,4 +1,4 @@
-FROM python:3.9-slim-buster AS hsds-base
+FROM python:3.9-slim AS hsds-base
 
  
 
