@@ -14,8 +14,9 @@ COPY Pipfile /app/Pipfile
 COPY Pipfile.lock /app/Pipfile.lock
 COPY requirements.txt /app/requirements.txt
 COPY setup.py /app/setup.py
-COPY hsds /app/hsds
-COPY admin /app/admin
+COPY hsds /app/hsds/
+COPY admin /app/admin/
+COPY entrypoint.sh  /
 WORKDIR /app
 RUN PIPENV_VENV_IN_PROJECT=1 pipenv install --deploy
 ENTRYPOINT ["/bin/bash", "-c", "/entrypoint.sh"]
