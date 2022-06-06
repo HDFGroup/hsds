@@ -18,10 +18,12 @@ import unittest
 import sys
 from aiohttp.web_exceptions import HTTPNotFound
 
-sys.path.append('../..')
+sys.path.append("../..")
 import hsds.config as config
-from hsds.util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes, getStorBytes, isStorObj
-from hsds.util.storUtil import getStorObjStats, getStorKeys, releaseStorageClient, getStorageDriverName
+from hsds.util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes
+from hsds.util.storUtil import getStorBytes, isStorObj
+from hsds.util.storUtil import getStorObjStats, getStorKeys, releaseStorageClient
+from hsds.util.storUtil import getStorageDriverName
 
 
 class StorUtilTest(unittest.TestCase):
@@ -37,14 +39,18 @@ class StorUtilTest(unittest.TestCase):
             await getStorKeys(app)
         except HTTPNotFound:
             bucket = app["bucket_name"]
-            print(f"WARNING: Failed to find bucket: {bucket}. Create this bucket or specify a different bucket using HSDS_UNIT_TEST_BUCKET environment variable to enable this test")
+            msg = f"WARNING: Failed to find bucket: {bucket}. Create this bucket or "
+            msg += "specify a different bucket using HSDS_UNIT_TEST_BUCKET "
+            msg += " environment variable to enable this test"
+
+            print(msg)
             return
 
         obj_json_1 = {"a": 1, "b": 2, "c": 3}
         obj_json_2 = {"d": 4, "e": 5, "f": 6}
         obj_json_3 = {"g": 7, "h": 8, "i": 9}
         np_arr_1 = np.arange(10)
-        np_arr_2 = np.array([2,3,5,7,11,13,17,19])
+        np_arr_2 = np.array([2, 3, 5, 7, 11, 13, 17, 19])
         key_folder = "stor_util_test"
         subkey_folder = f"{key_folder}/subkey_folder"
 
@@ -58,7 +64,6 @@ class StorUtilTest(unittest.TestCase):
         # write two objects to nested folder
         await putStorJSONObj(app, f"{subkey_folder}/obj_json_1", obj_json_1)
         await putStorBytes(app, f"{subkey_folder}/np_arr_1", np_arr_1.tobytes())
-
 
         # check the keys exists
         self.assertTrue(await isStorObj(app, f"{key_folder}/obj_json_1"))
@@ -90,23 +95,22 @@ class StorUtilTest(unittest.TestCase):
             await getStorBytes(app, f"{key_folder}/bogus")
             self.assertTrue(False)
         except HTTPNotFound:
-            pass # return expected
+            pass  # return expected
 
         # try reading non-existent bucket
         # make up a random bucket name
         nchars = 25
         bucket_name = bytearray(nchars)
         for i in range(nchars):
-            bucket_name[i] = ord('a') + random.randint(0,25)
-        bucket_name = bucket_name.decode('ascii')
+            bucket_name[i] = ord("a") + random.randint(0, 25)
+        bucket_name = bucket_name.decode("ascii")
         print("bucket name:", bucket_name)
 
         try:
             await getStorBytes(app, f"{key_folder}/bogus", bucket=bucket_name)
             self.assertTrue(False)
         except HTTPNotFound:
-            pass # return expected
-
+            pass  # return expected
 
         # Try getSorObjStats
 
@@ -131,18 +135,18 @@ class StorUtilTest(unittest.TestCase):
         self.assertEqual(obj_stats["Size"], 64)  # 8 element array of 64bit ints
 
         # try reading a non-existent key
-        #await getStorO
+        # await getStorO
 
         # list keys in top folder
-        key_list = await getStorKeys(app, prefix='', deliminator='/')
+        key_list = await getStorKeys(app, prefix="", deliminator="/")
 
         self.assertEqual(len(key_list), 1)
         self.assertEqual(key_list[0], "stor_util_test/")
 
         # list keys in folder - get all subkeys
-        key_list = await getStorKeys(app, prefix=key_folder+'/', deliminator='')
+        key_list = await getStorKeys(app, prefix=key_folder + "/", deliminator="")
         for key in key_list:
-            print('got key:', key)
+            print("got key:", key)
 
         self.assertEqual(len(key_list), 7)
         self.assertTrue(f"{key_folder}/obj_json_1" in key_list)
@@ -154,12 +158,11 @@ class StorUtilTest(unittest.TestCase):
         self.assertTrue(f"{subkey_folder}/np_arr_1" in key_list)
 
         # get just sub-folders
-        key_list = await getStorKeys(app, prefix=key_folder+'/', deliminator='/')
+        key_list = await getStorKeys(app, prefix=key_folder + "/", deliminator="/")
         for key in key_list:
             print("got delim key:", key)
         self.assertEqual(len(key_list), 1)
         self.assertTrue(f"{subkey_folder}/" in key_list)
-
 
         # get keys from subkey folder
         key_list = await getStorKeys(app, prefix=subkey_folder)
@@ -167,7 +170,7 @@ class StorUtilTest(unittest.TestCase):
         self.assertTrue(f"{subkey_folder}/np_arr_1" in key_list)
 
         # get keys with obj etag, size, last modified
-        key_dict = await getStorKeys(app, prefix=key_folder+'/', include_stats=True)
+        key_dict = await getStorKeys(app, prefix=key_folder + "/", include_stats=True)
 
         for k in key_dict:
             v = key_dict[k]
@@ -210,15 +213,16 @@ class StorUtilTest(unittest.TestCase):
         """
         await releaseStorageClient(app)
 
-
-
     def testStorUtil(self):
 
         cors_domain = config.get("cors_domain")
         print(f"cors_domain: [{cors_domain}]")
         bucket = config.get("hsds_unit_test_bucket")
         if not bucket:
-            print("No bucket configured, create bucket and export HSDS_UNIT_TEST_BUCKET=<bucket_name> to enable test")
+            msg = "No bucket configured, create bucket and export "
+            msg += " HSDS_UNIT_TEST_BUCKET=<bucket_name> to enable test"
+            print(msg)
+
             return
 
         # we need to setup a asyncio loop to query s3
@@ -234,7 +238,8 @@ class StorUtilTest(unittest.TestCase):
 
         loop.close()
 
-if __name__ == '__main__':
-    #setup test files
+
+if __name__ == "__main__":
+    # setup test files
 
     unittest.main()
