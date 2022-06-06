@@ -11,15 +11,16 @@
 ##############################################################################
 import sys
 import unittest
-sys.path.append('../..')
+
+sys.path.append("../..")
 
 from hsds.lambda_function import lambda_handler
+
 
 class LambdaTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(LambdaTest, self).__init__(*args, **kwargs)
         # main
-
 
     def testInvoke(self):
         event = {"method": "GET", "route": "/about"}
@@ -27,11 +28,10 @@ class LambdaTest(unittest.TestCase):
         rsp = lambda_handler(event, context)
         print("rsp:", rsp)
         self.assertTrue("statusCode" in rsp)
-        self.assertEqual(rsp['statusCode'], 200)
-         
+        self.assertEqual(rsp["statusCode"], 200)
 
 
-if __name__ == '__main__':
-    #setup test files
+if __name__ == "__main__":
+    # setup test files
 
     unittest.main()

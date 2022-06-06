@@ -12,10 +12,12 @@
 import os
 import json
 
+
 class Config:
     """
     User Config state
     """
+
     def __init__(self, config_file=None, **kwargs):
         self._cfg = {}
         if config_file:
@@ -33,12 +35,16 @@ class Config:
                     s = line.strip()
                     if not s:
                         continue
-                    if s[0] == '#':
+                    if s[0] == "#":
                         # comment line
                         continue
-                    fields = s.split('=')
+                    fields = s.split("=")
                     if len(fields) < 2:
-                        print("config file: {} line: {} is not valid".format(self._config_file, line_number))
+                        print(
+                            "config file: {} line: {} is not valid".format(
+                                self._config_file, line_number
+                            )
+                        )
                         continue
                     k = fields[0].strip()
                     v = fields[1].strip()
@@ -53,7 +59,7 @@ class Config:
             self._cfg[k] = kwargs[k]
 
     def __getitem__(self, name):
-        """ Get a config item  """
+        """Get a config item"""
         if name not in self._cfg:
             if name.upper() in os.environ:
                 self._cfg[name] = os.environ[name.upper()]
@@ -62,18 +68,18 @@ class Config:
         return self._cfg[name]
 
     def __setitem__(self, name, obj):
-        """ set config item """
+        """set config item"""
         self._cfg[name] = obj
 
     def __delitem__(self, name):
-        """ Delete option. """
+        """Delete option."""
         del self._cfg[name]
 
     def __len__(self):
         return len(self._cfg)
-         
+
     def __iter__(self):
-        """ Iterate over config names """
+        """Iterate over config names"""
         keys = self._cfg.keys()
         for key in keys:
             yield key
@@ -86,11 +92,3 @@ class Config:
 
     def keys(self):
         return self._cfg.keys()
-
-
-
-         
- 
-
-  
-  

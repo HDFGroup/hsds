@@ -12,26 +12,19 @@
 import os
 import sys
 
-cfg = {
-    'server_url': "http://localhost:8080/",  
-    'run_count': 100,
-    'batch_size': 1000  
-     
-}
-   
-def get(x): 
-    option = '--'+x+'='
+cfg = {"server_url": "http://localhost:8080/", "run_count": 100, "batch_size": 1000}
+
+
+def get(x):
+    option = "--" + x + "="
     for i in range(1, len(sys.argv)):
-        #print i, sys.argv[i]
+        # print i, sys.argv[i]
         if sys.argv[i].startswith(option):
             # found an override
             arg = sys.argv[i]
-            return arg[len(option):]  # return text after option string    
+            return arg[len(option) :]  # return text after option string
     # see if there are an environment variable override
     if x.upper() in os.environ:
         return os.environ[x.upper()]
-    # no command line override, just return the cfg value        
+    # no command line override, just return the cfg value
     return cfg[x]
-
-  
-  

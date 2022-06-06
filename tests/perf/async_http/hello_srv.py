@@ -1,4 +1,3 @@
-#!/usr/local/bin/python3.5
 import asyncio
 from datetime import datetime
 from aiohttp import web
@@ -7,6 +6,7 @@ import random
 # set seed to ensure async and sync client get same distribution of delay values
 # and tests are fair
 random.seed(1)
+
 
 async def hello(request):
     name = request.match_info.get("name", "foo")
@@ -24,6 +24,7 @@ async def hello(request):
         print("{}: {} delay: {}".format(n, request.path, delay))
         response = web.Response(body=html_body.read(), headers=headers)
     return response
+
 
 app = web.Application()
 app.router.add_route("GET", "/{name}", hello)

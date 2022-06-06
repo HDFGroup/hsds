@@ -13,29 +13,31 @@ import os
 import sys
 
 cfg = {
-    'host': "127.0.0.1",
-    'port': 0,
-    'num_bytes': 1048576,
-    'batch_size': 10240,
-    'use_shared_mem': 0,
-    'socket_type': "AF_INET"  # AF_UNIX or AF_INET
+    "host": "127.0.0.1",
+    "port": 0,
+    "num_bytes": 1048576,
+    "batch_size": 10240,
+    "use_shared_mem": 0,
+    "socket_type": "AF_INET",  # AF_UNIX or AF_INET
 }
+
 
 def getCmdLineArg(x):
     # return value of command-line option
     # use "--x=val" to set option 'x' to 'val'
     # use "--x" for boolean flags
-    option = '--'+x+'='
+    option = "--" + x + "="
     for i in range(1, len(sys.argv)):
         arg = sys.argv[i]
-        if arg == '--'+x:
+        if arg == "--" + x:
             # boolean flag
             return True
         elif arg.startswith(option):
             # found an override
-            override = arg[len(option):]  # return text after option string
+            override = arg[len(option) :]  # return text after option string
             return override
     return None
+
 
 def get(x):
     # see if there is a cmd line override

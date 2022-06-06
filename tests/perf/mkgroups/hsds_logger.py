@@ -10,37 +10,47 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 #
-# Simple looger 
+# Simple looger
 #
+
 import config
+
+
 def info(msg):
-	if config.get("log_level") == "INFO":
-		print("INFO> " + msg)
+    if config.get("log_level") == "INFO":
+        print("INFO> " + msg)
+
 
 def warn(msg):
-	if config.get("log_level") != "ERROR":
-		print("WARN> " + msg)
+    if config.get("log_level") != "ERROR":
+        print("WARN> " + msg)
+
 
 def error(msg):
-	print("ERROR> " + msg)
+    print("ERROR> " + msg)
+
 
 def request(req):
-	print("REQ> {}: {} host:[{}]".format(req.method, req.path, req.headers["host"]))
+    print("REQ> {}: {} host:[{}]".format(req.method, req.path, req.headers["host"]))
+
 
 def response(req, resp=None, code=None, message=None):
-	level = "INFO"
-	if code is None:
-		# rsp needs to be set otherwise
-		code = resp.status
-	if message is None:
-		message=resp.reason
-	if code > 399:
-		if  code < 500:
-			level = "WARN"
-		else:
-			level = "ERROR"
-	
-	log_level = config.get("log_level")
-	if log_level == "INFO" or (log_level == "WARN" and level != "INFO") or (log_level == "ERROR" and level == "ERROR"):
-		print("{} RSP> <{}> ({}): {}".format(level, code, message, req.path))
+    level = "INFO"
+    if code is None:
+        # rsp needs to be set otherwise
+        code = resp.status
+    if message is None:
+        message = resp.reason
+    if code > 399:
+        if code < 500:
+            level = "WARN"
+        else:
+            level = "ERROR"
 
+    log_level = config.get("log_level")
+    if (
+        log_level == "INFO"
+        or (log_level == "WARN" and level != "INFO")
+        or (log_level == "ERROR" and level == "ERROR")
+    ):
+        print("{} RSP> <{}> ({}): {}".format(level, code, message, req.path))
