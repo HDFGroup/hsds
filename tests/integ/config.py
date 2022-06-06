@@ -12,20 +12,20 @@
 import os
 
 cfg = {
-    'hsds_endpoint': 'http://localhost:5101',
+    "hsds_endpoint": "http://localhost:5101",
     # or 'http+unix://%2Ftmp%2Fhs%2Fsn_1.sock' for socket
-    'head_endpoint': 'http://localhost:5100',
-    'rangeget_endpoint': 'http://localhost:6900',
-    'user_name': 'test_user1',
-    'user_password': 'test',
-    'user2_name': 'test_user2',
-    'user2_password': 'test',
-    'test_noauth': True,
-    'default_public': False,  # set to true if the server makes new domains publicly readable
-    'bucket_name': '',   # bucket name to be used for requests
-    'hdf5_sample_bucket': '',  # S3 bucket for storing traditional HDF5 files (snp500.h5 and tall.h5), e.g. 'hdf5_sample'
-    'test_group': 'test_group',  # group defined in admin/config/groups.txt that includes user user_name and user2_name
-    'max_chunks_per_folder': 0   # match with this config setting on server
+    "head_endpoint": "http://localhost:5100",
+    "rangeget_endpoint": "http://localhost:6900",
+    "user_name": "test_user1",
+    "user_password": "test",
+    "user2_name": "test_user2",
+    "user2_password": "test",
+    "test_noauth": True,
+    "default_public": False,  # set to true if the server makes new domains publicly readable
+    "bucket_name": "",  # bucket name to be used for requests
+    "hdf5_sample_bucket": "",  # S3 bucket for storing traditional HDF5 files (snp500.h5 and tall.h5), e.g. 'hdf5_sample'
+    "test_group": "test_group",  # group defined in admin/config/groups.txt that includes user user_name and user2_name
+    "max_chunks_per_folder": 0,  # match with this config setting on server
 }
 
 

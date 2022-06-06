@@ -29,7 +29,6 @@ class QueryTest(unittest.TestCase):
         if self.session:
             self.session.close()
 
-
     def testSimpleQuery(self):
         # Test query value for 1d dataset
         print("testSimpleQuery", self.base_domain)
@@ -37,7 +36,7 @@ class QueryTest(unittest.TestCase):
         headers = helper.getRequestHeaders(domain=self.base_domain)
         headers_bin_rsp = helper.getRequestHeaders(domain=self.base_domain)
         headers_bin_rsp["accept"] = "application/octet-stream"
-        req = self.endpoint + '/'
+        req = self.endpoint + "/"
 
         # Get root uuid
         rsp = self.session.get(req, headers=headers)
@@ -47,35 +46,41 @@ class QueryTest(unittest.TestCase):
         helper.validateId(root_uuid)
 
         #
-        #create 1d dataset
+        # create 1d dataset
         #
-        fixed_str4_type = {"charSet": "H5T_CSET_ASCII",
-                "class": "H5T_STRING",
-                "length": 4,
-                "strPad": "H5T_STR_NULLPAD" }
-        fixed_str8_type = {"charSet": "H5T_CSET_ASCII",
-                "class": "H5T_STRING",
-                "length": 8,
-                "strPad": "H5T_STR_NULLPAD" }
-        fields = (  {'name': 'stock_symbol', 'type': fixed_str4_type},
-                    {'name': 'date', 'type': fixed_str8_type},
-                    {'name': 'open', 'type': 'H5T_STD_I32LE'},
-                    {'name': 'close', 'type': 'H5T_STD_I32LE'} )
-        datatype = {'class': 'H5T_COMPOUND', 'fields': fields }
+        fixed_str4_type = {
+            "charSet": "H5T_CSET_ASCII",
+            "class": "H5T_STRING",
+            "length": 4,
+            "strPad": "H5T_STR_NULLPAD",
+        }
+        fixed_str8_type = {
+            "charSet": "H5T_CSET_ASCII",
+            "class": "H5T_STRING",
+            "length": 8,
+            "strPad": "H5T_STR_NULLPAD",
+        }
+        fields = (
+            {"name": "stock_symbol", "type": fixed_str4_type},
+            {"name": "date", "type": fixed_str8_type},
+            {"name": "open", "type": "H5T_STD_I32LE"},
+            {"name": "close", "type": "H5T_STD_I32LE"},
+        )
+        datatype = {"class": "H5T_COMPOUND", "fields": fields}
 
         num_elements = 12
         maxdims = 20  # to verify we don't search elements off the dataset
-        payload = {'type': datatype, 'shape': num_elements, 'maxdims': maxdims }
+        payload = {"type": datatype, "shape": num_elements, "maxdims": maxdims}
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
 
         rspJson = json.loads(rsp.text)
-        dset_uuid = rspJson['id']
+        dset_uuid = rspJson["id"]
         self.assertTrue(helper.validateId(dset_uuid))
 
         # link new dataset as 'dset1'
-        name = 'dset'
+        name = "dset"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
@@ -94,35 +99,35 @@ class QueryTest(unittest.TestCase):
             ("AMZN", "20170104", 2891, 2978),
             ("EBAY", "20170105", 2973, 2962),
             ("AAPL", "20170105", 2934, 3010),
-            ("AMZN", "20170105", 3018, 3086)
+            ("AMZN", "20170105", 3018, 3086),
         ]
 
-        payload = {'value': value}
+        payload = {"value": value}
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
 
         def verifyQueryRsp(rsp, expected_indices=None, expect_bin=None):
-            ROW_BYTES=28  # 8 + 4 + 8 + 4 + 4
+            ROW_BYTES = 28  # 8 + 4 + 8 + 4 + 4
             self.assertEqual(rsp.status_code, 200)
             data = None
-            if rsp.headers['Content-Type'] == "application/octet-stream":
+            if rsp.headers["Content-Type"] == "application/octet-stream":
                 if expect_bin is False:
                     self.assertTrue(False)
-                bin_data = rsp.content 
+                bin_data = rsp.content
                 self.assertEqual(len(bin_data) % ROW_BYTES, 0)
                 # assemble binary response to a python list
                 nrows = len(bin_data) // ROW_BYTES
                 data = []
                 for i in range(nrows):
-                    x = bin_data[i*ROW_BYTES:(i+1)*ROW_BYTES]
+                    x = bin_data[i * ROW_BYTES : (i + 1) * ROW_BYTES]
                     index = int.from_bytes(x[0:8], "little", signed=False)
-                    symbol = x[8:12].decode('ascii')
-                    date_str = x[12:20].decode('ascii')
+                    symbol = x[8:12].decode("ascii")
+                    date_str = x[12:20].decode("ascii")
                     open = int.from_bytes(x[20:24], "little")
                     close = int.from_bytes(x[24:28], "little")
                     row = [index, symbol, date_str, open, close]
-                    data.append(row)                
+                    data.append(row)
             else:
                 if expect_bin is True:
                     self.assertTrue(False)
@@ -143,67 +148,76 @@ class QueryTest(unittest.TestCase):
                 index_set.add(index)
                 expected = value[index]
                 for i in range(4):
-                    self.assertEqual(item[i+1], expected[i])
+                    self.assertEqual(item[i + 1], expected[i])
             # indices should be unique
             self.assertEqual(len(index_set), len(data))
             # check we got the expected number of results
             if expected_count is not None:
                 self.assertEqual(len(data), expected_count)
-        
+
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        
+
         for query_headers in (headers, headers_bin_rsp):
-            if "accept" in query_headers and query_headers["accept"] == "application/octet-stream":
+            if (
+                "accept" in query_headers
+                and query_headers["accept"] == "application/octet-stream"
+            ):
                 expect_bin = True
             else:
                 expect_bin = False
             # read first row with AAPL
-            params = {'query': "stock_symbol == b'AAPL'", "Limit": 1 }
-            expected_indices=(1,)
+            params = {"query": "stock_symbol == b'AAPL'", "Limit": 1}
+            expected_indices = (1,)
             rsp = self.session.get(req, params=params, headers=query_headers)
-            verifyQueryRsp(rsp, expected_indices=expected_indices, expect_bin=expect_bin)     
+            verifyQueryRsp(
+                rsp, expected_indices=expected_indices, expect_bin=expect_bin
+            )
 
             # read all rows with APPL
-            params = {'query': "stock_symbol == b'AAPL'" }
+            params = {"query": "stock_symbol == b'AAPL'"}
             rsp = self.session.get(req, params=params, headers=query_headers)
-            #self.assertTrue("hrefs" in rspJson)
-            verifyQueryRsp(rsp, expected_indices=(1,4,7,10), expect_bin=expect_bin)
+            # self.assertTrue("hrefs" in rspJson)
+            verifyQueryRsp(rsp, expected_indices=(1, 4, 7, 10), expect_bin=expect_bin)
 
             params["select"] = "[2:12]"
             rsp = self.session.get(req, params=params, headers=query_headers)
-            verifyQueryRsp(rsp, expected_indices=(4,7,10), expect_bin=expect_bin)
-         
+            verifyQueryRsp(rsp, expected_indices=(4, 7, 10), expect_bin=expect_bin)
+
             # combine with Limit
             params["Limit"] = 2
             rsp = self.session.get(req, params=params, headers=query_headers)
-            verifyQueryRsp(rsp, expected_indices=(4,7), expect_bin=expect_bin)
-         
+            verifyQueryRsp(rsp, expected_indices=(4, 7), expect_bin=expect_bin)
+
             # try bad Limit
             params["Limit"] = "abc"
             rsp = self.session.get(req, params=params, headers=query_headers)
             self.assertEqual(rsp.status_code, 400)
 
             # try invalid query strings
-            queries = ("foobar", 
-                       "open @ 12", 
-                       "gloop < blag", 
-                       "x = 12",
-                       "open > 12; close < 40",
-                       "import os; print(os.environ['FOO'])",
-                       "i = 2")
+            queries = (
+                "foobar",
+                "open @ 12",
+                "gloop < blag",
+                "x = 12",
+                "open > 12; close < 40",
+                "import os; print(os.environ['FOO'])",
+                "i = 2",
+            )
             for query in queries:
-                params = {'query': query }
+                params = {"query": query}
                 rsp = self.session.get(req, params=params, headers=query_headers)
                 self.assertEqual(rsp.status_code, 400)
 
             # try boolean query
-            params = {'query': "(open > 3000) & (open < 3100)" }
+            params = {"query": "(open > 3000) & (open < 3100)"}
             rsp = self.session.get(req, params=params, headers=query_headers)
             self.assertEqual(rsp.status_code, 200)
-            verifyQueryRsp(rsp, expected_indices=(0, 1, 3, 5, 11), expect_bin=expect_bin)
+            verifyQueryRsp(
+                rsp, expected_indices=(0, 1, 3, 5, 11), expect_bin=expect_bin
+            )
 
             # query for a zero sector field (should return none)
-            params = {'query': "open == 0" } # query for zero sector
+            params = {"query": "open == 0"}  # query for zero sector
             rsp = self.session.get(req, params=params, headers=headers)
             self.assertEqual(rsp.status_code, 200)
             verifyQueryRsp(rsp, expected_indices=(), expect_bin=False)
@@ -214,7 +228,9 @@ class QueryTest(unittest.TestCase):
 
         hdf5_sample_bucket = config.get("hdf5_sample_bucket")
         if not hdf5_sample_bucket:
-            print("hdf5_sample_bucket config not set, skipping testChunkedRefIndirectDataset")
+            print(
+                "hdf5_sample_bucket config not set, skipping testChunkedRefIndirectDataset"
+            )
             return
 
         s3path = "s3://" + hdf5_sample_bucket + "/data/hdf5test" + "/snp500.h5"
@@ -228,7 +244,9 @@ class QueryTest(unittest.TestCase):
         if "snp500.h5" not in snp500_json:
             self.assertTrue(False)
 
-        chunk_dims = [60000,]  # chunk layout used in snp500.h5 file
+        chunk_dims = [
+            60000,
+        ]  # chunk layout used in snp500.h5 file
         num_chunks = (SNP500_ROWS // chunk_dims[0]) + 1
 
         chunk_info = snp500_json["snp500.h5"]
@@ -239,7 +257,7 @@ class QueryTest(unittest.TestCase):
 
         self.assertEqual(len(byteStreams), num_chunks)
 
-        chunkinfo_data = [(0,0)]*num_chunks
+        chunkinfo_data = [(0, 0)] * num_chunks
 
         # fill the numpy array with info from bytestreams data
         for i in range(num_chunks):
@@ -248,7 +266,7 @@ class QueryTest(unittest.TestCase):
             chunkinfo_data[index] = (item["file_offset"], item["size"])
 
         # get domain
-        req = helper.getEndpoint() + '/'
+        req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers)
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
@@ -256,18 +274,22 @@ class QueryTest(unittest.TestCase):
 
         # create table to hold chunkinfo
         # create a dataset to store chunk info
-        fields = ({'name': 'offset', 'type': 'H5T_STD_I64LE'},
-                  {'name': 'size', 'type': 'H5T_STD_I32LE'})
-        chunkinfo_type = {'class': 'H5T_COMPOUND', 'fields': fields }
+        fields = (
+            {"name": "offset", "type": "H5T_STD_I64LE"},
+            {"name": "size", "type": "H5T_STD_I32LE"},
+        )
+        chunkinfo_type = {"class": "H5T_COMPOUND", "fields": fields}
         req = self.endpoint + "/datasets"
         # Store 40 chunk locations
-        chunkinfo_dims = [num_chunks,]
-        payload = {'type': chunkinfo_type, 'shape': chunkinfo_dims }
+        chunkinfo_dims = [
+            num_chunks,
+        ]
+        payload = {"type": chunkinfo_type, "shape": chunkinfo_dims}
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
         rspJson = json.loads(rsp.text)
-        chunkinfo_uuid = rspJson['id']
+        chunkinfo_uuid = rspJson["id"]
         self.assertTrue(helper.validateId(chunkinfo_uuid))
 
         # link new dataset as 'chunks'
@@ -278,41 +300,55 @@ class QueryTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 201)
 
         # write to the chunkinfo dataset
-        payload = {'value': chunkinfo_data}
+        payload = {"value": chunkinfo_data}
 
         req = self.endpoint + "/datasets/" + chunkinfo_uuid + "/value"
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
 
-
         # define types we need
 
-        s10_type = {"charSet": "H5T_CSET_ASCII",
-                "class": "H5T_STRING",
-                "length": 10,
-                "strPad": "H5T_STR_NULLPAD" }
-        s4_type = {"charSet": "H5T_CSET_ASCII",
-                "class": "H5T_STRING",
-                "length": 4,
-                "strPad": "H5T_STR_NULLPAD" }
+        s10_type = {
+            "charSet": "H5T_CSET_ASCII",
+            "class": "H5T_STRING",
+            "length": 10,
+            "strPad": "H5T_STR_NULLPAD",
+        }
+        s4_type = {
+            "charSet": "H5T_CSET_ASCII",
+            "class": "H5T_STRING",
+            "length": 4,
+            "strPad": "H5T_STR_NULLPAD",
+        }
 
-        fields = ({'name': 'date', 'type': s10_type},
-                  {'name': 'stock_symbol', 'type': s4_type},
-                  {'name': 'sector', 'type': 'H5T_STD_I8LE'},
-                  {'name': 'open', 'type': 'H5T_IEEE_F32LE'},
-                  {'name': 'high', 'type': 'H5T_IEEE_F32LE'},
-                  {'name': 'low', 'type': 'H5T_IEEE_F32LE'},
-                  {'name': 'volume', 'type': 'H5T_IEEE_F32LE'},
-                  {'name': 'close', 'type': 'H5T_IEEE_F32LE'})
+        fields = (
+            {"name": "date", "type": s10_type},
+            {"name": "stock_symbol", "type": s4_type},
+            {"name": "sector", "type": "H5T_STD_I8LE"},
+            {"name": "open", "type": "H5T_IEEE_F32LE"},
+            {"name": "high", "type": "H5T_IEEE_F32LE"},
+            {"name": "low", "type": "H5T_IEEE_F32LE"},
+            {"name": "volume", "type": "H5T_IEEE_F32LE"},
+            {"name": "close", "type": "H5T_IEEE_F32LE"},
+        )
 
+        datatype = {"class": "H5T_COMPOUND", "fields": fields}
 
-        datatype = {'class': 'H5T_COMPOUND', 'fields': fields }
+        data = {
+            "type": datatype,
+            "shape": [
+                SNP500_ROWS,
+            ],
+        }
+        layout = {
+            "class": "H5D_CHUNKED_REF_INDIRECT",
+            "file_uri": s3path,
+            "dims": chunk_dims,
+            "chunk_table": chunkinfo_uuid,
+        }
+        data["creationProperties"] = {"layout": layout}
 
-        data = { "type": datatype, "shape": [SNP500_ROWS,] }
-        layout = {"class": 'H5D_CHUNKED_REF_INDIRECT', "file_uri": s3path, "dims": chunk_dims, "chunk_table": chunkinfo_uuid}
-        data['creationProperties'] = {'layout': layout}
-
-        req = self.endpoint + '/datasets'
+        req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
@@ -328,8 +364,8 @@ class QueryTest(unittest.TestCase):
 
         # read a selection
         req = self.endpoint + "/datasets/" + dset_id + "/value"
-        params = {'query': "stock_symbol == b'AAPL'" } # query for AAPL
-        params['select'] = "[0:1000000]" # search over just first 1MM rows
+        params = {"query": "stock_symbol == b'AAPL'"}  # query for AAPL
+        params["select"] = "[0:1000000]"  # search over just first 1MM rows
         rsp = self.session.get(req, params=params, headers=headers)
 
         self.assertEqual(rsp.status_code, 200)
@@ -343,13 +379,12 @@ class QueryTest(unittest.TestCase):
         self.assertEqual(item[1], "1980.12.12")
         self.assertEqual(item[2], "AAPL")
 
-
     def testPutQuery(self):
         # Test PUT query for 1d dataset
         print("testPutQuery", self.base_domain)
 
         headers = helper.getRequestHeaders(domain=self.base_domain)
-        req = self.endpoint + '/'
+        req = self.endpoint + "/"
 
         # Get root uuid
         rsp = self.session.get(req, headers=headers)
@@ -359,35 +394,40 @@ class QueryTest(unittest.TestCase):
         helper.validateId(root_uuid)
 
         #
-        #create 1d dataset
+        # create 1d dataset
         #
-        fixed_str4_type = {"charSet": "H5T_CSET_ASCII",
-                "class": "H5T_STRING",
-                "length": 4,
-                "strPad": "H5T_STR_NULLPAD" }
-        fixed_str8_type = {"charSet": "H5T_CSET_ASCII",
-                "class": "H5T_STRING",
-                "length": 8,
-                "strPad": "H5T_STR_NULLPAD" }
-        fields = (  {'name': 'stock_symbol', 'type': fixed_str4_type},
-                    {'name': 'date', 'type': fixed_str8_type},
-                    {'name': 'open', 'type': 'H5T_STD_I32LE'},
-                    {'name': 'close', 'type': 'H5T_STD_I32LE'} )
-        datatype = {'class': 'H5T_COMPOUND', 'fields': fields }
+        fixed_str4_type = {
+            "charSet": "H5T_CSET_ASCII",
+            "class": "H5T_STRING",
+            "length": 4,
+            "strPad": "H5T_STR_NULLPAD",
+        }
+        fixed_str8_type = {
+            "charSet": "H5T_CSET_ASCII",
+            "class": "H5T_STRING",
+            "length": 8,
+            "strPad": "H5T_STR_NULLPAD",
+        }
+        fields = (
+            {"name": "stock_symbol", "type": fixed_str4_type},
+            {"name": "date", "type": fixed_str8_type},
+            {"name": "open", "type": "H5T_STD_I32LE"},
+            {"name": "close", "type": "H5T_STD_I32LE"},
+        )
+        datatype = {"class": "H5T_COMPOUND", "fields": fields}
 
         num_elements = 12
-        maxdims = 12  # to verify we don't search elements off the dataset
-        payload = {'type': datatype, 'shape': num_elements} #, 'maxdims': maxdims}
+        payload = {"type": datatype, "shape": num_elements}  # , 'maxdims': maxdims}
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
 
         rspJson = json.loads(rsp.text)
-        dset_uuid = rspJson['id']
+        dset_uuid = rspJson["id"]
         self.assertTrue(helper.validateId(dset_uuid))
 
         # link new dataset as 'dset1'
-        name = 'dset'
+        name = "dset"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
@@ -406,19 +446,21 @@ class QueryTest(unittest.TestCase):
             ("AMZN", "20170104", 2891, 2978),
             ("EBAY", "20170105", 2973, 2962),
             ("AAPL", "20170105", 2934, 3010),
-            ("AMZN", "20170105", 3018, 3086)
+            ("AMZN", "20170105", 3018, 3086),
         ]
 
-        payload = {'value': value}
+        payload = {"value": value}
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
 
         # set any rows with AAPL to have open of 999
-        params = {'query': "stock_symbol == b'AAPL'" }
+        params = {"query": "stock_symbol == b'AAPL'"}
         update_value = {"open": 999}
-        payload = {'value': update_value}
-        rsp = self.session.put(req, params=params, data=json.dumps(update_value), headers=headers)
+        payload = {"value": update_value}
+        rsp = self.session.put(
+            req, params=params, data=json.dumps(update_value), headers=headers
+        )
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -429,7 +471,7 @@ class QueryTest(unittest.TestCase):
         for item in readData:
             indicies.append(item[0])
             self.assertEqual(item[1], "AAPL")
-        self.assertEqual(indicies, [1,4,7,10])
+        self.assertEqual(indicies, [1, 4, 7, 10])
 
         # read values and verify the expected changes where made
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
@@ -451,25 +493,27 @@ class QueryTest(unittest.TestCase):
                 self.assertEqual(orig_item[2], mod_item[2])
 
         # re-write values
-        payload = {'value': value}
+        payload = {"value": value}
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
 
         # set just one row with AAPL to have open of 42
-        params = {'query': "stock_symbol == b'AAPL'" }
+        params = {"query": "stock_symbol == b'AAPL'"}
         params["Limit"] = 1
         update_value = {"open": 999}
-        payload = {'value': update_value}
-        rsp = self.session.put(req, params=params, data=json.dumps(update_value), headers=headers)
+        payload = {"value": update_value}
+        rsp = self.session.put(
+            req, params=params, data=json.dumps(update_value), headers=headers
+        )
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
         readData = rspJson["value"]
         self.assertEqual(len(readData), 1)
-        self.assertEqual(readData[0], [1, 'AAPL', '20170102', 999, 2933])
-         
+        self.assertEqual(readData[0], [1, "AAPL", "20170102", 999, 2933])
+
         # read values and verify the expected changes where made
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         rsp = self.session.get(req, headers=headers)
@@ -491,10 +535,12 @@ class QueryTest(unittest.TestCase):
 
         # update zero value open rows (shouldn't find any)
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        params = {'query': "open == 0" }
+        params = {"query": "open == 0"}
         update_value = {"open": -999}
-        payload = {'value': update_value}
-        rsp = self.session.put(req, params=params, data=json.dumps(update_value), headers=headers)
+        payload = {"value": update_value}
+        rsp = self.session.put(
+            req, params=params, data=json.dumps(update_value), headers=headers
+        )
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("value" in rspJson)
@@ -502,7 +548,7 @@ class QueryTest(unittest.TestCase):
         self.assertEqual(len(readData), 0)
 
 
-if __name__ == '__main__':
-    #setup test files
+if __name__ == "__main__":
+    # setup test files
 
     unittest.main()
