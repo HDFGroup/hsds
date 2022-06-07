@@ -17,7 +17,7 @@ if "CONFIG_DIR" not in os.environ:
     os.environ["CONFIG_DIR"] = "../admin/config/"
 
 from aiobotocore.session import get_session
-from hsds.util.storUtil import getStorKeys, isStorObj, releaseStorageClient
+from hsds.util.storUtil import getStorKeys, releaseStorageClient
 from hsds import config
 
 
@@ -28,9 +28,12 @@ from hsds import config
 # Print usage and exit
 #
 def printUsage():
+    usage = "      python list_objects.py [--prefix <prefix> ] "
+    usage += "[--deliminator deliminator] [--showstats]"
 
-    print("       python list_objects.py [--prefix <prefix> ] [--deliminator deliminator] [--showstats]")
+    print(usage)
     sys.exit()
+
 
 def getS3KeysCallback(app, s3keys):
     print("getS3KeysCallback, {} items".format(len(s3keys)))
@@ -53,8 +56,15 @@ def getS3KeysCallback(app, s3keys):
             print("{}: {} {} {}".format(s3key, etag, obj_size, lastModified))
 
 
-async def listObjects(app, prefix='', deliminator='', suffix='', showstats=False):
-    await getStorKeys(app, prefix=prefix, deliminator=deliminator, suffix=suffix, include_stats=showstats, callback=getS3KeysCallback)
+async def listObjects(app, prefix="", deliminator="", suffix="", showstats=False):
+    await getStorKeys(
+        app,
+        prefix=prefix,
+        deliminator=deliminator,
+        suffix=suffix,
+        include_stats=showstats,
+        callback=getS3KeysCallback,
+    )
     await releaseStorageClient(app)
 
 
@@ -63,10 +73,9 @@ def main():
     if len(sys.argv) > 1 and (sys.argv[1] == "-h" or sys.argv[1] == "--help"):
         printUsage()
 
-
-    prefix = ''
-    deliminator = ''
-    suffix = ''
+    prefix = ""
+    deliminator = ""
+    suffix = ""
     showstats = False
 
     argn = 1
@@ -74,7 +83,7 @@ def main():
         arg = sys.argv[argn]
         val = None
         if len(sys.argv) > argn + 1:
-            val = sys.argv[argn+1]
+            val = sys.argv[argn + 1]
         if arg == "--prefix":
             prefix = val
             argn += 2
@@ -83,10 +92,10 @@ def main():
             argn += 2
         elif arg == "--suffix":
             suffix = val
-            argn +=2
+            argn += 2
         elif arg == "--showstats":
             showstats = True
-            argn +=1
+            argn += 1
         else:
             printUsage()
 
@@ -104,10 +113,19 @@ def main():
     session = get_session()
     app["session"] = session
     app["filter_map"] = {}
-    loop.run_until_complete(listObjects(app, prefix=prefix, deliminator=deliminator, suffix=suffix, showstats=showstats))
+    loop.run_until_complete(
+        listObjects(
+            app,
+            prefix=prefix,
+            deliminator=deliminator,
+            suffix=suffix,
+            showstats=showstats,
+        )
+    )
 
     loop.close()
 
     print("done!")
+
 
 main()

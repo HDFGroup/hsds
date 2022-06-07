@@ -21,8 +21,13 @@ if "CONFIG_DIR" not in os.environ:
     os.environ["CONFIG_DIR"] = "../admin/config/"
 
 from hsds.util.lruCache import LruCache
-from hsds.util.idUtil import isValidUuid,isSchema2Id, getS3Key
-from hsds.util.storUtil import releaseStorageClient, getStorKeys, getStorJSONObj, putStorJSONObj
+from hsds.util.idUtil import isValidUuid, isSchema2Id, getS3Key
+from hsds.util.storUtil import (
+    releaseStorageClient,
+    getStorKeys,
+    getStorJSONObj,
+    putStorJSONObj,
+)
 from hsds import config
 from hsds import hsds_logger as log
 
@@ -37,6 +42,7 @@ from hsds import hsds_logger as log
 def printUsage():
     print("       python link_mod.py [rootid] [prefix_old] [prefix_new] [-update]")
     sys.exit()
+
 
 async def checkDataset(app, dset_key):
     log.info(f"checkDataset for key: {dset_key}")
@@ -57,13 +63,16 @@ async def checkDataset(app, dset_key):
         return
     layout_class = layout_json["class"]
     log.info(f"got layout_class: {layout_class}")
-    if layout_class in ('H5D_CONTIGUOUS_REF', 'H5D_CHUNKED_REF'):
+    if layout_class in ("H5D_CONTIGUOUS_REF", "H5D_CHUNKED_REF"):
         if "file_uri" not in layout_json:
-            log.warn(f"Expected to find key 'file_uri' in layout_json for id: {dset_id}")
+            log.warn(
+                f"Expected to find key 'file_uri' in layout_json for id: {dset_id}"
+            )
             return
         file_uri = layout_json["file_uri"]
         if file_uri.startswith(prefix_old):
-            new_file_uri = prefix_new + file_uri[len(prefix_old):]
+            prefix_len = len(prefix_old)
+            new_file_uri = prefix_new + file_uri[prefix_len:]
             log.info(f"replacing uri: {file_uri} with {new_file_uri}")
             app["matched_dset_uri"] += 1
             if do_update:
@@ -76,11 +85,11 @@ async def checkDataset(app, dset_key):
                     log.info(f"dataset {dset_id} updated")
                 except Exception as e:
                     log.error(f"get exception writing dataset json: {e}")
-    elif layout_class == 'H5D_CHUNKED_REF_INDIRECT':
+    elif layout_class == "H5D_CHUNKED_REF_INDIRECT":
         # add to list to be scanned later
-        indirect_dataset_keys += dset_key[:-len(".dataset.json")]
+        indirect_dataset_keys += dset_key[: -len(".dataset.json")]
     else:
-        log.info(f"skipping check for layout_class: {layout_class}")     
+        log.info(f"skipping check for layout_class: {layout_class}")
 
 
 async def getKeysCallback(app, s3keys):
@@ -116,19 +125,31 @@ async def run_scan(app, rootid, update=False):
 
     if not root_key.endswith("/.group.json"):
         raise ValueError("unexpected root key")
-    root_prefix = root_key[:-(len(".group.json"))]
+    root_prefix = root_key[: -(len(".group.json"))]
     app["root_prefix"] = root_prefix
-    
+
     try:
-        await getStorKeys(app, prefix=root_prefix, suffix=".dataset.json", include_stats=False, callback=getKeysCallback)
+        await getStorKeys(
+            app,
+            prefix=root_prefix,
+            suffix=".dataset.json",
+            include_stats=False,
+            callback=getKeysCallback,
+        )
     except ClientError as ce:
         log.error(f"removeKeys - getS3Keys faiiled: {ce}")
     except HTTPNotFound:
-        log.warn(f"getStorKeys - HTTPNotFound error for getStorKeys with prefix: {root_prefix}")
+        log.warn(
+            f"getStorKeys - HTTPNotFound error for getStorKeys with prefix: {root_prefix}"
+        )
     except HTTPInternalServerError:
-        log.error(f"getStorKeys - HTTPInternalServerError for getStorKeys with prefix: {root_prefix}")
+        log.error(
+            f"getStorKeys - HTTPInternalServerError for getStorKeys with prefix: {root_prefix}"
+        )
     except Exception as e:
-        log.error(f"getStorKeys - Unexpected Exception for getStorKeys with prefix: {root_prefix}: {e}")
+        log.error(
+            f"getStorKeys - Unexpected Exception for getStorKeys with prefix: {root_prefix}: {e}"
+        )
 
     # update all chunks for datasets with H5D_CHUNKED_REF_INDIRECT layout
     indirect_dataset_keys = app["indirect_dataset_keys"]
@@ -164,7 +185,6 @@ def main():
         print("prefix_old and prefix_new or the same")
         sys.exit(1)
 
-
     # we need to setup a asyncio loop to query s3
     loop = asyncio.get_event_loop()
 
@@ -183,15 +203,19 @@ def main():
 
     # need the metadata cache since we will be calling into some SN methods
     metadata_mem_cache_size = int(config.get("metadata_mem_cache_size"))
-    app['meta_cache'] = LruCache(mem_target=metadata_mem_cache_size, name="MetaCache")
-   
+    app["meta_cache"] = LruCache(mem_target=metadata_mem_cache_size, name="MetaCache")
+
     loop.run_until_complete(run_scan(app, rootid=rootid, update=do_update))
 
     loop.close()
 
     print("datsets scanned:", app["dataset_count"])
-    print("datasets with matching uri ('H5D_CONTIGUOUS_REF', 'H5D_CHUNKED_REF' layouts):", app["matched_dset_uri"])
- 
+    print(
+        "datasets with matching uri ('H5D_CONTIGUOUS_REF', 'H5D_CHUNKED_REF' layouts):",
+        app["matched_dset_uri"],
+    )
+
     print("done!")
+
 
 main()
