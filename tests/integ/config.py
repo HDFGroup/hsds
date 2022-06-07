@@ -23,8 +23,8 @@ cfg = {
     "test_noauth": True,
     "default_public": False,  # set to true if the server makes new domains publicly readable
     "bucket_name": "",  # bucket name to be used for requests
-    "hdf5_sample_bucket": "",  # S3 bucket for storing traditional HDF5 files (snp500.h5 and tall.h5), e.g. 'hdf5_sample'
-    "test_group": "test_group",  # group defined in admin/config/groups.txt that includes user user_name and user2_name
+    "hdf5_sample_bucket": "",  # S3 bucket for storing traditional HDF5 files
+    "test_group": "test_group",  # group defined in admin/config/groups.txt
     "max_chunks_per_folder": 0,  # match with this config setting on server
 }
 

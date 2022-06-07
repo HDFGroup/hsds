@@ -136,15 +136,10 @@ class AttributeTest(unittest.TestCase):
 
         # get 3 attributes after "attr_5"
         limit = 3
-        req = (
-            self.endpoint
-            + "/groups/"
-            + root_uuid
-            + "/attributes?Limit="
-            + str(limit)
-            + "&Marker=attr_5"
-        )
-        rsp = self.session.get(req, headers=headers)
+        req = f"{self.endpoint}/groups/{root_uuid}/attributes"
+        params = {"Limit": limit, "Marker": "attr_5"}
+
+        rsp = self.session.get(req, headers=headers, params=params)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
 
@@ -197,15 +192,8 @@ class AttributeTest(unittest.TestCase):
             # do a GET for attribute "attr" (should return 404)
             attr_name = "attr"
             attr_payload = {"type": "H5T_STD_I32LE", "value": 42}
-            req = (
-                self.endpoint
-                + "/"
-                + col_name
-                + "/"
-                + obj1_id
-                + "/attributes/"
-                + attr_name
-            )
+            req = f"{self.endpoint}/{col_name}/{obj1_id}/attributes/{attr_name}"
+
             rsp = self.session.get(req, headers=headers)
             self.assertEqual(rsp.status_code, 404)  # not found
 
@@ -249,15 +237,8 @@ class AttributeTest(unittest.TestCase):
             self.assertEqual(rspJson["attributeCount"], 1)  # one attribute
 
             # try creating the attribute again - should return 409
-            req = (
-                self.endpoint
-                + "/"
-                + col_name
-                + "/"
-                + obj1_id
-                + "/attributes/"
-                + attr_name
-            )
+            req = f"{self.endpoint}/{col_name}/{obj1_id}/attributes/{attr_name}"
+
             rsp = self.session.put(req, data=json.dumps(attr_payload), headers=headers)
             self.assertEqual(rsp.status_code, 409)  # conflict
 
@@ -1175,14 +1156,8 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 201)
 
         # read attr
-        req = (
-            self.endpoint
-            + "/groups/"
-            + root_uuid
-            + "/attributes/"
-            + attr_name
-            + "/value"
-        )
+        req = f"{self.endpoint}/groups/{root_uuid}/attributes/{attr_name}/value"
+
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
@@ -1218,14 +1193,8 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 201)
 
         # read attr
-        req = (
-            self.endpoint
-            + "/groups/"
-            + root_uuid
-            + "/attributes/"
-            + attr_name
-            + "/value"
-        )
+        req = f"{self.endpoint}/groups/{root_uuid}/attributes/{attr_name}/value"
+
         rsp = self.session.get(req, headers=headers_bin_rsp)
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers["Content-Type"], "application/octet-stream")
@@ -1265,14 +1234,8 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 201)
 
         # read attr - values should be all zeros
-        req = (
-            self.endpoint
-            + "/groups/"
-            + root_uuid
-            + "/attributes/"
-            + attr_name
-            + "/value"
-        )
+        req = f"{self.endpoint}/groups/{root_uuid}/attributes/{attr_name}/value"
+
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
@@ -1298,14 +1261,8 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 400)
 
         # read attr
-        req = (
-            self.endpoint
-            + "/groups/"
-            + root_uuid
-            + "/attributes/"
-            + attr_name
-            + "/value"
-        )
+        req = f"{self.endpoint}/groups/{root_uuid}/attributes/{attr_name}/value"
+
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)

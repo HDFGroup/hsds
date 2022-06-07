@@ -86,13 +86,11 @@ class ValueTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
-        self.assertEqual(
-            rspJson["value"],
-            [
-                0,
-            ]
-            * data["shape"],
-        )
+        expect_value = [
+            0,
+        ]
+        expect_value *= data["shape"]
+        self.assertEqual(rspJson["value"], expect_value)
 
         # write to the dset
         data = list(range(10))  # write 0-9
@@ -287,13 +285,11 @@ class ValueTest(unittest.TestCase):
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
         for i in range(num_row):
-            self.assertEqual(
-                rspJson["value"][i],
-                [
-                    0,
-                ]
-                * num_col,
-            )
+            expected_value = [
+                0,
+            ]
+            expected_value *= num_col
+            self.assertEqual(rspJson["value"][i], expected_value)
 
         # write to the dset
         json_data = []
@@ -397,13 +393,11 @@ class ValueTest(unittest.TestCase):
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
         for i in range(num_row):
-            self.assertEqual(
-                rspJson["value"][i],
-                [
-                    0,
-                ]
-                * num_col,
-            )
+            expected_value = [
+                0,
+            ]
+            expected_value *= num_col
+            self.assertEqual(rspJson["value"][i], expected_value)
 
         # initialize bytearray to test values
         bin_data = bytearray(4 * num_row * num_col)
@@ -664,13 +658,11 @@ class ValueTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
-        self.assertEqual(
-            rspJson["value"],
-            [
-                "",
-            ]
-            * data["shape"],
-        )
+        expected_value = [
+            "",
+        ]
+        expected_value *= data["shape"]
+        self.assertEqual(rspJson["value"], expected_value)
 
         # write to the dset
         data = ["Parting", "is such", "sweet", "sorrow."]
@@ -744,13 +736,11 @@ class ValueTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
-        self.assertEqual(
-            rspJson["value"],
-            [
-                "",
-            ]
-            * data["shape"],
-        )
+        expected_value = [
+            "",
+        ]
+        expected_value *= data["shape"]
+        self.assertEqual(rspJson["value"], expected_value)
 
         # write to the dset
         strings = ["Parting", "is such", "sweet", "sorrow."]
@@ -823,13 +813,11 @@ class ValueTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
-        self.assertEqual(
-            rspJson["value"],
-            [
-                "",
-            ]
-            * data["shape"],
-        )
+        expected_value = [
+            "",
+        ]
+        expected_value *= data["shape"]
+        self.assertEqual(rspJson["value"], expected_value)
 
         # write to the dset
         data = ["123456", "1234567", "12345678", "123456789"]
@@ -1155,23 +1143,18 @@ class ValueTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
-        self.assertEqual(
-            rspJson["value"],
-            [
-                42,
-            ]
-            * 10,
-        )
+        expected_value = [
+            42,
+        ]
+        expected_value *= 10
+        self.assertEqual(rspJson["value"], expected_value)
 
         # write some values
-        payload = {
-            "start": 0,
-            "stop": 5,
-            "value": [
-                24,
-            ]
-            * 5,
-        }
+        value = [
+            24,
+        ]
+        value *= 5
+        payload = {"start": 0, "stop": 5, "value": value}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
@@ -1234,12 +1217,10 @@ class ValueTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         shape = rspJson["shape"]
         self.assertEqual(shape["class"], "H5S_SIMPLE")
-        self.assertEqual(
-            shape["dims"],
-            [
-                40,
-            ],
-        )
+        expected_value = [
+            40,
+        ]
+        self.assertEqual(shape["dims"], expected_value)
 
         # read the default values
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
@@ -1254,14 +1235,11 @@ class ValueTest(unittest.TestCase):
 
         # write some values
         new_value = ("mytag", 123)
-        payload = {
-            "start": 0,
-            "stop": 20,
-            "value": [
-                new_value,
-            ]
-            * 20,
-        }
+        new_values = []
+        for i in range(20):
+            new_values.append(new_value)
+
+        payload = {"start": 0, "stop": 20, "value": new_values}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
@@ -1325,23 +1303,18 @@ class ValueTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
-        self.assertEqual(
-            rspJson["value"],
-            [
-                fill_value,
-            ]
-            * 10,
-        )
+        expected_value = [
+            fill_value,
+        ]
+        expected_value *= 10
+        self.assertEqual(rspJson["value"], expected_value)
 
         # write some values
-        payload = {
-            "start": 0,
-            "stop": 5,
-            "value": [
-                "hello",
-            ]
-            * 5,
-        }
+        value = [
+            "hello",
+        ]
+        value *= 5
+        payload = {"start": 0, "stop": 5, "value": value}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
@@ -1413,14 +1386,11 @@ class ValueTest(unittest.TestCase):
             self.assertEqual(ret_values[i], None)
 
         # write some values
-        payload = {
-            "start": 0,
-            "stop": 5,
-            "value": [
-                3.12,
-            ]
-            * 5,
-        }
+        value = [
+            3.12,
+        ]
+        value *= 5
+        payload = {"start": 0, "stop": 5, "value": value}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 

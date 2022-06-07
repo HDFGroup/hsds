@@ -120,7 +120,9 @@ class QueryTest(unittest.TestCase):
                 nrows = len(bin_data) // ROW_BYTES
                 data = []
                 for i in range(nrows):
-                    x = bin_data[i * ROW_BYTES : (i + 1) * ROW_BYTES]
+                    index_start = i * ROW_BYTES
+                    index_end = (i + 1) * ROW_BYTES
+                    x = bin_data[index_start:index_end]
                     index = int.from_bytes(x[0:8], "little", signed=False)
                     symbol = x[8:12].decode("ascii")
                     date_str = x[12:20].decode("ascii")
@@ -158,10 +160,7 @@ class QueryTest(unittest.TestCase):
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
 
         for query_headers in (headers, headers_bin_rsp):
-            if (
-                "accept" in query_headers
-                and query_headers["accept"] == "application/octet-stream"
-            ):
+            if query_headers.get("accept") == "application/octet-stream":
                 expect_bin = True
             else:
                 expect_bin = False
