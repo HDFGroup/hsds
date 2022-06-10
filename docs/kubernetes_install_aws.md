@@ -107,6 +107,7 @@ If you need to build and deploy a custom HSDS image (e.g. you have made changes 
 
     Note: The RBAC role enables kubernetes pods to find the internal IP addresses of other pods
     running in the cluster. This step can be skipped if only one pod will be used.
+
     Note: if you plan to run HSDS in its own Kubernetes namespace, modify the namespace key of
     ClusterRoleBinding in k8s_rbac.yml from "default" to your namespace.
 
