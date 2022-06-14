@@ -1,7 +1,6 @@
 import sys
 import socket
 import tempfile
-import time
 from random import randint
 from multiprocessing import shared_memory
 import numpy as np
@@ -57,7 +56,8 @@ with socket.socket(socket_type, socket.SOCK_STREAM) as s:
         remaining = len(buffer)
         while remaining > 0:
             print(f"sending {remaining}")
-            sent = conn.send(buffer[(len(buffer) - remaining) :])
+            nlen = len(buffer) - remaining
+            sent = conn.send(buffer[nlen:])
             print(f"{sent} bytes sent")
             remaining -= sent
 

@@ -244,18 +244,22 @@ max_tasks = 10
 for narg in range(1, len(sys.argv)):
     arg = sys.argv[narg]
     if arg in ("-h", "--help"):
-        print(
-            "usage: python nsrdb_async.py [--index=n] [--block=n] [--tasks=n] [--loglevel={debug|info|warning|error}]"
-        )
+        msg = "usage: python nsrdb_async.py [--index=n] [--block=n] [--tasks=n] "
+        msg += "--loglevel={debug|info|warning|error}]"
+        print(msg)
         sys.exit(0)
     if arg.startswith("--index="):
-        index = int(arg[len("--index=") :])
+        nlen = len("--index=")
+        index = int(arg[nlen:])
     elif arg.startswith("--block="):
-        block_size = int(arg[len("--block=") :])
+        nlen = len("--block=")
+        block_size = int(arg[nlen:])
     elif arg.startswith("--tasks="):
-        max_tasks = int(arg[len("--tasks=") :])
+        nlen = len("--tasks=")
+        max_tasks = int(arg[nlen:])
     elif arg.startswith("--loglevel="):
-        level = arg[len("--loglevel=") :]
+        nlen = len("--loglevel=")
+        level = arg[nlen:]
         if level == "debug":
             log_level = logging.DEBUG
         elif level == "info":
@@ -267,7 +271,6 @@ for narg in range(1, len(sys.argv)):
         else:
             print("unexpected log level:", log_level)
             sys.exit(1)
-
     else:
         print(f"unexpected argument: {arg}")
 

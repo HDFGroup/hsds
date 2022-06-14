@@ -36,7 +36,8 @@ class Config:
                         )
                         continue
                     k = line[:index].strip()
-                    v = line[(index + 1) :].strip()
+                    nlen = index + 1
+                    v = line[nlen:].strip()
                     if v and v.upper() != "NONE":
                         self._cfg[k] = v
         # override any config values with environment variable if found

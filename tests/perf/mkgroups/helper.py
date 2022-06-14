@@ -17,7 +17,7 @@ import pytz
 import requests
 
 """
-    Helper function - get endpoint we'll send http requests to 
+    Helper function - get endpoint we'll send http requests to
 """
 
 

@@ -9,7 +9,6 @@ random.seed(1)
 
 
 async def hello(request):
-    name = request.match_info.get("name", "foo")
     n = datetime.now().isoformat()
     delay = random.randint(0, 3)
     await asyncio.sleep(delay)

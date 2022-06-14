@@ -48,9 +48,9 @@ def response(req, resp=None, code=None, message=None):
             level = "ERROR"
 
     log_level = config.get("log_level")
-    if (
-        log_level == "INFO"
-        or (log_level == "WARN" and level != "INFO")
-        or (log_level == "ERROR" and level == "ERROR")
+    if any(
+        log_level == "INFO",
+        (log_level == "WARN" and level != "INFO"),
+        (log_level == "ERROR" and level == "ERROR"),
     ):
         print("{} RSP> <{}> ({}): {}".format(level, code, message, req.path))

@@ -133,11 +133,13 @@ while True:
     nrow = entry["nrow"]
     ncol = entry["ncol"]
     arr = np.random.rand(nrow, ncol)
-    x = entry["x"]
-    y = entry["y"]
-    dset[x : x + nrow, y : y + ncol] = arr
+    x1 = entry["x"]
+    y1 = entry["y"]
+    x2 = x1 + nrow
+    y2 = y1 + ncol
+    dset[x1:x2, y1:y2] = arr
     if verbose:
-        print(f"wrote dset[{x}:{x+nrow}, {y}:{y+ncol}]")
+        print(f"wrote dset[{x1}:{x2}, {y1}:{y2}]")
     entry["done"] = time.time()
     entry["status"] = 1
     table[index] = entry

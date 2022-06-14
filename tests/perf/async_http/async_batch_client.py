@@ -1,5 +1,4 @@
 # modified fetch function with semaphore
-import random
 import asyncio
 from aiohttp import ClientSession
 import config

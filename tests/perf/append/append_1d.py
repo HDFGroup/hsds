@@ -15,9 +15,9 @@ sensor_seq = {}
 
 def usage():
     """usage message and quit"""
-    print(
-        "usage: python append_1d.py [--loglevel=debug|info|warning|error] [--maxrows=n] [--dump] filepath"
-    )
+    msg = "usage: python append_1d.py [--loglevel=debug|info|warning|error] [--maxrows=n] "
+    msg += "[--dump] filepath"
+    print(msg)
     print(" use hdf5:// prefix to denote use of HSDS domain rather than hdf5 filepath")
     sys.exit(0)
 
@@ -58,7 +58,8 @@ mode = "a"
 for narg in range(1, len(sys.argv)):
     arg = sys.argv[narg]
     if arg.startswith("--loglevel="):
-        level = arg[len("--loglevel=") :]
+        nlen = len("--loglevel=")
+        level = arg[nlen:]
         if level == "debug":
             log_level = logging.DEBUG
         elif level == "info":
@@ -76,7 +77,8 @@ for narg in range(1, len(sys.argv)):
     elif arg in ("-h", "--help"):
         usage()
     elif arg.startswith("--maxrows="):
-        maxrows = int(arg[len("--maxrows=") :])
+        nlen = len("--maxrows=")
+        maxrows = int(arg[nlen:])
     elif arg.startswith("-"):
         usage()
 
@@ -135,9 +137,9 @@ try:
             e = dset[index]
             ts = datetime.datetime.fromtimestamp(e["timestamp"])
             s = ts.isoformat(sep=" ", timespec="milliseconds")
-            print(
-                f"{index:12}: {s} {e['sensor']:8} {e['seq']:8} {e['mtype']:8} -- {e['value']:06.4f}"
-            )
+            msg = f"{index:12}: {s} {e['sensor']:8} {e['seq']:8} "
+            msg += f"{e['mtype']:8} -- {e['value']:06.4f}"
+            print(msg)
             count += 1
         else:
             if addRow(dset):

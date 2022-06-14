@@ -28,11 +28,14 @@ for narg in range(1, len(sys.argv)):
     if arg in OPTIONS:
         option = arg
     elif arg.startswith("--index="):
-        index = int(arg[len("--index=") :])
+        nlen = len("--index=")
+        index = int(arg[nlen:])
     elif arg.startswith("--block="):
-        block = int(arg[len("--block=") :])
+        nlen = len("--block=")
+        block = int(arg[nlen:])
     elif arg.startswith("--loglevel="):
-        level = arg[len("--loglevel=") :]
+        nlen = len("--loglevel=")
+        level = arg[nlen:]
         if level == "debug":
             log_level = logging.DEBUG
         elif level == "info":
@@ -48,9 +51,9 @@ for narg in range(1, len(sys.argv)):
         print(f"unexpected argument: {arg}")
 
 if option is None:
-    print(
-        f"usage: python nsrdb_test.py {OPTIONS} [--index=n] [--block=n] [--loglevel=debug|info|warning|error]"
-    )
+    msg = f"usage: python nsrdb_test.py {OPTIONS} "
+    msg == "[--index=n] [--block=n] [--loglevel=debug|info|warning|error]"
+    print(msg)
     sys.exit(0)
 
 if index is None:
@@ -103,8 +106,9 @@ for i in range(num_blocks):
     arr = dset[index, start:end]
     te = time.time()
     result[start:end] = arr
-    print(
-        f"    read[{start}:{end}]: {arr.min():4.2f}, {arr.max():4.2f}, {arr.mean():4.2f}, {te-ts:4.2f} s"
-    )
+    msg = f"    read[{start}:{end}]: {arr.min():4.2f}, {arr.max():4.2f}, "
+    msg += f"{arr.mean():4.2f}, {te-ts:4.2f} s"
+    print(msg)
+
 print(f"{H5_PATH}[{index}:]: {result}")
 print(f"{result.min()}, {result.max()}, {result.mean():4.2f}")

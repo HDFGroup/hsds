@@ -22,7 +22,8 @@ def get(x):
         if sys.argv[i].startswith(option):
             # found an override
             arg = sys.argv[i]
-            return arg[len(option) :]  # return text after option string
+            nlen = len(option)
+            return arg[nlen:]  # return text after option string
     # see if there are an environment variable override
     if x.upper() in os.environ:
         return os.environ[x.upper()]

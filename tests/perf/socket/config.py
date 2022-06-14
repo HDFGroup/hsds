@@ -34,7 +34,8 @@ def getCmdLineArg(x):
             return True
         elif arg.startswith(option):
             # found an override
-            override = arg[len(option) :]  # return text after option string
+            nlen = len(option)
+            override = arg[nlen:]  # return text after option string
             return override
     return None
 

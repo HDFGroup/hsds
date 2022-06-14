@@ -1,6 +1,7 @@
 # With the following code we create a "file" and then we read parts of it.
 # We measure the reading times.
-# We can use this code with reguar HDF5 files or with a HSDS service (make <USE_HSDS> variable true)
+# We can use this code with reguar HDF5 files or with a HSDS service
+# (make <USE_HSDS> variable true)
 
 import sys
 import random
@@ -35,9 +36,10 @@ def run_hyperslab_select(dset, axis=0):
     tEnd = time.time()
     tElapsed = tEnd - tStart
     mb_per_sec = (nbytes / tElapsed) / (1024 * 1024)
-    print(
-        f"Elapsed time hyperslab select :: dset[{sel_str}]:  {tElapsed:6.3f} s, {mb_per_sec:6.2f} Mb/s"
-    )
+    msg = f"Elapsed time hyperslab select :: dset[{sel_str}]:  {tElapsed:6.3f} s, "
+    msg += f"{mb_per_sec:6.2f} Mb/s"
+    print(msg)
+
     return (axis, tElapsed, mb_per_sec)
 
 
@@ -80,7 +82,8 @@ for i in range(1, len(sys.argv)):
     elif arg == "--use_shared_mem":
         use_shared_mem = True
     elif arg.startswith("--iter_count="):
-        iter_count = int(arg[len("--iter_count=") :])
+        nlen = len("--iter_count=")
+        iter_count = int(arg[nlen:])
     else:
         filepath = arg
 

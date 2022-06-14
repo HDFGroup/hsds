@@ -124,7 +124,7 @@ async def createGroup():
             )
             raise HttpProcessingError(code=rsp.status, message="Unexpected error")
         else:
-            link_created = True
+            log.debug("link_created")
 
     return group_id
 

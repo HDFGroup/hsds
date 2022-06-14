@@ -17,9 +17,9 @@ cfg = Config()
 
 
 def usage():
-    print(
-        "usage: python append_1d_async.py [--loglevel=debug|info|warning|error] [--maxrows=n] [--tasks=n] domainpath"
-    )
+    msg = "usage: python append_1d_async.py [--loglevel=debug|info|warning|error] "
+    msg += "[--maxrows=n] [--tasks=n] domainpath"
+    print(msg)
     print(" domain must exist (use append_1d.py to initialize)")
     sys.exit(0)
 
@@ -153,9 +153,9 @@ class DataAppender:
                         self._app["success_count"] += 1
                         self._app["rows_added"] += 1
                         seq_num += 1
-                        if (
-                            self.max_rows > 0
-                            and self._app["rows_added"] >= self.max_rows
+                        if all(
+                            (self.max_rows > 0),
+                            (self._app["rows_added"] >= self.max_rows),
                         ):
                             logging.info(f"task: {sensor_id}: no more work to do")
                             self._q.task_done()
@@ -164,7 +164,8 @@ class DataAppender:
                     logging.error(f"task: {sensor_id}: got Exception: {e}")
 
                 elapsed = time.time() - start_ts
-                msg = f"DataAppender - task {sensor_id} start: {start_ts:.3f} elapsed: {elapsed:.3f}"
+                msg = f"DataAppender - task {sensor_id} start: {start_ts:.3f} "
+                msg += f"elapsed: {elapsed:.3f}"
                 logging.info(msg)
 
                 if status_code == 200:
@@ -256,9 +257,11 @@ for narg in range(1, len(sys.argv)):
     if arg in ("-h", "--help"):
         usage()
     elif arg.startswith("--tasks="):
-        max_tasks = int(arg[len("--tasks=") :])
+        nlen = len("--tasks=")
+        max_tasks = int(arg[nlen:])
     elif arg.startswith("--loglevel="):
-        level = arg[len("--loglevel=") :]
+        nlen = len("--loglevel=")
+        level = arg[nlen:]
         if level == "debug":
             log_level = logging.DEBUG
         elif level == "info":
@@ -268,12 +271,14 @@ for narg in range(1, len(sys.argv)):
         elif level == "error":
             log_level = logging.ERROR
         else:
-            print("unexpected log level:", level)
+            print(f"unexpected log level: {level}")
             sys.exit(1)
     elif arg.startswith("--maxrows="):
-        max_rows = int(arg[len("--maxrows=") :])
+        nlen = len("--maxrows=")
+        max_rows = int(arg[nlen:])
     elif arg.startswith("--tasks="):
-        max_tasks = int(arg[len("--tasks=") :])
+        nlen = len("--tasks=")
+        max_tasks = int(arg[nlen:])
     elif arg.startswith("-"):
         usage()
     else:
@@ -284,7 +289,8 @@ if not domain:
 
 if domain.startswith("hdf5://"):
     # just need the path part for REST API
-    domain = domain[len("hdf5:/") :]
+    nlen = len("hdf5:/")
+    domain = domain[nlen:]
 
 logging.basicConfig(format="%(asctime)s %(message)s", level=log_level)
 

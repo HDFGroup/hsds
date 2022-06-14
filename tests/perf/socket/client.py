@@ -45,7 +45,9 @@ with socket.socket(socket_type, socket.SOCK_STREAM) as s:
                 print("got shared memory name:", shm_name)
             else:
                 # copy bytes to buffer
-                buffer[total_bytes : (total_bytes + len(data))] = data
+                n = total_bytes
+                m = total_bytes + len(data)
+                buffer[n:m] = data
             total_bytes += len(data)
         except KeyboardInterrupt:
             print("quiting")
@@ -73,6 +75,6 @@ if total_bytes > 1024 * 1024:
     print(f"mb: {total_bytes//(1024*1024)}")
 else:
     print(f"bytes: {total_bytes}")
-print(
-    f"Elapsed time :: {(tEnd - tStart):6.3f} s, {(total_bytes/(tEnd-tStart))/(1024*1024):6.2f} Mb/s"
-)
+    elapse = tEnd - tStart
+    mbs = (total_bytes / elapse) / (1024 * 1024)
+    print(f"Elapsed time :: {(elapse):6.3f} s, {mbs:6.2f} Mb/s")
