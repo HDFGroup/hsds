@@ -524,7 +524,7 @@ def getUserPasswordFromRequest(request):
 
     elif scheme.lower() == "bearer":
         # OpenID Auth.
-        log.debug(f"Got OpenID bearer token: {token}")
+        log.debug("Got OpenID bearer token")
         user_group_db = app["user_group_db"]
 
         # see if we've already validated this token
