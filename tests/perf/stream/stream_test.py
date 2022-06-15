@@ -146,8 +146,9 @@ class StreamTest(unittest.TestCase):
             for j in range(num_col):
                 n = row_start_value + j + 1
                 int_bytes = n.to_bytes(8, "little")
-                offset = (i * num_col + j) * item_size
-                bin_data[offset : offset + item_size] = int_bytes
+                offset_start = (i * num_col + j) * item_size
+                offset_end = offset_start + item_size
+                bin_data[offset_start:offset_end] = int_bytes
 
         print("writing...")
         ts = time.time()
