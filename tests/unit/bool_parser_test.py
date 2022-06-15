@@ -49,6 +49,15 @@ class BooleanParserTest(unittest.TestCase):
         eval_str = p.getEvalStr()
         self.assertEqual(eval_str, "(x1 == 'hi') & (y2 > 42.0)")
 
+        p = BooleanParser('x1 == "hi" & y2 > 42')
+        variables = p.getVariables()
+        self.assertEqual(len(variables), 2)
+        self.assertTrue("x1" in variables)
+        self.assertTrue("y2" in variables)
+        self.assertTrue(p.evaluate({"x1": "hi", "y2": 43}))
+        eval_str = p.getEvalStr()
+        self.assertEqual(eval_str, "(x1 == 'hi') & (y2 > 42.0)")
+
         # use single instead of double quotes
         p = BooleanParser("x1 == 'hi' AND y2 > 42")
         variables = p.getVariables()

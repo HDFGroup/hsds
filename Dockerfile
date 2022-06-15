@@ -1,14 +1,12 @@
 FROM python:3.9-slim AS hsds-base
 
- 
-
 # Install HSDS
 RUN mkdir /usr/local/src/hsds/ \
-          /usr/local/src/hsds/hsds/ \
-          /usr/local/src/hsds/admin/ \
-          /usr/local/src/hsds/admin/config/ \
-          /usr/local/src/hsds/hsds/util/ \
-           /etc/hsds/ 
+    /usr/local/src/hsds/hsds/ \
+    /usr/local/src/hsds/admin/ \
+    /usr/local/src/hsds/admin/config/ \
+    /usr/local/src/hsds/hsds/util/ \
+    /etc/hsds/ 
 
 COPY setup.py /usr/local/src/hsds/
 COPY hsds/*.py /usr/local/src/hsds/hsds/

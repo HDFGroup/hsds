@@ -1,5 +1,4 @@
-Installation with Azure Kubernetes
-==================================
+# Installation with Azure Kubernetes
 
 **Note:** These instructions assume you are using a Linux based system. If you are using Windows please see the special notes at the end.
 
@@ -20,17 +19,15 @@ These environment variables will be used to create Azure resources.
     export AZURE_CONNECTION_STRING="DefaultEndpointsProtocol=https;AccountName=myacct;AccountKey=GZJxxxOPnw==;EndpointSuffix=core.windows.net"
 
 The environment variables AZURE_APP_ID and AZURE_RESOURCE_ID are required if Azure Active Directory will
-be used for authentication.  See the "Azure Active Directory" section below for information and setting up Active Directory for use with HSDS.
+be used for authentication. See the "Azure Active Directory" section below for information and setting up Active Directory for use with HSDS.
 
-Prerequisites
--------------
+## Prerequisites
 
 Setup Pip and Python 3 on your local machine if not already installed (e.g. with Miniconda <https://docs.conda.io/en/latest/miniconda.html>).
 
 Clone the hsds repository in a local folder: `git clone https://github.com/HDFGroup/hsds`.
 
-Setup your Azure environment
-----------------------------
+## Setup your Azure environment
 
 Here we will deploy an Azure Storage Account, Azure Container Registry (ACR) and Azure Kubernetes Service (AKS).
 
@@ -41,14 +38,13 @@ Here we will deploy an Azure Storage Account, Azure Container Registry (ACR) and
 5. Run the following commands to create Azure Resource Group: `az group create --name $RESOURCEGROUP --location $LOCATION`
 6. Create storage account: `az storage account create -n $STORAGEACCTNAME -g $RESOURCEGROUP -l $LOCATION --sku Standard_LRS`
 7. Create a blob container in the storage account: `$az storage container create -n $CONTAINERNAME --account-name $STORAGEACCTNAME --fail-on-exist`
-Note: The connection string for the storage account can be found in the portal under Settings > Access keys on the storage account or via this cli command: `az storage account show-connection-string -n $STORAGEACCTNAME -g $RESOURCEGROUP`
+   Note: The connection string for the storage account can be found in the portal under Settings > Access keys on the storage account or via this cli command: `az storage account show-connection-string -n $STORAGEACCTNAME -g $RESOURCEGROUP`
 8. The following command will create the new ACR: `az acr create --resource-group $RESOURCEGROUP --name $ACRNAME --sku Basic --admin-enabled true`
 9. Install AKS cli: `az aks install-cli`
 10. Create AKS Cluster and attach to ACR: `az aks create -n $AKSCLUSTER -g $RESOURCEGROUP --generate-ssh-keys --attach-acr $ACRNAME`
 11. Get access to the AKS Cluster: `az aks get-credentials -g $RESOURCEGROUP -n $AKSCLUSTER`
 
-Create Kubernetes secrets
--------------------------
+## Create Kubernetes secrets
 
 Kubernetes secrets are used in AKS to make sensitive information available to the service.
 HSDS on AKS utilizes the following secrets:
@@ -57,7 +53,7 @@ HSDS on AKS utilizes the following secrets:
 2. azure-conn-str: the AZURE_CONNECTION_STRING value
 3. azure-ad-ids: AZURE_APP_ID and AZURE_RESOURCE_ID (optional)
 
-HSDS accounts can either be set by creating the user-password secret, or by using Azure Active Directory (AD).    See [Azure Active Directory Setup](azure_ad_setup.md) for instructions on using AD.
+HSDS accounts can either be set by creating the user-password secret, or by using Azure Active Directory (AD). See [Azure Active Directory Setup](azure_ad_setup.md) for instructions on using AD.
 
 To use user-password secret, first create a text file with the desired usernames and passwords as follows:
 
@@ -72,61 +68,58 @@ Run the make_secrets script: `./make_secrets.sh`
 
 Run: `kubectl get secrets` to verify the secrets have been created.
 
-Create Kubernetes ConfigMaps
-----------------------------
+## Create Kubernetes ConfigMaps
 
 Kubernetes ConfigMaps are used to store settings that are specific to your HSDS deployment.
 
-Review the contents of **admin/config/config.yml** and create the file **admin/config/override.yml** for any keys where you don't 
-wish to use the default value.  Values that you will most certainly want to override are:
+Review the contents of **admin/config/config.yml** and create the file **admin/config/override.yml** for any keys where you don't
+wish to use the default value. Values that you will most certainly want to override are:
 
-* bucket_name # set to the name of the Azure Blob container you will be using 
+- bucket_name # set to the name of the Azure Blob container you will be using
 
 Run the make_config map script to store the yaml settings as Kubernetes ConnfigMaps: `admin/kubernetes/k8s_make_configmap.sh`
 
-Deploy HSDS to AKS
-------------------
+## Deploy HSDS to AKS
 
-If you need to build and deploy a custom HSDS image (e.g. you have made changes to the HSDS code), first build and deploy the code to ACR as described in section "Building a docker image and deploying to ACR" below.  Otherwise, the standard image from docker hub (<https://hub.docker.com/repository/docker/hdfgroup/hsds>) will be deployed.
+If you need to build and deploy a custom HSDS image (e.g. you have made changes to the HSDS code), first build and deploy the code to ACR as described in section "Building a docker image and deploying to ACR" below. Otherwise, the standard image from docker hub (<https://hub.docker.com/repository/docker/hdfgroup/hsds>) will be deployed.
 
-1. Create RBAC roles: `kubectl create -f k8s_rbac.yml`
-2. Create HSDS service on the AKS cluster: `$ kubectl apply -f k8s_service_lb_azure.yml`
-3. This will create an external load balancer with an http endpoint with a public-ip.
-   Use kubectl to get the public-ip of the hsds service: `$kubectl get service`
-   You should see an entry similar to:
+1.  Create RBAC roles: `kubectl create -f k8s_rbac.yml`
+    Note: if you plan to run HSDS in its own Kubernetes namespace, modify the namespace key of
+    ClusterRoleBinding in k8s_rbac.yml from "default" to your namespace.
+2.  Create HSDS service on the AKS cluster: `$ kubectl apply -f k8s_service_lb_azure.yml`
+3.  This will create an external load balancer with an http endpoint with a public-ip.
+    Use kubectl to get the public-ip of the hsds service: `$kubectl get service`
+    You should see an entry similar to:
 
-       NAME    TYPE           CLUSTER-IP     EXTERNAL-IP      PORT(S)        AGE
-       hsds    LoadBalancer   10.0.242.109   20.36.17.252     80:30326/TCP   23
+        NAME    TYPE           CLUSTER-IP     EXTERNAL-IP      PORT(S)        AGE
+        hsds    LoadBalancer   10.0.242.109   20.36.17.252     80:30326/TCP   23
 
-   Note the public-ip (EXTERNAL-IP). This is where you can access the HSDS service externally. It may take some time for the EXTERNAL-IP to show up after the service deployment.  For additional configuration options to handle SSL related scenarios please see: *frontdoor_install_azure.md*
-   Additional reference for Azure Front Door <https://docs.microsoft.com/en-us/azure/frontdoor/>
-4. Now we will deploy the HSDS containers. In ***k8s_deployment_azure.yml***, customize the values for:
-   env sections:
-    * HSDS_ENDPOINT (change to `http://public-ip` where pubic-ip is the EXTERNAL-IP from step 3 above)
-    * BUCKET_NAME (this is the name of the blob container created earlier)
-   containers sections
-    * image: 'myacrname.azurecr.io/hsds:v1' to reflect the acr repository for deployment (for custom builds only).
-5. Apply the deployment: `$ kubectl apply -f k8s_deployment_azure.yml`
-6. Verify that the HSDS pod is running: `$ kubectl get pods`  a pod with a name starting with hsds should be displayed with status as "Running".
-7. Additional verification: Run (`$ kubectl describe pod hsds-xxxx`) and make sure everything looks OK
-8. To locally test that HSDS functioning
-    * Create a forwarding port to the Kubernetes service `$ sudo kubectl port-forward hsds-1234 8080:5101` (use another port if 8080 is unavailable)
-    * From a browser hit: <http://127.0.0.1:8080/about> and verify that "cluster_state" is "READY"
+    Note the public-ip (EXTERNAL-IP). This is where you can access the HSDS service externally. It may take some time for the EXTERNAL-IP to show up after the service deployment. For additional configuration options to handle SSL related scenarios please see: _frontdoor_install_azure.md_
+    Additional reference for Azure Front Door <https://docs.microsoft.com/en-us/azure/frontdoor/>
 
-Test the Deployment using Integration Test and Test Data
---------------------------------------------------------
+4.  Now we will deploy the HSDS containers. In **_k8s_deployment_azure.yml_**, customize the values for:
+    env sections:
+    - HSDS_ENDPOINT (change to `http://public-ip` where pubic-ip is the EXTERNAL-IP from step 3 above)
+    - BUCKET_NAME (this is the name of the blob container created earlier)
+      containers sections
+    - image: 'myacrname.azurecr.io/hsds:v1' to reflect the acr repository for deployment (for custom builds only).
+5.  Apply the deployment: `$ kubectl apply -f k8s_deployment_azure.yml`
+6.  Verify that the HSDS pod is running: `$ kubectl get pods` a pod with a name starting with hsds should be displayed with status as "Running".
+7.  Additional verification: Run (`$ kubectl describe pod hsds-xxxx`) and make sure everything looks OK
+8.  To locally test that HSDS functioning
+    - Create a forwarding port to the Kubernetes service `$ sudo kubectl port-forward hsds-1234 8080:5101` (use another port if 8080 is unavailable)
+    - From a browser hit: <http://127.0.0.1:8080/about> and verify that "cluster_state" is "READY"
 
-Perform post install configuration.   See: [Post Install Configuration](post_install.md)
+## Test the Deployment using Integration Test and Test Data
 
+Perform post install configuration. See: [Post Install Configuration](post_install.md)
 
-AKS Cluster Scaling
--------------------
+## AKS Cluster Scaling
 
 To scale up or down the number of HSDS pods, run:
 `$kubectl scale --replicas=n deployment/hsds` where n is the number of pods desired.
 
-Building a docker image and deploying to ACR
---------------------------------------------
+## Building a docker image and deploying to ACR
 
 This step is only needed if a custom image of HSDS needs to be deployed.
 
@@ -135,39 +128,39 @@ This step is only needed if a custom image of HSDS needs to be deployed.
 3. Login to the Azure container registry (ACR): `az acr login --name $ACRNAME`
 4. You may also need to login into ACR from docker as follows: Get the ACR admin credentials: `az acr credential show -n $ACRNAME` then docker login with those credentials: `docker login $ACRNAME -u xxx -p xxx`
 5. Push the image to Azure ACR: `docker push $ACRNAME.azurecr.io/hsds:v1`
-  **Note:** Use all lowercase ACRNAME in these commands if your actual ACRNAME includes uppercase characters
-6. Update the ***k8s_deployment_azure.yml*** file to use the ACR image path (note there are multiple references to the image)
+   **Note:** Use all lowercase ACRNAME in these commands if your actual ACRNAME includes uppercase characters
+6. Update the **_k8s_deployment_azure.yml_** file to use the ACR image path (note there are multiple references to the image)
 
-Notes for Installation from a Windows Machine
----------------------------------------------
+## Notes for Installation from a Windows Machine
 
 Follow the instructions above with the following modifications in the respective sections
 
-1. Before you start make sure that you have docker installed on your system by running: `docker --version` otherwise install docker desktop: <https://docs.docker.com/docker-for-windows/>
-2. Sample .bashrc will not work on Windows - instead run the following commands on the console (or include them in a batch file and run the batch file)
+1.  Before you start make sure that you have docker installed on your system by running: `docker --version` otherwise install docker desktop: <https://docs.docker.com/docker-for-windows/>
+2.  Sample .bashrc will not work on Windows - instead run the following commands on the console (or include them in a batch file and run the batch file)
 
-       SET AZURE_CONNECTION_STRING="DefaultEndpointsProtocol=https;AccountName=myacct;AccountKey=GZJxxxOPnw==;EndpointSuffix=core.windows.net"
-       SET BUCKET_NAME=home
-       SET RESOURCEGROUP=myresourcegroup
-       SET AKSCLUSTER=myakscluster
-       SET LOCATION=westus
-       SET ACRNAME=myacrname
-       SET STORAGEACCTNAME=mystorageaccount
-       SET CONTAINERNAME=testcontainer
+        SET AZURE_CONNECTION_STRING="DefaultEndpointsProtocol=https;AccountName=myacct;AccountKey=GZJxxxOPnw==;EndpointSuffix=core.windows.net"
+        SET BUCKET_NAME=home
+        SET RESOURCEGROUP=myresourcegroup
+        SET AKSCLUSTER=myakscluster
+        SET LOCATION=westus
+        SET ACRNAME=myacrname
+        SET STORAGEACCTNAME=mystorageaccount
+        SET CONTAINERNAME=testcontainer
 
-   For commands in all sections replace the unix environment variable notation (SVAR) with Windows notation (%VAR%).  For example instead of `$ACRNAME` use `%ACRNAME%`
-3. Setup your Azure environment, to install Azure cli on Windows, follow instructions here: <https://docs.microsoft.com/en-us/cli/azure/install-azure-cli-windows?view=azure-cli-latest>
-4. Prepare and deploy your docker image to ACR
-   To create kubernetes secret:
+    For commands in all sections replace the unix environment variable notation (SVAR) with Windows notation (%VAR%). For example instead of `$ACRNAME` use `%ACRNAME%`
 
-    * Enter the Azure connection string (just the string, not the set command) in a file named ***az_conn_str*** without double quotes (") or the end-of-line.
-    * Run `kubectl create secret generic azure-conn-str --from-file=` ***az_conn_str***
-    * Delete ***az_conn_str***
+3.  Setup your Azure environment, to install Azure cli on Windows, follow instructions here: <https://docs.microsoft.com/en-us/cli/azure/install-azure-cli-windows?view=azure-cli-latest>
+4.  Prepare and deploy your docker image to ACR
+    To create kubernetes secret:
 
-   On Windows downloaded files have CRLF instead of LF. This will cause the container to fail. To solve this:
+    - Enter the Azure connection string (just the string, not the set command) in a file named **_az_conn_str_** without double quotes (") or the end-of-line.
+    - Run `kubectl create secret generic azure-conn-str --from-file=` **_az_conn_str_**
+    - Delete **_az_conn_str_**
 
-    * Download do2unix from: <https://sourceforge.net/projects/dos2unix/>
-    * Apply dos2unix to entrypoint.sh: `dos2unix entrypoint.sh`
-    * build.sh will not run on Windows, instead run the docker build directly: `docker build -t ACRNAME.azurecr.io/hsds:v1 .`
+    On Windows downloaded files have CRLF instead of LF. This will cause the container to fail. To solve this:
 
-  **Note:** This will not run the pyflakes on the code. Pyflakes is a code checker and not essential to building the container.
+    - Download do2unix from: <https://sourceforge.net/projects/dos2unix/>
+    - Apply dos2unix to entrypoint.sh: `dos2unix entrypoint.sh`
+    - build.sh will not run on Windows, instead run the docker build directly: `docker build -t ACRNAME.azurecr.io/hsds:v1 .`
+
+    **Note:** This will not run the pyflakes on the code. Pyflakes is a code checker and not essential to building the container.

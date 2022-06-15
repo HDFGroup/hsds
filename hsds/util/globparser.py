@@ -83,17 +83,19 @@ def _wildcharmatch(item, pattern):
 
 def globmatch(item, pattern):
     """
-    Return True if item match pattern, where pattern uses simplified glob matching using wildcards:
-    '*': match zero or more characters
-    '?': match any one character
-    '[n-m]': match any character range from n through m
+    Return True if item match pattern, where pattern uses simplified glob matching
+    using wildcards:
+       '*': match zero or more characters
+       '?': match any one character
+       '[n-m]': match any character range from n through m
 
     To avoid potential ddos attacks, at most one '*' can be supplied in pattern
 
     For a literal match, wrap the meta-characters in brackets. For example,
     '[?]' matches the character '?'.
-    """
 
+
+    """
     if not item:
         return False
     if pattern == "*":

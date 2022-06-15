@@ -1698,6 +1698,21 @@ class ChunkUtilTest(unittest.TestCase):
         except ValueError:
             pass  # expected
 
+        try:
+            chunkQuery(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, query="(open > 5")
+            self.assertTrue(False)
+        except ValueError:
+            pass # expected
+
+        try:
+            chunkQuery(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, query="open @ 5")
+            self.assertTrue(False)
+        except ValueError:
+            pass # expected
+
+
+
+
         # try modifying one aapl row
         query_update = {"open": 999}
         result = chunkQuery(
