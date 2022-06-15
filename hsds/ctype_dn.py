@@ -12,6 +12,7 @@
 #
 # data node of hsds cluster
 #
+
 import time
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound
@@ -23,9 +24,9 @@ from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
 from .datanode_lib import delete_metadata_obj, check_metadata_obj
 from . import hsds_logger as log
 
+
 async def GET_Datatype(request):
-    """HTTP GET method to return JSON for /groups/
-    """
+    """HTTP GET method to return JSON for /groups/"""
     log.request(request)
     app = request.app
     params = request.rel_url.query
@@ -58,7 +59,7 @@ async def GET_Datatype(request):
 
 
 async def POST_Datatype(request):
-    """ Handler for POST /datatypes"""
+    """Handler for POST /datatypes"""
     log.info("Post_Datatype")
     log.request(request)
     app = request.app
@@ -113,12 +114,14 @@ async def POST_Datatype(request):
 
     log.info(f"POST_datatype, typejson: {type_json}")
 
-    ctype_json = {"id": ctype_id,
-                  "root": root_id,
-                  "created": now,
-                  "lastModified": now,
-                  "type": type_json,
-                  "attributes": {}}
+    ctype_json = {
+        "id": ctype_id,
+        "root": root_id,
+        "created": now,
+        "lastModified": now,
+        "type": type_json,
+        "attributes": {},
+    }
 
     kwargs = {"bucket": bucket, "notify": True, "flush": True}
     await save_metadata_obj(app, ctype_id, ctype_json, **kwargs)
@@ -136,8 +139,7 @@ async def POST_Datatype(request):
 
 
 async def DELETE_Datatype(request):
-    """HTTP DELETE method for datatype
-    """
+    """HTTP DELETE method for datatype"""
     log.request(request)
     app = request.app
     params = request.rel_url.query

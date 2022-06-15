@@ -12,6 +12,7 @@
 #
 # data node of hsds cluster
 #
+
 import time
 from copy import copy
 from bisect import bisect_left
@@ -27,8 +28,7 @@ from . import hsds_logger as log
 
 
 def _index(a, x):
-    """ Locate the leftmost value exactly equal to x
-    """
+    """Locate the leftmost value exactly equal to x"""
     i = bisect_left(a, x)
     if i != len(a) and a[i] == x:
         return i
@@ -36,8 +36,7 @@ def _index(a, x):
 
 
 async def GET_Links(request):
-    """HTTP GET method to return JSON for a link collection
-    """
+    """HTTP GET method to return JSON for a link collection"""
     log.request(request)
     app = request.app
     params = request.rel_url.query
@@ -64,7 +63,7 @@ async def GET_Links(request):
     bucket = None
     if "bucket" in params:
         bucket = params["bucket"]
-    
+
     if not bucket:
         msg = "GET_Links - no bucket param"
         log.warn(msg)
@@ -110,8 +109,7 @@ async def GET_Links(request):
 
 
 async def GET_Link(request):
-    """HTTP GET method to return JSON for a link
-    """
+    """HTTP GET method to return JSON for a link"""
     log.request(request)
     app = request.app
     params = request.rel_url.query
@@ -122,7 +120,7 @@ async def GET_Link(request):
         log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
 
-    link_title = request.match_info.get('title')
+    link_title = request.match_info.get("title")
 
     validateLinkName(link_title)
 
@@ -153,7 +151,7 @@ async def GET_Link(request):
 
 
 async def PUT_Link(request):
-    """ Handler creating a new link"""
+    """Handler creating a new link"""
     log.request(request)
     app = request.app
     params = request.rel_url.query
@@ -163,7 +161,7 @@ async def PUT_Link(request):
         log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
 
-    link_title = request.match_info.get('title')
+    link_title = request.match_info.get("title")
     validateLinkName(link_title)
 
     log.info(f"link_title: {link_title}")
@@ -197,7 +195,7 @@ async def PUT_Link(request):
         bucket = params["bucket"]
     else:
         bucket = None
-    
+
     if not bucket:
         msg = "GET_Links - no bucket param"
         log.warn(msg)
@@ -234,8 +232,7 @@ async def PUT_Link(request):
 
 
 async def DELETE_Link(request):
-    """HTTP DELETE method for group links
-    """
+    """HTTP DELETE method for group links"""
     log.request(request)
     app = request.app
     params = request.rel_url.query
@@ -247,7 +244,7 @@ async def DELETE_Link(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    link_title = request.match_info.get('title')
+    link_title = request.match_info.get("title")
     validateLinkName(link_title)
 
     if "bucket" in params:
@@ -281,7 +278,7 @@ async def DELETE_Link(request):
     await save_metadata_obj(app, group_id, group_json, bucket=bucket)
 
     hrefs = []  # TBD
-    resp_json = {"href":  hrefs}
+    resp_json = {"href": hrefs}
 
     resp = json_response(resp_json)
     log.response(request, resp=resp)

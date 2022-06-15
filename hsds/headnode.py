@@ -12,6 +12,7 @@
 #
 # Head node of hsds cluster
 #
+
 import asyncio
 import os
 import time
@@ -25,13 +26,22 @@ from .util.idUtil import createNodeId
 from . import hsds_logger as log
 from .util import query_marathon as marathonClient
 
-NODE_STAT_KEYS = ("cpu", "diskio", "memory", "log_stats", "disk", "netio",
-                  "req_count", "s3_stats", "azure_stats", "chunk_cache_stats")
+NODE_STAT_KEYS = (
+    "cpu",
+    "diskio",
+    "memory",
+    "log_stats",
+    "disk",
+    "netio",
+    "req_count",
+    "s3_stats",
+    "azure_stats",
+    "chunk_cache_stats",
+)
 
 
 class Node:
-    def __init__(self, node_id=None,
-                 node_type=None, node_host=None, node_port=None):
+    def __init__(self, node_id=None, node_type=None, node_host=None, node_port=None):
         self._id = node_id
         self._type = node_type
         self._host = node_host
@@ -120,7 +130,7 @@ async def isClusterReady(app):
 
 
 def removeNode(app, host=None, port=None):
-    dead_node_ids = app['dead_node_ids']
+    dead_node_ids = app["dead_node_ids"]
     nodes = app["nodes"]
     remove_id = None
     for node_id in nodes:
@@ -138,23 +148,23 @@ async def info(request):
     log.request(request)
     app = request.app
     resp = StreamResponse()
-    resp.headers['Content-Type'] = 'application/json'
+    resp.headers["Content-Type"] = "application/json"
     if await isClusterReady(app):
-        cluster_state = 'READY'
+        cluster_state = "READY"
     else:
-        cluster_state = 'WAITING'
+        cluster_state = "WAITING"
     answer = {}
     # copy relevant entries from state dictionary to response
-    answer['id'] = request.app['id']
-    answer['start_time'] = unixTimeToUTC(app['start_time'])
-    answer['last_health_check'] = unixTimeToUTC(app['last_health_check'])
-    answer['up_time'] = elapsedTime(app['start_time'])
-    answer['cluster_state'] = cluster_state
-    answer['bucket_name'] = app['bucket_name']
-    answer['target_sn_count'] = await getTargetNodeCount(app, "sn")
-    answer['active_sn_count'] = getActiveNodeCount(app, "sn")
-    answer['target_dn_count'] = await getTargetNodeCount(app, "dn")
-    answer['active_dn_count'] = getActiveNodeCount(app, "dn")
+    answer["id"] = request.app["id"]
+    answer["start_time"] = unixTimeToUTC(app["start_time"])
+    answer["last_health_check"] = unixTimeToUTC(app["last_health_check"])
+    answer["up_time"] = elapsedTime(app["start_time"])
+    answer["cluster_state"] = cluster_state
+    answer["bucket_name"] = app["bucket_name"]
+    answer["target_sn_count"] = await getTargetNodeCount(app, "sn")
+    answer["active_sn_count"] = getActiveNodeCount(app, "sn")
+    answer["target_dn_count"] = await getTargetNodeCount(app, "dn")
+    answer["active_dn_count"] = getActiveNodeCount(app, "dn")
 
     resp = json_response(answer)
     log.response(request, resp=resp)
@@ -162,7 +172,7 @@ async def info(request):
 
 
 async def register(request):
-    """ HTTP method for nodes to register with head node"""
+    """HTTP method for nodes to register with head node"""
     app = request.app
     if not request.has_body:
         msg = "register missing body"
@@ -174,29 +184,29 @@ async def register(request):
     node_port = None
     node_type = None
     node_id = None
-    if 'id' not in body:
+    if "id" not in body:
         msg = "Missing 'id'"
         log.response(request, code=400, message=msg)
         raise HTTPBadRequest(reason=msg)
-    node_id = body['id']
-    if 'node_type' not in body:
+    node_id = body["id"]
+    if "node_type" not in body:
         msg = "missing key 'node_type'"
         log.response(request, code=400, message=msg)
         raise HTTPBadRequest(reason=msg)
-    node_type = body['node_type']
-    if node_type not in ('sn', 'dn'):
+    node_type = body["node_type"]
+    if node_type not in ("sn", "dn"):
         msg = f"invalid node_type: {node_type}"
         log.response(request, code=400, message=msg)
         raise HTTPBadRequest(reason=msg)
-    if 'port' not in body:
+    if "port" not in body:
         msg = "missing key 'port'"
         log.response(request, code=400, message=msg)
         raise HTTPBadRequest(reason=msg)
-    node_port = body['port']
+    node_port = body["port"]
 
-    if 'ip' not in body:
+    if "ip" not in body:
         log.debug("register - get ip/port from request.transport")
-        peername = request.transport.get_extra_info('peername')
+        peername = request.transport.get_extra_info("peername")
         if peername is None:
             msg = "Can not determine caller IP"
             log.error(msg)
@@ -212,8 +222,8 @@ async def register(request):
 
     log.info(f"register host: {node_host}, port: {node_port}")
 
-    nodes = app['nodes']
-    dead_node_ids = app['dead_node_ids']
+    nodes = app["nodes"]
+    dead_node_ids = app["dead_node_ids"]
 
     if node_id in nodes:
         # already registered?
@@ -239,14 +249,18 @@ async def register(request):
         raise HTTPInternalServerError()
     else:
         log.info(f"Node {node_id} is unknown, new node coming online.")
-        node = Node(node_id=node_id, node_type=node_type,
-                    node_host=node_host, node_port=node_port)
+        node = Node(
+            node_id=node_id,
+            node_type=node_type,
+            node_host=node_host,
+            node_port=node_port,
+        )
         # delete any existing node with the same port
         removeNode(app, host=node_host, port=node_port)
         nodes[node_id] = node
 
     resp = StreamResponse()
-    resp.headers['Content-Type'] = 'application/json'
+    resp.headers["Content-Type"] = "application/json"
     answer = {}
 
     if await isClusterReady(app):
@@ -297,17 +311,17 @@ async def register(request):
 async def nodestate(request):
     """HTTP method to return information about registered nodes"""
     log.request(request)
-    node_id = request.match_info.get('node_id', '*')
-    node_type = request.match_info.get('node_type', '*')
+    node_id = request.match_info.get("node_id", "*")
+    node_type = request.match_info.get("node_type", "*")
 
     log.info(f"nodestate/{node_type}/{node_id}")
 
     app = request.app
     resp = StreamResponse()
-    resp.headers['Content-Type'] = 'application/json'
+    resp.headers["Content-Type"] = "application/json"
     nodes = app["nodes"]
 
-    if node_id == '*':
+    if node_id == "*":
         info_list = []
         for node_id in nodes:
             node = nodes[node_id]
@@ -320,9 +334,9 @@ async def nodestate(request):
         answer = {}
         answer["node"] = node.get_info()
     if await isClusterReady(app):
-        cluster_state = 'READY'
+        cluster_state = "READY"
     else:
-        cluster_state = 'WAITING'
+        cluster_state = "WAITING"
     answer["cluster_state"] = cluster_state
     resp = json_response(answer)
     log.response(request, resp=resp)
@@ -331,12 +345,12 @@ async def nodestate(request):
 
 async def nodeinfo(request):
     """HTTP method to return node stats (cpu usage, request count, errors,
-        etc.) about registed nodes
+    etc.) about registed nodes
     """
     log.request(request)
     node_stat_keys = NODE_STAT_KEYS
-    stat_key = request.match_info.get('statkey', '*')
-    if stat_key != '*':
+    stat_key = request.match_info.get("statkey", "*")
+    if stat_key != "*":
         if stat_key not in node_stat_keys:
             msg = f"nodeinfo - invalid key: {stat_key}"
             log.warn(msg)
@@ -345,7 +359,7 @@ async def nodeinfo(request):
 
     app = request.app
     resp = StreamResponse()
-    resp.headers['Content-Type'] = 'application/json'
+    resp.headers["Content-Type"] = "application/json"
 
     dn_count = 0
     sn_count = 0
@@ -379,8 +393,12 @@ async def nodeinfo(request):
             for k in stats_field:
                 if k not in stats:
                     stats[k] = {}
-                    stats[k]["sn"] = [0, ] * sn_count
-                    stats[k]["dn"] = [0, ] * dn_count
+                    stats[k]["sn"] = [
+                        0,
+                    ] * sn_count
+                    stats[k]["dn"] = [
+                        0,
+                    ] * dn_count
                 stats[k][node.type][node_number] = stats_field[k]
         answer[stat_key] = stats
 
@@ -392,12 +410,12 @@ async def nodeinfo(request):
 async def getTargetNodeCount(app, node_type):
 
     if node_type == "dn":
-        key = 'target_sn_count'
+        key = "target_sn_count"
     elif node_type == "sn":
         key = "target_sn_count"
     else:
         raise KeyError()
-    if 'key' not in app:
+    if "key" not in app:
         if "is_dcos" in app:
             marathon = marathonClient.MarathonClient(app)
             if node_type == "dn":
@@ -422,13 +440,13 @@ def getActiveNodeCount(app, node_type):
 
 
 async def init():
-    """Intitialize application and return app object """
+    """Intitialize application and return app object"""
 
     # setup log config
     log_level = config.get("log_level")
     prefix = config.get("log_prefix")
     log_timestamps = config.get("log_timestamps", default=False)
-    log.setLogConfig(log_level, prefix=prefix, timestamps=log_timestamps)     
+    log.setLogConfig(log_level, prefix=prefix, timestamps=log_timestamps)
 
     app = Application()
 
@@ -460,21 +478,20 @@ async def init():
     app["start_time"] = int(time.time())  # seconds after epoch
     app["last_health_check"] = 0
     app["max_task_count"] = config.get("max_task_count")
-    app.router.add_get('/', info)
-    app.router.add_get('/nodestate', nodestate)
-    app.router.add_get('/nodestate/{nodetype}', nodestate)
-    app.router.add_get('/nodestate/{nodetype}/{nodenumber}', nodestate)
-    app.router.add_get('/nodeinfo', nodeinfo)
-    app.router.add_get('/nodeinfo/{statkey}', nodeinfo)
-    app.router.add_get('/info', info)
-    app.router.add_post('/register', register)
+    app.router.add_get("/", info)
+    app.router.add_get("/nodestate", nodestate)
+    app.router.add_get("/nodestate/{nodetype}", nodestate)
+    app.router.add_get("/nodestate/{nodetype}/{nodenumber}", nodestate)
+    app.router.add_get("/nodeinfo", nodeinfo)
+    app.router.add_get("/nodeinfo/{statkey}", nodeinfo)
+    app.router.add_get("/info", info)
+    app.router.add_post("/register", register)
 
     return app
 
 
 def create_app():
-    """Create servicenode aiohttp application
-    """
+    """Create servicenode aiohttp application"""
     log.info("Head node initializing")
     loop = asyncio.get_event_loop()
     app = loop.run_until_complete(init())
@@ -483,7 +500,7 @@ def create_app():
 
 def main():
     """
-       Main - entry point for headnode
+    Main - entry point for headnode
     """
     app = create_app()
 
@@ -495,5 +512,5 @@ def main():
     run_app(app, port=int(head_port))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

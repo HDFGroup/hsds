@@ -35,8 +35,10 @@ from . import hsds_logger as log
 
 HSDS_VERSION = "0.7.0beta"
 
+
 def getVersion():
     return HSDS_VERSION
+
 
 def getHeadUrl(app):
     if "head_url" in app:
@@ -96,9 +98,10 @@ async def get_info(app, url):
 
     return rsp_json
 
+
 async def k8s_update_dn_info(app):
-    """ update dn urls by querying k8s api.
-        Call each url to determine node_ids
+    """update dn urls by querying k8s api.
+    Call each url to determine node_ids
     """
     log.info("k8s_update_dn_info")
     k8s_app_label = config.get("k8s_app_label")
@@ -142,7 +145,7 @@ async def k8s_update_dn_info(app):
 
 
 async def docker_update_dn_info(app):
-    """ update list of dn_urls by making request to head node """
+    """update list of dn_urls by making request to head node"""
     head_url = getHeadUrl(app)
     if not head_url:
         log.warn("head_url is not set, can not register yet")
@@ -150,9 +153,7 @@ async def docker_update_dn_info(app):
     req_reg = head_url + "/register"
     log.info(f"register: {req_reg}")
 
-    body = {"id": app["id"],
-            "port": app["node_port"],
-            "node_type": app["node_type"]}
+    body = {"id": app["id"], "port": app["node_port"], "node_type": app["node_type"]}
 
     try:
         log.info(f"register req: {req_reg} body: {body}")
@@ -179,7 +180,7 @@ def get_dn_id_set(app):
 
 
 async def update_dn_info(app):
-    """ update http urls and ids for each dn node """
+    """update http urls and ids for each dn node"""
 
     if "is_standalone" in app:
         # nothing to do in standalone mode
@@ -207,8 +208,8 @@ async def update_dn_info(app):
 
 
 def updateReadyState(app):
-    """ update node state (and node_number and node_count) based on number
-        of dn_urls available
+    """update node state (and node_number and node_count) based on number
+    of dn_urls available
     """
     if "is_standalone" in app:
         # dn_urls don't change in standalone mode, so just return
@@ -246,7 +247,9 @@ def updateReadyState(app):
                 # flush remaining items from cache
                 meta_cache.clearCache()
                 chunk_cache.clearCache()
-                msg = f"setting node_number to: {node_number} (old value: {old_number}), "
+                msg = (
+                    f"setting node_number to: {node_number} (old value: {old_number}), "
+                )
                 msg += "node_state to READY"
                 log.info(msg)
                 app["node_number"] = node_number
@@ -266,7 +269,7 @@ def updateReadyState(app):
 
 def _activeTaskCount():
     count = 0
-    for task in asyncio.Task.all_tasks():
+    for task in asyncio.all_tasks():
         if not task.done():
             count += 1
     return count
@@ -286,16 +289,16 @@ async def doHealthCheck(app, chaos_die=0):
         updateReadyState(app)
 
     svmem = psutil.virtual_memory()
-    num_tasks = len(asyncio.Task.all_tasks())
+    num_tasks = len(asyncio.all_tasks())
     msg = f"health check vm: {svmem.percent} num tasks: {num_tasks} "
     msg += f"active tasks: {_activeTaskCount()}"
     log.debug(msg)
 
 
 async def healthCheck(app):
-    """ Periodic method that either registers with headnode (if state in
-        INITIALIZING) or calls headnode to verify vitals about this node
-        (otherwise)
+    """Periodic method that either registers with headnode (if state in
+    INITIALIZING) or calls headnode to verify vitals about this node
+    (otherwise)
     """
 
     # let the server event loop startup before starting the health check
@@ -317,7 +320,7 @@ async def healthCheck(app):
 
 
 async def about(request):
-    """ HTTP Method to return general info about the service """
+    """HTTP Method to return general info about the service"""
     log.request(request)
 
     app = request.app
@@ -325,8 +328,8 @@ async def about(request):
     if username:
         await validateUserPassword(app, username, pswd)
     answer = {}
-    answer['start_time'] = app["start_time"]
-    answer['state'] = app['node_state']
+    answer["start_time"] = app["start_time"]
+    answer["state"] = app["node_state"]
     answer["hsds_version"] = getVersion()
     answer["name"] = config.get("server_name")
     answer["greeting"] = config.get("greeting")
@@ -355,13 +358,13 @@ async def info(request):
     answer = {}
     # copy relevant entries from state dictionary to response
     node = {}
-    node['id'] = app['id']
-    node['type'] = app['node_type']
-    node['start_time'] = app["start_time"]
-    node['state'] = app['node_state']
-    if app['node_type'] == 'dn':
-        node['node_number'] = app['node_number']
-    node['node_count'] = getNodeCount(app)
+    node["id"] = app["id"]
+    node["type"] = app["node_type"]
+    node["start_time"] = app["start_time"]
+    node["state"] = app["node_state"]
+    if app["node_type"] == "dn":
+        node["node_number"] = app["node_number"]
+    node["node_count"] = getNodeCount(app)
 
     answer["node"] = node
     # psutil info
@@ -401,7 +404,7 @@ async def info(request):
     mem_stats["percent"] = sswap.percent
     answer["memory"] = mem_stats
     disk_stats = {}
-    sdiskusage = psutil.disk_usage('/')
+    sdiskusage = psutil.disk_usage("/")
     disk_stats["total"] = sdiskusage.total
     disk_stats["used"] = sdiskusage.used
     disk_stats["free"] = sdiskusage.free
@@ -445,6 +448,7 @@ async def info(request):
     log.response(request, resp=resp)
     return resp
 
+
 def baseInit(node_type):
     """Intitialize application and return app object"""
 
@@ -453,7 +457,6 @@ def baseInit(node_type):
     prefix = config.get("log_prefix")
     log_timestamps = config.get("log_timestamps", default=False)
     log.setLogConfig(log_level, prefix=prefix, timestamps=log_timestamps)
-     
 
     # create the app object
     log.info("Application baseInit")
@@ -463,7 +466,7 @@ def baseInit(node_type):
     app["node_number"] = -1
     app["node_type"] = node_type
     app["start_time"] = int(time.time())  # seconds after epoch
-    app['register_time'] = 0
+    app["register_time"] = 0
     app["max_task_count"] = config.get("max_task_count")
 
     is_standalone = config.getCmdLineArg("standalone")
@@ -506,11 +509,11 @@ def baseInit(node_type):
     app["bucket_name"] = bucket_name
     app["dn_urls"] = []
     app["dn_ids"] = []  # node ids for each dn_url
-     
+
     if is_standalone:
-        dn_urls_arg = config.getCmdLineArg("dn_urls")  
+        dn_urls_arg = config.getCmdLineArg("dn_urls")
         if dn_urls_arg:
-            dn_urls = dn_urls_arg.split(',')
+            dn_urls = dn_urls_arg.split(",")
             dn_urls.sort()
             dn_ids = []
             for i in range(len(dn_urls)):
@@ -533,7 +536,7 @@ def baseInit(node_type):
         if rangeget_url:
             log.debug(f"store rangeget_url: {rangeget_url}")
             app["rangeget_url"] = rangeget_url
-        
+
         # check to see if we are running in a DCOS cluster
     elif "IS_DOCKER" in os.environ:
         log.info("running in docker")
@@ -544,14 +547,14 @@ def baseInit(node_type):
         log.info(msg)
         app["is_dcos"] = True
     elif "KUBERNETES_SERVICE_HOST" in os.environ:
-        # indicates we are running in a k8s cluster 
+        # indicates we are running in a k8s cluster
         log.info("running in kubernetes")
         app["is_k8s"] = True
     else:
         # check the root inode - high values indicate
         # we are running in a container
-        if os.path.isdir('/'):
-            stat = os.stat('/')
+        if os.path.isdir("/"):
+            stat = os.stat("/")
             if stat and stat.st_ino > 10:
                 log.info("running in docker based on inode number")
                 app["is_docker"] = True
@@ -562,7 +565,7 @@ def baseInit(node_type):
             log.error(msg)
             node_port = config.get(node_type + "_port")
         else:
-            node_port = os.environ['PORT0']
+            node_port = os.environ["PORT0"]
     else:
         node_port = config.get(node_type + "_port")
         log.info(f"using node port: {node_port}")
@@ -595,16 +598,15 @@ def baseInit(node_type):
     except KeyError:
         log.info("aws_region not set")
 
-    app.router.add_get('/info', info)
-    app.router.add_get('/about', about)
+    app.router.add_get("/info", info)
+    app.router.add_get("/about", about)
 
     if is_standalone:
         # can go straight to ready state
         msg = "setting node_state to inital state of READY for standalone"
         log.info(msg)
-        app['node_state'] = "READY"
+        app["node_state"] = "READY"
     else:
-        app['node_state'] = "WAITING"
-
+        app["node_state"] = "WAITING"
 
     return app

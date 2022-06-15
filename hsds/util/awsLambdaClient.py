@@ -43,12 +43,12 @@ def getLambdaClient(app, session):
     except KeyError:
         pass
     try:
-        max_pool_connections = config.get('aio_max_pool_connections')
+        max_pool_connections = config.get("aio_max_pool_connections")
     except KeyError:
         pass
     log.info(f"Lambda client init - aws_region {aws_region}")
 
-    lambda_gateway = config.get('aws_lambda_gateway')
+    lambda_gateway = config.get("aws_lambda_gateway")
     if not lambda_gateway:
         msg = "Invalid aws lambda gateway"
         log.error(msg)
@@ -59,10 +59,10 @@ def getLambdaClient(app, session):
     if lambda_gateway.startswith("https"):
         use_ssl = True
 
-    if not aws_secret_access_key or aws_secret_access_key == 'xxx':
+    if not aws_secret_access_key or aws_secret_access_key == "xxx":
         log.info("aws secret access key not set")
         aws_secret_access_key = None
-    if not aws_access_key_id or aws_access_key_id == 'xxx':
+    if not aws_access_key_id or aws_access_key_id == "xxx":
         log.info("aws access key id not set")
         aws_access_key_id = None
 
@@ -75,8 +75,7 @@ def getLambdaClient(app, session):
         req = "http://169.254.169.254/"
         req += f"latest/meta-data/iam/security-credentials/{aws_iam_role}"
         curl_cmd = ["curl", req]
-        p = subprocess.run(curl_cmd, stdout=subprocess.PIPE,
-                           stderr=subprocess.PIPE)
+        p = subprocess.run(curl_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if p.returncode != 0:
             msg = f"Error getting IAM role credentials: {p.stderr}"
             log.error(msg)
@@ -93,7 +92,8 @@ def getLambdaClient(app, session):
                 expiration_str = aws_cred_expiration[:-1] + "UTC"
                 # save the expiration
                 app["lambda_token_expiration"] = datetime.datetime.strptime(
-                        expiration_str, "%Y-%m-%dT%H:%M:%S%Z")
+                    expiration_str, "%Y-%m-%dT%H:%M:%S%Z"
+                )
             except json.JSONDecodeError:
                 msg = "Unexpected error decoding EC2 meta-data response"
                 log.error(msg)
@@ -104,15 +104,17 @@ def getLambdaClient(app, session):
     if not aws_region:
         aws_region = "us-east-1"
 
-    max_pool_connections = config.get('aio_max_pool_connections')
+    max_pool_connections = config.get("aio_max_pool_connections")
     aio_config = AioConfig(max_pool_connections=max_pool_connections)
-    kwargs = {"region_name": aws_region,
-              "aws_secret_access_key": aws_secret_access_key,
-              "aws_access_key_id": aws_access_key_id,
-              "aws_session_token": aws_session_token,
-              "use_ssl": use_ssl,
-              "config": aio_config}
-    lambda_client = session.create_client('lambda', **kwargs)
+    kwargs = {
+        "region_name": aws_region,
+        "aws_secret_access_key": aws_secret_access_key,
+        "aws_access_key_id": aws_access_key_id,
+        "aws_session_token": aws_session_token,
+        "use_ssl": use_ssl,
+        "config": aio_config,
+    }
+    lambda_client = session.create_client("lambda", **kwargs)
 
     # TBD - we are getting errors if we try to reuse lambda client
     # app["lambda"] = lambda_client
@@ -140,8 +142,7 @@ class lambdaInvoke:
             app["lambda_stats"] = {}
         lambda_stats = app["lambda_stats"]
         if self.lambdaFunction not in lambda_stats:
-            lambda_stats[self.lambdaFunction] = \
-                {"cnt": 0, "inflight": 0, "failed": 0}
+            lambda_stats[self.lambdaFunction] = {"cnt": 0, "inflight": 0, "failed": 0}
         self.funcStats = lambda_stats[self.lambdaFunction]
 
     async def __aenter__(self):

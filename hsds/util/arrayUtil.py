@@ -60,9 +60,9 @@ Example. [[1,2],[3,4]] -> ((1,2),(3,4))
 def toTuple(rank, data):
     if type(data) in (list, tuple):
         if rank > 0:
-            return list(toTuple(rank-1, x) for x in data)
+            return list(toTuple(rank - 1, x) for x in data)
         else:
-            return tuple(toTuple(rank-1, x) for x in data)
+            return tuple(toTuple(rank - 1, x) for x in data)
     else:
         return data
 
@@ -106,22 +106,26 @@ Get dims from a given shape json.  Return [1,] for Scalar datasets,
 def getShapeDims(shape):
     dims = None
     if isinstance(shape, int):
-        dims = [shape, ]
+        dims = [
+            shape,
+        ]
     elif isinstance(shape, list) or isinstance(shape, tuple):
         dims = shape  # can use as is
     elif isinstance(shape, str):
         # only valid string value is H5S_NULL
-        if shape != 'H5S_NULL':
+        if shape != "H5S_NULL":
             raise ValueError("Invalid value for shape")
         dims = None
     elif isinstance(shape, dict):
         if "class" not in shape:
             raise ValueError("'class' key not found in shape")
-        if shape["class"] == 'H5S_NULL':
+        if shape["class"] == "H5S_NULL":
             dims = None
-        elif shape["class"] == 'H5S_SCALAR':
-            dims = [1, ]
-        elif shape["class"] == 'H5S_SIMPLE':
+        elif shape["class"] == "H5S_SCALAR":
+            dims = [
+                1,
+            ]
+        elif shape["class"] == "H5S_SIMPLE":
             if "dims" not in shape:
                 raise ValueError("'dims' key expected for shape")
             dims = shape["dims"]
@@ -143,7 +147,7 @@ def jsonToArray(data_shape, data_dtype, data_json):
     def fillVlenArray(rank, data, arr, index):
         for i in range(len(data)):
             if rank > 1:
-                index = fillVlenArray(rank-1, data[i], arr, index)
+                index = fillVlenArray(rank - 1, data[i], arr, index)
             else:
                 arr[index] = data[i]
                 index += 1
@@ -165,7 +169,9 @@ def jsonToArray(data_shape, data_dtype, data_json):
             converted_data = toTuple(np_shape_rank, data_json)
         data_json = converted_data
     else:
-        data_json = [data_json, ]  # listify
+        data_json = [
+            data_json,
+        ]  # listify
 
     if isVlen(data_dtype):
         arr = np.zeros((npoints,), dtype=data_dtype)
@@ -234,10 +240,10 @@ def getElementSize(e, dt):
         elif isinstance(e, bytes):
             count = len(e) + 4
         elif isinstance(e, str):
-            count = len(e.encode('utf-8')) + 4
+            count = len(e.encode("utf-8")) + 4
         elif isinstance(e, np.ndarray):
             nElements = np.prod(e.shape)
-            if e.dtype.kind != 'O':
+            if e.dtype.kind != "O":
                 count = e.dtype.itemsize * nElements
             else:
                 arr1d = e.reshape((nElements,))
@@ -284,7 +290,7 @@ def copyBuffer(src, des, offset):
     # print(f"copyBuffer - src: {src} offset: {offset}")
     # TBD: just do: des[offset:] = src[:]  ?
     for i in range(len(src)):
-        des[i+offset] = src[i]
+        des[i + offset] = src[i]
 
     # print("returning:", offset + len(src))
     return offset + len(src)
@@ -324,7 +330,7 @@ def copyElement(e, dt, buffer, offset):
             # print("copyBuffer int")
             if e == 0:
                 # write 4-byte integer 0 to buffer
-                offset = copyBuffer(b'\x00\x00\x00\x00', buffer, offset)
+                offset = copyBuffer(b"\x00\x00\x00\x00", buffer, offset)
             else:
                 raise ValueError("Unexpected value: {}".format(e))
         elif isinstance(e, bytes):
@@ -336,7 +342,7 @@ def copyElement(e, dt, buffer, offset):
             offset = copyBuffer(e, buffer, offset)
         elif isinstance(e, str):
             # print("copyBuffer, str")
-            text = e.encode('utf-8')
+            text = e.encode("utf-8")
             count = np.int32(len(text))
             if count > MAX_VLEN_ELEMENT:
                 raise ValueError("vlen element too large")
@@ -347,7 +353,7 @@ def copyElement(e, dt, buffer, offset):
             nElements = np.prod(e.shape)
             # print("copyBuffer ndarray, nElements:", nElements)
 
-            if e.dtype.kind != 'O':
+            if e.dtype.kind != "O":
                 count = np.int32(e.dtype.itemsize * nElements)
                 # print("copyBuffeer got vlen count:", count)
                 # print("copyBuffer e:", e)
@@ -384,7 +390,9 @@ Get the count value from persisted vlen array
 
 
 def getElementCount(buffer, offset):
-    count_bytes = bytes(buffer[offset:(offset+4)])
+    n = offset
+    m = offset + 4
+    count_bytes = bytes(buffer[n:m])
 
     try:
         count = int(np.frombuffer(count_bytes, dtype="<i4"))
@@ -415,7 +423,9 @@ def readElement(buffer, offset, arr, index, dt):
             offset = readElement(buffer, offset, e, name, field_dt)
     elif not dt.metadata or "vlen" not in dt.metadata:
         count = dt.itemsize
-        e_buffer = buffer[offset:(offset+count)]
+        n = offset
+        m = offset + count
+        e_buffer = buffer[n:m]
         offset += count
         try:
             e = np.frombuffer(bytes(e_buffer), dtype=dt)
@@ -437,8 +447,10 @@ def readElement(buffer, offset, arr, index, dt):
         else:
             count = getElementCount(buffer, offset)
             offset += 4
+            n = offset
+            m = offset + count
             if count > 0:
-                e_buffer = buffer[offset:(offset+count)]
+                e_buffer = buffer[n:m]
                 offset += count
 
                 if vlen is bytes:
@@ -500,7 +512,7 @@ def bytesToArray(data, dt, shape):
     # Setting the flag directly is not recommended.
     # cf: https://github.com/numpy/numpy/issues/9440
 
-    if not arr.flags['WRITEABLE']:
+    if not arr.flags["WRITEABLE"]:
         arr_copy = arr.copy()
         arr = arr_copy
 

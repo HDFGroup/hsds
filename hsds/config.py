@@ -28,11 +28,11 @@ def debug(*args, **kwargs):
 
 
 def _has_unit(cfgval):
-    """ return True if val has unit char at end of string,
-        otherwise return False
+    """return True if val has unit char at end of string,
+    otherwise return False
     """
     if isinstance(cfgval, str):
-        if len(cfgval) > 1 and cfgval[-1] in ('g', 'm', 'k'):
+        if len(cfgval) > 1 and cfgval[-1] in ("g", "m", "k"):
             if cfgval[:-1].isdigit():
                 return True
     return False
@@ -42,16 +42,17 @@ def getCmdLineArg(x):
     # return value of command-line option
     # use "--x=val" to set option 'x' to 'val'
     # use "--x" for boolean flags
-    option = '--'+x+'='
+    option = "--" + x + "="
     for i in range(1, len(sys.argv)):
         arg = sys.argv[i]
-        if arg == '--'+x:
+        if arg == "--" + x:
             # boolean flag
             debug(f"got cmd line flag for {x}")
             return True
         elif arg.startswith(option):
             # found an override
-            override = arg[len(option):]  # return text after option string
+            nlen = len(option)
+            override = arg[nlen:]  # return text after option string
             debug(f"got cmd line override for {x}")
             return override
     return None
@@ -89,7 +90,7 @@ def _load_cfg():
             break
     if not yml_file:
         # use yaml file embedded in package
-        yml_file = resource_filename('admin', "config/config.yml")
+        yml_file = resource_filename("admin", "config/config.yml")
 
         if not yml_file:
             raise FileNotFoundError("unable to load config.yml")
@@ -153,20 +154,20 @@ def _load_cfg():
             # convert values like 512m to corresponding integer
             u = cfgval[-1]
             n = int(cfgval[:-1])
-            if u == 'k':
+            if u == "k":
                 cfgval = n * 1024
-            elif u == 'm':
-                cfgval = n * 1024*1024
-            elif u == 'g':
-                cfgval = n * 1024*1024*1024
+            elif u == "m":
+                cfgval = n * 1024 * 1024
+            elif u == "g":
+                cfgval = n * 1024 * 1024 * 1024
             else:
                 raise ValueError("Unexpected unit char")
         cfg[x] = cfgval
 
 
 def get(x, default=None):
-    """ get x if found in config
-        otherwise return default
+    """get x if found in config
+    otherwise return default
     """
     if not cfg:
         _load_cfg()

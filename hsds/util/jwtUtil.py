@@ -24,51 +24,51 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
 from .. import hsds_logger as log
 from .. import config
 
-MSONLINE_OPENID_URL = \
+MSONLINE_OPENID_URL = (
     "https://login.microsoftonline.com/common/.well-known/openid-configuration"
-GOOGLE_OPENID_URL = \
-    "https://accounts.google.com/.well-known/openid-configuration"
+)
+GOOGLE_OPENID_URL = "https://accounts.google.com/.well-known/openid-configuration"
 
 
 def verifyBearerToken(app, token):
     # Contact OpenID provider to validate bearer token.
     # if valid, return username, exp, and roles
     username = None
-    provider = config.get('openid_provider')
+    provider = config.get("openid_provider")
 
     if not provider:
         log.warn("no OpenID provider configured")
         raise HTTPUnauthorized()
     # Resolve provider into an OpenID configuration.
     log.debug(f"Using OpenID provider: {provider}")
-    if provider.lower() == 'azure':
+    if provider.lower() == "azure":
         openid_url = MSONLINE_OPENID_URL
-    elif provider.lower() == 'google':
+    elif provider.lower() == "google":
         openid_url = GOOGLE_OPENID_URL
     else:
-        openid_url = config.get('openid_url')
+        openid_url = config.get("openid_url")
         if not openid_url:
             msg = f"OpenID provider: {provider} requires 'openid_url' "
             msg += "config to be set"
             log.warn(msg)
             raise HTTPUnauthorized()
 
-    audience = config.get('openid_audience')
-    claims = config.get('openid_claims').split(',')
+    audience = config.get("openid_audience")
+    claims = config.get("openid_claims").split(",")
 
     # Maintain Azure defaults for compatibility.
     if not audience:
-        audience = config.get('azure_resource_id')
+        audience = config.get("azure_resource_id")
 
     # If we still don't have a provider and audience, abort.
     if not openid_url or not audience or not claims:
-        log.warn('Bearer authorization, but no OpenID configuration.')
+        log.warn("Bearer authorization, but no OpenID configuration.")
         raise HTTPUnauthorized()
 
     log.debug(f"Bearer authorization, using provider: {provider}")
     log.debug(f"Bearer authorization, using audience: {audience}")
     log.debug(f"Bearer authorization, using claims: {claims}")
-    if provider not in ('azure', 'google'):
+    if provider not in ("azure", "google"):
         log.debug(f"Bearer authorization, using openid_url: {openid_url}")
 
     log.debug(f"token: {token}")
@@ -107,7 +107,7 @@ def verifyBearerToken(app, token):
         else:
             raise HTTPInternalServerError()
 
-    jwk_uri = res.json()['jwks_uri']
+    jwk_uri = res.json()["jwks_uri"]
 
     # TBD: cache responses by uri
     res = requests.get(jwk_uri)
@@ -117,25 +117,27 @@ def verifyBearerToken(app, token):
     log.info("_verifyBearerToken")
 
     # Iterate JWK keys and extract matching x5c chain
-    for key in jwk_keys['keys']:
-        if key['kid'] == token_header['kid']:
-            if 'x5c' in key:
-                x5c = key['x5c']
-            elif 'e' in key and 'n' in key:
-                for field in ['e', 'n']:
+    for key in jwk_keys["keys"]:
+        if key["kid"] == token_header["kid"]:
+            if "x5c" in key:
+                x5c = key["x5c"]
+            elif "e" in key and "n" in key:
+                for field in ["e", "n"]:
                     val = key[field]
-                    val = val + '='*((4 - len(val) % 4) % 4)
-                    val = base64.urlsafe_b64decode(val.encode('utf-8'))
-                    rsa[field] = int.from_bytes(val, 'big')
+                    val = val + "=" * ((4 - len(val) % 4) % 4)
+                    val = base64.urlsafe_b64decode(val.encode("utf-8"))
+                    rsa[field] = int.from_bytes(val, "big")
 
     # Use the X5C chain to load a public key.
     if x5c:
         log.debug("using x5c public key")
-        cert = ''.join([
-            '-----BEGIN CERTIFICATE-----\n',
-            x5c[0],
-            '\n-----END CERTIFICATE-----\n',
-            ])
+        cert = "".join(
+            [
+                "-----BEGIN CERTIFICATE-----\n",
+                x5c[0],
+                "\n-----END CERTIFICATE-----\n",
+            ]
+        )
         x509 = load_pem_x509_certificate(cert.encode(), default_backend())
         public_key = x509.public_key()
         """
@@ -161,7 +163,7 @@ def verifyBearerToken(app, token):
         jwt_decode = jwt.decode(
             token,
             public_key,
-            algorithms='RS256',
+            algorithms="RS256",
             audience=audience,
         )
     except InvalidAudienceError:

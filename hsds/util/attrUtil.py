@@ -19,24 +19,25 @@ from .. import hsds_logger as log
 
 
 def getRequestCollectionName(request):
-    """ request is in the form:
+    """request is in the form:
         /(datasets|groups|datatypes)/<id>/attributes(/<name>),
     return: "datasets" | "groups" | "types"
     """
     uri = request.path
 
-    npos = uri.find('/')
+    npos = uri.find("/")
     if npos < 0:
         msg = "bad request uri"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    uri = uri[(npos+1):]
-    npos = uri.find('/')  # second '/'
+    npos += 1
+    uri = uri[npos:]
+    npos = uri.find("/")  # second '/'
     col_name = uri[:npos]
 
-    log.debug('got collection name: [' + col_name + ']')
-    if col_name not in ('datasets', 'groups', 'datatypes'):
-        msg = "Error: collection name unexpected: {}".format(col_name)
+    log.debug(f"got collection name: [{col_name}]")
+    if col_name not in ("datasets", "groups", "datatypes"):
+        msg = f"Error: collection name unexpected: {col_name}"
         log.error(msg)
         # shouldn't get routed here in this case
         raise HTTPInternalServerError()
@@ -45,13 +46,12 @@ def getRequestCollectionName(request):
 
 
 def validateAttributeName(name):
-    """ verify that the attribute name is valid
-    """
+    """verify that the attribute name is valid"""
     if not isinstance(name, str):
         msg = f"attribute name must be a string, but got: {type(name)}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if name.find('/') > -1:
+    if name.find("/") > -1:
         msg = "attribute names cannot contain slashes"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)

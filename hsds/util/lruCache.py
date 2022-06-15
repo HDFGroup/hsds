@@ -16,7 +16,7 @@ from .. import hsds_logger as log
 
 
 def getArraySize(arr):
-    """ Return size in bytes of numpy array """
+    """Return size in bytes of numpy array"""
     nbytes = arr.dtype.itemsize
     for n in arr.shape:
         nbytes *= n
@@ -24,8 +24,7 @@ def getArraySize(arr):
 
 
 class Node(object):
-    def __init__(self, id, data,
-                 mem_size=1024, isdirty=False, prev=None, next=None):
+    def __init__(self, id, data, mem_size=1024, isdirty=False, prev=None, next=None):
         self._id = id
         self._data = data
         self._mem_size = mem_size
@@ -36,11 +35,11 @@ class Node(object):
 
 
 class LruCache(object):
-    """ LRU cache for Numpy arrays that are read/written from S3
-        If name is "ChunkCache", chunk items are assumed by be ndarrays
+    """LRU cache for Numpy arrays that are read/written from S3
+    If name is "ChunkCache", chunk items are assumed by be ndarrays
     """
-    def __init__(self, mem_target=32*1024*1024,
-                 name="LruCache", expire_time=None):
+
+    def __init__(self, mem_target=32 * 1024 * 1024, name="LruCache", expire_time=None):
         self._hash = {}
         self._lru_head = None
         self._lru_tail = None
@@ -100,7 +99,7 @@ class LruCache(object):
         return node
 
     def _hasKey(self, key, ignore_expire=False):
-        """ check if key is present node  """
+        """check if key is present node"""
         if key not in self._hash:
             return False
         if ignore_expire:
@@ -121,7 +120,7 @@ class LruCache(object):
 
     def __delitem__(self, key):
         node = self._delNode(key)  # remove from LRU
-        del self._hash[key]        # remove from hash
+        del self._hash[key]  # remove from hash
         # remove from LRU list
 
         self._mem_size -= node._mem_size
@@ -133,22 +132,22 @@ class LruCache(object):
                 self._dirty_size = 0
 
     def __len__(self):
-        """ Number of nodes in the cache """
+        """Number of nodes in the cache"""
         return len(self._hash)
 
     def __iter__(self):
-        """ Iterate over node ids """
+        """Iterate over node ids"""
         node = self._lru_head
         while node is not None:
             yield node._id
             node = node._next
 
     def __contains__(self, key):
-        """ Test if key is in the cache """
+        """Test if key is in the cache"""
         return self._hasKey(key)
 
     def __getitem__(self, key):
-        """ Return numpy array from cache """
+        """Return numpy array from cache"""
         # doing a getitem has the side effect of moving this node
         # up in the LRU list
         if not self._hasKey(key):
@@ -266,7 +265,7 @@ class LruCache(object):
         # done clearCache
 
     def consistencyCheck(self):
-        """ verify that the data structure is self-consistent """
+        """verify that the data structure is self-consistent"""
         id_list = []
         dirty_count = 0
         mem_usage = 0
@@ -320,8 +319,8 @@ class LruCache(object):
         # done - consistencyCheck
 
     def setDirty(self, key):
-        """ setting dirty flag has the side effect of moving this node
-        up in the LRU list """
+        """setting dirty flag has the side effect of moving this node
+        up in the LRU list"""
         log.debug(f"LRU {self._name} set dirty node id: {key}")
 
         node = self._moveToFront(key)
@@ -333,7 +332,7 @@ class LruCache(object):
         self._dirty_set.add(key)
 
     def clearDirty(self, key):
-        """ clear the dirty flag """
+        """clear the dirty flag"""
         # clearing dirty flag has the side effect of moving this node
         # up in the LRU list
         # also, may trigger a memory cleanup
@@ -352,13 +351,13 @@ class LruCache(object):
                 self._reduceCache()
 
     def isDirty(self, key):
-        """ return dirty flag """
+        """return dirty flag"""
         # don't adjust LRU position
         return key in self._dirty_set
 
     def dump_lru(self):
-        """ Return LRU list as a string
-            (for debugging)
+        """Return LRU list as a string
+        (for debugging)
         """
         node = self._lru_head
         s = "->"
@@ -379,7 +378,7 @@ class LruCache(object):
 
     @property
     def cacheUtilizationPercent(self):
-        return int((self._mem_size/self._mem_target)*100.0)
+        return int((self._mem_size / self._mem_target) * 100.0)
 
     @property
     def dirtyCount(self):

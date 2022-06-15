@@ -38,7 +38,7 @@ async def GET_Datatype(request):
 
     h5path = None
     getAlias = False
-    ctype_id = request.match_info.get('id')
+    ctype_id = request.match_info.get("id")
     if not ctype_id and "h5path" not in params:
         msg = "Missing type id"
         log.warn(msg)
@@ -68,14 +68,14 @@ async def GET_Datatype(request):
             raise HTTPBadRequest(reason=msg)
 
         h5path = params["h5path"]
-        if h5path[0] != '/' and group_id is None:
+        if h5path[0] != "/" and group_id is None:
             msg = "h5paths must be absolute"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         log.info(f"GET_Datatype, h5path: {h5path}")
 
     username, pswd = getUserPasswordFromRequest(request)
-    if username is None and app['allow_noauth']:
+    if username is None and app["allow_noauth"]:
         username = "default"
     else:
         await validateUserPassword(app, username, pswd)
@@ -106,16 +106,14 @@ async def GET_Datatype(request):
 
     # get authoritative state for ctype from DN
     #   (even if it's in the meta_cache)
-    kwargs = {"bucket": bucket,
-              "refresh": True,
-              "include_attrs": include_attrs}
+    kwargs = {"bucket": bucket, "refresh": True, "include_attrs": include_attrs}
     type_json = await getObjectJson(app, ctype_id, **kwargs)
     type_json["domain"] = domain
 
     if getAlias:
         root_id = type_json["root"]
         alias = []
-        idpath_map = {root_id: '/'}
+        idpath_map = {root_id: "/"}
         kwargs = {"bucket": bucket, "tgt_id": ctype_id}
         h5path = await getPathForObjectId(app, root_id, idpath_map, **kwargs)
         if h5path:
@@ -123,13 +121,13 @@ async def GET_Datatype(request):
         type_json["alias"] = alias
 
     hrefs = []
-    ctype_uri = '/datatypes/'+ctype_id
-    hrefs.append({'rel': 'self', 'href': getHref(request, ctype_uri)})
-    root_uri = '/groups/' + type_json["root"]
-    hrefs.append({'rel': 'root', 'href': getHref(request, root_uri)})
-    hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
-    href = getHref(request, ctype_uri+'/attributes')
-    hrefs.append({'rel': 'attributes', 'href': href})
+    ctype_uri = "/datatypes/" + ctype_id
+    hrefs.append({"rel": "self", "href": getHref(request, ctype_uri)})
+    root_uri = "/groups/" + type_json["root"]
+    hrefs.append({"rel": "root", "href": getHref(request, root_uri)})
+    hrefs.append({"rel": "home", "href": getHref(request, "/")})
+    href = getHref(request, ctype_uri + "/attributes")
+    hrefs.append({"rel": "attributes", "href": href})
     type_json["hrefs"] = hrefs
 
     resp = await jsonResponse(request, type_json)
@@ -243,9 +241,9 @@ async def DELETE_Datatype(request):
     """HTTP method to delete a committed type resource"""
     log.request(request)
     app = request.app
-    meta_cache = app['meta_cache']
+    meta_cache = app["meta_cache"]
 
-    ctype_id = request.match_info.get('id')
+    ctype_id = request.match_info.get("id")
     if not ctype_id:
         msg = "Missing committed type id"
         log.warn(msg)

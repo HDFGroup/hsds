@@ -28,49 +28,49 @@ Format is:
 """
 
 FILTER_DEFS = (
-    ('H5Z_FILTER_NONE', 0, "none"),
-    ('H5Z_FILTER_DEFLATE', 1, "gzip"),  # aka as "zlib" for blosc
-    ('H5Z_FILTER_SHUFFLE', 2, "shuffle"),
-    ('H5Z_FILTER_FLETCHER32', 3, "fletcher32"),
-    ('H5Z_FILTER_SZIP', 4, "szip"),
-    ('H5Z_FILTER_NBIT', 5, "nbit"),
-    ('H5Z_FILTER_SCALEOFFSET', 6, "scaleoffet"),
-    ('H5Z_FILTER_LZF', 32000, "lzf"),
-    ('H5Z_FILTER_BLOSC', 32001, "blosclz"),
-    ('H5Z_FILTER_SNAPPY', 32003, "snappy"),
-    ('H5Z_FILTER_LZ4', 32004, "lz4"),
-    ('H5Z_FILTER_LZ4HC', 32005, "lz4hc"),
-    ('H5Z_FILTER_ZSTD', 32015, "zstd")
+    ("H5Z_FILTER_NONE", 0, "none"),
+    ("H5Z_FILTER_DEFLATE", 1, "gzip"),  # aka as "zlib" for blosc
+    ("H5Z_FILTER_SHUFFLE", 2, "shuffle"),
+    ("H5Z_FILTER_FLETCHER32", 3, "fletcher32"),
+    ("H5Z_FILTER_SZIP", 4, "szip"),
+    ("H5Z_FILTER_NBIT", 5, "nbit"),
+    ("H5Z_FILTER_SCALEOFFSET", 6, "scaleoffet"),
+    ("H5Z_FILTER_LZF", 32000, "lzf"),
+    ("H5Z_FILTER_BLOSC", 32001, "blosclz"),
+    ("H5Z_FILTER_SNAPPY", 32003, "snappy"),
+    ("H5Z_FILTER_LZ4", 32004, "lz4"),
+    ("H5Z_FILTER_LZ4HC", 32005, "lz4hc"),
+    ("H5Z_FILTER_ZSTD", 32015, "zstd"),
 )
 
 COMPRESSION_FILTER_IDS = (
-    'H5Z_FILTER_DEFLATE',
-    'H5Z_FILTER_SZIP',
-    'H5Z_FILTER_SCALEOFFSET',
-    'H5Z_FILTER_LZF',
-    'H5Z_FILTER_BLOSC',
-    'H5Z_FILTER_SNAPPY',
-    'H5Z_FILTER_LZ4',
-    'H5Z_FILTER_LZ4HC',
-    'H5Z_FILTER_ZSTD'
+    "H5Z_FILTER_DEFLATE",
+    "H5Z_FILTER_SZIP",
+    "H5Z_FILTER_SCALEOFFSET",
+    "H5Z_FILTER_LZF",
+    "H5Z_FILTER_BLOSC",
+    "H5Z_FILTER_SNAPPY",
+    "H5Z_FILTER_LZ4",
+    "H5Z_FILTER_LZ4HC",
+    "H5Z_FILTER_ZSTD",
 )
 
 COMPRESSION_FILTER_NAMES = (
-    'gzip',
-    'szip',
-    'lzf',
-    'blosclz',
-    'snappy',
-    'lz4',
-    'lz4hc',
-    'zstd'
+    "gzip",
+    "szip",
+    "lzf",
+    "blosclz",
+    "snappy",
+    "lz4",
+    "lz4hc",
+    "zstd",
 )
 
 CHUNK_LAYOUT_CLASSES = (
-    'H5D_CHUNKED',
-    'H5D_CHUNKED_REF',
-    'H5D_CHUNKED_REF_INDIRECT',
-    'H5D_CONTIGUOUS_REF'
+    "H5D_CHUNKED",
+    "H5D_CHUNKED_REF",
+    "H5D_CHUNKED_REF_INDIRECT",
+    "H5D_CONTIGUOUS_REF",
 )
 
 
@@ -88,7 +88,7 @@ def getFilterItem(key):
 
 
 def getFilters(dset_json):
-    """ Return list of filters, or empty list """
+    """Return list of filters, or empty list"""
     if "creationProperties" not in dset_json:
         return []
     creationProperties = dset_json["creationProperties"]
@@ -99,24 +99,29 @@ def getFilters(dset_json):
 
 
 def getCompressionFilter(dset_json):
-    """ Return compression filter from filters, or None """
+    """Return compression filter from filters, or None"""
     filters = getFilters(dset_json)
     for filter in filters:
-        if 'class' not in filter:
+        if "class" not in filter:
             msg = f"filter option: {filter} with no class key"
             log.warn(msg)
             continue
         filter_class = filter["class"]
         if filter_class in COMPRESSION_FILTER_IDS:
             return filter
-        if filter_class == 'H5Z_FILTER_USER' and 'name' in filter and \
-                filter['name'] in COMPRESSION_FILTER_NAMES:
+        if all(
+            (
+                filter_class == "H5Z_FILTER_USER",
+                "name" in filter,
+                filter["name"] in COMPRESSION_FILTER_NAMES,
+            )
+        ):
             return filter
     return None
 
 
 def getShuffleFilter(dset_json):
-    """ Return shuffle filter, or None """
+    """Return shuffle filter, or None"""
     filters = getFilters(dset_json)
     for filter in filters:
         try:
@@ -131,9 +136,9 @@ def getShuffleFilter(dset_json):
 
 
 def getFilterOps(app, dset_json, item_size):
-    """ Get list of filter operations to be used for this dataset """
-    filter_map = app['filter_map']
-    dset_id = dset_json['id']
+    """Get list of filter operations to be used for this dataset"""
+    filter_map = app["filter_map"]
+    dset_id = dset_json["id"]
     if dset_id in filter_map:
         log.debug(f"returning filter from filter_map {filter_map[dset_id]}")
         return filter_map[dset_id]
@@ -148,39 +153,40 @@ def getFilterOps(app, dset_json, item_size):
         filter_ops["use_shuffle"] = True
 
     if compressionFilter:
-        if compressionFilter["class"] == 'H5Z_FILTER_DEFLATE':
-            filter_ops["compressor"] = 'zlib'  # blosc compressor
+        if compressionFilter["class"] == "H5Z_FILTER_DEFLATE":
+            filter_ops["compressor"] = "zlib"  # blosc compressor
             if shuffleFilter:
                 filter_ops["use_shuffle"] = True
             else:
                 # for HDF5-style compression, use shuffle only if it turned on
-                filter_ops['use_shuffle'] = False
+                filter_ops["use_shuffle"] = False
         else:
             if "name" in compressionFilter:
                 filter_ops["compressor"] = compressionFilter["name"]
             else:
-                filter_ops["compressor"] = 'lz4'  # default to lz4
+                filter_ops["compressor"] = "lz4"  # default to lz4
         if "level" not in compressionFilter:
-            filter_ops['level'] = 5  # medium level
+            filter_ops["level"] = 5  # medium level
         else:
-            filter_ops['level'] = int(compressionFilter["level"])
+            filter_ops["level"] = int(compressionFilter["level"])
 
     if filter_ops:
-        filter_ops['item_size'] = item_size
-        if item_size == 'H5T_VARIABLE':
-            filter_ops['use_shuffle'] = False
+        filter_ops["item_size"] = item_size
+        if item_size == "H5T_VARIABLE":
+            filter_ops["use_shuffle"] = False
         log.debug(f"save filter ops: {filter_ops} for {dset_id}")
         filter_map[dset_id] = filter_ops  # save
         return filter_ops
     else:
         return None
 
+
 def getDsetRank(dset_json):
-    """ Get rank returning 0 for sclar or NULL datashapes """
+    """Get rank returning 0 for sclar or NULL datashapes"""
     datashape = dset_json["shape"]
-    if datashape["class"] == 'H5S_NULL':
+    if datashape["class"] == "H5S_NULL":
         return 0
-    if datashape["class"] == 'H5S_SCALAR':
+    if datashape["class"] == "H5S_SCALAR":
         return 0
     if "dims" not in datashape:
         log.warn(f"expected to find dims key in shape_json: {datashape}")
@@ -189,10 +195,11 @@ def getDsetRank(dset_json):
     rank = len(dims)
     return rank
 
+
 def isNullSpace(dset_json):
-    """ Return true if this dataset is a null dataspace """
+    """Return true if this dataset is a null dataspace"""
     datashape = dset_json["shape"]
-    if datashape["class"] == 'H5S_NULL':
+    if datashape["class"] == "H5S_NULL":
         return True
     else:
         return False
@@ -272,18 +279,18 @@ def getHyperslabSelection(dsetshape, start=None, stop=None, step=None):
 
 
 def getSelectionShape(selection):
-    """ Return the shape of the given selection.
-      Examples (selection -> returned shape):
-      [(3,7,1)] -> [4]
-      [(3, 7, 3)] -> [1]
-      [(44, 52, 1), (48,52,1)] -> [8, 4]
-      [[1,2,7]] ->
+    """Return the shape of the given selection.
+    Examples (selection -> returned shape):
+    [(3,7,1)] -> [4]
+    [(3, 7, 3)] -> [1]
+    [(44, 52, 1), (48,52,1)] -> [8, 4]
+    [[1,2,7]] ->
     """
     shape = []
     rank = len(selection)
     for i in range(rank):
         s = selection[i]
-        if isinstance(s,slice):
+        if isinstance(s, slice):
             extent = 0
             if s.step and s.step > 1:
                 step = s.step
@@ -292,7 +299,7 @@ def getSelectionShape(selection):
             if s.stop > s.start:
                 extent = s.stop - s.start
             if step > 1 and extent > 0:
-                extent = (extent // step)
+                extent = extent // step
             if (s.stop - s.start) % step != 0:
                 extent += 1
         else:
@@ -346,48 +353,58 @@ def getQueryParameter(request, query_name, body=None, default=None):
             raise HTTPBadRequest(reason=msg)
     return val
 
+
 def _getSelectionStringFromRequestBody(body):
-    """ Join start, stop, and (optionally) stop keys 
-         to create an equivalent selection string """
+    """Join start, stop, and (optionally) stop keys
+    to create an equivalent selection string"""
     if "start" not in body:
         raise KeyError("no start key")
     start_val = body["start"]
     if not isinstance(start_val, (list, tuple)):
-        start_val =  [start_val,]
+        start_val = [
+            start_val,
+        ]
     rank = len(start_val)
     if "stop" not in body:
         raise KeyError("no stop key")
     stop_val = body["stop"]
     if not isinstance(stop_val, (list, tuple)):
-        stop_val = [stop_val,]
+        stop_val = [
+            stop_val,
+        ]
     if len(stop_val) != rank:
         raise ValueError("start and stop values have different ranks")
     if "step" in body:
         step_val = body["step"]
         if not isinstance(step_val, (list, tuple)):
-            step_val = [step_val,]
+            step_val = [
+                step_val,
+            ]
         if len(step_val) != rank:
-            raise ValueError("step values have differnt rank from start and stop selections")
+            raise ValueError(
+                "step values have differnt rank from start and stop selections"
+            )
     else:
         step_val = None
     selection = []
-    selection.append('[')
+    selection.append("[")
     for i in range(rank):
         dim_sel = f"{start_val[i]}:{stop_val[i]}"
         if step_val:
             dim_sel += f":{step_val[i]}"
         selection.append(dim_sel)
-        if i+1 < rank:
-            selection.append(',')
-    selection.append(']')
+        if i + 1 < rank:
+            selection.append(",")
+    selection.append("]")
     return "".join(selection)
 
+
 def _getSelectElements(select):
-    """ helper method - return array of queries for each 
-       dimension """
+    """helper method - return array of queries for each
+    dimension"""
     if isinstance(select, list) or isinstance(select, tuple):
         return select  # already listified
-    select = select[1:-1] # strip brackets
+    select = select[1:-1]  # strip brackets
     query_array = []
     dim_query = []
     coord_list = False
@@ -395,7 +412,7 @@ def _getSelectElements(select):
         if ch.isspace():
             # ignore
             pass
-        elif ch == ',':
+        elif ch == ",":
             if coord_list:
                 dim_query.append(ch)
             else:
@@ -403,20 +420,20 @@ def _getSelectElements(select):
                     # empty dimension
                     raise ValueError("invalid query")
                 query_array.append("".join(dim_query))
-                dim_query = [] # reset
-        elif ch == '[':
+                dim_query = []  # reset
+        elif ch == "[":
             if coord_list:
                 # can't have nested coordinates
                 raise ValueError("invalid query")
             coord_list = True
             dim_query.append(ch)
-        elif ch == ']':
+        elif ch == "]":
             if not coord_list:
                 # close bracket with no open
                 raise ValueError("invalid query")
             dim_query.append(ch)
             coord_list = False
-        elif ch == ':':
+        elif ch == ":":
             if coord_list:
                 # range not allowed in coord list
                 raise ValueError("invalid query")
@@ -424,28 +441,28 @@ def _getSelectElements(select):
         else:
             dim_query.append(ch)
     if not dim_query:
-        #empty dimension
+        # empty dimension
         raise ValueError("invalid query")
     query_array.append("".join(dim_query))
-    
+
     return query_array
 
 
 def getSelectionList(select, dims):
-    """ Return tuple of slices and/or coordinate list for the given selection """
+    """Return tuple of slices and/or coordinate list for the given selection"""
     select_list = []
 
     if isinstance(select, dict):
         select = _getSelectionStringFromRequestBody(select)
 
     if select is None or len(select) == 0:
-        """ Return set of slices covering data space"""
+        """Return set of slices covering data space"""
         slices = []
         for extent in dims:
             s = slice(0, extent, 1)
             slices.append(s)
-        return tuple(slices)  
-        
+        return tuple(slices)
+
     # convert selection to list by dimension
     elements = _getSelectElements(select)
     rank = len(elements)
@@ -456,10 +473,10 @@ def getSelectionList(select, dims):
         element = elements[dim]
         is_list = isinstance(element, list)
         is_str = isinstance(element, str)
-        if is_list or (is_str and element.startswith('[')):
+        if is_list or (is_str and element.startswith("[")):
             # list of coordinates
             if is_str:
-                fields = element[1:-1].split(',')
+                fields = element[1:-1].split(",")
             else:
                 fields = element
             coords = []
@@ -470,8 +487,10 @@ def getSelectionList(select, dims):
                 except ValueError:
                     raise ValueError(f"Invalid coordinate for dim {dim}")
                 if coord < 0 or coord >= extent:
-                    raise ValueError(f"out of range coordinate for dim {dim}, {coord} not in range: 0-{extent-1} ")
-                if last_coord != None and coord <= last_coord:
+                    msg = f"out of range coordinate for dim {dim}, {coord} "
+                    msg += f"not in range: 0-{extent-1}"
+                    raise ValueError(msg)
+                if last_coord is not None and coord <= last_coord:
                     raise ValueError("coordinates must be increasing")
                 last_coord = coord
                 coords.append(coord)
@@ -479,9 +498,9 @@ def getSelectionList(select, dims):
         elif element == ":":
             s = slice(0, extent, 1)
             select_list.append(s)
-        elif is_str and element.find(':') >= 0:
-            fields = element.split(':')
-            if len(fields) not in (2,3):
+        elif is_str and element.find(":") >= 0:
+            fields = element.split(":")
+            if len(fields) not in (2, 3):
                 raise ValueError(f"Invalid selection format for dim {dim}")
             if len(fields[0]) == 0:
                 start = 0
@@ -491,7 +510,9 @@ def getSelectionList(select, dims):
                 except ValueError:
                     raise ValueError(f"Invalid selection - start value for dim {dim}")
                 if start < 0 or start >= extent:
-                    raise ValueError(f"Invalid selection - start value out of range for dim {dim}")
+                    raise ValueError(
+                        f"Invalid selection - start value out of range for dim {dim}"
+                    )
             if len(fields[1]) == 0:
                 stop = extent
             else:
@@ -500,7 +521,9 @@ def getSelectionList(select, dims):
                 except ValueError:
                     raise ValueError(f"Invalid selection - stop value for dim {dim}")
                 if stop < 0 or stop > extent or stop <= start:
-                    raise ValueError(f"Invalid selection - stop value out of range for dim {dim}")
+                    raise ValueError(
+                        f"Invalid selection - stop value out of range for dim {dim}"
+                    )
             if len(fields) == 3:
                 # get step value
                 if len(fields[2]) == 0:
@@ -509,9 +532,13 @@ def getSelectionList(select, dims):
                     try:
                         step = int(fields[2])
                     except ValueError:
-                        raise ValueError(f"Invalid selection - step value for dim {dim}")
+                        raise ValueError(
+                            f"Invalid selection - step value for dim {dim}"
+                        )
                     if step <= 0:
-                        raise ValueError(f"Invalid selection - step value out of range for dim {dim}")
+                        raise ValueError(
+                            f"Invalid selection - step value out of range for dim {dim}"
+                        )
             else:
                 step = 1
             s = slice(start, stop, step)
@@ -523,18 +550,20 @@ def getSelectionList(select, dims):
             except ValueError:
                 raise ValueError(f"Invalid selection - index value for dim {dim}")
             if index < 0 or index >= extent:
-                raise ValueError(f"Invalid selection - index value out of range for dim {dim}")
-            
-            s = slice(index, index+1, 1)
+                raise ValueError(
+                    f"Invalid selection - index value out of range for dim {dim}"
+                )
+
+            s = slice(index, index + 1, 1)
             select_list.append(s)
     # end dimension loop
-    return tuple(select_list) 
+    return tuple(select_list)
 
 
 def getSelectionPagination(select, dims, itemsize, max_request_size):
-    """ 
-    Paginate a select tupe into multiple selects where each 
-        select requires less than max_request_size bytes """
+    """
+    Paginate a select tupe into multiple selects where each
+        select requires less than max_request_size bytes"""
     msg = f"getSelectionPagination - select: {select}, dims: {dims}, "
     msg += f"itemsize: {itemsize}, max_request_size: {max_request_size}"
     log.debug(msg)
@@ -553,7 +582,7 @@ def getSelectionPagination(select, dims, itemsize, max_request_size):
     paginate_extent = None
     for i in range(rank):
         s = select[i]
-        if isinstance(s,slice):
+        if isinstance(s, slice):
             paginate_extent = 0
             if s.step and s.stop > 1:
                 step = s.step
@@ -572,21 +601,22 @@ def getSelectionPagination(select, dims, itemsize, max_request_size):
         log.warn(msg)
         raise ValueError(msg)
     log.debug(f"getSelectionPagination - using pagination dimension: {paginate_dim}")
-    
+
     # get the approx bytes per page by doing fractional dev with ceil
     page_count = select_size // max_request_size
     page_count += 1  # round up by one
     log.debug(f"getSelectionPagination - page_count: {page_count}")
-    page_size =  select_size // page_count
+    page_size = select_size // page_count
     log.debug(f"getSelectionPagination - page_size: {page_size}")
-    
+
     s = select[paginate_dim]
-    #log.debug(f"pagination dim: {paginate_dim} select: {s} paginate_extent: {paginate_extent}")
-    #page_extent = -(-max_request_size // page_size)
-    #log.debug(f"getSelectionPagination - page_extent: {page_extent}")
-    #page_count = -(-paginate_extent // page_extent)
+    # log.debug(f"pagination dim: {paginate_dim} select: {s} paginate_extent: {paginate_extent}")
+    # page_extent = -(-max_request_size // page_size)
+    # log.debug(f"getSelectionPagination - page_extent: {page_extent}")
+    # page_count = -(-paginate_extent // page_extent)
     if paginate_extent < page_count:
-        msg = f"select pagination unable to paginate select dim: {paginate_dim} into {page_count} pages"
+        msg = f"select pagination unable to paginate select dim: {paginate_dim} "
+        msg += f"into {page_count} pages"
         log.warn(msg)
         raise ValueError(msg)
     page_extent = paginate_extent // page_count
@@ -594,13 +624,13 @@ def getSelectionPagination(select, dims, itemsize, max_request_size):
         page_extent = 1
     log.debug(f"getSelectionPagination - page_extent: {page_extent}")
     paginate_slices = []
-    if isinstance(s,slice):
+    if isinstance(s, slice):
         start = s.start
         if s.step and s.stop > 1:
             step = s.step
         else:
             step = 1
-         
+
         while start < s.stop:
             stop = start + page_extent
             if stop % step != 0:
@@ -614,7 +644,7 @@ def getSelectionPagination(select, dims, itemsize, max_request_size):
             start = stop
     else:
         # coordinate list
-        start = 0 # first index
+        start = 0  # first index
         while start < len(s):
             stop = start + page_extent
             if stop > len(s):
@@ -626,7 +656,7 @@ def getSelectionPagination(select, dims, itemsize, max_request_size):
             start = stop
     # adjust page count to number to actual pagination
     page_count = len(paginate_slices)
-        
+
     log.debug(f"got {page_count} paginate_slices")
     # return paginated selection list using paginate_slices for pagination
     # dimension, original selection for each other dimension
@@ -640,8 +670,9 @@ def getSelectionPagination(select, dims, itemsize, max_request_size):
                 s.append(select[i])
         pagination.append(tuple(s))
     pagination = tuple(pagination)
-    #log.debug(f"returning pagination: {pagination}")
+    # log.debug(f"returning pagination: {pagination}")
     return pagination
+
 
 def getSliceQueryParam(sel):
     """
@@ -662,23 +693,23 @@ def getSliceQueryParam(sel):
             s = sel[i]
             if isinstance(s, slice):
                 sel_param += str(s.start)
-                sel_param += ':'
+                sel_param += ":"
                 sel_param += str(s.stop)
                 if s.step > 1:
-                    sel_param += ':'
+                    sel_param += ":"
                     sel_param += str(s.step)
             else:
                 # coord selection
-                sel_param += '['
+                sel_param += "["
                 count = len(s)
                 for j in range(count):
                     sel_param += str(s[j])
                     if j < count - 1:
-                        sel_param += ','
-                sel_param += ']'
+                        sel_param += ","
+                sel_param += "]"
             if i < rank - 1:
-                sel_param += ','
-        sel_param += ']'
+                sel_param += ","
+        sel_param += "]"
         log.debug(f"select query param: {sel_param}")
         if len(sel_param) > 500:
             log.warning(f"select param is {len(sel_param)} characters long")
@@ -703,7 +734,7 @@ def setChunkDimQueryParam(params, dims):
         for i in range(rank):
             extent = dims[i]
             dim_param += str(extent)
-        dim_param += ']'
+        dim_param += "]"
         log.debug("dim query param: {}".format(dim_param))
         params["dim"] = dim_param
 
@@ -719,24 +750,25 @@ def getDsetMaxDims(dset_json):
         raise HTTPInternalServerError()
     shape_json = dset_json["shape"]
     maxdims = None
-    if shape_json['class'] == 'H5S_NULL':
+    if shape_json["class"] == "H5S_NULL":
         msg = "Expected shape class other than H5S_NULL"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    elif shape_json['class'] == 'H5S_SCALAR':
-        maxdims = [1, ]
-    elif shape_json['class'] == 'H5S_SIMPLE':
+    elif shape_json["class"] == "H5S_SCALAR":
+        maxdims = [
+            1,
+        ]
+    elif shape_json["class"] == "H5S_SIMPLE":
         if "maxdims" in shape_json:
             maxdims = shape_json["maxdims"]
     else:
-        log.error("Unexpected shape class: {}".format(shape_json['class']))
+        log.error("Unexpected shape class: {}".format(shape_json["class"]))
         raise HTTPInternalServerError()
     return maxdims
 
 
 def getChunkLayout(dset_json):
-    """ Get chunk layout.  Throw 500 if used with non-H5D_CHUNKED layout
-    """
+    """Get chunk layout.  Throw 500 if used with non-H5D_CHUNKED layout"""
     if "layout" not in dset_json:
         log.error("No layout found in dset_json")
         raise HTTPInternalServerError()
@@ -757,9 +789,9 @@ def getPreviewQuery(dims):
     select = "select=["
     rank = len(dims)
 
-    ncols = dims[rank-1]
+    ncols = dims[rank - 1]
     if rank > 1:
-        nrows = dims[rank-2]
+        nrows = dims[rank - 2]
     else:
         nrows = 1
 
@@ -769,16 +801,16 @@ def getPreviewQuery(dims):
         ncols = 100
     if nrows > 100:
         nrows = 100
-    if nrows*ncols > 100:
+    if nrows * ncols > 100:
         if nrows > ncols:
             nrows = 100 // ncols
         else:
             ncols = 100 // nrows
 
     for i in range(rank):
-        if i == rank-1:
+        if i == rank - 1:
             select += "0:" + str(ncols)
-        elif i == rank-2:
+        elif i == rank - 2:
             select += "0:" + str(nrows) + ","
         else:
             select += "0:1,"
@@ -813,7 +845,7 @@ def isExtensible(dims, maxdims):
     for n in range(rank):
         # TBD - shouldn't have H5S_UNLIMITED in any new files.
         # Remove check once this is confirmed
-        if maxdims[n] in (0, 'H5S_UNLIMITED') or maxdims[n] > dims[n]:
+        if maxdims[n] in (0, "H5S_UNLIMITED") or maxdims[n] > dims[n]:
             return True
     return False
 
@@ -826,7 +858,9 @@ class ItemIterator:
     def __init__(self, selection):
         self._selection = selection
         self._rank = len(selection)
-        self._index = [0, ] * self._rank
+        self._index = [
+            0,
+        ] * self._rank
         for i in range(self._rank):
             s = self._selection[i]
             self._index[i] = s.start
@@ -840,7 +874,9 @@ class ItemIterator:
             raise StopIteration()
         dim = self._rank - 1
 
-        index = [0, ] * self._rank
+        index = [
+            0,
+        ] * self._rank
         for i in range(self._rank):
             index[i] = self._index[i]
         while dim >= 0:

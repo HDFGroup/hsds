@@ -26,23 +26,30 @@ from asyncio import CancelledError
 from .. import hsds_logger as log
 from .httpUtil import http_get
 from .s3Client import S3Client
+
 try:
     from .azureBlobClient import AzureBlobClient
 except ImportError:
+
     def AzureBlobClient(app):
         log.error("Unable to import AzureBlobClient")
         return None
+
+
 try:
     from .fileClient import FileClient
 except ImportError:
+
     def FileClient(app):
         log.error("ImportError for FileClient")
         return None
+
+
 from .. import config
 
 
 def getCompressors():
-    """ return available compressors """
+    """return available compressors"""
     compressors = codecs.blosc.list_compressors()
     # replace zlib with the equivalent gzip since that is the h5py name
     if "gzip" not in compressors and "zlib" in compressors:
@@ -57,21 +64,24 @@ def getCompressors():
 
     return compressors
 
+
 def getFilters(include_compressors=True):
-    """ return list of other supported filters """
-    filters = ["shuffle",]
+    """return list of other supported filters"""
+    filters = [
+        "shuffle",
+    ]
     if include_compressors:
         filters.extend(getCompressors())
     return filters
 
 
 def setBloscThreads(nthreads):
-    """ Set the number of threads blosc will use for compression """
+    """Set the number of threads blosc will use for compression"""
     codecs.blosc.set_nthreads(nthreads)
 
 
 def getBloscThreads():
-    """ Get the number of blosc threads to be used for compression """
+    """Get the number of blosc threads to be used for compression"""
     nthreads = codecs.blosc_get_nthreads()
 
     return nthreads
@@ -90,8 +100,7 @@ def _unshuffle(element_size, chunk):
 
 
 def _getStorageClient(app):
-    """ get storage client s3 or azure blob
-    """
+    """get storage client s3 or azure blob"""
 
     if "storage_client" in app:
         return app["storage_client"]
@@ -111,8 +120,7 @@ def _getStorageClient(app):
 
 
 def getStorageDriverName(app):
-    """ Return name of storage driver that is being used
-    """
+    """Return name of storage driver that is being used"""
     if config.get("aws_s3_gateway"):
         driver = "S3Client"
     elif config.get("azure_connection_string"):
@@ -123,8 +131,8 @@ def getStorageDriverName(app):
 
 
 async def releaseStorageClient(app):
-    """ release the client storage connection
-     (Used for cleanup on application exit)
+    """release the client storage connection
+    (Used for cleanup on application exit)
     """
     client = _getStorageClient(app)
     await client.releaseClient()
@@ -132,25 +140,27 @@ async def releaseStorageClient(app):
     if "storage_client" in app:
         del app["storage_client"]
 
+
 def _getURIParts(uri):
-    """ return tuple of (bucket, path) for given URI """
+    """return tuple of (bucket, path) for given URI"""
     if uri.startswith("s3://"):
         uri = uri[5:]
-    if uri.startswith('/'):
+    if uri.startswith("/"):
         raise ValueError("invalid uri")
-    n = uri.find('/')
+    n = uri.find("/")
     if n < 0:
         raise ValueError("invalid uri")
     fields = (uri[:n], uri[n:])
     return fields
 
+
 def getBucketFromStorURI(uri):
-    """ Return a bucket name given a storage URI 
-        Examples:
-          s3://mybucket/folder/object.json  -> mybucket
-          mybucket/folder/object.json  -> mybucket
-          mybucket -> ValueError  # no slash
-          /mybucket/folder/object.json -> ValueError # not expecting abs path
+    """Return a bucket name given a storage URI
+    Examples:
+      s3://mybucket/folder/object.json  -> mybucket
+      mybucket/folder/object.json  -> mybucket
+      mybucket -> ValueError  # no slash
+      /mybucket/folder/object.json -> ValueError # not expecting abs path
     """
     fields = _getURIParts(uri)
     bucket = fields[0]
@@ -158,13 +168,14 @@ def getBucketFromStorURI(uri):
         raise ValueError("invalid uri")
     return bucket
 
+
 def getKeyFromStorURI(uri):
-    """ Return a key (path within a bucket) given a storage URI 
-        Examples:
-          s3://mybucket/folder/object.json  -> mybucket
-          mybucket/folder/object.json  -> mybucket
-          mybucket -> ValueError  # no slash
-          /mybucket/folder/object.json -> ValueError # not expecting abs path
+    """Return a key (path within a bucket) given a storage URI
+    Examples:
+      s3://mybucket/folder/object.json  -> mybucket
+      mybucket/folder/object.json  -> mybucket
+      mybucket -> ValueError  # no slash
+      /mybucket/folder/object.json -> ValueError # not expecting abs path
     """
     fields = _getURIParts(uri)
     path = fields[1]
@@ -174,10 +185,9 @@ def getKeyFromStorURI(uri):
 
 
 async def rangegetProxy(app, bucket=None, key=None, offset=0, length=0):
-    """ fetch bytes from rangeget proxy
-    """
+    """fetch bytes from rangeget proxy"""
     if "rangeget_url" in app:
-        req = app["rangeget_url"] + '/'
+        req = app["rangeget_url"] + "/"
     else:
         rangeget_port = config.get("rangeget_port")
         if "is_docker" in app:
@@ -211,24 +221,22 @@ async def rangegetProxy(app, bucket=None, key=None, offset=0, length=0):
         msg += f"but got: {len(data)}"
         log.warn(msg)
     return data
-    
 
 
 async def getStorJSONObj(app, key, bucket=None):
-    """ Get object identified by key and read as JSON
-    """
+    """Get object identified by key and read as JSON"""
 
     client = _getStorageClient(app)
     if not bucket:
-        bucket = app['bucket_name']
-    if key[0] == '/':
+        bucket = app["bucket_name"]
+    if key[0] == "/":
         key = key[1:]  # no leading slash
     log.info(f"getStorJSONObj({bucket})/{key}")
 
     data = await client.get_object(key, bucket=bucket)
 
     try:
-        json_dict = json.loads(data.decode('utf8'))
+        json_dict = json.loads(data.decode("utf8"))
     except UnicodeDecodeError:
         log.error(f"Error loading JSON at key: {key}")
         raise HTTPInternalServerError()
@@ -239,15 +247,15 @@ async def getStorJSONObj(app, key, bucket=None):
     return json_dict
 
 
-async def getStorBytes(app, key, filter_ops=None, offset=0,
-                       length=-1, bucket=None, use_proxy=False):
-    """ Get object identified by key and read as bytes
-    """
+async def getStorBytes(
+    app, key, filter_ops=None, offset=0, length=-1, bucket=None, use_proxy=False
+):
+    """Get object identified by key and read as bytes"""
 
     client = _getStorageClient(app)
     if not bucket:
-        bucket = app['bucket_name']
-    if key[0] == '/':
+        bucket = app["bucket_name"]
+    if key[0] == "/":
         key = key[1:]  # no leading slash
     if offset is None:
         offset = 0
@@ -257,21 +265,22 @@ async def getStorBytes(app, key, filter_ops=None, offset=0,
     log.info(msg)
 
     default_req_size = 128 * 1024 * 1024  # 128KB
-    data_cache_max_req_size = int(config.get("data_cache_max_req_size", default=default_req_size))
+    data_cache_max_req_size = int(
+        config.get("data_cache_max_req_size", default=default_req_size)
+    )
 
     shuffle = 0
     compressor = None
     if filter_ops:
         log.debug(f"getStorBytes for {key} with filter_ops: {filter_ops}")
-        if "use_shuffle" in filter_ops and filter_ops['use_shuffle']:
-            shuffle = filter_ops['item_size']
+        if "use_shuffle" in filter_ops and filter_ops["use_shuffle"]:
+            shuffle = filter_ops["item_size"]
             log.debug("using shuffle filter")
         if "compressor" in filter_ops:
             compressor = filter_ops["compressor"]
             log.debug(f"using compressor: {compressor}")
 
-    kwargs = {"bucket": bucket, "key": key,
-              "offset": offset, "length": length}
+    kwargs = {"bucket": bucket, "key": key, "offset": offset, "length": length}
     if offset > 0 and use_proxy and length < data_cache_max_req_size:
         # use rangeget proxy
         data = await rangegetProxy(app, **kwargs)
@@ -337,13 +346,12 @@ async def getStorBytes(app, key, filter_ops=None, offset=0,
 
 
 async def putStorBytes(app, key, data, filter_ops=None, bucket=None):
-    """ Store byte string as S3 object with given key
-    """
+    """Store byte string as S3 object with given key"""
 
     client = _getStorageClient(app)
     if not bucket:
-        bucket = app['bucket_name']
-    if key[0] == '/':
+        bucket = app["bucket_name"]
+    if key[0] == "/":
         key = key[1:]  # no leading slash
     shuffle = -1  # auto-shuffle
     clevel = 5
@@ -351,7 +359,7 @@ async def putStorBytes(app, key, data, filter_ops=None, bucket=None):
     if filter_ops:
         if "compressor" in filter_ops:
             cname = filter_ops["compressor"]
-        if "use_shuffle" in filter_ops and not filter_ops['use_shuffle']:
+        if "use_shuffle" in filter_ops and not filter_ops["use_shuffle"]:
             shuffle = 0  # client indicates to turn off shuffling
         if "level" in filter_ops:
             clevel = filter_ops["level"]
@@ -378,17 +386,16 @@ async def putStorBytes(app, key, data, filter_ops=None, bucket=None):
 
 
 async def putStorJSONObj(app, key, json_obj, bucket=None):
-    """ Store JSON data as storage object with given key
-    """
+    """Store JSON data as storage object with given key"""
 
     client = _getStorageClient(app)
     if not bucket:
-        bucket = app['bucket_name']
-    if key[0] == '/':
+        bucket = app["bucket_name"]
+    if key[0] == "/":
         key = key[1:]  # no leading slash
     log.info(f"putS3JSONObj({bucket}/{key})")
     data = json.dumps(json_obj)
-    data = data.encode('utf8')
+    data = data.encode("utf8")
 
     rsp = await client.put_object(key, data, bucket=bucket)
 
@@ -396,13 +403,12 @@ async def putStorJSONObj(app, key, json_obj, bucket=None):
 
 
 async def deleteStorObj(app, key, bucket=None):
-    """ Delete storage object identfied by given key
-    """
+    """Delete storage object identfied by given key"""
 
     client = _getStorageClient(app)
     if not bucket:
-        bucket = app['bucket_name']
-    if key[0] == '/':
+        bucket = app["bucket_name"]
+    if key[0] == "/":
         key = key[1:]  # no leading slash
     log.info(f"deleteStorObj({key})")
 
@@ -412,16 +418,15 @@ async def deleteStorObj(app, key, bucket=None):
 
 
 async def getStorObjStats(app, key, bucket=None):
-    """ Return etag, size, and last modified time for given object
-    """
+    """Return etag, size, and last modified time for given object"""
     # TBD - will need to be refactored to handle azure responses
 
     client = _getStorageClient(app)
     if not bucket:
-        bucket = app['bucket_name']
+        bucket = app["bucket_name"]
     stats = {}
 
-    if key[0] == '/':
+    if key[0] == "/":
         # key = key[1:]  # no leading slash
         msg = f"key with leading slash: {key}"
         log.error(msg)
@@ -435,12 +440,11 @@ async def getStorObjStats(app, key, bucket=None):
 
 
 async def isStorObj(app, key, bucket=None):
-    """ Test if the given key maps to S3 object
-    """
+    """Test if the given key maps to S3 object"""
     found = False
     client = _getStorageClient(app)
     if not bucket:
-        bucket = app['bucket_name']
+        bucket = app["bucket_name"]
     else:
         log.debug(f"using bucket: [{bucket}]")
     log.debug(f"isStorObj {bucket}/{key}")
@@ -451,13 +455,20 @@ async def isStorObj(app, key, bucket=None):
     return found
 
 
-async def getStorKeys(app, prefix='', deliminator='', suffix='',
-                      include_stats=False, callback=None, bucket=None,
-                      limit=None):
+async def getStorKeys(
+    app,
+    prefix="",
+    deliminator="",
+    suffix="",
+    include_stats=False,
+    callback=None,
+    bucket=None,
+    limit=None,
+):
     # return keys matching the arguments
     client = _getStorageClient(app)
     if not bucket:
-        bucket = app['bucket_name']
+        bucket = app["bucket_name"]
     msg = f"getStorKeys('{prefix}','{deliminator}','{suffix}', "
     msg += f"include_stats={include_stats}"
     log.info(msg)

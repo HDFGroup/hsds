@@ -23,7 +23,7 @@ def validateLinkName(name):
         msg = "Unexpected type for link name"
         log.error(msg)
         raise HTTPBadRequest(reason=msg)
-    if name.find('/') >= 0:
+    if name.find("/") >= 0:
         msg = "link name contains slash"
         log.error(msg)
         raise HTTPBadRequest(reason=msg)

@@ -14,9 +14,9 @@ from .. import config
 CALLBACK_MAX_COUNT = 1000  # compatible with S3 batch size
 
 
-class AzureBlobClient():
+class AzureBlobClient:
     """
-     Utility class for reading and storing data to AzureStorage Blobs
+    Utility class for reading and storing data to AzureStorage Blobs
     """
 
     def __init__(self, app):
@@ -44,22 +44,20 @@ class AzureBlobClient():
         # TBD - what do do about region?
         log.info("AzureBlobClient init")
 
-        azure_connection_string = config.get('azure_connection_string')
+        azure_connection_string = config.get("azure_connection_string")
         if not azure_connection_string:
             msg = "No connection string specified"
             log.error(msg)
             raise ValueError(msg)
         log.info(f"Using azure_connection_string: {azure_connection_string}")
 
-        self._client = BlobServiceClient.from_connection_string(
-            azure_connection_string)
+        self._client = BlobServiceClient.from_connection_string(azure_connection_string)
 
         # save so same client can be returned in subsequent calls
-        app['azureBlobClient'] = self._client
+        app["azureBlobClient"] = self._client
 
     def _azure_stats_increment(self, counter, inc=1):
-        """ Incremenet the indicated connter
-        """
+        """Incremenet the indicated connter"""
         if "azure_stats" not in self._app:
             # setup stats
             azure_stats = {}
@@ -71,7 +69,7 @@ class AzureBlobClient():
             azure_stats["bytes_in"] = 0
             azure_stats["bytes_out"] = 0
             self._app["azure_stats"] = azure_stats
-        azure_stats = self._app['azure_stats']
+        azure_stats = self._app["azure_stats"]
         if counter not in azure_stats:
             log.error(f"unexpected counter for azure_stats: {counter}")
             return
@@ -82,8 +80,8 @@ class AzureBlobClient():
         azure_stats[counter] += inc
 
     async def get_object(self, key, bucket=None, offset=0, length=-1):
-        """ Return data for object at given key.
-           If Range is set, return the given byte range.
+        """Return data for object at given key.
+        If Range is set, return the given byte range.
         """
         if not bucket:
             log.error("get_object - bucket not set")
@@ -142,8 +140,8 @@ class AzureBlobClient():
         return data
 
     async def put_object(self, key, data, bucket=None):
-        """ Write data to given key.
-            Returns client specific dict on success
+        """Write data to given key.
+        Returns client specific dict on success
         """
         if not bucket:
             log.error("put_object - bucket not set")
@@ -155,16 +153,14 @@ class AzureBlobClient():
         try:
             kwargs = {"container": bucket, "blob": key}
             async with self._client.get_blob_client(**kwargs) as blob_client:
-                kwargs = {"blob_type": 'BlockBlob', "overwrite": True}
+                kwargs = {"blob_type": "BlockBlob", "overwrite": True}
                 blob_rsp = await blob_client.upload_blob(data, **kwargs)
 
             finish_time = time.time()
             ETag = blob_rsp["etag"]
             lastModified = int(blob_rsp["last_modified"].timestamp())
             data_size = len(data)
-            rsp = {"ETag": ETag,
-                   "size": data_size,
-                   "LastModified": lastModified}
+            rsp = {"ETag": ETag, "size": data_size, "LastModified": lastModified}
             log.debug(f"put_object {key} returning: {rsp}")
             msg = f"azureBlobClient.put_object({key} bucket={bucket}) "
             msg += f"start={start_time:.4f} finish={finish_time:.4f} "
@@ -205,8 +201,7 @@ class AzureBlobClient():
         return rsp
 
     async def delete_object(self, key, bucket=None):
-        """ Deletes the object at the given key
-        """
+        """Deletes the object at the given key"""
         if not bucket:
             log.error("delete_object - bucket not set")
             raise HTTPInternalServerError()
@@ -216,8 +211,7 @@ class AzureBlobClient():
         msg += f"start: {start_time}"
         log.debug(msg)
         try:
-            async with self._client.get_container_client(container=bucket) as \
-                                                              client:
+            async with self._client.get_container_client(container=bucket) as client:
                 await client.delete_blob(blob=key)
             finish_time = time.time()
             msg = f"azureBlobClient.delete_object({key} bucket={bucket}) "
@@ -255,8 +249,7 @@ class AzureBlobClient():
                 raise HTTPInternalServerError()
 
     async def is_object(self, key, bucket=None):
-        """ Return true if the given object exists
-        """
+        """Return true if the given object exists"""
         if not bucket:
             log.error("is_object - bucket not set")
             raise HTTPInternalServerError()
@@ -307,8 +300,7 @@ class AzureBlobClient():
         return found
 
     async def get_key_stats(self, key, bucket=None):
-        """ Get ETag, size, and last modified time for given objecct
-        """
+        """Get ETag, size, and last modified time for given objecct"""
         start_time = time.time()
         key_stats = {}
         try:
@@ -363,15 +355,24 @@ class AzureBlobClient():
 
         return key_stats
 
-    async def walk_blobs(self, client, prefix="", suffix="",
-                         include_stats=False, deliminator='/', callback=None):
+    async def walk_blobs(
+        self,
+        client,
+        prefix="",
+        suffix="",
+        include_stats=False,
+        deliminator="/",
+        callback=None,
+    ):
         continuation_token = None
         count = 0
         while True:
-            kwargs = {"name_starts_with": prefix, "delimiter": deliminator,
-                      "results_per_page": CALLBACK_MAX_COUNT}
-            keyList = client.walk_blobs(**kwargs).\
-                by_page(continuation_token)
+            kwargs = {
+                "name_starts_with": prefix,
+                "delimiter": deliminator,
+                "results_per_page": CALLBACK_MAX_COUNT,
+            }
+            keyList = client.walk_blobs(**kwargs).by_page(continuation_token)
             key_names = {} if include_stats else []
             async for key in await keyList.__anext__():
                 key_name = key["name"]
@@ -383,14 +384,14 @@ class AzureBlobClient():
                     key_tags = {
                         "ETag": ETag,
                         "Size": data_size,
-                        "LastModified": lastModified
-                        }
+                        "LastModified": lastModified,
+                    }
                     key_names[key_name] = key_tags
                 else:
                     if suffix and not key_name.endswith(suffix):
                         log.debug(f"skip name that doesn't end with {suffix}")
                         continue
-                    if deliminator and key_name[-1] != '/':
+                    if deliminator and key_name[-1] != "/":
                         log.debug("skip name thaat doesn't end in '/'")
                         # only return folders
                         continue
@@ -419,8 +420,9 @@ class AzureBlobClient():
             log.warning(msg)
         return key_names
 
-    async def walk_blob_hierarchy(self, client, prefix="",
-                                  include_stats=False, callback=None):
+    async def walk_blob_hierarchy(
+        self, client, prefix="", include_stats=False, callback=None
+    ):
         log.info(f"walk_blob_hierarchy, prefix: {prefix}")
 
         key_names = None
@@ -434,29 +436,34 @@ class AzureBlobClient():
         key_names = key_names = {} if include_stats else []
         count = 0
         async for item in client.walk_blobs(name_starts_with=prefix):
-            short_name = item.name[len(prefix):]
+            nlen = len(prefix)
+            short_name = item.name[nlen:]
             if isinstance(item, BlobPrefix):
                 log.debug(f"walk_blob_hierarchy - BlobPrefix: {short_name}")
-                kwargs = {"prefix": item.name,
-                          "include_stats": include_stats,
-                          "callback": callback}
+                kwargs = {
+                    "prefix": item.name,
+                    "include_stats": include_stats,
+                    "callback": callback,
+                }
                 key_names = await self.walk_blob_hierarchy(client, **kwargs)
             else:
                 kwargs = {"nme_starts_with": item.name}
                 async for item in client.list_blobs(**kwargs):
-                    key_name = item['name']
+                    key_name = item["name"]
                     log.debug(f"walk_blob_hierarchy - got name: {key_name}")
                     if include_stats:
                         ETag = item["etag"]
                         lastModified = int(item["last_modified"].timestamp())
                         data_size = item["size"]
-                        key_tags = {"ETag": ETag,
-                                    "Size": data_size,
-                                    "LastModified": lastModified}
+                        key_tags = {
+                            "ETag": ETag,
+                            "Size": data_size,
+                            "LastModified": lastModified,
+                        }
                         key_names[key_name] = key_tags
                     else:
                         # just add the blob name to the list
-                        key_names.append(item['name'])
+                        key_names.append(item["name"])
                     count += 1
                     if callback and len(key_names) >= CALLBACK_MAX_COUNT:
                         msg = "walk_blob_hierarchy, invoking callback "
@@ -479,11 +486,17 @@ class AzureBlobClient():
 
         return key_names
 
-    async def list_keys(self, prefix='', deliminator='', suffix='',
-                        include_stats=False, callback=None,
-                        bucket=None, limit=None):
-        """ return keys matching the arguments
-        """
+    async def list_keys(
+        self,
+        prefix="",
+        deliminator="",
+        suffix="",
+        include_stats=False,
+        callback=None,
+        bucket=None,
+        limit=None,
+    ):
+        """return keys matching the arguments"""
         if not bucket:
             log.error("list_keys - bucket not set")
             raise HTTPInternalServerError()
@@ -491,22 +504,24 @@ class AzureBlobClient():
         msg += f"include_stats={include_stats}, callback "
         msg += f"{'set' if callback is not None else 'not set'}"
         log.info(msg)
-        if deliminator and deliminator != '/':
+        if deliminator and deliminator != "/":
             msg = "Only '/' is supported as deliminator"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         key_names = None
 
-        if prefix == '':
+        if prefix == "":
             prefix = None  # azure sdk expects None for no prefix
 
         try:
             kwargs = {"container": bucket}
             async with self._client.get_container_client(**kwargs) as client:
-                kwargs = {"prefix": prefix,
-                          "deliminator": deliminator,
-                          "include_stats": include_stats,
-                          "callback": callback}
+                kwargs = {
+                    "prefix": prefix,
+                    "deliminator": deliminator,
+                    "include_stats": include_stats,
+                    "callback": callback,
+                }
                 key_names = await self.walk_blobs(client, **kwargs)
                 # key_names = await self.walk_blob_hierarchy(client, **kwargs)
         except CancelledError as cle:
@@ -550,11 +565,11 @@ class AzureBlobClient():
         return key_names
 
     async def releaseClient(self):
-        """ release the client collection to Azure Blob Storage
-           (Used for cleanup on application exit)
+        """release the client collection to Azure Blob Storage
+        (Used for cleanup on application exit)
         """
         log.info("release AzureBlobClient")
-        if 'azureBlobClient' in self._app:
-            client = self._app['azureBlobClient']
+        if "azureBlobClient" in self._app:
+            client = self._app["azureBlobClient"]
             await client.close()
-            del self._app['azureBlobClient']
+            del self._app["azureBlobClient"]

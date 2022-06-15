@@ -12,6 +12,7 @@
 #
 # Simple looger for hsds
 #
+
 import asyncio
 import time
 from aiohttp.web_exceptions import HTTPServiceUnavailable
@@ -28,6 +29,7 @@ log_count = {"DEBUG": 0, "INFO": 0, "WARN": 0, "ERROR": 0}
 # the following defaults will be adjusted by the app
 config = {"log_level": DEBUG, "prefix": "", "timestamps": False}
 
+
 def _getLevelName(level):
     if level == DEBUG:
         name = "DEBUG"
@@ -40,6 +42,7 @@ def _getLevelName(level):
     else:
         name = "????"
     return name
+
 
 def setLogConfig(level, prefix=None, timestamps=None):
     if level == "DEBUG":
@@ -58,14 +61,15 @@ def setLogConfig(level, prefix=None, timestamps=None):
         config["prefix"] = prefix
     if timestamps is not None:
         config["timestamps"] = timestamps
-    
-        
+
+
 def _activeTaskCount():
     count = 0
     for task in asyncio.all_tasks():
         if not task.done():
             count += 1
     return count
+
 
 def _timestamp():
 
@@ -74,8 +78,9 @@ def _timestamp():
         ts = f"{now:.3f} "
     else:
         ts = ""
-    
+
     return ts
+
 
 def _logMsg(level, msg):
     if config["log_level"] > level:
@@ -90,24 +95,27 @@ def _logMsg(level, msg):
     print(f"{prefix}{ts}{level_name}> {msg}")
 
     log_count[level_name] += 1
-        
 
 
 def debug(msg):
     _logMsg(DEBUG, msg)
-    
+
+
 def info(msg):
     _logMsg(INFO, msg)
-     
+
+
 def warn(msg):
-    _logMsg(WARNING,  msg)
-     
+    _logMsg(WARNING, msg)
+
+
 def warning(msg):
     _logMsg(WARNING, msg)
-     
+
+
 def error(msg):
     _logMsg(ERROR, msg)
-     
+
 
 def request(req):
     app = req.app
@@ -119,9 +127,15 @@ def request(req):
     if domain:
         msg += f" [{domain}]"
     print(msg)
- 
-    INFO_METHODS = ("/about", "/register", "/info", "/nodeinfo",
-                    "/nodestate", "/register")
+
+    INFO_METHODS = (
+        "/about",
+        "/register",
+        "/info",
+        "/nodeinfo",
+        "/nodestate",
+        "/register",
+    )
     if req.path in INFO_METHODS:
         # always service these state requests regardles of node state and
         # task load
@@ -162,10 +176,10 @@ def response(req, resp=None, code=None, message=None):
             level = ERROR
 
     log_level = config["log_level"]
-    
+
     if log_level <= level:
         prefix = config["prefix"]
         ts = _timestamp()
-        
+
         s = "{}{} RSP> <{}> ({}): {}"
         print(s.format(prefix, ts, code, message, req.path))

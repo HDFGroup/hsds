@@ -61,9 +61,9 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
         msg = f"updateDatasetInfo - no shape dataset_json for {dset_id} "
         msg += "- skipping"
         log.debug(msg)
-        return   # null dataspace
+        return  # null dataspace
     shape_json = dset_json["shape"]
-    if "class" in shape_json and shape_json["class"] == 'H5S_NULL':
+    if "class" in shape_json and shape_json["class"] == "H5S_NULL":
         log.debug(f"updatedDatasetInfo - null space for {dset_id} - skipping")
         return
     if "type" not in dset_json:
@@ -88,9 +88,9 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
     if dims is None:
         return  # null dataspace
 
-    if item_size == 'H5T_VARIABLE':
+    if item_size == "H5T_VARIABLE":
         # arbitrary lgoical size for vaariable, so just set to allocated size
-        logical_bytes = dataset_info['allocated_bytes']
+        logical_bytes = dataset_info["allocated_bytes"]
     else:
         num_elements = getNumElements(dims)
         logical_bytes = num_elements * item_size
@@ -104,7 +104,7 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
     linked_bytes = 0
     num_linked_chunks = 0
 
-    if layout_class == 'H5D_CONTIGUOUS_REF':
+    if layout_class == "H5D_CONTIGUOUS_REF":
         # In H5D_CONTIGUOUS_REF a non-compressed part of the HDF5 is divided
         # into equal size chunks, so we can just compute link bytes and num
         # chunks based on the size of the coniguous dataset
@@ -118,14 +118,14 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
         log.debug(msg)
         linked_bytes = chunk_size * num_chunks
         num_linked_chunks = num_chunks
-    elif layout_class == 'H5D_CHUNKED_REF':
+    elif layout_class == "H5D_CHUNKED_REF":
         chunks = layout["chunks"]
         # chunks is a dict with tuples (offset, size)
         for chunk_id in chunks:
             chunk_info = chunks[chunk_id]
             linked_bytes += chunk_info[1]
         num_linked_chunks = len(chunks)
-    elif layout_class == 'H5D_CHUNKED_REF_INDIRECT':
+    elif layout_class == "H5D_CHUNKED_REF_INDIRECT":
         log.debug("chunk ref indirect")
         if "chunk_table" not in layout:
             msg = "Expected to find chunk_table in dataset layout for "
@@ -151,7 +151,7 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
         if "class" not in chunktable_layout:
             log.warn(f"expected class in chunktable_layout: {chunktable_id}")
             return
-        if chunktable_layout["class"] != 'H5D_CHUNKED':
+        if chunktable_layout["class"] != "H5D_CHUNKED":
             log.warn("expected chunktable layout class to be chunked")
             return
         if "dims" not in chunktable_layout:
@@ -161,8 +161,7 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
         chunktable_type_json = chunktable_json["type"]
         chunktable_item_size = getItemSize(chunktable_type_json)
         chunktable_dt = createDataType(chunktable_type_json)
-        chunktable_filter_ops = \
-            getFilterOps(app, chunktable_json, chunktable_item_size)
+        chunktable_filter_ops = getFilterOps(app, chunktable_json, chunktable_item_size)
 
         # read chunktable one chunk at a time - this can be slow if there
         # are a lot of chunks, but this is only used by the async bucket
@@ -181,9 +180,7 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
                 s3key = getS3Key(chunktable_chunk_id)
                 # read the chunk
                 try:
-                    is_stor_obj = await isStorObj(app,
-                                                  s3key,
-                                                  bucket=bucket)
+                    is_stor_obj = await isStorObj(app, s3key, bucket=bucket)
                 except HTTPInternalServerError as hse:
                     msg = "updateDatasetInfo - got error checking for key: "
                     msg += f"{s3key}: {hse}"
@@ -194,8 +191,7 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
                     msg += f"id: {chunktable_chunk_id}"
                     log.debug(msg)
                 else:
-                    kwargs = {"filter_ops": chunktable_filter_ops,
-                              "bucket": bucket}
+                    kwargs = {"filter_ops": chunktable_filter_ops, "bucket": bucket}
                     try:
                         chunk_bytes = await getStorBytes(app, s3key, **kwargs)
                     except HTTPInternalServerError as hse:
@@ -231,7 +227,7 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
         msg = "updateDatasetInfo - done with chunktable iteration "
         msg += f"for {chunktable_id}"
         log.debug(msg)
-    elif layout_class == 'H5D_CHUNKED':
+    elif layout_class == "H5D_CHUNKED":
         msg = "updateDatasetInfo - no linked bytes/chunks for "
         msg += "H5D_CHUNKED layout"
         log.debug(msg)
@@ -357,7 +353,7 @@ async def scanRoot(app, rootid, update=False, bucket=None):
 
     if not root_key.endswith("/.group.json"):
         raise ValueError("unexpected root key")
-    root_prefix = root_key[:-(len(".group.json"))]
+    root_prefix = root_key[: -(len(".group.json"))]
 
     log.debug(f"scanRoot - using prefix: {root_prefix}")
 
@@ -379,8 +375,12 @@ async def scanRoot(app, rootid, update=False, bucket=None):
     app["scanRoot_results"] = results
     app["scanRoot_keyset"] = set()
 
-    kwargs = {"prefix": root_prefix, "include_stats": True,
-              "bucket": bucket, "callback": scanRootCallback}
+    kwargs = {
+        "prefix": root_prefix,
+        "include_stats": True,
+        "bucket": bucket,
+        "callback": scanRootCallback,
+    }
     await getStorKeys(app, **kwargs)
     num_objects = results["num_groups"]
     num_objects += results["num_datatypes"]
@@ -411,7 +411,7 @@ async def scanRoot(app, rootid, update=False, bucket=None):
         # create a numpy array to store checksums
         msg = f"creating numpy checksum array for {num_objects} checksums"
         log.debug(msg)
-        checksum_arr = np.zeros((num_objects,), dtype='S16')
+        checksum_arr = np.zeros((num_objects,), dtype="S16")
         objids = list(checksums.keys())
         objids.sort()
         for i in range(num_objects):
@@ -450,7 +450,6 @@ async def objDeleteCallback(app, s3keys):
     if "objDelete_bucket" not in app:
         log.error("Expecte to find objDelete_bucket key for objDeleteCallback")
         raise ValueError("Invalid objDeleteCallback")
-    
 
     prefix = app["objDelete_prefix"]
     bucket = app["objDelete_bucket"]
@@ -467,7 +466,7 @@ async def objDeleteCallback(app, s3keys):
 
 
 async def removeKeys(app, objid, bucket=None):
-    """ delete all keys for given root or dataset id"""
+    """delete all keys for given root or dataset id"""
     # iterate through all s3 keys under the given root or dataset id
     #  and delete them
     #
@@ -484,7 +483,7 @@ async def removeKeys(app, objid, bucket=None):
 
     for suffix in expected_suffixes:
         if s3key.endswith(suffix):
-            s3prefix = s3key[:-len(suffix)]
+            s3prefix = s3key[: -len(suffix)]
     if not s3prefix:
         log.error("removeKeys - unexpected s3key for delete_set")
         raise KeyError("unexpected key suffix")
@@ -498,10 +497,12 @@ async def removeKeys(app, objid, bucket=None):
     app["objDelete_prefix"] = s3prefix
     app["objDelete_bucket"] = bucket
     try:
-        kwargs = {"prefix": s3prefix,
-                  "include_stats": False,
-                  "bucket": bucket,
-                  "callback": objDeleteCallback}
+        kwargs = {
+            "prefix": s3prefix,
+            "include_stats": False,
+            "bucket": bucket,
+            "callback": objDeleteCallback,
+        }
         await getStorKeys(app, **kwargs)
     except ClientError as ce:
         log.error(f"removeKeys - getS3Keys faiiled: {ce}")

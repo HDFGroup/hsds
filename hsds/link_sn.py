@@ -18,7 +18,7 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPConflict
 from .util.httpUtil import http_get, http_put, http_delete, getHref
 from .util.httpUtil import jsonResponse
 from .util.idUtil import isValidUuid, getDataNodeUrl, getCollectionForId
-from .util.authUtil import getUserPasswordFromRequest,   validateUserPassword
+from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain
 from .util.linkUtil import validateLinkName
@@ -33,7 +33,7 @@ async def GET_Links(request):
     app = request.app
     params = request.rel_url.query
 
-    group_id = request.match_info.get('id')
+    group_id = request.match_info.get("id")
     if not group_id:
         msg = "Missing group id"
         log.warn(msg)
@@ -55,7 +55,7 @@ async def GET_Links(request):
         marker = params["Marker"]
 
     username, pswd = getUserPasswordFromRequest(request)
-    if username is None and app['allow_noauth']:
+    if username is None and app["allow_noauth"]:
         username = "default"
     else:
         await validateUserPassword(app, username, pswd)
@@ -73,10 +73,10 @@ async def GET_Links(request):
 
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id + "/links"
-    query_sep = '?'
+    query_sep = "?"
     if limit is not None:
         req += query_sep + "Limit=" + str(limit)
-        query_sep = '&'
+        query_sep = "&"
     if marker is not None:
         req += query_sep + "Marker=" + marker
 
@@ -93,21 +93,21 @@ async def GET_Links(request):
         if link["class"] == "H5L_TYPE_HARD":
             collection_name = getCollectionForId(link["id"])
             link["collection"] = collection_name
-            target_uri = '/' + collection_name + '/' + link["id"]
+            target_uri = "/" + collection_name + "/" + link["id"]
             link["target"] = getHref(request, target_uri)
-        link_uri = '/groups/' + group_id + '/links/' + link['title']
+        link_uri = "/groups/" + group_id + "/links/" + link["title"]
         link["href"] = getHref(request, link_uri)
 
     resp_json = {}
     resp_json["links"] = links
     hrefs = []
-    group_uri = '/groups/'+group_id
-    href = getHref(request, group_uri+'/links')
-    hrefs.append({'rel': 'self', 'href': href})
-    href = getHref(request, '/')
-    hrefs.append({'rel': 'home', 'href': href})
+    group_uri = "/groups/" + group_id
+    href = getHref(request, group_uri + "/links")
+    hrefs.append({"rel": "self", "href": href})
+    href = getHref(request, "/")
+    hrefs.append({"rel": "home", "href": href})
     href = getHref(request, group_uri)
-    hrefs.append({'rel': 'owner', 'href': href})
+    hrefs.append({"rel": "owner", "href": href})
     resp_json["hrefs"] = hrefs
 
     resp = await jsonResponse(request, resp_json)
@@ -120,7 +120,7 @@ async def GET_Link(request):
     log.request(request)
     app = request.app
 
-    group_id = request.match_info.get('id')
+    group_id = request.match_info.get("id")
     if not group_id:
         msg = "Missing group id"
         log.warn(msg)
@@ -129,11 +129,11 @@ async def GET_Link(request):
         msg = f"Invalid group id: {group_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    link_title = request.match_info.get('title')
+    link_title = request.match_info.get("title")
     validateLinkName(link_title)
 
     username, pswd = getUserPasswordFromRequest(request)
-    if username is None and app['allow_noauth']:
+    if username is None and app["allow_noauth"]:
         username = "default"
     else:
         await validateUserPassword(app, username, pswd)
@@ -178,17 +178,17 @@ async def GET_Link(request):
     resp_json["lastModified"] = link_json["created"]
 
     hrefs = []
-    group_uri = '/groups/'+group_id
+    group_uri = "/groups/" + group_id
     href = getHref(request, f"{group_uri}/links/{link_title}")
-    hrefs.append({'rel': 'self', 'href': href})
-    href = getHref(request, '/')
-    hrefs.append({'rel': 'home', 'href': href})
+    hrefs.append({"rel": "self", "href": href})
+    href = getHref(request, "/")
+    hrefs.append({"rel": "home", "href": href})
     href = getHref(request, group_uri)
-    hrefs.append({'rel': 'owner', 'href': href})
+    hrefs.append({"rel": "owner", "href": href})
     if link_json["class"] == "H5L_TYPE_HARD":
-        target = '/' + resp_link["collection"] + '/' + resp_link["id"]
+        target = "/" + resp_link["collection"] + "/" + resp_link["id"]
         href = getHref(request, target)
-        hrefs.append({'rel': 'target', 'href': href})
+        hrefs.append({"rel": "target", "href": href})
 
     resp_json["hrefs"] = hrefs
 
@@ -202,7 +202,7 @@ async def PUT_Link(request):
     log.request(request)
     app = request.app
 
-    group_id = request.match_info.get('id')
+    group_id = request.match_info.get("id")
     if not group_id:
         msg = "Missing group id"
         log.warn(msg)
@@ -211,7 +211,7 @@ async def PUT_Link(request):
         msg = f"Invalid group id: {group_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    link_title = request.match_info.get('title')
+    link_title = request.match_info.get("title")
     log.info(f"PUT Link_title: [{link_title}]")
     validateLinkName(link_title)
 
@@ -321,7 +321,7 @@ async def DELETE_Link(request):
     log.request(request)
     app = request.app
 
-    group_id = request.match_info.get('id')
+    group_id = request.match_info.get("id")
     if not group_id:
         msg = "Missing group id"
         log.warn(msg)
@@ -330,7 +330,7 @@ async def DELETE_Link(request):
         msg = f"Invalid group id: {group_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    link_title = request.match_info.get('title')
+    link_title = request.match_info.get("title")
     validateLinkName(link_title)
 
     username, pswd = getUserPasswordFromRequest(request)
@@ -345,7 +345,7 @@ async def DELETE_Link(request):
     bucket = getBucketForDomain(domain)
     if not bucket:
         bucket = config.get("bucket_name")
-        
+
     await validateAction(app, domain, group_id, username, "delete")
 
     req = getDataNodeUrl(app, group_id)
