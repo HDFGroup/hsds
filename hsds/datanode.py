@@ -12,6 +12,7 @@
 #
 # data node of hsds cluster
 #
+
 import asyncio
 import time
 from aiohttp.web import run_app
@@ -22,7 +23,7 @@ from .util.idUtil import isValidUuid, isSchema2Id, getCollectionForId
 from .util.idUtil import isRootObjId
 from .util.httpUtil import isUnixDomainUrl, bindToSocket, getPortFromUrl
 from .util.httpUtil import jsonResponse, release_http_client
-from . util.storUtil import setBloscThreads, getBloscThreads
+from .util.storUtil import setBloscThreads, getBloscThreads
 from .basenode import healthCheck, baseInit
 from . import hsds_logger as log
 from .domain_dn import GET_Domain, PUT_Domain, DELETE_Domain, PUT_ACL
@@ -43,64 +44,56 @@ from aiohttp.web_exceptions import HTTPForbidden, HTTPBadRequest
 
 async def init():
     """Intitialize application and return app object"""
-    app = baseInit('dn')
+    app = baseInit("dn")
 
     #
     # call app.router.add_get() here to add node-specific routes
     #
-    app.router.add_route('GET', '/domains', GET_Domain)
-    app.router.add_route('PUT', '/domains', PUT_Domain)
-    app.router.add_route('DELETE', '/domains', DELETE_Domain)
-    app.router.add_route('PUT', '/acls/{username}', PUT_ACL)
-    app.router.add_route('GET', '/groups/{id}', GET_Group)
-    app.router.add_route('DELETE', '/groups/{id}', DELETE_Group)
-    app.router.add_route('PUT', '/groups/{id}', PUT_Group)
-    app.router.add_route('POST', '/groups', POST_Group)
-    app.router.add_route('GET', '/groups/{id}/links', GET_Links)
-    app.router.add_route('GET', '/groups/{id}/links/{title}', GET_Link)
-    app.router.add_route('DELETE', '/groups/{id}/links/{title}', DELETE_Link)
-    app.router.add_route('PUT', '/groups/{id}/links/{title}', PUT_Link)
-    app.router.add_route('GET', '/groups/{id}/attributes', GET_Attributes)
-    app.router.add_route('GET', '/groups/{id}/attributes/{name}',
-                         GET_Attribute)
-    app.router.add_route('DELETE', '/groups/{id}/attributes/{name}',
-                         DELETE_Attribute)
-    app.router.add_route('PUT', '/groups/{id}/attributes/{name}',
-                         PUT_Attribute)
-    app.router.add_route('GET', '/datatypes/{id}', GET_Datatype)
-    app.router.add_route('DELETE', '/datatypes/{id}', DELETE_Datatype)
-    app.router.add_route('POST', '/datatypes', POST_Datatype)
-    app.router.add_route('GET', '/datatypes/{id}/attributes', GET_Attributes)
-    app.router.add_route('GET', '/datatypes/{id}/attributes/{name}',
-                         GET_Attribute)
-    app.router.add_route('DELETE', '/datatypes/{id}/attributes/{name}',
-                         DELETE_Attribute)
-    app.router.add_route('PUT', '/datatypes/{id}/attributes/{name}',
-                         PUT_Attribute)
-    app.router.add_route('GET', '/datasets/{id}', GET_Dataset)
-    app.router.add_route('DELETE', '/datasets/{id}', DELETE_Dataset)
-    app.router.add_route('POST', '/datasets', POST_Dataset)
-    app.router.add_route('PUT', '/datasets/{id}/shape', PUT_DatasetShape)
-    app.router.add_route('GET', '/datasets/{id}/attributes', GET_Attributes)
-    app.router.add_route('GET', '/datasets/{id}/attributes/{name}',
-                         GET_Attribute)
-    app.router.add_route('DELETE', '/datasets/{id}/attributes/{name}',
-                         DELETE_Attribute)
-    app.router.add_route('PUT', '/datasets/{id}/attributes/{name}',
-                         PUT_Attribute)
-    app.router.add_route('PUT', '/chunks/{id}', PUT_Chunk)
-    app.router.add_route('GET', '/chunks/{id}', GET_Chunk)
-    app.router.add_route('POST', '/chunks/{id}', POST_Chunk)
-    app.router.add_route('DELETE', '/chunks/{id}', DELETE_Chunk)
-    app.router.add_route("POST", '/roots/{id}', POST_Root)
-    app.router.add_route("DELETE", '/prestop', preStop)
+    app.router.add_route("GET", "/domains", GET_Domain)
+    app.router.add_route("PUT", "/domains", PUT_Domain)
+    app.router.add_route("DELETE", "/domains", DELETE_Domain)
+    app.router.add_route("PUT", "/acls/{username}", PUT_ACL)
+    app.router.add_route("GET", "/groups/{id}", GET_Group)
+    app.router.add_route("DELETE", "/groups/{id}", DELETE_Group)
+    app.router.add_route("PUT", "/groups/{id}", PUT_Group)
+    app.router.add_route("POST", "/groups", POST_Group)
+    app.router.add_route("GET", "/groups/{id}/links", GET_Links)
+    app.router.add_route("GET", "/groups/{id}/links/{title}", GET_Link)
+    app.router.add_route("DELETE", "/groups/{id}/links/{title}", DELETE_Link)
+    app.router.add_route("PUT", "/groups/{id}/links/{title}", PUT_Link)
+    app.router.add_route("GET", "/groups/{id}/attributes", GET_Attributes)
+    app.router.add_route("GET", "/groups/{id}/attributes/{name}", GET_Attribute)
+    app.router.add_route("DELETE", "/groups/{id}/attributes/{name}", DELETE_Attribute)
+    app.router.add_route("PUT", "/groups/{id}/attributes/{name}", PUT_Attribute)
+    app.router.add_route("GET", "/datatypes/{id}", GET_Datatype)
+    app.router.add_route("DELETE", "/datatypes/{id}", DELETE_Datatype)
+    app.router.add_route("POST", "/datatypes", POST_Datatype)
+    app.router.add_route("GET", "/datatypes/{id}/attributes", GET_Attributes)
+    app.router.add_route("GET", "/datatypes/{id}/attributes/{name}", GET_Attribute)
+    app.router.add_route(
+        "DELETE", "/datatypes/{id}/attributes/{name}", DELETE_Attribute
+    )
+    app.router.add_route("PUT", "/datatypes/{id}/attributes/{name}", PUT_Attribute)
+    app.router.add_route("GET", "/datasets/{id}", GET_Dataset)
+    app.router.add_route("DELETE", "/datasets/{id}", DELETE_Dataset)
+    app.router.add_route("POST", "/datasets", POST_Dataset)
+    app.router.add_route("PUT", "/datasets/{id}/shape", PUT_DatasetShape)
+    app.router.add_route("GET", "/datasets/{id}/attributes", GET_Attributes)
+    app.router.add_route("GET", "/datasets/{id}/attributes/{name}", GET_Attribute)
+    app.router.add_route("DELETE", "/datasets/{id}/attributes/{name}", DELETE_Attribute)
+    app.router.add_route("PUT", "/datasets/{id}/attributes/{name}", PUT_Attribute)
+    app.router.add_route("PUT", "/chunks/{id}", PUT_Chunk)
+    app.router.add_route("GET", "/chunks/{id}", GET_Chunk)
+    app.router.add_route("POST", "/chunks/{id}", POST_Chunk)
+    app.router.add_route("DELETE", "/chunks/{id}", DELETE_Chunk)
+    app.router.add_route("POST", "/roots/{id}", POST_Root)
+    app.router.add_route("DELETE", "/prestop", preStop)
 
     return app
 
 
 async def bucketScan(app):
-    """ Scan v2 keys and update .info.json
-    """
+    """Scan v2 keys and update .info.json"""
     log.info("bucketScan start")
 
     async_sleep_time = int(config.get("async_sleep_time"))
@@ -171,8 +164,9 @@ async def bucketScan(app):
     # shouldn't ever get here
     log.error("bucketScan terminating unexpectedly")
 
+
 def get_gc_count(app):
-    """ Return number of items in gc queue """
+    """Return number of items in gc queue"""
     count = 0
     gc_buckets = app["gc_buckets"]
     for bucket in gc_buckets:
@@ -181,9 +175,9 @@ def get_gc_count(app):
         count += len(gc_ids)
     return count
 
+
 async def bucketGC(app):
-    """ remove objects from db for any deleted root groups or datasets
-    """
+    """remove objects from db for any deleted root groups or datasets"""
     async_sleep_time = int(config.get("async_sleep_time"))
     log.info(f"bucketGC start - async_sleep_time: {async_sleep_time}")
 
@@ -194,7 +188,7 @@ async def bucketGC(app):
             log.info("bucketGC - waiting for Node state to be READY")
             await asyncio.sleep(async_sleep_time)
             continue  # wait for READY state
-        
+
         gc_buckets = app["gc_buckets"]
         for bucket in gc_buckets:
             log.debug(f"bucketGC - getting keys for bucket: {bucket}")
@@ -210,7 +204,9 @@ async def bucketGC(app):
                     continue
                 if getCollectionForId(obj_id) == "groups":
                     if not isRootObjId(obj_id):
-                        log.error(f"bucketGC - unexpected non-root id: {bucket}/{obj_id}")
+                        log.error(
+                            f"bucketGC - unexpected non-root id: {bucket}/{obj_id}"
+                        )
                         continue
                     log.info(f"bucketGC - delete root objs: {bucket}/{obj_id}")
                     await removeKeys(app, obj_id, bucket=bucket)
@@ -275,32 +271,36 @@ def create_app():
     # create the app object
     loop = asyncio.get_event_loop()
     app = loop.run_until_complete(init())
-    kwargs = {"mem_target": metadata_mem_cache_size,
-              "name": "MetaCache",
-              "expire_time": metadata_mem_cache_expire}
-    app['meta_cache'] = LruCache(**kwargs)
-    kwargs = {"mem_target": chunk_mem_cache_size,
-              "name": "ChunkCache",
-              "expire_time": chunk_mem_cache_expire}
-    app['chunk_cache'] = LruCache(**kwargs)
-    app['deleted_ids'] = set()
+    kwargs = {
+        "mem_target": metadata_mem_cache_size,
+        "name": "MetaCache",
+        "expire_time": metadata_mem_cache_expire,
+    }
+    app["meta_cache"] = LruCache(**kwargs)
+    kwargs = {
+        "mem_target": chunk_mem_cache_size,
+        "name": "ChunkCache",
+        "expire_time": chunk_mem_cache_expire,
+    }
+    app["chunk_cache"] = LruCache(**kwargs)
+    app["deleted_ids"] = set()
     # map of objids to timestamp and bucket of which they were last updated
-    app['dirty_ids'] = {}
+    app["dirty_ids"] = {}
     # map of dataset ids to deflate levels (if compressed)
-    app['filter_map'] = {}
+    app["filter_map"] = {}
     # map of objid to timestamp for in-flight read requests
-    app['pending_s3_read'] = {}
+    app["pending_s3_read"] = {}
     # map of objid to timestamp for in-flight write requests
-    app['pending_s3_write'] = {}
+    app["pending_s3_write"] = {}
     # map of objid to asyncio Task objects for writes
-    app['pending_s3_write_tasks'] = {}
+    app["pending_s3_write_tasks"] = {}
     # map of root_id to bucket name used for notify root of changes in domain
-    app['root_notify_ids'] = {}
+    app["root_notify_ids"] = {}
     # map of root_id to bucket name for pending root scans
-    app['root_scan_ids'] = {}
+    app["root_scan_ids"] = {}
     # set of root or dataset ids for deletion
-    app['gc_buckets'] = {}
-    app['objDelete_prefix'] = None  # used by async_lib removeKeys
+    app["gc_buckets"] = {}
+    app["objDelete_prefix"] = None  # used by async_lib removeKeys
 
     # TODO - there's nothing to prevent the deflate_map from getting
     # ever larger
@@ -315,8 +315,9 @@ def create_app():
 
     return app
 
+
 async def on_shutdown(app):
-    """ Release any held resources """
+    """Release any held resources"""
     log.info("on_shutdown - setting node_state to TERMINATING")
     app["node_state"] = "TERMINATING"
     s3_sync_interval = config.get("s3_sync_interval")
@@ -344,19 +345,19 @@ async def on_shutdown(app):
         msg += f"sleeping for {sleep_interval:.2f}"
         log.warning(msg)
         await asyncio.sleep(sleep_interval)
-    
+
     # finally release any http_clients
     await release_http_client(app)
 
     log.info("on_shutdown - done")
 
+
 async def preStop(request):
-    """ HTTP Method used by K8s to signal the container is shutting down
-    """
+    """HTTP Method used by K8s to signal the container is shutting down"""
 
     log.request(request)
     app = request.app
-    
+
     shutdown_start = time.time()
     log.warn(f"preStop request calling on_shutdown at {shutdown_start:.2f}")
     await on_shutdown(app)
@@ -376,12 +377,13 @@ async def preStop(request):
 # Main
 #
 
+
 def main():
     log.info("Data node initializing")
     app = create_app()
 
     # run app using either socket or tcp
-    
+
     if app["dn_urls"] and app["node_number"] >= 0:
         dn_urls = app["dn_urls"]
         node_number = app["node_number"]
@@ -423,5 +425,5 @@ def main():
     log.info("datanode exiting")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

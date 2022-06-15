@@ -1,10 +1,12 @@
 import os
 import json
 
+
 class Config:
     """
     User Config state
     """
+
     def __init__(self, config_file=None, **kwargs):
         self._cfg = {}
         if config_file:
@@ -22,15 +24,20 @@ class Config:
                     s = line.strip()
                     if not s:
                         continue
-                    if s[0] == '#':
+                    if s[0] == "#":
                         # comment line
                         continue
-                    index = line.find('=')
+                    index = line.find("=")
                     if index <= 0:
-                        print("config file: {} line: {} is not valid".format(self._config_file, line_number))
+                        print(
+                            "config file: {} line: {} is not valid".format(
+                                self._config_file, line_number
+                            )
+                        )
                         continue
                     k = line[:index].strip()
-                    v = line[(index+1):].strip()
+                    nlen = index + 1
+                    v = line[nlen:].strip()
                     if v and v.upper() != "NONE":
                         self._cfg[k] = v
         # override any config values with environment variable if found
@@ -43,7 +50,7 @@ class Config:
             self._cfg[k] = kwargs[k]
 
     def __getitem__(self, name):
-        """ Get a config item  """
+        """Get a config item"""
 
         # Load a variable from environment. It would have only been loaded in
         # __init__ if it was also specified in the config file.
@@ -54,18 +61,18 @@ class Config:
         return self._cfg[name]
 
     def __setitem__(self, name, obj):
-        """ set config item """
+        """set config item"""
         self._cfg[name] = obj
 
     def __delitem__(self, name):
-        """ Delete option. """
+        """Delete option."""
         del self._cfg[name]
 
     def __len__(self):
         return len(self._cfg)
 
     def __iter__(self):
-        """ Iterate over config names """
+        """Iterate over config names"""
         keys = self._cfg.keys()
         for key in keys:
             yield key
@@ -84,4 +91,3 @@ class Config:
             return self[name]
         else:
             return default
-            

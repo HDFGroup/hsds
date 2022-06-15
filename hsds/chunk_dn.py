@@ -13,7 +13,7 @@
 # value operations
 # handles regauests to read/write chunk data
 #
-#
+
 import numpy as np
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPNotFound, HTTPServiceUnavailable
@@ -54,7 +54,7 @@ async def PUT_Chunk(request):
         log.info(f"PUT_Chunk query: {query}")
     if "Limit" in params:
         limit = int(params["Limit"])
-    chunk_id = request.match_info.get('id')
+    chunk_id = request.match_info.get("id")
     if not chunk_id:
         msg = "Missing chunk id"
         log.error(msg)
@@ -71,7 +71,7 @@ async def PUT_Chunk(request):
     if "bucket" in params:
         bucket = params["bucket"]
         log.debug(f"PUT_Chunk using bucket: {bucket}")
-    
+
     if not bucket:
         msg = "PUT_Chunk - bucket is None"
         log.warn(msg)
@@ -111,13 +111,13 @@ async def PUT_Chunk(request):
     # TBD - does this work with linked datasets?
     dims = getChunkLayout(dset_json)
     rank = len(dims)
-  
+
     type_json = dset_json["type"]
     dt = createDataType(type_json)
     if "size" in type_json:
         itemsize = type_json["size"]
     else:
-        itemsize  = 'H5T_VARIABLE'
+        itemsize = "H5T_VARIABLE"
 
     # TBD - cancel pending read if present?
 
@@ -126,7 +126,7 @@ async def PUT_Chunk(request):
         select = params["select"]
         log.debug(f"PUT_Chunk got select param: {select}")
     else:
-        select = None # put for entire dataspace
+        select = None  # put for entire dataspace
     try:
         selection = getSelectionList(select, dims)
     except ValueError as ve:
@@ -177,13 +177,15 @@ async def PUT_Chunk(request):
         log.debug(f"query_update: {query_update}")
         # TBD - send back binary response to SN node
         try:
-            kwargs = {"chunk_id": chunk_id,
-                      "chunk_layout": dims,
-                      "chunk_arr": chunk_arr,
-                      "slices": selection,
-                      "query": eval_str,
-                      "query_update": query_update,
-                      "limit": limit}
+            kwargs = {
+                "chunk_id": chunk_id,
+                "chunk_layout": dims,
+                "chunk_arr": chunk_arr,
+                "slices": selection,
+                "query": eval_str,
+                "query_update": query_update,
+                "limit": limit,
+            }
             rsp_arr = chunkQuery(**kwargs)
             log.debug(f"query_update returned: {len(rsp_arr)} rows")
         except TypeError as te:
@@ -200,10 +202,10 @@ async def PUT_Chunk(request):
             status_code = 201
         # stream back response array
         read_resp = arrayToBytes(rsp_arr)
- 
+
         try:
             resp = StreamResponse()
-            resp.headers['Content-Type'] = "application/octet-stream"
+            resp.headers["Content-Type"] = "application/octet-stream"
             resp.content_length = len(read_resp)
             await resp.prepare(request)
             await resp.write(read_resp)
@@ -217,13 +219,13 @@ async def PUT_Chunk(request):
         # regular chunk update
 
         # check that the content_length is what we expect
-        if itemsize != 'H5T_VARIABLE':
+        if itemsize != "H5T_VARIABLE":
             log.debug(f"expect content_length: {num_elements*itemsize}")
         log.debug(f"actual content_length: {request.content_length}")
 
         actual = request.content_length
-        if itemsize != 'H5T_VARIABLE':
-            expected = num_elements*itemsize
+        if itemsize != "H5T_VARIABLE":
+            expected = num_elements * itemsize
             if expected != actual:
                 msg = f"Expected content_length of: {expected}, but got: {actual}"
                 log.error(msg)
@@ -239,9 +241,7 @@ async def PUT_Chunk(request):
             raise HTTPInternalServerError()
 
         input_arr = bytesToArray(input_bytes, dt, mshape)
-        kwargs = {"chunk_arr": chunk_arr,
-                  "slices": selection,
-                  "data": input_arr}
+        kwargs = {"chunk_arr": chunk_arr, "slices": selection, "data": input_arr}
         is_dirty = chunkWriteSelection(**kwargs)
 
         # chunk update successful
@@ -273,7 +273,7 @@ async def GET_Chunk(request):
     app = request.app
     params = request.rel_url.query
 
-    chunk_id = request.match_info.get('id')
+    chunk_id = request.match_info.get("id")
     if not chunk_id:
         msg = "Missing chunk id"
         log.error(msg)
@@ -290,7 +290,7 @@ async def GET_Chunk(request):
         log.error(msg)
         raise HTTPInternalServerError()
     log.debug(f"GET_Chunk - request params: {params.keys()}")
-     
+
     if "s3path" in params:
         s3path = params["s3path"]
         log.debug(f"GET_Chunk - using URI: {s3path}")
@@ -302,7 +302,7 @@ async def GET_Chunk(request):
         raise HTTPBadRequest(reason=msg)
 
     log.debug(f"GET_Chunk - using bucket: {bucket}")
-        
+
     if "s3offset" in params:
         try:
             s3offset = int(params["s3offset"])
@@ -335,7 +335,7 @@ async def GET_Chunk(request):
     if "select" in params:
         select = params["select"]
     else:
-        select = None # get slices for entire datashape
+        select = None  # get slices for entire datashape
     if select is not None:
         log.debug(f"GET_Chunk - using select string: {select}")
     try:
@@ -349,9 +349,9 @@ async def GET_Chunk(request):
     if s3path:
         kwargs["s3path"] = s3path
         kwargs["s3offset"] = s3offset
-        kwargs["s3size"] = s3size   
+        kwargs["s3size"] = s3size
     else:
-        kwargs["bucket"] = bucket 
+        kwargs["bucket"] = bucket
     chunk_arr = await get_chunk(app, chunk_id, dset_json, **kwargs)
     if chunk_arr is None:
         msg = f"chunk {chunk_id} not found"
@@ -374,15 +374,16 @@ async def GET_Chunk(request):
             raise HTTPInternalServerError()
         log.debug(f"got eval str: {eval_str} for query: {query}")
 
-
         # run given query
         try:
-            kwargs = {"chunk_id": chunk_id,
-                      "chunk_layout": dims,
-                      "chunk_arr": chunk_arr,
-                      "slices": selection,
-                      "query": eval_str,
-                      "limit": limit}
+            kwargs = {
+                "chunk_id": chunk_id,
+                "chunk_layout": dims,
+                "chunk_arr": chunk_arr,
+                "slices": selection,
+                "query": eval_str,
+                "limit": limit,
+            }
             output_arr = chunkQuery(**kwargs)
         except TypeError as te:
             log.warn(f"chunkQuery - TypeError: {te}")
@@ -398,7 +399,6 @@ async def GET_Chunk(request):
     else:
         # read selected data from chunk
         output_arr = chunkReadSelection(chunk_arr, slices=selection)
-    
 
     # write response
     if output_arr is not None:
@@ -407,7 +407,7 @@ async def GET_Chunk(request):
 
         try:
             resp = StreamResponse()
-            resp.headers['Content-Type'] = "application/octet-stream"
+            resp.headers["Content-Type"] = "application/octet-stream"
             resp.content_length = len(read_resp)
             await resp.prepare(request)
             await resp.write(read_resp)
@@ -434,7 +434,7 @@ async def POST_Chunk(request):
     content_type = getContentType(request)
 
     put_points = False
-    select = None # for hyperslab/fancy selection
+    select = None  # for hyperslab/fancy selection
     num_points = 0
 
     if "count" in params:
@@ -472,7 +472,7 @@ async def POST_Chunk(request):
             raise HTTPBadRequest()
         s3path = params["s3path"]
         log.debug(f"POST_Chunk - using s3path: {s3path}")
-     
+
     if "s3offset" in params:
         try:
             s3offset = int(params["s3offset"])
@@ -486,7 +486,7 @@ async def POST_Chunk(request):
             log.error(f"invalid s3size params: {params['s3size']}")
             raise HTTPBadRequest()
 
-    chunk_id = request.match_info.get('id')
+    chunk_id = request.match_info.get("id")
     if not chunk_id:
         msg = "Missing chunk id"
         log.error(msg)
@@ -517,7 +517,7 @@ async def POST_Chunk(request):
         msg = "POST Value with no body"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-     
+
     dset_id = getDatasetId(chunk_id)
 
     dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
@@ -527,7 +527,7 @@ async def POST_Chunk(request):
     type_json = dset_json["type"]
     dset_dtype = createDataType(type_json)
     output_arr = None
-    chunk_init = False # will be set to True for setting points
+    chunk_init = False  # will be set to True for setting points
 
     if content_type == "binary":
         # create a numpy array for incoming points
@@ -546,13 +546,12 @@ async def POST_Chunk(request):
         if put_points:
             # create a numpy array with the following type:
             #       (coord1, coord2, ...) | dset_dtype
-            type_fields = [("coord", np.dtype(coord_type_str)),
-                           ("value", dset_dtype)]
+            type_fields = [("coord", np.dtype(coord_type_str)), ("value", dset_dtype)]
             point_dt = np.dtype(type_fields)
             point_shape = (num_points,)
             chunk_init = True
         else:
-            point_dt = np.dtype('uint64')
+            point_dt = np.dtype("uint64")
             point_shape = (num_points, rank)
         point_arr = bytesToArray(input_bytes, point_dt, point_shape)
     else:
@@ -571,7 +570,7 @@ async def POST_Chunk(request):
         kwargs["s3size"] = s3size
     else:
         kwargs["bucket"] = bucket
-              
+
     chunk_arr = await get_chunk(app, chunk_id, dset_json, **kwargs)
     if chunk_arr is None:
         log.warn(f"chunk {chunk_id} not found")
@@ -580,10 +579,12 @@ async def POST_Chunk(request):
     if put_points:
         # writing point data
         try:
-            kwargs = {"chunk_id": chunk_id,
-                      "chunk_layout": dims,
-                      "chunk_arr": chunk_arr,
-                      "point_arr": point_arr}
+            kwargs = {
+                "chunk_id": chunk_id,
+                "chunk_layout": dims,
+                "chunk_arr": chunk_arr,
+                "point_arr": point_arr,
+            }
             chunkWritePoints(**kwargs)
         except ValueError as ve:
             log.warn(f"got value error from chunkWritePoints: {ve}")
@@ -604,15 +605,17 @@ async def POST_Chunk(request):
     else:
         # read points
         try:
-            kwargs = {"chunk_id": chunk_id,
-                      "chunk_layout": dims,
-                      "chunk_arr": chunk_arr,
-                      "point_arr": point_arr}
+            kwargs = {
+                "chunk_id": chunk_id,
+                "chunk_layout": dims,
+                "chunk_arr": chunk_arr,
+                "point_arr": point_arr,
+            }
             output_arr = chunkReadPoints(**kwargs)
         except ValueError as ve:
             log.warn(f"got value error from chunkReadPoints: {ve}")
             raise HTTPBadRequest()
-        
+
     if output_arr is None:
         # write empty response
         resp = json_response({})
@@ -621,7 +624,7 @@ async def POST_Chunk(request):
         # write response
         try:
             resp = StreamResponse()
-            resp.headers['Content-Type'] = "application/octet-stream"
+            resp.headers["Content-Type"] = "application/octet-stream"
             resp.content_length = len(output_data)
             await resp.prepare(request)
             await resp.write(output_data)
@@ -642,7 +645,7 @@ async def DELETE_Chunk(request):
     log.request(request)
     app = request.app
     params = request.rel_url.query
-    chunk_id = request.match_info.get('id')
+    chunk_id = request.match_info.get("id")
     if not chunk_id:
         msg = "Missing chunk id"
         log.error(msg)
@@ -655,12 +658,11 @@ async def DELETE_Chunk(request):
         raise HTTPBadRequest(reason=msg)
     if "bucket" in params:
         bucket = params["bucket"]
-    
+
     if not bucket:
         msg = "DELETE_Chunk - bucket param not set"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-
 
     try:
         validateInPartition(app, chunk_id)
@@ -669,7 +671,7 @@ async def DELETE_Chunk(request):
         log.error(msg)
         raise HTTPInternalServerError()
 
-    chunk_cache = app['chunk_cache']
+    chunk_cache = app["chunk_cache"]
     s3key = getS3Key(chunk_id)
     log.debug(f"DELETE_Chunk s3_key: {s3key}")
 

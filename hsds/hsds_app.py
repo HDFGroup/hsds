@@ -13,7 +13,7 @@ from shutil import which
 
 def _enqueue_output(out, queue, loglevel):
     try:
-        for line in iter(out.readline, b''):
+        for line in iter(out.readline, b""):
             # filter lines by loglevel
             words = line.split()
             put_line = True
@@ -40,7 +40,6 @@ def _enqueue_output(out, queue, loglevel):
         logging.warn(f"_enqueue_output - ValueError (handle closed?): {ve}")
     except Exception as e:
         logging.error(f"_enqueue_output - Unexpected exception {type(e)}: {e}")
-
 
 
 def get_cmd_dir():
@@ -79,11 +78,23 @@ class HsdsApp:
     Class to initiate and manage sub-process HSDS service
     """
 
-    def __init__(self, username=None, 
-                password=None, password_file=None, logger=None, 
-                log_level=None, dn_count=1, logfile=None, root_dir=None,
-                socket_dir=None, host=None, sn_port=None, config_dir=None, readonly=False,
-                islambda=False):
+    def __init__(
+        self,
+        username=None,
+        password=None,
+        password_file=None,
+        logger=None,
+        log_level=None,
+        dn_count=1,
+        logfile=None,
+        root_dir=None,
+        socket_dir=None,
+        host=None,
+        sn_port=None,
+        config_dir=None,
+        readonly=False,
+        islambda=False,
+    ):
         """
         Initializer for class
         """
@@ -132,7 +143,7 @@ class HsdsApp:
             self.log.debug(f"HsdsApp init - Using socketdir: {socket_dir}")
             socket_url = ""
             for ch in socket_dir:
-                if ch == '/' or ch == '\\':
+                if ch == "/" or ch == "\\":
                     socket_url += "%2F"
                 else:
                     socket_url += ch
@@ -156,10 +167,9 @@ class HsdsApp:
             rangeget_port = 6900  # TBD: pull from config
             rangeget_url = f"http://{host}:{rangeget_port}"
 
-
         # sort the ports so that node_number can be determined based on dn_url
         self._dn_urls.sort()
-        self._endpoint = sn_url 
+        self._endpoint = sn_url
         self._rangeget_url = rangeget_url
         print("endpoint:", self._endpoint)
 
@@ -172,8 +182,7 @@ class HsdsApp:
         return self._ready
 
     def print_process_output(self):
-        """ print any queue output from sub-processes
-        """
+        """print any queue output from sub-processes"""
         if self._logfile:
             f = open(self._logfile, "a")
         else:
@@ -209,8 +218,7 @@ class HsdsApp:
                 # TBD - restart failed process
 
     def run(self):
-        """ startup hsds processes
-        """
+        """startup hsds processes"""
         if self._processes:
             # just check process state and restart if necessary
             self.check_processes()
@@ -219,17 +227,19 @@ class HsdsApp:
         dn_urls_arg = ""
         for dn_url in self._dn_urls:
             if dn_urls_arg:
-                dn_urls_arg += ','
+                dn_urls_arg += ","
             dn_urls_arg += dn_url
 
-        pout = subprocess.PIPE   # will pipe to parent
+        pout = subprocess.PIPE  # will pipe to parent
         # create processes for count dn nodes, sn node, and rangeget node
         count = self._dn_count + 2  # plus 2 for rangeget proxy and sn
         # set PYTHONUNBUFFERED so we can get any output immediately
         os.environ["PYTHONUNBUFFERED"] = "1"
         # TODO: don't modify parent process env, use os.environ.copy(), set, and popen(env=)
 
-        common_args = ["--standalone", ]
+        common_args = [
+            "--standalone",
+        ]
         common_args.append(f"--dn_urls={dn_urls_arg}")
         common_args.append(f"--rangeget_url={self._rangeget_url}")
         common_args.append(f"--hsds_endpoint={self._endpoint}")
@@ -265,10 +275,7 @@ class HsdsApp:
         for i in range(count):
             if i == 0:
                 # args for service node
-                pargs = [py_exe,
-                         cmd_path,
-                         "--node_type=sn",
-                         "--log_prefix=sn "]
+                pargs = [py_exe, cmd_path, "--node_type=sn", "--log_prefix=sn "]
                 if self._username:
                     pargs.append(f"--hs_username={self._username}")
                 if self._password:
@@ -282,28 +289,27 @@ class HsdsApp:
                 pargs.append("--logfile=sn1.log")
             elif i == 1:
                 # args for rangeget node
-                pargs = [py_exe,
-                         cmd_path,
-                         "--node_type=rn",
-                         "--log_prefix=rg "]
+                pargs = [py_exe, cmd_path, "--node_type=rn", "--log_prefix=rg "]
             else:
                 node_number = i - 2  # start with 0
-                pargs = [py_exe,
-                         cmd_path,
-                         "--node_type=dn",
-                         f"--log_prefix=dn{node_number+1} "]
+                pargs = [
+                    py_exe,
+                    cmd_path,
+                    "--node_type=dn",
+                    f"--log_prefix=dn{node_number+1} ",
+                ]
                 pargs.append(f"--dn_urls={dn_urls_arg}")
                 pargs.append(f"--node_number={node_number}")
             # logging.info(f"starting {pargs[0]}")
             pargs.extend(common_args)
-            p = subprocess.Popen(pargs, bufsize=1, universal_newlines=True,
-                                 shell=False, stdout=pout)
+            p = subprocess.Popen(
+                pargs, bufsize=1, universal_newlines=True, shell=False, stdout=pout
+            )
             self._processes.append(p)
             # setup queue so we can check on process output without blocking
             q = queue.Queue()
             loglevel = self.log.root.level
-            t = threading.Thread(
-                target=_enqueue_output, args=(p.stdout, q, loglevel))
+            t = threading.Thread(target=_enqueue_output, args=(p.stdout, q, loglevel))
             self._queues.append(q)
             t.daemon = True  # thread dies with the program
             t.start()
@@ -340,8 +346,7 @@ class HsdsApp:
         self._ready = True
 
     def stop(self):
-        """ terminate hsds processes
-        """
+        """terminate hsds processes"""
         if not self._processes:
             return
         now = time.time()
@@ -353,7 +358,7 @@ class HsdsApp:
             for p in self._processes:
                 logging.info(f"sending SIGINT to {p.args[0]}")
                 p.send_signal(signal.SIGINT)
-          
+
         # wait for sub-proccesses to exit
         SLEEP_TIME = 0.1  # time to sleep between checking on process state
         MAX_WAIT_TIME = 10.0  # max time to wait for sub-process to terminate
@@ -385,6 +390,6 @@ class HsdsApp:
         self._threads = []
 
     def __del__(self):
-        """ cleanup class resources """
+        """cleanup class resources"""
         self.stop()
         # self._tempdir.cleanup()

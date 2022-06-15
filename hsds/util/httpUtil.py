@@ -30,19 +30,19 @@ from .. import config
 
 
 def isOK(http_response):
-    """ return True for successful http_status codes """
+    """return True for successful http_status codes"""
     if http_response < 300:
         return True
     return False
 
 
 def getUrl(host, port):
-    """ return url for host and port """
+    """return url for host and port"""
     return f"http://{host}:{port}"
 
 
 def getPortFromUrl(url):
-    """ Get Port number for given url """
+    """Get Port number for given url"""
     if not url:
         raise ValueError("url undefined")
     if url.startswith("http://"):
@@ -55,13 +55,13 @@ def getPortFromUrl(url):
     else:
         raise ValueError(f"Invalid Url: {url}")
 
-    start = url.find('//')
+    start = url.find("//")
     port = None
     dns = url[start:]
-    index = dns.find(':')
+    index = dns.find(":")
     port_str = ""
     if index > 0:
-        for i in range(index+1, len(dns)):
+        for i in range(index + 1, len(dns)):
             ch = dns[i]
             if ch.isdigit():
                 port_str += ch
@@ -74,6 +74,7 @@ def getPortFromUrl(url):
 
     return port
 
+
 def isUnixDomainUrl(url):
     # return True if url is a Unix Socket domain
     # e.g. http://unix:%2Ftmp%2Fdn_1.sock/about -> True
@@ -84,7 +85,7 @@ def isUnixDomainUrl(url):
         raise ValueError(f"invalid url, no http: {url}")
     if url.startswith("http+unix:"):
         if not url.startswith("http+unix://"):
-            raise ValueError(f"invalid socket url: {url}")   
+            raise ValueError(f"invalid socket url: {url}")
         return True
     else:
         return False
@@ -101,15 +102,16 @@ def getSocketPath(url):
     # TBD - replace with proper url-decode
     for i in range(len(url)):
         if skip:
-            skip -= 1  
-        elif url[i] == '/':
+            skip -= 1
+        elif url[i] == "/":
             break
-        elif url[i] == '%' and url[i+1] == '2' and url[i+2] == 'F':
-            chars.append('/')
+        elif url[i] == "%" and url[i + 1] == "2" and url[i + 2] == "F":
+            chars.append("/")
             skip = 2
         else:
             chars.append(url[i])
     return "".join(chars)
+
 
 def bindToSocket(url):
     """
@@ -136,33 +138,35 @@ def get_http_std_url(url):
     if not isUnixDomainUrl(url):
         return url
     index = url.find(".sock")
-    url = "http://127.0.0.1" + url[(index+5):]
+    n = index + 5
+    url = "http://127.0.0.1" + url[n:]
     return url
 
+
 def get_base_url(url):
-    """ return protocal+dns+port part of url.
-    Returns just url if a non-standard protocol is given. """
+    """return protocal+dns+port part of url.
+    Returns just url if a non-standard protocol is given."""
     n = len(url)
-    for protocol in ("http://", "https://", "http+unix://"): 
+    for protocol in ("http://", "https://", "http+unix://"):
         if url.startswith(protocol):
             start = len(protocol)
-            n = url.find('/', start) 
+            n = url.find("/", start)
             if n < 0:
                 n = len(url)
-            break   
+            break
     s = url[:n]
     return s
-        
+
 
 def get_http_client(app, url=None, cache_client=True):
-    """ get http client """
+    """get http client"""
     log.debug(f"get_http_client, url: {url}")
     if url is None or not isUnixDomainUrl(url):
         socket_path = None
     else:
         socket_path = getSocketPath(url)
         log.debug(f"socket_path: {socket_path}")
-        
+
     if cache_client:
         if "client" in app and not socket_path:
             return app["client"]
@@ -190,12 +194,12 @@ def get_http_client(app, url=None, cache_client=True):
         log.info(msg)
         kwargs = {"limit_per_host": max_tcp_connections}
         # not yet supported in this aiohttp version
-        #read_buf_size = config.get("read_buf_size", default=10*1024*1024)
-        #log.debug(f"setting read_buf_size to: {read_buf_size}")
-        #kwargs['read_bufsize'] = read_buf_size
+        # read_buf_size = config.get("read_buf_size", default=10*1024*1024)
+        # log.debug(f"setting read_buf_size to: {read_buf_size}")
+        # kwargs['read_bufsize'] = read_buf_size
         client = ClientSession(connector=TCPConnector(**kwargs))
         if cache_client:
-            app['client'] = client
+            app["client"] = client
 
     # return client instance
     return client
@@ -206,10 +210,10 @@ async def release_http_client(app):
     Release any http clients
     """
     log.info("releasing http clients")
-    if 'client' in app:
-        client = app['client']
+    if "client" in app:
+        client = app["client"]
         await client.close()
-        del app['client']
+        del app["client"]
     if "socket_clients" in app:
         socket_clients = app["socket_clients"]
         for socket_path in socket_clients:
@@ -239,9 +243,8 @@ async def request_read(request, count=None) -> bytes:
         body_size = len(body)
         if body_size >= max_request_size:
             raise HTTPRequestEntityTooLarge(
-                    max_size=max_request_size,
-                    actual_size=body_size
-                )
+                max_size=max_request_size, actual_size=body_size
+            )
         if not chunk:
             break
         if count is not None and count <= 0:
@@ -348,7 +351,7 @@ async def http_post(app, url, data=None, params=None, client=None):
                 raise HTTPInternalServerError()
             if isBinaryResponse(rsp):
                 # return binary data
-                retval = await(rsp.read())
+                retval = await (rsp.read())
                 log.debug(f"http_post({url}) returning {len(retval)} bytes")
             else:
                 retval = await rsp.json()
@@ -493,16 +496,16 @@ def getHref(request, uri, query=None, domain=None):
     if not href:
         href = request.scheme + "://127.0.0.1"
     href += uri
-    delimiter = '?'
+    delimiter = "?"
     if domain:
         href += "?domain=" + domain
-        delimiter = '&'
+        delimiter = "&"
     elif "domain" in params:
         href += "?domain=" + params["domain"]
-        delimiter = '&'
+        delimiter = "&"
     elif "host" in params:
         href += "?host=" + params["host"]
-        delimiter = '&'
+        delimiter = "&"
 
     if query is not None:
         if type(query) is str:
@@ -511,7 +514,7 @@ def getHref(request, uri, query=None, domain=None):
             # list or tuple
             for item in query:
                 href += delimiter + item
-                delimiter = '&'
+                delimiter = "&"
     return href
 
 
@@ -532,9 +535,10 @@ def getAcceptType(request):
             accept_type = "binary"
     return accept_type
 
+
 def getContentType(request):
     """
-    Get the content type from request headers.  
+    Get the content type from request headers.
     Default to json if not specified
     """
     if "Content-Type" in request.headers:
@@ -558,8 +562,8 @@ def isBinaryResponse(rsp):
     Return True if response is binary data
     """
     is_binary = False
-    if 'Content-Type' in rsp.headers:
-        content_type = rsp.headers['Content-Type']
+    if "Content-Type" in rsp.headers:
+        content_type = rsp.headers["Content-Type"]
         if content_type == "application/octet-stream":
             is_binary = True
     return is_binary

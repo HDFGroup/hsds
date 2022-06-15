@@ -12,6 +12,7 @@
 
 import os.path as op
 from aiohttp.web_exceptions import HTTPBadRequest
+
 #
 # Domain utilities
 #
@@ -21,22 +22,22 @@ DOMAIN_SUFFIX = "/.domain.json"  # key suffix used to hold domain info
 
 def isIPAddress(s):
     """Return True if the string looks like an IP address:
-        n.n.n.n where n is between 0 and 255 """
+    n.n.n.n where n is between 0 and 255"""
     if not s:
         return False
     # see if there is a port specifier
-    if s.find(':') > 0:
+    if s.find(":") > 0:
         return True
 
-    if s == 'localhost':
+    if s == "localhost":
         return True  # special case for loopback dns_path
 
-    parts = s.split('.')
+    parts = s.split(".")
 
     if len(parts) != 4:
         return False
     for part in parts:
-        if part == ':':
+        if part == ":":
             # skip past a possible port specifier
             break
         try:
@@ -59,7 +60,7 @@ def getParentDomain(domain):
 
     bucket = getBucketForDomain(domain)
     domain_path = getPathForDomain(domain)
-    if len(domain_path) > 1 and domain_path[-1] == '/':
+    if len(domain_path) > 1 and domain_path[-1] == "/":
         domain_path = domain_path[:-1]
     dirname = op.dirname(domain_path)
     if bucket:
@@ -77,24 +78,31 @@ def validateHostDomain(id):
         raise ValueError("Expected string type")
     if len(id) < 3:
         raise ValueError("Host Domain name is too short")
-    if len(id) == 38 and id[5] == '-' and id[7] == '-' and id[16] == '-' and \
-            id[21] == '-' and id[26] == '-':
+    if len(id) == 38 and all(
+        (
+            id[5] == "-",
+            id[7] == "-",
+            id[16] == "-",
+            id[21] == "-",
+            id[26] == "-",
+        )
+    ):
         raise ValueError("Host Domain name not allowed")
     if len(id) == 14 and id.endswith("-headnode"):
         raise ValueError("Host Domain name not allowed")
-    if id.startswith('.'):
+    if id.startswith("."):
         raise ValueError("Host Domain cannot start with dot")
-    if id.endswith('.'):
+    if id.endswith("."):
         raise ValueError("Host Domain cannot end with dot")
-    if id.startswith('-'):
+    if id.startswith("-"):
         raise ValueError("Host Domain cannot start with hyphen")
-    if id.endswith('-'):
+    if id.endswith("-"):
         raise ValueError("Host Domain cannot end with hyphen")
-    if id.find('..') > 0:
+    if id.find("..") > 0:
         raise ValueError("Host Domain cannot contain consecutive dots")
     if isIPAddress(id):
         raise ValueError("Host Domain looks like IP address")
-    if id.find('/') >= 0:
+    if id.find("/") >= 0:
         raise ValueError("Host Domain cannot contain slash")
     if id.find(".") == -1:
         raise ValueError("Host domain must have a dot")
@@ -113,9 +121,9 @@ def validateDomain(id):
         raise ValueError("Expected string type")
     if len(id) < 3:
         raise ValueError("Domain name too short")
-    if id.find('/') == -1:
+    if id.find("/") == -1:
         raise ValueError("Domain names should include a '/'")
-    if id[-1] == '/':
+    if id[-1] == "/":
         raise ValueError("Slash at end not allowed")
 
 
@@ -132,12 +140,12 @@ def validateDomainPath(path):
         raise ValueError("Expected string type")
     if len(path) < 1:
         raise ValueError("Domain path too short")
-    if path == '/':
+    if path == "/":
         return  # default buckete, root folder
-    if path[:-1].find('/') == -1:
+    if path[:-1].find("/") == -1:
         msg = "Domain path should have at least one '/' before trailing slash"
         raise ValueError(msg)
-    if path[-1] != '/':
+    if path[-1] != "/":
         raise ValueError("Domain path must end with '/'")
 
 
@@ -156,7 +164,7 @@ def validateDomainKey(domain_key):
 
 def getDomainForHost(host_value):
     # Convert domain paths to S3 keys
-    npos = host_value.rfind(':')
+    npos = host_value.rfind(":")
     if npos > 0:
         host = host_value[:npos]
     else:
@@ -164,21 +172,21 @@ def getDomainForHost(host_value):
 
     if len(host) < 3:
         # by equivalence to internet top-level domains, .org, .com, etc
-        raise ValueError('domain name is not valid')
+        raise ValueError("domain name is not valid")
 
-    if host[0] == '.' or host[-1] == '.':
+    if host[0] == "." or host[-1] == ".":
         # can't have a first or last dot'
-        raise ValueError('domain name is not valid')
+        raise ValueError("domain name is not valid")
 
-    dns_path = host.split('.')
+    dns_path = host.split(".")
     dns_path.reverse()  # flip to filesystem ordering
-    domain = '/'
+    domain = "/"
     for field in dns_path:
         if len(field) == 0:
             # consecutive dots are not allowed
-            raise ValueError('domain name is not valid')
+            raise ValueError("domain name is not valid")
         domain += field
-        domain += '/'
+        domain += "/"
 
     domain = domain[:-1]  # remove trailing slash
 
@@ -194,10 +202,10 @@ def getDomainFromRequest(request, validate=True, allow_dns=True):
     if "domain" in params:
         domain = params["domain"]
     else:
-        if 'host' in params and allow_dns:
-            domain = params['host']
+        if "host" in params and allow_dns:
+            domain = params["host"]
         elif "X-Hdf-domain" in request.headers:
-            domain = request.headers['X-Hdf-domain']
+            domain = request.headers["X-Hdf-domain"]
         elif "X-Forwarded-Host" in request.headers and allow_dns:
             domain = request.headers["X-Forwarded-Host"]
         elif allow_dns:
@@ -205,7 +213,7 @@ def getDomainFromRequest(request, validate=True, allow_dns=True):
     if not domain:
         raise ValueError("no domain")
 
-    if domain[0] != '/':
+    if domain[0] != "/":
         # DNS style hostname
         if validate:
             validateHostDomain(domain)  # throw ValueError if invalid
@@ -230,9 +238,9 @@ def getDomainFromRequest(request, validate=True, allow_dns=True):
         pass  # no bucket specified
 
     if bucket and validate:
-        if bucket.find('/') >= 0:
+        if bucket.find("/") >= 0:
             raise ValueError(f"bucket name: {bucket} is not valid")
-        if domain[0] == '/':
+        if domain[0] == "/":
             domain = bucket + domain
 
     return domain
@@ -244,22 +252,22 @@ def getPathForDomain(domain):
     """
     if not domain:
         return None
-    index = domain.find('/')
+    index = domain.find("/")
     if index < 1:
         return domain  # no bucket
     return domain[(index):]
 
 
 def getBucketForDomain(domain):
-    """ get the bucket for the domain or None
-        if no bucket is given
+    """get the bucket for the domain or None
+    if no bucket is given
     """
     if not domain:
         return None
-    if domain[0] == '/':
+    if domain[0] == "/":
         # no bucket specified
         return None
-    index = domain.find('/')
+    index = domain.find("/")
     if index < 0:
         # invalid domain?
         return None
@@ -267,8 +275,8 @@ def getBucketForDomain(domain):
 
 
 def verifyRoot(domain_json):
-    """ Throw bad request if we are expecting a domain,
-      but got a folder instead
+    """Throw bad request if we are expecting a domain,
+    but got a folder instead
     """
     if "root" not in domain_json:
         msg = "Expected root key for domain"

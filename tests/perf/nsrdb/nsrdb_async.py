@@ -9,60 +9,60 @@ import time
 import numpy as np
 from config import Config
 
-BUCKET_NAME = "nrel-pds-hsds" 
-DOMAIN = "/nrel/nsrdb/v3/nsrdb_2000.h5" 
+BUCKET_NAME = "nrel-pds-hsds"
+DOMAIN = "/nrel/nsrdb/v3/nsrdb_2000.h5"
 H5_PATH = "/wind_speed"
 DEFAULT_BLOCK_SIZE = 1000
 NUM_COLS = 17568
 NUM_ROWS = 2018392
 DSET_ID = "d-096b7930-5dc5b556-dbc8-00c5ad-8aca89"  # wind-speed dataset
-DSET_TYPE = 'i2'  # two-byte signed integer
+DSET_TYPE = "i2"  # two-byte signed integer
 NUM_RETRIES = 10
 SLEEP_TIME = 0.1
 MAX_SLEEP_TIME = 10.0
 
 cfg = Config()
 
+
 def isBinary(rsp):
-    """ return true if http response headers 
-    indicate binary data """
-    if 'Content-Type' not in rsp.headers:
+    """return true if http response headers
+    indicate binary data"""
+    if "Content-Type" not in rsp.headers:
         return False  # assume text
-                    
-    if rsp.headers['Content-Type'] == "application/octet-stream":
+
+    if rsp.headers["Content-Type"] == "application/octet-stream":
         return True
     else:
         return False
-                     
-   
+
+
 class DataFetcher:
     def __init__(self, app, max_tasks=10):
         self._app = app
-          
+
         logging.info(f"DataFetcher.__init__  {self.bucket}/{self.domain} {self.dsetid}")
         self._app = app
         self._q = asyncio.Queue()
         num_blocks = -(-NUM_ROWS // self.block_size)  # integer ceiling
         for i in range(num_blocks):
-            self._q.put_nowait(i*self.block_size)
+            self._q.put_nowait(i * self.block_size)
 
         if num_blocks < max_tasks:
             self._max_tasks = num_blocks
-        else:  
+        else:
             self._max_tasks = max_tasks
-
 
     def getHeaders(self, format="binary"):
         """Get default request headers for domain"""
         username = self.username
-        password = self.password  
+        password = self.password
         headers = {}
         if username and password:
-            auth_string = username + ':' + password
-            auth_string = auth_string.encode('utf-8')
+            auth_string = username + ":" + password
+            auth_string = auth_string.encode("utf-8")
             auth_string = base64.b64encode(auth_string)
             auth_string = "Basic " + auth_string.decode("utf-8")
-            headers['Authorization'] = auth_string
+            headers["Authorization"] = auth_string
 
         if format == "binary":
             headers["accept"] = "application/octet-stream"
@@ -104,11 +104,11 @@ class DataFetcher:
     @property
     def username(self):
         return self._app["hs_username"]
-           
+
     @property
     def password(self):
         return self._app["hs_password"]
-         
+
     @property
     def endpoint(self):
         return self._app["hs_endpoint"]
@@ -120,11 +120,9 @@ class DataFetcher:
     @property
     def retries(self):
         return self._app["retries"]
-         
 
     async def fetch(self):
-        workers = [asyncio.Task(self.work())
-            for _ in range(self._max_tasks)]
+        workers = [asyncio.Task(self.work()) for _ in range(self._max_tasks)]
         # When all work is done, exit.
         msg = f"DataFetcher max_tasks {self._max_tasks} = await queue.join "
         logging.info(msg)
@@ -173,7 +171,9 @@ class DataFetcher:
                     if sleep_time > MAX_SLEEP_TIME:
                         sleep_time = MAX_SLEEP_TIME
                 else:
-                    logging.error(f"got status code: {status_code} retry: {retry_count}")
+                    logging.error(
+                        f"got status code: {status_code} retry: {retry_count}"
+                    )
                     self._app["error_count"] += 1
                     retry_count += 1
                     if retry_count > max_retries:
@@ -182,7 +182,6 @@ class DataFetcher:
                         block = await self._q.get()
                         retry_count = 0
                         sleep_time = SLEEP_TIME
-
 
     async def read_block(self, session, block):
         row_start = block
@@ -198,7 +197,7 @@ class DataFetcher:
 
         headers = self.getHeaders()
         req = f"{self.endpoint}/datasets/{self.dsetid}/value"
-        
+
         select = f"[{index},{row_start}:{row_end}]"
         params = {}
         params["select"] = select
@@ -210,7 +209,7 @@ class DataFetcher:
         async with session.get(req, headers=headers, params=params) as rsp:
             if rsp.status == 200:
                 if isBinary(rsp):
-                    data = await rsp.read() 
+                    data = await rsp.read()
                     if len(data) != expected_bytes:
                         msg = f"Expected {expected_bytes} but got: {len(data)}"
                         logging.error(msg)
@@ -226,15 +225,16 @@ class DataFetcher:
                         raise IOError(msg)
                     value = body_json["value"]
                     arr = np.array(value, dtype=dt)
-                    
-                logging.debug(f"read_block({block}): got {arr.min()}, {arr.max()}, {arr.mean():4.2f}")
+
+                logging.debug(
+                    f"read_block({block}): got {arr.min()}, {arr.max()}, {arr.mean():4.2f}"
+                )
                 result = self.result
                 # slot in to result array
                 result[row_start:row_end] = arr
-            status_code =rsp.status
+            status_code = rsp.status
         return status_code
-        
-       
+
 
 # parse command line args
 index = None
@@ -244,16 +244,22 @@ max_tasks = 10
 for narg in range(1, len(sys.argv)):
     arg = sys.argv[narg]
     if arg in ("-h", "--help"):
-        print("usage: python nsrdb_async.py [--index=n] [--block=n] [--tasks=n] [--loglevel={debug|info|warning|error}]")
+        msg = "usage: python nsrdb_async.py [--index=n] [--block=n] [--tasks=n] "
+        msg += "--loglevel={debug|info|warning|error}]"
+        print(msg)
         sys.exit(0)
     if arg.startswith("--index="):
-        index = int(arg[len("--index="):])
+        nlen = len("--index=")
+        index = int(arg[nlen:])
     elif arg.startswith("--block="):
-        block_size = int(arg[len("--block="):])
+        nlen = len("--block=")
+        block_size = int(arg[nlen:])
     elif arg.startswith("--tasks="):
-        max_tasks = int(arg[len("--tasks="):])
+        nlen = len("--tasks=")
+        max_tasks = int(arg[nlen:])
     elif arg.startswith("--loglevel="):
-        level= arg[len("--loglevel="):]
+        nlen = len("--loglevel=")
+        level = arg[nlen:]
         if level == "debug":
             log_level = logging.DEBUG
         elif level == "info":
@@ -265,10 +271,9 @@ for narg in range(1, len(sys.argv)):
         else:
             print("unexpected log level:", log_level)
             sys.exit(1)
-    
     else:
         print(f"unexpected argument: {arg}")
- 
+
 if index is None:
     # choose a random index
     index = random.randrange(0, NUM_COLS)
@@ -276,8 +281,8 @@ if block_size is None:
     # read entire column in one call
     block_size = DEFAULT_BLOCK_SIZE
 
-logging.basicConfig(format='%(asctime)s %(message)s', level=log_level)
-    
+logging.basicConfig(format="%(asctime)s %(message)s", level=log_level)
+
 # init app dictionary
 cfg["domain"] = DOMAIN
 cfg["bucket"] = BUCKET_NAME
@@ -286,7 +291,7 @@ cfg["dsettype"] = DSET_TYPE
 cfg["block_size"] = block_size
 cfg["index"] = index
 cfg["num_rows"] = NUM_ROWS
-cfg["retries"] =  NUM_RETRIES
+cfg["retries"] = NUM_RETRIES
 cfg["request_count"] = 0
 cfg["success_count"] = 0
 cfg["error_count"] = 0
@@ -304,10 +309,3 @@ print(f"{result.min()}, {result.max()}, {result.mean():4.2f}")
 print("num requests:", cfg["request_count"])
 print("num success:", cfg["success_count"])
 print("num failures:", cfg["error_count"])
-
- 
-
-
-
-
-

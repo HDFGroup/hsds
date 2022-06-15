@@ -11,8 +11,9 @@
 ##############################################################################
 #
 # value operations
-# handles dataset /value requests
+# handles dataset /value requests for service node
 #
+
 from multiprocessing import shared_memory
 import base64
 import numpy as np
@@ -28,9 +29,9 @@ from .util.idUtil import isValidUuid, getDataNodeUrl
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain
 from .util.hdf5dtype import getItemSize, createDataType
-from .util.dsetUtil import getSelectionList, isNullSpace  
+from .util.dsetUtil import getSelectionList, isNullSpace
 from .util.dsetUtil import getFillValue, isExtensible, getSelectionPagination
-from .util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout 
+from .util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout
 from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId
 from .util.chunkUtil import getChunkIndex, getChunkSuffix
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
@@ -45,9 +46,11 @@ from .chunk_crawl import ChunkCrawler
 from . import config
 from . import hsds_logger as log
 
-CHUNK_REF_LAYOUTS = ('H5D_CONTIGUOUS_REF',
-                     'H5D_CHUNKED_REF',
-                     'H5D_CHUNKED_REF_INDIRECT')
+CHUNK_REF_LAYOUTS = (
+    "H5D_CONTIGUOUS_REF",
+    "H5D_CHUNKED_REF",
+    "H5D_CHUNKED_REF_INDIRECT",
+)
 
 VARIABLE_AVG_ITEM_SIZE = 512  # guess at avg variable type length
 
@@ -60,28 +63,28 @@ def get_hrefs(request, dset_json):
     dset_id = dset_json["id"]
     dset_uri = f"/datasets/{dset_id}"
     self_uri = f"{dset_uri}/value"
-    hrefs.append({'rel': 'self', 'href': getHref(request, self_uri)})
-    root_uri = '/groups/' + dset_json["root"]
-    hrefs.append({'rel': 'root', 'href': getHref(request, root_uri)})
-    hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
-    hrefs.append({'rel': 'owner', 'href': getHref(request, dset_uri)})
+    hrefs.append({"rel": "self", "href": getHref(request, self_uri)})
+    root_uri = "/groups/" + dset_json["root"]
+    hrefs.append({"rel": "root", "href": getHref(request, root_uri)})
+    hrefs.append({"rel": "home", "href": getHref(request, "/")})
+    hrefs.append({"rel": "owner", "href": getHref(request, dset_uri)})
     return hrefs
-    
+
 
 async def get_slices(app, select, dset_json, bucket=None):
-    """ Get desired slices from selection query param string or json value.
-       If select is none or empty, slices for entire datashape will be 
-       returned.
-       Refretch dims if the dataset is extensible 
+    """Get desired slices from selection query param string or json value.
+    If select is none or empty, slices for entire datashape will be
+    returned.
+    Refretch dims if the dataset is extensible
     """
-    
-    dset_id = dset_json['id']
+
+    dset_id = dset_json["id"]
     datashape = dset_json["shape"]
-    if datashape["class"] == 'H5S_NULL':
+    if datashape["class"] == "H5S_NULL":
         msg = "Null space datasets can not be used as target for GET value"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    
+
     dims = getShapeDims(datashape)  # throws 400 for HS_NULL dsets
     maxdims = getDsetMaxDims(dset_json)
 
@@ -112,8 +115,11 @@ async def get_slices(app, select, dset_json, bucket=None):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
     return slices
-   
-async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, bucket=None):
+
+
+async def getChunkLocations(
+    app, dset_id, dset_json, chunkinfo_map, chunk_ids, bucket=None
+):
     """
     Get info for chunk locations (for reference layouts)
     """
@@ -131,8 +137,8 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
         raise HTTPInternalServerError()
     dims = getShapeDims(datashape)
     rank = len(dims)
-    #chunk_ids = list(chunkinfo_map.keys())
-    #chunk_ids.sort()
+    # chunk_ids = list(chunkinfo_map.keys())
+    # chunk_ids.sort()
     num_chunks = len(chunk_ids)
     msg = f"getChunkLocations for dset: {dset_id} bucket: {bucket} "
     msg += f"rank: {rank} num chunk_ids: {num_chunks}"
@@ -147,15 +153,14 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
             chunkinfo_map[chunk_id] = chunk_item
         return chunk_item
 
-
-    if layout["class"] == 'H5D_CONTIGUOUS_REF':
+    if layout["class"] == "H5D_CONTIGUOUS_REF":
         s3path = layout["file_uri"]
         s3size = layout["size"]
         if s3size == 0:
             msg = "getChunkLocations - H5D_CONTIGUOUS_REF layout size 0, "
             msg += "no allocation"
             log.info(msg)
-            return 
+            return
         chunk_dims = layout["dims"]
         item_size = getItemSize(datatype)
         chunk_size = item_size
@@ -196,10 +201,10 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
                 msg += "extends beyond end of contiguous dataset for "
                 msg += f"chunk_id: {chunk_id}"
                 log.warn(msg)
-            chunk_item['s3path'] = s3path
-            chunk_item['s3offset'] = s3offset
-            chunk_item['s3size'] = chunk_size
-    elif layout["class"] == 'H5D_CHUNKED_REF':
+            chunk_item["s3path"] = s3path
+            chunk_item["s3offset"] = s3offset
+            chunk_item["s3size"] = chunk_size
+    elif layout["class"] == "H5D_CHUNKED_REF":
         s3path = layout["file_uri"]
         chunks = layout["chunks"]
 
@@ -212,11 +217,11 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
                 item = chunks[chunk_key]
                 s3offset = item[0]
                 s3size = item[1]
-            chunk_item['s3path'] = s3path
-            chunk_item['s3offset'] = s3offset
-            chunk_item['s3size'] = s3size
-             
-    elif layout["class"] == 'H5D_CHUNKED_REF_INDIRECT':
+            chunk_item["s3path"] = s3path
+            chunk_item["s3offset"] = s3offset
+            chunk_item["s3size"] = s3size
+
+    elif layout["class"] == "H5D_CHUNKED_REF_INDIRECT":
         if "chunk_table" not in layout:
             log.error("Expected to find chunk_table in dataset layout")
             raise HTTPInternalServerError()
@@ -224,10 +229,10 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
         # get  state for dataset from DN.
         kwargs = {"bucket": bucket, "refresh": False}
         chunktable_json = await getObjectJson(app, chunktable_id, **kwargs)
-        #log.debug(f"chunktable_json: {chunktable_json}")
+        # log.debug(f"chunktable_json: {chunktable_json}")
         chunktable_dims = getShapeDims(chunktable_json["shape"])
         chunktable_layout = chunktable_json["layout"]
-        if chunktable_layout.get("class") == 'H5D_CHUNKED_REF_INDIRECT':
+        if chunktable_layout.get("class") == "H5D_CHUNKED_REF_INDIRECT":
             # We don't support recursive chunked_ref_indirect classes
             msg = "chunktable layout: H5D_CHUNKED_REF_INDIRECT is invalid"
             log.warn(msg)
@@ -241,9 +246,9 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
         # convert the list of chunk_ids into a set of points to query in
         # the chunk table
         if rank == 1:
-            arr_points = np.zeros((num_chunks,), dtype=np.dtype('u8'))
+            arr_points = np.zeros((num_chunks,), dtype=np.dtype("u8"))
         else:
-            arr_points = np.zeros((num_chunks, rank), dtype=np.dtype('u8'))
+            arr_points = np.zeros((num_chunks, rank), dtype=np.dtype("u8"))
         for i in range(num_chunks):
             chunk_id = chunk_ids[i]
             log.debug(f"chunk_id for chunktable: {chunk_id}")
@@ -257,11 +262,9 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
         log.debug(msg)
         # this call won't lead to a circular loop of calls since we've checked
         # that the chunktable layout is not H5D_CHUNKED_REF_INDIRECT
-        point_data = await getSelectionData(app, 
-                                            chunktable_id, 
-                                            chunktable_json,
-                                            points=arr_points,
-                                            bucket=bucket)
+        point_data = await getSelectionData(
+            app, chunktable_id, chunktable_json, points=arr_points, bucket=bucket
+        )
 
         log.debug(f"got chunktable data: {point_data}")
         if "file_uri" in layout:
@@ -281,15 +284,15 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
                     raise HTTPBadRequest(reason=msg)
                 e = item[2]
                 if e:
-                    s3path = e.decode('utf-8')
+                    s3path = e.decode("utf-8")
                     log.debug(f"got s3path: {s3path}")
             else:
                 s3path = s3_layout_path
             chunk_item = getChunkItem(chunk_id)
-            chunk_item['s3path'] = s3path
-            chunk_item['s3offset'] = s3offset
-            chunk_item['s3size'] = s3size
-             
+            chunk_item["s3path"] = s3path
+            chunk_item["s3offset"] = s3offset
+            chunk_item["s3size"] = s3size
+
     else:
         log.error(f"Unexpected chunk layout: {layout['class']}")
         raise HTTPInternalServerError()
@@ -297,14 +300,15 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
     log.debug(f"returning chunkinfo_map: {chunkinfo_map}")
     return chunkinfo_map
 
+
 def get_chunk_selections(chunk_map, chunk_ids, slices, dset_json):
-    """ Update chunk_map with chunk and data selections for the 
-        given set of slices 
+    """Update chunk_map with chunk and data selections for the
+    given set of slices
     """
     log.debug(f"get_chunk_selections - chunk_ids: {chunk_ids}")
     if not slices:
         log.debug("no slices set, returning")
-        return # nothing to do
+        return  # nothing to do
     log.debug(f"slices: {slices}")
     layout = getChunkLayout(dset_json)
     for chunk_id in chunk_ids:
@@ -315,11 +319,14 @@ def get_chunk_selections(chunk_map, chunk_ids, slices, dset_json):
             chunk_map[chunk_id] = item
 
         chunk_sel = getChunkCoverage(chunk_id, slices, layout)
-        log.debug(f"get_chunk_selections - chunk_id: {chunk_id}, chunk_sel: {chunk_sel}")
+        log.debug(
+            f"get_chunk_selections - chunk_id: {chunk_id}, chunk_sel: {chunk_sel}"
+        )
         item["chunk_sel"] = chunk_sel
         data_sel = getDataCoverage(chunk_id, slices, layout)
         log.debug(f"get_chunk_selections - data_sel: {data_sel}")
         item["data_sel"] = data_sel
+
 
 async def PUT_Value(request):
     """
@@ -354,7 +361,7 @@ async def PUT_Value(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         log.info(f"append_dim: {append_dim}")
-   
+
     if "query" in params:
         if "append" in params:
             msg = "Query string can not be used with append parameter"
@@ -362,7 +369,7 @@ async def PUT_Value(request):
             raise HTTPBadRequest(reason=msg)
         query = params["query"]
 
-    dset_id = request.match_info.get('id')
+    dset_id = request.match_info.get("id")
     if not dset_id:
         msg = "Missing dataset id"
         log.warn(msg)
@@ -383,9 +390,9 @@ async def PUT_Value(request):
     bucket = getBucketForDomain(domain)
 
     request_type = getContentType(request)
-     
+
     log.debug(f"PUT value - request_type is {request_type}")
-         
+
     if not request.has_body:
         msg = "PUT Value with no body"
         log.warn(msg)
@@ -422,7 +429,7 @@ async def PUT_Value(request):
 
     layout = None
     datashape = dset_json["shape"]
-    if datashape["class"] == 'H5S_NULL':
+    if datashape["class"] == "H5S_NULL":
         msg = "Null space datasets can not be used as target for PUT value"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -442,7 +449,7 @@ async def PUT_Value(request):
     dset_dtype = createDataType(type_json)
     item_size = getItemSize(type_json)
     max_request_size = int(config.get("max_request_size"))
-    
+
     if query:
         # divert here if we are doing a put query
         # returns array data like a GET query request
@@ -474,16 +481,18 @@ async def PUT_Value(request):
         else:
             limit = 0
 
-        arr_rsp = await getSelectionData(app, 
-                                         dset_id, 
-                                         dset_json, 
-                                         slices,
-                                         query=query,
-                                         bucket=bucket,
-                                         limit=limit,
-                                         query_update=body,
-                                         method=request.method)
-     
+        arr_rsp = await getSelectionData(
+            app,
+            dset_id,
+            dset_json,
+            slices,
+            query=query,
+            bucket=bucket,
+            limit=limit,
+            query_update=body,
+            method=request.method,
+        )
+
         log.debug(f"arr shape: {arr_rsp.shape}")
         response_type = getAcceptType(request)
         if response_type == "binary":
@@ -497,7 +506,7 @@ async def PUT_Value(request):
                 if config.get("http_compression"):
                     log.debug("enabling http_compression")
                     resp.enable_compression()
-                resp.headers['Content-Type'] = "application/octet-stream"
+                resp.headers["Content-Type"] = "application/octet-stream"
                 resp.content_length = len(output_data)
                 await resp.prepare(request)
                 await resp.write(output_data)
@@ -521,7 +530,7 @@ async def PUT_Value(request):
     binary_data = None
     points = None  # used for point selection writes
     np_shape = []  # shape of incoming data
-    slices = []    # selection area to write to
+    slices = []  # selection area to write to
 
     # body could also contain a point selection specifier
     if body and "points" in body:
@@ -553,7 +562,7 @@ async def PUT_Value(request):
             msg = "Dataset shape must be extensible for packet updates"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        if append_dim < 0 or append_dim > rank-1:
+        if append_dim < 0 or append_dim > rank - 1:
             msg = "invalid append_dim"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
@@ -572,7 +581,7 @@ async def PUT_Value(request):
     if request_type == "json":
         if "value" in body:
             json_data = body["value"]
-            
+
         elif "value_base64" in body:
             base64_data = body["value_base64"]
             base64_data = base64_data.encode("ascii")
@@ -587,16 +596,19 @@ async def PUT_Value(request):
 
         if isinstance(request.content_length, int):
             if request.content_length >= max_request_size:
-                if item_size == 'H5T_VARIABLE':
+                if item_size == "H5T_VARIABLE":
                     msg = f"Request size {request.content_length} too large "
                     msg += f"for variable length data, max: {max_request_size}"
                     log.warn(msg)
-                    raise HTTPRequestEntityTooLarge(request.content_length,
-                                                max_request_size)
+                    raise HTTPRequestEntityTooLarge(
+                        request.content_length, max_request_size
+                    )
                 else:
-                    log.info(f"will paginate over large request with {request.content_length} bytes")     
+                    log.info(
+                        f"will paginate over large request with {request.content_length} bytes"
+                    )
 
-        if item_size == 'H5T_VARIABLE':
+        if item_size == "H5T_VARIABLE":
             # read the request data now
             # TBD: support streaming for variable types
             try:
@@ -637,7 +649,7 @@ async def PUT_Value(request):
         # The selection parameters will determine expected put value shape
         log.debug(f"PUT Value selection: {slices}")
         # not point selection, get hyperslab selection shape
-        np_shape =  getSelectionShape(slices)
+        np_shape = getSelectionShape(slices)
         num_elements = getNumElements(np_shape)
     else:
         # point update
@@ -655,14 +667,16 @@ async def PUT_Value(request):
     arr = None  # np array to hold request data
     if binary_data and isinstance(item_size, int):
         # binary, fixed item_size
-        if num_elements*item_size != len(binary_data):
+        if num_elements * item_size != len(binary_data):
             msg = f"Expected: {num_elements*item_size} bytes, "
             msg += f"but got: {len(binary_data)}, "
             msg += f"num_elements: {num_elements}, item_size: {item_size}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        if num_elements*item_size > max_request_size:
-            log.warn(f"read {num_elements*item_size} bytes, greater than {max_request_size}")
+        if num_elements * item_size > max_request_size:
+            log.warn(
+                f"read {num_elements*item_size} bytes, greater than {max_request_size}"
+            )
         arr = np.fromstring(binary_data, dtype=dset_dtype)
         try:
             arr = arr.reshape(np_shape)  # conform to selection shape
@@ -672,7 +686,7 @@ async def PUT_Value(request):
             raise HTTPBadRequest(reason=msg)
         msg = f"PUT value - numpy array shape: {arr.shape} dtype: {arr.dtype}"
         log.debug(msg)
-    elif binary_data and item_size == 'H5T_VARIABLE':
+    elif binary_data and item_size == "H5T_VARIABLE":
         # binary variable length data
         try:
             arr = bytesToArray(binary_data, dset_dtype, np_shape)
@@ -723,11 +737,11 @@ async def PUT_Value(request):
             log.error("Unexpected selection in PUT shape response")
             raise HTTPInternalServerError()
         selection = selection[1:-1]  # strip off brackets
-        parts = selection.split(',')
+        parts = selection.split(",")
         for part in parts:
             if part == ":":
                 continue
-            bounds = part.split(':')
+            bounds = part.split(":")
             if len(bounds) != 2:
                 log.error("Unexpected selection in PUT shape response")
                 raise HTTPInternalServerError()
@@ -754,20 +768,26 @@ async def PUT_Value(request):
             pages = getSelectionPagination(slices, dims, item_size, max_request_size)
             log.debug(f"getSelectionPagination returned: {len(pages)} pages")
         bytes_streamed = 0
-        max_chunks = int(config.get('max_chunks_per_request', default=1000))
+        max_chunks = int(config.get("max_chunks_per_request", default=1000))
 
         for page_number in range(len(pages)):
             page = pages[page_number]
-            log.info(f"streaming request data for page: {page_number+1} of {len(pages)}, selection: {page}")
+            msg = f"streaming request data for page: {page_number+1} of {len(pages)}, "
+            msg += f"selection: {page}"
+            log.info(msg)
             num_chunks = getNumChunks(page, layout)
             log.debug(f"num_chunks: {num_chunks}")
             if num_chunks > max_chunks:
-                log.warn(f"PUT value chunk count: {num_chunks} exceeds max_chunks: {max_chunks}")
+                log.warn(
+                    f"PUT value chunk count: {num_chunks} exceeds max_chunks: {max_chunks}"
+                )
             select_shape = getSelectionShape(page)
             log.debug(f"got select_shape: {select_shape} for page: {page}")
             num_bytes = np.prod(select_shape) * item_size
             if arr is None or page_number > 0:
-                log.debug(f"page: {page_number} reading {num_bytes} from request stream")
+                log.debug(
+                    f"page: {page_number} reading {num_bytes} from request stream"
+                )
                 # read page of data from input stream
                 try:
                     page_bytes = await request_read(request, count=num_bytes)
@@ -780,7 +800,7 @@ async def PUT_Value(request):
                     msg = "Got asyncio.IncompleteReadError during binary "
                     msg += f"read: {ire}"
                     log.warn(msg)
-                    raise  HTTPBadRequest(reason=msg)
+                    raise HTTPBadRequest(reason=msg)
                 log.debug(f"read {len(page_bytes)} for page: {page_number+1}")
                 bytes_streamed += len(page_bytes)
                 try:
@@ -790,7 +810,7 @@ async def PUT_Value(request):
                     log.warn(msg)
                     raise HTTPBadRequest(reason=msg)
                 if len(select_shape) == 2:
-                    log.debug(f"arr test value[0,0]: {arr[0,0]}")    
+                    log.debug(f"arr test value[0,0]: {arr[0,0]}")
 
             try:
                 chunk_ids = getChunkIds(dset_id, page, layout)
@@ -799,24 +819,29 @@ async def PUT_Value(request):
                 raise HTTPInternalServerError()
             log.debug(f"chunk_ids: {chunk_ids}")
             if len(chunk_ids) > max_chunks:
-                log.warn(f"got {len(chunk_ids)} for page: {page_number+1}.  max_chunks: {max_chunks} ")
+                log.warn(
+                    f"got {len(chunk_ids)} for page: {page_number+1}.  max_chunks: {max_chunks} "
+                )
 
-            crawler = ChunkCrawler(app, 
-                        chunk_ids, 
-                        dset_json=dset_json,
-                        bucket=bucket,
-                        slices=page,
-                        arr=arr,
-                        action="write_chunk_hyperslab")
+            crawler = ChunkCrawler(
+                app,
+                chunk_ids,
+                dset_json=dset_json,
+                bucket=bucket,
+                slices=page,
+                arr=arr,
+                action="write_chunk_hyperslab",
+            )
             await crawler.crawl()
 
             crawler_status = crawler.get_status()
 
-            if crawler_status not in (200,201):
-                log.warn(f"crawler failed for page: {page_number+1} with status: {crawler_status}")
+            if crawler_status not in (200, 201):
+                log.warn(
+                    f"crawler failed for page: {page_number+1} with status: {crawler_status}"
+                )
             else:
                 log.info("crawler write_chunk_hyperslab successful")
-            
 
     else:
         #
@@ -855,10 +880,13 @@ async def PUT_Value(request):
             # get the pt_indx element from the input data
             value = arr[pt_indx]
             if chunk_id not in chunk_dict:
-                point_list = [point, ]
-                point_data = [value, ]
-                chunk_dict[chunk_id] = {"indices": point_list,
-                                        "points": point_data}
+                point_list = [
+                    point,
+                ]
+                point_data = [
+                    value,
+                ]
+                chunk_dict[chunk_id] = {"indices": point_list, "points": point_data}
             else:
                 item = chunk_dict[chunk_id]
                 point_list = item["indices"]
@@ -868,20 +896,22 @@ async def PUT_Value(request):
 
         num_chunks = len(chunk_dict)
         log.debug(f"num_chunks: {num_chunks}")
-        max_chunks = int(config.get('max_chunks_per_request', default=1000))
+        max_chunks = int(config.get("max_chunks_per_request", default=1000))
         if num_chunks > max_chunks:
             msg = f"PUT value request with more than {max_chunks} chunks"
             log.warn(msg)
 
         chunk_ids = list(chunk_dict.keys())
-        chunk_ids.sort()    
+        chunk_ids.sort()
 
-        crawler = ChunkCrawler(app, 
-                           chunk_ids, 
-                           dset_json=dset_json,
-                           bucket=bucket,
-                           points=chunk_dict,
-                           action="write_point_sel")
+        crawler = ChunkCrawler(
+            app,
+            chunk_ids,
+            dset_json=dset_json,
+            bucket=bucket,
+            points=chunk_dict,
+            action="write_point_sel",
+        )
         await crawler.crawl()
 
         crawler_status = crawler.get_status()
@@ -889,15 +919,17 @@ async def PUT_Value(request):
     if crawler_status == 400:
         log.info(f"doWriteSelection raising BadRequest error:  {crawler_status}")
         raise HTTPBadRequest()
-    if crawler_status not in  (200, 201):
-        log.info(f"doWriteSelection raising HTTPInternalServerError for status:  {crawler_status}")
-        raise HTTPInternalServerError() 
-    
+    if crawler_status not in (200, 201):
+        log.info(
+            f"doWriteSelection raising HTTPInternalServerError for status:  {crawler_status}"
+        )
+        raise HTTPInternalServerError()
+
     # write successful
     resp_json = {}
     resp = await jsonResponse(request, resp_json)
     return resp
-    
+
 
 async def GET_Value(request):
     """
@@ -907,7 +939,7 @@ async def GET_Value(request):
     app = request.app
     params = request.rel_url.query
 
-    dset_id = request.match_info.get('id')
+    dset_id = request.match_info.get("id")
     if not dset_id:
         msg = "Missing dataset id"
         log.warn(msg)
@@ -918,7 +950,7 @@ async def GET_Value(request):
         raise HTTPBadRequest(reason=msg)
 
     username, pswd = getUserPasswordFromRequest(request)
-    if username is None and app['allow_noauth']:
+    if username is None and app["allow_noauth"]:
         username = "default"
     else:
         await validateUserPassword(app, username, pswd)
@@ -931,7 +963,7 @@ async def GET_Value(request):
     bucket = getBucketForDomain(domain)
 
     # get state for dataset from DN.
-    dset_json = await getObjectJson(app, dset_id, bucket=bucket)   
+    dset_json = await getObjectJson(app, dset_id, bucket=bucket)
     type_json = dset_json["type"]
     dset_dtype = createDataType(type_json)
 
@@ -940,7 +972,7 @@ async def GET_Value(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    datashape = dset_json["shape"] 
+    datashape = dset_json["shape"]
     dims = getShapeDims(datashape)
     log.debug(f"dset shape: {dims}")
     rank = len(dims)
@@ -954,7 +986,7 @@ async def GET_Value(request):
 
     await validateAction(app, domain, dset_id, username, "read")
 
-    # Get query parameter for selection 
+    # Get query parameter for selection
     select = params.get("select")
     if select:
         log.debug(f"select query param: {select}")
@@ -994,7 +1026,6 @@ async def GET_Value(request):
                 msg = f"query variable {variable} not valid"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
-         
     if shm_name:
         response_type = "json"
     else:
@@ -1004,10 +1035,10 @@ async def GET_Value(request):
         stream_pagination = True
         log.debug("use stream_pagination")
     else:
-        stream_pagination = False 
+        stream_pagination = False
         log.debug("no stream_pagination")
-    
-    # for non query requests with non-variable types we can fetch 
+
+    # for non query requests with non-variable types we can fetch
     # the expected response bytes length now
     item_size = getItemSize(type_json)
     log.debug(f"item size: {item_size}")
@@ -1018,7 +1049,7 @@ async def GET_Value(request):
 
     # check that the array size is reasonable
     request_size = np.prod(np_shape)
-    if item_size == 'H5T_VARIABLE':
+    if item_size == "H5T_VARIABLE":
         request_size *= VARIABLE_AVG_ITEM_SIZE  # random guess of avg item_size
     else:
         request_size *= item_size
@@ -1028,13 +1059,12 @@ async def GET_Value(request):
         msg = "GET value request too large"
         log.warn(msg)
         raise HTTPRequestEntityTooLarge(request_size, max_request_size)
-    if item_size != 'H5T_VARIABLE' and not query:
+    if item_size != "H5T_VARIABLE" and not query:
         # this is the exact number of bytes to be returned
         content_length = request_size
     else:
         content_length = None
 
-    
     resp_json = {"status": 200}  # will over-write if there's a problem
     # write response
     try:
@@ -1043,38 +1073,45 @@ async def GET_Value(request):
             log.debug("enabling http_compression")
             resp.enable_compression()
         if response_type == "binary":
-            resp.headers['Content-Type'] = "application/octet-stream"
+            resp.headers["Content-Type"] = "application/octet-stream"
             if content_length is None:
                 log.debug("content_length could not be determined")
             else:
                 resp.content_length = content_length
         else:
-            resp.headers['Content-Type'] = "application/json"
+            resp.headers["Content-Type"] = "application/json"
         log.debug("prepare request")
         await resp.prepare(request)
 
         if stream_pagination:
             # example
             # get binary data a page at a time and write back to response
-            if item_size == 'H5T_VARIABLE':
+            if item_size == "H5T_VARIABLE":
                 page_item_size = VARIABLE_AVG_ITEM_SIZE  # random guess of avg item_size
             else:
                 page_item_size = item_size
-            pages = getSelectionPagination(slices, dims, page_item_size, max_request_size)
+            pages = getSelectionPagination(
+                slices, dims, page_item_size, max_request_size
+            )
             log.debug(f"getSelectionPagination returned: {len(pages)} pages")
             bytes_streamed = 0
             try:
                 for page_number in range(len(pages)):
                     page = pages[page_number]
-                    log.info(f"streaming response data for page: {page_number+1} of {len(pages)}, selection: {page}")
-                    arr = await getSelectionData(app,
-                           dset_id,
-                           dset_json, 
-                           page, 
-                           query=query,
-                           bucket=bucket,
-                           limit=limit,
-                           method=request.method)
+                    msg = f"streaming response data for page: {page_number+1} "
+                    msg += f"of {len(pages)}, selection: {page}"
+                    log.info(msg)
+
+                    arr = await getSelectionData(
+                        app,
+                        dset_id,
+                        dset_json,
+                        page,
+                        query=query,
+                        bucket=bucket,
+                        limit=limit,
+                        method=request.method,
+                    )
 
                     if arr is None or np.prod(arr.shape) == 0:
                         log.warn(f"no data returend for streaming page: {page_number}")
@@ -1089,7 +1126,9 @@ async def GET_Value(request):
 
                     if query and limit > 0:
                         query_rows = arr.shape[0]
-                        log.debug(f"streaming page {page_number} returned {query_rows} rows")
+                        log.debug(
+                            f"streaming page {page_number} returned {query_rows} rows"
+                        )
                         limit -= query_rows
                         if limit <= 0:
                             log.debug("skipping remaining pages, query limit reached")
@@ -1100,31 +1139,35 @@ async def GET_Value(request):
                 log.error(f"got {type(he)} exception doing getSelectionData: {he}")
                 resp_json["status"] = he.status_code
                 # can't raise a HTTPException here since write is in progress
-                # 
+                #
             finally:
-                log.info(f"streaming data for {len(pages)} pages complete, {bytes_streamed} bytes written")
+                msg = f"streaming data for {len(pages)} pages complete, "
+                msg += f"{bytes_streamed} bytes written"
+                log.info(msg)
+
                 await resp.write_eof()
                 return resp
 
-        # 
+        #
         # non-paginated response
         #
-                          
 
         try:
-            arr = await getSelectionData(app, 
-                           dset_id,
-                           dset_json, 
-                           slices, 
-                           query=query,
-                           bucket=bucket,
-                           limit=limit,
-                           method=request.method)
+            arr = await getSelectionData(
+                app,
+                dset_id,
+                dset_json,
+                slices,
+                query=query,
+                bucket=bucket,
+                limit=limit,
+                method=request.method,
+            )
         except HTTPException as he:
             # close the response stream
             log.error(f"got {type(he)} exception doing getSelectionData: {he}")
             resp_json["status"] = he.status_code
-            # can't raise a HTTPException here since write is in progress 
+            # can't raise a HTTPException here since write is in progress
 
         if arr is None:
             # no array (OPTION request?)  Return empty json response
@@ -1156,12 +1199,14 @@ async def GET_Value(request):
 
             # copy array data
             shm.buf[:num_bytes] = buffer[:]
-            log.debug(f"copied {num_bytes} array data to shared memory name: {shm_name}")
+            log.debug(
+                f"copied {num_bytes} array data to shared memory name: {shm_name}"
+            )
 
             # close shared memory block
-            # Note - since we are not calling shm.unlink (expecting the 
+            # Note - since we are not calling shm.unlink (expecting the
             # client to do that), it's likely the resource tracker will complain on
-            # app exit.  This should be fixed in Python 3.9.  See: 
+            # app exit.  This should be fixed in Python 3.9.  See:
             # https://bugs.python.org/issue39959
             shm.close()
 
@@ -1170,13 +1215,13 @@ async def GET_Value(request):
             resp_json["num_bytes"] = num_bytes
             resp_json["hrefs"] = get_hrefs(request, dset_json)
             resp_body = await jsonResponse(resp, resp_json, body_only=True)
-            resp_body = resp_body.encode('utf-8')
+            resp_body = resp_body.encode("utf-8")
             await resp.write(resp_body)
         elif response_type == "binary":
             if resp_json["status"] != 200:
                 # write json with status_code
-                #resp_json = resp_json.encode('utf-8')
-                #await resp.write(resp_json)
+                # resp_json = resp_json.encode('utf-8')
+                # await resp.write(resp_json)
                 log.warn(f"GET Value - got error status: {resp_json['status']}")
             else:
                 log.debug("preparing binary response")
@@ -1190,46 +1235,53 @@ async def GET_Value(request):
             params = request.rel_url.query
             if "reduce_dim" in params and params["reduce_dim"]:
                 arr = squeezeArray(arr)
-         
+
             data = arr.tolist()
             json_data = bytesArrayToList(data)
-         
+
             datashape = dset_json["shape"]
 
-            if datashape["class"] == 'H5S_SCALAR':
+            if datashape["class"] == "H5S_SCALAR":
                 # convert array response to value
                 resp_json["value"] = json_data[0]
             else:
                 resp_json["value"] = json_data
             resp_json["hrefs"] = get_hrefs(request, dset_json)
-            resp_body = await jsonResponse(resp, resp_json, ignore_nan=ignore_nan, body_only=True)
+            resp_body = await jsonResponse(
+                resp, resp_json, ignore_nan=ignore_nan, body_only=True
+            )
             log.debug(f"jsonResponse returned: {resp_body}")
-            resp_body = resp_body.encode('utf-8')
+            resp_body = resp_body.encode("utf-8")
             await resp.write(resp_body)
         await resp.write_eof()
     except Exception as e:
         log.error(f"{type(e)} Exception during data write: {e}")
         import traceback
+
         tb = traceback.format_exc()
         print("traceback:", tb)
         raise HTTPInternalServerError()
 
     return resp
-    
 
-async def doReadSelection(app, chunk_ids, dset_json, 
-                          slices=None,
-                          points=None,
-                          query=None,
-                          query_update=None,
-                          chunk_map=None, 
-                          bucket=None, 
-                          shm_name=None,
-                          limit=0):
-    """ read selection utility function """
+
+async def doReadSelection(
+    app,
+    chunk_ids,
+    dset_json,
+    slices=None,
+    points=None,
+    query=None,
+    query_update=None,
+    chunk_map=None,
+    bucket=None,
+    shm_name=None,
+    limit=0,
+):
+    """read selection utility function"""
     log.info(f"doReadSelection - number of chunk_ids: {len(chunk_ids)}")
     log.debug(f"doReadSelection - chunk_ids: {chunk_ids}")
-     
+
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
     log.debug(f"item size: {item_size}")
@@ -1242,10 +1294,12 @@ async def doReadSelection(app, chunk_ids, dset_json,
 
     # create array to hold response data
     arr = None
-    
+
     if points is not None:
         # point selection
-        np_shape = [len(points),]
+        np_shape = [
+            len(points),
+        ]
     elif query is not None:
         # return shape will be determined by number of matches
         np_shape = None
@@ -1260,33 +1314,36 @@ async def doReadSelection(app, chunk_ids, dset_json,
     if np_shape is not None:
         # check that the array size is reasonable
         request_size = np.prod(np_shape)
-        if item_size == 'H5T_VARIABLE':
+        if item_size == "H5T_VARIABLE":
             request_size *= 512  # random guess of avg item_size
         else:
             request_size *= item_size
             log.debug(f"request_size: {request_size}")
         max_request_size = int(config.get("max_request_size"))
         if request_size >= max_request_size:
-            msg = f"Attempting to fetch {request_size} bytes (greater than {max_request_size} limit"
+            msg = f"Attempting to fetch {request_size} bytes (greater than "
+            msg += f"{max_request_size} limit"
             log.error(msg)
             raise HTTPBadRequest(reason=msg)
-  
-        arr = np.zeros(np_shape, dtype=dset_dtype, order='C')
+
+        arr = np.zeros(np_shape, dtype=dset_dtype, order="C")
         fill_value = getFillValue(dset_json)
         if fill_value is not None:
             arr[...] = fill_value
 
-    crawler = ChunkCrawler(app, 
-                           chunk_ids, 
-                           dset_json=dset_json,
-                           chunk_map=chunk_map,
-                           bucket=bucket,
-                           slices=slices,
-                           query=query,
-                           query_update=query_update,
-                           limit=limit,
-                           arr=arr,
-                           action="read_chunk_hyperslab")
+    crawler = ChunkCrawler(
+        app,
+        chunk_ids,
+        dset_json=dset_json,
+        chunk_map=chunk_map,
+        bucket=bucket,
+        slices=slices,
+        query=query,
+        query_update=query_update,
+        limit=limit,
+        arr=arr,
+        action="read_chunk_hyperslab",
+    )
     await crawler.crawl()
 
     crawler_status = crawler.get_status()
@@ -1295,8 +1352,10 @@ async def doReadSelection(app, chunk_ids, dset_json,
     if crawler_status == 400:
         log.info(f"doReadSelection raising BadRequest error:  {crawler_status}")
         raise HTTPBadRequest()
-    if crawler_status not in  (200, 201):
-        log.info(f"doReadSelection raising HTTPInternalServerError for status:  {crawler_status}")
+    if crawler_status not in (200, 201):
+        log.info(
+            f"doReadSelection raising HTTPInternalServerError for status:  {crawler_status}"
+        )
         raise HTTPInternalServerError()
 
     if query is not None:
@@ -1305,15 +1364,15 @@ async def doReadSelection(app, chunk_ids, dset_json,
             nrows = limit
         else:
             nrows = crawler._hits
-        arr = np.empty((nrows,),dtype=query_dtype)
+        arr = np.empty((nrows,), dtype=query_dtype)
         start = 0
         for chunkid in chunk_ids:
             if chunkid not in chunk_map:
                 continue
             chunk_item = chunk_map[chunkid]
-            if 'query_rsp' not in chunk_item:
+            if "query_rsp" not in chunk_item:
                 continue
-            query_rsp = chunk_item['query_rsp']
+            query_rsp = chunk_item["query_rsp"]
             if len(query_rsp) == 0:
                 continue
             stop = start + len(query_rsp)
@@ -1329,8 +1388,19 @@ async def doReadSelection(app, chunk_ids, dset_json,
     return arr
 
 
-async def getSelectionData(app, dset_id, dset_json, slices=None, points=None, query=None, query_update=None, bucket=None, limit=0, method="GET"):
-    """ Read selected slices and return numpy array """
+async def getSelectionData(
+    app,
+    dset_id,
+    dset_json,
+    slices=None,
+    points=None,
+    query=None,
+    query_update=None,
+    bucket=None,
+    limit=0,
+    method="GET",
+):
+    """Read selected slices and return numpy array"""
     log.debug("getSelectionData")
     if slices is None and points is None:
         log.error("getSelectionData - expected either slices or points to be set")
@@ -1343,8 +1413,8 @@ async def getSelectionData(app, dset_id, dset_json, slices=None, points=None, qu
     if slices is not None:
         num_chunks = getNumChunks(slices, layout)
         log.debug(f"num_chunks: {num_chunks}")
-    
-        max_chunks = int(config.get('max_chunks_per_request', default=1000))
+
+        max_chunks = int(config.get("max_chunks_per_request", default=1000))
         if num_chunks > max_chunks:
             msg = f"num_chunks over {max_chunks} limit, but will attempt to fetch with crawler"
             log.warn(msg)
@@ -1363,28 +1433,25 @@ async def getSelectionData(app, dset_id, dset_json, slices=None, points=None, qu
                 chunk_entry = {}
                 chunkinfo[chunk_id] = chunk_entry
                 chunk_ids.append(chunk_id)
-            if 'points' in chunk_entry:
-                point_list = chunk_entry['points']
+            if "points" in chunk_entry:
+                point_list = chunk_entry["points"]
             else:
                 point_list = []
-                chunk_entry['points'] = point_list
-            if 'indices' in chunk_entry:
-                point_index = chunk_entry['indices']
+                chunk_entry["points"] = point_list
+            if "indices" in chunk_entry:
+                point_index = chunk_entry["indices"]
             else:
                 point_index = []
-                chunk_entry['indices'] = point_index
-            
+                chunk_entry["indices"] = point_index
+
             point_list.append(point)
             point_index.append(pt_indx)
 
     # Get information about where chunks are located
     #   Will be None except for H5D_CHUNKED_REF_INDIRECT type
-    await getChunkLocations(app,
-                            dset_id,
-                            dset_json,
-                            chunkinfo,
-                            chunk_ids,
-                            bucket=bucket)
+    await getChunkLocations(
+        app, dset_id, dset_json, chunkinfo, chunk_ids, bucket=bucket
+    )
     if slices is None:
         slices = await get_slices(app, None, dset_json, bucket=bucket)
 
@@ -1398,18 +1465,21 @@ async def getSelectionData(app, dset_id, dset_json, slices=None, points=None, qu
         # skip doing any big data load for options request
         return None
 
-    arr = await doReadSelection(app,
-                                chunk_ids,
-                                dset_json,
-                                slices=slices,
-                                points=points,
-                                query=query,
-                                query_update=query_update,
-                                limit=limit,
-                                chunk_map=chunkinfo,
-                                bucket=bucket)
+    arr = await doReadSelection(
+        app,
+        chunk_ids,
+        dset_json,
+        slices=slices,
+        points=points,
+        query=query,
+        query_update=query_update,
+        limit=limit,
+        chunk_map=chunkinfo,
+        bucket=bucket,
+    )
 
     return arr
+
 
 async def POST_Value(request):
     """
@@ -1420,7 +1490,7 @@ async def POST_Value(request):
     app = request.app
     body = None
 
-    dset_id = request.match_info.get('id')
+    dset_id = request.match_info.get("id")
     if not dset_id:
         msg = "Missing dataset id"
         log.warn(msg)
@@ -1433,7 +1503,7 @@ async def POST_Value(request):
     log.info(f"POST_Value, dataset id: {dset_id}")
 
     username, pswd = getUserPasswordFromRequest(request)
-    if username is None and app['allow_noauth']:
+    if username is None and app["allow_noauth"]:
         username = "default"
     else:
         await validateUserPassword(app, username, pswd)
@@ -1456,7 +1526,7 @@ async def POST_Value(request):
 
     request_type = getContentType(request)
     log.debug(f"POST value - request_type is {request_type}")
-           
+
     if not request.has_body:
         msg = "POST Value with no body"
         log.warn(msg)
@@ -1466,11 +1536,11 @@ async def POST_Value(request):
     dset_json = await getObjectJson(app, dset_id, bucket=bucket)
 
     datashape = dset_json["shape"]
-    if datashape["class"] == 'H5S_NULL':
+    if datashape["class"] == "H5S_NULL":
         msg = "POST value not supported for datasets with NULL shape"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if datashape["class"] == 'H5S_SCALAR':
+    if datashape["class"] == "H5S_SCALAR":
         msg = "POST value not supported for datasets with SCALAR shape"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -1486,7 +1556,7 @@ async def POST_Value(request):
     # read body data
     slices = None  # this will be set for hyperslab selection
     points = None  # this will be set for point selection
-    point_dt = np.dtype('u8')  # use unsigned long for point index
+    point_dt = np.dtype("u8")  # use unsigned long for point index
     if request_type == "json":
         body = await request.json()
         if "points" in body:
@@ -1544,13 +1614,15 @@ async def POST_Value(request):
         np_shape = getSelectionShape(slices)
     else:
         # point selection
-        np_shape = [len(points),]
+        np_shape = [
+            len(points),
+        ]
 
     log.debug(f"selection shape: {np_shape}")
 
     # check that the array size is reasonable
     request_size = np.prod(np_shape)
-    if item_size == 'H5T_VARIABLE':
+    if item_size == "H5T_VARIABLE":
         request_size *= 512  # random guess of avg item_size
     else:
         request_size *= item_size
@@ -1560,7 +1632,7 @@ async def POST_Value(request):
         msg = "POST value request too large"
         log.warn(msg)
         raise HTTPRequestEntityTooLarge(request_size, max_request_size)
-    if item_size != 'H5T_VARIABLE':
+    if item_size != "H5T_VARIABLE":
         # this is the exact number of bytes to be returned
         content_length = request_size
     else:
@@ -1591,28 +1663,28 @@ async def POST_Value(request):
 
     # write response
     resp = StreamResponse()
-    try: 
+    try:
         if config.get("http_compression"):
             log.debug("enabling http_compression")
             resp.enable_compression()
         if response_type == "binary":
-            resp.headers['Content-Type'] = "application/octet-stream"
+            resp.headers["Content-Type"] = "application/octet-stream"
             if content_length is None:
                 log.debug("content_length could not be determined")
             else:
                 resp.content_length = content_length
         else:
-            resp.headers['Content-Type'] = "application/json"
+            resp.headers["Content-Type"] = "application/json"
         log.debug("prepare request...")
         await resp.prepare(request)
 
-        kwargs = {'bucket': bucket}
+        kwargs = {"bucket": bucket}
         if slices is not None:
-            kwargs['slices'] = slices
+            kwargs["slices"] = slices
         if points is not None:
-            kwargs['points'] = points
+            kwargs["points"] = points
         log.debug(f"getSelectionData kwargs: {kwargs}")
-        
+
         arr_rsp = await getSelectionData(app, dset_id, dset_json, **kwargs)
         if not isinstance(arr_rsp, np.ndarray):
             msg = f"POST_Value - Expected ndarray but got: {type(arr_rsp)}"
@@ -1634,17 +1706,20 @@ async def POST_Value(request):
             json_data = bytesArrayToList(data)
             resp_json["value"] = json_data
             resp_json["hrefs"] = get_hrefs(request, dset_json)
-            resp_body = await jsonResponse(resp, resp_json, ignore_nan=ignore_nan, body_only=True)
+            resp_body = await jsonResponse(
+                resp, resp_json, ignore_nan=ignore_nan, body_only=True
+            )
             log.debug(f"jsonResponse returned: {resp_body}")
-            resp_body = resp_body.encode('utf-8')
+            resp_body = resp_body.encode("utf-8")
             await resp.write(resp_body)
     except Exception as e:
         log.error(f"{type(e)} Exception during response write")
         import traceback
+
         tb = traceback.format_exc()
         print("traceback:", tb)
     # finalize response
     await resp.write_eof()
-    
+
     log.response(request, resp=resp)
     return resp

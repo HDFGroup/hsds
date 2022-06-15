@@ -26,8 +26,8 @@ def unixTimeToUTC(timestamp):
     # '2014-10-30T04:25:21+00:00'
     # strip off the '+00:00' and replace
     # with 'Z' (both are ISO-8601 compatible)
-    npos = iso_str.rfind('+')
-    iso_z = iso_str[:npos] + 'Z'
+    npos = iso_str.rfind("+")
+    iso_z = iso_str[:npos] + "Z"
     return iso_z
 
 
@@ -36,13 +36,13 @@ def elapsedTime(timestamp):
     delta = int(time.time()) - timestamp
     if delta < 0:
         return "Invalid timestamp!"
-    day_length = 24*60*60
+    day_length = 24 * 60 * 60
     days = 0
-    hour_length = 60*60
+    hour_length = 60 * 60
     hours = 0
     minute_length = 60
     minutes = 0
-    ret_str = ''
+    ret_str = ""
 
     if delta > day_length:
         days = delta // day_length

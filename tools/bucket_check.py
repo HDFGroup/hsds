@@ -27,21 +27,20 @@ from hsds import hsds_logger as log
 
 
 async def bucketCheck(app, base_folder):
-    """ Verify that contents of bucket are self-consistent
-    """
+    """Verify that contents of bucket are self-consistent"""
 
     now = int(time.time())
     log.info("bucket check {}".format(unixTimeToUTC(now)))
 
     bucket = app["bucket_name"]
 
-    if base_folder.startswith('/'):
+    if base_folder.startswith("/"):
         # slash is not part of the storage key
         prefix = base_folder[1:]
     else:
         prefix = base_folder
 
-    keys = await getStorKeys(app, prefix=prefix, suffix='domain.json')
+    keys = await getStorKeys(app, prefix=prefix, suffix="domain.json")
 
     root_count = 0
     group_count = 0
@@ -56,11 +55,13 @@ async def bucketCheck(app, base_folder):
         return
 
     log.info(f"got {len(keys)} keys")
-    print("name, num_groups, num_datasets, num_datatypes, num chunks, metadata bytes, chunk bytes")
+    print(
+        "name, num_groups, num_datasets, num_datatypes, num chunks, metadata bytes, chunk bytes"
+    )
     for key in keys:
         log.info(f"got key: {key}")
         domain_json = await getStorJSONObj(app, key, bucket=bucket)
-        #print("domain_json:", domain_json)
+        # print("domain_json:", domain_json)
         if "root" not in domain_json:
             log.info(f"skipping folder object: {key}")
             continue
@@ -75,7 +76,9 @@ async def bucketCheck(app, base_folder):
         chunk_bytes = scan["allocated_bytes"]
         metadata_bytes = scan["metadata_bytes"]
 
-        print(f"{key},{num_groups},{num_datasets},{num_datatypes},{num_chunks},{metadata_bytes},{chunk_bytes}")
+        line = f"{key},{num_groups},{num_datasets},{num_datatypes},{num_chunks},"
+        line += f" {metadata_bytes},{chunk_bytes}"
+        print(line)
 
         # TBD - get service scan results from .info.json and compare to ones just calculated
         root_count += 1
@@ -90,7 +93,7 @@ async def bucketCheck(app, base_folder):
 
     print("")
     print("Totals")
-    print("="*40)
+    print("=" * 40)
     print(f"folders: {len(keys) - root_count}")
     print(f"domains: {root_count}")
     print(f"groups: {group_count}")
@@ -100,16 +103,17 @@ async def bucketCheck(app, base_folder):
     print(f"chunk bytes: {total_chunk_bytes}")
     print("")
 
+
 #
 # Main
 #
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 
     base_folder = "/home"
     if len(sys.argv) > 1:
         last_arg = sys.argv[-1]
-        if last_arg in ("-h","--help"):
+        if last_arg in ("-h", "--help"):
             print("Usage: python bucket_check.py <base_domain>")
             sys.exit(0)
         if not last_arg.startswith("-"):
@@ -123,7 +127,7 @@ if __name__ == '__main__':
     app["bucket_name"] = config.get("bucket_name")
     app["s3objs"] = {}
     app["domains"] = {}  # domain to root map
-    app["roots"] = {}    # root obj to domain map
+    app["roots"] = {}  # root obj to domain map
     app["deleted_ids"] = set()
     app["bytes_in_bucket"] = 0
     app["loop"] = loop
@@ -132,5 +136,3 @@ if __name__ == '__main__':
     loop.close()
 
     print("done!")
-
-

@@ -7,6 +7,7 @@ from . import datanode
 from . import rangeget_proxy
 from . import headnode
 
+
 def removeSitePackages():
 
     # site_packages = "/var/lang/lib/python3.9/site-packages"
@@ -25,18 +26,19 @@ def removeSitePackages():
         for dist in pkg_resources.find_distributions(site_packages, True):
             pkg_resources.working_set.add(dist, site_packages, False, replace=True)
 
+
 def main():
     node_type = config.getCmdLineArg("node_type")
     if node_type is None:
         raise ValueError("no node_type argument found")
-    if node_type not in ("sn","dn", "head", "rn"):
+    if node_type not in ("sn", "dn", "head", "rn"):
         raise ValueError(f"Unexpected node type: {node_type}")
     print(f"hsds node main for node_type: {node_type}")
     print(f"python version: {sys.version}")
     print(f"sys path: {sys.path}")
     if config.getCmdLineArg("removesitepackages"):
         removeSitePackages()
-     
+
     if node_type == "sn":
         servicenode.main()
     elif node_type == "dn":
@@ -49,5 +51,6 @@ def main():
         # shouldn't ever get here
         raise ValueError("unexpected error")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

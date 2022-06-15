@@ -38,7 +38,7 @@ async def getS3RootKeysCallback(app, s3keys):
 
     for s3key in s3keys:
         log.info(f"got key: {s3key}")
-        if not s3key.startswith("db/") or s3key[-1] != '/':
+        if not s3key.startswith("db/") or s3key[-1] != "/":
             log.error(f"unexpected key for getS3RootKeysCallback: {s3key}")
             continue
         root_id = getObjId(s3key + ".group.json")
@@ -71,7 +71,6 @@ async def getS3RootKeysCallback(app, s3keys):
             results["metadata_bytes"] += info_obj["metadata_bytes"]
 
 
-
 async def scanRootKeys(app, update=False):
 
     # iterate through all s3 root keys in the bucket.
@@ -80,9 +79,13 @@ async def scanRootKeys(app, update=False):
     log.info("scanRootKeys")
     app["scanRootKeys_update"] = update
 
-    await getStorKeys(app, prefix="db/", deliminator='/', include_stats=False, callback=getS3RootKeysCallback)
-
-
+    await getStorKeys(
+        app,
+        prefix="db/",
+        deliminator="/",
+        include_stats=False,
+        callback=getS3RootKeysCallback,
+    )
 
 
 #
@@ -90,7 +93,7 @@ async def scanRootKeys(app, update=False):
 #
 def printUsage():
     print("       python bucket_scan.py [--update]")
-    sys.exit();
+    sys.exit()
 
 
 async def run_scan(app, update=False):
@@ -115,12 +118,10 @@ def main():
     if len(sys.argv) > 1 and (sys.argv[1] == "-h" or sys.argv[1] == "--help"):
         printUsage()
 
-
     if len(sys.argv) > 1 and sys.argv[1] == "--update":
         do_update = True
     else:
         do_update = False
-
 
     # we need to setup a asyncio loop to query s3
     loop = asyncio.get_event_loop()
@@ -142,10 +143,11 @@ def main():
     print("dataset_count:", results["dataset_count"])
     print("datatype_count", results["datatype_count"])
     print("chunk_count:", results["chunk_count"])
-    print('allocated_bytes:', results["allocated_bytes"])
+    print("allocated_bytes:", results["allocated_bytes"])
     print("metadata_bytes:", results["metadata_bytes"])
     print("updated_count:", results["updated_count"])
 
     print("done!")
+
 
 main()

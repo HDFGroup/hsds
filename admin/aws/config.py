@@ -13,32 +13,31 @@ import os
 import sys
 
 cfg = {
-    'aws_region': 'us-west-2',  # use us-west-2a to launch in one AZ
-    'aws_s3_gateway': 'https://s3.amazonaws.com',
-    'hsds_ami': 'ami-908430f0', # 'ami-3443eb54',
-    'bucket_name': 'nasa.hsdsdev',
-    'security_group_id': 'sg-6e384417',
-    'profile_name': 'LimitedEC2', 
-    'subnet_id': 'subnet-5b04173f',
-    'key_name': 'ACCESS',
-    'instance_type': 'm4.large',
-    'project_tag': 'ACCESS'
+    "aws_region": "us-west-2",  # use us-west-2a to launch in one AZ
+    "aws_s3_gateway": "https://s3.amazonaws.com",
+    "hsds_ami": "ami-908430f0",  # 'ami-3443eb54',
+    "bucket_name": "nasa.hsdsdev",
+    "security_group_id": "sg-6e384417",
+    "profile_name": "LimitedEC2",
+    "subnet_id": "subnet-5b04173f",
+    "key_name": "ACCESS",
+    "instance_type": "m4.large",
+    "project_tag": "ACCESS",
 }
-   
-def get(x): 
+
+
+def get(x):
     # see if there is a command-line override
-    option = '--'+x+'='
+    option = "--" + x + "="
     for i in range(1, len(sys.argv)):
-        #print i, sys.argv[i]
+        # print i, sys.argv[i]
         if sys.argv[i].startswith(option):
             # found an override
             arg = sys.argv[i]
-            return arg[len(option):]  # return text after option string    
+            option_len = len(option)
+            return arg[option_len:]  # return text after option string
     # see if there are an environment variable override
     if x.upper() in os.environ:
         return os.environ[x.upper()]
-    # no command line override, just return the cfg value        
+    # no command line override, just return the cfg value
     return cfg[x]
-
-  
-  

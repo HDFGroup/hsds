@@ -12,6 +12,7 @@
 #
 # data node of hsds cluster
 #
+
 import time
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict
 from aiohttp.web_exceptions import HTTPInternalServerError
@@ -23,9 +24,9 @@ from .datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj
 from .datanode_lib import save_metadata_obj, delete_metadata_obj
 from . import hsds_logger as log
 
+
 async def GET_Dataset(request):
-    """HTTP GET method to return JSON for /groups/
-    """
+    """HTTP GET method to return JSON for /groups/"""
     log.request(request)
     app = request.app
     params = request.rel_url.query
@@ -62,7 +63,7 @@ async def GET_Dataset(request):
 
 
 async def POST_Dataset(request):
-    """ Handler for POST /datasets"""
+    """Handler for POST /datasets"""
     log.request(request)
     app = request.app
     params = request.rel_url.query
@@ -124,13 +125,15 @@ async def POST_Dataset(request):
 
     log.debug(f"POST_dataset typejson: {type_json}, shapejson: {shape_json}")
 
-    dset_json = {"id": dset_id,
-                 "root": root_id,
-                 "created": now,
-                 "lastModified": now,
-                 "type": type_json,
-                 "shape": shape_json,
-                 "attributes": {}}
+    dset_json = {
+        "id": dset_id,
+        "root": root_id,
+        "created": now,
+        "lastModified": now,
+        "type": type_json,
+        "shape": shape_json,
+        "attributes": {},
+    }
 
     if "creationProperties" in body:
         dset_json["creationProperties"] = body["creationProperties"]
@@ -155,12 +158,11 @@ async def POST_Dataset(request):
 
 
 async def DELETE_Dataset(request):
-    """HTTP DELETE method for dataset
-    """
+    """HTTP DELETE method for dataset"""
     log.request(request)
     app = request.app
     params = request.rel_url.query
-    dset_id = request.match_info.get('id')
+    dset_id = request.match_info.get("id")
     log.info(f"DELETE dataset: {dset_id}")
 
     if not isValidUuid(dset_id, obj_class="dataset"):
@@ -201,7 +203,7 @@ async def PUT_DatasetShape(request):
     log.request(request)
     app = request.app
     params = request.rel_url.query
-    dset_id = request.match_info.get('id')
+    dset_id = request.match_info.get("id")
 
     if not isValidUuid(dset_id, obj_class="dataset"):
         log.error("Unexpected type_id: {}".format(dset_id))

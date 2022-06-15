@@ -13,16 +13,16 @@ except ModuleNotFoundError:
 
 
 def getNextChunkTableIndex(chunk_table):
-    ''' Get first row of chunk table where start field is 0.
-        Return -1 is now row exist
-    '''
+    """Get first row of chunk table where start field is 0.
+    Return -1 is now row exist
+    """
     index = -1
     now = time.time()
 
     # query for row with 0 start value and update it to now
     if isinstance(chunk_table.id.id, str):
         # HSDS dataset - use query selection
-        condition = "status == 0" 
+        condition = "status == 0"
         update_val = {"start": now, "status": -1, "pod": pod_name}
         indices = table.update_where(condition, update_val, limit=1)
         if indices is None or len(indices) == 0:
@@ -35,12 +35,12 @@ def getNextChunkTableIndex(chunk_table):
             arr = chunk_table[s]
             for i in range(len(arr)):
                 row = arr[i]
-                if row['status'] == 0:
-                    row['start'] = now # update start time
-                    row['status'] = -1
+                if row["status"] == 0:
+                    row["start"] = now  # update start time
+                    row["status"] = -1
                     index = s[0].start + i
                     # write back updated row
-                    chunk_table[index] = row  
+                    chunk_table[index] = row
                     break
             if index > -1:
                 # found a chunk to write to
@@ -56,8 +56,8 @@ if len(sys.argv) == 1 or sys.argv[1] in ("-h", "--help"):
     print("usage: python hs_write.py filepath [numtasks]")
     sys.exit(1)
 
-if 'LOG_LEVEL' in os.environ:
-    level_env = os.environ['LOG_LEVEL']
+if "LOG_LEVEL" in os.environ:
+    level_env = os.environ["LOG_LEVEL"]
     if level_env == "DEBUG":
         loglevel = logging.DEBUG
     elif level_env == "INFO":
@@ -68,7 +68,7 @@ if 'LOG_LEVEL' in os.environ:
         loglevel = logging.ERROR
 else:
     loglevel = logging.ERROR
-logging.basicConfig(format='%(asctime)s %(message)s', level=loglevel)
+logging.basicConfig(format="%(asctime)s %(message)s", level=loglevel)
 
 if sys.argv[1] == "-v":
     verbose = True
@@ -82,7 +82,7 @@ if len(sys.argv) > 2:
 else:
     # will run as long as there are tasks to pick up
     numtasks = None
- 
+
 print("filepath:", filepath)
 
 if "HS_USERNAME" in os.environ:
@@ -101,13 +101,15 @@ else:
     hs_endpoint = None
 
 if filepath.startswith("hdf5://"):
-    f = h5pyd.File(filepath, 'a', username=hs_username, password=hs_password, endpoint=hs_endpoint)
+    f = h5pyd.File(
+        filepath, "a", username=hs_username, password=hs_password, endpoint=hs_endpoint
+    )
 else:
-    f = h5py.File(filepath, 'a')
+    f = h5py.File(filepath, "a")
 dset = f["dset"]
 print("dset:", dset)
 print("dset chunks:", dset.chunks)
-print("chunk_size:", np.prod(dset.chunks)*dset.dtype.itemsize)
+print("chunk_size:", np.prod(dset.chunks) * dset.dtype.itemsize)
 if numtasks:
     print("num tasks:", numtasks)
 
@@ -122,22 +124,24 @@ else:
 print("writing data...")
 while True:
     index = getNextChunkTableIndex(table)
-    
+
     if index < 0:
         print("no more chunks")
         break
     print(f"got index: {index}")
     entry = table[index]
-    nrow = entry['nrow']
-    ncol = entry['ncol']
+    nrow = entry["nrow"]
+    ncol = entry["ncol"]
     arr = np.random.rand(nrow, ncol)
-    x = entry['x']
-    y = entry['y']
-    dset[x:x+nrow, y:y+ncol] = arr
+    x1 = entry["x"]
+    y1 = entry["y"]
+    x2 = x1 + nrow
+    y2 = y1 + ncol
+    dset[x1:x2, y1:y2] = arr
     if verbose:
-        print(f"wrote dset[{x}:{x+nrow}, {y}:{y+ncol}]")
-    entry['done'] = time.time()
-    entry['status'] = 1
+        print(f"wrote dset[{x1}:{x2}, {y1}:{y2}]")
+    entry["done"] = time.time()
+    entry["status"] = 1
     table[index] = entry
     if numtasks:
         numtasks -= 1
@@ -146,4 +150,3 @@ while True:
 
 f.close()
 print("done!")
- 

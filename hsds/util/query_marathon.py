@@ -24,8 +24,8 @@ import os
 
 class MarathonClient:
     """
-     Utility class for access the parts of DCOS Marathon configurations we
-     need to coordinate the HSDS nodes
+    Utility class for access the parts of DCOS Marathon configurations we
+    need to coordinate the HSDS nodes
     """
 
     def __init__(self, app):

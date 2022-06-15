@@ -37,7 +37,7 @@ async def GET_Group(request):
     getAlias = False
     include_links = False
     include_attrs = False
-    group_id = request.match_info.get('id')
+    group_id = request.match_info.get("id")
     if not group_id and "h5path" not in params:
         # no id, or path provided, so bad request
         msg = "Missing group id"
@@ -55,7 +55,7 @@ async def GET_Group(request):
                 getAlias = True
     if "h5path" in params:
         h5path = params["h5path"]
-        if not group_id and h5path[0] != '/':
+        if not group_id and h5path[0] != "/":
             msg = "h5paths must be absolute if no parent id is provided"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
@@ -66,7 +66,7 @@ async def GET_Group(request):
         include_attrs = True
 
     username, pswd = getUserPasswordFromRequest(request)
-    if username is None and app['allow_noauth']:
+    if username is None and app["allow_noauth"]:
         username = "default"
     else:
         await validateUserPassword(app, username, pswd)
@@ -78,7 +78,7 @@ async def GET_Group(request):
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
 
-    if h5path and h5path[0] == '/':
+    if h5path and h5path[0] == "/":
         # ignore the request path id (if given) and start
         # from root group for absolute paths
 
@@ -101,10 +101,12 @@ async def GET_Group(request):
 
     # get authoritative state for group from DN (even if it's in the
     # meta_cache).
-    kwargs = {"refresh": True,
-              "include_links": include_links,
-              "include_attrs": include_attrs,
-              "bucket": bucket}
+    kwargs = {
+        "refresh": True,
+        "include_links": include_links,
+        "include_attrs": include_attrs,
+        "bucket": bucket,
+    }
     group_json = await getObjectJson(app, group_id, **kwargs)
     log.debug(f"domain from request: {domain}")
     group_json["domain"] = getPathForDomain(domain)
@@ -115,9 +117,9 @@ async def GET_Group(request):
         root_id = group_json["root"]
         alias = []
         if group_id == root_id:
-            alias.append('/')
+            alias.append("/")
         else:
-            id_map = {root_id: '/'}
+            id_map = {root_id: "/"}
             kwargs = {"bucket": bucket, "tgt_id": group_id}
             h5path = await getPathForObjectId(app, root_id, id_map, **kwargs)
             if h5path:
@@ -125,18 +127,18 @@ async def GET_Group(request):
         group_json["alias"] = alias
 
     hrefs = []
-    group_uri = '/groups/'+group_id
+    group_uri = "/groups/" + group_id
     href = getHref(request, group_uri)
-    hrefs.append({'rel': 'self', 'href': href})
-    href = getHref(request, group_uri+'/links')
-    hrefs.append({'rel': 'links', 'href': href})
-    root_uri = '/groups/' + group_json["root"]
+    hrefs.append({"rel": "self", "href": href})
+    href = getHref(request, group_uri + "/links")
+    hrefs.append({"rel": "links", "href": href})
+    root_uri = "/groups/" + group_json["root"]
     href = getHref(request, root_uri)
-    hrefs.append({'rel': 'root', 'href': href})
-    href = getHref(request, '/')
-    hrefs.append({'rel': 'home', 'href': href})
-    href = getHref(request, group_uri+'/attributes')
-    hrefs.append({'rel': 'attributes', 'href': href})
+    hrefs.append({"rel": "root", "href": href})
+    href = getHref(request, "/")
+    hrefs.append({"rel": "home", "href": href})
+    href = getHref(request, group_uri + "/attributes")
+    hrefs.append({"rel": "attributes", "href": href})
     group_json["hrefs"] = hrefs
 
     resp = await jsonResponse(request, group_json)
@@ -227,9 +229,9 @@ async def DELETE_Group(request):
     """HTTP method to delete a group resource"""
     log.request(request)
     app = request.app
-    meta_cache = app['meta_cache']
+    meta_cache = app["meta_cache"]
 
-    group_id = request.match_info.get('id')
+    group_id = request.match_info.get("id")
     if not group_id:
         msg = "Missing group id"
         log.warn(msg)

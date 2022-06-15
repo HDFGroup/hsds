@@ -1,23 +1,20 @@
+FROM python:3.9-slim AS hsds-base
 
-FROM python:3.10-slim as base
+# Install HSDS
+RUN mkdir /usr/local/src/hsds/ \
+    /usr/local/src/hsds/hsds/ \
+    /usr/local/src/hsds/admin/ \
+    /usr/local/src/hsds/admin/config/ \
+    /usr/local/src/hsds/hsds/util/ \
+    /etc/hsds/ 
 
-# Here, build the python environment for the deployment
-FROM base as build
-# Install pipenv
-RUN pip install pipenv
-# Install  build and compilation dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends build-essential
-RUN mkdir /app \
-    /app/hsds \
-    /app/cp
-COPY Pipfile /app/Pipfile
-COPY Pipfile.lock /app/Pipfile.lock
-COPY requirements.txt /app/requirements.txt
-COPY setup.py /app/setup.py
-COPY hsds /app/hsds/
-COPY admin /app/admin/
+COPY setup.py /usr/local/src/hsds/
+COPY hsds/*.py /usr/local/src/hsds/hsds/
+COPY hsds/util/*.py /usr/local/src/hsds/hsds/util/
+COPY admin/config/config.yml /etc/hsds/
+COPY admin/config/config.yml /usr/local/src/hsds/admin/config/
 COPY entrypoint.sh  /
-WORKDIR /app
-RUN PIPENV_VENV_IN_PROJECT=1 pipenv install --deploy
-RUN apt-get remove -y build-essential
+RUN /bin/bash -c "pip install /usr/local/src/hsds/"
+
+EXPOSE 5100-5999
 ENTRYPOINT ["/bin/bash", "-c", "/entrypoint.sh"]

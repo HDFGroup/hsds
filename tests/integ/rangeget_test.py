@@ -17,8 +17,9 @@ import config
 # practially the min config value should be larger than
 # CHUNK_MIN and the max config value should less than
 # CHUNK_MAX
-CHUNK_MIN = 1024                # lower limit  (1024b)
-CHUNK_MAX = 50*1024*1024        # upper limit (50M)
+CHUNK_MIN = 1024  # lower limit  (1024b)
+CHUNK_MAX = 50 * 1024 * 1024  # upper limit (50M)
+
 
 class RangeGetTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -36,7 +37,6 @@ class RangeGetTest(unittest.TestCase):
 
     def testRangeGetBytes(self):
         print("testRangeGetBytes")
-     
 
         hdf5_sample_bucket = config.get("hdf5_sample_bucket")
         if not hdf5_sample_bucket:
@@ -67,10 +67,8 @@ class RangeGetTest(unittest.TestCase):
         dset112_size = byteStream["size"]
         self.assertEqual(dset112_size, 80)
 
-        
         req_headers = {"accept": "application/octet-stream"}
-        req = self.endpoint + '/'
-        
+        req = self.endpoint + "/"
 
         params = {}
         params["bucket"] = hdf5_sample_bucket
@@ -80,16 +78,16 @@ class RangeGetTest(unittest.TestCase):
         rsp = self.session.get(req, headers=req_headers, params=params)
         self.assertEqual(rsp.status_code, 200)
 
-        self.assertEqual(rsp.headers['Content-Type'], "application/octet-stream")
+        self.assertEqual(rsp.headers["Content-Type"], "application/octet-stream")
         data = rsp.content
         self.assertEqual(len(data), dset112_size)
         # content should be 4-byte little-endian integers 0 thru 19
         for i in range(dset112_size):
             if i % 4 == 3:
-                self.assertEqual(data[i], i//4)
+                self.assertEqual(data[i], i // 4)
             else:
                 self.assertEqual(data[i], 0)
-        
+
         # try reading last 5 bytes
         params = {}
         params["bucket"] = hdf5_sample_bucket
@@ -99,10 +97,10 @@ class RangeGetTest(unittest.TestCase):
         rsp = self.session.get(req, headers=req_headers, params=params)
         self.assertEqual(rsp.status_code, 200)
 
-        self.assertEqual(rsp.headers['Content-Type'], "application/octet-stream")
+        self.assertEqual(rsp.headers["Content-Type"], "application/octet-stream")
         data = rsp.content
         self.assertEqual(len(data), 5)
-        self.assertEqual(data, b'path\x00')
+        self.assertEqual(data, b"path\x00")
 
         # try reading last 5000
         params = {}
@@ -113,13 +111,13 @@ class RangeGetTest(unittest.TestCase):
         rsp = self.session.get(req, headers=req_headers, params=params)
         self.assertEqual(rsp.status_code, 200)
 
-        self.assertEqual(rsp.headers['Content-Type'], "application/octet-stream")
+        self.assertEqual(rsp.headers["Content-Type"], "application/octet-stream")
         data = rsp.content
         self.assertEqual(len(data), 5000)
-        self.assertEqual(data[0:5], b'\x00\x00\x00\x00\x00')
-        
- 
-if __name__ == '__main__':
-    #setup test files
+        self.assertEqual(data[0:5], b"\x00\x00\x00\x00\x00")
+
+
+if __name__ == "__main__":
+    # setup test files
 
     unittest.main()

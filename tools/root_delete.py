@@ -17,12 +17,11 @@ from aiobotocore.session import get_session
 if "CONFIG_DIR" not in os.environ:
     os.environ["CONFIG_DIR"] = "../admin/config/"
 
-from hsds.util.idUtil import isValidUuid,isSchema2Id
+from hsds.util.idUtil import isValidUuid, isSchema2Id
 from hsds.util.storUtil import releaseStorageClient
 
 from hsds.async_lib import removeKeys
 from hsds import config
-
 
 # This is a utility to remove all keys for a given rootid
 # Note: only works with schema v2 domains!
@@ -44,9 +43,8 @@ async def run_delete(app, rootid):
 
 def main():
 
-    if len(sys.argv) == 1 or len(sys.argv) > 1 and (sys.argv[1] == "-h" or sys.argv[1] == "--help"):
+    if len(sys.argv) == 1 or sys.argv[1] in ("-h", "--help"):
         printUsage()
-
 
     rootid = sys.argv[1]
 
@@ -57,7 +55,6 @@ def main():
     if not isSchema2Id(rootid):
         print("This tool can only be used with Schema v2 ids")
         sys.exit(1)
-
 
     # we need to setup a asyncio loop to query s3
     loop = asyncio.get_event_loop()
@@ -74,5 +71,6 @@ def main():
     loop.close()
 
     print("done!")
+
 
 main()

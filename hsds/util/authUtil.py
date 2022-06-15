@@ -33,8 +33,7 @@ ACL_KEYS = ("create", "read", "update", "delete", "readACL", "updateACL")
 
 
 def getDynamoDBClient(app):
-    """ Return dynamodb handle
-    """
+    """Return dynamodb handle"""
     if "session" not in app:
         session = get_session()
         app["session"] = session
@@ -63,10 +62,10 @@ def getDynamoDBClient(app):
     log.info(f"using iam role: {aws_iam_role}")
     aws_secret_access_key = config.get("aws_secret_access_key")
     aws_access_key_id = config.get("aws_access_key_id")
-    if not aws_secret_access_key or aws_secret_access_key == 'xxx':
+    if not aws_secret_access_key or aws_secret_access_key == "xxx":
         log.info("aws secret access key not set")
         aws_secret_access_key = None
-    if not aws_access_key_id or aws_access_key_id == 'xxx':
+    if not aws_access_key_id or aws_access_key_id == "xxx":
         log.info("aws access key id not set")
         aws_access_key_id = None
 
@@ -79,8 +78,7 @@ def getDynamoDBClient(app):
         req = "http://169.254.169.254/"
         req += f"latest/meta-data/iam/security-credentials/{aws_iam_role}"
         curl_cmd = ["curl", req]
-        p = subprocess.run(curl_cmd, stdout=subprocess.PIPE,
-                           stderr=subprocess.PIPE)
+        p = subprocess.run(curl_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if p.returncode != 0:
             msg = f"Error getting IAM role credentials: {p.stderr}"
             log.error(msg)
@@ -90,16 +88,19 @@ def getDynamoDBClient(app):
                 cred = json.loads(stdout)
                 aws_secret_access_key = cred["SecretAccessKey"]
                 aws_access_key_id = cred["AccessKeyId"]
-                log.info(f"Got ACCESS_KEY_ID: {aws_access_key_id} \
-                    from EC2 metadata")
+                log.info(
+                    f"Got ACCESS_KEY_ID: {aws_access_key_id} \
+                    from EC2 metadata"
+                )
                 aws_session_token = cred["Token"]
                 log.info("Got Expiration of: {}".format(cred["Expiration"]))
                 # trim off 'Z' and add 'UTC'
                 expiration_str = cred["Expiration"][:-1] + "UTC"
                 # save the expiration
                 fmt = "%Y-%m-%dT%H:%M:%S%Z"
-                app["token_expiration"] = \
-                    datetime.datetime.strptime(expiration_str, fmt)
+                app["token_expiration"] = datetime.datetime.strptime(
+                    expiration_str, fmt
+                )
             except json.JSONDecodeError:
                 msg = f"Unexpected error decoding EC2 meta-data response: \
 {stdout}"
@@ -109,7 +110,7 @@ def getDynamoDBClient(app):
 {stdout}"
                 log.error(msg)
 
-    dynamodb_gateway = config.get('aws_dynamodb_gateway')
+    dynamodb_gateway = config.get("aws_dynamodb_gateway")
     if not dynamodb_gateway:
         msg = "Invalid aws dynamodb gateway"
         log.error(msg)
@@ -117,28 +118,30 @@ def getDynamoDBClient(app):
     use_ssl = False
     if dynamodb_gateway.startswith("https"):
         use_ssl = True
-    kwargs = {"region_name": aws_region,
-              "aws_secret_access_key": aws_secret_access_key,
-              "aws_access_key_id": aws_access_key_id,
-              "aws_session_token": aws_session_token,
-              "endpoint_url": dynamodb_gateway,
-              "use_ssl": use_ssl}
+    kwargs = {
+        "region_name": aws_region,
+        "aws_secret_access_key": aws_secret_access_key,
+        "aws_access_key_id": aws_access_key_id,
+        "aws_session_token": aws_session_token,
+        "endpoint_url": dynamodb_gateway,
+        "use_ssl": use_ssl,
+    }
 
-    dynamodb = session.create_client('dynamodb',  **kwargs)
+    dynamodb = session.create_client("dynamodb", **kwargs)
     # save so same client can be returned in subsiquent calls
-    app['dynamodb'] = dynamodb
+    app["dynamodb"] = dynamodb
 
     return dynamodb
 
 
 def releaseDynamoDBClient(app):
-    """ release the client collection to dynamoDB
-     (Used for cleanup on application exit)
+    """release the client collection to dynamoDB
+    (Used for cleanup on application exit)
     """
-    if 'dynamodb' in app:
-        client = app['dynamodb']
+    if "dynamodb" in app:
+        client = app["dynamodb"]
         client.close()
-        del app['dynamodb']
+        del app["dynamodb"]
 
 
 def loadPasswordFile(password_file):
@@ -152,10 +155,10 @@ def loadPasswordFile(password_file):
                 s = line.strip()
                 if not s:
                     continue
-                if s[0] == '#':
+                if s[0] == "#":
                     # comment line
                     continue
-                fields = s.split(':')
+                fields = s.split(":")
                 if len(fields) < 2:
                     msg = f"line: {line_num} of {password_file} is not valid"
                     log.warn(msg)
@@ -191,8 +194,7 @@ def initUserDB(app):
         log.warn(msg)
         return
 
-    if config.get("aws_dynamodb_gateway") and \
-            config.get("aws_dynamodb_users_table"):
+    if config.get("aws_dynamodb_gateway") and config.get("aws_dynamodb_users_table"):
         # user entries will be obtained dynamicaly
         log.info("Getting DynamoDB client")
         # get client here so any errors will be seen right away
@@ -270,26 +272,25 @@ async def validateUserPasswordDynamoDB(app, username, password):
         log.info(msg)
         try:
             response = await dynamodb.get_item(
-                TableName=table_name,
-                Key={'username': {'S': username}}
+                TableName=table_name, Key={"username": {"S": username}}
             )
         except ClientError as e:
-            msg = e.response['Error']['Message']
+            msg = e.response["Error"]["Message"]
             log.error(f"Unable to read dyanamodb table: {msg}")
             raise HTTPInternalServerError()  # 500
         if "Item" not in response:
             log.info(f"user: {username} not found")
             raise HTTPUnauthorized()  # 401
-        item = response['Item']
+        item = response["Item"]
         if "password" not in item:
             log.error("Expected to find password key in DynamoDB table")
             raise HTTPInternalServerError()  # 500
         password_item = item["password"]
-        if 'S' not in password_item:
+        if "S" not in password_item:
             log.error("Expected to find 'S' key for password item")
             raise HTTPInternalServerError()  # 500
         log.debug(f"password: {password_item}")
-        if password_item['S'] != password:
+        if password_item["S"] != password:
             log.warn(f"user password is not valid for user: {username}")
             raise HTTPUnauthorized()  # 401
         # add user/password to user_db map
@@ -300,7 +301,7 @@ def validatePasswordSHA512(app, username, password):
     if getPassword(app, username) is None:
         log.info(f"SHA512 check for username: {username}")
         salt = config.get("password_salt")
-        hash_str = username.encode('utf-8') + salt.encode('utf-8')
+        hash_str = username.encode("utf-8") + salt.encode("utf-8")
         hex_hash = hashlib.sha512(hash_str).hexdigest()
         if hex_hash[:32] != password:
             msg = "user password is not valid (didn't equal sha512 hash) for "
@@ -320,10 +321,10 @@ async def validateUserPassword(app, username, password):
     log.debug(f"validateUserPassword username: {username}")
 
     if not username:
-        log.info('validateUserPassword - null user')
+        log.info("validateUserPassword - null user")
         raise HTTPUnauthorized()
     if not password:
-        log.info('isPasswordValid - null password')
+        log.info("isPasswordValid - null password")
         raise HTTPUnauthorized()
 
     log.debug(f"looking up username: {username}")
@@ -348,7 +349,7 @@ async def validateUserPassword(app, username, password):
             raise HTTPUnauthorized()  # 401
         user_data = getPassword(app, username)
 
-    if user_data['pwd'] == password:
+    if user_data["pwd"] == password:
         log.debug("user password validated")
     else:
         log.info(f"user password is not valid for user: {username}")
@@ -381,7 +382,7 @@ def _checkTokenCache(app, token):
             continue
         if "pwd" not in user or user["pwd"] != token:
             continue
-        pwd = user['pwd']
+        pwd = user["pwd"]
 
         if time.time() < exp:
             # still valid!
@@ -417,17 +418,17 @@ def loadGroupsFile(group_file):
                 if not s:
                     continue
                 log.debug(f"group[{line_number}]: {s}")
-                if s[0] == '#':
+                if s[0] == "#":
                     # comment line
                     continue
-                fields = s.split(':')
+                fields = s.split(":")
                 if len(fields) < 2:
                     msg = f"line: {line_number} is not valid"
                     log.warn(msg)
                     continue
                 group_name = fields[0]
                 users = fields[1]
-                user_names = users.split(' ')
+                user_names = users.split(" ")
                 log.debug(f"group: {group_name} users: {user_names}")
 
                 if group_name in group_db:
@@ -487,42 +488,41 @@ def initGroupDB(app):
 
 
 def getUserPasswordFromRequest(request):
-    """ Return user defined in Auth header (if any)
-    """
+    """Return user defined in Auth header (if any)"""
     user = None
     pswd = None
     app = request.app
-    if 'Authorization' not in request.headers:
+    if "Authorization" not in request.headers:
         log.debug("no Authorization in header")
         return None, None
-    scheme, _, token = request.headers.get('Authorization', '').partition(' ')
+    scheme, _, token = request.headers.get("Authorization", "").partition(" ")
     if not scheme or not token:
         log.info("Invalid Authorization header")
         raise HTTPBadRequest(reason="Invalid Authorization header")
 
-    if scheme.lower() == 'basic':
+    if scheme.lower() == "basic":
         log.debug("using basic authorization")
         # HTTP Basic Auth
         try:
-            token = token.encode('utf-8')  # convert to bytes
+            token = token.encode("utf-8")  # convert to bytes
             token_decoded = base64.decodebytes(token)
         except binascii.Error:
             msg = "Malformed authorization header"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        if token_decoded.index(b':') < 0:
+        if token_decoded.index(b":") < 0:
             msg = "Malformed authorization header (No ':' character)"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        user, _, pswd = token_decoded.partition(b':')
+        user, _, pswd = token_decoded.partition(b":")
         if not user or not pswd:
             msg = "Malformed authorization header, user/password not found"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        user = user.decode('utf-8')   # convert bytes to string
-        pswd = pswd.decode('utf-8')   # convert bytes to string
+        user = user.decode("utf-8")  # convert bytes to string
+        pswd = pswd.decode("utf-8")  # convert bytes to string
 
-    elif scheme.lower() == 'bearer':
+    elif scheme.lower() == "bearer":
         # OpenID Auth.
         log.debug(f"Got OpenID bearer token: {token}")
         user_group_db = app["user_group_db"]
@@ -535,6 +535,7 @@ def getUserPasswordFromRequest(request):
         else:
             # put import here to avoid jwt package dependency unless required
             from .jwtUtil import verifyBearerToken
+
             user, exp, roles = verifyBearerToken(app, token)
             if exp:
                 msg = f"decoded bearer token for user: {user}, expired: {exp}"
@@ -562,7 +563,7 @@ def getUserPasswordFromRequest(request):
 
 
 def isAdminUser(app, username):
-    """ Return true if user is an admin """
+    """Return true if user is an admin"""
     if not username:
         return False
     if username == config.get("admin_user"):
@@ -642,8 +643,7 @@ def validateAclJson(acl_json):
 
 
 def aclOpForRequest(request):
-    """ return default ACL action for request method
-    """
+    """return default ACL action for request method"""
     req_action = None
     if request.method == "GET":
         req_action = "read"

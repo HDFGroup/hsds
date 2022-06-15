@@ -18,7 +18,7 @@ import time
 import uuid
 
 from .hsds_app import HsdsApp
- 
+
 _HELP_USAGE = "Starts hsds a REST-based service for HDF5 data."
 
 _HELP_EPILOG = """Examples:
@@ -38,12 +38,14 @@ _HELP_EPILOG = """Examples:
 # maximum number of characters if socket directory is given
 # Exceeding this can cause errors - see: https://github.com/HDFGroup/hsds/issues/129
 # Underlying issue is reported here: https://bugs.python.org/issue32958
-MAX_SOCKET_DIR_PATH_LEN=63
+MAX_SOCKET_DIR_PATH_LEN = 63
+
 
 class UserConfig:
     """
     User Config state
     """
+
     def __init__(self, config_file=None, **kwargs):
         self._cfg = {}
         if config_file:
@@ -61,15 +63,20 @@ class UserConfig:
                     s = line.strip()
                     if not s:
                         continue
-                    if s[0] == '#':
+                    if s[0] == "#":
                         # comment line
                         continue
-                    index = line.find('=')
+                    index = line.find("=")
                     if index <= 0:
-                        print("config file: {} line: {} is not valid".format(self._config_file, line_number))
+                        print(
+                            "config file: {} line: {} is not valid".format(
+                                self._config_file, line_number
+                            )
+                        )
                         continue
                     k = line[:index].strip()
-                    v = line[(index+1):].strip()
+                    nlen = index + 1
+                    v = line[nlen:].strip()
                     if v and v.upper() != "NONE":
                         self._cfg[k] = v
         # override any config values with environment variable if found
@@ -82,7 +89,7 @@ class UserConfig:
             self._cfg[k.upper()] = kwargs[k]
 
     def __getitem__(self, name):
-        """ Get a config item  """
+        """Get a config item"""
 
         # Load a variable from environment. It would have only been loaded in
         # __init__ if it was also specified in the config file.
@@ -93,18 +100,18 @@ class UserConfig:
         return self._cfg[name]
 
     def __setitem__(self, name, obj):
-        """ set config item """
+        """set config item"""
         self._cfg[name] = obj
 
     def __delitem__(self, name):
-        """ Delete option. """
+        """Delete option."""
         del self._cfg[name]
 
     def __len__(self):
         return len(self._cfg)
 
     def __iter__(self):
-        """ Iterate over config names """
+        """Iterate over config names"""
         keys = self._cfg.keys()
         for key in keys:
             yield key
@@ -129,48 +136,90 @@ def main():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawTextHelpFormatter,
         usage=_HELP_USAGE,
-        epilog=_HELP_EPILOG)
+        epilog=_HELP_EPILOG,
+    )
 
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
-        '--root_dir', type=str, dest='root_dir',
-        help='Directory where to store the object store data')
+        "--root_dir",
+        type=str,
+        dest="root_dir",
+        help="Directory where to store the object store data",
+    )
     group.add_argument(
-        '--bucket_name', nargs=1, type=str, dest='bucket_name',
-        help='Name of the bucket to use (e.g., "hsds.test").')
-    parser.add_argument('--host', default='',
-                        type=str, dest='host',
-                        help="host name for url")
-    parser.add_argument('--hs_username', type=str,  dest='hs_username',
-                        help="username to be added to list of valid users",
-                        default='')
-    parser.add_argument('--hs_password', type=str,  dest='hs_password',
-                        help="password for hs_username", default='')
-    parser.add_argument('--password_file', type=str, dest='password_file',
-                        help="location of hsds password file",  default='')
+        "--bucket_name",
+        nargs=1,
+        type=str,
+        dest="bucket_name",
+        help='Name of the bucket to use (e.g., "hsds.test").',
+    )
+    parser.add_argument(
+        "--host", default="", type=str, dest="host", help="host name for url"
+    )
+    parser.add_argument(
+        "--hs_username",
+        type=str,
+        dest="hs_username",
+        help="username to be added to list of valid users",
+        default="",
+    )
+    parser.add_argument(
+        "--hs_password",
+        type=str,
+        dest="hs_password",
+        help="password for hs_username",
+        default="",
+    )
+    parser.add_argument(
+        "--password_file",
+        type=str,
+        dest="password_file",
+        help="location of hsds password file",
+        default="",
+    )
 
-    parser.add_argument('--logfile', default='',
-                        type=str, dest='logfile',
-                        help="filename for logout (default stdout).")
-    parser.add_argument('--loglevel', default='',
-                        type=str, dest='loglevel',
-                        help="log verbosity: DEBUG, WARNING, INFO, OR ERROR")
-    parser.add_argument('-p', '--port', default=0,
-                        type=int, dest='port',
-                        help='Service node port')
-    parser.add_argument('--count', default=1, type=int,
-                        dest='dn_count',
-                        help='Number of dn sub-processes to create.')
-    parser.add_argument('--socket_dir', default='',
-                        type=str, dest='socket_dir',
-                        help="directory for socket endpoint")
-    parser.add_argument("--config_dir", default='',
-                        type=str, dest="config_dir",
-                        help="directory for config data")
+    parser.add_argument(
+        "--logfile",
+        default="",
+        type=str,
+        dest="logfile",
+        help="filename for logout (default stdout).",
+    )
+    parser.add_argument(
+        "--loglevel",
+        default="",
+        type=str,
+        dest="loglevel",
+        help="log verbosity: DEBUG, WARNING, INFO, OR ERROR",
+    )
+    parser.add_argument(
+        "-p", "--port", default=0, type=int, dest="port", help="Service node port"
+    )
+    parser.add_argument(
+        "--count",
+        default=1,
+        type=int,
+        dest="dn_count",
+        help="Number of dn sub-processes to create.",
+    )
+    parser.add_argument(
+        "--socket_dir",
+        default="",
+        type=str,
+        dest="socket_dir",
+        help="directory for socket endpoint",
+    )
+    parser.add_argument(
+        "--config_dir",
+        default="",
+        type=str,
+        dest="config_dir",
+        help="directory for config data",
+    )
 
     args, extra_args = parser.parse_known_args()
 
-    kwargs = {} # options to pass to hsdsapp
+    kwargs = {}  # options to pass to hsdsapp
 
     # setup logging
     if args.loglevel:
@@ -237,19 +286,21 @@ def main():
             if not os.path.isdir(socket_dir):
                 raise FileNotFoundError(f"directory: {socket_dir} not found")
         else:
-            if 'TMP' in os.environ:
+            if "TMP" in os.environ:
                 # This should be set at least on Windows
-                tmp_dir = os.environ['TMP']
+                tmp_dir = os.environ["TMP"]
                 print("set tmp_dir:", tmp_dir)
             else:
-                tmp_dir = "/tmp"  
+                tmp_dir = "/tmp"
             if not os.path.isdir(tmp_dir):
                 raise FileNotFoundError(f"directory {tmp_dir} not found")
             rand_name = uuid.uuid4().hex[:8]
-            socket_dir = os.path.join(tmp_dir, f"hs{rand_name}")  
+            socket_dir = os.path.join(tmp_dir, f"hs{rand_name}")
             print("using socket dir:", socket_dir)
             if len(socket_dir) > MAX_SOCKET_DIR_PATH_LEN:
-                raise ValueError(f"length of socket_dir must be less than: {MAX_SOCKET_DIR_PATH_LEN}") 
+                raise ValueError(
+                    f"length of socket_dir must be less than: {MAX_SOCKET_DIR_PATH_LEN}"
+                )
             os.mkdir(socket_dir)
         kwargs["socket_dir"] = socket_dir
 
@@ -265,7 +316,7 @@ def main():
 
     if args.root_dir:
         kwargs["root_dir"] = args.root_dir
-        
+
     config_dir = None
     if args.config_dir:
         if not os.path.isdir(args.config_dir):
@@ -274,7 +325,7 @@ def main():
             config_dir = args.config_dir
     if config_dir:
         kwargs["config_dir"] = config_dir
-    
+
     if args.dn_count:
         kwargs["dn_count"] = args.dn_count
 
@@ -285,7 +336,7 @@ def main():
 
     while True:
         try:
-            time.sleep(1)   
+            time.sleep(1)
             app.check_processes()
         except KeyboardInterrupt:
             print("got keyboard interrupt")
@@ -301,5 +352,3 @@ def main():
 
     print("shutting down server")
     app.stop()
-    
-    

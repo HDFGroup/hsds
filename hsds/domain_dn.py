@@ -12,6 +12,7 @@
 #
 # data node of hsds cluster
 #
+
 import time
 from aiohttp.web_exceptions import HTTPConflict, HTTPInternalServerError
 from aiohttp.web import json_response
@@ -25,7 +26,7 @@ from . import hsds_logger as log
 
 
 def get_domain(request, body=None):
-    """ Extract domain and validate """
+    """Extract domain and validate"""
     app = request.app
     params = request.rel_url.query
 
@@ -54,8 +55,7 @@ def get_domain(request, body=None):
 
 
 async def GET_Domain(request):
-    """HTTP GET method to return JSON for /domains/
-    """
+    """HTTP GET method to return JSON for /domains/"""
     log.request(request)
     app = request.app
 
@@ -75,8 +75,7 @@ async def GET_Domain(request):
 
 
 async def PUT_Domain(request):
-    """HTTP PUT method to create a domain
-    """
+    """HTTP PUT method to create a domain"""
     log.request(request)
     app = request.app
 
@@ -146,8 +145,7 @@ async def PUT_Domain(request):
 
 
 async def DELETE_Domain(request):
-    """HTTP DELETE method to delete a domain
-    """
+    """HTTP DELETE method to delete a domain"""
     log.request(request)
     app = request.app
     domain = get_domain(request)
@@ -175,10 +173,10 @@ async def DELETE_Domain(request):
 
 
 async def PUT_ACL(request):
-    """ Handler creating/update an ACL"""
+    """Handler creating/update an ACL"""
     log.request(request)
     app = request.app
-    acl_username = request.match_info.get('username')
+    acl_username = request.match_info.get("username")
 
     if not request.has_body:
         msg = "Expected body in delete domain"

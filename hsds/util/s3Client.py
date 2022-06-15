@@ -26,9 +26,9 @@ from .. import hsds_logger as log
 from .. import config
 
 
-class S3Client():
+class S3Client:
     """
-     Utility class for reading and storing data to AWS S3
+    Utility class for reading and storing data to AWS S3
     """
 
     def __init__(self, app):
@@ -83,7 +83,7 @@ class S3Client():
         except KeyError:
             pass
         try:
-            max_pool_connections = config.get('aio_max_pool_connections')
+            max_pool_connections = config.get("aio_max_pool_connections")
         except KeyError:
             pass
         self._aws_role_arn = None
@@ -91,20 +91,20 @@ class S3Client():
             # Assume IAM roles for EKS is being used.  See:
             # https://aws.amazon.com/blogs/opensource/\
             # introducing-fine-grained-iam-roles-service-accounts/
-            self._aws_role_arn = os.environ['AWS_ROLE_ARN']
+            self._aws_role_arn = os.environ["AWS_ROLE_ARN"]
             log.info(f"AWS_ROLE_ARN set to: {self._aws_role_arn}")
             if "AWS_WEB_IDENTITY_TOKEN_FILE" in os.environ:
-                token_file = os.environ['AWS_WEB_IDENTITY_TOKEN_FILE']
+                token_file = os.environ["AWS_WEB_IDENTITY_TOKEN_FILE"]
                 log.debug(f"AWS_WEB_IDENTITY_TOKEN_FILE is: {token_file}")
         if "AWS_SESSION_TOKEN" in os.environ:
-            self._aws_session_token = os.environ['AWS_SESSION_TOKEN']
+            self._aws_session_token = os.environ["AWS_SESSION_TOKEN"]
             log.debug(f"got AWS_SESSION_TOKEN: {self._aws_session_token}")
 
         self._aio_config = AioConfig(max_pool_connections=max_pool_connections)
 
         log.debug(f"S3Client init - aws_region {self._aws_region}")
 
-        self._s3_gateway = config.get('aws_s3_gateway')
+        self._s3_gateway = config.get("aws_s3_gateway")
         if not self._s3_gateway:
             msg = "Invalid aws s3 gateway"
             log.error(msg)
@@ -115,11 +115,10 @@ class S3Client():
         if self._s3_gateway.startswith("https"):
             self._use_ssl = True
 
-        if not self._aws_secret_access_key or \
-                self._aws_secret_access_key == 'xxx':
+        if not self._aws_secret_access_key or self._aws_secret_access_key == "xxx":
             log.debug("aws secret access key not set")
             self._aws_secret_access_key = None
-        if not self._aws_access_key_id or self._aws_access_key_id == 'xxx':
+        if not self._aws_access_key_id or self._aws_access_key_id == "xxx":
             log.debug("aws access key id not set")
             self._aws_access_key_id = None
         else:
@@ -138,8 +137,8 @@ class S3Client():
         return kwargs
 
     def _renewToken(self):
-        """ if using an aws_iam_role, fetch credentials if our token is about
-          to expire, otherwise just return
+        """if using an aws_iam_role, fetch credentials if our token is about
+        to expire, otherwise just return
         """
         app = self._app
 
@@ -211,8 +210,7 @@ class S3Client():
                     log.error(msg)
 
     def _s3_stats_increment(self, counter, inc=1):
-        """ Incremenet the indicated connter
-        """
+        """Incremenet the indicated connter"""
         if "s3_stats" not in self._app:
             # setup stats
             s3_stats = {}
@@ -224,7 +222,7 @@ class S3Client():
             s3_stats["bytes_in"] = 0
             s3_stats["bytes_out"] = 0
             self._app["s3_stats"] = s3_stats
-        s3_stats = self._app['s3_stats']
+        s3_stats = self._app["s3_stats"]
         if counter not in s3_stats:
             log.error(f"unexpected counter for s3_stats: {counter}")
             return
@@ -235,8 +233,8 @@ class S3Client():
         s3_stats[counter] += inc
 
     async def get_object(self, key, bucket=None, offset=0, length=-1):
-        """ Return data for object at given key.
-           If Range is set, return the given byte range.
+        """Return data for object at given key.
+        If Range is set, return the given byte range.
         """
 
         range = ""
@@ -254,13 +252,13 @@ class S3Client():
         session = self._app["session"]
         self._renewToken()
         kwargs = self._get_client_kwargs()
-        async with session.create_client('s3', **kwargs) as _client:
+        async with session.create_client("s3", **kwargs) as _client:
             try:
                 kwargs = {"Bucket": bucket, "Key": key}
                 if range:
                     kwargs["Range"] = range
                 resp = await _client.get_object(**kwargs)
-                data = await resp['Body'].read()
+                data = await resp["Body"].read()
                 finish_time = time.time()
                 if offset > 0:
                     range_key = f"{key}[{offset}:{offset+length}]"
@@ -272,7 +270,7 @@ class S3Client():
                 msg += f"bytes={len(data)}"
                 log.info(msg)
 
-                resp['Body'].close()
+                resp["Body"].close()
             except ClientError as ce:
                 # key does not exist?
                 # check for not found status
@@ -308,8 +306,8 @@ class S3Client():
         return data
 
     async def put_object(self, key, data, bucket=None):
-        """ Write data to given key.
-            Returns client specific dict on success
+        """Write data to given key.
+        Returns client specific dict on success
         """
         if not bucket:
             log.error("put_object - bucket not set")
@@ -320,7 +318,7 @@ class S3Client():
         session = self._app["session"]
         self._renewToken()
         kwargs = self._get_client_kwargs()
-        async with session.create_client('s3', **kwargs) as _client:
+        async with session.create_client("s3", **kwargs) as _client:
             try:
                 kwargs = {"Bucket": bucket, "Key": key, "Body": data}
                 rsp = await _client.put_object(**kwargs)
@@ -330,9 +328,11 @@ class S3Client():
                 msg += f"elapsed={finish_time-start_time:.4f} "
                 msg += f"bytes={len(data)}"
                 log.info(msg)
-                s3_rsp = {"etag": rsp["ETag"],
-                          "size": len(data),
-                          "lastModified": int(finish_time)}
+                s3_rsp = {
+                    "etag": rsp["ETag"],
+                    "size": len(data),
+                    "lastModified": int(finish_time),
+                }
             except ClientError as ce:
                 response_code = ce.response["Error"]["Code"]
                 if response_code == "NoSuchBucket":
@@ -361,8 +361,7 @@ class S3Client():
         return s3_rsp
 
     async def delete_object(self, key, bucket=None):
-        """ Deletes the object at the given key
-        """
+        """Deletes the object at the given key"""
         if not bucket:
             log.error("delete_object - bucket not set")
             raise HTTPInternalServerError()
@@ -372,7 +371,7 @@ class S3Client():
         session = self._app["session"]
         self._renewToken()
         kwargs = self._get_client_kwargs()
-        async with session.create_client('s3', **kwargs) as _client:
+        async with session.create_client("s3", **kwargs) as _client:
             try:
                 await _client.delete_object(Bucket=bucket, Key=key)
                 finish_time = time.time()
@@ -405,8 +404,7 @@ class S3Client():
                 raise HTTPInternalServerError()
 
     async def is_object(self, key, bucket=None):
-        """ Return true if the given object exists
-        """
+        """Return true if the given object exists"""
         if not bucket:
             log.error("is_object - bucket not set")
             raise HTTPInternalServerError()
@@ -415,7 +413,7 @@ class S3Client():
         session = self._app["session"]
         self._renewToken()
         kwargs = self._get_client_kwargs()
-        async with session.create_client('s3', **kwargs) as _client:
+        async with session.create_client("s3", **kwargs) as _client:
             try:
                 head_data = await _client.head_object(Bucket=bucket, Key=key)
                 finish_time = time.time()
@@ -445,13 +443,12 @@ class S3Client():
         return found
 
     async def get_key_stats(self, key, bucket=None):
-        """ Get ETag, size, and last modified time for given object
-        """
+        """Get ETag, size, and last modified time for given object"""
         start_time = time.time()
         session = self._app["session"]
         self._renewToken()
         kwargs = self._get_client_kwargs()
-        async with session.create_client('s3', **kwargs) as _client:
+        async with session.create_client("s3", **kwargs) as _client:
             try:
                 head_data = await _client.head_object(Bucket=bucket, Key=key)
                 finish_time = time.time()
@@ -489,7 +486,7 @@ class S3Client():
             log.error(msg)
             raise HTTPInternalServerError()
         key_stats = {}
-        key_stats["Size"] = head_data['ContentLength']
+        key_stats["Size"] = head_data["ContentLength"]
         key_stats["ETag"] = head_data["ETag"]
         LastModified = datetime.datetime.timestamp(last_modified_dt)
         key_stats["LastModified"] = LastModified
@@ -501,22 +498,22 @@ class S3Client():
         return key_stats
 
     def _getPageItems(self, response, items, include_stats=False):
-        """ internl method for list pagination """
+        """internl method for list pagination"""
         log.info("getPageItems")
 
-        if 'CommonPrefixes' in response:
+        if "CommonPrefixes" in response:
             log.debug("got CommonPrefixes in s3 response")
             common = response["CommonPrefixes"]
             for item in common:
-                if 'Prefix' in item:
+                if "Prefix" in item:
                     log.debug(f"got s3 prefix: {item['Prefix']}")
                     items.append(item["Prefix"])
 
-        elif 'Contents' in response:
+        elif "Contents" in response:
             log.debug("got Contents in s3 response")
-            contents = response['Contents']
+            contents = response["Contents"]
             for item in contents:
-                key_name = item['Key']
+                key_name = item["Key"]
                 if include_stats:
                     stats = {}
                     if item["ETag"]:
@@ -537,11 +534,17 @@ class S3Client():
                 else:
                     items.append(key_name)
 
-    async def list_keys(self, prefix='', deliminator='', suffix='',
-                        include_stats=False, callback=None, bucket=None,
-                        limit=None):
-        """ return keys matching the arguments
-        """
+    async def list_keys(
+        self,
+        prefix="",
+        deliminator="",
+        suffix="",
+        include_stats=False,
+        callback=None,
+        bucket=None,
+        limit=None,
+    ):
+        """return keys matching the arguments"""
         if not bucket:
             log.error("list_keys - bucket not set")
             raise HTTPInternalServerError()
@@ -549,15 +552,15 @@ class S3Client():
         msg += f"include_stats={include_stats}, "
         msg += f"callback {'set' if callback is not None else 'not set'}"
         log.info(msg)
-        if deliminator and deliminator != '/':
+        if deliminator and deliminator != "/":
             msg = "Only '/' is supported as deliminator"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         session = self._app["session"]
         self._renewToken()
         kwargs = self._get_client_kwargs()
-        async with session.create_client('s3', **kwargs) as _client:
-            paginator = _client.get_paginator('list_objects')
+        async with session.create_client("s3", **kwargs) as _client:
+            paginator = _client.get_paginator("list_objects")
 
             # use a dictionary to hold return values if stats are needed
             key_names = {} if include_stats else []
@@ -565,8 +568,11 @@ class S3Client():
 
             try:
                 async for page in paginator.paginate(
-                         PaginationConfig={'PageSize': 1000}, Bucket=bucket,
-                         Prefix=prefix, Delimiter=deliminator):
+                    PaginationConfig={"PageSize": 1000},
+                    Bucket=bucket,
+                    Prefix=prefix,
+                    Delimiter=deliminator,
+                ):
                     assert not asyncio.iscoroutine(page)
                     kwargs = {"include_stats": include_stats}
                     self._getPageItems(page, key_names, **kwargs)
@@ -596,8 +602,8 @@ class S3Client():
         return key_names
 
     async def releaseClient(self):
-        """ release the client collection to s3
-           (Used for cleanup on application exit)
+        """release the client collection to s3
+        (Used for cleanup on application exit)
         """
         log.info("release S3Client")
         await asyncio.sleep(0)  # nothing to do

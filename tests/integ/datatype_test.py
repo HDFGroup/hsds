@@ -29,14 +29,12 @@ class DatatypeTest(unittest.TestCase):
         if self.session:
             self.session.close()
 
-        # main
-
     def testCommittedType(self):
         # Test creation/deletion of datatype obj
 
         print("testCommittedType", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
-        req = self.endpoint + '/'
+        req = self.endpoint + "/"
 
         # Get root uuid
         rsp = self.session.get(req, headers=headers)
@@ -46,8 +44,8 @@ class DatatypeTest(unittest.TestCase):
         helper.validateId(root_uuid)
 
         # create a committed type obj
-        data = { "type": "H5T_IEEE_F32LE" }
-        req = self.endpoint + '/datatypes'
+        data = {"type": "H5T_IEEE_F32LE"}
+        req = self.endpoint + "/datatypes"
         rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
@@ -56,7 +54,7 @@ class DatatypeTest(unittest.TestCase):
         self.assertTrue(helper.validateId(ctype_id))
 
         # read back the obj
-        req = self.endpoint + '/datatypes/' + ctype_id
+        req = self.endpoint + "/datatypes/" + ctype_id
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
@@ -74,7 +72,9 @@ class DatatypeTest(unittest.TestCase):
         self.assertEqual(type_json["base"], "H5T_IEEE_F32LE")
 
         # try get with a different user (who has read permission)
-        headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
+        headers = helper.getRequestHeaders(
+            domain=self.base_domain, username="test_user2"
+        )
         rsp = self.session.get(req, headers=headers)
         if config.get("default_public"):
             self.assertEqual(rsp.status_code, 200)
@@ -90,9 +90,11 @@ class DatatypeTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 400)
 
         # try DELETE with user who doesn't have create permission on this domain
-        headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
+        headers = helper.getRequestHeaders(
+            domain=self.base_domain, username="test_user2"
+        )
         rsp = self.session.delete(req, headers=headers)
-        self.assertEqual(rsp.status_code, 403) # forbidden
+        self.assertEqual(rsp.status_code, 403)  # forbidden
 
         # try to do a DELETE with a different domain (should fail)
         another_domain = helper.getParentDomain(self.base_domain)
@@ -116,7 +118,7 @@ class DatatypeTest(unittest.TestCase):
 
         print("testCommittedType", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
-        req = self.endpoint + '/'
+        req = self.endpoint + "/"
 
         # Get root uuid
         rsp = self.session.get(req, headers=headers)
@@ -125,26 +127,32 @@ class DatatypeTest(unittest.TestCase):
         root_uuid = rspJson["root"]
         helper.validateId(root_uuid)
 
-
         # list of types supported
-        datatypes = ( 'H5T_STD_I8LE',   'H5T_STD_U8LE',
-                      'H5T_STD_I16LE',  'H5T_STD_U16LE',
-                      'H5T_STD_I32LE',  'H5T_STD_U32LE',
-                      'H5T_STD_I64LE',  'H5T_STD_U64LE',
-                      'H5T_IEEE_F32LE', 'H5T_IEEE_F64LE',
-                      'H5T_IEEE_F16LE' )
+        datatypes = (
+            "H5T_STD_I8LE",
+            "H5T_STD_U8LE",
+            "H5T_STD_I16LE",
+            "H5T_STD_U16LE",
+            "H5T_STD_I32LE",
+            "H5T_STD_U32LE",
+            "H5T_STD_I64LE",
+            "H5T_STD_U64LE",
+            "H5T_IEEE_F32LE",
+            "H5T_IEEE_F64LE",
+            "H5T_IEEE_F16LE",
+        )
 
         for datatype in datatypes:
-            data = {'type': datatype}
+            data = {"type": datatype}
             req = self.endpoint + "/datatypes"
             rsp = self.session.post(req, data=json.dumps(data), headers=headers)
             self.assertEqual(rsp.status_code, 201)  # create datatypes
             rspJson = json.loads(rsp.text)
-            dtype_uuid = rspJson['id']
+            dtype_uuid = rspJson["id"]
             self.assertTrue(helper.validateId(dtype_uuid))
 
             # read back the obj
-            req = self.endpoint + '/datatypes/' + dtype_uuid
+            req = self.endpoint + "/datatypes/" + dtype_uuid
             rsp = self.session.get(req, headers=headers)
             self.assertEqual(rsp.status_code, 200)
             rspJson = json.loads(rsp.text)
@@ -168,8 +176,8 @@ class DatatypeTest(unittest.TestCase):
             self.assertEqual(rsp.status_code, 201)
 
             # Try getting the datatype by h5path
-            req = self.endpoint + '/datatypes/'
-            h5path = '/' + datatype
+            req = self.endpoint + "/datatypes/"
+            h5path = "/" + datatype
             params = {"h5path": h5path}
             rsp = self.session.get(req, headers=headers, params=params)
             self.assertEqual(rsp.status_code, 200)
@@ -177,14 +185,14 @@ class DatatypeTest(unittest.TestCase):
             self.assertEqual(rspJson["id"], dtype_uuid)
 
             # Try again using relative h5path
-            req = self.endpoint + '/datatypes/'
+            req = self.endpoint + "/datatypes/"
             h5path = datatype
             params = {"h5path": h5path}
             rsp = self.session.get(req, headers=headers, params=params)
             self.assertEqual(rsp.status_code, 400)
 
             # try using relative h5path and parent group id
-            req = self.endpoint + '/datatypes/'
+            req = self.endpoint + "/datatypes/"
             h5path = datatype
             params = {"h5path": h5path, "grpid": root_uuid}
             rsp = self.session.get(req, headers=headers, params=params)
@@ -192,11 +200,10 @@ class DatatypeTest(unittest.TestCase):
             rspJson = json.loads(rsp.text)
             self.assertEqual(rspJson["id"], dtype_uuid)
 
-
     def testPostCompoundType(self):
         print("testPostCompoundType", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
-        req = self.endpoint + '/'
+        req = self.endpoint + "/"
 
         # Get root uuid
         rsp = self.session.get(req, headers=headers)
@@ -205,15 +212,17 @@ class DatatypeTest(unittest.TestCase):
         root_uuid = rspJson["root"]
         helper.validateId(root_uuid)
 
-        fields = ({'name': 'temp', 'type': 'H5T_STD_I32LE'},
-                    {'name': 'pressure', 'type': 'H5T_IEEE_F32LE'})
-        datatype = {'class': 'H5T_COMPOUND', 'fields': fields }
-        payload = {'type': datatype}
+        fields = (
+            {"name": "temp", "type": "H5T_STD_I32LE"},
+            {"name": "pressure", "type": "H5T_IEEE_F32LE"},
+        )
+        datatype = {"class": "H5T_COMPOUND", "fields": fields}
+        payload = {"type": datatype}
         req = self.endpoint + "/datatypes"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create datatype
         rspJson = json.loads(rsp.text)
-        dtype_uuid = rspJson['id']
+        dtype_uuid = rspJson["id"]
         self.assertTrue(helper.validateId(dtype_uuid))
 
         # link the new datatype
@@ -224,7 +233,7 @@ class DatatypeTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 201)
 
         # read back the obj
-        req = self.endpoint + '/datatypes/' + dtype_uuid
+        req = self.endpoint + "/datatypes/" + dtype_uuid
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
@@ -255,7 +264,7 @@ class DatatypeTest(unittest.TestCase):
 
         print("testPutAttributeDatatype", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
-        req = self.endpoint + '/'
+        req = self.endpoint + "/"
 
         # Get root uuid
         rsp = self.session.get(req, headers=headers)
@@ -265,8 +274,8 @@ class DatatypeTest(unittest.TestCase):
         helper.validateId(root_uuid)
 
         # create a committed type obj
-        data = { "type": "H5T_IEEE_F32LE" }
-        req = self.endpoint + '/datatypes'
+        data = {"type": "H5T_IEEE_F32LE"}
+        req = self.endpoint + "/datatypes"
         rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
@@ -283,13 +292,13 @@ class DatatypeTest(unittest.TestCase):
 
         # add an attribute
         attr_name = "attr"
-        attr_payload = {'type': 'H5T_STD_I32LE', 'value': 42}
+        attr_payload = {"type": "H5T_STD_I32LE", "value": 42}
         req = self.endpoint + "/datatypes/" + ctype_id + "/attributes/" + attr_name
         rsp = self.session.put(req, data=json.dumps(attr_payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # created
 
         # read back the obj
-        req = self.endpoint + '/datatypes/' + ctype_id
+        req = self.endpoint + "/datatypes/" + ctype_id
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
@@ -312,7 +321,7 @@ class DatatypeTest(unittest.TestCase):
         # test POST with link
         print("testPutAttributeDatatype", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
-        req = self.endpoint + '/'
+        req = self.endpoint + "/"
 
         # Get root uuid
         rsp = self.session.get(req, headers=headers)
@@ -322,15 +331,15 @@ class DatatypeTest(unittest.TestCase):
         helper.validateId(root_uuid)
 
         # get root group and verify link count is 0
-        req = helper.getEndpoint() + '/groups/' + root_uuid
+        req = helper.getEndpoint() + "/groups/" + root_uuid
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["linkCount"], 0)
 
         payload = {
-            'type': 'H5T_IEEE_F64LE',
-            'link': {'id': root_uuid, 'name': 'linked_dtype'}
+            "type": "H5T_IEEE_F64LE",
+            "link": {"id": root_uuid, "name": "linked_dtype"},
         }
 
         req = self.endpoint + "/datatypes"
@@ -340,10 +349,10 @@ class DatatypeTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["attributeCount"], 0)
         dtype_uuid = rspJson["id"]
-        self.assertTrue(helper.validateId(dtype_uuid) )
+        self.assertTrue(helper.validateId(dtype_uuid))
 
         # get root group and verify link count is 1
-        req = helper.getEndpoint() + '/groups/' + root_uuid
+        req = helper.getEndpoint() + "/groups/" + root_uuid
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
@@ -362,17 +371,16 @@ class DatatypeTest(unittest.TestCase):
         self.assertEqual(link_json["id"], dtype_uuid)
 
         # request the dataset path
-        req = helper.getEndpoint() + '/datatypes/' + dtype_uuid
+        req = helper.getEndpoint() + "/datatypes/" + dtype_uuid
         params = {"getalias": 1}
         rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("alias" in rspJson)
-        self.assertEqual(rspJson["alias"], ['/linked_dtype'])
+        self.assertEqual(rspJson["alias"], ["/linked_dtype"])
 
 
-
-if __name__ == '__main__':
-    #setup test files
+if __name__ == "__main__":
+    # setup test files
 
     unittest.main()

@@ -2,17 +2,18 @@ import asyncio
 from aiohttp import ClientSession
 import config
 
+
 async def fetch(url):
     async with ClientSession() as session:
         async with session.get(url) as res:
             await res.read()
             delay = res.headers.get("DELAY")
-            d = res.headers.get("DATE")    
+            d = res.headers.get("DATE")
             retval = "{}:{} delay {}".format(d, res.url, delay)
             return retval
-              
 
-async def run(loop,  r):
+
+async def run(loop, r):
     url = config.get("server_url") + "{}"
     tasks = []
     for i in range(r):
@@ -22,16 +23,16 @@ async def run(loop,  r):
     responses = await asyncio.gather(*tasks)
     # you now have all response bodies in this variable
     print_responses(responses)
-     
+
 
 def print_responses(results):
     print("num results: {}".format(len(results)))
     for res in results:
         print(res)
-        #delay = res.headers.get("DELAY")
-        #d = res.headers.get("DATE")
-        #print("{}:{} delay {}".format(d, res.url, delay))
-    
+        # delay = res.headers.get("DELAY")
+        # d = res.headers.get("DATE")
+        # print("{}:{} delay {}".format(d, res.url, delay))
+
 
 loop = asyncio.get_event_loop()
 run_count = int(config.get("run_count"))

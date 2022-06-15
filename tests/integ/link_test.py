@@ -13,7 +13,9 @@ from copy import copy
 import unittest
 import time
 import json
+import uuid
 import helper
+
 
 class LinkTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -28,20 +30,12 @@ class LinkTest(unittest.TestCase):
         if self.session:
             self.session.close()
 
-    def getUUIDByPath(self, domain, h5path):
-        return helper.getUUIDByPath(domain, h5path, session=self.session)
-
-    def getRootUUID(self, domain, username=None, password=None):
-        return helper.getRootUUID(domain, username=username, password=password, session=self.session)
-
-        # main
-
     def testHardLink(self):
         domain = self.base_domain + "/testHardLink.h5"
         print("testHardLink", domain)
         helper.setupDomain(domain)
         headers = helper.getRequestHeaders(domain=domain)
-        req = helper.getEndpoint() + '/'
+        req = helper.getEndpoint() + "/"
 
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -56,7 +50,7 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(rspJson["linkCount"], 0)  # no links
 
         # create a new group
-        req = helper.getEndpoint() + '/groups'
+        req = helper.getEndpoint() + "/groups"
         rsp = self.session.post(req, headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
@@ -116,7 +110,7 @@ class LinkTest(unittest.TestCase):
         headers = helper.getRequestHeaders(domain=domain, username="test_user2")
         req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title
         rsp = self.session.delete(req, headers=headers)
-        self.assertEqual(rsp.status_code, 403)   # forbidden
+        self.assertEqual(rsp.status_code, 403)  # forbidden
 
         # delete the link with original user
         req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title
@@ -125,7 +119,6 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
 
         # try creating a link with a bogus id
-        import uuid
         fake_id = "g-" + str(uuid.uuid1())
         payload = {"id": fake_id}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
@@ -155,12 +148,11 @@ class LinkTest(unittest.TestCase):
         rsp = self.session.delete(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
-
         # got a real id, but outside this domain
         req = helper.getEndpoint() + "/groups/" + root_id + "/links/another_domain"
         another_domain = self.base_domain + "/testHardLink2.h5"
         helper.setupDomain(another_domain)
-        another_id = self.getRootUUID(another_domain)
+        another_id = helper.getRootUUID(another_domain, session=self.session)
         payload = {"id": another_id}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 400)  # Invalid request
@@ -193,7 +185,7 @@ class LinkTest(unittest.TestCase):
         print("testSoftLink", domain)
         helper.setupDomain(domain)
         headers = helper.getRequestHeaders(domain=domain)
-        req = helper.getEndpoint() + '/'
+        req = helper.getEndpoint() + "/"
 
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -208,8 +200,8 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(rspJson["linkCount"], 0)  # no links
 
         # create softlink
-        link_title = 'softlink'
-        target_path = 'somewhere'
+        link_title = "softlink"
+        target_path = "somewhere"
         req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title
         payload = {"h5path": target_path}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
@@ -241,7 +233,7 @@ class LinkTest(unittest.TestCase):
         print("testExternalLink", domain)
         helper.setupDomain(domain)
         headers = helper.getRequestHeaders(domain=domain)
-        req = helper.getEndpoint() + '/'
+        req = helper.getEndpoint() + "/"
 
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -256,9 +248,9 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(rspJson["linkCount"], 0)  # no links
 
         # create external link
-        target_domain = self.base_domain + '/external_target.h5'
-        target_path = 'somewhere'
-        link_title = 'external_link'
+        target_domain = self.base_domain + "/external_target.h5"
+        target_path = "somewhere"
+        link_title = "external_link"
         req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title
         payload = {"h5path": target_path, "h5domain": target_domain}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
@@ -286,13 +278,12 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(rspLink["h5path"], target_path)
         self.assertEqual(rspLink["h5domain"], target_domain)
 
-
     def testGetLinks(self):
         domain = self.base_domain + "/testGetLinks.h5"
         print("testGetLinks", domain)
         helper.setupDomain(domain)
         headers = helper.getRequestHeaders(domain=domain)
-        req = helper.getEndpoint() + '/'
+        req = helper.getEndpoint() + "/"
 
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -306,12 +297,24 @@ class LinkTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["linkCount"], 0)  # no links
 
-        link_names = ["first", "second", "third", "fourth", "fifth", "sixth",
-            "seventh", "eighth", "ninth", "tenth", "eleventh", "twelfth"]
+        link_names = [
+            "first",
+            "second",
+            "third",
+            "fourth",
+            "fifth",
+            "sixth",
+            "seventh",
+            "eighth",
+            "ninth",
+            "tenth",
+            "eleventh",
+            "twelfth",
+        ]
 
         # create subgroups and link them to root using the above names
         for link_name in link_names:
-            req = helper.getEndpoint() + '/groups'
+            req = helper.getEndpoint() + "/groups"
             rsp = self.session.post(req, headers=headers)
             self.assertEqual(rsp.status_code, 201)
             rspJson = json.loads(rsp.text)
@@ -348,7 +351,6 @@ class LinkTest(unittest.TestCase):
             self.assertTrue("created" in link)
             ret_names.append(link["title"])
 
-
         # result should come back in sorted order
         sorted_names = copy(link_names)
         sorted_names.sort()
@@ -360,7 +362,7 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(ret_names, sorted_names)
 
         # get links with a result limit of 4
-        limit=4
+        limit = 4
         req = helper.getEndpoint() + "/groups/" + root_id + "/links?Limit=" + str(limit)
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -370,7 +372,7 @@ class LinkTest(unittest.TestCase):
         links = rspJson["links"]
         self.assertEqual(len(links), limit)
         last_link = links[-1]
-        self.assertEqual(last_link["title"], sorted_names[limit-1])
+        self.assertEqual(last_link["title"], sorted_names[limit - 1])
 
         # get links after the one with name: "seventh"
         marker = "seventh"
@@ -381,7 +383,7 @@ class LinkTest(unittest.TestCase):
         self.assertTrue("links" in rspJson)
         self.assertTrue("hrefs" in rspJson)
         links = rspJson["links"]
-        self.assertEqual(len(links), 4)  #   "sixth", "tenth", "third", "twelfth"
+        self.assertEqual(len(links), 4)  # "sixth", "tenth", "third", "twelfth"
         last_link = links[-1]
         self.assertEqual(last_link["title"], "twelfth")
 
@@ -402,7 +404,7 @@ class LinkTest(unittest.TestCase):
         self.assertTrue("links" in rspJson)
         self.assertTrue("hrefs" in rspJson)
         links = rspJson["links"]
-        self.assertEqual(len(links), 3)  #  "sixth", "tenth", "third"
+        self.assertEqual(len(links), 3)  # "sixth", "tenth", "third"
         last_link = links[-1]
         self.assertEqual(last_link["title"], "third")
 
@@ -413,10 +415,12 @@ class LinkTest(unittest.TestCase):
         headers = helper.getRequestHeaders(domain=domain)
 
         # verify domain exists
-        req = helper.getEndpoint() + '/'
+        req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers)
         if rsp.status_code != 200:
-            print("WARNING: Failed to get domain: {}. Is test data setup?".format(domain))
+            print(
+                "WARNING: Failed to get domain: {}. Is test data setup?".format(domain)
+            )
             return  # abort rest of test
 
         rspJson = json.loads(rsp.text)
@@ -424,12 +428,12 @@ class LinkTest(unittest.TestCase):
         self.assertTrue(root_uuid.startswith("g-"))
 
         # get the "/g1" group
-        g1_2_uuid = self.getUUIDByPath(domain, "/g1/g1.2")
+        g1_2_uuid = helper.getUUIDByPath(domain, "/g1/g1.2", session=self.session)
 
         now = time.time()
 
         # get links for /g1/g1.2:
-        req = helper.getEndpoint() + '/groups/' + g1_2_uuid + '/links'
+        req = helper.getEndpoint() + "/groups/" + g1_2_uuid + "/links"
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
@@ -444,18 +448,24 @@ class LinkTest(unittest.TestCase):
         for link in links:
             self.assertTrue("class" in link)
             link_class = link["class"]
-            if link_class == 'H5L_TYPE_HARD':
-                for name in ("target", "created", "collection", "class", "id",
-                    "title", "href"):
+            if link_class == "H5L_TYPE_HARD":
+                for name in (
+                    "target",
+                    "created",
+                    "collection",
+                    "class",
+                    "id",
+                    "title",
+                    "href",
+                ):
                     self.assertTrue(name in link)
                 g1_2_1_uuid = link["id"]
                 self.assertTrue(g1_2_1_uuid.startswith("g-"))
                 self.assertEqual(link["title"], "g1.2.1")
                 self.assertTrue(link["created"] < now - 10)
             else:
-                self.assertEqual(link_class, 'H5L_TYPE_EXTERNAL')
-                for name in ("created", "class", "h5domain", "h5path",
-                    "title", "href"):
+                self.assertEqual(link_class, "H5L_TYPE_EXTERNAL")
+                for name in ("created", "class", "h5domain", "h5path", "title", "href"):
                     self.assertTrue(name in link)
                 self.assertEqual(link["title"], "extlink")
                 extlink_file = link["h5domain"]
@@ -465,10 +475,13 @@ class LinkTest(unittest.TestCase):
 
         self.assertTrue(g1_2_1_uuid is not None)
         self.assertTrue(extlink_file is not None)
-        self.assertEqual(self.getUUIDByPath(domain, "/g1/g1.2/g1.2.1"), g1_2_1_uuid)
+        expected_uuid = helper.getUUIDByPath(
+            domain, "/g1/g1.2/g1.2.1", session=self.session
+        )
+        self.assertEqual(expected_uuid, g1_2_1_uuid)
 
         # get link by title
-        req = helper.getEndpoint() + '/groups/' + g1_2_1_uuid + '/links/slink'
+        req = helper.getEndpoint() + "/groups/" + g1_2_1_uuid + "/links/slink"
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
@@ -484,13 +497,13 @@ class LinkTest(unittest.TestCase):
         for name in ("title", "h5path", "class"):
             self.assertTrue(name in link)
 
-        self.assertEqual(link["class"], 'H5L_TYPE_SOFT')
+        self.assertEqual(link["class"], "H5L_TYPE_SOFT")
         self.assertFalse("h5domain" in link)  # only for external links
         self.assertEqual(link["title"], "slink")
         self.assertEqual(link["h5path"], "somevalue")
 
 
-if __name__ == '__main__':
-    #setup test files
+if __name__ == "__main__":
+    # setup test files
 
     unittest.main()

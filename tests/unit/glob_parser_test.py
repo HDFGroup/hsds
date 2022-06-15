@@ -12,17 +12,16 @@
 import unittest
 import sys
 
-sys.path.append('../..')
+sys.path.append("../..")
 from hsds.util.globparser import globmatch
+
 
 class GlobParserTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(GlobParserTest, self).__init__(*args, **kwargs)
         # main
 
-
     def testPatterns(self):
-
 
         self.assertTrue(globmatch("ab123", "ab*"))
         self.assertTrue(globmatch("abc123", "*123"))
@@ -33,16 +32,15 @@ class GlobParserTest(unittest.TestCase):
         self.assertTrue(globmatch("a*c", "a[*]c"))
         self.assertFalse(globmatch("abc", "a[*]c"))
 
-
         self.assertFalse(globmatch("abc123", "*124"))
         self.assertTrue(globmatch("ab7", "ab[0-9]"))
         self.assertTrue(globmatch("abc123", "a?c*123"))
-        
+
         # no wild chard chars
         self.assertTrue(globmatch("abc", "abc"))
 
         self.assertFalse(globmatch("abc", "abcd"))
-        
+
         self.assertFalse(globmatch("", "abc"))
         self.assertFalse(globmatch("abc", ""))
 
@@ -51,7 +49,6 @@ class GlobParserTest(unittest.TestCase):
         self.assertTrue(globmatch("abc", "a??"))
         self.assertFalse(globmatch("abc", "a?"))
         self.assertFalse(globmatch("abc", "x??"))
-        
 
         # test range
         self.assertTrue(globmatch("abc", "ab[c]"))
@@ -65,7 +62,16 @@ class GlobParserTest(unittest.TestCase):
         self.assertFalse(globmatch("abx123", "[a-c][a-c][a-c][1-3][1-3][1-3]"))
 
         # test expected ValueError exceptions
-        bad_patterns = ("[", "ab[", "ab[-c]", "ab]", "*ab*", "ab[12]", "ab[12-34]", "ab[c]]")
+        bad_patterns = (
+            "[",
+            "ab[",
+            "ab[-c]",
+            "ab]",
+            "*ab*",
+            "ab[12]",
+            "ab[12-34]",
+            "ab[c]]",
+        )
         for pattern in bad_patterns:
             try:
                 globmatch("abcdef", pattern)
@@ -74,7 +80,7 @@ class GlobParserTest(unittest.TestCase):
                 pass  # expected
 
 
-if __name__ == '__main__':
-    #setup test files
+if __name__ == "__main__":
+    # setup test files
 
     unittest.main()

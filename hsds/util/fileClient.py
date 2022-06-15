@@ -12,10 +12,10 @@ from .. import hsds_logger as log
 from .. import config
 
 
-class FileClient():
+class FileClient:
     """
-     Utility class for reading and storing data to local files
-     using aiofiles package
+    Utility class for reading and storing data to local files
+    using aiofiles package
     """
 
     def __init__(self, app):
@@ -43,7 +43,7 @@ class FileClient():
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
-    def _getFilePath(self, bucket, key=''):
+    def _getFilePath(self, bucket, key=""):
         filepath = pp.join(self._root_dir, bucket, key)
         return pp.normpath(filepath)
 
@@ -64,17 +64,18 @@ class FileClient():
             ETag = ""
         try:
             file_stats = stat(filepath)
-            key_stats = {"ETag": ETag,
-                         "Size": file_stats.st_size,
-                         "LastModified": file_stats.st_mtime}
+            key_stats = {
+                "ETag": ETag,
+                "Size": file_stats.st_size,
+                "LastModified": file_stats.st_mtime,
+            }
             log.info(f"_getFileStats({filepath}) returning: {key_stats}")
         except FileNotFoundError:
             raise HTTPNotFound()
         return key_stats
 
     def _file_stats_increment(self, counter, inc=1):
-        """ Incremenet the indicated connter
-        """
+        """Incremenet the indicated connter"""
         if "file_stats" not in self._app:
             # setup stats
             file_stats = {}
@@ -86,7 +87,7 @@ class FileClient():
             file_stats["bytes_in"] = 0
             file_stats["bytes_out"] = 0
             self._app["file_stats"] = file_stats
-        file_stats = self._app['file_stats']
+        file_stats = self._app["file_stats"]
         if counter not in file_stats:
             log.error(f"unexpected counter for file_stats: {counter}")
             return
@@ -97,8 +98,8 @@ class FileClient():
         file_stats[counter] += inc
 
     async def get_object(self, key, bucket=None, offset=0, length=-1):
-        """ Return data for object at given key.
-           If Range is set, return the given byte range.
+        """Return data for object at given key.
+        If Range is set, return the given byte range.
         """
         self._validateBucket(bucket)
         self._validateKey(key)
@@ -115,7 +116,7 @@ class FileClient():
         loop = asyncio.get_event_loop()
 
         try:
-            async with aiofiles.open(filepath, loop=loop, mode='rb') as f:
+            async with aiofiles.open(filepath, loop=loop, mode="rb") as f:
                 if offset:
                     await f.seek(offset)
                 if length > 0:
@@ -149,8 +150,8 @@ class FileClient():
         return data
 
     async def put_object(self, key, data, bucket=None):
-        """ Write data to given key.
-            Returns client specific dict on success
+        """Write data to given key.
+        Returns client specific dict on success
         """
         self._validateBucket(bucket)
         self._validateKey(key)
@@ -185,7 +186,7 @@ class FileClient():
                     else:
                         log.debug(f"isdir {dirpath} found")
             log.debug(f"open({filepath}, 'wb')")
-            async with aiofiles.open(filepath, loop=loop, mode='wb') as f:
+            async with aiofiles.open(filepath, loop=loop, mode="wb") as f:
                 await f.write(data)
             finish_time = time.time()
             msg = f"fileClient.put_object({key} bucket={bucket}) "
@@ -218,8 +219,7 @@ class FileClient():
         return write_rsp
 
     async def delete_object(self, key, bucket=None):
-        """ Deletes the object at the given key
-        """
+        """Deletes the object at the given key"""
         self._validateBucket(bucket)
         self._validateKey(key)
         filepath = self._getFilePath(bucket, key)
@@ -277,13 +277,19 @@ class FileClient():
 
         return key_stats
 
-    async def list_keys(self, prefix='', deliminator='', suffix='',
-                        include_stats=False, callback=None, bucket=None,
-                        limit=None):
-        """ return keys matching the arguments
-        """
+    async def list_keys(
+        self,
+        prefix="",
+        deliminator="",
+        suffix="",
+        include_stats=False,
+        callback=None,
+        bucket=None,
+        limit=None,
+    ):
+        """return keys matching the arguments"""
         self._validateBucket(bucket)
-        if deliminator and deliminator != '/':
+        if deliminator and deliminator != "/":
             msg = "Only '/' is supported as deliminator"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
@@ -314,8 +320,9 @@ class FileClient():
                     if suffix and not dirname.endswith(suffix):
                         continue
                     log.debug(f"got dirname: {dirname}")
-                    filename = pp.join(root[len(basedir):], dirname)
-                    filename += '/'
+                    nlen = len(basedir)
+                    filename = pp.join(root[nlen:], dirname)
+                    filename += "/"
                     files.append(filename)
                     if limit and len(files) >= limit:
                         break
@@ -326,7 +333,8 @@ class FileClient():
                 for filename in filelist:
                     if suffix and not filename.endswith(suffix):
                         continue
-                    filepath = pp.join(root[len(basedir):], filename)
+                    nlen = len(basedir)
+                    filepath = pp.join(root[nlen:], filename)
                     files.append(filepath)
                     if limit and len(files) >= limit:
                         break
@@ -335,7 +343,7 @@ class FileClient():
         key_names = {} if include_stats else []
         count = 0
         for filename in files:
-            if filename.startswith('/'):
+            if filename.startswith("/"):
                 filename = filename[1:]
             log.debug(f"filename: {filename}, basedir: {basedir}")
             if suffix and not filename.endswith(suffix):
@@ -371,8 +379,8 @@ class FileClient():
         return key_names
 
     async def releaseClient(self):
-        """ release the client collection
-           (Used for cleanup on application exit)
+        """release the client collection
+        (Used for cleanup on application exit)
         """
         await asyncio.sleep(0)  # for async compat
         log.info("release fileClient")

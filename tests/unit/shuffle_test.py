@@ -14,7 +14,7 @@ import sys
 import numpy as np
 import time
 
-sys.path.append('../..')
+sys.path.append("../..")
 from hsds.util.storUtil import _shuffle, _unshuffle
 
 
@@ -24,12 +24,12 @@ class ShuffleUtilTest(unittest.TestCase):
         # main
 
     def testShuffle(self):
-        arr = np.zeros((3,), dtype='<u2')
+        arr = np.zeros((3,), dtype="<u2")
         arr[0] = 0x0001
         arr[1] = 0x0002
         arr[2] = 0x0003
         data = arr.tobytes()
-        fmt = '{:02X}{:02X} ' * (len(data)//2)
+        fmt = "{:02X}{:02X} " * (len(data) // 2)
         self.assertEqual(fmt.format(*data), "0100 0200 0300 ")
         shuffled = _shuffle(2, data)
         self.assertEqual(fmt.format(*shuffled), "0102 0300 0000 ")
@@ -57,6 +57,6 @@ class ShuffleUtilTest(unittest.TestCase):
         self.assertEqual(data, unshuffled)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # setup test files
     unittest.main()

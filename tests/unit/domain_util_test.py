@@ -10,43 +10,48 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import unittest
-import time
 import sys
-import os
 
-sys.path.append('../..')
+sys.path.append("../..")
 from hsds.util.domainUtil import getParentDomain, isValidDomain, isValidHostDomain
-from hsds.util.domainUtil import getDomainForHost, isValidDomainPath, getBucketForDomain, getPathForDomain
+from hsds.util.domainUtil import (
+    getDomainForHost,
+    isValidDomainPath,
+    getBucketForDomain,
+    getPathForDomain,
+)
+
 
 class DomainUtilTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(DomainUtilTest, self).__init__(*args, **kwargs)
         # main
 
-
     def testValidHostDomain(self):
         # test invalid dns names
-        invalid_domains = ('x',       # too short
-                           '.x.y.z',  # period in front
-                           'x.y.z.',  # period in back
-                           'x.y..z',  # consecutive periods
-                           '192.168.1.100',  # looks like IP
-                           '172.17.0.9:5101', # IP with port
-                           'mydomain/foobar', # no dots
-                           None)      # none
+        invalid_domains = (
+            "x",  # too short
+            ".x.y.z",  # period in front
+            "x.y.z.",  # period in back
+            "x.y..z",  # consecutive periods
+            "192.168.1.100",  # looks like IP
+            "172.17.0.9:5101",  # IP with port
+            "mydomain/foobar",  # no dots
+            None,
+        )  # none
         for domain in invalid_domains:
             self.assertFalse(isValidHostDomain(domain))
 
-        valid_domains =  ("nex.nasa.gov",)
+        valid_domains = ("nex.nasa.gov",)
         for domain in valid_domains:
             self.assertTrue(isValidHostDomain(domain))
 
     def testValidDomain(self):
-        invalid_domains = (123, '/', 'abc/', '', None)
+        invalid_domains = (123, "/", "abc/", "", None)
         for domain in invalid_domains:
             self.assertFalse(isValidDomain(domain))
 
-        valid_domains = ('/gov/nasa/nex', '/home')
+        valid_domains = ("/gov/nasa/nex", "/home")
         for domain in valid_domains:
             self.assertTrue(isValidDomain(domain))
 
@@ -63,7 +68,6 @@ class DomainUtilTest(unittest.TestCase):
         self.assertEqual(domain, "/gov/nasa/nex")
         domain = getDomainForHost("my-data.nex.nasa.gov")
         self.assertEqual(domain, "/gov/nasa/nex/my-data")
-
 
     def testGetParentDomain(self):
 
@@ -97,7 +101,6 @@ class DomainUtilTest(unittest.TestCase):
         parent = getParentDomain(domain)
         self.assertEqual(parent, "gov/")
 
-
     def testGetDomainFragments(self):
         domain = "/gov/nasa/nex/climate.h5"
         domain_path = getPathForDomain(domain)
@@ -118,7 +121,7 @@ class DomainUtilTest(unittest.TestCase):
         self.assertEqual(bucket, "mybucket")
 
 
-if __name__ == '__main__':
-    #setup test files
+if __name__ == "__main__":
+    # setup test files
 
     unittest.main()

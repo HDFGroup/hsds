@@ -14,9 +14,10 @@ import random
 import sys
 import numpy as np
 
-sys.path.append('../..')
+sys.path.append("../..")
 from hsds.util.lruCache import LruCache
 from hsds.util.idUtil import createObjId
+
 
 class LruCacheTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -24,8 +25,8 @@ class LruCacheTest(unittest.TestCase):
         # main
 
     def testSimple(self):
-        """ check basic functions by adding one chunk to cache """
-        cc = LruCache(mem_target=1000*1000*10)
+        """check basic functions by adding one chunk to cache"""
+        cc = LruCache(mem_target=1000 * 1000 * 10)
         cc.consistencyCheck()
 
         self.assertEqual(len(cc), 0)
@@ -39,8 +40,7 @@ class LruCacheTest(unittest.TestCase):
             cc[id] = list(range(20))
             self.assertTrue(False)
         except TypeError:
-            pass # expected
-        arr = np.empty((16, 16), dtype='i4')     
+            pass  # expected
 
         rand_id = createObjId("chunks")
         np_arr = np.random.random((500, 500))  # smaller than our chunk cache size
@@ -50,13 +50,13 @@ class LruCacheTest(unittest.TestCase):
         self.assertTrue(rand_id in cc)
         lru_str = "->" + rand_id + "\n<-" + rand_id + "\n"
         mem_tgt = cc.memTarget
-        self.assertEqual(mem_tgt, 1000*1000*10)
+        self.assertEqual(mem_tgt, 1000 * 1000 * 10)
         mem_used = cc.memUsed
-        self.assertEqual(mem_used, 500*500*8)
+        self.assertEqual(mem_used, 500 * 500 * 8)
         mem_dirty = cc.memDirty
         self.assertEqual(mem_dirty, 0)
         mem_per = cc.cacheUtilizationPercent
-        self.assertEqual(mem_per, 20)   # have used 20% of target memory
+        self.assertEqual(mem_per, 20)  # have used 20% of target memory
 
         # try adding the same id to the cache again
         cc[rand_id] = np_arr
@@ -87,25 +87,26 @@ class LruCacheTest(unittest.TestCase):
         self.assertEqual(len(cc), 0)
         self.assertFalse(rand_id in cc)
         mem_tgt = cc.memTarget
-        self.assertEqual(mem_tgt, 1000*1000*10)
+        self.assertEqual(mem_tgt, 1000 * 1000 * 10)
         mem_used = cc.memUsed
         self.assertEqual(mem_used, 0)
         mem_dirty = cc.memDirty
         self.assertEqual(mem_dirty, 0)
         mem_per = cc.cacheUtilizationPercent
-        self.assertEqual(mem_per, 0)   # no memory used
-
+        self.assertEqual(mem_per, 0)  # no memory used
 
     def testLRU(self):
-        """ Check LRU replacement logic """
-        cc = LruCache(mem_target=1024*1024*1024) # big enough that there shouldn't be any cleanup
+        """Check LRU replacement logic"""
+        cc = LruCache(
+            mem_target=1024 * 1024 * 1024
+        )  # big enough that there shouldn't be any cleanup
         self.assertEqual(len(cc), 0)
         ids = []
         # add chunks to the cache
         for i in range(10):
             id = createObjId("chunks")
             ids.append(id)
-            arr = np.empty((16, 16), dtype='i4')  # 1024 bytes
+            arr = np.empty((16, 16), dtype="i4")  # 1024 bytes
             arr[...] = i
             cc[id] = arr
         for id in cc:
@@ -127,7 +128,7 @@ class LruCacheTest(unittest.TestCase):
         cc.consistencyCheck()
 
         np_arr = cc[chunk_5]
-        self.assertEqual(np_arr[0,0], 5)
+        self.assertEqual(np_arr[0, 0], 5)
         # the get should have moved this guy to the front
         self.assertEqual(cc._lru_head._id, chunk_5)
         for i in range(10):
@@ -156,15 +157,17 @@ class LruCacheTest(unittest.TestCase):
         cc.consistencyCheck()
 
     def testClearCache(self):
-        """ Check LRU clear logic """
-        cc = LruCache(mem_target=1024*1024*1024) # big enough that there shouldn't be any cleanup
+        """Check LRU clear logic"""
+        cc = LruCache(
+            mem_target=1024 * 1024 * 1024
+        )  # big enough that there shouldn't be any cleanup
         self.assertEqual(len(cc), 0)
         ids = []
         # add chunks to the cache
         for i in range(10):
             id = createObjId("chunks")
             ids.append(id)
-            arr = np.empty((16, 16), dtype='i4')  # 1024 bytes
+            arr = np.empty((16, 16), dtype="i4")  # 1024 bytes
             arr[...] = i
             cc[id] = arr
         for id in cc:
@@ -181,22 +184,23 @@ class LruCacheTest(unittest.TestCase):
 
         cc.consistencyCheck()
 
-
     def testMemUtil(self):
-        """ Test memory usage tracks target """
+        """Test memory usage tracks target"""
         cc = LruCache(mem_target=5000)
         self.assertEqual(len(cc), 0)
         ids = set()
         for i in range(10):
             id = createObjId("chunks")
             ids.add(id)
-            arr = np.empty((16, 16), dtype='i4')  # 1024 bytes
+            arr = np.empty((16, 16), dtype="i4")  # 1024 bytes
             arr[...] = i
             cc[id] = arr
             self.assertTrue(id in cc)
 
         cc.consistencyCheck()
-        self.assertTrue(len(cc) < 10) # given mem-target, some items should have been removed
+        self.assertTrue(
+            len(cc) < 10
+        )  # given mem-target, some items should have been removed
         mem_per = cc.cacheUtilizationPercent
         self.assertTrue(mem_per < 100)
         mem_dirty = cc.memDirty
@@ -206,15 +210,14 @@ class LruCacheTest(unittest.TestCase):
         for i in range(10):
             id = createObjId("chunks")
             ids.add(id)
-            arr = np.empty((16, 16), dtype='i4')  # 1024 bytes
+            arr = np.empty((16, 16), dtype="i4")  # 1024 bytes
             arr[...] = i
             cc[id] = arr
             self.assertTrue(id in cc)
             cc.setDirty(id)
             cc.consistencyCheck()
             mem_dirty = cc.memDirty
-            self.assertEqual(mem_dirty, 1024 * (i+1))
-
+            self.assertEqual(mem_dirty, 1024 * (i + 1))
 
         mem_per = cc.cacheUtilizationPercent
         # chunks are dirty so percent is over 100%
@@ -227,7 +230,7 @@ class LruCacheTest(unittest.TestCase):
 
         random.shuffle(id_list)  # randomize the order we clear dirty flag
 
-        id=id_list[0]
+        id = id_list[0]
         cc.clearDirty(id)
         cc.consistencyCheck()
 
@@ -243,14 +246,14 @@ class LruCacheTest(unittest.TestCase):
         self.assertTrue(mem_per <= 100)
 
     def testMetaDataCache(self):
-        """ check metadata cache functionality """
-        cc = LruCache(mem_target=1024*10, name="ChunkCache")
+        """check metadata cache functionality"""
+        cc = LruCache(mem_target=1024 * 10, name="ChunkCache")
         cc.consistencyCheck()
 
         self.assertEqual(len(cc), 0)
         self.assertEqual(cc.dump_lru(), "->\n<-\n")
 
-        data = { "x": 123, "y": 456}
+        data = {"x": 123, "y": 456}
 
         rand_id = createObjId("groups")
         data = {"foo": "bar"}
@@ -260,11 +263,11 @@ class LruCacheTest(unittest.TestCase):
         self.assertTrue(rand_id in cc)
         lru_str = "->" + rand_id + "\n<-" + rand_id + "\n"
         mem_tgt = cc.memTarget
-        self.assertEqual(mem_tgt, 1024*10)
+        self.assertEqual(mem_tgt, 1024 * 10)
         mem_used = cc.memUsed
         self.assertEqual(mem_used, 1024)  # not based on actual size
         mem_per = cc.cacheUtilizationPercent
-        self.assertEqual(mem_per, 10)   # have used 10% of target memory
+        self.assertEqual(mem_per, 10)  # have used 10% of target memory
         # try out the dirty flags
         self.assertFalse(cc.isDirty(rand_id))
         self.assertEqual(cc.dirtyCount, 0)
@@ -287,14 +290,14 @@ class LruCacheTest(unittest.TestCase):
         self.assertEqual(len(cc), 0)
         self.assertFalse(rand_id in cc)
         mem_tgt = cc.memTarget
-        self.assertEqual(mem_tgt, 1024*10)
+        self.assertEqual(mem_tgt, 1024 * 10)
         mem_used = cc.memUsed
         self.assertEqual(mem_used, 0)
         mem_per = cc.cacheUtilizationPercent
-        self.assertEqual(mem_per, 0)   # no memory used
+        self.assertEqual(mem_per, 0)  # no memory used
 
 
-if __name__ == '__main__':
-    #setup test files
+if __name__ == "__main__":
+    # setup test files
 
     unittest.main()

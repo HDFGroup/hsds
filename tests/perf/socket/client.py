@@ -4,17 +4,18 @@ import time
 from multiprocessing import shared_memory
 import config
 
+
 BATCH_SIZE = int(config.get("batch_size"))
 NUM_BYTES = int(config.get("num_bytes"))
 if len(sys.argv) < 2 or sys.argv[1] in ("-h", ("--help")):
     print("usage: python client.py <addr>")
     sys.exit(1)
 addr = sys.argv[1]
-if addr.find(':') < 0:
+if addr.find(":") < 0:
     socket_type = socket.AF_UNIX
 else:
     socket_type = socket.AF_INET
-    fields = addr.split(':')
+    fields = addr.split(":")
     host = fields[0]
     port = int(fields[1])
 
@@ -28,7 +29,7 @@ buffer = bytearray(NUM_BYTES)
 
 with socket.socket(socket_type, socket.SOCK_STREAM) as s:
     if socket_type == socket.AF_UNIX:
-        s.connect(addr) 
+        s.connect(addr)
     else:
         s.connect((host, port))
     tStart = time.time()
@@ -37,14 +38,16 @@ with socket.socket(socket_type, socket.SOCK_STREAM) as s:
             data = s.recv(BATCH_SIZE)
             if not data:
                 break
-            #print(f"got {len(data)} bytes")
+            # print(f"got {len(data)} bytes")
             if use_shared_mem:
                 # read the name of the shm block from socket
                 shm_name = data.decode("ascii")
                 print("got shared memory name:", shm_name)
             else:
                 # copy bytes to buffer
-                buffer[total_bytes:(total_bytes+len(data))] = data
+                n = total_bytes
+                m = total_bytes + len(data)
+                buffer[n:m] = data
             total_bytes += len(data)
         except KeyboardInterrupt:
             print("quiting")
@@ -68,10 +71,10 @@ if use_shared_mem:
     shm_block.close()
     shm_block.unlink()
 
-if total_bytes > 1024*1024:
+if total_bytes > 1024 * 1024:
     print(f"mb: {total_bytes//(1024*1024)}")
 else:
     print(f"bytes: {total_bytes}")
-print(f"Elapsed time :: {(tEnd - tStart):6.3f} s, {(total_bytes/(tEnd-tStart))/(1024*1024):6.2f} Mb/s")
-   
-
+    elapse = tEnd - tStart
+    mbs = (total_bytes / elapse) / (1024 * 1024)
+    print(f"Elapsed time :: {(elapse):6.3f} s, {mbs:6.2f} Mb/s")

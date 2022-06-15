@@ -1,8 +1,8 @@
 # modified fetch function with semaphore
-import random
 import asyncio
 from aiohttp import ClientSession
 import config
+
 
 async def fetch(url):
     async with ClientSession() as session:
@@ -31,8 +31,9 @@ async def run(loop, r):
         tasks.append(task)
 
     responses = await asyncio.gather(*tasks)
-    #await responses
+    # await responses
     print("Got {} responses".format(len(responses)))
+
 
 number = int(config.get("run_count"))
 print("run_count: {}".format(number))

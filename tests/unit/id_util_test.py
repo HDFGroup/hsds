@@ -12,9 +12,12 @@
 import unittest
 import sys
 
-sys.path.append('../..')
-from hsds.util.idUtil import getObjPartition, isValidUuid, validateUuid, createObjId, getCollectionForId
-from hsds.util.idUtil import isObjId, isS3ObjKey, getS3Key, getObjId, isSchema2Id, isRootObjId, getRootObjId
+sys.path.append("../..")
+from hsds.util.idUtil import getObjPartition, isValidUuid, validateUuid
+from hsds.util.idUtil import createObjId, getCollectionForId
+from hsds.util.idUtil import isObjId, isS3ObjKey, getS3Key, getObjId, isSchema2Id
+from hsds.util.idUtil import isRootObjId, getRootObjId
+
 
 class IdUtilTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -24,20 +27,20 @@ class IdUtilTest(unittest.TestCase):
     def testCreateObjId(self):
         id_len = 38  # 36 for uuid plus two for prefix ("g-", "d-")
         ids = set()
-        for obj_class in ('groups', 'datasets', 'datatypes', 'chunks'):
+        for obj_class in ("groups", "datasets", "datatypes", "chunks"):
             for i in range(100):
                 id = createObjId(obj_class)
                 self.assertEqual(len(id), id_len)
-                self.assertTrue(id[0] in ('g', 'd', 't', 'c'))
-                self.assertEqual(id[1], '-')
+                self.assertTrue(id[0] in ("g", "d", "t", "c"))
+                self.assertEqual(id[1], "-")
                 ids.add(id)
 
         self.assertEqual(len(ids), 400)
         try:
             createObjId("bad_class")
-            self.assertTrue(False) # should throw exception
+            self.assertTrue(False)  # should throw exception
         except ValueError:
-            pass # expected
+            pass  # expected
 
     def testIsValidUuid(self):
         group_id = "g-314d61b8-9954-11e6-a733-3c15c2da029e"
@@ -65,15 +68,14 @@ class IdUtilTest(unittest.TestCase):
             self.assertTrue(False)
         except ValueError:
             # only works for v2 schema
-            pass # expected
-
+            pass  # expected
 
         for item in valid_ids:
             self.assertTrue(isObjId(item))
             s3key = getS3Key(item)
-            self.assertTrue(s3key[0] != '/')
+            self.assertTrue(s3key[0] != "/")
             self.assertTrue(isS3ObjKey(s3key))
-            if item.find('/') > 0:
+            if item.find("/") > 0:
                 continue  # bucket name gets lost when domain ids get converted to s3keys
             objid = getObjId(s3key)
             self.assertEqual(objid, item)
@@ -81,11 +83,9 @@ class IdUtilTest(unittest.TestCase):
             self.assertFalse(isValidUuid(item))
             self.assertFalse(isObjId(item))
 
-
-
     def testGetObjPartition(self):
         node_count = 12
-        for obj_class in ('groups', 'datasets', 'datatypes', 'chunks'):
+        for obj_class in ("groups", "datasets", "datatypes", "chunks"):
             for i in range(100):
                 id = createObjId(obj_class)
                 node_number = getObjPartition(id, node_count)
@@ -115,10 +115,9 @@ class IdUtilTest(unittest.TestCase):
         except ValueError:
             pass  # expected
 
-
     def testSchema2Id(self):
         root_id = createObjId("roots")
-        group_id = createObjId("groups",rootid=root_id)
+        group_id = createObjId("groups", rootid=root_id)
         dataset_id = createObjId("datasets", rootid=root_id)
         ctype_id = createObjId("datatypes", rootid=root_id)
 
@@ -126,26 +125,33 @@ class IdUtilTest(unittest.TestCase):
         self.assertEqual(getCollectionForId(group_id), "groups")
         self.assertEqual(getCollectionForId(dataset_id), "datasets")
         self.assertEqual(getCollectionForId(ctype_id), "datatypes")
-        chunk_id = 'c' + dataset_id[1:] + "_1_2"
+        chunk_id = "c" + dataset_id[1:] + "_1_2"
         print(chunk_id)
-        chunk_partition_id = 'c42-' + dataset_id[2:] + "_1_2"
+        chunk_partition_id = "c42-" + dataset_id[2:] + "_1_2"
 
         for id in (chunk_id, chunk_partition_id):
             try:
                 getCollectionForId(id)
                 self.assertTrue(False)
             except ValueError:
-                pass # expected
-        valid_ids = (group_id, dataset_id, ctype_id, chunk_id, chunk_partition_id, root_id)
+                pass  # expected
+        valid_ids = (
+            group_id,
+            dataset_id,
+            ctype_id,
+            chunk_id,
+            chunk_partition_id,
+            root_id,
+        )
         s3prefix = getS3Key(root_id)
         self.assertTrue(s3prefix.endswith("/.group.json"))
-        s3prefix = s3prefix[:-(len(".group.json"))]
+        s3prefix = s3prefix[: -(len(".group.json"))]
         for oid in valid_ids:
             print("oid:", oid)
             self.assertTrue(len(oid) >= 38)
-            parts = oid.split('-')
+            parts = oid.split("-")
             self.assertEqual(len(parts), 6)
-            self.assertTrue(oid[0] in ('g', 'd', 't', 'c'))
+            self.assertTrue(oid[0] in ("g", "d", "t", "c"))
             self.assertTrue(isSchema2Id(oid))
             if oid == root_id:
                 self.assertTrue(isRootObjId(oid))
@@ -160,7 +166,7 @@ class IdUtilTest(unittest.TestCase):
             self.assertTrue(isS3ObjKey(s3key))
 
 
-if __name__ == '__main__':
-    #setup test files
+if __name__ == "__main__":
+    # setup test files
 
     unittest.main()

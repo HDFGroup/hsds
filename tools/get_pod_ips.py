@@ -27,51 +27,58 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 APISERVER = "https://kubernetes.default.svc"
 SERVICEACCOUNT = "/var/run/secrets/kubernetes.io/serviceaccount"
 
+
 def log_error(msg):
     print(msg)
+
 
 def log_warn(msg):
     print(msg)
 
+
 def log_info(msg):
     print(msg)
+
 
 def log_debug(msg):
     print(msg)
 
+
 def _k8sGetNamespace():
-    """ Return namespace of current pod """
+    """Return namespace of current pod"""
     namespace = None
     try:
-        with open(SERVICEACCOUNT+"/namespace") as f:
+        with open(SERVICEACCOUNT + "/namespace") as f:
             s = f.read()
             if s:
                 namespace = s.strip()
     except FileNotFoundError:
         pass
-    
+
     if not namespace:
         log_error("Unable to read namespace - not running in Kubernetes?")
         raise ValueError("Kubernetes namespace could not be determined")
     log_debug(f"k8s namespace: [{namespace}]")
     return namespace
 
+
 def _k8sGetBearerToken():
-    """ Return kubernetes bearer token """
+    """Return kubernetes bearer token"""
     token = None
     try:
-        with open(SERVICEACCOUNT+"/token") as f:
+        with open(SERVICEACCOUNT + "/token") as f:
             s = f.read()
             if s:
                 token = s.strip()
     except FileNotFoundError:
         pass
-    
+
     if not token:
         log_error("Unable to read token - not running in Kubernetes?")
         raise ValueError("Could not get Kubernetes auth token")
 
     return "Bearer " + token
+
 
 def getIPKeys(metadata):
     KEY_PATH = ("fieldsV1", "f:status", "f:podIPs")
@@ -86,21 +93,21 @@ def getIPKeys(metadata):
     if not isinstance(managedFields, list):
         log_warn(f"expected managedFields to be list but got: {type(managedFields)}")
         return pod_ips
-    #log.debug(f"mangagedFields - {len(managedFields)} items")
+    # log.debug(f"mangagedFields - {len(managedFields)} items")
     for item in managedFields:
         if not isinstance(item, dict):
             log_warn(f"ignoring item type {type(item)}: {item}")
             continue
         for key in KEY_PATH:
-            #log.debug(f"using key: {key}")
+            # log.debug(f"using key: {key}")
             if key not in item:
                 # key not found, move on to next managedField
                 msg = f"getIPKeys - looking for {key} key but not present"
                 log_debug(msg)
                 break
             item = item[key]
-            #log.debug(f"got obj type: {type(item)}")
-            #log.debug(f"item: {item}")
+            # log.debug(f"got obj type: {type(item)}")
+            # log.debug(f"item: {item}")
             if not isinstance(item, dict):
                 log_warn("not a dict")
                 break
@@ -111,7 +118,7 @@ def getIPKeys(metadata):
             log_warn(f"expected podIPs to be dict but got: {type(item)}")
             continue
         for k in item:
-            #log.debug(f"got podIPs key: {k}")
+            # log.debug(f"got podIPs key: {k}")
             if k.startswith('k:{"ip":"'):
                 n = len('k:{"ip":"')
                 s = k[n:]
@@ -144,7 +151,7 @@ def _k8sGetPodIPs(pod_json, k8s_app_label):
             log_warn(msg)
             continue
         metadata = item["metadata"]
-        #log.debug(f"pod metadata: {metadata}")
+        # log.debug(f"pod metadata: {metadata}")
         if "labels" not in metadata:
             msg = "_k8sGetPodIPs - expected to labels key in metadata"
             log_warn(msg)
@@ -165,10 +172,10 @@ def _k8sGetPodIPs(pod_json, k8s_app_label):
 
 
 async def _k8sListPod():
-    """ Make http request to k8s to get info on all pods in 
-      the current namespace.  Return json dictionary """
+    """Make http request to k8s to get info on all pods in
+    the current namespace.  Return json dictionary"""
     namespace = _k8sGetNamespace()
-    cafile = SERVICEACCOUNT+"/ca.crt"
+    cafile = SERVICEACCOUNT + "/ca.crt"
     ssl_ctx = ssl.create_default_context(cafile=cafile)
     token = _k8sGetBearerToken()
     headers = {"Authorization": token}
@@ -220,16 +227,16 @@ async def getPodIps(k8s_app_label):
     pod_ips = _k8sGetPodIPs(pod_json, k8s_app_label)
     log_info(f"gotPodIps: {pod_ips}")
 
-    return pod_ips   
-    
- 
+    return pod_ips
+
+
 async def main():
     print("main")
     pod_ips = await getPodIps("hsds")
     print("pod_ips:", pod_ips)
-    
+
+
 #
 # main
 #
 asyncio.run(main())
- 

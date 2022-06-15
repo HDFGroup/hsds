@@ -20,7 +20,6 @@ from hsds import config
 from hsds.util.storUtil import releaseStorageClient, deleteStorObj, getStorKeys
 
 
-
 # This is a utility to delete all objects in the bucket
 
 
@@ -36,14 +35,14 @@ def printUsage():
 
 async def deleteAll(app):
     print(f"getting list of objects for bucket: {app['bucket_name']}")
-    keys =  await getStorKeys(app)
+    keys = await getStorKeys(app)
     print("got: {} objects".format(len(keys)))
     if len(keys) == 0:
         print("bucket is empty!")
         return
     # verify we really want to do this!
     response = input("Enter 'Y' to continue:")
-    if response != 'Y':
+    if response != "Y":
         print("cancel")
         return
 
@@ -63,23 +62,21 @@ def main():
 
     # we need to setup a asyncio loop to query s3
     loop = asyncio.get_event_loop()
-    #loop.run_until_complete(init(loop))
+    # loop.run_until_complete(init(loop))
     session = get_session()
 
     app = {}
-    app['bucket_name'] = config.get("bucket_name")
+    app["bucket_name"] = config.get("bucket_name")
     app["session"] = session
     app["loop"] = loop
     app["filter_map"] = {}
 
     loop.run_until_complete(deleteAll(app))
-    #releaseClient(app)
+    # releaseClient(app)
 
     loop.close()
 
     print("done!")
 
+
 main()
-
-
-

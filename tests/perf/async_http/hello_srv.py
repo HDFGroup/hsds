@@ -1,4 +1,3 @@
-#!/usr/local/bin/python3.5
 import asyncio
 from datetime import datetime
 from aiohttp import web
@@ -8,8 +7,8 @@ import random
 # and tests are fair
 random.seed(1)
 
+
 async def hello(request):
-    name = request.match_info.get("name", "foo")
     n = datetime.now().isoformat()
     delay = random.randint(0, 3)
     await asyncio.sleep(delay)
@@ -24,6 +23,7 @@ async def hello(request):
         print("{}: {} delay: {}".format(n, request.path, delay))
         response = web.Response(body=html_body.read(), headers=headers)
     return response
+
 
 app = web.Application()
 app.router.add_route("GET", "/{name}", hello)

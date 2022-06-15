@@ -12,6 +12,7 @@
 #
 # data node of hsds cluster
 #
+
 import time
 import asyncio
 
@@ -27,8 +28,7 @@ from . import config
 
 
 async def GET_Group(request):
-    """HTTP GET method to return JSON for /groups/
-    """
+    """HTTP GET method to return JSON for /groups/"""
     log.request(request)
     app = request.app
     params = request.rel_url.query
@@ -64,7 +64,7 @@ async def GET_Group(request):
 
 
 async def POST_Group(request):
-    """ Handler for POST /groups"""
+    """Handler for POST /groups"""
     log.request(request)
     app = request.app
     params = request.rel_url.query
@@ -109,12 +109,14 @@ async def POST_Group(request):
     # ok - all set, create group obj
     now = time.time()
 
-    group_json = {"id": group_id,
-                  "root": root_id,
-                  "created": now,
-                  "lastModified": now,
-                  "links": {},
-                  "attributes": {}}
+    group_json = {
+        "id": group_id,
+        "root": root_id,
+        "created": now,
+        "lastModified": now,
+        "links": {},
+        "attributes": {},
+    }
 
     kwargs = {"bucket": bucket, "notify": True, "flush": True}
     await save_metadata_obj(app, group_id, group_json, **kwargs)
@@ -134,8 +136,8 @@ async def POST_Group(request):
 
 
 async def PUT_Group(request):
-    """ Handler for PUT /groups
-        Used to flush all objects under a root group to S3
+    """Handler for PUT /groups
+    Used to flush all objects under a root group to S3
     """
 
     flush_time_out = config.get("s3_sync_interval") * 2
@@ -144,7 +146,7 @@ async def PUT_Group(request):
     app = request.app
     params = request.rel_url.query
 
-    root_id = request.match_info.get('id')
+    root_id = request.match_info.get("id")
     if "bucket" in params:
         bucket = params["bucket"]
     else:
@@ -208,7 +210,7 @@ async def PUT_Group(request):
         log.debug(f"flush set: {flush_set}")
         raise HTTPServiceUnavailable()
 
-    rsp_json = {"id": app['id']}  # return the node id
+    rsp_json = {"id": app["id"]}  # return the node id
     log.debug(f"flush returning: {rsp_json}")
     resp = json_response(rsp_json, status=200)
     log.response(request, resp=resp)
@@ -216,8 +218,7 @@ async def PUT_Group(request):
 
 
 async def DELETE_Group(request):
-    """HTTP DELETE method for /groups/
-    """
+    """HTTP DELETE method for /groups/"""
     log.request(request)
     app = request.app
     params = request.rel_url.query
@@ -262,11 +263,10 @@ async def DELETE_Group(request):
 
 
 async def POST_Root(request):
-    """ Notify root that content in the domain has been modified.
-    """
+    """Notify root that content in the domain has been modified."""
     log.request(request)
     app = request.app
-    root_id = request.match_info.get('id')
+    root_id = request.match_info.get("id")
     if not root_id:
         log.error("missing id in request")
         raise HTTPInternalServerError()

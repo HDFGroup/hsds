@@ -13,19 +13,19 @@ if [ -z $NODE_TYPE ]; then
 elif [ $NODE_TYPE == "dn" ]; then
   echo "running hsds-datanode"
   export PYTHONUNBUFFERED="1"
-  pipenv run hsds-datanode
+  hsds-datanode
 elif [ $NODE_TYPE == "sn" ]; then
   echo "running hsds-servicenode"
   export PYTHONUNBUFFERED="1"
-  pipenv run hsds-servicenode
+  hsds-servicenode
 elif [ $NODE_TYPE == "head_node" ]; then
   echo "running hsds-headnode"
   export PYTHONUNBUFFERED="1"
-  pipenv run hsds-headnode
+  hsds-headnode
 elif [ $NODE_TYPE == "rangeget" ]; then
   echo "running hsds-rangeget"
   export PYTHONUNBUFFERED="1"
-  pipenv run hsds-rangeget
+  hsds-rangeget
 else
   echo "Unknown NODE_TYPE: " $NODE_TYPE
 fi

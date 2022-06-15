@@ -24,6 +24,7 @@ from hsds.util.domainUtil import validateDomain, getParentDomain
 from hsds.util.idUtil import getS3Key
 
 from hsds import hsds_logger as log
+
 """
 import asyncio
 import sys
@@ -52,20 +53,41 @@ from hsds import hsds_logger as log
 # Print usage and exit
 #
 def printUsage():
-    print("usage: python create_toplevel_domain_json.py --user=<username> [--private] --domain=<domain> ")
-    print("  options --user: username of who will be owner of the domain (will have full permissions)")
-    print("  options --private: if set, private for all other users, otherwise public read")
-    print("  options --domain: domain to be assigned for the user.  If not set, the domain of  /home/<username> will be used")
-    print(" ------------------------------------------------------------------------------")
+    msg = "usage: python create_toplevel_domain_json.py --user=<username> "
+    msg += "[--private] --domain=<domain>"
+    print(msg)
+    msg = "  options --user: username of who will be owner of the domain "
+    msg += "(will have full permissions)"
+
+    print(msg)
+    msg = "  options --private: if set, private for all other users, otherwise public read"
+    print(msg)
+    msg = "  options --domain: domain to be assigned for the user.  If not set, "
+    msg += "the domain of  /home/<username> will be used"
+    print(msg)
+    msg = " ------------------------------------------------------------------------------"
+    print(msg)
+
     print("  Example - ")
-    print("       python create_toplevel_domain_json.py --user=joebob --domain=/home/joebob ")
-    print("  The user argument can also be a list of usernames (in this case the domain arg can't be used):")
+    msg = "       python create_toplevel_domain_json.py --user=joebob --domain=/home/joebob "
+    print(msg)
+    msg = " The user argument can also be a list of usernames "
+    msg == "(in this case the domain arg can't be used):"
+    print(msg)
     print("       python create_toplevel_domain_json.py --user='user1 user2 user3'")
-    sys.exit();
+    sys.exit()
+
 
 async def createDomains(app, usernames, default_perm, domain_name=None):
     now = time.time()
-    owner_perm = {'create': True, 'read': True, 'update': True, 'delete': True, 'readACL': True, 'updateACL': True }
+    owner_perm = {
+        "create": True,
+        "read": True,
+        "update": True,
+        "delete": True,
+        "readACL": True,
+        "updateACL": True,
+    }
     for username in usernames:
         if domain_name is None:
             domain = "/home/" + username
@@ -102,10 +124,13 @@ async def createDomain(app, domain, domain_json):
 
         log.info("writing domain")
         await putStorJSONObj(app, s3_key, domain_json)
-        print("domain created!  s3_key: {}  domain_json: {}".format(s3_key, domain_json))
+        print(
+            "domain created!  s3_key: {}  domain_json: {}".format(s3_key, domain_json)
+        )
     except ValueError as ve:
         print("Got ValueError exception: {}".format(str(ve)))
         raise
+
 
 #
 # Shutodwn - release S3 client
@@ -114,9 +139,24 @@ async def shutdown(app):
     log.info("closing storage connections")
     await releaseStorageClient(app)
 
+
 def main():
-    default_public_perm =  {'create': False, 'read': True, 'update': False, 'delete': False, 'readACL': False, 'updateACL': False }
-    default_private_perm =  {'create': False, 'read': False, 'update': False, 'delete': False, 'readACL': False, 'updateACL': False }
+    default_public_perm = {
+        "create": False,
+        "read": True,
+        "update": False,
+        "delete": False,
+        "readACL": False,
+        "updateACL": False,
+    }
+    default_private_perm = {
+        "create": False,
+        "read": False,
+        "update": False,
+        "delete": False,
+        "readACL": False,
+        "updateACL": False,
+    }
 
     if len(sys.argv) == 1 or sys.argv[1] == "-h" or sys.argv[1] == "--help":
         printUsage()
@@ -126,12 +166,14 @@ def main():
     userarg = None
     domain = None
     for arg in sys.argv[1:]:
-        if arg.startswith('--user='):
-            userarg = arg[len('--user='):]
-        elif arg == '--private':
+        if arg.startswith("--user="):
+            arg_len = len("--user=")
+            userarg = arg[arg_len:]
+        elif arg == "--private":
             default_perm = default_private_perm
-        elif arg.startswith('--domain='):
-            domain = arg[len('--domain='):]
+        elif arg.startswith("--domain="):
+            arg_len = len("--domain=")
+            domain = arg[arg_len:]
         else:
             print("Unexpected argument:", arg)
             printUsage()
@@ -142,8 +184,8 @@ def main():
         printUsage()
         sys.exit(1)
     usernames = []
-    if userarg[0] == '[' and userarg[-1] == ']':
-        names = userarg[1:-1].split(',')
+    if userarg[0] == "[" and userarg[-1] == "]":
+        names = userarg[1:-1].split(",")
         for name in names:
             usernames.append(name)
     else:
@@ -155,11 +197,12 @@ def main():
         if not username[0].isalpha():
             raise ValueError("first character of username must be character a-z")
         for c in username:
-            if c != '_' and not c.isalnum():
-                raise ValueError("username must consist of the characters a-z, numeric or underscore")
+            if c != "_" and not c.isalnum():
+                raise ValueError(
+                    "username must consist of the characters a-z, numeric or underscore"
+                )
         if len(username) < 3:
             raise ValueError("username must have at least three characters")
-
 
     # we need to setup a asyncio loop to query s3
     loop = asyncio.get_event_loop()
@@ -167,15 +210,14 @@ def main():
     app["loop"] = loop
     app["bucket_name"] = config.get("bucket_name")
 
-    loop.run_until_complete(createDomains(app, usernames, default_perm, domain_name=domain))
+    loop.run_until_complete(
+        createDomains(app, usernames, default_perm, domain_name=domain)
+    )
     loop.run_until_complete(shutdown(app))
 
     loop.close()
 
     print("done!")
-
-
-
 
 
 main()

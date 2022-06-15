@@ -41,7 +41,7 @@ async def GET_Attributes(request):
     # returns datasets|groups|datatypes
     collection = getRequestCollectionName(request)
 
-    obj_id = request.match_info.get('id')
+    obj_id = request.match_info.get("id")
     if not obj_id:
         msg = "Missing object id"
         log.warn(msg)
@@ -72,7 +72,7 @@ async def GET_Attributes(request):
         marker = params["Marker"]
 
     username, pswd = getUserPasswordFromRequest(request)
-    if username is None and app['allow_noauth']:
+    if username is None and app["allow_noauth"]:
         username = "default"
     else:
         await validateUserPassword(app, username, pswd)
@@ -89,14 +89,14 @@ async def GET_Attributes(request):
 
     req = getDataNodeUrl(app, obj_id)
 
-    req += '/' + collection + '/' + obj_id + "/attributes"
+    req += "/" + collection + "/" + obj_id + "/attributes"
     params = {}
     if limit is not None:
         params["Limit"] = str(limit)
     if marker is not None:
         params["Marker"] = marker
     if include_data:
-        params["IncludeData"] = '1'
+        params["IncludeData"] = "1"
     if bucket:
         params["bucket"] = bucket
 
@@ -115,11 +115,11 @@ async def GET_Attributes(request):
     resp_json["attributes"] = attributes
 
     hrefs = []
-    obj_uri = '/' + collection + '/' + obj_id
-    href = getHref(request, obj_uri + '/attributes')
-    hrefs.append({'rel': 'self', 'href': href})
-    hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
-    hrefs.append({'rel': 'owner', 'href': getHref(request, obj_uri)})
+    obj_uri = "/" + collection + "/" + obj_id
+    href = getHref(request, obj_uri + "/attributes")
+    hrefs.append({"rel": "self", "href": href})
+    hrefs.append({"rel": "home", "href": getHref(request, "/")})
+    hrefs.append({"rel": "owner", "href": getHref(request, obj_uri)})
     resp_json["hrefs"] = hrefs
 
     resp = await jsonResponse(request, resp_json, ignore_nan=ignore_nan)
@@ -134,7 +134,7 @@ async def GET_Attribute(request):
     # returns datasets|groups|datatypes
     collection = getRequestCollectionName(request)
 
-    obj_id = request.match_info.get('id')
+    obj_id = request.match_info.get("id")
     if not obj_id:
         msg = "Missing object id"
         log.warn(msg)
@@ -143,11 +143,11 @@ async def GET_Attribute(request):
         msg = f"Invalid object id: {obj_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    attr_name = request.match_info.get('name')
+    attr_name = request.match_info.get("name")
     validateAttributeName(attr_name)
 
     username, pswd = getUserPasswordFromRequest(request)
-    if username is None and app['allow_noauth']:
+    if username is None and app["allow_noauth"]:
         username = "default"
     else:
         await validateUserPassword(app, username, pswd)
@@ -187,11 +187,11 @@ async def GET_Attribute(request):
     resp_json["lastModified"] = dn_json["created"]
 
     hrefs = []
-    obj_uri = '/' + collection + '/' + obj_id
-    attr_uri = obj_uri + '/attributes/' + attr_name
-    hrefs.append({'rel': 'self', 'href': getHref(request, attr_uri)})
-    hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
-    hrefs.append({'rel': 'owner', 'href': getHref(request, obj_uri)})
+    obj_uri = "/" + collection + "/" + obj_id
+    attr_uri = obj_uri + "/attributes/" + attr_name
+    hrefs.append({"rel": "self", "href": getHref(request, attr_uri)})
+    hrefs.append({"rel": "home", "href": getHref(request, "/")})
+    hrefs.append({"rel": "owner", "href": getHref(request, obj_uri)})
     resp_json["hrefs"] = hrefs
     resp = await jsonResponse(request, resp_json, ignore_nan=ignore_nan)
     log.response(request, resp=resp)
@@ -205,7 +205,7 @@ async def PUT_Attribute(request):
     # returns datasets|groups|datatypes
     collection = getRequestCollectionName(request)
 
-    obj_id = request.match_info.get('id')
+    obj_id = request.match_info.get("id")
     if not obj_id:
         msg = "Missing object id"
         log.warn(msg)
@@ -214,7 +214,7 @@ async def PUT_Attribute(request):
         msg = f"Invalid object id: {obj_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    attr_name = request.match_info.get('name')
+    attr_name = request.match_info.get("name")
     log.debug(f"Attribute name: [{attr_name}]")
     validateAttributeName(attr_name)
 
@@ -331,14 +331,18 @@ async def PUT_Attribute(request):
             # use H5S_SIMPLE as class
             if isinstance(shape_body, list) and len(shape_body) == 0:
                 shape_json["class"] = "H5S_SCALAR"
-                dims = [1, ]
+                dims = [
+                    1,
+                ]
             else:
                 shape_json["class"] = "H5S_SIMPLE"
                 dims = getShapeDims(shape_body)
                 shape_json["dims"] = dims
     else:
         shape_json["class"] = "H5S_SCALAR"
-        dims = [1, ]
+        dims = [
+            1,
+        ]
 
     if "value" in body:
         if dims is None:
@@ -349,7 +353,9 @@ async def PUT_Attribute(request):
         # validate that the value agrees with type/shape
         arr_dtype = createDataType(datatype)  # np datatype
         if len(dims) == 0:
-            np_dims = [1, ]
+            np_dims = [
+                1,
+            ]
         else:
             np_dims = dims
         log.debug(f"attribute dims: {np_dims}")
@@ -366,7 +372,7 @@ async def PUT_Attribute(request):
 
     # ready to add attribute now
     req = getDataNodeUrl(app, obj_id)
-    req += '/' + collection + '/' + obj_id + "/attributes/" + attr_name
+    req += "/" + collection + "/" + obj_id + "/attributes/" + attr_name
     log.info("PUT Attribute: " + req)
 
     attr_json = {}
@@ -396,7 +402,7 @@ async def DELETE_Attribute(request):
     # returns datasets|groups|datatypes
     collection = getRequestCollectionName(request)
 
-    obj_id = request.match_info.get('id')
+    obj_id = request.match_info.get("id")
     if not obj_id:
         msg = "Missing object id"
         log.warn(msg)
@@ -405,7 +411,7 @@ async def DELETE_Attribute(request):
         msg = f"Invalid object id: {obj_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    attr_name = request.match_info.get('name')
+    attr_name = request.match_info.get("name")
     log.debug(f"Attribute name: [{attr_name}]")
     validateAttributeName(attr_name)
 
@@ -427,7 +433,7 @@ async def DELETE_Attribute(request):
     await validateAction(app, domain, obj_id, username, "delete")
 
     req = getDataNodeUrl(app, obj_id)
-    req += '/' + collection + '/' + obj_id + "/attributes/" + attr_name
+    req += "/" + collection + "/" + obj_id + "/attributes/" + attr_name
     log.info("PUT Attribute: " + req)
     params = {}
     if bucket:
@@ -451,7 +457,7 @@ async def GET_AttributeValue(request):
     # returns datasets|groups|datatypes
     collection = getRequestCollectionName(request)
 
-    obj_id = request.match_info.get('id')
+    obj_id = request.match_info.get("id")
     if not obj_id:
         msg = "Missing object id"
         log.warn(msg)
@@ -460,11 +466,11 @@ async def GET_AttributeValue(request):
         msg = f"Invalid object id: {obj_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    attr_name = request.match_info.get('name')
+    attr_name = request.match_info.get("name")
     validateAttributeName(attr_name)
 
     username, pswd = getUserPasswordFromRequest(request)
-    if username is None and app['allow_noauth']:
+    if username is None and app["allow_noauth"]:
         username = "default"
     else:
         await validateUserPassword(app, username, pswd)
@@ -490,7 +496,7 @@ async def GET_AttributeValue(request):
         ignore_nan = False
 
     req = getDataNodeUrl(app, obj_id)
-    req += '/' + collection + '/' + obj_id + "/attributes/" + attr_name
+    req += "/" + collection + "/" + obj_id + "/attributes/" + attr_name
     log.debug("get Attribute: " + req)
     params = {}
     if bucket:
@@ -500,18 +506,18 @@ async def GET_AttributeValue(request):
 
     attr_shape = dn_json["shape"]
     log.debug(f"attribute shape: {attr_shape}")
-    if attr_shape["class"] == 'H5S_NULL':
+    if attr_shape["class"] == "H5S_NULL":
         msg = "Null space attributes can not be read"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
     accept_type = getAcceptType(request)
-    response_type = accept_type    # will adjust later if binary not possible
+    response_type = accept_type  # will adjust later if binary not possible
     type_json = dn_json["type"]
     shape_json = dn_json["shape"]
     item_size = getItemSize(type_json)
 
-    if item_size == 'H5T_VARIABLE' and accept_type != "json":
+    if item_size == "H5T_VARIABLE" and accept_type != "json":
         msg = "Client requested binary, but only JSON is supported for "
         msg += "variable length data types"
         log.info(msg)
@@ -540,11 +546,11 @@ async def GET_AttributeValue(request):
             resp.content_length = len(output_data)
             # allow CORS
             if cors_domain:
-                resp.headers['Access-Control-Allow-Origin'] = cors_domain
+                resp.headers["Access-Control-Allow-Origin"] = cors_domain
                 cors_methods = "GET, POST, DELETE, PUT, OPTIONS"
-                resp.headers['Access-Control-Allow-Methods'] = cors_methods
+                resp.headers["Access-Control-Allow-Methods"] = cors_methods
                 cors_headers = "Content-Type, api_key, Authorization"
-                resp.headers['Access-Control-Allow-Headers'] = cors_headers
+                resp.headers["Access-Control-Allow-Headers"] = cors_headers
             await resp.prepare(request)
             await resp.write(output_data)
         except Exception as e:
@@ -559,11 +565,11 @@ async def GET_AttributeValue(request):
             resp_json["value"] = dn_json["value"]
 
         hrefs = []
-        obj_uri = '/' + collection + '/' + obj_id
-        attr_uri = obj_uri + '/attributes/' + attr_name
-        hrefs.append({'rel': 'self', 'href': getHref(request, attr_uri)})
-        hrefs.append({'rel': 'home', 'href': getHref(request, '/')})
-        hrefs.append({'rel': 'owner', 'href': getHref(request, obj_uri)})
+        obj_uri = "/" + collection + "/" + obj_id
+        attr_uri = obj_uri + "/attributes/" + attr_name
+        hrefs.append({"rel": "self", "href": getHref(request, attr_uri)})
+        hrefs.append({"rel": "home", "href": getHref(request, "/")})
+        hrefs.append({"rel": "owner", "href": getHref(request, obj_uri)})
         resp_json["hrefs"] = hrefs
         resp = await jsonResponse(request, resp_json, ignore_nan=ignore_nan)
         log.response(request, resp=resp)
@@ -577,7 +583,7 @@ async def PUT_AttributeValue(request):
     app = request.app
     # returns datasets|groups|datatypes
     collection = getRequestCollectionName(request)
-    obj_id = request.match_info.get('id')
+    obj_id = request.match_info.get("id")
     if not obj_id:
         msg = "Missing object id"
         log.warn(msg)
@@ -586,7 +592,7 @@ async def PUT_AttributeValue(request):
         msg = f"Invalid object id: {obj_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    attr_name = request.match_info.get('name')
+    attr_name = request.match_info.get("name")
     log.debug(f"Attribute name: [{attr_name}]")
     validateAttributeName(attr_name)
 
@@ -615,7 +621,7 @@ async def PUT_AttributeValue(request):
     await validateAction(app, domain, obj_id, username, "update")
 
     req = getDataNodeUrl(app, obj_id)
-    req += '/' + collection + '/' + obj_id + "/attributes/" + attr_name
+    req += "/" + collection + "/" + obj_id + "/attributes/" + attr_name
     log.debug("get Attribute: " + req)
     params = {}
     if bucket:
@@ -625,7 +631,7 @@ async def PUT_AttributeValue(request):
     log.debug(f"got dn_json: {dn_json}")
 
     attr_shape = dn_json["shape"]
-    if attr_shape["class"] == 'H5S_NULL':
+    if attr_shape["class"] == "H5S_NULL":
         msg = "Null space attributes can not be updated"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -653,7 +659,7 @@ async def PUT_AttributeValue(request):
     if request_type == "binary":
         item_size = getItemSize(type_json)
 
-        if item_size == 'H5T_VARIABLE':
+        if item_size == "H5T_VARIABLE":
             msg = "Only JSON is supported for variable length data types"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
@@ -669,7 +675,7 @@ async def PUT_AttributeValue(request):
 
     if binary_data:
         npoints = getNumElements(np_shape)
-        if npoints*item_size != len(binary_data):
+        if npoints * item_size != len(binary_data):
             msg = f"Expected: {npoints*item_size} bytes, "
             msg += f"but got {len(binary_data)}"
             log.warn(msg)
@@ -704,7 +710,7 @@ async def PUT_AttributeValue(request):
     attr_json["value"] = value
 
     req = getDataNodeUrl(app, obj_id)
-    req += '/' + collection + '/' + obj_id + "/attributes/" + attr_name
+    req += "/" + collection + "/" + obj_id + "/attributes/" + attr_name
     log.info(f"PUT Attribute Value: {req}")
 
     dn_json["value"] = value

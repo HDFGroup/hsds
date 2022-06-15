@@ -12,6 +12,7 @@
 #
 # rangeget proxy of hsds cluster
 #
+
 import asyncio
 import time
 from aiohttp.web import run_app
@@ -25,8 +26,9 @@ from aiohttp.web_exceptions import HTTPInternalServerError, HTTPNotFound
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotImplemented
 
 
-async def read_page(app, key, buffer, obj_size=0, offset=0, start=0,
-                    end=0, bucket=None):
+async def read_page(
+    app, key, buffer, obj_size=0, offset=0, start=0, end=0, bucket=None
+):
     """
     read indicated bytes from LRU cache (or S3 if not in cache)
     """
@@ -39,7 +41,7 @@ async def read_page(app, key, buffer, obj_size=0, offset=0, start=0,
         msg = "Invalid parameter - end <= start"
         log.error(msg)
         raise HTTPInternalServerError()
-    if start // page_size != (end-1) // page_size:
+    if start // page_size != (end - 1) // page_size:
         msg = "Invalid parameter - start and end not in same page"
         log.error(msg)
         raise HTTPInternalServerError()
@@ -90,8 +92,12 @@ async def read_page(app, key, buffer, obj_size=0, offset=0, start=0,
             pending_read[cache_key] = time.time()
 
             # set use_proxy to False since we are the proxy!
-            kwargs = {"offset": page_start, "length": page_length,
-                      "bucket": bucket, "use_proxy": False}
+            kwargs = {
+                "offset": page_start,
+                "length": page_length,
+                "bucket": bucket,
+                "use_proxy": False,
+            }
             page_bytes = await getStorBytes(app, key, **kwargs)
             if cache_key in pending_read:
                 del pending_read[cache_key]
@@ -108,7 +114,8 @@ async def read_page(app, key, buffer, obj_size=0, offset=0, start=0,
     page_s = start % page_size
     page_e = page_s + length
     buf_s = start - offset
-    buffer[buf_s:(buf_s+length)] = page_bytes[page_s:page_e]
+    buf_e = buf_s + length
+    buffer[buf_s:buf_e] = page_bytes[page_s:page_e]
 
 
 async def GET_ByteRange(request):
@@ -206,8 +213,13 @@ async def GET_ByteRange(request):
         if page_end > offset + length:
             page_end = offset + length
         log.debug(f"read page {page_start} - {page_end}")
-        kwargs = {"obj_size": obj_size, "offset": offset, "start": page_start,
-                  "end": page_end, "bucket": bucket}
+        kwargs = {
+            "obj_size": obj_size,
+            "offset": offset,
+            "start": page_start,
+            "end": page_end,
+            "bucket": bucket,
+        }
         task = loop.create_task(read_page(app, key, buffer, **kwargs))
         tasks.add(task)
         page_start = page_end
@@ -220,7 +232,7 @@ async def GET_ByteRange(request):
 
     try:
         resp = StreamResponse()
-        resp.headers['Content-Type'] = "application/octet-stream"
+        resp.headers["Content-Type"] = "application/octet-stream"
         resp.content_length = len(buffer)
         await resp.prepare(request)
         await resp.write(buffer)
@@ -235,7 +247,7 @@ async def GET_ByteRange(request):
 
 def main():
     """
-      main - entrypoint for rangeget proxy
+    main - entrypoint for rangeget proxy
     """
     # setup log config
     log_level = config.get("log_level")
@@ -258,17 +270,16 @@ def main():
     #
     # call app.router.add_get() here to add node-specific routes
     #
-    app.router.add_route('GET', '/', GET_ByteRange)
-    kwargs = {"mem_target": cache_size, "name": "DataCache",
-              "expire_time": expire_time}
-    app['data_cache'] = LruCache(**kwargs)
-    app['obj_stat_map'] = {}  # map of obj stats (e.g. size)
+    app.router.add_route("GET", "/", GET_ByteRange)
+    kwargs = {"mem_target": cache_size, "name": "DataCache", "expire_time": expire_time}
+    app["data_cache"] = LruCache(**kwargs)
+    app["obj_stat_map"] = {}  # map of obj stats (e.g. size)
     # pending_read: map of key to timestamp for in-flight read requests
-    app['pending_read'] = {}
-    app['max_task_count'] = config.get('max_task_count')
-    app['node_type'] = 'rg'
+    app["pending_read"] = {}
+    app["max_task_count"] = config.get("max_task_count")
+    app["node_type"] = "rg"
     # range proxy doesn't care about health state of other nodes
-    app['node_state'] = "READY"
+    app["node_state"] = "READY"
 
     rangeget_url = config.getCmdLineArg("rangeget_url")
     if rangeget_url:
@@ -307,5 +318,5 @@ def main():
     log.info("run_app done")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

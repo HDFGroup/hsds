@@ -37,7 +37,7 @@ class Tokenizer:
 
     def next(self):
         self.i += 1
-        return self.tokens[self.i-1]
+        return self.tokens[self.i - 1]
 
     def peek(self):
         return self.tokens[self.i]
@@ -50,40 +50,46 @@ class Tokenizer:
 
     def nextTokenTypeIsOperator(self):
         t = self.tokenTypes[self.i]
-        return t == TokenType.GT or t == TokenType.GTE \
-            or t == TokenType.LT or t == TokenType.LTE \
-            or t == TokenType.EQ or t == TokenType.NEQ
+        return t in (
+            TokenType.GT,
+            TokenType.GTE,
+            TokenType.LT,
+            TokenType.LTE,
+            TokenType.EQ,
+            TokenType.NEQ,
+        )
 
     def tokenize(self):
         import re
-        reg = re.compile(r'(\bAND\b|\bOR\b|!=|==|<=|>=|<|>|\(|\)|\&|\|)')
+
+        reg = re.compile(r"(\bAND\b|\bOR\b|!=|==|<=|>=|<|>|\(|\)|\&|\|)")
         SINGLE_QUOTE = "'"
         DOUBLE_QUOTE = '"'
         self.tokens = reg.split(self.expression)
-        self.tokens = [t.strip() for t in self.tokens if t.strip() != '']
+        self.tokens = [t.strip() for t in self.tokens if t.strip() != ""]
 
         self.tokenTypes = []
         for i in range(len(self.tokens)):
             t = self.tokens[i]
-            if t in ('AND', '&'):
+            if t in ("AND", "&"):
                 self.tokenTypes.append(TokenType.AND)
-            elif t in ('OR', '|'):
+            elif t in ("OR", "|"):
                 self.tokenTypes.append(TokenType.OR)
-            elif t == '(':
+            elif t == "(":
                 self.tokenTypes.append(TokenType.LP)
-            elif t == ')':
+            elif t == ")":
                 self.tokenTypes.append(TokenType.RP)
-            elif t == '<':
+            elif t == "<":
                 self.tokenTypes.append(TokenType.LT)
-            elif t == '<=':
+            elif t == "<=":
                 self.tokenTypes.append(TokenType.LTE)
-            elif t == '>':
+            elif t == ">":
                 self.tokenTypes.append(TokenType.GT)
-            elif t == '>=':
+            elif t == ">=":
                 self.tokenTypes.append(TokenType.GTE)
-            elif t == '==':
+            elif t == "==":
                 self.tokenTypes.append(TokenType.EQ)
-            elif t == '!=':
+            elif t == "!=":
                 self.tokenTypes.append(TokenType.NEQ)
             else:
                 # number of string or variable
@@ -93,7 +99,9 @@ class Tokenizer:
                 elif t[0] == DOUBLE_QUOTE and t[-1] == DOUBLE_QUOTE:
                     self.tokenTypes.append(TokenType.STR)
                     self.tokens[i] = t[1:-1]  # strip quotes
-                elif len(t) > 3 and t[0] == 'b' and t[1] == SINGLE_QUOTE and t[-1] == SINGLE_QUOTE:
+                elif len(t) > 3 and all(
+                    (t[0] == "b", t[1] == SINGLE_QUOTE, t[-1] == SINGLE_QUOTE)
+                ):
                     # binary string
                     self.tokenTypes.append(TokenType.BYTE)
                     self.tokens[i] = t[2:-1]  # strip quotes and 'b'
@@ -131,8 +139,9 @@ class BooleanParser:
 
     def parseExpression(self):
         andTerm1 = self.parseAndTerm()
-        while self.tokenizer.hasNext() and \
-                self.tokenizer.nextTokenType() == TokenType.OR:
+        while (
+            self.tokenizer.hasNext() and self.tokenizer.nextTokenType() == TokenType.OR
+        ):
             self.tokenizer.next()
             andTermX = self.parseAndTerm()
             andTerm = TreeNode(TokenType.OR)
@@ -143,8 +152,9 @@ class BooleanParser:
 
     def parseAndTerm(self):
         condition1 = self.parseCondition()
-        while self.tokenizer.hasNext() and \
-                self.tokenizer.nextTokenType() == TokenType.AND:
+        while (
+            self.tokenizer.hasNext() and self.tokenizer.nextTokenType() == TokenType.AND
+        ):
             self.tokenizer.next()
             conditionX = self.parseCondition()
             condition = TreeNode(TokenType.AND)
@@ -154,12 +164,13 @@ class BooleanParser:
         return condition1
 
     def parseCondition(self):
-        if self.tokenizer.hasNext() and \
-               self.tokenizer.nextTokenType() == TokenType.LP:
+        if self.tokenizer.hasNext() and self.tokenizer.nextTokenType() == TokenType.LP:
             self.tokenizer.next()
             expression = self.parseExpression()
-            if self.tokenizer.hasNext() and \
-                    self.tokenizer.nextTokenType() == TokenType.RP:
+            next_token = None
+            if self.tokenizer.hasNext():
+                next_token = self.tokenizer.nextTokenType()
+            if next_token == TokenType.RP:
                 self.tokenizer.next()
                 return expression
             else:
@@ -167,8 +178,7 @@ class BooleanParser:
                 raise Exception(msg)
 
         terminal1 = self.parseTerminal()
-        if self.tokenizer.hasNext() and \
-                self.tokenizer.nextTokenTypeIsOperator():
+        if self.tokenizer.hasNext() and self.tokenizer.nextTokenTypeIsOperator():
             condition = TreeNode(self.tokenizer.nextTokenType())
             self.tokenizer.next()
             terminal2 = self.parseTerminal()
@@ -176,7 +186,7 @@ class BooleanParser:
             condition.right = terminal2
             return condition
         else:
-            msg = 'Operator expected, but got ' + self.tokenizer.next()
+            msg = "Operator expected, but got " + self.tokenizer.next()
             raise Exception(msg)
 
     def parseTerminal(self):
@@ -191,23 +201,23 @@ class BooleanParser:
                 n.value = self.tokenizer.next()
                 return n
             else:
-                msg = 'NUM, STR, or VAR expected, but got '
+                msg = "NUM, STR, or VAR expected, but got "
                 msg += self.tokenizer.next()
                 raise Exception(msg)
         else:
-            msg = 'NUM, STR, or VAR expected, but got ' + self.tokenizer.next()
+            msg = "NUM, STR, or VAR expected, but got " + self.tokenizer.next()
             raise Exception(msg)
 
     def evaluate(self, variable_dict):
         return self.evaluateRecursive(self.root, variable_dict)
 
     def evaluateRecursive(self, treeNode, variable_dict):
-        if treeNode.tokenType in (TokenType.NUM, TokenType.STR, TokenType.BYTE):  
+        if treeNode.tokenType in (TokenType.NUM, TokenType.STR, TokenType.BYTE):
             return treeNode.value
 
         if treeNode.tokenType == TokenType.VAR:
             return variable_dict.get(treeNode.value)
-         
+
         left = self.evaluateRecursive(treeNode.left, variable_dict)
         right = self.evaluateRecursive(treeNode.right, variable_dict)
 
@@ -228,7 +238,7 @@ class BooleanParser:
         elif treeNode.tokenType == TokenType.OR:
             return left or right
         else:
-            raise Exception('Unexpected type ' + str(treeNode.tokenType))
+            raise Exception("Unexpected type " + str(treeNode.tokenType))
 
     def getEvalRecursive(self, treeNode):
         if treeNode.tokenType == TokenType.NUM:
@@ -242,12 +252,12 @@ class BooleanParser:
             return treeNode.value
 
         left = self.getEvalRecursive(treeNode.left)
-        if isinstance(left, str) and ' ' in left:
+        if isinstance(left, str) and " " in left:
             left = f"({left})"
         right = self.getEvalRecursive(treeNode.right)
-        if isinstance(right, str) and ' ' in right:
+        if isinstance(right, str) and " " in right:
             right = f"({right})"
- 
+
         if treeNode.tokenType == TokenType.GT:
             return f"{left} > {right}"
         elif treeNode.tokenType == TokenType.GTE:
@@ -255,18 +265,17 @@ class BooleanParser:
         elif treeNode.tokenType == TokenType.LT:
             return f"{left} < {right}"
         elif treeNode.tokenType == TokenType.LTE:
-            return  f"{left} <= {right}"
+            return f"{left} <= {right}"
         elif treeNode.tokenType == TokenType.EQ:
-            return  f"{left} == {right}"
+            return f"{left} == {right}"
         elif treeNode.tokenType == TokenType.NEQ:
-            return  f"{left} != {right}"
+            return f"{left} != {right}"
         elif treeNode.tokenType == TokenType.AND:
-            return  f"{left} & {right}"
+            return f"{left} & {right}"
         elif treeNode.tokenType == TokenType.OR:
-            return  f"{left} | {right}"
+            return f"{left} | {right}"
         else:
-            raise Exception('Unexpected type ' + str(treeNode.tokenType))
-
+            raise Exception("Unexpected type " + str(treeNode.tokenType))
 
     def getEvalStr(self):
         return self.getEvalRecursive(self.root)
