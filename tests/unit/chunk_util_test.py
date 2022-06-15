@@ -1698,30 +1698,29 @@ class ChunkUtilTest(unittest.TestCase):
         except ValueError:
             pass  # expected
 
+        kwargs = {}
+        kwargs["chunk_id"] = chunk_id
+        kwargs["chunk_layout"] = chunk_layout
+        kwargs["chunk_arr"] = chunk_arr
+        kwargs["query"] = "(open > 5"
         try:
-            chunkQuery(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, query="(open > 5")
+            chunkQuery(**kwargs)
             self.assertTrue(False)
         except ValueError:
-            pass # expected
+            pass  # expected
 
+        kwargs["query"] = "(open > 5"
         try:
-            chunkQuery(chunk_id=chunk_id, chunk_layout=chunk_layout, chunk_arr=chunk_arr, query="open @ 5")
+            chunkQuery(**kwargs)
             self.assertTrue(False)
         except ValueError:
-            pass # expected
-
-
-
+            pass  # expected
 
         # try modifying one aapl row
-        query_update = {"open": 999}
-        result = chunkQuery(
-            chunk_id=chunk_id,
-            chunk_layout=chunk_layout,
-            chunk_arr=chunk_arr,
-            query="symbol == b'AAPL'",
-            query_update=query_update,
-        )
+        kwargs["query"] = "symbol == b'AAPL'"
+        kwargs["query_update"] = {"open": 999}
+        result = chunkQuery(**kwargs)
+
         self.assertEqual(len(result), 4)
         for i in range(4):
             item = result[i]
