@@ -493,38 +493,38 @@ def getUserPasswordFromRequest(request):
     pswd = None
     app = request.app
     if "Authorization" not in request.headers:
-        log.debug("no Authorization in header")
+        # log.debug("no Authorization in header")
         return None, None
     scheme, _, token = request.headers.get("Authorization", "").partition(" ")
     if not scheme or not token:
-        log.info("Invalid Authorization header")
+        # log.info("Invalid Authorization header")
         raise HTTPBadRequest(reason="Invalid Authorization header")
 
     if scheme.lower() == "basic":
-        log.debug("using basic authorization")
+        # log.debug("using basic authorization")
         # HTTP Basic Auth
         try:
             token = token.encode("utf-8")  # convert to bytes
             token_decoded = base64.decodebytes(token)
         except binascii.Error:
             msg = "Malformed authorization header"
-            log.warn(msg)
+            # log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         if token_decoded.index(b":") < 0:
             msg = "Malformed authorization header (No ':' character)"
-            log.warn(msg)
+            # log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         user, _, pswd = token_decoded.partition(b":")
         if not user or not pswd:
             msg = "Malformed authorization header, user/password not found"
-            log.warn(msg)
+            # log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         user = user.decode("utf-8")  # convert bytes to string
         pswd = pswd.decode("utf-8")  # convert bytes to string
 
     elif scheme.lower() == "bearer":
         # OpenID Auth.
-        log.debug(f"Got OpenID bearer token: {token}")
+        # log.debug("Got OpenID bearer token")
         user_group_db = app["user_group_db"]
 
         # see if we've already validated this token
@@ -539,11 +539,11 @@ def getUserPasswordFromRequest(request):
             user, exp, roles = verifyBearerToken(app, token)
             if exp:
                 msg = f"decoded bearer token for user: {user}, expired: {exp}"
-                log.info(msg)
+                # log.info(msg)
                 setPassword(app, user, token, scheme="bearer", exp=exp)
             else:
                 msg = f"decoded bearer token for user: {user}, no expiration"
-                log.info(msg)
+                # log.info(msg)
                 setPassword(app, user, token, scheme="bearer")
             if user:
                 pswd = token
@@ -556,7 +556,7 @@ def getUserPasswordFromRequest(request):
 
     else:
         msg = f"Unsupported Authorization header scheme: {scheme}"
-        log.warn(msg)
+        # log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
     return user, pswd

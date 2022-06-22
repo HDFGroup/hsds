@@ -64,7 +64,10 @@ if username and password:
     auth_string = auth_string.encode("utf-8")
     auth_string = base64.b64encode(auth_string)
     auth_string = b"Basic " + auth_string
+<<<<<<< HEAD
     print("auth_string:", auth_string)
+=======
+>>>>>>> master
     headers["Authorization"] = auth_string
 
 req = "http://" + endpoint + ":" + str(port) + uri
