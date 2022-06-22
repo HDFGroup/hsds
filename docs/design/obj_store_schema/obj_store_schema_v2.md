@@ -458,6 +458,7 @@ The dataset storage schema consists of JSON with the following keys:
 Notes:
 
 - See: <http://hdf5-json.readthedocs.io/en/latest/bnf/dataset.html#grammar-token-dcpl> for a specification of the "creationProperties" object
+- See: <https://github.com/HDFGroup/hsds/blob/master/docs/design/single_object/SingleObject.md> for a description of the "layout" object
 - "creationProperties" may optionaly provide a chunk layout, but "layout" object of dataset may differ from what is provided in "creationProperties" (for optimization purposes the hsds service may use different layout values)
 - See "Attributes" for a description of the object schema for attributes
 - See "Types" for a description of the object schema for type
