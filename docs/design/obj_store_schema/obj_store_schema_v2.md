@@ -576,12 +576,14 @@ The summary schema consists of JSON with the following keys:
 - "lastModified": The most recent modification time for any object in the domain
 - "num_groups": The number of groups in the domain (including the root group)
 - "num_datatypes": The number of datatypes in the domain
-- "datasets": A map of datasets belonging to the domain. Each item has keys for "lastModified", "num_chunks", and "allocated_bytes"
+- "datasets": A map of datasets belonging to the domain. Each item has keys for "lastModified", "num_chunks", "allocated_bytes", "linked_bytes", and "num_linked_chunks"
 - "num_chunks": The number of chunks present in the domain (across all datasets)
 - "allocated_bytes": Amount of storage used by chunks in the domain
 - "metadata_bytes": Amount of storage used by metadata objects (objects with a .json suffix) in the domain
+- "linked_bytes": Amount of storage used by datasets in the domain that link to external HDF5 files
 - "scan_start": Timestamp for when the domain scan process started
 - "scan_complete": Timestamp for when the domain scan process comnpleted
+- "md5_sum": A md5 checksum of metadata and chunk data used in the domain
 
 ### Summary example
 
@@ -599,13 +601,16 @@ Object:
             "d-7c84a4f8-7f61cd74-c999-bcdfad-2602e8": {
                 "lastModified": 1543365852,
                 "num_chunks": 153,
-                "allocated_bytes": 160432128
+                "allocated_bytes": 160432128,
+                "linked_bytes": 0,
+                "num_linked_chunks": 0
             }
         },
         "num_chunks": 5725,
         "allocated_bytes": 6003097600,
         "metadata_bytes": 2494,
         "scan_start": 1543365850.919641,
+        "md5_sum": "076a6a4bbf4355629f39ef7e7ddfb3b0",
         "scan_complete": 1543365852.811196
     }
 
