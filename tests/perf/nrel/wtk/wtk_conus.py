@@ -4,6 +4,8 @@ import sys
 import time
 import logging
 from multiprocessing import Pool
+import s3fs
+import h5py
 import h5pyd
 
 cfg = {}
@@ -23,7 +25,11 @@ def get_timeseries(filepath):
     bucket = cfg["bucket"]
     h5path = cfg["h5path"]
     index = cfg["index"]
-    f = h5pyd.File(filepath, "r", use_cache=use_cache, bucket=bucket)
+    if filepath.startswith("s3://"):
+        s3 = s3fs.S3FileSystem()
+        f = h5py.File(s3.open(filepath, "rb"), "r")
+    else:
+        f = h5pyd.File(filepath, "r", use_cache=use_cache, bucket=bucket)
     dset = f[h5path]
     logging.info(f"dset: {dset} id: {dset.id.id}")
     logging.info(f"shape: {dset.shape}")
@@ -49,7 +55,7 @@ def print_stats(filepath, index, arr):
 station_count = 2488136
 folderpath = "/nrel/wtk/conus/"
 year_start = 2007
-num_years = 8
+num_years = 7
 iter_count = 1
 use_mp = False
 cfg["h5path"] = "windspeed_80m"
@@ -66,6 +72,8 @@ if len(sys.argv) > 1 and sys.argv[1] in ("-h", "--help"):
     msg += "[--iter=count] [--usecache] [--mp]"
     print(msg)
     print(f"    --folder: path to wtk conus files (defalt: {folderpath})")
+    print("        path can be an HSDS domain path or s3 uri to HDF5 files")
+    print("        example: folder=s3://nrel-pds-wtk/conus/v1.0.0/")
     print(f"    --h5path: hdf5 path to dataset (default: {cfg['h5path']})")
     print("    --index:  location index [0-2488135] (default: random))")
     print(f"    --bucket_name: S3 bucket name (default: {cfg['bucket']}")
@@ -83,7 +91,7 @@ if len(sys.argv) > 1 and sys.argv[1] in ("-h", "--help"):
 for arg in sys.argv:
     if arg == sys.argv[0]:
         pass
-    elif arg.startswith("--folderpath="):
+    elif arg.startswith("--folder="):
         folderpath = get_argval(arg)
     elif arg.startswith("--h5path="):
         cfg["h5path"] = get_argval(arg)
