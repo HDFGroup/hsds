@@ -7,10 +7,10 @@ from multiprocessing import Pool
 import h5pyd
 
 cfg = {}
-#
-# Return text after '=' sign
-#
+
+
 def get_argval(arg):
+    # get text after '=' char
     fields = arg.split("=")
     if len(fields) != 2:
         raise ValueError(f"Unexpected argument: {arg}")
@@ -18,6 +18,7 @@ def get_argval(arg):
 
 
 def get_timeseries(filepath):
+    # return timeseries for given filepath
     use_cache = cfg["use_cache"]
     bucket = cfg["bucket"]
     h5path = cfg["h5path"]
@@ -33,6 +34,13 @@ def get_timeseries(filepath):
     elapsed = time.time() - ts
     logging.info(f"get_timeseries {filepath}[::,{index}]: {elapsed:6.2f}s")
     return arr
+
+
+def print_stats(filepath, index, arr):
+    # print min, max, mean valaues
+    msg = f"{filepath} - arr[:,{index}]: {arr.min():6.2f}, "
+    msg += f"{arr.max():6.2f}, {arr.mean():6.2f}"
+    print(msg)
 
 
 #
@@ -53,23 +61,22 @@ logging.basicConfig(format="%(asctime)s %(message)s", level=loglevel)
 
 
 if len(sys.argv) > 1 and sys.argv[1] in ("-h", "--help"):
-    print(
-        "usage: python wtk_conus_test.py [--folder=<folderpath>] [--h5path=dataset_name] [--index=index] [--bucket=bucket_name] [--iter=count] [--usecache] [--mp]"
-    )
+    msg = "usage: python wtk_conus_test.py [--folder=<folderpath>] "
+    msg += "[--h5path=dataset_name] [--index=index] [--bucket=bucket_name] "
+    msg += "[--iter=count] [--usecache] [--mp]"
+    print(msg)
     print(f"    --folder: path to wtk conus files (defalt: {folderpath})")
     print(f"    --h5path: hdf5 path to dataset (default: {cfg['h5path']})")
     print("    --index:  location index [0-2488135] (default: random))")
     print(f"    --bucket_name: S3 bucket name (default: {cfg['bucket']}")
     print(f"    --iter:  number of times to repeat test (default: {iter_count})")
-    print(
-        "    --mp: use multiprocessing to run year look ups in parallel (default: run serially)"
-    )
+    print("    --mp: use multiprocessing to run year look ups in parallel ")
+    print("           (default: run serially)")
     print("    --usecache: set use_cache to True in h5py.File open (default: False)")
     print(" ")
     print("example: python wtk_conus_test.py --folder=/nrel/wtk/conus/")
-    print(
-        "or with bucket arg: python wtk_conus_test.py --folder=/nrel/wtk/conus --bucket=nrel-pds-hsds"
-    )
+    print("or with bucket arg: ")
+    print("python wtk_conus_test.py --folder=/nrel/wtk/conus --bucket=nrel-pds-hsds")
     sys.exit(0)
 
 
@@ -121,19 +128,16 @@ if __name__ == "__main__":
                 for i in range(num_years):
                     filepath = filepaths[i]
                     arr = year_arrs[i]
+                    print_stats(filepath, index, arr)
 
-                    print(
-                        f"{filepath} - arr[:,{index}]: {arr.min():6.2f}, {arr.max():6.2f}, {arr.mean():6.2f}"
-                    )
                 cfg["index"] += 1
     else:
         for i in range(iter_count):
             for i in range(num_years):
                 filepath = filepaths[i]
                 arr = get_timeseries(filepath)
-                print(
-                    f"{filepath} - arr[:,{index}]: {arr.min():6.2f}, {arr.max():6.2f}, {arr.mean():6.2f}"
-                )
+                print_stats(filepath, index, arr)
+
             cfg["index"] += 1
 
     print("------------")
