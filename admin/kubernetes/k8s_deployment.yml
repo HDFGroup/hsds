@@ -15,44 +15,47 @@ spec:
         app: hsds
     spec:
       containers:
-        -
-          name: sn
+        - name: sn
           image: "hsds"
           imagePullPolicy: Never
           ports:
-            -
-              containerPort: 5101
+            - containerPort: 5101
           env:
-          - name: NODE_TYPE
-            value: sn
-          - name: AWS_S3_GATEWAY
-            value: http://s3.amazonaws.com
-          - name: AWS_ACCESS_KEY_ID
-            valueFrom:
-              secretKeyRef:
-                name: aws-auth-keys
-                key: aws_access_key_id
-          - name: AWS_SECRET_ACCESS_KEY
-            valueFrom:
-              secretKeyRef:
-                name: aws-auth-keys
-                key: aws_secret_access_key
-          - name: AWS_REGION
-            value: us-east-1
-          - name: BUCKET_NAME
-            value: hsds.bucket
-          - name: LOG_LEVEL
-            value: DEBUG
-          - name: SERVER_NAME
-            value: "Highly Scalable Data Service (HSDS)"
-          - name: HSDS_ENDPOINT
-            value: http://hsds.hdf.test
-          - name: GREETING
-            value: "Welcome to HSDS!"
-          - name: ABOUT
-            value: "HSDS is a webservice for HDF data"
-        -
-          name: dn
+            - name: NODE_TYPE
+              value: sn
+            - name: AWS_S3_GATEWAY
+              value: http://s3.amazonaws.com
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: aws-auth-keys
+                  key: aws_access_key_id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aws-auth-keys
+                  key: aws_secret_access_key
+            - name: AWS_REGION
+              value: us-east-1
+            - name: BUCKET_NAME
+              value: hsds.bucket
+            - name: LOG_LEVEL
+              value: DEBUG
+            - name: SERVER_NAME
+              value: "Highly Scalable Data Service (HSDS)"
+            - name: HSDS_ENDPOINT
+              value: http://hsds.hdf.test
+            - name: GREETING
+              value: "Welcome to HSDS!"
+            - name: ABOUT
+              value: "HSDS is a webservice for HDF data"
+          livenessProbe:
+            httpGet:
+              path: /info
+              port: 5101
+            initialDelaySeconds: 5
+            periodSeconds: 5
+        - name: dn
           image: "hsds"
           lifecycle:
             preStop:
@@ -60,28 +63,33 @@ spec:
                 command: ["/sbin/killall5", "-15"]
           imagePullPolicy: Never
           ports:
-            -
-              containerPort: 6101
+            - containerPort: 6101
           env:
-          - name: NODE_TYPE
-            value: dn
-          - name: AWS_S3_GATEWAY
-            value: http://s3.amazonaws.com
-          - name: AWS_ACCESS_KEY_ID
-            valueFrom:
-              secretKeyRef:
-                name: aws-auth-keys
-                key: aws_access_key_id
-          - name: AWS_SECRET_ACCESS_KEY
-            valueFrom:
-              secretKeyRef:
-                name: aws-auth-keys
-                key: aws_secret_access_key
-          - name: AWS_REGION
-            value: us-east-1
-          - name: BUCKET_NAME
-            value: hsds.bucket
-          - name: LOG_LEVEL
-            value: DEBUG
-          - name: HSDS_ENDPOINT
-            value: http://hsds.hdf.test
+            - name: NODE_TYPE
+              value: dn
+            - name: AWS_S3_GATEWAY
+              value: http://s3.amazonaws.com
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: aws-auth-keys
+                  key: aws_access_key_id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aws-auth-keys
+                  key: aws_secret_access_key
+            - name: AWS_REGION
+              value: us-east-1
+            - name: BUCKET_NAME
+              value: hsds.bucket
+            - name: LOG_LEVEL
+              value: DEBUG
+            - name: HSDS_ENDPOINT
+              value: http://hsds.hdf.test
+          livenessProbe:
+            httpGet:
+              path: /info
+              port: 6101
+            initialDelaySeconds: 5
+            periodSeconds: 5

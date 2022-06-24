@@ -52,6 +52,12 @@ spec:
               secretKeyRef:
                 name: azure-ad-ids
                 key: az_resource_id
+          livenessProbe:
+            httpGet:
+              path: /info
+              port: 5101
+            initialDelaySeconds: 5
+            periodSeconds: 5
         -
           name: dn
           image: "hdfgroup/hsds"
@@ -80,6 +86,12 @@ spec:
               secretKeyRef:
                 name: azure-conn-str
                 key: az_conn_str
+          livenessProbe:
+            httpGet:
+              path: /info
+              port: 6101
+            initialDelaySeconds: 5
+            periodSeconds: 5
       volumes:
       - name: accounts
         secret:

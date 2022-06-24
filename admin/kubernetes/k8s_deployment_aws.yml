@@ -1,4 +1,3 @@
-
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -16,8 +15,7 @@ spec:
         app: hsds
     spec:
       containers:
-        -
-          name: sn
+        - name: sn
           image: "hdfgroup/hsds:v0.7.0beta6"
           imagePullPolicy: IfNotPresent
           resources:
@@ -26,33 +24,37 @@ spec:
             limits:
               memory: "1G"
           volumeMounts:
-          - name: accounts
-            mountPath: "/config/passwd.txt"
-            subPath: passwd.txt
-          - name: config
-            mountPath: "/config"
+            - name: accounts
+              mountPath: "/config/passwd.txt"
+              subPath: passwd.txt
+            - name: config
+              mountPath: "/config"
           ports:
-            -
-              containerPort: 5101
+            - containerPort: 5101
           env:
-          - name: NODE_TYPE
-            value: sn
-          - name: HEAD_PORT
-            value: null # no head container
-          - name: PASSWORD_FILE
-            value: /config/passwd.txt
-          - name: AWS_ACCESS_KEY_ID
-            valueFrom:
-              secretKeyRef:
-                name: aws-auth-keys
-                key: aws_access_key_id
-          - name: AWS_SECRET_ACCESS_KEY
-            valueFrom:
-              secretKeyRef:
-                name: aws-auth-keys
-                key: aws_secret_access_key
-        -
-          name: dn
+            - name: NODE_TYPE
+              value: sn
+            - name: HEAD_PORT
+              value: null # no head container
+            - name: PASSWORD_FILE
+              value: /config/passwd.txt
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: aws-auth-keys
+                  key: aws_access_key_id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aws-auth-keys
+                  key: aws_secret_access_key
+          livenessProbe:
+            httpGet:
+              path: /info
+              port: 5101
+            initialDelaySeconds: 5
+            periodSeconds: 5
+        - name: dn
           image: "hdfgroup/hsds:v0.7.0beta6"
           lifecycle:
             preStop:
@@ -65,30 +67,35 @@ spec:
             limits:
               memory: "2G"
           volumeMounts:
-          - name: config
-            mountPath: "/config"
+            - name: config
+              mountPath: "/config"
           ports:
-            -
-              containerPort: 6101
+            - containerPort: 6101
           env:
-          - name: NODE_TYPE
-            value: dn
-          - name: HEAD_PORT
-            value: null # no head container
-          - name: AWS_ACCESS_KEY_ID
-            valueFrom:
-              secretKeyRef:
-                name: aws-auth-keys
-                key: aws_access_key_id
-          - name: AWS_SECRET_ACCESS_KEY
-            valueFrom:
-              secretKeyRef:
-                name: aws-auth-keys
-                key: aws_secret_access_key
+            - name: NODE_TYPE
+              value: dn
+            - name: HEAD_PORT
+              value: null # no head container
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: aws-auth-keys
+                  key: aws_access_key_id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aws-auth-keys
+                  key: aws_secret_access_key
+          livenessProbe:
+            httpGet:
+              path: /info
+              port: 6101
+            initialDelaySeconds: 5
+            periodSeconds: 5
       volumes:
-      - name: accounts
-        secret:
-          secretName: user-password
-      - name: config
-        configMap:
-          name: hsds-config
+        - name: accounts
+          secret:
+            secretName: user-password
+        - name: config
+          configMap:
+            name: hsds-config

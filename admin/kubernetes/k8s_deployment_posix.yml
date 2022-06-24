@@ -15,27 +15,30 @@ spec:
         app: hsds
     spec:
       containers:
-        -
-          name: sn
+        - name: sn
           image: "hdfgroup/hsds"
           imagePullPolicy: IfNotPresent
           volumeMounts:
-          - name: data
-            mountPath: "/data"
-          - name: accounts
-            mountPath: "/config"
-          - name: config
-            mountPath: "/config/"
+            - name: data
+              mountPath: "/data"
+            - name: accounts
+              mountPath: "/config"
+            - name: config
+              mountPath: "/config/"
           ports:
-            -
-              containerPort: 5101
+            - containerPort: 5101
           env:
-          - name: NODE_TYPE
-            value: sn
-          - name: HEAD_PORT
-            value: "0" # no head container
-        -
-          name: dn
+            - name: NODE_TYPE
+              value: sn
+            - name: HEAD_PORT
+              value: "0" # no head container
+          livenessProbe:
+            httpGet:
+              path: /info
+              port: 5101
+            initialDelaySeconds: 5
+            periodSeconds: 5
+        - name: dn
           image: "hdfgroup/hsds"
           lifecycle:
             preStop:
@@ -43,25 +46,30 @@ spec:
                 command: ["/sbin/killall5", "-15"]
           imagePullPolicy: IfNotPresent
           volumeMounts:
-          - name: data
-            mountPath: "/data"
+            - name: data
+              mountPath: "/data"
           ports:
-            -
-              containerPort: 6101
+            - containerPort: 6101
           env:
-          - name: NODE_TYPE
-            value: dn
-          - name: HEAD_PORT
-            value: "0" # no head container
+            - name: NODE_TYPE
+              value: dn
+            - name: HEAD_PORT
+              value: "0" # no head container
+          livenessProbe:
+            httpGet:
+              path: /info
+              port: 6101
+            initialDelaySeconds: 5
+            periodSeconds: 5
       volumes:
-      - name: data
-        hostPath:
-          # change to directory location for bucket parent directory
-          path: /var/mybuckets
-          type: Directory
-      - name: config
-        secret:
-          secretName: user-password
-      - name: hsds-config
-        configMap:
-          name: hsds-config
+        - name: data
+          hostPath:
+            # change to directory location for bucket parent directory
+            path: /var/mybuckets
+            type: Directory
+        - name: config
+          secret:
+            secretName: user-password
+        - name: hsds-config
+          configMap:
+            name: hsds-config
