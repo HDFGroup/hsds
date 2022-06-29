@@ -73,7 +73,7 @@ if len(sys.argv) > 1 and sys.argv[1] in ("-h", "--help"):
     print(msg)
     print(f"    --folder: path to wtk conus files (defalt: {folderpath})")
     print("        path can be an HSDS domain path or s3 uri to HDF5 files")
-    print("        example: folder=s3://nrel-pds-wtk/conus/v1.0.0/")
+    print("        example: --folder=s3://nrel-pds-wtk/conus/v1.0.0/")
     print(f"    --h5path: hdf5 path to dataset (default: {cfg['h5path']})")
     print("    --index:  location index [0-2488135] (default: random))")
     print(f"    --bucket_name: S3 bucket name (default: {cfg['bucket']}")
