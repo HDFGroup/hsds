@@ -177,7 +177,7 @@ class S3Client:
             # iam-roles-for-amazon-ec2.html?icmpid=docs_ec2_console
             url = "http://169.254.169.254/latest/meta-data/iam/"
             url += f"security-credentials/{self._aws_iam_role}"
-            curl_cmd = ["curl", url]
+            curl_cmd = ["curl", "--no-progress-meter", url]
             kwargs = {"stdout": subprocess.PIPE, "stderr": subprocess.PIPE}
             p = subprocess.run(curl_cmd, **kwargs)
             if p.returncode != 0:
