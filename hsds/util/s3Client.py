@@ -20,6 +20,7 @@ import time
 from aiobotocore.config import AioConfig
 from aiobotocore.session import get_session
 from botocore.exceptions import ClientError
+from botocore import UNSIGNED
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPForbidden, HTTPBadRequest
 from .. import hsds_logger as log
@@ -64,6 +65,8 @@ class S3Client:
         self._aws_session_token = None
         self._aws_role_arn = None
         self._aws_session_token = None
+        self._aws_no_sign_request = False
+        signature_version = None
 
         try:
             self._aws_iam_role = config.get("aws_iam_role")
@@ -100,7 +103,14 @@ class S3Client:
             self._aws_session_token = os.environ["AWS_SESSION_TOKEN"]
             log.debug(f"got AWS_SESSION_TOKEN: {self._aws_session_token}")
 
-        self._aio_config = AioConfig(max_pool_connections=max_pool_connections)
+        try:
+            self._aws_no_sign_request = config.get("aws_s3_no_sign_request", False)
+            if self._aws_no_sign_request:
+                signature_version = UNSIGNED
+        except KeyError:
+            pass
+
+        self._aio_config = AioConfig(max_pool_connections=max_pool_connections, signature_version=signature_version)
 
         log.debug(f"S3Client init - aws_region {self._aws_region}")
 
@@ -141,6 +151,10 @@ class S3Client:
         to expire, otherwise just return
         """
         app = self._app
+
+        if self._aws_no_sign_request:
+            # no need to get a token
+            return
 
         if not self._aws_iam_role:
             # need this to get a token

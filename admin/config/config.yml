@@ -8,6 +8,7 @@ aws_iam_role: hsds_role  # For EC2 using IAM roles
 aws_region: us-east-1
 hsds_endpoint: http://hsds.hdf.test # used for hateos links in response
 aws_s3_gateway: null   # use endpoint for the region HSDS is running in, e.g. 'https://s3.amazonaws.com' for us-east-1
+aws_s3_no_sign_request: false # do not use credentials for S3 requests, equivalent of --no-sign-request for AWS CLI
 aws_dynamodb_gateway: null # use for dynamodb endpint, e.g. 'https://dynamodb.us-east-1.amazonaws.com',
 aws_dynamodb_users_table: null # set to table name if dynamodb is used to store usernames and passwords
 azure_connection_string: null # use for connecting to Azure blob storage
