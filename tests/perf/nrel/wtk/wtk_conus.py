@@ -151,4 +151,4 @@ if __name__ == "__main__":
     print("------------")
 
     elapsed = time.time() - ts
-    print(f"elapsed time: {elapsed:6.2f}")
+    print(f"elapsed time: {elapsed:6.2f} s")

@@ -72,7 +72,7 @@ if option == "--hsds":
         mode="r",
         use_cache=False,
         bucket=HSDS_BUCKET,
-        retries=100,
+        retries=1,
     )
 elif option == "--ros3":
     secret_id = os.environ["AWS_ACCESS_KEY_ID"]
@@ -90,7 +90,7 @@ elif option == "--ros3":
     )
 elif option == "--s3fs":
     s3 = s3fs.S3FileSystem()
-    s3Url = f"s3://{HDF5_BUCKET}.s3.amazonaws.com/{FILENAME}"
+    s3Url = f"s3://{HDF5_BUCKET}/{FILENAME}"
     f = h5py.File(s3.open(s3Url, "rb"), "r")
 else:
     # --hdf5
