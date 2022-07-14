@@ -5,6 +5,7 @@ import logging
 import time
 import h5py
 import h5pyd
+import s3fs
 import numpy as np
 
 HSDS_BUCKET = "nrel-pds-hsds"
@@ -14,7 +15,7 @@ FILENAME = "v3/nsrdb_2000.h5"
 NUM_COLS = 17568
 NUM_ROWS = 2018392
 H5_PATH = "/wind_speed"
-OPTIONS = ("--hdf5", "--hsds", "--ros3")
+OPTIONS = ("--hdf5", "--hsds", "--ros3", "--s3fs")
 
 # Note: currently the ros3 option needs the h5py build from conda-forge
 
@@ -87,6 +88,10 @@ elif option == "--ros3":
         secret_id=secret_id,
         secret_key=secret_key,
     )
+elif option == "--s3fs":
+    s3 = s3fs.S3FileSystem()
+    s3Url = f"s3://{HDF5_BUCKET}.s3.amazonaws.com/{FILENAME}"
+    f = h5py.File(s3.open(s3Url, "rb"), "r")
 else:
     # --hdf5
     f = h5py.File(FILENAME, mode="r")
