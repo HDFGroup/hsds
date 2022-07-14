@@ -110,8 +110,9 @@ async def get_slices(app, select, dset_json, bucket=None):
     if slices is None:
         try:
             slices = getSelectionList(select, dims)
-        except ValueError as ve:
-            msg = str(ve)
+        except ValueError:
+            msg = f"Invalid selection: {select} on dims: {dims} "
+            msg += f"for dataset: {dset_id}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
     return slices
