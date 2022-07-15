@@ -143,16 +143,12 @@ if __name__ == "__main__":
                     filepath = filepaths[i]
                     arr = year_arrs[i]
                     print_stats(filepath, index, arr)
-
-                cfg["index"] += 1
     else:
         for i in range(iter_count):
             for i in range(num_years):
                 filepath = filepaths[i]
                 arr = get_timeseries(filepath)
                 print_stats(filepath, index, arr)
-
-            cfg["index"] += 1
 
     print("------------")
 
