@@ -8,10 +8,11 @@ import h5pyd
 import s3fs
 import numpy as np
 
-HSDS_BUCKET = "nrel-pds-hsds"
-HDF5_BUCKET = "nrel-pds-nsrdb"
-HSDS_FOLDER = "/nrel/nsrdb/"
-FILENAME = "v3/nsrdb_2000.h5"
+HSDS_BUCKET = "hdflab2"
+HDF5_BUCKET = "hdfgroup"
+S3_FOLDER = "data/NREL"
+HSDS_FOLDER = "/shared/NREL/nsrdb"
+FILENAME = "nsrdb_2000_wind_speed.h5"
 NUM_COLS = 17568
 NUM_ROWS = 2018392
 H5_PATH = "/wind_speed"
@@ -68,7 +69,7 @@ logging.basicConfig(format="%(asctime)s %(message)s", level=log_level)
 
 if option == "--hsds":
     f = h5pyd.File(
-        HSDS_FOLDER + FILENAME,
+        f"{HSDS_FOLDER}/{FILENAME}",
         mode="r",
         use_cache=False,
         bucket=HSDS_BUCKET,
@@ -79,7 +80,7 @@ elif option == "--ros3":
     secret_id = secret_id.encode("utf-8")
     secret_key = os.environ["AWS_SECRET_ACCESS_KEY"]
     secret_key = secret_key.encode("utf-8")
-    s3Url = f"http://{HDF5_BUCKET}.s3.amazonaws.com/{FILENAME}"
+    s3Url = f"http://{HDF5_BUCKET}.s3.amazonaws.com/{S3_FOLDER}/{FILENAME}"
     f = h5py.File(
         s3Url,
         mode="r",
@@ -90,7 +91,7 @@ elif option == "--ros3":
     )
 elif option == "--s3fs":
     s3 = s3fs.S3FileSystem()
-    s3Url = f"s3://{HDF5_BUCKET}/{FILENAME}"
+    s3Url = f"s3://{HDF5_BUCKET}/{S3_FOLDER}/{FILENAME}"
     f = h5py.File(s3.open(s3Url, "rb"), "r")
 else:
     # --hdf5
@@ -98,7 +99,6 @@ else:
 
 # read dataset
 dset = f[H5_PATH]
-print(dset)
 result = np.zeros((NUM_ROWS,), dtype=dset.dtype)
 # read by blocks
 num_blocks = -(-NUM_ROWS // block)  # integer ceiling
