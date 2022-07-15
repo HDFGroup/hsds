@@ -80,7 +80,7 @@ elif option == "--ros3":
     secret_id = secret_id.encode("utf-8")
     secret_key = os.environ["AWS_SECRET_ACCESS_KEY"]
     secret_key = secret_key.encode("utf-8")
-    s3Url = f"http://{HDF5_BUCKET}.us-west-2.s3.amazonaws.com/{S3_FOLDER}/{FILENAME}"
+    s3Url = f"http://{HDF5_BUCKET}.s3.amazonaws.com/{S3_FOLDER}/{FILENAME}"
     h5py._errors.unsilence_errors()  # for better error reporting
     f = h5py.File(
         s3Url,
