@@ -25,6 +25,10 @@ def get_timeseries(filepath):
     bucket = cfg["bucket"]
     h5path = cfg["h5path"]
     index = cfg["index"]
+    if index is None:
+        max_index = cfg["max_index"]
+        index = random.randint(0, max_index)
+
     if filepath.startswith("s3://"):
         s3 = s3fs.S3FileSystem()
         f = h5py.File(s3.open(filepath, "rb"), "r")
@@ -109,15 +113,17 @@ for arg in sys.argv:
         raise ValueError(f"unexpected argument: {arg}")
 
 max_index = station_count - iter_count
+cfg["max_index"] = max_index
 logging.info(f"cfg: {cfg}")
 
 index = None
 if index is None:
-    index = random.randint(0, max_index)
+    cfg["index"] = None  # set randomly
 elif index > max_index:
     raise ValueError("index is too large")
-logging.info(f"index: {index}")
-cfg["index"] = index
+else:
+    logging.info(f"index: {index}")
+    cfg["index"] = index
 
 filepaths = []
 for i in range(num_years):
