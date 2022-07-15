@@ -9,7 +9,7 @@ import s3fs
 import numpy as np
 
 HSDS_BUCKET = "hdflab2"
-HDF5_BUCKET = "hdfgroup"
+HDF5_BUCKET = "hdf5.sample"
 S3_FOLDER = "data/NREL"
 HSDS_FOLDER = "/shared/NREL/nsrdb"
 FILENAME = "nsrdb_2000_wind_speed.h5"
