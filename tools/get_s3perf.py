@@ -49,7 +49,7 @@ if len(data) == 0:
 
 print(f"start_time:  {start_time}")
 print(f"finish_time: {finish_time}")
-print(f"elpased_time: {(finish_time - start_time):6.2f}")
+print(f"elapsed_time: {(finish_time - start_time):6.2f}")
 print(f"total_bytes: {total_bytes}")
 bytes_per_sec = total_bytes / (finish_time - start_time)
 print(f"MiB/s: {(bytes_per_sec/(1024.0*1024.0)):6.2f}")
