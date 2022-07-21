@@ -33,7 +33,7 @@ for narg in range(1, len(sys.argv)):
     arg = sys.argv[narg]
     if arg in OPTIONS:
         option = arg
-    if arg == "--cohdf5":
+    elif arg == "--cohdf5":
         file_extension = COHDF5_EXTENSION
     elif arg.startswith("--index="):
         nlen = len("--index=")
