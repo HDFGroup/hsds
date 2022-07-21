@@ -74,14 +74,13 @@ if block is None:
 logging.basicConfig(format="%(asctime)s %(message)s", level=log_level)
 
 if option == "--hsds":
-    f = h5pyd.File(
-        f"{HSDS_FOLDER}/{FILENAME}{file_extension}",
-        mode="r",
-        use_cache=False,
-        bucket=HSDS_BUCKET,
-        retries=1,
-        timeout=(10, 10000),
-    )
+    kwargs = {}
+    kwargs["mode"] = "r"
+    kwargs["bucket"] = HSDS_BUCKET
+    kwargs["retries"] = 1
+    kwargs["timeout"] = (10, 1000)
+
+    f = h5pyd.File(f"{HSDS_FOLDER}/{FILENAME}{file_extension}", **kwargs)
 elif option == "--ros3":
     secret_id = os.environ["AWS_ACCESS_KEY_ID"]
     secret_id = secret_id.encode("utf-8")
@@ -100,14 +99,7 @@ elif option == "--ros3":
     if file_extension == COHDF5_EXTENSION:
         kwargs["page_buf_size"] = PAGE_BUF_SIZE
 
-    f = h5py.File(
-        s3Url,
-        mode="r",
-        driver="ros3",
-        aws_region=b"us-west-2",
-        secret_id=secret_id,
-        secret_key=secret_key,
-    )
+    f = h5py.File(s3Url, **kwargs)
 elif option == "--s3fs":
     s3 = s3fs.S3FileSystem()
     s3Url = f"s3://{HDF5_BUCKET}/{S3_FOLDER}/{FILENAME}{file_extension}"
