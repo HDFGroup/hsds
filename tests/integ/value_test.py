@@ -1625,6 +1625,20 @@ class ValueTest(unittest.TestCase):
                 self.assertEqual(data[offset + 2], 0)
                 self.assertEqual(data[offset + 3], i * j)
 
+        # try same thing with a select param
+        params = {"select": "[0:10, 0:10]"}
+        rsp = self.session.get(req, params=params, headers=headers_bin_rsp)
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(rsp.headers["Content-Type"], "application/octet-stream")
+        self.assertEqual(rsp.content, data)  # should get same values
+
+        # equivalent select param
+        params = {"select": "[::, ::]"}
+        rsp = self.session.get(req, params=params, headers=headers_bin_rsp)
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(rsp.headers["Content-Type"], "application/octet-stream")
+        self.assertEqual(rsp.content, data)  # should get same values
+
         # read 4x4 block from dataset
         params = {"select": "[0:4, 0:4]"}
         params["nonstrict"] = 1  # SN can read directly from S3 or DN node

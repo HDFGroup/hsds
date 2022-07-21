@@ -25,6 +25,8 @@ def get_timeseries(filepath):
     bucket = cfg["bucket"]
     h5path = cfg["h5path"]
     index = cfg["index"]
+    print("cfg:", cfg)
+
     if filepath.startswith("s3://"):
         s3 = s3fs.S3FileSystem()
         f = h5py.File(s3.open(filepath, "rb"), "r")
@@ -44,7 +46,7 @@ def get_timeseries(filepath):
 
 def print_stats(filepath, index, arr):
     # print min, max, mean valaues
-    msg = f"{filepath} - arr[:,{index}]: {arr.min():6.2f}, "
+    msg = f"    {filepath} - arr[:,{index}]: {arr.min():6.2f}, "
     msg += f"{arr.max():6.2f}, {arr.mean():6.2f}"
     print(msg)
 
@@ -113,11 +115,13 @@ logging.info(f"cfg: {cfg}")
 
 index = None
 if index is None:
-    index = random.randint(0, max_index)
+    # cfg["index"] = None  # set randomly
+    cfg["index"] = random.randint(0, max_index)
 elif index > max_index:
     raise ValueError("index is too large")
-logging.info(f"index: {index}")
-cfg["index"] = index
+else:
+    logging.info(f"index: {index}")
+    cfg["index"] = index
 
 filepaths = []
 for i in range(num_years):
@@ -129,26 +133,36 @@ for i in range(num_years):
 if __name__ == "__main__":
     ts = time.time()
 
-    if use_mp:
-        with Pool(num_years) as pool:
-            for i in range(iter_count):
+    for iter in range(iter_count):
+        if index is None:
+            cfg["index"] = random.randint(0, max_index)
+            print("set index to:", cfg["index"])
+        elif iter > 0:
+            cfg["index"] += 1
+        t_start = time.time()
+
+        if use_mp:
+            with Pool(num_years) as pool:
+                t_start = time.time()
                 year_arrs = pool.map(get_timeseries, filepaths)
+                t_end = time.time()
                 for i in range(num_years):
                     filepath = filepaths[i]
                     arr = year_arrs[i]
-                    print_stats(filepath, index, arr)
-
-                cfg["index"] += 1
-    else:
-        for i in range(iter_count):
+                    print_stats(filepath, cfg["index"], arr)
+                if iter_count > 1:
+                    print(f"iter {i}: {(t_end-t_start):6.2f} s")
+        else:
             for i in range(num_years):
                 filepath = filepaths[i]
                 arr = get_timeseries(filepath)
-                print_stats(filepath, index, arr)
+                print_stats(filepath, cfg["index"], arr)
 
-            cfg["index"] += 1
+        t_end = time.time()
+        if iter_count > 1:
+            print(f"iter {iter}: {(t_end-t_start):6.2f} s")
 
     print("------------")
 
     elapsed = time.time() - ts
-    print(f"elapsed time: {elapsed:6.2f}")
+    print(f"elapsed time: {elapsed:6.2f} s")
