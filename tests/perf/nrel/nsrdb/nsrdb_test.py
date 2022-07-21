@@ -12,7 +12,10 @@ HSDS_BUCKET = "hdflab2"
 HDF5_BUCKET = "hdf5.sample"
 S3_FOLDER = "data/NREL"
 HSDS_FOLDER = "/shared/NREL/nsrdb"
-FILENAME = "nsrdb_2000_wind_speed.h5"
+FILENAME = "nsrdb_2000_wind_speed"
+HDF5_EXTENSION = ".h5"
+COHDF5_EXTENSION = ".ch5"
+PAGE_BUF_SIZE = 8388608  # 8MB
 NUM_COLS = 17568
 NUM_ROWS = 2018392
 H5_PATH = "/wind_speed"
@@ -25,10 +28,13 @@ option = None  # one of OPTIONS
 index = None
 block = None
 log_level = logging.WARNING
+file_extension = HDF5_EXTENSION
 for narg in range(1, len(sys.argv)):
     arg = sys.argv[narg]
     if arg in OPTIONS:
         option = arg
+    if arg == "--cohdf5":
+        file_extension = COHDF5_EXTENSION
     elif arg.startswith("--index="):
         nlen = len("--index=")
         index = int(arg[nlen:])
@@ -54,7 +60,7 @@ for narg in range(1, len(sys.argv)):
 
 if option is None:
     msg = f"usage: python nsrdb_test.py {OPTIONS} "
-    msg == "[--index=n] [--block=n] [--loglevel=debug|info|warning|error]"
+    msg += "[--index=n] [--block=n] [--cohdf5] [--loglevel=debug|info|warning|error]"
     print(msg)
     sys.exit(0)
 
@@ -69,19 +75,31 @@ logging.basicConfig(format="%(asctime)s %(message)s", level=log_level)
 
 if option == "--hsds":
     f = h5pyd.File(
-        f"{HSDS_FOLDER}/{FILENAME}",
+        f"{HSDS_FOLDER}/{FILENAME}{file_extension}",
         mode="r",
         use_cache=False,
         bucket=HSDS_BUCKET,
         retries=1,
+        timeout=(10, 10000),
     )
 elif option == "--ros3":
     secret_id = os.environ["AWS_ACCESS_KEY_ID"]
     secret_id = secret_id.encode("utf-8")
     secret_key = os.environ["AWS_SECRET_ACCESS_KEY"]
     secret_key = secret_key.encode("utf-8")
-    s3Url = f"http://{HDF5_BUCKET}.s3.amazonaws.com/{S3_FOLDER}/{FILENAME}"
+    s3Url = (
+        f"http://{HDF5_BUCKET}.s3.amazonaws.com/{S3_FOLDER}/{FILENAME}{file_extension}"
+    )
     h5py._errors.unsilence_errors()  # for better error reporting
+    kwargs = {}
+    kwargs["mode"] = "r"
+    kwargs["driver"] = "ros3"
+    kwargs["aws_region"] = b"us-west-2"
+    kwargs["secret_id"] = secret_id
+    kwargs["secret_key"] = secret_key
+    if file_extension == COHDF5_EXTENSION:
+        kwargs["page_buf_size"] = PAGE_BUF_SIZE
+
     f = h5py.File(
         s3Url,
         mode="r",
@@ -92,11 +110,18 @@ elif option == "--ros3":
     )
 elif option == "--s3fs":
     s3 = s3fs.S3FileSystem()
-    s3Url = f"s3://{HDF5_BUCKET}/{S3_FOLDER}/{FILENAME}"
-    f = h5py.File(s3.open(s3Url, "rb"), "r")
+    s3Url = f"s3://{HDF5_BUCKET}/{S3_FOLDER}/{FILENAME}{file_extension}"
+    kwargs = {}
+    if file_extension == COHDF5_EXTENSION:
+        kwargs["page_buf_size"] = PAGE_BUF_SIZE
+
+    f = h5py.File(s3.open(s3Url, "rb"), "r", **kwargs)
 else:
     # --hdf5
-    f = h5py.File(FILENAME, mode="r")
+    kwargs = {}
+    if file_extension == COHDF5_EXTENSION:
+        kwargs["page_buf_size"] = PAGE_BUF_SIZE
+    f = h5py.File(FILENAME + file_extension, "r", **kwargs)
 
 # read dataset
 dset = f[H5_PATH]
