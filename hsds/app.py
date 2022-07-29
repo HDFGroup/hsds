@@ -217,7 +217,7 @@ def main():
         help="directory for config data",
     )
 
-    args, extra_args = parser.parse_known_args()
+    args = parser.parse_args()
 
     kwargs = {}  # options to pass to hsdsapp
 
