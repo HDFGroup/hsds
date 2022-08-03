@@ -49,7 +49,7 @@ class AzureBlobClient:
             msg = "No connection string specified"
             log.error(msg)
             raise ValueError(msg)
-        log.info(f"Using azure_connection_string: {azure_connection_string}")
+        log.info(f"Using azure_connection_string: {'*'*len(azure_connection_string)}")
 
         self._client = BlobServiceClient.from_connection_string(azure_connection_string)
 
