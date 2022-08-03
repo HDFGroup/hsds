@@ -14,7 +14,7 @@ COPY hsds/util/*.py /usr/local/src/hsds/hsds/util/
 COPY admin/config/config.yml /etc/hsds/
 COPY admin/config/config.yml /usr/local/src/hsds/admin/config/
 COPY entrypoint.sh  /
-RUN /bin/bash -c "pip install /usr/local/src/hsds/"
+RUN /bin/bash -c 'cd /usr/local/src/hsds; pip install -e ".[azure]" ; cd -'
 
 EXPOSE 5100-5999
 ENTRYPOINT ["/bin/bash", "-c", "/entrypoint.sh"]
