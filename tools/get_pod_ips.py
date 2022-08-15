@@ -152,26 +152,11 @@ def _k8sGetPodIPs(pod_json, k8s_app_label):
             continue
         metadata = item["metadata"]
         # log.debug(f"pod metadata: {metadata}")
-        if "labels" not in metadata:
-            msg = "_k8sGetPodIPs - expected to labels key in metadata"
-            log_warn(msg)
-            continue
-        labels = metadata["labels"]
-        if "app" not in labels:
-            msg = "_k8sGetPodIPs - no app label"
-            log_debug(msg)
-            continue
-        app_label = labels["app"]
-        if app_label != k8s_app_label:
-            msg = f"_k8sGetPodIPs - app_label: {app_label} not equal to: "
-            msg += f"{k8s_app_label}, skipping"
-            log_debug(msg)
-            continue
         ipKeys.extend(getIPKeys(metadata))
     return ipKeys
 
 
-async def _k8sListPod():
+async def _k8sListPod(k8s_label_selector):
     """Make http request to k8s to get info on all pods in
     the current namespace.  Return json dictionary"""
     namespace = _k8sGetNamespace()
@@ -179,6 +164,7 @@ async def _k8sListPod():
     ssl_ctx = ssl.create_default_context(cafile=cafile)
     token = _k8sGetBearerToken()
     headers = {"Authorization": token}
+    params = {"labelSelector": k8s_label_selector}
     conn = aiohttp.TCPConnector(ssl_context=ssl_ctx)
     pod_json = None
     # TBD - save session for re-use
@@ -188,7 +174,7 @@ async def _k8sListPod():
     async with aiohttp.ClientSession(connector=conn) as session:
         # TBD: use read_bufsize parameter to optimize read for large responses
         try:
-            async with session.get(url, headers=headers) as rsp:
+            async with session.get(url, headers=headers, params=params) as rsp:
                 log_info(f"http_get status for k8s pods: {rsp.status} for req: {url}")
                 status_code = rsp.status
                 if rsp.status == 200:
@@ -221,10 +207,10 @@ async def _k8sListPod():
     return pod_json
 
 
-async def getPodIps(k8s_app_label):
-    log_debug(f"getPodIps({k8s_app_label})")
-    pod_json = await _k8sListPod()
-    pod_ips = _k8sGetPodIPs(pod_json, k8s_app_label)
+async def getPodIps(k8s_label_selector):
+    log_debug(f"getPodIps({k8s_label_selector})")
+    pod_json = await _k8sListPod(k8s_label_selector)
+    pod_ips = _k8sGetPodIPs(pod_json)
     log_info(f"gotPodIps: {pod_ips}")
 
     return pod_ips
@@ -232,7 +218,7 @@ async def getPodIps(k8s_app_label):
 
 async def main():
     print("main")
-    pod_ips = await getPodIps("hsds")
+    pod_ips = await getPodIps("app=hsds")
     print("pod_ips:", pod_ips)
 
 

@@ -25,10 +25,10 @@ dn_ram: 3g     # memory for DN container (per container)
 sn_port: 5101   # Start sn ports at 5101
 sn_ram: 1g     # memory for SN container
 rangeget_port: 6900  # singleton proxy at port 6900
-rangeget_ram: 2g  # memory for RANGEGET container 
+rangeget_ram: 2g  # memory for RANGEGET container
 target_sn_count: 0  # desired number of SN containers
 target_dn_count: 0 # desire number of DN containers
-log_level: INFO    # log level.  One of ERROR, WARNING, INFO, DEBUG 
+log_level: INFO    # log level.  One of ERROR, WARNING, INFO, DEBUG
 log_timestamps: false # emit timestamp with log messages
 log_prefix: null   # Prefix text to append to log entries
 max_tcp_connections: 100   # max number of inflight tcp connections
@@ -49,7 +49,7 @@ max_chunks_per_folder: 0 # max number of chunks per s3 folder. 0 for unlimiited
 max_task_count: 100  # maximum number of concurrent tasks before server will return 503 error
 max_tasks_per_node_per_request: 16 # maximum number of inflight tasks to to each node per request
 aio_max_pool_connections: 64  # number of connections to keep in conection pool for aiobotocore requests
-client_pool_count: 10 # pool count for SessionClient 
+client_pool_count: 10 # pool count for SessionClient
 metadata_mem_cache_size: 128m  # 128 MB - metadata cache size per DN node
 metadata_mem_cache_expire: 3600  # expire cache items after one hour
 chunk_mem_cache_size: 128m  # 128 MB - chunk cache size per DN node
@@ -76,9 +76,9 @@ openid_claims: unique_name,appid,roles   # Comma seperated list of claims to res
 chaos_die: 0           # if > 0, have nodes randomly die after n seconds (for testing)
 standalone_app: false   # True when run as a single application
 blosc_nthreads: 2  # number of threads to use for blosc compression.  Set to 0 to have blosc auto-determine thread count
-http_compression: false  # Use HTTP compression 
+http_compression: false  # Use HTTP compression
 http_max_url_length: 512 # Limit http request url + params to be less than this
-k8s_app_label: hsds  # The app label for k8s deployments
+k8s_dn_label_selector: app=hsds # Selector for getting data node pods from a k8s deployment (https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors)
 k8s_namespace: null # Specifies if a the client should be limited to a specific namespace. Useful for some RBAC configurations.
 restart_policy: on-failure # Docker restart policy
 domain_req_max_objects_limit: 500  # maximum number of objects to return in GET domain request with use_cache
@@ -91,5 +91,6 @@ aws_lambda_chunkread_function: null  # name of aws lambda function for chunk rea
 aws_lambda_threshold: 4   # number of chunks per node per request to reach before using lambda
 aws_lambda_max_invoke: 1000  # max number of lambda functions to invoke simultaneously
 aws_lambda_gateway: null # use lambda endpoint for region HSDS is running in
+k8s_app_label: null  # The app label for k8s deployments (use k8s_dn_label_selector instead)
 write_zero_chunks: False # write chunk to storage even when it's all zeros (or in general equial to the fill value)
 max_chunks_per_request: 1000  # maximum number of chunks to be serviced by one request
