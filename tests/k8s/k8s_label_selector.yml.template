@@ -1,0 +1,102 @@
+# This template file must be parsed by `envsubst` from gettext package to fill
+# the variables
+
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: hsds-dn-${HSDS_K8S_ENV}
+spec:
+  replicas: ${HSDS_K8S_DN_REPLICAS}
+  selector:
+    matchLabels:
+      app: hsds
+      nodeType: dn
+      env: ${HSDS_K8S_ENV}
+  template:
+    metadata:
+      labels:
+        app: hsds
+        nodeType: dn
+        env: ${HSDS_K8S_ENV}
+    spec:
+      containers:
+        - name: hsds-dn
+          image: hdfgroup/hsds
+          imagePullPolicy: IfNotPresent
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/sbin/killall5", "-15"]
+          env:
+            - name: NODE_TYPE
+              value: dn
+            - name: K8S_DN_LABEL_SELECTOR
+              value: app=hsds,nodeType=dn,env=${HSDS_K8S_ENV}
+            - name: HEAD_PORT
+              value: null # no head container
+          volumeMounts:
+            - name: config
+              mountPath: /config
+      volumes:
+        - name: config
+          configMap:
+            name: hsds-config
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: hsds-sn-${HSDS_K8S_ENV}
+  labels:
+    app: hsds
+    nodeType: sn
+    env: ${HSDS_K8S_ENV}
+spec:
+  containers:
+    - name: hsds-sn
+      image: hdfgroup/hsds
+      imagePullPolicy: IfNotPresent
+      lifecycle:
+        preStop:
+          exec:
+            command: ["/sbin/killall5", "-15"]
+      env:
+        - name: NODE_TYPE
+          value: sn
+        - name: K8S_DN_LABEL_SELECTOR
+          value: app=hsds,nodeType=dn,env=${HSDS_K8S_ENV}
+        - name: HEAD_PORT
+          value: null # no head container
+        - name: SN_PORT
+          value: "6101"  # Use the same port as DNs to check if it's not including the SN pod itself in the query
+      volumeMounts:
+        - name: config
+          mountPath: /config
+  volumes:
+    - name: config
+      configMap:
+        name: hsds-config
+
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: pods-list
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["list"]
+
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: pods-list
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: ${HSDS_K8S_NAMESPACE}
+roleRef:
+  kind: ClusterRole
+  name: pods-list
+  apiGroup: rbac.authorization.k8s.io
