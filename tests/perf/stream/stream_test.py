@@ -13,8 +13,8 @@ import unittest
 import json
 import math
 import time
-from tests.integ import helper
 import config
+import helper
 
 # Test the binary PUTs and GETs work for request larger than
 # max_request_size (by default 100MB)
