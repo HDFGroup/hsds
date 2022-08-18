@@ -1083,6 +1083,7 @@ async def GET_Value(request):
             resp.headers["Content-Type"] = "application/json"
         log.debug("prepare request")
         await resp.prepare(request)
+        arr = None  # will be set based on returned data
 
         if stream_pagination:
             # example
