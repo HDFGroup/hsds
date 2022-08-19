@@ -38,14 +38,12 @@ class K8sListDnTest(unittest.TestCase):
         try:
             run(["kubectl", "create", "namespace", self.k8s_namespace])
         except FileNotFoundError as e:
-            raise unittest.SkipTest(f"Missing kubectl") from e
+            raise unittest.SkipTest("Missing kubectl") from e
 
         self.kubectl(["create", "configmap", "hsds-config", "--from-file", CONFIG_FILE])
 
-
     def tearDown(self):
         run(["kubectl", "delete", "namespaces", self.k8s_namespace])
-
 
     def kubectl(self, args, **kwargs):
         args = ["kubectl", "--namespace", self.k8s_namespace] + args
@@ -55,9 +53,8 @@ class K8sListDnTest(unittest.TestCase):
         else:
             return subprocess.Popen(args, **kwargs)
 
-
     def create_pods(self, template_file, vars):
-        vars = { f"${{HSDS_K8S_{k.upper()}}}": v for k, v in vars.items() }
+        vars = {f"${{HSDS_K8S_{k.upper()}}}": v for k, v in vars.items()}
         vars["${HSDS_K8S_NAMESPACE}"] = self.k8s_namespace
 
         with NamedTemporaryFile("wt") as file, open(template_file) as template:
@@ -69,16 +66,20 @@ class K8sListDnTest(unittest.TestCase):
             file.flush()
             self.kubectl(["apply", "--filename", file.name])
 
-
     def forward_port(self, sn_pod_name):
         proc = self.kubectl(["port-forward", sn_pod_name, ":6101"],
                             stdout=subprocess.PIPE, universal_newlines=True)
 
         class Proc:
-            def __init__(self, proc): self.proc = proc
-            def __getattr__(self, name): return getattr(self.proc, name)
+            def __init__(self, proc):
+                self.proc = proc
 
-            def __enter__(self): return self
+            def __getattr__(self, name):
+                return getattr(self.proc, name)
+
+            def __enter__(self):
+                return self
+
             def __exit__(self, exc_type, exc_value, traceback):
                 self.proc.stdout.close()
                 self.proc.kill()
@@ -88,22 +89,22 @@ class K8sListDnTest(unittest.TestCase):
 
         line = proc.stdout.readline()
 
-        pattern = re.compile(".*:(\d+) -> 6101")
+        pattern = re.compile(r".*:(\d+) -> 6101")
         port = pattern.match(line)
         if not port:
-            raise RuntimeError(f"Failed parsing forwarded port from kubectl port-forward output '{line}'")
+            msg = f"Failed parsing forwarded port from kubectl port-forward output '{line}'"
+            raise RuntimeError(msg)
 
         proc.port = port.group(1)
         return proc
 
-
     def testK8sListDn(self):
         # Items pattern: { name: dn_replicas }
-        ENVS = { "dev": 2, "prod": 3 }
+        ENVS = {"dev": 2, "prod": 3}
 
         template_file = TEST_DIR / "k8s_label_selector.yml.template"
         for env, dn_replicas in ENVS.items():
-            vars = { "env": env, "dn_replicas": str(dn_replicas) }
+            vars = {"env": env, "dn_replicas": str(dn_replicas)}
             self.create_pods(template_file, vars)
 
         sleep(75)  # Give the pods time to start and HSDS to initialize
@@ -113,11 +114,10 @@ class K8sListDnTest(unittest.TestCase):
                 resp = requests.get(f"http://localhost:{proc.port}/info")
 
                 self.assertEqual(resp.status_code, requests.codes.ok,
-                                f"env={env}, reason={resp.reason}, body={resp.text}")
+                                 f"env={env}, reason={resp.reason}, body={resp.text}")
 
                 self.assertEqual(dn_replicas, resp.json()["node"]["node_count"],
-                                f"env={env}")
-
+                                 f"env={env}")
 
     def testK8sAppLabel(self):
         """Check backward compatibility with old "k8s_app_label" config entry"""
@@ -125,7 +125,7 @@ class K8sListDnTest(unittest.TestCase):
         dn_replicas = 3
 
         template_file = TEST_DIR / "k8s_app_label.yml.template"
-        vars = { "dn_replicas": str(dn_replicas) }
+        vars = {"dn_replicas": str(dn_replicas)}
         self.create_pods(template_file, vars)
 
         sleep(60)  # Give the pods time to start and HSDS to initialize
