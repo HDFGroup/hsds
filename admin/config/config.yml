@@ -1,95 +1,95 @@
 # HSDS configuration
-allow_noauth: true  # enable unauthenticated requests
+allow_noauth: true # enable unauthenticated requests
 auth_expiration: -1 # set an expiration for credential caching
 default_public: False # new domains are publically readable by default
-aws_access_key_id: xxx  # Replace with access key for account or use aws_iam_role
-aws_secret_access_key: xxx   # Replace with secret key for account
-aws_iam_role: hsds_role  # For EC2 using IAM roles
+aws_access_key_id: xxx # Replace with access key for account or use aws_iam_role
+aws_secret_access_key: xxx # Replace with secret key for account
+aws_iam_role: hsds_role # For EC2 using IAM roles
 aws_region: us-east-1
 hsds_endpoint: http://hsds.hdf.test # used for hateos links in response
-aws_s3_gateway: null   # use endpoint for the region HSDS is running in, e.g. 'https://s3.amazonaws.com' for us-east-1
+aws_s3_gateway: null # use endpoint for the region HSDS is running in, e.g. 'https://s3.amazonaws.com' for us-east-1
 aws_s3_no_sign_request: false # do not use credentials for S3 requests, equivalent of --no-sign-request for AWS CLI
 aws_dynamodb_gateway: null # use for dynamodb endpint, e.g. 'https://dynamodb.us-east-1.amazonaws.com',
 aws_dynamodb_users_table: null # set to table name if dynamodb is used to store usernames and passwords
 azure_connection_string: null # use for connecting to Azure blob storage
-azure_resource_id: null  # resource id for use with Azure Active Directory
-azure_storage_account: null  # storage account to use on Azure
-azure_resource_group: null  # Azure resource group the container (BUCKET_NAME) belongs to
-root_dir: null   # base directory to use for Posix storage
-password_salt: null  # salt value to generate password based on username.  Not recommended for public deployments
-bucket_name: hsdstest  # set to use a default bucket, otherwise bucket param is needed for all requests
-head_port: 5100     # port to use for head node
-head_ram: 512m  # memory for head container
-dn_port: 6101  # Start dn ports at 6101
-dn_ram: 3g     # memory for DN container (per container)
-sn_port: 5101   # Start sn ports at 5101
-sn_ram: 1g     # memory for SN container
-rangeget_port: 6900  # singleton proxy at port 6900
-rangeget_ram: 2g  # memory for RANGEGET container 
-target_sn_count: 0  # desired number of SN containers
+azure_resource_id: null # resource id for use with Azure Active Directory
+azure_storage_account: null # storage account to use on Azure
+azure_resource_group: null # Azure resource group the container (BUCKET_NAME) belongs to
+root_dir: null # base directory to use for Posix storage
+password_salt: null # salt value to generate password based on username.  Not recommended for public deployments
+bucket_name: hsdstest # set to use a default bucket, otherwise bucket param is needed for all requests
+head_port: 5100 # port to use for head node
+head_ram: 512m # memory for head container
+dn_port: 6101 # Start dn ports at 6101
+dn_ram: 3g # memory for DN container (per container)
+sn_port: 5101 # Start sn ports at 5101
+sn_ram: 3g # memory for SN container
+rangeget_port: 6900 # singleton proxy at port 6900
+rangeget_ram: 2g # memory for RANGEGET container
+target_sn_count: 0 # desired number of SN containers
 target_dn_count: 0 # desire number of DN containers
-log_level: INFO    # log level.  One of ERROR, WARNING, INFO, DEBUG 
+log_level: INFO # log level.  One of ERROR, WARNING, INFO, DEBUG
 log_timestamps: false # emit timestamp with log messages
-log_prefix: null   # Prefix text to append to log entries
-max_tcp_connections: 100   # max number of inflight tcp connections
-head_sleep_time: 10  # max sleep time between health checks for head node
+log_prefix: null # Prefix text to append to log entries
+max_tcp_connections: 100 # max number of inflight tcp connections
+head_sleep_time: 10 # max sleep time between health checks for head node
 node_sleep_time: 10 # max sleep time between health checks for SN/DN nodes
-async_sleep_time: 10  # max sleep time between async task runs
-s3_sync_interval: 1  # time to wait between s3_sync checks (in sec)
-s3_age_time: 1       # time to wait since last update to write an object to S3
-s3_sync_task_timeout: 10  # time to cancel write task if no response
-store_read_timeout: 1  # time to cancel storage read request if no response
-store_read_sleep_interval: 0.1  # time to sleep between checking on read request
-max_pending_write_requests: 20  # maxium number of inflight write requests
-flush_sleep_interval: 1  # time to wait between checking on dirty objects
-min_chunk_size: 1m  # 1 MB
+async_sleep_time: 10 # max sleep time between async task runs
+s3_sync_interval: 1 # time to wait between s3_sync checks (in sec)
+s3_age_time: 1 # time to wait since last update to write an object to S3
+s3_sync_task_timeout: 10 # time to cancel write task if no response
+store_read_timeout: 1 # time to cancel storage read request if no response
+store_read_sleep_interval: 0.1 # time to sleep between checking on read request
+max_pending_write_requests: 20 # maxium number of inflight write requests
+flush_sleep_interval: 1 # time to wait between checking on dirty objects
+min_chunk_size: 1m # 1 MB
 max_chunk_size: 4m # 4 MB
-max_request_size: 100m  # 100 MB - should be no smaller than client_max_body_size in nginx tmpl (if using nginx)
+max_request_size: 100m # 100 MB - should be no smaller than client_max_body_size in nginx tmpl (if using nginx)
 max_chunks_per_folder: 0 # max number of chunks per s3 folder. 0 for unlimiited
-max_task_count: 100  # maximum number of concurrent tasks before server will return 503 error
+max_task_count: 100 # maximum number of concurrent tasks before server will return 503 error
 max_tasks_per_node_per_request: 16 # maximum number of inflight tasks to to each node per request
-aio_max_pool_connections: 64  # number of connections to keep in conection pool for aiobotocore requests
-client_pool_count: 10 # pool count for SessionClient 
-metadata_mem_cache_size: 128m  # 128 MB - metadata cache size per DN node
-metadata_mem_cache_expire: 3600  # expire cache items after one hour
-chunk_mem_cache_size: 128m  # 128 MB - chunk cache size per DN node
-chunk_mem_cache_expire: 3600  # expire cache items after one hour
-data_cache_size: 128m  # cache for rangegets
-data_cache_max_req_size: 128k  # max size for rangeget fetches
-data_cache_expire_time: 3600  # expire cache items after one hour
-data_cache_page_size: 4m  # page size for range get cache, set to zero to disable proxy
-data_cache_max_concurrent_read: 16  # maximum number of inflight storage read requests
-timeout: 30     # http timeout - 30 sec
-password_file: /config/passwd.txt  # filepath to a text file of username/passwords. set to '' for no-auth access
-groups_file: /config/groups.txt     # filepath to text file defining user groups
-server_name: Highly Scalable Data Service (HSDS)  # this gets returned in the about request
+aio_max_pool_connections: 64 # number of connections to keep in conection pool for aiobotocore requests
+client_pool_count: 10 # pool count for SessionClient
+metadata_mem_cache_size: 128m # 128 MB - metadata cache size per DN node
+metadata_mem_cache_expire: 3600 # expire cache items after one hour
+chunk_mem_cache_size: 128m # 128 MB - chunk cache size per DN node
+chunk_mem_cache_expire: 3600 # expire cache items after one hour
+data_cache_size: 128m # cache for rangegets
+data_cache_max_req_size: 128k # max size for rangeget fetches
+data_cache_expire_time: 3600 # expire cache items after one hour
+data_cache_page_size: 4m # page size for range get cache, set to zero to disable proxy
+data_cache_max_concurrent_read: 16 # maximum number of inflight storage read requests
+timeout: 30 # http timeout - 30 sec
+password_file: /config/passwd.txt # filepath to a text file of username/passwords. set to '' for no-auth access
+groups_file: /config/groups.txt # filepath to text file defining user groups
+server_name: Highly Scalable Data Service (HSDS) # this gets returned in the about request
 greeting: Welcome to HSDS!
 about: HSDS is a webservice for HDF data
-top_level_domains: []  # list of possible top-level domains, example: ["/home", "/shared"], if empty all top-level folders in default bucket will be returned
-cors_domain: "*"     # domains allowed for CORS
-admin_user: admin  # user with admin privileges
-admin_group: null  # enable admin privileges for any user in this group
-openid_provider: azure  # OpenID authentication provider
+top_level_domains: [] # list of possible top-level domains, example: ["/home", "/shared"], if empty all top-level folders in default bucket will be returned
+cors_domain: "*" # domains allowed for CORS
+admin_user: admin # user with admin privileges
+admin_group: null # enable admin privileges for any user in this group
+openid_provider: azure # OpenID authentication provider
 openid_url: null # OpenID connect endpoint if provider is not azure or google
 openid_audience: null # OpenID audience. This is synonymous with azure_resource_id for azure
-openid_claims: unique_name,appid,roles   # Comma seperated list of claims to resolve to usernames.
-chaos_die: 0           # if > 0, have nodes randomly die after n seconds (for testing)
-standalone_app: false   # True when run as a single application
-blosc_nthreads: 2  # number of threads to use for blosc compression.  Set to 0 to have blosc auto-determine thread count
-http_compression: false  # Use HTTP compression 
+openid_claims: unique_name,appid,roles # Comma seperated list of claims to resolve to usernames.
+chaos_die: 0 # if > 0, have nodes randomly die after n seconds (for testing)
+standalone_app: false # True when run as a single application
+blosc_nthreads: 2 # number of threads to use for blosc compression.  Set to 0 to have blosc auto-determine thread count
+http_compression: false # Use HTTP compression
 http_max_url_length: 512 # Limit http request url + params to be less than this
-k8s_app_label: hsds  # The app label for k8s deployments
+k8s_app_label: hsds # The app label for k8s deployments
 k8s_namespace: null # Specifies if a the client should be limited to a specific namespace. Useful for some RBAC configurations.
 restart_policy: on-failure # Docker restart policy
-domain_req_max_objects_limit: 500  # maximum number of objects to return in GET domain request with use_cache
+domain_req_max_objects_limit: 500 # maximum number of objects to return in GET domain request with use_cache
 # the following two values with give backof times of approx: 0.2, 0.4, 0.8, 1.6, 3.2, 6.4, 12.8
-dn_max_retries: 7  # number of time to retry DN requests
-dn_retry_backoff_exp: 0.1  # backoff factor for retries
+dn_max_retries: 7 # number of time to retry DN requests
+dn_retry_backoff_exp: 0.1 # backoff factor for retries
 
 # DEPRECATED - the remaining config values are not used in currently but kept for backward compatibility with older container images
-aws_lambda_chunkread_function: null  # name of aws lambda function for chunk reading
-aws_lambda_threshold: 4   # number of chunks per node per request to reach before using lambda
-aws_lambda_max_invoke: 1000  # max number of lambda functions to invoke simultaneously
+aws_lambda_chunkread_function: null # name of aws lambda function for chunk reading
+aws_lambda_threshold: 4 # number of chunks per node per request to reach before using lambda
+aws_lambda_max_invoke: 1000 # max number of lambda functions to invoke simultaneously
 aws_lambda_gateway: null # use lambda endpoint for region HSDS is running in
 write_zero_chunks: False # write chunk to storage even when it's all zeros (or in general equial to the fill value)
-max_chunks_per_request: 1000  # maximum number of chunks to be serviced by one request
+max_chunks_per_request: 1000 # maximum number of chunks to be serviced by one request

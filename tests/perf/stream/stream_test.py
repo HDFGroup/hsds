@@ -157,7 +157,7 @@ class StreamTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         elapsed = time.time() - ts
         mb_per_sec = num_bytes / (1024 * 1024 * elapsed)
-        print(f" elapsed: {elapsed:.2f} s, {mb_per_sec:.2f} mb/s")
+        print(f" elapsed: {elapsed:.2f} s, {mb_per_sec:.2f} MB/s")
 
         # read back the data as binary
         print("reading...")
@@ -166,7 +166,7 @@ class StreamTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         elapsed = time.time() - ts
         mb_per_sec = num_bytes / (1024 * 1024 * elapsed)
-        print(f" elapsed: {elapsed:.2f} s, {mb_per_sec:.2f} mb/s")
+        print(f" elapsed: {elapsed:.2f} s, {mb_per_sec:.2f} MB/s")
 
         print("comparing sent vs. received")
         data = rsp.content
