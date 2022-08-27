@@ -30,6 +30,7 @@ def run(args):
     ret.check_returncode()
 
 
+@unittest.skip("no automated testing for kubernetes currently")
 class K8sListDnTest(unittest.TestCase):
     def setUp(self):
         # Usa a unique temporary K8s namespace to isolate the test environment:
