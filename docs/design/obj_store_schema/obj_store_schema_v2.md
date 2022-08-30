@@ -120,7 +120,7 @@ Each high-level object (group, dataset, committed type) can be identified by a U
 - "d-": a dataset id
 - "t-": a type id
 
-For example, the id used for a group object with the above UUID would be::
+For example, the id used for a group object with the above UUID would be:
 
     g-b03b24ef-69f244b6-acd9-4df97b-37122a
 
@@ -187,15 +187,15 @@ The domain entity is similar to traditional HDF5 files in that they are containe
 
 Domain keys end with "/.domain.json" and can have an arbitrary prefix. Unlike other entities in the object storage schema, domain keys are stored hierarchically (as with files in a file system), delimited using the '/' character. This enables domain keys to be listed by prefix and provides a canonical key for the parent of a domain.
 
-For example, the domain key::
+For example, the domain key:
 
     /home/test_user1/my_domain/.domain.json
 
-Would have a parent domain of::
+Would have a parent domain of:
 
     /home/test_user1/.domain.json
 
-Sub-domains of the domain could be found by listing all keys with the prefix of::
+Sub-domains of the domain could be found by listing all keys with the prefix of:
 
     /home/test_user1/my_domain/
 
@@ -220,36 +220,38 @@ Notes:
 
 ### Domain object example
 
-Key::
+Key:
 
     /home/test_user1/my_domain/.domain.json
 
 Object:
 
-    {
-        "acls": {
-            "default": {
-                "create": false,
-                "read": true,
-                "update": false,
-                "delete": false,
-                "readACL": false,
-                "updateACL": false
-            },
-            "test_user1": {
-                "create": true,
-                "read": true,
-                "update": true,
-                "delete": true,
-                "readACL": true,
-                "updateACL": true
-            }
+```json
+{
+    "acls": {
+        "default": {
+            "create": false,
+            "read": true,
+            "update": false,
+            "delete": false,
+            "readACL": false,
+            "updateACL": false
         },
-        "root": "g-cf4f3baa-956e-11e6-8319-0242ac110005",
-        "owner": "test_user1",
-        "created": 1479168471.038638,
-        "lastModified": 1479168471.038638
-    }
+        "test_user1": {
+            "create": true,
+            "read": true,
+            "update": true,
+            "delete": true,
+            "readACL": true,
+            "updateACL": true
+        }
+    },
+    "root": "g-cf4f3baa-956e-11e6-8319-0242ac110005",
+    "owner": "test_user1",
+    "created": 1479168471.038638,
+    "lastModified": 1479168471.038638
+}
+```
 
 ### Domain ACLs
 
@@ -278,23 +280,23 @@ In the object store schema, the links contain just information about the link it
 
 ### Group key
 
-The group object storage key is of the form::
+The group object storage key is of the form:
 
-    /db/<uuid>/g/<uuid>.group.json
+    /db/<uuid1>/g/<uuid2>.group.json
 
 Where &lt;uuid1&gt; is formed from the first 16 hex characters of the object's id and &lt;uuid2&gt; is formed from the last 16 hex characters of the id.
 
-For example, if the object id is::
+For example, if the object id is:
 
     g-b03b24ef-69f244b6-acd9-4df97b-37122a
 
-The storage key would be::
+The storage key would be:
 
     /db/b03b24ef-69f244b6/g/acd9-4df97b-37122a/.group.json
 
 This storage key is used to store and retrieve the given object.
 
-Since all groups whithin a given domain would have a prefix starting with:
+Since all groups within a given domain would have a prefix starting with:
 
     /db/b03b24ef-69f244b6/g/
 
@@ -333,37 +335,39 @@ TBD:
 
 ### Group object example
 
-Key::
+Key:
 
     db/b03b24ef-69f244b6/g/acd9-4df97b-37122a/.group.json
 
 Object:
 
-    {
-        "id": "g-b03b24ef-69f244b6-acd9-4df97b-37122a",
-        "root": "g-b03b24ef-69f244b6-38b3-ac67e1-7acc3e",
-        "created": 1543359860.1245284,
-        "lastModified": 1543359861.9263768,
-        "attributes": {},
-        "links": {
-            "dset1.1": {
-                "created": 1543359890.084772,
-                "id": "d-b03b24ef-69f244b6-acd9-4df97b-37122a",
-                "class": "H5L_TYPE_HARD"
-            },
-            "slink": {
-                "created": 1543359890.034954,
-                "h5path": "/g2/g2.1/dset2.1.1",
-                "class": "H5L_TYPE_SOFT"
-            },
-            "extlink": {
-                "created": 1543359890.035682,
-                "h5path": "/a_group/a_dset",
-                "domain": "/home/test_user2/another_domain",
-                "class": "H5L_TYPE_EXTERNAL"
-            },
-        }
+```json
+{
+    "id": "g-b03b24ef-69f244b6-acd9-4df97b-37122a",
+    "root": "g-b03b24ef-69f244b6-38b3-ac67e1-7acc3e",
+    "created": 1543359860.1245284,
+    "lastModified": 1543359861.9263768,
+    "attributes": {},
+    "links": {
+        "dset1.1": {
+            "created": 1543359890.084772,
+            "id": "d-b03b24ef-69f244b6-acd9-4df97b-37122a",
+            "class": "H5L_TYPE_HARD"
+        },
+        "slink": {
+            "created": 1543359890.034954,
+            "h5path": "/g2/g2.1/dset2.1.1",
+            "class": "H5L_TYPE_SOFT"
+        },
+        "extlink": {
+            "created": 1543359890.035682,
+            "h5path": "/a_group/a_dset",
+            "domain": "/home/test_user2/another_domain",
+            "class": "H5L_TYPE_EXTERNAL"
+        },
     }
+}
+```
 
 ## Committed Type Object
 
@@ -371,7 +375,7 @@ In the HDF data model the committed type object is used to provide types that ca
 
 ### Committed Type Key
 
-The committed type object storage key is of the form::
+The committed type object storage key is of the form:
 
     db/<uuid1>/t/<uuid2>/.datatype.json
 
@@ -397,23 +401,34 @@ Notes:
 
 ### Committed Type Example
 
-Key::
+Key:
 
     db/8b0daca7-67ce884d/t/685b-bafe46-1cf516/.datatype.json
 
 Object:
 
-    {
-        "id": "t-8b0daca7-67ce884d-685b-bafe46-1cf516",
-        "root": "g-8b0daca7-67ce884d-0385-242fef-4600c5",
-        "created": 1543363027.421313,
-        "lastModified": 1543363027.421313,
-        "type": {
-            "class": "H5T_COMPOUND",
-            "fields": [{"name": "temp", "type": "H5T_STD_I32LE"}, {"name": "pressure", "type": "H5T_IEEE_F32LE"}]
-        },
-        "attributes": {}
-    }
+```json
+{
+    "id": "t-8b0daca7-67ce884d-685b-bafe46-1cf516",
+    "root": "g-8b0daca7-67ce884d-0385-242fef-4600c5",
+    "created": 1543363027.421313,
+    "lastModified": 1543363027.421313,
+    "type": {
+        "class": "H5T_COMPOUND",
+        "fields": [
+            {
+                "name": "temp", 
+                "type": "H5T_STD_I32LE"
+            }, 
+            {
+                "name": "pressure",
+                "type": "H5T_IEEE_F32LE"
+            }
+        ]
+    },
+    "attributes": {}
+}
+```
 
 ## Dataset object
 
@@ -435,11 +450,11 @@ This is so that we can control the maximum size of objects stored in the system.
 
 ### Dataset key
 
-The dataset object storage key is of the form::
+The dataset object storage key is of the form:
 
     db/<uuid1>/d/<uuid2>/.dataset.json
 
-Where &lt;uuid1&gt; is formed from the first 16 hex characters of the object's id and &lt;uuid1&gt; is formed from the last 16 hex characters of the id.
+Where &lt;uuid1&gt; is formed from the first 16 hex characters of the object's id and &lt;uuid2 &gt; is formed from the last 16 hex characters of the id.
 
 ### Dataset Specification
 
@@ -467,31 +482,33 @@ Notes:
 
 ### Dataset Example
 
-Key::
+Key:
 
     db/5644dd09-768fdcf7/d/1c61-4b5289-3052a9/.dataset.json
 
 Object:
 
-    {
-        "id": "d-5644dd09-768fdcf7-1c61-4b5289-3052a9",
-        "root": "g-5644dd09-768fdcf7-decc-5581fe-07547f",
-        "created": 1542311303,
-        "lastModified": 1542311303,
-        "type": {
-            "class": "H5T_INTEGER",
-            "base": "H5T_STD_I32LE"
-        },
-        "shape": {
-            "class": "H5S_SIMPLE",
-            "dims": [4, 8]
-        },
-        "attributes": {},
-        "layout": {
-            "class": "H5D_CHUNKED",
-            "dims": [4, 8]
-        }
+```json
+{
+    "id": "d-5644dd09-768fdcf7-1c61-4b5289-3052a9",
+    "root": "g-5644dd09-768fdcf7-decc-5581fe-07547f",
+    "created": 1542311303,
+    "lastModified": 1542311303,
+    "type": {
+        "class": "H5T_INTEGER",
+        "base": "H5T_STD_I32LE"
+    },
+    "shape": {
+        "class": "H5S_SIMPLE",
+        "dims": [4, 8]
+    },
+    "attributes": {},
+    "layout": {
+        "class": "H5D_CHUNKED",
+        "dims": [4, 8]
     }
+}
+```
 
 ## Chunk object
 
@@ -514,9 +531,9 @@ set of chunks can be determined by listing all the keys under the datasets S3 ke
 
 ### Chunk key
 
-The chunk storage key is of the form::
+The chunk storage key is of the form:
 
-db/&lt;uuid1&gt;/d/&lt;uuid2&gt;/&lt;i&gt;_&lt;j&gt;_&lt;k&gt;
+    db/&lt;uuid1&gt;/d/&lt;uuid2&gt;/&lt;i&gt;_&lt;j&gt;_&lt;k&gt;
 
 Where:
 
@@ -535,13 +552,13 @@ For variable length types, a run length encoding format is used. See "Variable L
 
 ### Chunk object example
 
-Consider a dataset with a dataspace of [100,100] and a chunk layout of [10,10]. For the section of the dataset at: [10:20, 30:40], the key for the chunk would be::
+Consider a dataset with a dataspace of [100,100] and a chunk layout of [10,10]. For the section of the dataset at: [10:20, 30:40], the key for the chunk would be:
 
     db/<uuid1>/d/<uuid2>_1_3
 
 The chunk object would contain binary data of the data values in the chunk.
 
-If the chunk is not compressed, the size of the object would be 10 \* 10 \* &lt;item_size&gt;. If compressed, the object size would (presumably!) be less.
+If the chunk is not compressed, the size of the object would be `10 * 10 * <item_size>`. If compressed, the object size would (presumably!) be less.
 
 ### Variable Length Data
 
@@ -554,14 +571,14 @@ field can be used to allocate heap memory to store the given element.
 
 While it is useful to have information about a domain as a whole, e.g. the amount of storage used, for large collections it can be
 inefficient to iterate through all the keys in a domain (i.e. the keys under the domain's root group key). To provide a convenient source
-for aggregate charateristics, a ".info.json" object may be created under each root group. In hsds this object is created by the ASYNC node,
+for aggregate charateristics, a ".info.json" object may be created under each root group. In HSDS this object is created by the ASYNC node,
 and therefore the contents of the object may not accurately reflect the real time state of the domain.
 
 ### Summary key
 
-The summary key is of the form::
+The summary key is of the form:
 
-db/&lt;uuid1&gt;/.info.json
+    db/&lt;uuid1&gt;/.info.json
 
 Where:
 
@@ -587,39 +604,41 @@ The summary schema consists of JSON with the following keys:
 
 ### Summary example
 
-Key::
+Key:
 
     db/7c84a4f8-7f61cd74/.info.json
 
 Object:
 
-    {
-        "lastModified": 1543365852,
-        "num_groups": 1,
-        "num_datatypes": 0,
-        "datasets": {
-            "d-7c84a4f8-7f61cd74-c999-bcdfad-2602e8": {
-                "lastModified": 1543365852,
-                "num_chunks": 153,
-                "allocated_bytes": 160432128,
-                "linked_bytes": 0,
-                "num_linked_chunks": 0
-            }
-        },
-        "num_chunks": 5725,
-        "allocated_bytes": 6003097600,
-        "metadata_bytes": 2494,
-        "scan_start": 1543365850.919641,
-        "md5_sum": "076a6a4bbf4355629f39ef7e7ddfb3b0",
-        "scan_complete": 1543365852.811196
-    }
+```json
+{
+    "lastModified": 1543365852,
+    "num_groups": 1,
+    "num_datatypes": 0,
+    "datasets": {
+        "d-7c84a4f8-7f61cd74-c999-bcdfad-2602e8": {
+            "lastModified": 1543365852,
+            "num_chunks": 153,
+            "allocated_bytes": 160432128,
+            "linked_bytes": 0,
+            "num_linked_chunks": 0
+        }
+    },
+    "num_chunks": 5725,
+    "allocated_bytes": 6003097600,
+    "metadata_bytes": 2494,
+    "scan_start": 1543365850.919641,
+    "md5_sum": "076a6a4bbf4355629f39ef7e7ddfb3b0",
+    "scan_complete": 1543365852.811196
+}
+```
 
 ## Sub-object schema description
 
 In this section we define common sub-objects of the top-level objects (groups, datasets, and committed types).
 These sub-objects will not be stored as separate objects in the object store, but as JSON objects in a top-level object.
 
-The specification for these borrows heavily from the hdf5-json specification, so we'll refer to this document: <http://hdf5-json.readthedocs.io/en/latest/index.html#> as appropriate.
+The specification for these borrows heavily from the HDF5/JSON specification, so we'll refer to this document: <http://hdf5-json.readthedocs.io> as appropriate.
 
 - type
 - dataspace
@@ -634,34 +653,36 @@ Types are used as components of committed type objects, attributes, and datasets
 
 The following is the JSON specifying a compound type with three fields (64-bit little endian integer, 6 character ASCII string, and 64-bit IEEE floating point):
 
-    "type": {
-        "class": "H5T_COMPOUND",
-        "fields": [
-             {
-                    "name": "date",
-                    "type": {
-                        "base": "H5T_STD_I64LE",
-                        "class": "H5T_INTEGER"
-                    }
-                },
-                {
-                    "name": "time",
-                    "type": {
-                        "charSet": "H5T_CSET_ASCII",
-                        "class": "H5T_STRING",
-                        "length": 6,
-                        "strPad": "H5T_STR_NULLPAD"
-                    }
-                },
-                {
-                    "name": "pressure",
-                    "type": {
-                        "base": "H5T_IEEE_F64LE",
-                        "class": "H5T_FLOAT"
-                    }
+```json
+"type": {
+    "class": "H5T_COMPOUND",
+    "fields": [
+         {
+                "name": "date",
+                "type": {
+                    "base": "H5T_STD_I64LE",
+                    "class": "H5T_INTEGER"
                 }
-        ]
-    }
+            },
+            {
+                "name": "time",
+                "type": {
+                    "charSet": "H5T_CSET_ASCII",
+                    "class": "H5T_STRING",
+                    "length": 6,
+                    "strPad": "H5T_STR_NULLPAD"
+                }
+            },
+            {
+                "name": "pressure",
+                "type": {
+                    "base": "H5T_IEEE_F64LE",
+                    "class": "H5T_FLOAT"
+                }
+            }
+    ]
+}
+```
 
 ### Dataspace
 
@@ -673,17 +694,19 @@ Note: when used in an attribute, the maxdims key for a simple dataspace is not v
 
 The following is an example of a 10 x 10 dataspace that is extendable to 20 in the first dimension and is unlimited in the second dimension:
 
-    "shape": {
-        "class": "H5S_SIMPLE",
-        "dims": [
-            10,
-            10
-        ],
-        "maxdims": [
-            20,
-            "H5S_UNLIMITED"
-        ]
-    }
+```json
+"shape": {
+    "class": "H5S_SIMPLE",
+    "dims": [
+        10,
+        10
+    ],
+    "maxdims": [
+        20,
+        "H5S_UNLIMITED"
+    ]
+}
+```
 
 ### Attribute
 
@@ -699,17 +722,19 @@ An attribute object consists of JSON with the following keys:
 
 The following is an example of an attribute with 5 elements of type 8-bit little-endian integers:
 
-    {
-        "shape": {
-            "class": "H5S_SIMPLE",
-            "dims": [5]
-        },
-        "type": {
-            "base": "H5T_STD_I8LE",
-            "class": "H5T_INTEGER"
-        },
-        "value": [2, 3, 5, 7, 11]
-    }
+```json
+{
+    "shape": {
+        "class": "H5S_SIMPLE",
+        "dims": [5]
+    },
+    "type": {
+        "base": "H5T_STD_I8LE",
+        "class": "H5T_INTEGER"
+    },
+    "value": [2, 3, 5, 7, 11]
+}
+```
 
 ### Dataset creation properties
 
@@ -721,14 +746,16 @@ The creation properties specification is given here: <http://hdf5-json.readthedo
 
 The following example shows properties for "allocTime", "fillValue", and "layout":
 
-    {
-        "allocTime": "H5D_ALLOC_TIME_LATE",
-        "fillValue": 42,
-        "layout": {
-            "class": "H5D_CHUNKED",
-            "dims": [10]
-        }
+```json
+{
+    "allocTime": "H5D_ALLOC_TIME_LATE",
+    "fillValue": 42,
+    "layout": {
+        "class": "H5D_CHUNKED",
+        "dims": [10]
     }
+}
+```
 
 ## Related documents
 
@@ -736,7 +763,7 @@ The following documents provided related material that may be of use:
 
 - HSDS Design document: <https://s3.amazonaws.com/hdfgroup/docs/HDF+Scalable+Data+Service.pdf>
 - H5Serv developer documentation: <http://h5serv.readthedocs.io/en/latest/index.html>
-- HDF5/JSON specification: <http://hdf5-json.readthedocs.io/en/latest/index.html>
+- HDF5/JSON specification: <http://hdf5-json.readthedocs.io/>
 - HDF REST API Authentication and authorization: <https://www.hdfgroup.org/2015/12/serve-protect-web-security-hdf5/>
 - HDF Server: <https://hdfgroup.org/wp/2015/04/hdf5-for-the-web-hdf-server/>
 - RESTful HDF5: <https://support.hdfgroup.org/pubs/papers/RESTful_HDF5.pdf>
