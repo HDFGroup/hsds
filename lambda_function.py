@@ -26,7 +26,7 @@ def getEventMethod(event):
 
 
 def getEventPath(event):
-    path = "/about"  # default
+    path = None
     if "path" in event:
         path = event["path"]
     else:
@@ -66,7 +66,7 @@ def getEventBody(event):
 def invoke(hsds, method, path, params=None, headers=None, body=None):
     # invoke given request
     req = hsds.endpoint + path
-    print(f"make_request: {req}")
+    print(f"invoke: {req}")
     result = {}
     with requests_unixsocket.Session() as s:
         try:
@@ -79,22 +79,31 @@ def invoke(hsds, method, path, params=None, headers=None, body=None):
             elif method == "DELETE":
                 rsp = s.delete(req, params=params, headers=headers)
             else:
-                msg = f"Unexpected request method: {method}"
-                print(msg)
-                raise ValueError(msg)
+                err_msg = f"Unexpected request method: {method}"
+                print(err_msg)
+                return {"status_code": 400, "error": err_msg}
 
             print(f"got status_code: {rsp.status_code} from req: {req}")
 
-            # TBD - return dataset data in base64
             result["isBase64Encoded"] = False
             result["statusCode"] = rsp.status_code
             # convert case-insisitive headers to dict
             result["headers"] = json.dumps(dict(rsp.headers))
 
-            # print_process_output(processes)
             if rsp.status_code == 200:
-                print(f"rsp.text: {rsp.text}")
-                result["body"] = rsp.text
+                print(f"rsp.text len: {len(rsp.text)}, type: {type(rsp.text)}")
+                if "Content-Type" in rsp.headers and rsp.headers["Content-Type"] == "application/octet-stream":
+                    # hexencode the response
+                    result["body"] = rsp.content.hex()
+                    result["isBase64Encoded"] = True
+                else:
+                    # should be json
+                    try:
+                        rsp_json = json.loads(rsp.text)
+                        result["body"] = rsp_json
+                    except json.JSONDecodeError:
+                        print(f"unexpected response: {rsp.text}")
+                        result["statusCode"] = 500   
             else:
                 result["body"] = "{}"
 
@@ -113,7 +122,6 @@ def lambda_handler(event, context):
         log_level_cfg = os.environ["LOG_LEVEL"]
     else:
         log_level_cfg = "INFO"
-
     if log_level_cfg == "DEBUG":
         log_level = logging.DEBUG
     elif log_level_cfg == "INFO":
@@ -128,14 +136,17 @@ def lambda_handler(event, context):
 
     logging.basicConfig(format="%(asctime)s %(message)s", level=log_level)
 
+    if "AWS_S3_GATEWAY" not in os.environ:
+        err_msg = "AWS_S3_GATEWAY environment variable not set"
+        print(err_msg)
+        return {"status_code": 500, "error": err_msg}
+
     # process event data
     function_name = context.function_name
-    print(f"lambda_handler(event, context) for function {function_name}")
     if "AWS_ROLE_ARN" in os.environ:
         print(f"using AWS_ROLE_ARN: {os.environ['AWS_ROLE_ARN']}")
     if "AWS_SESSION_TOKEN" in os.environ:
         print(f"using AWS_SESSION_TOKEN: {os.environ['AWS_SESSION_TOKEN']}")
-    print(f"event: {event}")
     method = getEventMethod(event)
     if method not in ("GET", "POST", "PUT", "DELETE"):
         err_msg = f"method: {method} is unsupported"
@@ -145,6 +156,10 @@ def lambda_handler(event, context):
     headers = getEventHeaders(event)
     params = getEventParams(event)
     req = getEventPath(event)
+    if not req:
+        err_msg = f"no request path provided ('path' key not present?)"
+        print(err_msg)
+        return {"status_code": 400, "error": err_msg}
     print(f"got req path: {req}")
 
     # determine if this method will modify storage
@@ -175,13 +190,6 @@ def lambda_handler(event, context):
         err_msg = f"expected params to be a dict, but got: {type(params)}"
         print(err_msg)
         return {"status_code": 400, "error": err_msg}
-
-    if "accept" in headers:
-        accept = headers["accept"]
-        print(f"request accept type: {accept}")
-        if accept == "application/octet-stream":
-            print("replacing binary accept with json")
-            headers["accept"] = "aplication/json"
 
     body = getEventBody(event)
     if body and method not in ("PUT", "POST"):
@@ -239,7 +247,6 @@ def lambda_handler(event, context):
 #
 
 if __name__ == "__main__":
-    # export PYTHONUNBUFFERED=1
     print("main")
     # req = "/about"
     req = "/datasets/d-d38053ea-3418fe27-22d9-478e7b-913279/value"
