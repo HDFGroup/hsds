@@ -43,7 +43,12 @@ def getEventPath(event):
 def getEventHeaders(event):
     headers = {}  # default
     if "headers" in event:
-        headers = event["headers"]
+        event_headers = event["headers"]
+        for k in event_headers:
+            v = event_headers[k]
+            headers[k] = v
+    # set User-Agent to let HSDS know that this is Lambda
+    headers["User-Agent"] = "AWSLambda"
     return headers
 
 
@@ -92,7 +97,7 @@ def invoke(hsds, method, path, params=None, headers=None, body=None):
 
             if rsp.status_code == 200:
                 print(f"rsp.text len: {len(rsp.text)}, type: {type(rsp.text)}")
-                if "Content-Type" in rsp.headers and rsp.headers["Content-Type"] == "application/octet-stream":
+                if rsp.headers.get("Content-Type") == "application/octet-stream":
                     # hexencode the response
                     result["body"] = rsp.content.hex()
                     result["isBase64Encoded"] = True
@@ -103,7 +108,7 @@ def invoke(hsds, method, path, params=None, headers=None, body=None):
                         result["body"] = rsp_json
                     except json.JSONDecodeError:
                         print(f"unexpected response: {rsp.text}")
-                        result["statusCode"] = 500   
+                        result["statusCode"] = 500
             else:
                 result["body"] = "{}"
 
@@ -157,7 +162,7 @@ def lambda_handler(event, context):
     params = getEventParams(event)
     req = getEventPath(event)
     if not req:
-        err_msg = f"no request path provided ('path' key not present?)"
+        err_msg = "no request path provided ('path' key not present?)"
         print(err_msg)
         return {"status_code": 400, "error": err_msg}
     print(f"got req path: {req}")
@@ -239,6 +244,10 @@ def lambda_handler(event, context):
     result = invoke(hsds, method, req, params=params, headers=headers, body=body)
     hsds.check_processes()
     hsds.stop()
+
+    if "requestContext" in event:
+        # Invoked from API Gateway - we need to stringify the result
+        result = json.dumps(result)
     return result
 
 
@@ -266,4 +275,3 @@ if __name__ == "__main__":
     event = {"method": "GET", "path": req, "params": params}
     context = Context()
     result = lambda_handler(event, context)
-    print(f"got result: {result}")

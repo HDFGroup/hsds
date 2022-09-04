@@ -535,6 +535,16 @@ def getAcceptType(request):
             accept_type = "binary"
     return accept_type
 
+def isAWSLambda(request):
+    """
+    Return true if this is a lambda request
+    """
+    is_lambda = False
+    if "User-Agent" in request.headers:
+        if request.headers["User-Agent"] == "AWSLambda":
+            is_lambda = True
+    return is_lambda
+
 
 def getContentType(request):
     """

@@ -24,7 +24,7 @@ from aiohttp.web_exceptions import HTTPConflict, HTTPInternalServerError
 from aiohttp.web import StreamResponse
 
 from .util.httpUtil import getHref, getAcceptType, getContentType, http_put
-from .util.httpUtil import request_read, jsonResponse
+from .util.httpUtil import request_read, jsonResponse, isAWSLambda
 from .util.idUtil import isValidUuid, getDataNodeUrl
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain
@@ -675,9 +675,8 @@ async def PUT_Value(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         if num_elements * item_size > max_request_size:
-            log.warn(
-                f"read {num_elements*item_size} bytes, greater than {max_request_size}"
-            )
+            msg = f"read {num_elements*item_size} bytes, greater than {max_request_size}"
+            log.warn(msg)
         arr = np.fromstring(binary_data, dtype=dset_dtype)
         try:
             arr = arr.reshape(np_shape)  # conform to selection shape
@@ -1032,7 +1031,7 @@ async def GET_Value(request):
     else:
         response_type = getAcceptType(request)
 
-    if response_type == "binary" and rank > 0:
+    if response_type == "binary" and rank > 0 and not isAWSLambda(request):
         stream_pagination = True
         log.debug("use stream_pagination")
     else:
@@ -1056,6 +1055,10 @@ async def GET_Value(request):
         request_size *= item_size
     log.debug(f"request_size: {request_size}")
     max_request_size = int(config.get("max_request_size"))
+    if isAWSLambda(request):
+        # reduce max size to account for hex_encoding and other JSON content
+        max_request_size -= 1000
+        max_request_size /= 2
     if request_size >= max_request_size and not stream_pagination:
         msg = "GET value request too large"
         log.warn(msg)
