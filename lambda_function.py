@@ -257,7 +257,6 @@ def lambda_handler(event, context):
 
 if __name__ == "__main__":
     print("main")
-    # req = "/about"
     req = "/datasets/d-d38053ea-3418fe27-22d9-478e7b-913279/value"
     # params = {}
     params = {"domain": "/shared/tall.h5", "bucket": "hdflab2"}
