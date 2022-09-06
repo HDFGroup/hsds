@@ -480,11 +480,17 @@ async def jsonResponse(resp, data, status=200, ignore_nan=False, body_only=False
     JSON data
     """
     # tbd - remove resp parameter - not used
+    
     text = simplejson.dumps(data, ignore_nan=ignore_nan)
     if body_only:
         return text
     else:
-        return json_response(text=text, headers={}, status=status)
+        server_name = config.get("server_name")
+        xss_protection = config.get("xss_protection", default="1; mode=block")
+        headers = {"Server": server_name}
+        if xss_protection:
+            headers["X-XSS-Protection"] = xss_protection
+        return json_response(text=text, headers=headers, status=status)
 
 
 def getHref(request, uri, query=None, domain=None):
