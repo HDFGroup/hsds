@@ -45,6 +45,20 @@ class UpTest(unittest.TestCase):
             rsp.headers["Access-Control-Allow-Methods"], "GET",
         )
 
+    def testResponseHeaders(self):
+        endpoint = helper.getEndpoint()
+        req = endpoint + "/about"
+        rsp = self.session.get(req)
+        self.assertEqual(rsp.status_code, 200)
+
+        self.assertTrue("X-XSS-Protection" in rsp.headers)
+        self.assertEqual(rsp.headers["X-XSS-Protection"], "1; mode=block")
+        self.assertTrue("Server" in rsp.headers)
+        server = rsp.headers["Server"]
+        server = server.lower()
+        # should see the default server value (Python with version #)
+        self.assertEqual(server.find("python"), -1)
+
     def testGetAbout(self):
         endpoint = helper.getEndpoint()
         req = endpoint + "/about"
@@ -53,7 +67,7 @@ class UpTest(unittest.TestCase):
         self.assertEqual(rsp.headers["Content-Type"], "application/json; charset=utf-8")
 
         rspJson = json.loads(rsp.text)
-        self.assertTrue("state") in rspJson
+        self.assertTrue("state" in rspJson)
         self.assertEqual(rspJson["state"], "READY")
         self.assertTrue("about" in rspJson)
         self.assertTrue("hsds_version" in rspJson)
