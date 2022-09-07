@@ -480,7 +480,7 @@ async def jsonResponse(resp, data, status=200, ignore_nan=False, body_only=False
     JSON data
     """
     # tbd - remove resp parameter - not used
-    
+
     text = simplejson.dumps(data, ignore_nan=ignore_nan)
     if body_only:
         return text

@@ -59,7 +59,6 @@ class UpTest(unittest.TestCase):
         # should see the default server value (Python with version #)
         self.assertEqual(server.find("python"), -1)
 
-
     def testGetAbout(self):
         endpoint = helper.getEndpoint()
         req = endpoint + "/about"
