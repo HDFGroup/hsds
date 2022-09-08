@@ -110,7 +110,8 @@ def invoke(hsds, method, path, params=None, headers=None, body=None):
                         print(f"unexpected response: {rsp.text}")
                         result["statusCode"] = 500
             else:
-                result["body"] = "{}"
+                body = {"statusCode": rsp.status_code}
+                result["body"] = json.dumps(body)
 
         except Exception as e:
             print(f"got exception: {e}, quitting")
@@ -247,7 +248,9 @@ def lambda_handler(event, context):
 
     if "requestContext" in event:
         # Invoked from API Gateway - we need to stringify the result
-        result = json.dumps(result)
+        if "body" not in result:
+             return {"status_code": 500, "error": f"unexpected result: {result}"}
+        result = json.dumps(result["body"])
     return result
 
 
