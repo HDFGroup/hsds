@@ -78,7 +78,8 @@ te = time.time()
 field_name = options["field"]
 
 arr_field = arr[field_name]
-msg = f"consecutive read with random start [{start}:{end}]: {arr_field.min():4.2f}, {arr_field.max():4.2f}, "
+msg = f"consecutive read with random start [{start}:{end}]: "
+msg += f"{arr_field.min():4.2f}, {arr_field.max():4.2f}, "
 msg += f"{arr_field.mean():4.2f}, {te-ts:4.2f} s"
 print(msg)
 
