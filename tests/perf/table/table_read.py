@@ -82,25 +82,6 @@ msg = f"consecutive read[{start}:{end}]: {arr_field.min():4.2f}, {arr_field.max(
 msg += f"{arr_field.mean():4.2f}, {te-ts:4.2f} s"
 print(msg)
 
-# read random set of columns
-indices = []
-while len(indices) < read_count:
-    n = random.randint(0, num_rows - 1)
-    if n not in indices:
-        indices.append(n)
-indices.sort()
-
-ts = time.time()
-arr = dset[indices]
-te = time.time()
-
-arr_field = arr[field_name]
-msg = "random index with stride read[[n0,n1,...,nx]]: "
-msg += f"f{arr_field.min():4.2f}, {arr_field.max():4.2f}, "
-msg += f"{arr_field.mean():4.2f}, {te-ts:4.2f} s"
-print(msg)
-
-
 # read with stride
 stride = options["stride"]
 if stride == 0:
@@ -118,3 +99,22 @@ else:
     msg += f"{arr_field.min():4.2f}, {arr_field.max():4.2f}, "
     msg += f"{arr_field.mean():4.2f}, {te-ts:4.2f} s"
     print(msg)
+
+
+# read random set of columns
+indices = []
+while len(indices) < read_count:
+    n = random.randint(0, num_rows - 1)
+    if n not in indices:
+        indices.append(n)
+indices.sort()
+
+ts = time.time()
+arr = dset[indices]
+te = time.time()
+
+arr_field = arr[field_name]
+msg = "random index with stride read[[n0,n1,...,nx]]: "
+msg += f"f{arr_field.min():4.2f}, {arr_field.max():4.2f}, "
+msg += f"{arr_field.mean():4.2f}, {te-ts:4.2f} s"
+print(msg)
