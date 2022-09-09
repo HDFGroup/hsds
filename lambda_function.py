@@ -249,7 +249,7 @@ def lambda_handler(event, context):
     if "requestContext" in event:
         # Invoked from API Gateway - we need to stringify the result
         if "body" not in result:
-             return {"status_code": 500, "error": f"unexpected result: {result}"}
+            return {"status_code": 500, "error": f"unexpected result: {result}"}
         result = json.dumps(result["body"])
     return result
 
