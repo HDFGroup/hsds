@@ -115,7 +115,7 @@ arr = dset[indices]
 te = time.time()
 
 arr_field = arr[field_name]
-msg = "read with random indicies [[n0,n1,...,nx]]: "
+msg = "read with random indices [[n0,n1,...,nx]]: "
 msg += f"{arr_field.min():4.2f}, {arr_field.max():4.2f}, "
 msg += f"{arr_field.mean():4.2f}, {te-ts:4.2f} s"
 print(msg)
