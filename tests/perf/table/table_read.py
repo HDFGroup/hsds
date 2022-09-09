@@ -4,6 +4,7 @@ import time
 import random
 import sys
 
+
 def get_option(options, arg):
     if not arg.startswith("--"):
         raise ValueError(f"no an option arg: {arg}")
@@ -13,7 +14,7 @@ def get_option(options, arg):
     key = arg[2:n]
     if key not in options:
         raise KeyError(f"Invalid option: {arg}")
-    val = arg[n+1:]
+    val = arg[(n + 1):]
     default = options[key]
     if isinstance(default, int):
         val = int(val)
@@ -30,7 +31,6 @@ options["h5path"] = "/data"
 options["field"] = "data_value"
 options["count"] = 5000
 options["stride"] = 5
- 
 
 if len(sys.argv) == 1 or sys.argv[1] in ("-h", "--help"):
     msg = f"Usage: python {sys.argv[0]} "
@@ -95,27 +95,26 @@ arr = dset[indices]
 te = time.time()
 
 arr_field = arr[field_name]
-msg = f"random index with stride read[[n0,n1,...,nx]]: {arr_field.min():4.2f}, {arr_field.max():4.2f}, "
+msg = "random index with stride read[[n0,n1,...,nx]]: "
+msg += f"f{arr_field.min():4.2f}, {arr_field.max():4.2f}, "
 msg += f"{arr_field.mean():4.2f}, {te-ts:4.2f} s"
 print(msg)
 
 
 # read with stride
 stride = options["stride"]
-if num_rows // stride < read_count:
+if stride == 0:
+    print("stride value is zero, skipping stride test")
+elif num_rows // stride < read_count:
     print("stride value too high, skipping stride test")
 else:
-    start = random.randint(0, num_rows - read_count*stride)
-    end = start + read_count*stride
+    start = random.randint(0, num_rows - (read_count * stride))
+    end = start + (read_count * stride)
     ts = time.time()
     arr = dset[start:end:stride]
     te = time.time()
     arr_field = arr[field_name]
-    msg = f"random index read[{start}:{end}:{stride}]: {arr_field.min():4.2f}, {arr_field.max():4.2f}, "
+    msg = f"random index read[{start}:{end}:{stride}]: "
+    msg += f"{arr_field.min():4.2f}, {arr_field.max():4.2f}, "
     msg += f"{arr_field.mean():4.2f}, {te-ts:4.2f} s"
     print(msg)
-
-
-
-
-
