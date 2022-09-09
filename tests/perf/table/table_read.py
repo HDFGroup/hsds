@@ -95,7 +95,7 @@ else:
     arr = dset[start:end:stride]
     te = time.time()
     arr_field = arr[field_name]
-    msg = f"random index read[{start}:{end}:{stride}]: "
+    msg = f"random index read with stride [{start}:{end}:{stride}]: "
     msg += f"{arr_field.min():4.2f}, {arr_field.max():4.2f}, "
     msg += f"{arr_field.mean():4.2f}, {te-ts:4.2f} s"
     print(msg)
@@ -114,7 +114,7 @@ arr = dset[indices]
 te = time.time()
 
 arr_field = arr[field_name]
-msg = "random index with stride read[[n0,n1,...,nx]]: "
+msg = "random index with read[[n0,n1,...,nx]]: "
 msg += f"f{arr_field.min():4.2f}, {arr_field.max():4.2f}, "
 msg += f"{arr_field.mean():4.2f}, {te-ts:4.2f} s"
 print(msg)
