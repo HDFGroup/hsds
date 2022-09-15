@@ -535,6 +535,7 @@ def getAcceptType(request):
             accept_type = "binary"
     return accept_type
 
+
 def isAWSLambda(request):
     """
     Return true if this is a lambda request

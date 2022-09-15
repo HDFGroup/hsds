@@ -97,7 +97,7 @@ def invoke(hsds, method, path, params=None, headers=None, body=None):
 
             if rsp.status_code in (200, 201):
                 if rsp.text is None or len(rsp.text) == 0:
-                    pass # empty response text
+                    pass  # empty response text
                 elif rsp.headers.get("Content-Type") == "application/octet-stream":
                     # hexencode the response
                     result["body"] = rsp.content.hex()
@@ -246,7 +246,7 @@ def lambda_handler(event, context):
     if "requestContext" in event:
         # Invoked from API Gateway - we need to stringify the result
         if "body" not in result:
-             return {"status_code": 500, "error": f"unexpected result: {result}"}
+            return {"status_code": 500, "error": f"unexpected result: {result}"}
         result = json.dumps(result["body"])
     return result
 
