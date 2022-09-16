@@ -42,12 +42,29 @@ The following is an example of how a hyperslab selection is packaged into an eve
     {
       "method": "GET",
       "path": "/datasets/d-d29fda32-85f3-11e7-bf89-0242ac110008/value",
+      "headers": {
+        "accept": "application/octet-stream"
+      },
       "params": {
         "domain": "/nrel/wtk-us.h5",
         "select": "[0:100,620,1401]",
         "bucket": "nrel-pds-hsds"
       }
     }
+
+When the accept header with octet-stream is used with dataset value requests,
+the body of the response will be hex-encoded (otherwise JSON data is used).
+
+With the request above, the following response should be returned:
+
+    {
+      "isBase64Encoded": true,
+      "statusCode": 200,
+      "headers": "{\"Content-Type\": \"application/octet-stream\", \"Content-Length\":    \"4000\", \"Date\": \"Fri, 16 Sep 2022 03:19:21 GMT\", \"Server\": \"Python/3.9 aiohttp/3.  8.1\"}",
+      "body": "a8bb1241d0f7...e0bf6b40"
+    }
+
+Where the "body" key will consist of 8000 hex characters.
 
 See: https://github.com/HDFGroup/hdf-rest-api, for a complete description of the HDF REST API.
 
