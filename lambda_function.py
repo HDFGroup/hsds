@@ -95,9 +95,10 @@ def invoke(hsds, method, path, params=None, headers=None, body=None):
             # convert case-insisitive headers to dict
             result["headers"] = json.dumps(dict(rsp.headers))
 
-            if rsp.status_code == 200:
-                print(f"rsp.text len: {len(rsp.text)}, type: {type(rsp.text)}")
-                if rsp.headers.get("Content-Type") == "application/octet-stream":
+            if rsp.status_code in (200, 201):
+                if rsp.text is None or len(rsp.text) == 0:
+                    pass  # empty response text
+                elif rsp.headers.get("Content-Type") == "application/octet-stream":
                     # hexencode the response
                     result["body"] = rsp.content.hex()
                     result["isBase64Encoded"] = True
@@ -166,7 +167,6 @@ def lambda_handler(event, context):
         err_msg = "no request path provided ('path' key not present?)"
         print(err_msg)
         return {"status_code": 400, "error": err_msg}
-    print(f"got req path: {req}")
 
     # determine if this method will modify storage
     # if not, we'll pass readonly to the dn nodes so they
@@ -187,12 +187,12 @@ def lambda_handler(event, context):
         print(f"unexpected method: {method}")
         readonly = False
 
-    if not isinstance(headers, dict):
+    if headers and not isinstance(headers, dict):
         err_msg = f"expected headers to be a dict, but got: {type(headers)}"
         print(err_msg)
         return {"status_code": 400, "error": err_msg}
 
-    if not isinstance(params, dict):
+    if params and not isinstance(params, dict):
         err_msg = f"expected params to be a dict, but got: {type(params)}"
         print(err_msg)
         return {"status_code": 400, "error": err_msg}
@@ -204,14 +204,11 @@ def lambda_handler(event, context):
         return {"status_code": 400, "error": err_msg}
 
     cpu_count = multiprocessing.cpu_count()
-    print(f"got cpu_count of: {cpu_count}")
     if "TARGET_DN_COUNT" in os.environ:
         target_dn_count = int(os.environ["TARGET_DN_COUNT"])
-        print(f"get env override for target_dn_count of: {target_dn_count}")
     else:
         # base dn count on half the VCPUs (rounded up)
         target_dn_count = -(-cpu_count // 2)
-        print(f"setting dn count to: {target_dn_count}")
 
     tmp_dir = "/tmp"
     rand_name = uuid.uuid4().hex[:8]
@@ -259,9 +256,8 @@ def lambda_handler(event, context):
 #
 
 if __name__ == "__main__":
-    print("main")
+    # request to use for testing
     req = "/datasets/d-d38053ea-3418fe27-22d9-478e7b-913279/value"
-    # params = {}
     params = {"domain": "/shared/tall.h5", "bucket": "hdflab2"}
 
     class Context:
