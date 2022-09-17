@@ -99,11 +99,6 @@ class HsdsApp:
         Initializer for class
         """
 
-        # create a random dirname if one is not supplied
-        if not socket_dir and not host:
-            raise ValueError("socket_dir or host needs to be set")
-        if host and not sn_port:
-            raise ValueError("sn_port not set")
         self._dn_urls = []
         self._socket_paths = []
         self._processes = []
@@ -125,6 +120,12 @@ class HsdsApp:
             self.log = logging
         else:
             self.log = logger
+
+        # create a random dirname if one is not supplied
+        if not socket_dir and not host:
+            raise ValueError("socket_dir or host needs to be set")
+        if host and not sn_port:
+            raise ValueError("sn_port not set")
 
         if socket_dir is not None and not os.path.isdir(socket_dir):
             os.mkdir(socket_dir)
@@ -171,7 +172,6 @@ class HsdsApp:
         self._dn_urls.sort()
         self._endpoint = sn_url
         self._rangeget_url = rangeget_url
-        print("endpoint:", self._endpoint)
 
     @property
     def endpoint(self):
@@ -270,7 +270,6 @@ class HsdsApp:
             cmd_path = os.path.join(cmd_path, "hsds-node-script.py")
             if not os.path.isfile(cmd_path):
                 raise FileNotFoundError("can't find hsds-node executable")
-        print("using cmd_path:", cmd_path)
 
         for i in range(count):
             if i == 0:
@@ -349,6 +348,7 @@ class HsdsApp:
         """terminate hsds processes"""
         if not self._processes:
             return
+
         now = time.time()
         logging.info(f"hsds app stop at {now}")
         if hasattr(signal, "CTRL_C_EVENT"):
