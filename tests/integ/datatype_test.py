@@ -49,7 +49,7 @@ class DatatypeTest(unittest.TestCase):
         rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
-        self.assertEqual(rspJson["attributeCount"], 0)
+        self.assertEqual(rspJson["attributeCount"], 1)
         ctype_id = rspJson["id"]
         self.assertTrue(helper.validateId(ctype_id))
 
