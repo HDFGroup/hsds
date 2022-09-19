@@ -34,11 +34,14 @@ Make sure you have Python 3, Pip, and git installed, then:
 3.  Run install: `$ python setup.py install` OR install from pypi: `$ pip install hsds`
 4.  Setup password file: `$ cp admin/config/passwd.default admin/config/passwd.txt`
 5.  Create a directory the server will use to store data, and then set the ROOT_DIR environment variable to point to it: `$ mkdir ~/hsds_data; export ROOT_DIR="${HOME}/hsds_data"`
-6.  Start server: `$ ./runall.sh --no-docker`
-7.  In a new shell, set the environment variable HSDS_ENDPOINT to the string displayed. E.g.: `$ export HSDS_ENDPOINT=http+unix://%2Ftmp%2Fhs%2Fsn_1.sock`
-8.  Run the test suite: `$ python testall.py`
-9.  (Optional) Post install setup (test data, home folders, cli tools, etc): [docs/post_install.md](docs/post_install.md)
-10. (Optional) Install the h5pyd package for an h5py compatible api and tool suite: https://github.com/HDFGroup/h5pyd
+6. Create the hsds test bucket: `$ mkdir $ROOT_DIR/hsdstest
+7.  Start server: `$ ./runall.sh --no-docker`
+8. Set environment variables for the admin account: `$export 
+9. In a new shell, set the environment variable HSDS_ENDPOINT to the string displayed. E.g.: `$ export HSDS_ENDPOINT=http+unix://%2Ftmp%2Fhs%2Fsn_1.sock`
+10. Set environment variables for the admin account: `$ export ADMIN_USERNAME=admin` and `$ export ADMIN_PASSWORD=admin` (adjust for any changes made to the passwd.txt file)
+11.  Run the test suite: `$ python testall.py`
+12.  (Optional) Post install setup (test data, home folders, cli tools, etc): [docs/post_install.md](docs/post_install.md)
+13. (Optional) Install the h5pyd package for an h5py compatible api and tool suite: https://github.com/HDFGroup/h5pyd
 
 To shut down the server, and the server was started with the --no-docker option, just control-C.
 
@@ -50,17 +53,21 @@ Note: passwords can (and should for production use) be modified by changing valu
 
 **On AWS**
 
-See: [docs/docker_install_aws.md](docs/docker_install_aws.md) for complete install instructions.
+For complete instructions to install on a single Azure VM with Docker:
 
-See: [docs/kubernetes_install_aws.md](docs/kubernetes_install_aws.md) for setup on Kubernetes.
+- See: [docs/docker_install_aws.md](docs/docker_install_aws.md)
 
-See: [docs/aws_lambda_setup.md](docs/aws_lambda_setup.md) for setup on AWS Lambda.
+For complete instructions to install on AWS Kubernetes Service (EKS):
 
-See: <https://github.com/HDFGroup/h5pyd/blob/master/README.rst> to run serverless with h5pyd local.
+- See: [docs/kubernetes_install_aws.md](docs/kubernetes_install_aws.md)  
+
+For complete instructions to install on AWS Lambda:
+
+See: [docs/aws_lambda_setup.md](docs/aws_lambda_setup.md).
 
 **On Azure**
 
-For complete instructions to install on a single Azure VM:
+For complete instructions to install on a single Azure VM with Docker:
 
 - See: [docs/docker_install_azure.md](docs/docker_install_azure.md)
 
@@ -93,6 +100,10 @@ Post install setup and testing:
 Authorization, ACLs, and Role Based Access Control (RBAC):
 
 - See [docs/authorization.mid](docs/authorization.md)
+
+Running serverless with h5pyd:
+
+- See <https://github.com/HDFGroup/h5pyd/blob/master/README.rst> 
 
 ## Writing Client Applications
 
