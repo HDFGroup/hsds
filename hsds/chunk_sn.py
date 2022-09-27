@@ -14,7 +14,6 @@
 # handles dataset /value requests for service node
 #
 
-from multiprocessing import shared_memory
 import base64
 import numpy as np
 from asyncio import IncompleteReadError
@@ -979,10 +978,6 @@ async def GET_Value(request):
 
     layout = getChunkLayout(dset_json)
     log.debug(f"chunk layout: {layout}")
-    if "shm_name" in params and params["shm_name"]:
-        shm_name = params["shm_name"]
-    else:
-        shm_name = None
 
     await validateAction(app, domain, dset_id, username, "read")
 
@@ -1026,10 +1021,8 @@ async def GET_Value(request):
                 msg = f"query variable {variable} not valid"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
-    if shm_name:
-        response_type = "json"
-    else:
-        response_type = getAcceptType(request)
+
+    response_type = getAcceptType(request)
 
     if response_type == "binary" and rank > 0 and not isAWSLambda(request):
         stream_pagination = True
@@ -1181,47 +1174,6 @@ async def GET_Value(request):
         elif not isinstance(arr, np.ndarray):
             msg = f"GET_Value - Expected ndarray but got: {type(arr)}"
             resp_json["status"] = 500
-        elif shm_name:
-            shm = None
-            log.debug(f"attaching to shared memory block: {shm_name}")
-            try:
-                shm = shared_memory.SharedMemory(name=shm_name)
-            except FileNotFoundError:
-                msg = f"no shared memory block with name: {shm_name} found"
-                log.warning(msg)
-                resp_json["status"] = 400
-            except OSError as oe:
-                msg = f"Unexpected OSError: {oe.errno} attaching to shared memory block"
-                log.error(msg)
-                resp_json["status"] = 400
-            if shm is not None:
-                buffer = arrayToBytes(arr)
-                num_bytes = len(buffer)
-                if shm.size < num_bytes:
-                    msg = f"unable to copy {num_bytes} to shared memory block of size: {shm.size}"
-                    log.warning(msg)
-                    resp_json["status"] = 413  # Payload too larger error
-
-            # copy array data
-            shm.buf[:num_bytes] = buffer[:]
-            log.debug(
-                f"copied {num_bytes} array data to shared memory name: {shm_name}"
-            )
-
-            # close shared memory block
-            # Note - since we are not calling shm.unlink (expecting the
-            # client to do that), it's likely the resource tracker will complain on
-            # app exit.  This should be fixed in Python 3.9.  See:
-            # https://bugs.python.org/issue39959
-            shm.close()
-
-            log.debug("GET Value - returning JSON data with shared memory buffer")
-            resp_json["shm_name"] = shm.name
-            resp_json["num_bytes"] = num_bytes
-            resp_json["hrefs"] = get_hrefs(request, dset_json)
-            resp_body = await jsonResponse(resp, resp_json, body_only=True)
-            resp_body = resp_body.encode("utf-8")
-            await resp.write(resp_body)
         elif response_type == "binary":
             if resp_json["status"] != 200:
                 # write json with status_code
@@ -1280,7 +1232,6 @@ async def doReadSelection(
     query_update=None,
     chunk_map=None,
     bucket=None,
-    shm_name=None,
     limit=0,
 ):
     """read selection utility function"""
