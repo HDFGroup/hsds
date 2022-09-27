@@ -9,22 +9,6 @@ HSDS can be run a single machine using Docker or on a cluster using Kubernetes (
 
 In addition HSDS can be run in serverless mode with AWS Lambda or h5pyd local mode.
 
-## Websites
-
-- Main website: <https://www.hdfgroup.org/solutions/highly-scalable-data-service-hsds/>
-- Source code: <https://github.com/HDFGroup/hsds>
-- Forum: <https://forum.hdfgroup.org/c/hsds>
-- Documentation: <http://h5serv.readthedocs.org> (For REST API)
-
-## Other useful resources
-
-- RESTful HDF5 White Paper: <https://www.hdfgroup.org/pubs/papers/RESTful_HDF5.pdf>
-- SciPy17 Presentation: <http://s3.amazonaws.com/hdfgroup/docs/hdf_data_services_scipy2017.pdf>
-- HDF5 For the Web: <https://hdfgroup.org/wp/2015/04/hdf5-for-the-web-hdf-server>
-- HSDS Security: <https://hdfgroup.org/wp/2015/12/serve-protect-web-security-hdf5>
-- HSDS with Jupyter: <https://www.slideshare.net/HDFEOS/hdf-kita-lab-jupyterlab-hdf-service>
-- AWS Big Data Blog: <https://aws.amazon.com/blogs/big-data/power-from-wind-open-data-on-aws/>
-
 ## Quick Start
 
 Make sure you have Python 3, Pip, and git installed, then:
@@ -34,13 +18,13 @@ Make sure you have Python 3, Pip, and git installed, then:
 3.  Run install: `$ python setup.py install` OR install from pypi: `$ pip install hsds`
 4.  Setup password file: `$ cp admin/config/passwd.default admin/config/passwd.txt`
 5.  Create a directory the server will use to store data, and then set the ROOT_DIR environment variable to point to it: `$ mkdir ~/hsds_data; export ROOT_DIR="${HOME}/hsds_data"`
-6. Create the hsds test bucket: `$ mkdir $ROOT_DIR/hsdstest
+6.  Create the hsds test bucket: `$ mkdir $ROOT_DIR/hsdstest
 7.  Start server: `$ ./runall.sh --no-docker`
-8. Set environment variables for the admin account: `$export 
-9. In a new shell, set the environment variable HSDS_ENDPOINT to the string displayed. E.g.: `$ export HSDS_ENDPOINT=http+unix://%2Ftmp%2Fhs%2Fsn_1.sock`
+8.  Set environment variables for the admin account: `$export
+9.  In a new shell, set the environment variable HSDS_ENDPOINT to the string displayed. E.g.: `$ export HSDS_ENDPOINT=http+unix://%2Ftmp%2Fhs%2Fsn_1.sock`
 10. Set environment variables for the admin account: `$ export ADMIN_USERNAME=admin` and `$ export ADMIN_PASSWORD=admin` (adjust for any changes made to the passwd.txt file)
-11.  Run the test suite: `$ python testall.py`
-12.  (Optional) Post install setup (test data, home folders, cli tools, etc): [docs/post_install.md](docs/post_install.md)
+11. Run the test suite: `$ python testall.py`
+12. (Optional) Post install setup (test data, home folders, cli tools, etc): [docs/post_install.md](docs/post_install.md)
 13. (Optional) Install the h5pyd package for an h5py compatible api and tool suite: https://github.com/HDFGroup/h5pyd
 
 To shut down the server, and the server was started with the --no-docker option, just control-C.
@@ -51,7 +35,7 @@ Note: passwords can (and should for production use) be modified by changing valu
 
 ## Detailed Install Instructions
 
-**On AWS**
+### On AWS
 
 For complete instructions to install on a single Azure VM with Docker:
 
@@ -59,13 +43,13 @@ For complete instructions to install on a single Azure VM with Docker:
 
 For complete instructions to install on AWS Kubernetes Service (EKS):
 
-- See: [docs/kubernetes_install_aws.md](docs/kubernetes_install_aws.md)  
+- See: [docs/kubernetes_install_aws.md](docs/kubernetes_install_aws.md)
 
 For complete instructions to install on AWS Lambda:
 
-See: [docs/aws_lambda_setup.md](docs/aws_lambda_setup.md).
+- See: [docs/aws_lambda_setup.md](docs/aws_lambda_setup.md).
 
-**On Azure**
+### On Azure
 
 For complete instructions to install on a single Azure VM with Docker:
 
@@ -75,19 +59,19 @@ For complete instructions to install on Azure Kubernetes Service (AKS):
 
 - See: [docs/kubernetes_install_azure.md](docs/kubernetes_install_azure.md)
 
-**On Prem (POSIX-based storage)**
+### On Prem (POSIX-based storage)
 
 For complete instructions to install on a desktop or local server:
 
 - See: [docs/docker_install_posix.md](docs/docker_install_posix.md)
 
-**On DCOS** **(BETA)**
+### On DCOS (BETA)
 
 For complete instructions to install on DCOS:
 
 - See: [docs/docker_install_dcos.md](docs/docker_install_dcos.md)
 
-**General Install Topics**
+## General Install Topics
 
 Setting up docker:
 
@@ -103,7 +87,7 @@ Authorization, ACLs, and Role Based Access Control (RBAC):
 
 Running serverless with h5pyd:
 
-- See <https://github.com/HDFGroup/h5pyd/blob/master/README.rst> 
+- See <https://github.com/HDFGroup/h5pyd/blob/master/README.rst>
 
 ## Writing Client Applications
 
@@ -148,3 +132,51 @@ Sign up for HDF Lab here: <https://www.hdfgroup.org/hdfkitalab/>.
 
 VM Offer for Azure Marketplace. HSDS for Azure Marketplace provides an easy way to
 setup a Azure instance with HSDS. See: <https://azuremarketplace.microsoft.com/en-us/marketplace/apps/thehdfgroup1616725197741.hsdsazurevm?tab=Overview> for more information.
+
+## Websites
+
+- Main website: <https://www.hdfgroup.org/solutions/highly-scalable-data-service-hsds/>
+- Source code: <https://github.com/HDFGroup/hsds>
+- Forum: <https://forum.hdfgroup.org/c/hsds>
+- Documentation: <http://h5serv.readthedocs.org> (For REST API)
+
+## Other useful resources
+
+### HDF Group Blog Posts
+
+- HSDS Streaming: <https://www.hdfgroup.org/2022/08/hsds-streaming/>
+- Cloud Storage Options for HDF5: <https://www.hdfgroup.org/2022/08/cloud-storage-options-for-hdf5/>
+- HSDS Docker Images: <https://www.hdfgroup.org/2022/07/hsds-docker-images/>
+- HSDS Container Types: <https://www.hdfgroup.org/2022/07/deep-dive-hsds-container-types/>
+- Using Multiprocessing in Python: <https://www.hdfgroup.org/2022/06/speed-up-cloud-access-using-multiprocessing/>
+- Biosimulations - case study with HSDS and Vega: <https://www.hdfgroup.org/2022/02/biosimulations-a-platform-for-sharing-and-reusing-biological-simulations/>
+- HSDS for Microsoft Azure: <https://www.hdfgroup.org/2021/08/hsds-for-azure/>
+- New Features in HSDS v0.6: <https://www.hdfgroup.org/2020/10/new-features-in-hsds-version-0-6/>
+- HSDS Security: <https://hdfgroup.org/wp/2015/12/serve-protect-web-security-hdf5>
+- HDF for the Web: HDF Server: <https://www.hdfgroup.org/2015/04/hdf5-for-the-web-hdf-server/>
+
+### External Blogs and articles
+
+- A RESTful Meeting Betwween MATLAB and HDF Server: <https://www.mathworks.com/matlabcentral/fileexchange/59072-a-restful-meeting-between-matlab-and-hdf-server-web-based-hdf5-access-using-matlab>
+- AWS Big Data Blog: <https://aws.amazon.com/blogs/big-data/power-from-wind-open-data-on-aws/>
+
+### Slide Decks
+
+- EUHUG 2022 - HSDS v0.7 New Features: <https://www.hdfgroup.org/wp-content/uploads/2022/05/HSDS_New_Feautres_7.0.pdf>
+- EUHUG 2021 - HSDS Serverless: <https://www.hdfgroup.org/wp-content/uploads/2021/07/ServerlessHSDS.pdf>
+- HUG 2020 - HSDS REST: <https://www.hdfgroup.org/wp-content/uploads/2020/10/HSDS_Rest_Service_HDF5_Readey.pdf>
+- SciPy17 Presentation: <http://s3.amazonaws.com/hdfgroup/docs/hdf_data_services_scipy2017.pdf>
+- HSDS with Jupyter: <https://www.slideshare.net/HDFEOS/hdf-kita-lab-jupyterlab-hdf-service>
+
+### Videos
+
+- HSDS Webinar: <https://www.youtube.com/watch?v=9b5TO7drqqE&t=401s>
+- HSDS Overview, Allotrope Connect Day: <https://www.youtube.com/watch?v=nRHXEkhlfZ0>
+- The Use of HSDS on SlideRule, HUG 2020: <https://www.youtube.com/watch?v=i-KIoGqdEMg>
+- HDF Data Services, SciPy 2017: <https://www.youtube.com/watch?v=EmnCz1Hg-VM>
+- RESTful HDF, SciPy 2015: <https://www.youtube.com/watch?v=JSFZ3i3WcjQ>
+
+### Papers
+
+- restfulSE: A semantically rich interface for cloud-scale genomics with Bioconductor: <https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6392152>
+- RESTful HDF5 White Paper: <https://www.hdfgroup.org/pubs/papers/RESTful_HDF5.pdf>
