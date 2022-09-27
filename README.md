@@ -155,22 +155,22 @@ setup a Azure instance with HSDS. See: <https://azuremarketplace.microsoft.com/e
 - HSDS Security: <https://hdfgroup.org/wp/2015/12/serve-protect-web-security-hdf5>
 - HDF for the Web: HDF Server: <https://www.hdfgroup.org/2015/04/hdf5-for-the-web-hdf-server/>
 
-### External Blogs and articles
+### External Blogs and Articles
 
 - A RESTful Meeting Betwween MATLAB and HDF Server: <https://www.mathworks.com/matlabcentral/fileexchange/59072-a-restful-meeting-between-matlab-and-hdf-server-web-based-hdf5-access-using-matlab>
 - AWS Big Data Blog: <https://aws.amazon.com/blogs/big-data/power-from-wind-open-data-on-aws/>
 
 ### Slide Decks
 
-- EUHUG 2022 - HSDS v0.7 New Features: <https://www.hdfgroup.org/wp-content/uploads/2022/05/HSDS_New_Feautres_7.0.pdf>
-- EUHUG 2021 - HSDS Serverless: <https://www.hdfgroup.org/wp-content/uploads/2021/07/ServerlessHSDS.pdf>
-- HUG 2020 - HSDS REST: <https://www.hdfgroup.org/wp-content/uploads/2020/10/HSDS_Rest_Service_HDF5_Readey.pdf>
-- SciPy17 Presentation: <http://s3.amazonaws.com/hdfgroup/docs/hdf_data_services_scipy2017.pdf>
-- HSDS with Jupyter: <https://www.slideshare.net/HDFEOS/hdf-kita-lab-jupyterlab-hdf-service>
+- HSDS v0.7 New Features, EUHUG 2022: <https://www.hdfgroup.org/wp-content/uploads/2022/05/HSDS_New_Feautres_7.0.pdf>
+- HSDS Serverless, EUHUG 2021: <https://www.hdfgroup.org/wp-content/uploads/2021/07/ServerlessHSDS.pdf>
+- HSDS REST, HUG 2020: <https://www.hdfgroup.org/wp-content/uploads/2020/10/HSDS_Rest_Service_HDF5_Readey.pdf>
+- HSDS with Jupyter, ESIP 2018: <https://www.slideshare.net/HDFEOS/hdf-kita-lab-jupyterlab-hdf-service>
+- HDF Data Services, SciPy17: <http://s3.amazonaws.com/hdfgroup/docs/hdf_data_services_scipy2017.pdf>
 
 ### Videos
 
-- HSDS Webinar: <https://www.youtube.com/watch?v=9b5TO7drqqE&t=401s>
+- HSDS Webinar: <https://www.youtube.com/watch?v=9b5TO7drqqE>
 - HSDS Overview, Allotrope Connect Day: <https://www.youtube.com/watch?v=nRHXEkhlfZ0>
 - The Use of HSDS on SlideRule, HUG 2020: <https://www.youtube.com/watch?v=i-KIoGqdEMg>
 - HDF Data Services, SciPy 2017: <https://www.youtube.com/watch?v=EmnCz1Hg-VM>
