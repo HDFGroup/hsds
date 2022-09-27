@@ -720,7 +720,7 @@ class DomainTest(unittest.TestCase):
         params = {"bucket": "doesnotexistbucket47839293433"}
         req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers, params=params)
-        self.assertEqual(rsp.status_code, 404)
+        self.assertTrue(rsp.status_code in (403, 404))
 
     def testInvalidBucket(self):
         domain = self.base_domain + "/invalid_bucket.h5"

@@ -71,6 +71,23 @@ async def getDomainJson(app, domain, reload=False):
     return domain_json
 
 
+def checkBucketAccess(app, bucket, action="read"):
+    """ if the given bucket is not the default bucket, check
+    that non-default bucket access is enabled.
+    Throw 403 error if not allowed """
+    if bucket and bucket != app["bucket_name"]:
+        # check that we are allowed to access non-default buckets
+        if action == "read":
+            if not app["allow_any_bucket_read"]:
+                log.warn(f"read access to non-default bucket: {bucket} not enabled")
+                raise HTTPForbidden()
+        else:
+            # write acction
+            if not app["allow_any_bucket_write"]:
+                log.warn(f"write access to non-default bucket: {bucket} not enabled")
+                raise HTTPForbidden()
+
+
 async def validateAction(app, domain, obj_id, username, action):
     """check that the given object belongs in the domain and that the
     requested action (create, read, update, delete, readACL, udpateACL)
@@ -80,6 +97,10 @@ async def validateAction(app, domain, obj_id, username, action):
     msg = f"validateAction(domain={domain}, obj_id={obj_id}, "
     msg += f"username={username}, action={action})"
     log.info(msg)
+    bucket = getBucketForDomain(domain)
+    if bucket:
+        checkBucketAccess(app, bucket, action=action)
+
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
     verifyRoot(domain_json)

@@ -86,6 +86,8 @@ domain_req_max_objects_limit: 500 # maximum number of objects to return in GET d
 dn_max_retries: 7 # number of time to retry DN requests
 dn_retry_backoff_exp: 0.1 # backoff factor for retries
 xss_protection: "1; mode=block"  # Include in response headers if set
+allow_any_bucket_read: true  # enable reads to buckets other than default bucket
+allow_any_bucket_write: true # enable writes to buckets other than default bucket
 # DEPRECATED - the remaining config values are not used in currently but kept for backward compatibility with older container images
 aws_lambda_chunkread_function: null # name of aws lambda function for chunk reading
 aws_lambda_threshold: 4 # number of chunks per node per request to reach before using lambda
