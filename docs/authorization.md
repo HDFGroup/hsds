@@ -160,4 +160,7 @@ ACL Inheritance
 When a new domain or folder is created, a user ACL will be automatically created that gives the requesting user full control
 over that resource.  Additionally, any other ACLs (user, group, or default) defined in the parent folder will be copied to the ACLs of the new resource (unless that ACL does not authorize any action).
  
- 
+Bucket Access
+-------------
+
+By default HSDS requests can be used to read or write to any bucket (or Azure Container, or Posix directory under ROOT_DIR) that the service has access to.  If this is not desired, set the "allow_any_bucket_write" config to false to disable non-default bucket writes, and/or "allow_any_bucket_read" config to false to disable non-default bucket reads.  When a request to read or write to a non-allowed bucket is received, a 403 - Forbidden error will be returned.

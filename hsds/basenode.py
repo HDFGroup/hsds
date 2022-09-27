@@ -507,6 +507,8 @@ def baseInit(node_type):
     else:
         log.info("no default bucket defined")
     app["bucket_name"] = bucket_name
+    app["allow_any_bucket_read"] = config.get("allow_any_bucket_read", default=True)
+    app["allow_any_bucket_write"] = config.get("allow_any_bucket_write", default=True)
     app["dn_urls"] = []
     app["dn_ids"] = []  # node ids for each dn_url
 

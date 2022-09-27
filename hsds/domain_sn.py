@@ -40,7 +40,7 @@ from .util.storUtil import getStorKeys, getCompressors
 from .util.boolparser import BooleanParser
 from .util.globparser import globmatch
 from .servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath
-from .servicenode_lib import getRootInfo
+from .servicenode_lib import getRootInfo, checkBucketAccess
 from .basenode import getVersion
 from . import hsds_logger as log
 from . import config
@@ -724,6 +724,8 @@ async def GET_Domain(request):
         msg = "Bucket not provided"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    if bucket:
+        checkBucketAccess(app, bucket)
 
     verbose = False
     if "verbose" in params and params["verbose"]:
@@ -922,6 +924,8 @@ async def PUT_Domain(request):
     bucket = getBucketForDomain(domain)
 
     log.info(f"PUT domain: {domain}, bucket: {bucket}")
+    if bucket:
+        checkBucketAccess(app, bucket, action="write")
 
     body = None
     if request.has_body:
@@ -1221,13 +1225,16 @@ async def DELETE_Domain(request):
     except ValueError:
         log.warn(f"Invalid domain: {domain}")
         raise HTTPBadRequest(reason="Invalid domain name")
-    bucket = getBucketForDomain(domain)
-    log.debug(f"GET_Domain domain: {domain}")
+    log.debug(f"DELETE_Domain domain: {domain}")
 
     if not domain:
         msg = "No domain given"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+
+    bucket = getBucketForDomain(domain)
+    if bucket:
+        checkBucketAccess(app, bucket, action="delete")
 
     log.info(f"meta_only domain delete: {meta_only}")
     if meta_only:
@@ -1340,6 +1347,11 @@ async def GET_ACL(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
+    bucket = getBucketForDomain(domain)
+
+    if bucket:
+        checkBucketAccess(app, bucket)
+
     # use reload to get authoritative domain json
     try:
         domain_json = await getDomainJson(app, domain, reload=True)
@@ -1419,6 +1431,10 @@ async def GET_ACLs(request):
         msg = "Invalid domain"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+
+    bucket = getBucketForDomain(domain)
+    if bucket:
+        checkBucketAccess(app, bucket)
 
     # use reload to get authoritative domain json
     try:
@@ -1510,6 +1526,10 @@ async def PUT_ACL(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
+    bucket = getBucketForDomain(domain)
+    if bucket:
+        checkBucketAccess(app, bucket, action="write")
+
     # don't use app["domain_cache"]  if a direct domain request is made
     # as opposed to an implicit request as with other operations, query
     # the domain from the authoritative source (the dn node)
@@ -1549,6 +1569,8 @@ async def GET_Datasets(request):
     bucket = getBucketForDomain(domain)
     if not bucket:
         bucket = config.get("bucket_name")
+    else:
+        checkBucketAccess(app, bucket)
 
     # verify the domain
     try:
@@ -1641,6 +1663,8 @@ async def GET_Groups(request):
     bucket = getBucketForDomain(domain)
     if not bucket:
         bucket = config.get("bucket_name")
+    else:
+        checkBucketAccess(app, bucket)
 
     # use reload to get authoritative domain json
     try:
@@ -1728,6 +1752,8 @@ async def GET_Datatypes(request):
     bucket = getBucketForDomain(domain)
     if not bucket:
         bucket = config.get("bucket_name")
+    else:
+        checkBucketAccess(app, bucket)
 
     # use reload to get authoritative domain json
     try:
