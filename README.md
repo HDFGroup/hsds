@@ -35,7 +35,7 @@ Note: passwords can (and should for production use) be modified by changing valu
 
 ## Detailed Install Instructions
 
-**On AWS**
+### On AWS
 
 For complete instructions to install on a single Azure VM with Docker:
 
@@ -47,9 +47,9 @@ For complete instructions to install on AWS Kubernetes Service (EKS):
 
 For complete instructions to install on AWS Lambda:
 
-See: [docs/aws_lambda_setup.md](docs/aws_lambda_setup.md).
+- See: [docs/aws_lambda_setup.md](docs/aws_lambda_setup.md).
 
-**On Azure**
+### On Azure
 
 For complete instructions to install on a single Azure VM with Docker:
 
@@ -59,19 +59,19 @@ For complete instructions to install on Azure Kubernetes Service (AKS):
 
 - See: [docs/kubernetes_install_azure.md](docs/kubernetes_install_azure.md)
 
-**On Prem (POSIX-based storage)**
+### On Prem (POSIX-based storage)
 
 For complete instructions to install on a desktop or local server:
 
 - See: [docs/docker_install_posix.md](docs/docker_install_posix.md)
 
-**On DCOS** **(BETA)**
+### On DCOS (BETA)
 
 For complete instructions to install on DCOS:
 
 - See: [docs/docker_install_dcos.md](docs/docker_install_dcos.md)
 
-**General Install Topics**
+## General Install Topics
 
 Setting up docker:
 
