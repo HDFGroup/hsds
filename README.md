@@ -3,11 +3,11 @@
 ## Introduction
 
 HSDS is a web service that implements a REST-based web service for HDF5 data stores.
-Data can be stored in either a POSIX files system, or using object based storage such as
+Data can be stored in either a POSIX files system, or using object-based storage such as
 AWS S3, Azure Blob Storage, or MinIO <min.io>.
 HSDS can be run a single machine using Docker or on a cluster using Kubernetes (or AKS on Microsoft Azure).
 
-In addition HSDS can be run in serverless mode with AWS Lambda or h5pyd local mode.
+In addition, HSDS can be run in serverless mode with AWS Lambda or h5pyd local mode.
 
 ## Quick Start
 
@@ -18,14 +18,13 @@ Make sure you have Python 3, Pip, and git installed, then:
 3.  Run install: `$ python setup.py install` OR install from pypi: `$ pip install hsds`
 4.  Setup password file: `$ cp admin/config/passwd.default admin/config/passwd.txt`
 5.  Create a directory the server will use to store data, and then set the ROOT_DIR environment variable to point to it: `$ mkdir ~/hsds_data; export ROOT_DIR="${HOME}/hsds_data"`
-6.  Create the hsds test bucket: `$ mkdir $ROOT_DIR/hsdstest
+6.  Create the hsds test bucket: `$ mkdir $ROOT_DIR/hsdstest`
 7.  Start server: `$ ./runall.sh --no-docker`
-8.  Set environment variables for the admin account: `$export
-9.  In a new shell, set the environment variable HSDS_ENDPOINT to the string displayed. E.g.: `$ export HSDS_ENDPOINT=http+unix://%2Ftmp%2Fhs%2Fsn_1.sock`
-10. Set environment variables for the admin account: `$ export ADMIN_USERNAME=admin` and `$ export ADMIN_PASSWORD=admin` (adjust for any changes made to the passwd.txt file)
-11. Run the test suite: `$ python testall.py`
-12. (Optional) Post install setup (test data, home folders, cli tools, etc): [docs/post_install.md](docs/post_install.md)
-13. (Optional) Install the h5pyd package for an h5py compatible api and tool suite: https://github.com/HDFGroup/h5pyd
+8.  In a new shell, set the environment variable HSDS_ENDPOINT to the string displayed. E.g.: `$ export HSDS_ENDPOINT=http+unix://%2Ftmp%2Fhs%2Fsn_1.sock`
+9.  Set environment variables for the admin account: `$ export ADMIN_USERNAME=admin` and `$ export ADMIN_PASSWORD=admin` (adjust for any changes made to the passwd.txt file)
+10. Run the test suite: `$ python testall.py`
+11. (Optional) Post install setup (test data, home folders, cli tools, etc): [docs/post_install.md](docs/post_install.md)
+12. (Optional) Install the h5pyd package for an h5py compatible api and tool suite: https://github.com/HDFGroup/h5pyd
 
 To shut down the server, and the server was started with the --no-docker option, just control-C.
 
@@ -157,7 +156,7 @@ setup a Azure instance with HSDS. See: <https://azuremarketplace.microsoft.com/e
 
 ### External Blogs and Articles
 
-- A RESTful Meeting Betwween MATLAB and HDF Server: <https://www.mathworks.com/matlabcentral/fileexchange/59072-a-restful-meeting-between-matlab-and-hdf-server-web-based-hdf5-access-using-matlab>
+- A RESTful Meeting Between MATLAB and HDF Server: <https://www.mathworks.com/matlabcentral/fileexchange/59072-a-restful-meeting-between-matlab-and-hdf-server-web-based-hdf5-access-using-matlab>
 - AWS Big Data Blog: <https://aws.amazon.com/blogs/big-data/power-from-wind-open-data-on-aws/>
 
 ### Slide Decks
