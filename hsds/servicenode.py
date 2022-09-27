@@ -15,7 +15,6 @@
 
 import asyncio
 import time
-from collections import deque
 from aiohttp.web import run_app
 import aiohttp_cors
 from .util.lruCache import LruCache
@@ -207,7 +206,6 @@ def create_app():
     app["meta_cache"] = LruCache(**kwargs)
     kwargs["name"] = "DomainCache"
     app["domain_cache"] = LruCache(**kwargs)
-    app["shm_blocks"] = deque()  # store (timestamp, shm_name) tuples
 
     if config.get("allow_noauth"):
         allow_noauth = config.get("allow_noauth")
