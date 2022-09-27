@@ -1021,7 +1021,7 @@ async def GET_Value(request):
                 msg = f"query variable {variable} not valid"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
-    
+
     response_type = getAcceptType(request)
 
     if response_type == "binary" and rank > 0 and not isAWSLambda(request):
