@@ -16,6 +16,7 @@
 
 import base64
 import numpy as np
+from json import JSONDecodeError
 from asyncio import IncompleteReadError
 from aiohttp.web_exceptions import HTTPException, HTTPBadRequest
 from aiohttp.web_exceptions import HTTPRequestEntityTooLarge
@@ -399,7 +400,12 @@ async def PUT_Value(request):
         raise HTTPBadRequest(reason=msg)
 
     if request_type == "json":
-        body = await request.json()
+        try:
+            body = await request.json()
+        except JSONDecodeError:
+            msg = "Unable to load JSON body"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
         if "append" in body and body["append"]:
             try:
                 append_rows = int(body["append"])
@@ -1514,7 +1520,12 @@ async def POST_Value(request):
     points = None  # this will be set for point selection
     point_dt = np.dtype("u8")  # use unsigned long for point index
     if request_type == "json":
-        body = await request.json()
+        try:
+            body = await request.json()
+        except JSONDecodeError:
+            msg = "Unable to load JSON body"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
         if "points" in body:
             points_list = body["points"]
             if not isinstance(points_list, list):

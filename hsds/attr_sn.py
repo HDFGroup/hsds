@@ -16,6 +16,7 @@
 import numpy as np
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 from aiohttp.web import StreamResponse
+from json import JSONDecodeError
 
 from .util.httpUtil import http_get, http_put, http_delete, getHref
 from .util.httpUtil import getAcceptType, jsonResponse
@@ -228,7 +229,12 @@ async def PUT_Attribute(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    body = await request.json()
+    try:
+        body = await request.json()
+    except JSONDecodeError:
+        msg = "Unable to load JSON body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
@@ -686,7 +692,12 @@ async def PUT_AttributeValue(request):
         data = arr.tolist()
         value = bytesArrayToList(data)
     else:
-        body = await request.json()
+        try:
+            body = await request.json()
+        except JSONDecodeError:
+            msg = "Unable to load JSON body"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
 
         if "value" not in body:
             msg = "PUT attribute value with no value in body"
