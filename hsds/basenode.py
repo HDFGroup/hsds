@@ -33,7 +33,7 @@ from .util.authUtil import isAdminUser
 from .util.k8sClient import getDnLabelSelector, getPodIps
 from . import hsds_logger as log
 
-HSDS_VERSION = "0.7.0beta"
+HSDS_VERSION = "0.7.0"
 
 
 def getVersion():
