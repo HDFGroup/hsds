@@ -39,6 +39,7 @@ HSDS_VERSION = "0.7.0"
 def getVersion():
     return HSDS_VERSION
 
+
 def getHeadUrl(app):
     if "head_url" in app:
         head_url = app["head_url"]
