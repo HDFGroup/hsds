@@ -16,6 +16,7 @@
 
 import math
 import numpy as np
+from json import JSONDecodeError
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict
 
 from .util.httpUtil import http_post, http_put, http_delete, getHref
@@ -560,7 +561,13 @@ async def PUT_DatasetShape(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    data = await request.json()
+    try:
+        data = await request.json()
+    except JSONDecodeError:
+        msg = "Unable to load JSON body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
     if "shape" not in data and "extend" not in data:
         msg = "PUT shape has no shape or extend key in body"
         log.warn(msg)
@@ -685,7 +692,12 @@ async def POST_Dataset(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    body = await request.json()
+    try:
+        body = await request.json()
+    except JSONDecodeError:
+        msg = "Unable to load JSON body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     # get domain, check authorization
     domain = getDomainFromRequest(request)

@@ -14,6 +14,7 @@
 #
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPConflict
+from json import JSONDecodeError
 
 from .util.httpUtil import http_get, http_put, http_delete, getHref
 from .util.httpUtil import jsonResponse
@@ -224,7 +225,12 @@ async def PUT_Link(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    body = await request.json()
+    try:
+        body = await request.json()
+    except JSONDecodeError:
+        msg = "Unable to load JSON body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     link_json = {}
     if "id" in body:

@@ -305,6 +305,10 @@ class AttributeTest(unittest.TestCase):
         rsp = self.session.put(req, headers=headers, data=json.dumps(attr_payload))
         self.assertEqual(rsp.status_code, 400)  # can't include data
 
+        # try with invalid json body
+        rsp = self.session.put(req, headers=headers, data="foobar_content")
+        self.assertEqual(rsp.status_code, 400)  # not json data
+
         # try again without the data
         attr_payload = {"type": "H5T_STD_I32LE", "shape": "H5S_NULL"}
         req = self.endpoint + "/groups/" + root_uuid + "/attributes/" + attr_name

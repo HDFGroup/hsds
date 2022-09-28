@@ -14,6 +14,7 @@
 #
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
+from json import JSONDecodeError
 
 from .util.httpUtil import http_post, http_put, http_delete, getHref
 from .util.httpUtil import jsonResponse
@@ -172,7 +173,14 @@ async def POST_Group(request):
     link_id = None
     link_title = None
     if request.has_body:
-        body = await request.json()
+
+        try:
+            body = await request.json()
+        except JSONDecodeError:
+            msg = "Unable to load JSON body"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
         log.info(f"POST Group body: {body}")
         if body:
             if "link" in body:

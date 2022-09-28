@@ -15,7 +15,7 @@
 #
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPGone
-
+from json import JSONDecodeError
 from .util.httpUtil import http_post, http_put, http_delete, getHref
 from .util.httpUtil import jsonResponse
 from .util.idUtil import isValidUuid, getDataNodeUrl, createObjId
@@ -149,7 +149,12 @@ async def POST_Datatype(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    body = await request.json()
+    try:
+        body = await request.json()
+    except JSONDecodeError:
+        msg = "Unable to load JSON body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
     if "type" not in body:
         msg = "POST Datatype has no type key in body"
         log.warn(msg)

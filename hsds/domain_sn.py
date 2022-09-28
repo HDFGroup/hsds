@@ -929,7 +929,12 @@ async def PUT_Domain(request):
 
     body = None
     if request.has_body:
-        body = await request.json()
+        try:
+            body = await request.json()
+        except json.JSONDecodeError:
+            msg = "Unable to load JSON body"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
         log.debug(f"PUT domain with body: {body}")
 
     if "getdnids" in params and params["getdnids"]:
@@ -1208,7 +1213,12 @@ async def DELETE_Domain(request):
     meta_only = False  # if True, just delete the meta cache value
     keep_root = False
     if request.has_body:
-        body = await request.json()
+        try:
+            body = await request.json()
+        except json.JSONDecodeError:
+            msg = "Unable to load JSON body"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
         if "meta_only" in body:
             meta_only = body["meta_only"]
         if "keep_root" in body:
@@ -1506,7 +1516,13 @@ async def PUT_ACL(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    body = await request.json()
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        msg = "Unable to load JSON body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
     acl_keys = getAclKeys()
 
     for k in body.keys():
