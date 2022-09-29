@@ -57,6 +57,7 @@ def setLogConfig(level, prefix=None, timestamps=None):
         config["log_level"] = ERROR
     else:
         raise ValueError(f"unexpected log_level: {level}")
+    print(f"setLogConfig - level={level}")
     if prefix is not None:
         config["prefix"] = prefix
     if timestamps is not None:
