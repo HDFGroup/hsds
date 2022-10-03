@@ -148,15 +148,14 @@ class DataAppender:
                     else:
                         # call addrow and update stats
                         status_code = await self.addrow(
-                            session, dsetid, sensor_id, seq_num
-                        )
+                            session, dsetid, sensor_id, seq_num)
                         self._app["success_count"] += 1
                         self._app["rows_added"] += 1
                         seq_num += 1
-                        if all(
+                        if all([
                             (self.max_rows > 0),
                             (self._app["rows_added"] >= self.max_rows),
-                        ):
+                        ]):
                             logging.info(f"task: {sensor_id}: no more work to do")
                             self._q.task_done()
                             break
