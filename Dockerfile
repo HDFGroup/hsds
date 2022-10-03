@@ -1,5 +1,8 @@
 FROM python:3.9-slim AS hsds-base
 
+# Install Curl
+RUN apt-get update; apt-get -y install curl
+
 # Install HSDS
 RUN mkdir /usr/local/src/hsds/ \
     /usr/local/src/hsds/hsds/ \
