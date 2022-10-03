@@ -10,6 +10,7 @@ import h5pyd as h5py
 
 globals = {}
 
+
 class ThingItem:
 
     def __init__(self, name, age, version, data):
@@ -19,7 +20,7 @@ class ThingItem:
         self.data = data
 
 
-#Storing approaches
+# Storing approaches
 
 def get_headers():
     """ Return http headers for hsds request """
@@ -31,6 +32,7 @@ def get_headers():
     auth_string = "Basic " + auth_string
     headers["Authorization"] = auth_string
     return headers
+
 
 def get_type_for_value(value):
     """ Return HSDS type for given value """
@@ -58,12 +60,12 @@ async def create_attribute(obj_id, attr_name, value):
         req = globals["endpoint"] + "/datasets/"
     else:
         raise ValueError(f"invalid obj_id: {obj_id}")
-        
+
     req += obj_id + "/attributes/" + attr_name
     headers = get_headers()
     params = {"domain": globals["domain"]}
     client = globals["client"]
-    
+
     attr_type = get_type_for_value(value)
 
     body = {"type": attr_type, "value": value}
@@ -106,7 +108,7 @@ async def create_dataset(parent_grp_id, dataset_name, value=None):
     params = {"domain": globals["domain"]}
     client = globals["client"]
     dset_type = get_type_for_value(value)
-    body =  {"type": dset_type}
+    body = {"type": dset_type}
     dset_id = None
 
     # create the dataset
@@ -133,7 +135,7 @@ async def create_dataset(parent_grp_id, dataset_name, value=None):
         return dset_id
 
     # write the scalar value
-    req =  globals["endpoint"] + "/datasets/" + dset_id + "/value"
+    req = globals["endpoint"] + "/datasets/" + dset_id + "/value"
     body = {"value": value}
     async with client.put(req, headers=headers, params=params, json=body) as rsp:
         if rsp.status != 200:
@@ -152,14 +154,13 @@ async def store(group_name):
     group_id = await create_group(parent_grp_id, group_name)
     logging.info(f"store: got group_id: {group_id} for group_name: {group_name}")
     things = globals["things"]
-    
+
     for key, val in things.items():
         logging.debug(f"{key}: {val}")
         if type(val) == dict:
             logging.debug("dict")
             val_grp_id = await create_group(group_id, key)
             logging.debug(f"got val_grp_id: {val_grp_id}")
-            # store(g, val)
         elif type(val) == ThingItem:
             logging.info(f"ThingItem - create_group_attributes name for group: {group_id} ")
             val_grp_id = await create_group(group_id, key)
@@ -168,13 +169,13 @@ async def store(group_name):
             await create_attribute(val_grp_id, "version", val.version)
         else:
             await create_dataset(group_id, key, value=val)
-            #group.create_dataset(key, data=val)
-        
+
+
 async def store_items(grp_names):
     task_limit = globals["task_limit"]
     max_tcp_connections = globals["max_tcp_connections"]
     session = ClientSession(loop=loop, connector=TCPConnector(limit=max_tcp_connections))
-    globals["client"] = session 
+    globals["client"] = session
     xs = stream.iterate(grp_names) | pipe.map(store, ordered=False, task_limit=task_limit)
     await(xs)
     await session.close()
@@ -194,7 +195,7 @@ usage += f"[--max-tcp-conn={max_tcp_connections}] [--task-limit={task_limit}] "
 usage += f"--loglevel={log_level}] domain"
 
 
-if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):    
+if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
     print(usage)
     sys.exit(1)
 
@@ -231,7 +232,6 @@ print(f"task_limit: {task_limit}")
 print(f"log_level: {log_level}")
 print(f"domain: {domain}")
 
-        
 if log_level == "debug":
     logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
 elif log_level == "info":
@@ -258,7 +258,7 @@ totRunningTime = 0
 
 # Creating test data
 
-child= {}
+child = {}
 child["name"] = "John"
 child["age"] = "32"
 child["address"] = "some street"
@@ -302,10 +302,10 @@ loop.run_until_complete(store_items(grp_names))
 
 end = time.time()
 
-timingsData[i] = end-start
-print(f"Saving small datasets: {timingsData[i]:.2f} s" )
+timingsData[i] = end - start
+print(f"Saving small datasets: {timingsData[i]:.2f} s")
 
-im = np.random.randint(0,10,size=[6000,4000], dtype=np.int16)
+im = np.random.randint(0, 10, size=[6000, 4000], dtype=np.int16)
 
 things["im"] = im
 start = time.time()
@@ -313,8 +313,8 @@ with h5py.File(domain, mode="a") as f:
     f["im"] = im
 
 end = time.time()
-timingsIm[i] = end-start
-print(f"Saving image: {timingsIm[i]:.2f} s" )
+timingsIm[i] = end - start
+print(f"Saving image: {timingsIm[i]:.2f} s")
 
 print("group count:", globals["group_count"])
 print("dataset count:", globals["dataset_count"])
@@ -323,4 +323,3 @@ print("attribute_count:", globals["attribute_count"])
 logging.info("done")
 
 print("")
-
