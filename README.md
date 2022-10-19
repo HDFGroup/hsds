@@ -143,6 +143,7 @@ setup a Azure instance with HSDS. See: <https://azuremarketplace.microsoft.com/e
 
 ### HDF Group Blog Posts
 
+- Web Caching: <https://www.hdfgroup.org/2022/10/improve-hdf5-performance-using-caching/>
 - HSDS Streaming: <https://www.hdfgroup.org/2022/08/hsds-streaming/>
 - Cloud Storage Options for HDF5: <https://www.hdfgroup.org/2022/08/cloud-storage-options-for-hdf5/>
 - HSDS Docker Images: <https://www.hdfgroup.org/2022/07/hsds-docker-images/>
