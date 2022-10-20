@@ -82,7 +82,7 @@ Post install setup and testing:
 
 Authorization, ACLs, and Role Based Access Control (RBAC):
 
-- See [docs/authorization.mid](docs/authorization.md)
+- See [docs/authorization.md](docs/authorization.md)
 
 Running serverless with h5pyd:
 
