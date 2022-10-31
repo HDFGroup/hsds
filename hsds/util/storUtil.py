@@ -82,7 +82,7 @@ def setBloscThreads(nthreads):
 
 def getBloscThreads():
     """Get the number of blosc threads to be used for compression"""
-    nthreads = codecs.blosc_get_nthreads()
+    nthreads = codecs.blosc.get_nthreads()
 
     return nthreads
 

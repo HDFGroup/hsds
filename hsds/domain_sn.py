@@ -1451,7 +1451,6 @@ async def GET_ACLs(request):
         domain_json = await getDomainJson(app, domain, reload=True)
     except ClientResponseError:
         log.warn("domain not found")
-        log.warn(msg)
         raise HTTPNotFound()
 
     if "owner" not in domain_json:
