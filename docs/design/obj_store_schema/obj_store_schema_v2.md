@@ -533,7 +533,7 @@ set of chunks can be determined by listing all the keys under the datasets S3 ke
 
 The chunk storage key is of the form:
 
-    db/&lt;uuid1&gt;/d/&lt;uuid2&gt;/&lt;i&gt;_&lt;j&gt;_&lt;k&gt;
+    db/<uuid1>/d/<uuid2>/<i>_<j>_<k>
 
 Where:
 
@@ -554,7 +554,7 @@ For variable length types, a run length encoding format is used. See "Variable L
 
 Consider a dataset with a dataspace of [100,100] and a chunk layout of [10,10]. For the section of the dataset at: [10:20, 30:40], the key for the chunk would be:
 
-    db/<uuid1>/d/<uuid2>_1_3
+    db/<uuid1>/d/<uuid2>1_3
 
 The chunk object would contain binary data of the data values in the chunk.
 
@@ -578,7 +578,7 @@ and therefore the contents of the object may not accurately reflect the real tim
 
 The summary key is of the form:
 
-    db/&lt;uuid1&gt;/.info.json
+    db/<uuid1>/.info.json
 
 Where:
 
