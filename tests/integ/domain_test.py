@@ -720,7 +720,8 @@ class DomainTest(unittest.TestCase):
         params = {"bucket": "doesnotexistbucket47839293433"}
         req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers, params=params)
-        self.assertTrue(rsp.status_code in (403, 404))
+        # Tencent returns a 500, AWS will return a 403 or 404
+        self.assertTrue(rsp.status_code in (403, 404, 500))
 
     def testInvalidBucket(self):
         domain = self.base_domain + "/invalid_bucket.h5"
