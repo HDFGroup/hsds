@@ -1,7 +1,7 @@
 Installation using Docker with Tencent Cloud object storage
 ===========================================================
 
-1. In the Tencent Cloud console, select "Cloud Access Managemnt/API Keys"
+1. In the Tencent Cloud console, select "Cloud Access Management/API Keys"
 2. Press "Create Key" to create aa new access key.  Save the "SecretId" and "SecretKey" in a secure place
 select "Compute/Cloud Virtual Machine"
 3. Using the Tencent Cloud console, go to "Cloud Object Storage", select "Bucket List", then press "Create Bucket" button.  Choose a region that is in the same region as your VM (or geographically close to you if running HSDS on a external machine).  Enter a bucket name, and click "Next".  For other options, the default
