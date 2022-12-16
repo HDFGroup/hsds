@@ -33,11 +33,11 @@ Here we will deploy an Azure Storage Account, Azure Container Registry (ACR) and
 
 1. Install az-cli: `pip install azure-cli`
 2. Validate runtime version az-cli is at least 2.0.80: `az version`
-3. Log in to Azure Subscription using AZ-Cli. `$az login`
+3. Log in to Azure Subscription using AZ-Cli. `az login`
 4. After successful login, the list of available subscriptions will be displayed. If you have access to more than one subscription, set the proper subscription to be used: `az account set --subscription [name]`
 5. Run the following commands to create Azure Resource Group: `az group create --name $RESOURCEGROUP --location $LOCATION`
 6. Create storage account: `az storage account create -n $STORAGEACCTNAME -g $RESOURCEGROUP -l $LOCATION --sku Standard_LRS`
-7. Create a blob container in the storage account: `$az storage container create -n $CONTAINERNAME --account-name $STORAGEACCTNAME --fail-on-exist`
+7. Create a blob container in the storage account: `az storage container create -n $CONTAINERNAME --account-name $STORAGEACCTNAME --fail-on-exist`
    Note: The connection string for the storage account can be found in the portal under Settings > Access keys on the storage account or via this cli command: `az storage account show-connection-string -n $STORAGEACCTNAME -g $RESOURCEGROUP`
 8. The following command will create the new ACR: `az acr create --resource-group $RESOURCEGROUP --name $ACRNAME --sku Basic --admin-enabled true`
 9. Install AKS cli: `az aks install-cli`
@@ -100,8 +100,6 @@ If you need to build and deploy a custom HSDS image (e.g. you have made changes 
 4.  Now we will deploy the HSDS containers. In **_k8s_deployment_azure.yml_**, customize the values for:
     env sections:
     - HSDS_ENDPOINT (change to `http://public-ip` where pubic-ip is the EXTERNAL-IP from step 3 above)
-    - BUCKET_NAME (this is the name of the blob container created earlier)
-      containers sections
     - image: 'myacrname.azurecr.io/hsds:v1' to reflect the acr repository for deployment (for custom builds only).
 5.  Apply the deployment: `$ kubectl apply -f k8s_deployment_azure.yml`
 6.  Verify that the HSDS pod is running: `$ kubectl get pods` a pod with a name starting with hsds should be displayed with status as "Running".
@@ -126,7 +124,7 @@ This step is only needed if a custom image of HSDS needs to be deployed.
 1. From hsds directory, build docker image: `bash build.sh`
 2. Tag the docker image using the ACR scheme: `docker tag hdfgroup/hsds $ACRNAME.azurecr.io/hsds:v1` where $ACRNAME is the ACR being deployed to, and v1 is the version (update this every time you will be deploying a new version of HSDS).
 3. Login to the Azure container registry (ACR): `az acr login --name $ACRNAME`
-4. You may also need to login into ACR from docker as follows: Get the ACR admin credentials: `az acr credential show -n $ACRNAME` then docker login with those credentials: `docker login $ACRNAME -u xxx -p xxx`
+4. You may also need to login into ACR from docker as follows: Get the ACR admin credentials: `az acr credential show -n $ACRNAME` then docker login with those credentials: `docker login $ACRNAME.azure.io -u xxx -p xxx`
 5. Push the image to Azure ACR: `docker push $ACRNAME.azurecr.io/hsds:v1`
    **Note:** Use all lowercase ACRNAME in these commands if your actual ACRNAME includes uppercase characters
 6. Update the **_k8s_deployment_azure.yml_** file to use the ACR image path (note there are multiple references to the image)
