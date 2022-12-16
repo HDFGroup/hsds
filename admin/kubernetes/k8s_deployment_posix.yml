@@ -16,15 +16,20 @@ spec:
     spec:
       containers:
         - name: sn
-          image: "hdfgroup/hsds"
+          image: hdfgroup/hsds:0.7.0
           imagePullPolicy: IfNotPresent
           volumeMounts:
             - name: data
               mountPath: "/data"
             - name: accounts
-              mountPath: "/config"
+              mountPath: "/config/passwd.txt"
+              subPath: passwd.txt
             - name: config
-              mountPath: "/config/"
+              mountPath: "/config/config.yml"
+              subPath: config.yml
+            - name: override
+              mountPath: "/config/override.yml"
+              subPath: override.yml
           ports:
             - containerPort: 5101
           env:
@@ -37,17 +42,23 @@ spec:
               path: /info
               port: 5101
             initialDelaySeconds: 5
-            periodSeconds: 5
+            periodSeconds: 60
         - name: dn
-          image: "hdfgroup/hsds"
+          image: hdfgroup/hsds:0.7.0
+          imagePullPolicy: IfNotPresent
           lifecycle:
             preStop:
               exec:
                 command: ["/sbin/killall5", "-15"]
-          imagePullPolicy: IfNotPresent
           volumeMounts:
             - name: data
               mountPath: "/data"
+            - name: config
+              mountPath: "/config/config.yml"
+              subPath: config.yml
+            - name: override
+              mountPath: "/config/override.yml"
+              subPath: override.yml
           ports:
             - containerPort: 6101
           env:
@@ -60,16 +71,19 @@ spec:
               path: /info
               port: 6101
             initialDelaySeconds: 5
-            periodSeconds: 5
+            periodSeconds: 60
       volumes:
         - name: data
           hostPath:
             # change to directory location for bucket parent directory
             path: /var/mybuckets
             type: Directory
-        - name: config
+        - name: accounts
           secret:
             secretName: user-password
-        - name: hsds-config
+        - name: config
           configMap:
             name: hsds-config
+        - name: override
+          configMap:
+            name: hsds-override

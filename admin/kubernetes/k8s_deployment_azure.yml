@@ -17,7 +17,7 @@ spec:
       containers:
         - name: sn
           image: hdfgroup/hsds:0.7.0 
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           resources:
             requests:
               memory: "1G"
@@ -55,10 +55,10 @@ spec:
               path: /info
               port: 5101
             initialDelaySeconds: 5
-            periodSeconds: 5
-        -
-          name: dn
-          image: hdfgroup/hsds:0.7.0 
+            periodSeconds: 60
+        - name: dn
+          image: hdfgroup/hsds:0.7.0
+          imagePullPolicy: IfNotPresent 
           resources:
             requests:
               memory: "2G"
@@ -68,7 +68,6 @@ spec:
             preStop:
               exec:
                 command: ["/sbin/killall5", "-15"]
-          imagePullPolicy: IfNotPresent
           volumeMounts:
           - name: config
             mountPath: "/config/config.yml"
@@ -94,7 +93,7 @@ spec:
               path: /info
               port: 6101
             initialDelaySeconds: 5
-            periodSeconds: 5
+            periodSeconds: 60
       volumes:
       - name: accounts
         secret:
