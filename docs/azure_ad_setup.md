@@ -27,7 +27,7 @@ HSDS Configuration
 
 In the hsds/admin/config directory, create the file "override.yml" if it doesn't already exist.
 
-In the override.yml file, create the following two lines:
+In the override.yml file, create the following line:
 
     azure_resource_id: 12345678-1234-1234-abcd-123456789ab          # client id value for AD server application
 

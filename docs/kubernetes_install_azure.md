@@ -68,27 +68,23 @@ Run the make_secrets script: `./make_secrets.sh`
 
 Run: `kubectl get secrets` to verify the secrets have been created.
 
-## Create Kubernetes ConfigMaps
+## Create RBAC role
 
-Kubernetes ConfigMaps are used to store settings that are specific to your HSDS deployment.
+If you anticipate running more than one HSDS pod, you will need to cluster role bindings to 
+allow pods to call the Kubernetes service to list running pods.  This is to enable HSDS pods to
+delegate operations to other HSDS pods running in the same namespace and same app label.
 
-Review the contents of **admin/config/config.yml** and create the file **admin/config/override.yml** for any keys where you don't
-wish to use the default value. Values that you will most certainly want to override are:
-
-- bucket_name # set to the name of the Azure Blob container you will be using
-
-Run the make_config map script to store the yaml settings as Kubernetes ConnfigMaps: `admin/kubernetes/k8s_make_configmap.sh`
-
-## Deploy HSDS to AKS
-
-If you need to build and deploy a custom HSDS image (e.g. you have made changes to the HSDS code), first build and deploy the code to ACR as described in section "Building a docker image and deploying to ACR" below. Otherwise, the standard image from docker hub (<https://hub.docker.com/repository/docker/hdfgroup/hsds>) will be deployed.
-
-1.  Create RBAC roles: `kubectl create -f k8s_rbac.yml`
+1.  Run: `kubectl create -f k8s_rbac.yml`
     Note: if you plan to run HSDS in its own Kubernetes namespace, modify the namespace key of
     ClusterRoleBinding in k8s_rbac.yml from "default" to your namespace.
-2.  Create HSDS service on the AKS cluster: `$ kubectl apply -f k8s_service_lb_azure.yml`
-3.  This will create an external load balancer with an http endpoint with a public-ip.
-    Use kubectl to get the public-ip of the hsds service: `$kubectl get service`
+
+
+## Create Kubernetes service for HSDS
+
+
+1.  Create HSDS service on the AKS cluster: `$ kubectl apply -f k8s_service_lb_azure.yml`
+2.  This will create an external load balancer with an http endpoint with a public-ip.
+    Use kubectl to get the public-ip of the hsds service: `$ kubectl get service`
     You should see an entry similar to:
 
         NAME    TYPE           CLUSTER-IP     EXTERNAL-IP      PORT(S)        AGE
@@ -97,16 +93,40 @@ If you need to build and deploy a custom HSDS image (e.g. you have made changes 
     Note the public-ip (EXTERNAL-IP). This is where you can access the HSDS service externally. It may take some time for the EXTERNAL-IP to show up after the service deployment. For additional configuration options to handle SSL related scenarios please see: _frontdoor_install_azure.md_
     Additional reference for Azure Front Door <https://docs.microsoft.com/en-us/azure/frontdoor/>
 
-4.  Now we will deploy the HSDS containers. In **_k8s_deployment_azure.yml_**, customize the values for:
-    env sections:
-    - HSDS_ENDPOINT (change to `http://public-ip` where pubic-ip is the EXTERNAL-IP from step 3 above)
-    - image: 'myacrname.azurecr.io/hsds:v1' to reflect the acr repository for deployment (for custom builds only).
-5.  Apply the deployment: `$ kubectl apply -f k8s_deployment_azure.yml`
-6.  Verify that the HSDS pod is running: `$ kubectl get pods` a pod with a name starting with hsds should be displayed with status as "Running".
-7.  Additional verification: Run (`$ kubectl describe pod hsds-xxxx`) and make sure everything looks OK
-8.  To locally test that HSDS functioning
+
+
+## Create Kubernetes ConfigMaps
+
+Kubernetes ConfigMaps are used to store settings that are specific to your HSDS deployment.
+
+Review the contents of **admin/config/config.yml** and create the file **admin/config/override.yml** for any keys where you don't
+wish to use the default value. Values that you will most certainly want to override are:
+
+- bucket_name # set to the name of the Azure Blob container you will be using
+- password_file # if you created the user-password secret, set this to the mount path of the secret ("/accounts/passwd.txt" as specified in the k8s_deployment yamls)
+- hsds_endpoint # set to "http://<EXTERNAL_IP>" where EXTERNAL_IP is the IP address returned by `$ kubectl get service`.  If a DNS name will be mapped to this IP, that can be used instead.  If HSDS will only be accessed within the Kubernetes cluster, you can use: <http://hsds.default.svc.cluster.local:5101>  instead.  (use the namespace name instead of "default" if HSDS is being deployed to a Kubernetes namespace).  The hsds_endpoint value is used to return a reference back to the service in REST HATEAOS responses.
+
+Run the make_config map script to store the yaml settings as Kubernetes ConnfigMaps: `admin/kubernetes/k8s_make_configmap.sh`
+
+## Building HSDS image
+
+If you need to build and deploy a custom HSDS image (e.g. you have made changes to the HSDS code), first build and deploy the code to ACR as described in section "Building a docker image and deploying to ACR" below. Otherwise, the standard image from docker hub (<https://hub.docker.com/repository/docker/hdfgroup/hsds>) will be deployed.
+
+
+# Deploy HSDS to AKS
+
+Now we are ready to create the HSDS deployment
+
+1.  In **_k8s_deployment_azure.yml_**, make any desired changes:
+    - image: 'myacrname.azurecr.io/hsds:v1' to reflect the acr repository for deployment (for custom builds only)
+    - resource memory limits: change if defaults are not satisfactory
+2.  Apply the deployment: `$ kubectl apply -f k8s_deployment_azure.yml`
+3.  Verify that the HSDS pod is running: `$ kubectl get pods` a pod with a name starting with hsds should be displayed with status as "Running".
+4.  Additional verification: Run (`$ kubectl describe pod hsds-xxxx`) and make sure everything looks OK
+5.  To locally test that HSDS functioning
     - Create a forwarding port to the Kubernetes service `$ sudo kubectl port-forward hsds-1234 8080:5101` (use another port if 8080 is unavailable)
     - From a browser hit: <http://127.0.0.1:8080/about> and verify that "cluster_state" is "READY"
+6.  If an external endpoint has been setup, try accessing HSDS through that endpoint
 
 ## Test the Deployment using Integration Test and Test Data
 
