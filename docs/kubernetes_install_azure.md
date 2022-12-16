@@ -90,7 +90,7 @@ delegate operations to other HSDS pods running in the same namespace and same ap
         NAME    TYPE           CLUSTER-IP     EXTERNAL-IP      PORT(S)        AGE
         hsds    LoadBalancer   10.0.242.109   20.36.17.252     80:30326/TCP   23
 
-    Note the public-ip (EXTERNAL-IP). This is where you can access the HSDS service externally. It may take some time for the EXTERNAL-IP to show up after the service deployment. For additional configuration options to handle SSL related scenarios please see: _frontdoor_install_azure.md_
+    Note the public-ip (EXTERNAL-IP). This is where you can access the HSDS service externally. It may take some time for the EXTERNAL-IP to show up after the service deployment. For additional configuration options to handle SSL related scenarios please see: _[Front Door Install](frontdoor_install_azure.md)_
     Additional reference for Azure Front Door <https://docs.microsoft.com/en-us/azure/frontdoor/>
 
 
