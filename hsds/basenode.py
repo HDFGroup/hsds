@@ -300,7 +300,6 @@ def updateReadyState(app, old_dn_urls=None):
         if len(dn_urls) > 0:
             log.warning(f"not all dn_ids found, got: {dn_ids}")
             is_ready = False
-        
 
     if app["node_type"] == "dn":
         # dn node
@@ -331,7 +330,7 @@ def updateReadyState(app, old_dn_urls=None):
         if old_dn_urls:
             old_count = len(old_dn_urls)
         else:
-            old_count =  0
+            old_count = 0
         new_count = len(dn_urls)
         if old_count != new_count:
             msg = f"scaling - number of dn nodes has changed from {old_count} "
@@ -356,7 +355,6 @@ def updateReadyState(app, old_dn_urls=None):
             log.warn("got is_ready for node in TERMINATING state")
     else:
         log.error(f"unexpected node_state: {node_state}")
-
 
 
 def _activeTaskCount():
