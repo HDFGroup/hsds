@@ -87,8 +87,8 @@ def getIPKeys(metadata):
             # log.debug(f"using key: {key}")
             if key not in item:
                 # key not found, move on to next managedField
-                msg = f"getIPKeys - looking for {key} key but not present"
-                log.debug(msg)
+                #msg = f"getIPKeys - looking for {key} key but not present"
+                #log.debug(msg)
                 break
             item = item[key]
             # log.debug(f"got obj type: {type(item)}")

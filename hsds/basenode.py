@@ -99,49 +99,120 @@ async def get_info(app, url):
     return rsp_json
 
 
+async def k8s_get_dn_info(app, dn_urls=None):
+    # call info on each dn container and return map of info json key'd by dn_url
+    log.debug("k8s_get_dn_info")
+    info_map = {}
+    if dn_urls is None:
+        dn_urls = app["dn_urls"]
+    for dn_url in dn_urls:
+        req = dn_url + "/info"
+        log.debug(f"k8s_get_dn_urls - about to call: {req}")
+        # TBD - running these requests in a batch would be a bit faster
+        try:
+            rsp_json = await http_get(app, req)
+            if "node" not in rsp_json:
+                log.error("k8s_get_dn_urls - Unexpected response from info (no node key)")
+                continue
+            node_json = rsp_json["node"]
+            if "id" not in node_json:
+                log.error("k8s_get_dn_urls - Unexpected response from info (no node/id key)")
+                continue
+        except HTTPServiceUnavailable:
+            log.warn("k8s_get_dn_urls - 503 error from /info request")
+        except Exception as e:
+            log.error(f"k8s_get_dn_urls - Exception: {e} from /info request")
+        info_map[dn_url] = node_json
+        log.debug(f"adding {dn_url} to dn info map: {node_json}")
+    log.debug(f"k8s_get_dn_info, returning {len(info_map)} items")
+    return info_map
+
+
 async def k8s_update_dn_info(app):
     """update dn urls by querying k8s api.
     Call each url to determine node_ids
     """
     log.info("k8s_update_dn_info")
     k8s_dn_label_selector = getDnLabelSelector(config)
-    # put import here to avoid k8s package dependency unless required
     pod_ips = await getPodIps(k8s_dn_label_selector)
     if not pod_ips:
         log.error("Expected to find at least one hsds pod")
         return
     pod_ips.sort()  # for assigning node numbers
     log.debug(f"got pod_ips: {pod_ips}")
+
     dn_port = config.get("dn_port")
     dn_urls = []
     for pod_ip in pod_ips:
         dn_urls.append(f"http://{pod_ip}:{dn_port}")
-    # call info on each dn container and get node ids
-    dn_ids = []
-    for dn_url in dn_urls:
-        req = dn_url + "/info"
-        log.debug(f"about to call: {req}")
-        try:
-            rsp_json = await http_get(app, req)
-            if "node" not in rsp_json:
-                log.error("Unexpected response from info (no node key)")
-                continue
-            node_json = rsp_json["node"]
-            if "id" not in node_json:
-                log.error("Unexpected response from info (no node/id key)")
-                continue
-            dn_ids.append(node_json["id"])
-        except HTTPServiceUnavailable:
-            log.warn("503 error from /info request")
-        except Exception as e:
-            log.error(f"Exception: {e} from /info request")
-    log.info(f"node_info check dn_ids: {dn_ids}")
 
-    # save to global
-    app["dn_urls"] = dn_urls
-    log.debug(f"k8s_update_dn_info - dn_urls: {dn_urls}")
-    app["dn_ids"] = dn_ids
-    log.debug(f"k8s_udpdate_dn_info - dn_ids: {dn_ids}")
+    old_count = len(app["dn_urls"])
+    new_count = len(dn_urls)
+
+    if old_count != new_count:
+        log.info(f"pod count changed from {old_count} to {new_count}, fetch dn_ids")
+        scale_update = True
+    elif app["dn_urls"] != dn_urls:
+        log.info(f"pod ips have changed: {dn_urls}, fetch dn_ids")
+        scale_update = True
+    else:
+        scale_update = False
+
+    log.debug(f"scale_update: {scale_update}")
+    if scale_update:
+        # save to global
+        app["dn_urls"] = dn_urls
+        log.info(f"k8s_update_dn_info - dn_urls: {dn_urls}")
+        log.debug("scale_update is True, calling k8s_get_dn_info")
+        info_map = await k8s_get_dn_info(app, dn_urls=dn_urls)
+        dn_ids = []
+        dn_node_numbers = []
+        min_node_count = len(dn_urls)
+        max_node_count = len(dn_urls)
+        for dn_url in dn_urls:
+            if dn_url in info_map:
+                item = info_map[dn_url]
+                if "id" in item:
+                    dn_ids.append(item["id"])
+                if "node_number" in item:
+                    dn_node_numbers.append(item["node_number"])
+                if "node_count" in item:
+                    node_count = item["node_count"]
+                else:
+                    node_count = 0
+                if node_count < min_node_count:
+                    min_node_count = node_count
+                elif node_count > max_node_count:
+                    max_node_count = node_count
+
+        log.debug(f"scale update - min_node_count: {min_node_count}")
+        log.debug(f"scale update - max_node_couunt: {max_node_count}")
+        log.debug(f"scale_update - dn_node_numbers: {dn_node_numbers}")
+        log.debug(f"scale update - dn_ids: {dn_ids}")
+        # signal ready state by setting app["dn_ids"] only if:
+        #  1) node_count == len(dn_urls) for all dn's
+        #  2) dn_ids set for all nodes
+        #  3) dn node number are consecutive
+
+        consecutive = True
+        dn_node_numbers.sort()
+        for i in range(len(dn_node_numbers)):
+            if dn_node_numbers[i] != i:
+                consecutive = False
+                break
+
+        # save ids
+        log.info(f"scaling - updating dn_ids to: {dn_ids}")
+        app["dn_ids"] = dn_ids
+
+        if len(dn_ids) != new_count:
+            log.warn(f"scaling - got {len(dn_ids)} dn_ids expected {new_count}")
+        elif len(dn_node_numbers) != len(dn_urls):
+            log.warn(f"scaling - got {len(dn_node_numbers)} node numbers, expected {new_count}")
+        elif not consecutive:
+            log.warn(f"scaling - node_numbers not consecutive - got: {dn_node_numbers}")
+        else:
+            log.info("scaling - node numbers complete")
 
 
 async def docker_update_dn_info(app):
@@ -160,10 +231,12 @@ async def docker_update_dn_info(app):
         rsp_json = await http_post(app, req_reg, data=body)
     except HTTPInternalServerError:
         log.error("HEAD node seems to be down.")
-        return []
+        app["dn_urls"] = []
+        app["dn_ids"] = []
     except OSError:
         log.error("failed to register")
-        return []
+        app["dn_urls"] = []
+        app["dn_ids"] = []
 
     if rsp_json is not None:
         log.info(f"register response: {rsp_json}")
@@ -196,6 +269,7 @@ async def update_dn_info(app):
 
     # do a log if there has been a change in the dn nodes
     id_set_post = get_dn_id_set(app)
+    log.debug(f"update_dn_info - id_set_post: {id_set_post}")
     if id_set_pre != id_set_post:
         gone_ids = id_set_pre.difference(id_set_post)
         if gone_ids:
@@ -207,7 +281,7 @@ async def update_dn_info(app):
             log.info(f"update_dn_info - dn_nodes: {new_ids} are now active")
 
 
-def updateReadyState(app):
+def updateReadyState(app, old_dn_urls=None):
     """update node state (and node_number and node_count) based on number
     of dn_urls available
     """
@@ -216,20 +290,24 @@ def updateReadyState(app):
         log.debug("skip updateReadyState for standalone app")
         return
     dn_urls = app["dn_urls"]
-    log.debug(f"updateReadyState for dn_urls: {dn_urls}")
-    if len(dn_urls) == 0:
-        if app["node_type"] == "dn":
-            log.error("no dn_urls returned from dn node!")
-        if app["node_state"] != "INITIALIZING":
-            msg = f"setting node_state from {app['node_state']} to "
-            msg += "INITIALIZING since there are no dn nodes"
-            log.info(msg)
-            app["node_state"] = "INITIALIZING"
-    elif app["node_type"] == "dn":
+    dn_ids = app["dn_ids"]
+    log.debug(f"updateReadyState - for old_dn_urls: {old_dn_urls}")
+    log.debug(f"updateReadyState - for new dn_urls: {dn_urls}")
+    log.debug(f"updateReadyState - dn_ids: {dn_ids}")
+
+    is_ready = True
+    if len(dn_urls) == 0 or len(dn_urls) != len(dn_ids):
+        if len(dn_urls) > 0:
+            log.warning(f"not all dn_ids found, got: {dn_ids}")
+            is_ready = False
+        
+
+    if app["node_type"] == "dn":
+        # dn node
+        old_number = app["node_number"]
         node_number = getNodeNumber(app)
-        if app["node_number"] != node_number:
-            old_number = app["node_number"]
-            msg = f"node_number is {old_number}, should be: {node_number}"
+        if old_number != node_number:
+            msg = f"node_number was {old_number}, setting to: {node_number}"
             log.info(msg)
             meta_cache = app["meta_cache"]
             chunk_cache = app["chunk_cache"]
@@ -237,34 +315,48 @@ def updateReadyState(app):
             if dirty_cache_count > 0:
                 # set the node state to waiting till the chunk cache have
                 # been flushed
-                msg = f"updateReadyState /Waiting on {dirty_cache_count} cache items to be "
-                msg += "flushed"
+                msg = f"updateReadyState - waiting on {dirty_cache_count} "
+                msg += "cache items to be flushed"
                 log.info(msg)
-                if app["node_state"] == "READY":
-                    log.info("Setting node_state to WAITING (was READY)")
-                    app["node_state"] = "WAITING"
+                is_ready = False
             else:
                 # flush remaining items from cache
                 meta_cache.clearCache()
                 chunk_cache.clearCache()
-                msg = (
-                    f"setting node_number to: {node_number} (old value: {old_number}), "
-                )
-                msg += "node_state to READY"
+                msg = f"scaling - setting node_number to: {node_number} (old value: {old_number}"
                 log.info(msg)
                 app["node_number"] = node_number
-                app["node_state"] = "READY"
     else:
-        # sn node with at least one dn node
-        old_count = getNodeCount(app)
+        # sn node
+        if old_dn_urls:
+            old_count = len(old_dn_urls)
+        else:
+            old_count =  0
         new_count = len(dn_urls)
         if old_count != new_count:
-            msg = f"number of dn nodes has changed from {old_count} "
+            msg = f"scaling - number of dn nodes has changed from {old_count} "
             msg += f"to {new_count}"
             log.info(msg)
-        if app["node_state"] != "READY":
-            log.info(f"setting node_state from {app['node_state']} to READY")
+
+    # finally, change state if indicated
+    node_state = app["node_state"]
+    if node_state == "READY":
+        if not is_ready:
+            log.info("setting node_state from READY to WAITING")
+            app["node_state"] = "WAITING"
+    elif node_state == "WAITING":
+        if is_ready:
+            log.info("setting node_state from WAITING to READY")
             app["node_state"] = "READY"
+    elif node_state == "INITIALIZING":
+        if is_ready:
+            log.info("setting node_state from INITIALIZING to READY")
+    elif node_state == "TERMINATING":
+        if is_ready:
+            log.warn("got is_ready for node in TERMINATING state")
+    else:
+        log.error(f"unexpected node_state: {node_state}")
+
 
 
 def _activeTaskCount():
@@ -285,8 +377,9 @@ async def doHealthCheck(app, chaos_die=0):
             log.info("chaos die - still alive")
     log.info(f"healthCheck - node_state: {node_state}")
     if node_state != "TERMINATING":
-        await update_dn_info(app)
-        updateReadyState(app)
+        old_dn_urls = app["dn_urls"]
+        await update_dn_info(app)  # may update app["dn_urls"]
+        updateReadyState(app, old_dn_urls=old_dn_urls)
 
     svmem = psutil.virtual_memory()
     num_tasks = len(asyncio.all_tasks())
