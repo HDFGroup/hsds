@@ -8,7 +8,7 @@ spec:
     spec:
       containers:
       - name: write 
-        image: hdfgroup/hswritetest:v0.5 
+        image: hdfgroup/hswritetest:v0.8 
         resources:
             requests:
               memory: "128M"

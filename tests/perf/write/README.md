@@ -37,8 +37,8 @@ For HSDS, Docker can be used to run multiple writers as Docker containers.  To r
 Docker do the following:
 
 1. Run: `$ ./build.sh` to create a container image
-2. Set environment variables for HS_ENDPOINT, HS_USERNAME, HS_PASSWORD, HS_BUCKET, and HS_WRITE_TEST_DOMAIN
-3. Run: `$ python create_empty.py ${HS_WRITE_TEST_DOMAIN} nrows ncols` to initialize the domain
+2. Set environment variables for HS_ENDPOINT, HS_USERNAME, HS_PASSWORD, HS_BUCKET, and HS_WRITE_TEST_DOMAIN.  Use "hdf5://" prefix for HSDS
+3. Run: `$ python create_empty.py ${HS_WRITE_TEST_DOMAIN} nrows ncols iter_type` to initialize the domain
 4. Run: `$ ./run.sh` for as many times as desired.  Each run.sh invocation will launch a new container
 5. When `$ docker ps` shows all the containers have exited, the dataset should be completely written
 6. Run `$ python get_status.py ${HS_WRITE_TEST_DOMAIN}` to show the results of the test
@@ -53,13 +53,14 @@ To run with Kubernetes do the following:
 
 1. Run: `$ ./build.sh` to create a container image
 2. Push the image to Docker Hub or other container repository
-3. Run `$ kubectl apply -f k8s_namespace.yml` to create the "hsperf" namespace
-4. Run `$ ./k8s_make_secrets.sh` to set secrets needed by the pod (HSDS username and HSDS password)
-5. Modify k8s_job.yml as necessary for the specifics of your deployment
-6. Run `$ python create_empty.py ${HS_WRITE_TEST_DOMAIN} nrows ncols` to create the domain
-7. Run `$ kubectl --namespace hsperf apply -f k8s_job.yml` to create the Kubernetes job
-8. Run `$ ./scale_job.sh [n]` to change the number of pods in the job
-9. Run `$ kubectl --namespace hsperf desceribe job hswritetest` to view the job status
-10. Run `$ python get_status.py ${HS_WRITE_TEST_DOMAIN}` at any time to view the progress of the test, and get total runtime once pending is zero.
+3. Set environment variables for HS_ENDPOINT, HS_USERNAME, HS_PASSWORD, HS_BUCKET, HS_WRITE_TEST_DOMAIN, and K8S_NAMESPACE  
+4. Run `$ kubectl apply -f k8s_namespace.yml` to create the "hsperf" namespace
+5. Run `$ ./k8s_make_secrets.sh` to set secrets needed by the pod (HSDS username and HSDS password)
+6. Modify k8s_job.yml as necessary for the specifics of your deployment
+7. Run `$ python create_empty.py ${HS_WRITE_TEST_DOMAIN} nrows ncols` to create the domain
+8. Run `$ kubectl --namespace hsperf apply -f k8s_job.yml` to create the Kubernetes job
+9. Run `$ ./scale_job.sh [n]` to change the number of pods in the job
+10. Run `$ kubectl --namespace hsperf desceribe job hswritetest` to view the job status
+11. Run `$ python get_status.py ${HS_WRITE_TEST_DOMAIN}` at any time to view the progress of the test, and get total runtime once pending is zero.
 
 
