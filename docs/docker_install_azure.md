@@ -59,8 +59,9 @@ On the VM, export environment variables as shown in "Sample .bashrc" below. **IM
 
 These environment variables will be passed to the Docker containers on startup.
 
-    export BUCKET_NAME=hsdstest                   # set to the name of the container you will be using
-    export HSDS_ENDPOINT=http://myvmname.westus.cloudapp.azure.com      # Set to the public DNS name of the VM.  Use https protocol if SSL is desired and configured
+    export BUCKET_NAME=hsdstest                      # set to the name of the storage container you will be using
+    export SN_PORT=5101                              # port to use
+    export HSDS_ENDPOINT=http://myvmname.westus.cloudapp.azure.com:${SN_PORT}      # Set to the public DNS name of the VM.  Use https protocol if SSL is desired and configured
     export AZURE_CONNECTION_STRING="1234567890"      # use the connection string for your Azure account. Note the quotation marks around the string
 
 Follow the following steps to setup HSDS:

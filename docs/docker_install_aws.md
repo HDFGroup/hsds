@@ -17,7 +17,7 @@ Export environment variables as shown in "Sample .bashrc" below.
 12. Create the file **admin/config/override.yml** for deployment specific settings (see "Sample override.yml")
 13. Start the service `$./runall.sh <n>` where n is the number of containers desired (defaults to 4)
 14. Run `$ docker ps` and verify that the containers are running: hsds_head, hsds_sn_[1-n], hsds_dn_[1-n]
-15. Run `$ curl http://127.0.0.1:5101/about` and verify that "cluster_state" is "READY" (might need to give it a minute or two)
+15. Run `$ curl http://127.0.0.1:${SN_PORT}/about` and verify that "cluster_state" is "READY" (might need to give it a minute or two)
 16. Perform post install configuration.   See: [Post Install Configuration](post_install.md)
 
 
@@ -31,7 +31,8 @@ These environment variables will be passed to the Docker containers on start up.
     export BUCKET_NAME=hsds.test                   # set to the name of the bucket you will be using
     export AWS_REGION=us-east-1                    # The AWS region the instance/bucket is running in
     export AWS_S3_GATEWAY=http://s3.amazonaws.com  # Use AWS endpoint for region where bucket is
-    export HSDS_ENDPOINT=http://hsds.hdf.test      # The DNS name of the instance (use https protocol if SSL is desired)
+    export SN_PORT=5101                            # port to use for the service
+    export HSDS_ENDPOINT=http://hsds.hdf.test:${SN_PORT}   # The DNS name of the instance (use https protocol if SSL is desired)
     export LOG_LEVEL=INFO                          # Verbosity of server logs (DEBUG, INFO, WARN, or ERROR)
     # For S3, set AWS_S3_GATEWAY to endpoint for the region the bucket is in.  E.g.: http://s3.amazonaws.com.
     # See http://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region for list of endpoints.
