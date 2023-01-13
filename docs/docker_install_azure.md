@@ -16,7 +16,8 @@ These environment variables will be used to create Azure resources.
 
     # the following will be the same as the variables exported on the VM below
     export AZURE_CONNECTION_STRING="1234567890"      # use the connection string for your Azure account.                                                     # Note the quotation marks around the string
-    export BUCKET_NAME=hsdstest                   # set to the name of the container you will be using
+    export BUCKET_NAME=hsdstest                      # set to the name of the container you will be using
+    export SN_PORT=5101                              # port to use
 
     
 Prerequisites
