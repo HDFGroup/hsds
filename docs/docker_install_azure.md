@@ -16,7 +16,8 @@ These environment variables will be used to create Azure resources.
 
     # the following will be the same as the variables exported on the VM below
     export AZURE_CONNECTION_STRING="1234567890"      # use the connection string for your Azure account.                                                     # Note the quotation marks around the string
-    export BUCKET_NAME=hsdstest                   # set to the name of the container you will be using
+    export BUCKET_NAME=hsdstest                      # set to the name of the container you will be using
+    export SN_PORT=5101                              # port to use
 
     
 Prerequisites
@@ -46,7 +47,7 @@ Virtual Machine Setup
   --generate-ssh-keys`<br/>
 The `--generate-ssh-keys` parameter is used to automatically generate an SSH key, and put it in the default key location (~/.ssh). To use a specific set of keys instead, use the `--ssh-key-value` option.<br/>**Note:**: To use $VMNAME as your public DNS name, it will need to be unique across the $LOCATION the VM is located.
 2. The above command will output values after the successful creation of the VM.  Keep the publicIpAddress for use below.
-3. Open port 80 to web traffic: `az vm open-port --port 80 --resource-group $RESOURCEGROUP --name $VMNAME`
+3. Open the port you wish to use to web traffic: `az vm open-port --port $SN_PORT --resource-group $RESOURCEGROUP --name $VMNAME`
 4. Create a storage account if one does not exist: `az storage account create -n $STORAGEACCTNAME -g $RESOURCEGROUP -l $LOCATION --sku Standard_LRS`
 5. Create a container for HSDS in the storage account: `az storage container create --name $BUCKET_NAME --connection-string $AZURE_CONNECTION_STRING`
 
@@ -59,8 +60,9 @@ On the VM, export environment variables as shown in "Sample .bashrc" below. **IM
 
 These environment variables will be passed to the Docker containers on startup.
 
-    export BUCKET_NAME=hsdstest                   # set to the name of the container you will be using
-    export HSDS_ENDPOINT=http://myvmname.westus.cloudapp.azure.com      # Set to the public DNS name of the VM.  Use https protocol if SSL is desired and configured
+    export BUCKET_NAME=hsdstest                      # set to the name of the storage container you will be using
+    export SN_PORT=5101                              # port to use
+    export HSDS_ENDPOINT=http://myvmname.westus.cloudapp.azure.com:${SN_PORT}      # Set to the public DNS name of the VM.  Use https protocol if SSL is desired and configured
     export AZURE_CONNECTION_STRING="1234567890"      # use the connection string for your Azure account. Note the quotation marks around the string
 
 Follow the following steps to setup HSDS:
