@@ -112,6 +112,11 @@ def getIPKeys(metadata):
                     log.warn(f"unexpected key: {k}")
                     continue
                 ip = s[:m]
+                if ip.find("::") >= 0:
+                    log.debug(f"non-valid ip value: {ip}, skip")
+                    continue
+                log.debug(f"found pod ip: {ip}")
+                pod_ips.append(ip)
                 log.debug(f"found pod ip: {ip}")
                 pod_ips.append(ip)
     log.debug(f"getIPKeys  done: returning {pod_ips}")
