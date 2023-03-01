@@ -42,7 +42,7 @@ install_requires = [
 
 setup(
     name="hsds",
-    version="0.7.1",
+    version="0.7.2",
     description="HDF REST API",
     url="http://github.com/HDFGroup/hsds",
     author="John Readey",
