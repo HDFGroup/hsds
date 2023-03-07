@@ -225,6 +225,7 @@ async def docker_update_dn_info(app):
     log.info(f"register: {req_reg}")
 
     body = {"id": app["id"], "port": app["node_port"], "node_type": app["node_type"]}
+    rsp_json = None
 
     try:
         log.info(f"register req: {req_reg} body: {body}")
@@ -299,7 +300,7 @@ def updateReadyState(app, old_dn_urls=None):
     if len(dn_urls) == 0 or len(dn_urls) != len(dn_ids):
         if len(dn_urls) > 0:
             log.warning(f"not all dn_ids found, got: {dn_ids}")
-            is_ready = False
+        is_ready = False
 
     if app["node_type"] == "dn":
         # dn node
