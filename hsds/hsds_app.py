@@ -262,8 +262,7 @@ class HsdsApp:
             common_args.append(f"--log_level={self._loglevel}")
 
         py_exe = sys.executable
-        cmd_path = os.path.join(sys.exec_prefix, "bin")
-        cmd_path = os.path.join(cmd_path, "hsds-node")
+        cmd_path = os.path.join(self._cmd_dir, "hsds-node")
         if not os.path.isfile(cmd_path):
             # search corresponding location for windows installs
             cmd_path = os.path.join(sys.exec_prefix, "Scripts")
