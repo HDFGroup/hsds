@@ -15,6 +15,7 @@
 #
 
 import base64
+import math
 import numpy as np
 from json import JSONDecodeError
 from asyncio import IncompleteReadError
@@ -788,7 +789,7 @@ async def PUT_Value(request):
                 )
             select_shape = getSelectionShape(page)
             log.debug(f"got select_shape: {select_shape} for page: {page}")
-            num_bytes = np.prod(select_shape) * item_size
+            num_bytes = math.prod(select_shape) * item_size
             if arr is None or page_number > 0:
                 log.debug(
                     f"page: {page_number} reading {num_bytes} from request stream"
@@ -1047,7 +1048,7 @@ async def GET_Value(request):
     log.debug(f"selection shape: {np_shape}")
 
     # check that the array size is reasonable
-    request_size = np.prod(np_shape)
+    request_size = math.prod(np_shape)
     if item_size == "H5T_VARIABLE":
         request_size *= VARIABLE_AVG_ITEM_SIZE  # random guess of avg item_size
     else:
@@ -1117,7 +1118,7 @@ async def GET_Value(request):
                         method=request.method,
                     )
 
-                    if arr is None or np.prod(arr.shape) == 0:
+                    if arr is None or math.prod(arr.shape) == 0:
                         log.warn(f"no data returend for streaming page: {page_number}")
                         continue
 
@@ -1275,7 +1276,7 @@ async def doReadSelection(
 
     if np_shape is not None:
         # check that the array size is reasonable
-        request_size = np.prod(np_shape)
+        request_size = math.prod(np_shape)
         if item_size == "H5T_VARIABLE":
             request_size *= 512  # random guess of avg item_size
         else:

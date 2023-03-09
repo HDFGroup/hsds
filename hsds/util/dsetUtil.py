@@ -11,7 +11,7 @@
 ##############################################################################
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
-import numpy as np
+import math
 
 from .. import hsds_logger as log
 
@@ -569,7 +569,7 @@ def getSelectionPagination(select, dims, itemsize, max_request_size):
     log.debug(msg)
     select_shape = getSelectionShape(select)
     log.debug(f"getSelectionPagination - select_shape: {select_shape}")
-    select_size = np.prod(select_shape) * itemsize
+    select_size = math.prod(select_shape) * itemsize
     log.debug(f"getSelectionPagination - select_size: {select_size}")
     if select_size <= max_request_size:
         # No need to paginate, just return select as as a one item tuple

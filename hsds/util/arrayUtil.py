@@ -10,6 +10,7 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 
+import math
 import numpy as np
 
 MAX_VLEN_ELEMENT = 1000000  # restrict largest vlen element to one million
@@ -242,7 +243,7 @@ def getElementSize(e, dt):
         elif isinstance(e, str):
             count = len(e.encode("utf-8")) + 4
         elif isinstance(e, np.ndarray):
-            nElements = np.prod(e.shape)
+            nElements = math.prod(e.shape)
             if e.dtype.kind != "O":
                 count = e.dtype.itemsize * nElements
             else:
@@ -270,8 +271,8 @@ Get number of bytes needed to store given numpy array as a bytestream
 
 def getByteArraySize(arr):
     if not isVlen(arr.dtype):
-        return arr.itemsize * np.prod(arr.shape)
-    nElements = np.prod(arr.shape)
+        return arr.itemsize * math.prod(arr.shape)
+    nElements = math.prod(arr.shape)
     # reshape to 1d for easier iteration
     arr1d = arr.reshape((nElements,))
     dt = arr1d.dtype
@@ -350,7 +351,7 @@ def copyElement(e, dt, buffer, offset):
             offset = copyBuffer(text, buffer, offset)
 
         elif isinstance(e, np.ndarray):
-            nElements = np.prod(e.shape)
+            nElements = math.prod(e.shape)
             # print("copyBuffer ndarray, nElements:", nElements)
 
             if e.dtype.kind != "O":
@@ -439,7 +440,7 @@ def readElement(buffer, offset, arr, index, dt):
         e = arr[index]
 
         if isinstance(e, np.ndarray):
-            nelements = np.prod(dt.shape)
+            nelements = math.prod(dt.shape)
             e.reshape((nelements,))
             for i in range(nelements):
                 offset = readElement(buffer, offset, e, i, dt)
@@ -482,7 +483,7 @@ def arrayToBytes(arr):
     nSize = getByteArraySize(arr)
     buffer = bytearray(nSize)
     offset = 0
-    nElements = np.prod(arr.shape)
+    nElements = math.prod(arr.shape)
     arr1d = arr.reshape((nElements,))
     for e in arr1d:
         # print("arrayToBytes:", e)
