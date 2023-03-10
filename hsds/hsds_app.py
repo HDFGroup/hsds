@@ -354,15 +354,11 @@ class HsdsApp:
 
         now = time.time()
         logging.info(f"hsds app stop at {now}")
-        if hasattr(signal, "CTRL_C_EVENT"):
-            # windows style
-            logging.info("sending ctrlc event to sub-processes")
-            os.kill(signal.CTRL_C_EVENT, 0)
-        else:
-            for pname in self._processes:
-                p = self._processes[pname]
-                logging.info(f"terminating sub-process: {pname}")
-                p.terminate()
+        
+        for pname in self._processes:
+            p = self._processes[pname]
+            logging.info(f"terminating sub-process: {pname}")
+            p.terminate()
 
         # wait for sub-proccesses to exit
         SLEEP_TIME = 0.1  # time to sleep between checking on process state
