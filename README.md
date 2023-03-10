@@ -17,11 +17,11 @@ Make sure you have Python 3, Pip, and git installed, then:
 2.  Go to the hsds directory: `$ cd hsds`
 3.  Run install: `$ python setup.py install` OR install from pypi: `$ pip install hsds`
 4.  Setup password file: `$ cp admin/config/passwd.default admin/config/passwd.txt`
-5.  Create a directory the server will use to store data, and then set the ROOT_DIR environment variable to point to it: `$ mkdir ~/hsds_data; export ROOT_DIR="${HOME}/hsds_data"`
-6.  Create the hsds test bucket: `$ mkdir $ROOT_DIR/hsdstest`
-7.  Start server: `$ ./runall.sh --no-docker`
-8.  In a new shell, set the environment variable HSDS_ENDPOINT to the string displayed. E.g.: `$ export HSDS_ENDPOINT=http+unix://%2Ftmp%2Fhs%2Fsn_1.sock`
-9.  Set environment variables for the admin account: `$ export ADMIN_USERNAME=admin` and `$ export ADMIN_PASSWORD=admin` (adjust for any changes made to the passwd.txt file)
+5.  Create a directory the server will use to store data, and then set the ROOT_DIR environment variable to point to it: `$ mkdir hsds_data; export ROOT_DIR="${PWD}/hsds_data"`  For Windows: `C:> set ROOT_DIR=%CD%\hsds_data`
+6.  Create the hsds test bucket: `$ mkdir hsds_data/hsdstest`
+7.  Start server: `$ ./runall.sh --no-docker`  For Windows: `C:> runall.bat`
+8.  In a new shell, set the environment variable HSDS_ENDPOINT to the string displayed. E.g.: `$ export HSDS_ENDPOINT=http+unix://%2Ftmp%2Fhs%2Fsn_1.sock`.  For Windows, this step can be skipped
+9.  Set environment variables for the admin account: `$ export ADMIN_USERNAME=admin` and `$ export ADMIN_PASSWORD=admin` (adjust for any changes made to the passwd.txt file).  For Windows - use the corresponding set commands
 10. Run the test suite: `$ python testall.py`
 11. (Optional) Post install setup (test data, home folders, cli tools, etc): [docs/post_install.md](docs/post_install.md)
 12. (Optional) Install the h5pyd package for an h5py compatible api and tool suite: https://github.com/HDFGroup/h5pyd

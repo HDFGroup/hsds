@@ -231,9 +231,8 @@ class DomainTest(unittest.TestCase):
 
         rsp = self.session.get(req, params=params, headers=headers)
         if rsp.status_code == 404:
-            print(
-                "WARNING: Failed to get domain: {}. Is test data setup?".format(domain)
-            )
+            msg = f"WARNING: Failed to get domain: {domain}. Is test data setup?"
+            print(msg)
             return  # abort rest of test
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers["content-type"], "application/json; charset=utf-8")
@@ -252,8 +251,6 @@ class DomainTest(unittest.TestCase):
         root_uuid = rspJson["root"]
 
         helper.validateId(root_uuid)
-
-        # restore when sqlite changes are complete
         self.assertTrue("num_groups" in rspJson)
         self.assertEqual(rspJson["num_groups"], 6)
         self.assertTrue("num_datasets" in rspJson)
