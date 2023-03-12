@@ -338,8 +338,7 @@ class FileClient:
                         continue
                     log.debug(f"got dirname: {dirname}")
                     nlen = len(basedir)
-                    filename = pp.join(root[nlen:], dirname)
-                    filename += filesep
+                    filename = f"{root[nlen:]}{dirname}/"
                     files.append(filename)
                     if limit and len(files) >= limit:
                         break
