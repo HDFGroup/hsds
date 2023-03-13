@@ -483,6 +483,9 @@ async def getStorKeys(
 
     key_names = await client.list_keys(**kwargs)
 
-    log.info(f"getStorKeys done, got {len(key_names)} keys")
+    msg = f"getStorKeys done for prefix: {prefix}"
+    if not callback:
+        msg += f", got {len(key_names)} keys"
+    log.info(msg)
 
     return key_names
