@@ -230,7 +230,7 @@ class FileClient:
             self._file_stats_increment("bytes_out", inc=len(data))
             msg = f"fileClient.put_object {key} complete, "
             msg += f"write_rsp: {write_rsp}"
-        log.debug(msg)
+            log.debug(msg)
         return write_rsp
 
     async def delete_object(self, key, bucket=None):
@@ -320,6 +320,7 @@ class FileClient:
         basedir = pp.join(self._root_dir, bucket)
         if prefix:
             basedir = pp.join(basedir, prefix)
+        basedir = pp.normpath(basedir)
         log.debug(f"fileClient listKeys for directory: {basedir}")
 
         if not pp.isdir(basedir):
@@ -338,7 +339,7 @@ class FileClient:
                         continue
                     log.debug(f"got dirname: {dirname}")
                     nlen = len(basedir)
-                    filename = f"{root[nlen:]}{dirname}/"
+                    filename = f"{root[nlen:]}{dirname}{filesep}"
                     files.append(filename)
                     if limit and len(files) >= limit:
                         break
@@ -373,9 +374,15 @@ class FileClient:
                     log.debug(msg)
                     key_stats = self._getFileStats(filepath, data=data)
                 key_name = pp.join(prefix, filename)
+                # replace any windows-style sep with linux
+                key_name = key_name.replace("\\", "/")
                 key_names[key_name] = key_stats
             else:
-                key_names.append(pp.join(prefix, filename))
+                key_name = pp.join(prefix, filename)
+                # replace any windows-style sep with linux
+                key_name = key_name.replace("\\", "/")
+                key_names.append(key_name)
+
             if limit and len(key_names) == limit:
                 break
         count += len(key_names)

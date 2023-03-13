@@ -2,7 +2,6 @@ import os
 import sys
 from pathlib import Path
 import site
-import signal
 import subprocess
 import time
 import queue
