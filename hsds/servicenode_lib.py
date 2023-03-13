@@ -13,7 +13,6 @@
 # utility methods for service node handlers
 #
 
-import os.path as op
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
 from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.client_exceptions import ClientOSError
@@ -21,6 +20,7 @@ from aiohttp.client_exceptions import ClientOSError
 from .util.authUtil import getAclKeys
 from .util.idUtil import getDataNodeUrl, getCollectionForId, isSchema2Id
 from .util.idUtil import getS3Key
+from .util.linkUtil import h5Join
 from .util.storUtil import getStorJSONObj, isStorObj
 from .util.authUtil import aclCheck
 from .util.httpUtil import http_get
@@ -293,9 +293,9 @@ async def getPathForObjectId(app, parent_id, idpath_map, tgt_id=None, bucket=Non
         title = link["title"]
         if tgt_id is not None and link_id == tgt_id:
             # found it!
-            h5path = op.join(parent_path, title)
+            h5path = h5Join(parent_path, title)
             break
-        idpath_map[link_id] = op.join(parent_path, title)
+        idpath_map[link_id] = h5Join(parent_path, title)
         if getCollectionForId(link_id) != "groups":
             continue
         # recursive call

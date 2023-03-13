@@ -27,3 +27,16 @@ def validateLinkName(name):
         msg = "link name contains slash"
         log.error(msg)
         raise HTTPBadRequest(reason=msg)
+    
+def h5Join(path, paths):
+    h5path = path
+    if not paths:
+        return h5path
+    if isinstance(paths, str):
+        paths = (paths,)
+    for s in paths:
+        if h5path[-1] != "/":
+            h5path += "/"
+        h5path += s
+    return h5path
+        
