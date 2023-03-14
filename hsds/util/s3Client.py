@@ -110,7 +110,8 @@ class S3Client:
         except KeyError:
             pass
 
-        self._aio_config = AioConfig(max_pool_connections=max_pool_connections, signature_version=signature_version)
+        self._aio_config = AioConfig(max_pool_connections=max_pool_connections,
+                                     signature_version=signature_version)
 
         log.debug(f"S3Client init - aws_region {self._aws_region}")
 

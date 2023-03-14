@@ -353,7 +353,7 @@ class HsdsApp:
 
         now = time.time()
         logging.info(f"hsds app stop at {now}")
-        
+
         for pname in self._processes:
             p = self._processes[pname]
             logging.info(f"terminating sub-process: {pname}")

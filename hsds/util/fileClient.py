@@ -32,21 +32,19 @@ class FileClient:
             raise HTTPInternalServerError()
         self._root_dir = pp.normpath(root_dir)
 
-
     def _validateBucket(self, bucket):
         if not bucket:
             msg = "bucket not set"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        if bucket.find("\\") != -1 :
+        if bucket.find("\\") != -1:
             msg = f"bucket: {bucket} contains invalid character, backslash"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        if bucket.find("/") != -1 :
+        if bucket.find("/") != -1:
             msg = f"bucket: {bucket} contains invalid character, slash"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        
 
     def _validateKey(self, key):
         if not key:

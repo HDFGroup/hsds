@@ -10,7 +10,6 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import unittest
-from multiprocessing import shared_memory
 import json
 import numpy as np
 import helper
@@ -1745,7 +1744,6 @@ class ValueTest(unittest.TestCase):
         self.assertTrue(len(data), 2)
         self.assertTrue(data[0], [2, 4, 7])
         self.assertTrue(data[1], [4, 8, 14])
-
 
     def testResizable1DValue(self):
         # test read/write to resizable dataset
