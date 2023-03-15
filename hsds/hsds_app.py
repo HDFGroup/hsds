@@ -2,7 +2,6 @@ import os
 import sys
 from pathlib import Path
 import site
-import signal
 import subprocess
 import time
 import queue
@@ -101,7 +100,7 @@ class HsdsApp:
 
         self._dn_urls = []
         self._socket_paths = []
-        self._processes = []
+        self._processes = {}
         self._queues = []
         self._threads = []
         self._dn_count = dn_count
@@ -210,10 +209,11 @@ class HsdsApp:
     def check_processes(self):
         # self.log.debug("check processes")
         self.print_process_output()
-        for p in self._processes:
+        for pname in self._processes:
+            p = self._processes[pname]
             if p.poll() is not None:
                 result = p.communicate()
-                msg = f"process {p.args[0]} ended, result: {result}"
+                msg = f"process {pname} ended, result: {result}"
                 self.log.warn(msg)
                 # TBD - restart failed process
 
@@ -262,8 +262,7 @@ class HsdsApp:
             common_args.append(f"--log_level={self._loglevel}")
 
         py_exe = sys.executable
-        cmd_path = os.path.join(sys.exec_prefix, "bin")
-        cmd_path = os.path.join(cmd_path, "hsds-node")
+        cmd_path = os.path.join(self._cmd_dir, "hsds-node")
         if not os.path.isfile(cmd_path):
             # search corresponding location for windows installs
             cmd_path = os.path.join(sys.exec_prefix, "Scripts")
@@ -274,6 +273,7 @@ class HsdsApp:
         for i in range(count):
             if i == 0:
                 # args for service node
+                pname = "sn"
                 pargs = [py_exe, cmd_path, "--node_type=sn", "--log_prefix=sn "]
                 if self._username:
                     pargs.append(f"--hs_username={self._username}")
@@ -288,9 +288,11 @@ class HsdsApp:
                 pargs.append("--logfile=sn1.log")
             elif i == 1:
                 # args for rangeget node
+                pname = "rg"
                 pargs = [py_exe, cmd_path, "--node_type=rn", "--log_prefix=rg "]
             else:
                 node_number = i - 2  # start with 0
+                pname = f"dn{node_number}"
                 pargs = [
                     py_exe,
                     cmd_path,
@@ -304,7 +306,7 @@ class HsdsApp:
             p = subprocess.Popen(
                 pargs, bufsize=1, universal_newlines=True, shell=False, stdout=pout
             )
-            self._processes.append(p)
+            self._processes[pname] = p
             # setup queue so we can check on process output without blocking
             q = queue.Queue()
             loglevel = self.log.root.level
@@ -351,25 +353,28 @@ class HsdsApp:
 
         now = time.time()
         logging.info(f"hsds app stop at {now}")
-        if hasattr(signal, "CTRL_C_EVENT"):
-            # windows style
-            os.kill(signal.CTRL_C_EVENT, 0)
-        else:
-            for p in self._processes:
-                logging.info(f"sending SIGINT to {p.args[0]}")
-                p.send_signal(signal.SIGINT)
+
+        for pname in self._processes:
+            p = self._processes[pname]
+            logging.info(f"terminating sub-process: {pname}")
+            p.terminate()
 
         # wait for sub-proccesses to exit
         SLEEP_TIME = 0.1  # time to sleep between checking on process state
         MAX_WAIT_TIME = 10.0  # max time to wait for sub-process to terminate
         start_ts = time.time()
         while True:
-            is_alive = False
-            for p in self._processes:
+            is_alive_cnt = 0
+            for pname in self._processes:
+                p = self._processes[pname]
                 if p.poll() is None:
-                    is_alive = True
-            if is_alive:
-                logging.debug(f"still alive, sleep {SLEEP_TIME}")
+                    self.log.debug(f"process {pname} still alive")
+                    is_alive_cnt += 1
+                else:
+                    self.log.debug(f"process {pname} has exited")
+
+            if is_alive_cnt > 0:
+                logging.debug(f"stop - {is_alive_cnt} processes still alive, sleep {SLEEP_TIME}")
                 time.sleep(SLEEP_TIME)
             else:
                 logging.debug("all subprocesses exited")
@@ -380,11 +385,12 @@ class HsdsApp:
                 break
 
         # kill any reluctant to die processes
-        for p in self._processes:
+        for pname in self._processes:
+            p = self._processes[pname]
             if p.poll():
-                logging.info(f"terminating {p.args[0]}")
+                logging.info(f"terminating process {pname}")
                 p.terminate()
-        self._processes = []
+        self._processes = {}  # reset
         for t in self._threads:
             del t
         self._threads = []

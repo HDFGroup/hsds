@@ -281,7 +281,9 @@ def getObjId(s3key):
         objid += "-" + token[16:20] + "-" + token[20:26] + "-"
         objid += token[26:32] + chunk_coord
     else:
-        raise ValueError(f"unexpected S3Key: {s3key}")
+        msg = f"unexpected S3Key: {s3key}"
+        log.warn(msg)
+        raise ValueError(msg)
     return objid
 
 

@@ -10,7 +10,6 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 import unittest
-from multiprocessing import shared_memory
 import json
 import numpy as np
 import helper
@@ -1745,58 +1744,6 @@ class ValueTest(unittest.TestCase):
         self.assertTrue(len(data), 2)
         self.assertTrue(data[0], [2, 4, 7])
         self.assertTrue(data[1], [4, 8, 14])
-
-    def testSharedMem(self):
-        if not helper.getEndpoint().startswith("http+unix"):
-            # this test will only work when running SN as a
-            # subprocess since docker containers operate
-            # in their own shared memory space
-            return
-        domain = helper.getTestDomain("tall.h5")
-        print("testGetDomain", domain)
-        headers = helper.getRequestHeaders(domain=domain)
-        headers["Origin"] = "https://www.hdfgroup.org"  # test CORS
-        headers_bin_rsp = helper.getRequestHeaders(domain=domain)
-        headers_bin_rsp["accept"] = "application/octet-stream"
-
-        # verify domain exists
-        req = helper.getEndpoint() + "/"
-        rsp = self.session.get(req, headers=headers)
-        if rsp.status_code != 200:
-            print(
-                "WARNING: Failed to get domain: {}. Is test data setup?".format(domain)
-            )
-            return  # abort rest of test
-        domainJson = json.loads(rsp.text)
-        root_uuid = domainJson["root"]
-        helper.validateId(root_uuid)
-
-        # get the dataset uuid
-        dset1_uuid = self.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1")
-
-        # read all the dataset values using shared memory
-        req = helper.getEndpoint() + "/datasets/" + dset1_uuid + "/value"
-        shm = shared_memory.SharedMemory(create=True, size=400)
-        params = {"shm_name": shm.name}
-        rsp = self.session.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("shm_name" in rspJson)
-        shm_name = rspJson["shm_name"]
-        self.assertEqual(shm_name, shm.name)
-        self.assertTrue("num_bytes" in rspJson)
-        num_bytes = rspJson["num_bytes"]
-        self.assertEqual(num_bytes, 400)
-        data = shm.buf
-        for j in range(10):
-            for i in range(10):
-                offset = (j * 10 + i) * 4
-                self.assertEqual(data[offset], 0)
-                self.assertEqual(data[offset + 1], 0)
-                self.assertEqual(data[offset + 2], 0)
-                self.assertEqual(data[offset + 3], i * j)
-        shm.close()
-        shm.unlink()
 
     def testResizable1DValue(self):
         # test read/write to resizable dataset

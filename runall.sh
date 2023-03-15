@@ -29,44 +29,54 @@ config_value() {
 
 # script to startup hsds service
 if [[ $# -eq 1 ]] && ([[ $1 == "-h" ]] || [[ $1 == "--help" ]]); then
-   echo "Usage: runall.sh [--no-docker] [--stop] [--config] [count] "
-   echo "  --no-docker: run server as set of processes rather than Docker containers"
+   echo "Usage: runall.sh [--no-docker] [--no-docker-tcp] [--stop] [--config] [count] "
+   echo "  --no-docker: run server as set of processes rather than Docker containers (using unix sockets)"
+   echo "  --no-docker-tcp: run server as set of processes rather than Docker containers (using tcp)"
    echo "  --stop: shutdown the server (Docker only)"
    echo "  --config: view config options"
    echo "  count: set number of DN processes/containers (default is 4)"
    exit 1
 fi
 
-if [[ $# -gt 0 ]] ; then
-  if [[ $1 == "--no-docker" ]] ; then
+if [[ $# -gt 0 ]]; then
+  if [[ $1 == "--no-docker" ]]; then
     export NO_DOCKER=1
 
     if [[ $# -gt 1 ]] ; then
       export CORES=$2
     fi
+  elif [[ $1 == "--no-docker-tcp" ]]; then
+    export NO_DOCKER=1
+    export USE_TCP=1
+
+    if [[ $# -gt 1 ]] ; then
+      export CORES=$2
+    fi
+
   elif [[ $1 == "--stop" ]]; then
-     echo "stopping"
+    echo "stopping"
   elif [[ $1 == "--config" ]]; then
-     PRINT_CONFIG=1
+    PRINT_CONFIG=1
   else
     export CORES=$1
   fi
 fi
 
-if [[ ${CORES} ]] ; then
+if [[ ${CORES} ]]; then
   export DN_CORES=${CORES}
 else
   export DN_CORES=4
 fi
 
-if [[ -z $SN_CORES ]] ; then
+if [[ -z $SN_CORES ]]; then
   # Use 1 SN_CORE unless there's an environment variable set
   export SN_CORES=1
 fi
 
-if [[ -z $CONFIG_DIR ]] ; then
+if [[ -z $CONFIG_DIR ]]; then
   export CONFIG_DIR="admin/config"
 fi
+
 CONFIG_FILE="${CONFIG_DIR}/config.yml"
 OVERRIDE_FILE="${CONFIG_DIR}/override.yml"
 
@@ -75,6 +85,7 @@ if [[ ${PRINT_CONFIG} ]]; then
    echo "Config values.."
    echo "  Modify by setting corresponding environment variable or setting in admin/config/override.yml"
 fi
+
 config_value "LOG_LEVEL" && export LOG_LEVEL=$rv
 config_value "AWS_S3_GATEWAY" && export AWS_S3_GATEWAY=$rv
 config_value "AWS_IAM_ROLE" && export AWS_IAM_ROLE=$rv
@@ -97,18 +108,23 @@ config_value "SN_RAM" && export SN_RAM=$rv
 config_value "RANGEGET_PORT" && export RANGEGET_PORT=$rv
 config_value "RANGEGET_RAM" && export RANGEGET_RAM=$rv
 
+
 if [[ ${NO_DOCKER} ]]; then
   # setup extra envs needed when not using docker
   export PYTHONUNBUFFERED="1"
-  if [[ -z ${SOCKET_DIR} ]] ; then
-    # this is the directory that will be used for socket file and log files
-    export SOCKET_DIR=/tmp/hs
+  if [[ $USE_TCP ]] ; then
+    echo "use tcp with no-docker option"
+  else
+    if [[ -z ${SOCKET_DIR} ]]; then
+      # this is the directory that will be used for socket file and log files
+      export SOCKET_DIR=/tmp/hs
+    fi
+    if [[ ! -d ${SOCKET_DIR} ]]; then
+      echo "creating directory ${SOCKET_DIR}"
+      mkdir ${SOCKET_DIR}
+    fi
+    echo "--no_docker option specified - using directory: ${SOCKET_DIR} for socket and log files"
   fi
-  if [[ ! -d ${SOCKET_DIR} ]]; then
-    echo "creating directory ${SOCKET_DIR}"
-    mkdir ${SOCKET_DIR}
-  fi
-  echo "--no_docker option specified - using directory: ${SOCKET_DIR} for socket and log files"
   if [[ -f "admin/config/passwd.txt" ]]; then
      export PASSWORD_FILE="admin/config/passwd.txt"
   else
@@ -170,10 +186,18 @@ if [[ $NO_DOCKER ]] ; then
     else
       echo "Using Azure connection string"
     fi
-    hsds --bucket_name ${BUCKET_NAME} --password_file ${PASSWORD_FILE} --logfile hs.log  --socket_dir ${SOCKET_DIR} --loglevel ${LOG_LEVEL} --config_dir=${CONFIG_DIR} --count=${DN_CORES}
+    if [[ $USE_TCP ]]; then
+      hsds --bucket_name ${BUCKET_NAME} --password_file ${PASSWORD_FILE} --logfile hs.log --loglevel ${LOG_LEVEL} --host localhost --port ${SN_PORT} --config_dir=${CONFIG_DIR} --count=${DN_CORES}
+    else
+      hsds --bucket_name ${BUCKET_NAME} --password_file ${PASSWORD_FILE} --logfile hs.log  --loglevel ${LOG_LEVEL} --socket_dir ${SOCKET_DIR} --config_dir=${CONFIG_DIR} --count=${DN_CORES}
+    fi
   else
     echo "Using posix storage: ${ROOT_DIR}"
-    hsds --root_dir ${ROOT_DIR} --password_file ${PASSWORD_FILE} --logfile hs.log  --socket_dir ${SOCKET_DIR} --loglevel ${LOG_LEVEL} --config_dir=${CONFIG_DIR} --count=${DN_CORES}
+    if [[ $USE_TCP ]]; then
+      hsds --root_dir ${ROOT_DIR} --password_file ${PASSWORD_FILE} --logfile hs.log  --loglevel ${LOG_LEVEL} --host localhost --port ${SN_PORT} --config_dir=${CONFIG_DIR} --count=${DN_CORES}
+    else
+      hsds --root_dir ${ROOT_DIR} --password_file ${PASSWORD_FILE} --logfile hs.log  --loglevel ${LOG_LEVEL} --socket_dir ${SOCKET_DIR}  --config_dir=${CONFIG_DIR} --count=${DN_CORES}
+    fi
   fi
   # this will run until server is killed by ^C
 else

@@ -1,7 +1,7 @@
 import asyncio
 import hashlib
-import os.path as pp
 from os import mkdir, rmdir, listdir, stat, remove, walk
+import os.path as pp
 from asyncio import CancelledError
 from inspect import iscoroutinefunction
 import time
@@ -20,26 +20,39 @@ class FileClient:
 
     def __init__(self, app):
         self._app = app
-        self._root_dir = config.get("root_dir")
-        if not self._root_dir:
+        root_dir = config.get("root_dir")
+        if not root_dir:
             log.error("FileClient init: root_dir config not set")
             raise HTTPInternalServerError()
-        if not pp.isdir(self._root_dir):
+        if not pp.isdir(root_dir):
             log.error("FileClient init: root folder does not exist")
             raise HTTPInternalServerError()
-        if not pp.isabs(self._root_dir):
+        if not pp.isabs(root_dir):
             log.error("FileClient init: root dir most have absolute path")
             raise HTTPInternalServerError()
+        self._root_dir = pp.normpath(root_dir)
 
     def _validateBucket(self, bucket):
-        if not bucket or pp.isabs(bucket) or pp.dirname(bucket):
-            msg = "invalid bucket name"
+        if not bucket:
+            msg = "bucket not set"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        if bucket.find("\\") != -1:
+            msg = f"bucket: {bucket} contains invalid character, backslash"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        if bucket.find("/") != -1:
+            msg = f"bucket: {bucket} contains invalid character, slash"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
     def _validateKey(self, key):
-        if not key or pp.isabs(key):
-            msg = "invalid key name"
+        if not key:
+            msg = "key not set"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        if key.startswith("/") or key.startswith("\\"):
+            msg = f"invalid key: {key}, cannot start with slash"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
@@ -112,7 +125,7 @@ class FileClient:
         log.info(f"get_object - filepath: {filepath}")
 
         start_time = time.time()
-        log.debug(f"fileClient.get_object({bucket}/{key} start: {start_time}")
+        log.debug(f"fileClient.get_object({filepath} start: {start_time}")
         loop = asyncio.get_event_loop()
 
         try:
@@ -215,7 +228,7 @@ class FileClient:
             self._file_stats_increment("bytes_out", inc=len(data))
             msg = f"fileClient.put_object {key} complete, "
             msg += f"write_rsp: {write_rsp}"
-        log.debug(msg)
+            log.debug(msg)
         return write_rsp
 
     async def delete_object(self, key, bucket=None):
@@ -299,10 +312,13 @@ class FileClient:
         msg += f"callback {'set' if callback is not None else 'not set'}"
         log.info(msg)
 
+        filesep = pp.normpath("/")  # '/' on linux, '\\' on windows
+
         await asyncio.sleep(0)  # for async compat
         basedir = pp.join(self._root_dir, bucket)
         if prefix:
             basedir = pp.join(basedir, prefix)
+        basedir = pp.normpath(basedir)
         log.debug(f"fileClient listKeys for directory: {basedir}")
 
         if not pp.isdir(basedir):
@@ -321,8 +337,7 @@ class FileClient:
                         continue
                     log.debug(f"got dirname: {dirname}")
                     nlen = len(basedir)
-                    filename = pp.join(root[nlen:], dirname)
-                    filename += "/"
+                    filename = f"{root[nlen:]}{dirname}{filesep}"
                     files.append(filename)
                     if limit and len(files) >= limit:
                         break
@@ -343,7 +358,7 @@ class FileClient:
         key_names = {} if include_stats else []
         count = 0
         for filename in files:
-            if filename.startswith("/"):
+            if filename.startswith(filesep):
                 filename = filename[1:]
             log.debug(f"filename: {filename}, basedir: {basedir}")
             if suffix and not filename.endswith(suffix):
@@ -357,9 +372,15 @@ class FileClient:
                     log.debug(msg)
                     key_stats = self._getFileStats(filepath, data=data)
                 key_name = pp.join(prefix, filename)
+                # replace any windows-style sep with linux
+                key_name = key_name.replace("\\", "/")
                 key_names[key_name] = key_stats
             else:
-                key_names.append(pp.join(prefix, filename))
+                key_name = pp.join(prefix, filename)
+                # replace any windows-style sep with linux
+                key_name = key_name.replace("\\", "/")
+                key_names.append(key_name)
+
             if limit and len(key_names) == limit:
                 break
         count += len(key_names)
@@ -371,6 +392,8 @@ class FileClient:
             key_names = {} if include_stats else []  # reset
 
         log.info(f"listKeys done, got {count} keys")
+        for key in key_names:
+            log.debug(key)
         if not callback and count != len(key_names):
             msg = f"expected {count} keys in return list but "
             msg == f"got {len(key_names)}"
