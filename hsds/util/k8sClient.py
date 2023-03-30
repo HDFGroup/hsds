@@ -117,8 +117,6 @@ def getIPKeys(metadata):
                     continue
                 log.debug(f"found pod ip: {ip}")
                 pod_ips.append(ip)
-                log.debug(f"found pod ip: {ip}")
-                pod_ips.append(ip)
     log.debug(f"getIPKeys  done: returning {pod_ips}")
     return pod_ips
 

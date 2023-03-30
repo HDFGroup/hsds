@@ -51,7 +51,7 @@ async def getDatasetJson(app, dsetid, bucket=None):
 
 
 async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
-    # get dataset metadata and deteermine number logical)_bytes,
+    # get dataset metadata and determine number logical_bytes,
     # linked_bytes, and num_linked_chunks
 
     dset_json = await getDatasetJson(app, dset_id, bucket=bucket)
