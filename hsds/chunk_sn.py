@@ -929,7 +929,7 @@ async def PUT_Value(request):
         raise HTTPInternalServerError()
 
     # write successful
-    
+
     resp_json = {}
     resp = await jsonResponse(request, resp_json)
     return resp
@@ -1684,7 +1684,7 @@ async def POST_Value(request):
 
         tb = traceback.format_exc()
         print("traceback:", tb)
-        
+
     # finalize response
     await resp.write_eof()
 
