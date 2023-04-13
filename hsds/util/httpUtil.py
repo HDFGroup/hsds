@@ -480,7 +480,6 @@ async def jsonResponse(resp, data, status=200, ignore_nan=False, body_only=False
     JSON data
     """
     # tbd - remove resp parameter - not used
-    print("data:", data)
 
     try:
         text = simplejson.dumps(data, ignore_nan=ignore_nan, allow_nan=True)

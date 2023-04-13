@@ -611,9 +611,8 @@ async def PUT_Value(request):
                         request.content_length, max_request_size
                     )
                 else:
-                    log.info(
-                        f"will paginate over large request with {request.content_length} bytes"
-                    )
+                    msg = f"will paginate over large request with {request.content_length} bytes"
+                    log.info(msg)
 
         if item_size == "H5T_VARIABLE":
             # read the request data now
@@ -657,13 +656,11 @@ async def PUT_Value(request):
         log.debug(f"PUT Value selection: {slices}")
         # not point selection, get hyperslab selection shape
         np_shape = getSelectionShape(slices)
-        num_elements = getNumElements(np_shape)
     else:
         # point update
         np_shape = (num_points,)
-        num_elements = num_points
-    log.debug(f"selection shape: {np_shape}")
 
+    log.debug(f"selection shape: {np_shape}")
     num_elements = getNumElements(np_shape)
     log.debug(f"selection num elements: {num_elements}")
     if num_elements <= 0:
@@ -932,6 +929,7 @@ async def PUT_Value(request):
         raise HTTPInternalServerError()
 
     # write successful
+    
     resp_json = {}
     resp = await jsonResponse(request, resp_json)
     return resp
@@ -1686,6 +1684,7 @@ async def POST_Value(request):
 
         tb = traceback.format_exc()
         print("traceback:", tb)
+        
     # finalize response
     await resp.write_eof()
 
