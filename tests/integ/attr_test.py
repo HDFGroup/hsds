@@ -1313,9 +1313,6 @@ class AttributeTest(unittest.TestCase):
                 if ignore_nan:
                     params["ignore_nan"] = 1
                 rsp = self.session.get(req, headers=headers, params=params)
-                if rsp.status_code == 500 and not ignore_nan:
-                    # nan value can generate json encoiding errors
-                    continue
                 self.assertEqual(rsp.status_code, 200)
                 rspJson = json.loads(rsp.text)
                 self.assertTrue("hrefs" in rspJson)
