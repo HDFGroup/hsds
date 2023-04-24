@@ -481,7 +481,14 @@ async def jsonResponse(resp, data, status=200, ignore_nan=False, body_only=False
     """
     # tbd - remove resp parameter - not used
 
-    text = simplejson.dumps(data, ignore_nan=ignore_nan)
+    try:
+        text = simplejson.dumps(data, ignore_nan=ignore_nan, allow_nan=True)
+    except ValueError as ve:
+        # this exception started to get raised around 04/12/2023
+        # "out of range float values" when nan is eturned and ignore_nan is False
+        # some change in numpy behaviour?
+        log.warn(f"got exception {ve} trying to do json dump of: {data}")
+        raise HTTPInternalServerError()
     if body_only:
         return text
     else:

@@ -24,7 +24,7 @@ classifiers = [
 ]
 
 install_requires = [
-    "aiobotocore==2.1.0",
+    "aiobotocore",
     "aiohttp_cors",
     "aiofiles",
     "cryptography",
@@ -36,7 +36,7 @@ install_requires = [
     "pyyaml",
     "requests-unixsocket",
     "simplejson",
-    "aiohttp==3.8.1",
+    "aiohttp",
 ]
 
 

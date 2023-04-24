@@ -120,8 +120,10 @@ async def k8s_get_dn_info(app, dn_urls=None):
                 continue
         except HTTPServiceUnavailable:
             log.warn("k8s_get_dn_urls - 503 error from /info request")
+            continue
         except Exception as e:
             log.error(f"k8s_get_dn_urls - Exception: {e} from /info request")
+            continue
         info_map[dn_url] = node_json
         log.debug(f"adding {dn_url} to dn info map: {node_json}")
     log.debug(f"k8s_get_dn_info, returning {len(info_map)} items")
