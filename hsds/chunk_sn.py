@@ -119,6 +119,17 @@ async def get_slices(app, select, dset_json, bucket=None):
     return slices
 
 
+def use_http_streaming(request, rank):
+    """ return boolean indicating whether http streaming should be used """
+    if rank == 0:
+        return False
+    if isAWSLambda(request):
+        return False
+    if not config.get("http_streaming", default=True):
+        return False
+    return True
+
+
 async def getChunkLocations(
     app, dset_id, dset_json, chunkinfo_map, chunk_ids, bucket=None
 ):
@@ -502,6 +513,7 @@ async def PUT_Value(request):
 
         log.debug(f"arr shape: {arr_rsp.shape}")
         response_type = getAcceptType(request)
+
         if response_type == "binary":
             output_data = arr_rsp.tobytes()
             msg = f"PUT_Value query - returning {len(output_data)} bytes binary data"
@@ -538,6 +550,11 @@ async def PUT_Value(request):
     points = None  # used for point selection writes
     np_shape = []  # shape of incoming data
     slices = []  # selection area to write to
+
+    if item_size == 'H5T_VARIABLE' or not use_http_streaming(request, rank):
+        http_streaming = False
+    else:
+        http_streaming = True
 
     # body could also contain a point selection specifier
     if body and "points" in body:
@@ -603,20 +620,19 @@ async def PUT_Value(request):
 
         if isinstance(request.content_length, int):
             if request.content_length >= max_request_size:
-                if item_size == "H5T_VARIABLE":
+                if http_streaming:
+                    # just do an info log that we'll be paginating over a large request
+                    msg = f"will paginate over large request with {request.content_length} bytes"
+                    log.info(msg)
+                else:
                     msg = f"Request size {request.content_length} too large "
                     msg += f"for variable length data, max: {max_request_size}"
                     log.warn(msg)
-                    raise HTTPRequestEntityTooLarge(
-                        request.content_length, max_request_size
-                    )
-                else:
-                    msg = f"will paginate over large request with {request.content_length} bytes"
-                    log.info(msg)
+                    raise HTTPRequestEntityTooLarge(request.content_length, max_request_size)
 
-        if item_size == "H5T_VARIABLE":
+        if not http_streaming:
             # read the request data now
-            # TBD: support streaming for variable types
+            # TBD: support streaming for variable length types
             try:
                 binary_data = await request_read(request)
             except HTTPRequestEntityTooLarge as tle:
@@ -1029,7 +1045,7 @@ async def GET_Value(request):
 
     response_type = getAcceptType(request)
 
-    if response_type == "binary" and rank > 0 and not isAWSLambda(request):
+    if response_type == "binary" and use_http_streaming(request, rank):
         stream_pagination = True
         log.debug("use stream_pagination")
     else:
