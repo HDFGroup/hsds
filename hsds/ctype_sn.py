@@ -94,7 +94,7 @@ async def GET_Datatype(request):
         if group_id is None:
             group_id = domain_json["root"]
         # throws 404 if not found
-        kwargs = {"bucket": bucket}
+        kwargs = {"bucket": bucket, "domain": domain}
         ctype_id = await getObjectIdByPath(app, group_id, h5path, **kwargs)
         if not isValidUuid(ctype_id, "Datatype"):
             msg = f"No datatype exist with the path: {h5path}"

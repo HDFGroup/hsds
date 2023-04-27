@@ -768,7 +768,7 @@ async def GET_Domain(request):
         h5path = params["h5path"]
         root_id = domain_json["root"]
         # getObjectIdByPath throws 404 if not found
-        obj_id = await getObjectIdByPath(app, root_id, h5path, bucket=bucket)
+        obj_id = await getObjectIdByPath(app, root_id, h5path, bucket=bucket, domain=domain)
         log.info(f"get obj_id: {obj_id} from h5path: {h5path}")
         # get authoritative state for object from DN (even if
         # it's in the meta_cache).
