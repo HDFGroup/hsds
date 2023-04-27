@@ -224,7 +224,6 @@ class GroupTest(unittest.TestCase):
         rsp = self.session.post(req, headers=headers)
         self.assertEqual(rsp.status_code, 403)  # forbidden
 
-
     def testPostWithLink(self):
         # test PUT_root
         print("testPostWithLink", self.base_domain)
@@ -351,7 +350,6 @@ class GroupTest(unittest.TestCase):
         self.assertTrue("alias" in rspJson)
         self.assertEqual(rspJson["alias"], [])
 
-
     def testDelete(self):
         # test Delete
         print("testDelete", self.base_domain)
@@ -425,9 +423,7 @@ class GroupTest(unittest.TestCase):
         req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers)
         if rsp.status_code != 200:
-            print(
-                "WARNING: Failed to get domain: {}. Is test data setup?".format(domain)
-            )
+            print(f"WARNING: Failed to get domain: {domain}. Is test data setup?")
             return  # abort rest of test
 
         rspJson = json.loads(rsp.text)

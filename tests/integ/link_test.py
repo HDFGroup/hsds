@@ -423,7 +423,7 @@ class LinkTest(unittest.TestCase):
 
         # create a new group, linked as "g1"
         link_body = {"id": root_id, "name": "g1"}
-        creation_props = {"link_creation_order": True, 
+        creation_props = {"link_creation_order": True,
                           "crt_order_indexed": True,
                           "link": link_body}
         payload = {"creationProperties": creation_props}
@@ -647,8 +647,6 @@ class LinkTest(unittest.TestCase):
         self.assertFalse("h5domain" in link)  # only for external links
         self.assertEqual(link["title"], "slink")
         self.assertEqual(link["h5path"], "somevalue")
-
-    
 
 
 if __name__ == "__main__":

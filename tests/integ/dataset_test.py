@@ -1066,14 +1066,14 @@ class DatasetTest(unittest.TestCase):
             "level": 9,
             "name": "deflate",
         }
-        
-        creationProperties = {"layout": layout, "filters": [gzip_filter,]}
+
+        creationProperties = {"layout": layout, "filters": [gzip_filter, ]}
 
         payload = {"creationProperties": creationProperties,
                    "type": "H5T_IEEE_F32LE",
                    "shape": [10, 20]
                    }
-        
+
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
@@ -1102,7 +1102,6 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("creationProperties" in rspJson)
         cpl = rspJson["creationProperties"]
         self.assertTrue("layout" in cpl)
-        
 
     def testCompressionFiltersDataset(self):
         # test Dataset with creation property list
@@ -1908,7 +1907,6 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(cpl_layout["offset"], offset)
         self.assertTrue("size" in cpl_layout)
         self.assertEqual(cpl_layout["size"], size)
-        
 
     def testChunkedRefDataset(self):
         # test Dataset where H5D_CHUNKED_REF layout is used
@@ -1973,7 +1971,7 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("layout" in rspJson)
         layout_json = rspJson["layout"]
         self.assertTrue("class" in layout_json)
-        self.assertEqual(layout_json["class"], "H5D_CHUNKED")  
+        self.assertEqual(layout_json["class"], "H5D_CHUNKED")
         self.assertTrue("dims" in layout_json)
         chunk_dims = layout_json["dims"]
         self.assertEqual(len(chunk_dims), 2)
@@ -1985,7 +1983,7 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(cpl_layout["class"], "H5D_CHUNKED_REF")
         self.assertTrue("file_uri" in cpl_layout)
         self.assertEqual(cpl_layout["file_uri"], file_uri)
-        self.assertTrue("chunks" in cpl_layout)      
+        self.assertTrue("chunks" in cpl_layout)
         self.assertEqual(cpl_layout["chunks"], chunks)
 
     def testChunkedRefIndirectDataset(self):
@@ -2057,7 +2055,7 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("layout" in rspJson)
         layout_json = rspJson["layout"]
         self.assertTrue("class" in layout_json)
-        self.assertEqual(layout_json["class"], "H5D_CHUNKED")        
+        self.assertEqual(layout_json["class"], "H5D_CHUNKED")
         self.assertTrue("chunks" not in layout_json)
         chunk_dims = layout_json["dims"]
         self.assertEqual(len(chunk_dims), 2)
@@ -2070,7 +2068,7 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(cpl_layout["class"], "H5D_CHUNKED_REF_INDIRECT")
         self.assertTrue("file_uri" in cpl_layout)
         self.assertEqual(cpl_layout["file_uri"], file_uri)
-        self.assertTrue("chunks" not in cpl_layout)      
+        self.assertTrue("chunks" not in cpl_layout)
 
         self.assertTrue("chunk_table" in cpl_layout)
         self.assertEqual(cpl_layout["chunk_table"], chunkinfo_uuid)
@@ -2171,7 +2169,6 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("chunk_table" in cpl_layout)
         self.assertEqual(cpl_layout["chunk_table"], chunkinfo_uuid)
         self.assertTrue("chunks" not in cpl)
-        
 
     def testDatasetChunkPartitioning(self):
         # test Dataset partitioning logic for large datasets
