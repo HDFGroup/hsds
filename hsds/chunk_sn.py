@@ -33,7 +33,7 @@ from .util.hdf5dtype import getItemSize, createDataType
 from .util.dsetUtil import getSelectionList, isNullSpace, getDatasetLayout
 from .util.dsetUtil import getFillValue, isExtensible, getSelectionPagination
 from .util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout
-from .util.dsetUtil import getDatasetCreationPropertyLayout 
+from .util.dsetUtil import getDatasetCreationPropertyLayout
 from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId
 from .util.chunkUtil import getChunkIndex, getChunkSuffix
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
@@ -143,7 +143,7 @@ async def getChunkLocations(
         msg = f"skip getChunkLocations for layout class: {layout_class}"
         log.debug(msg)
         return
-    
+
     chunk_dims = None
     if "layout" in dset_json:
         dset_layout = dset_json["layout"]

@@ -913,12 +913,10 @@ async def POST_Dataset(request):
         # null space - no layout
         layout = None
 
-
     if layout_props and "dims" in layout_props:
         chunk_dims = layout_props["dims"]
     else:
         chunk_dims = None
-    
 
     if layout_class == "H5D_CONTIGUOUS_REF":
         kwargs = {"chunk_min": min_chunk_size, "chunk_max": max_chunk_size}

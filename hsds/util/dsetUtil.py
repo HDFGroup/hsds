@@ -849,6 +849,7 @@ def isExtensible(dims, maxdims):
             return True
     return False
 
+
 def getDatasetCreationPropertyLayout(dset_json):
     """ return layout json from cretion property list """
     cpl = None
@@ -857,6 +858,7 @@ def getDatasetCreationPropertyLayout(dset_json):
         if "layout" in cp:
             cpl = cp["layout"]
     return cpl
+
 
 def getDatasetLayout(dset_json):
     """ return layout class """
@@ -869,7 +871,7 @@ def getDatasetLayout(dset_json):
     # otherwise, get class prop from layout
     if chunk_layout is None and "layout" in dset_json:
         layout = dset_json["layout"]
-        if "class" in  layout:
+        if "class" in layout:
             chunk_layout = layout["class"]
     return chunk_layout
 
