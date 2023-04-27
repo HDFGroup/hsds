@@ -21,7 +21,7 @@ from .util.idUtil import getObjId, isValidChunkId, getCollectionForId
 from .util.chunkUtil import getDatasetId, getNumChunks, ChunkIterator
 from .util.hdf5dtype import getItemSize, createDataType
 from .util.arrayUtil import getShapeDims, getNumElements, bytesToArray
-from .util.dsetUtil import getHyperslabSelection, getFilterOps
+from .util.dsetUtil import getHyperslabSelection, getFilterOps, getDatasetLayout
 
 from .util.storUtil import getStorKeys, putStorJSONObj, getStorJSONObj
 from .util.storUtil import deleteStorObj, getStorBytes, isStorObj
@@ -97,7 +97,7 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
     dataset_info["logical_bytes"] = logical_bytes
     log.debug(f"dims: {dims}")
     rank = len(dims)
-    layout_class = layout["class"]
+    layout_class = getDatasetLayout(dset_json)
     msg = f"updateDatasetInfo - {dset_id} has layout_class: {layout_class}"
     log.debug(msg)
     selection = getHyperslabSelection(dims)  # select entire datashape
