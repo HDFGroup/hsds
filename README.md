@@ -4,7 +4,7 @@
 
 HSDS is a web service that implements a REST-based web service for HDF5 data stores.
 Data can be stored in either a POSIX files system, or using object-based storage such as
-AWS S3, Azure Blob Storage, or MinIO <min.io>.
+AWS S3, Azure Blob Storage, or [MinIO](https://min.io).
 HSDS can be run a single machine using Docker or on a cluster using Kubernetes (or AKS on Microsoft Azure).
 
 In addition, HSDS can be run in serverless mode with AWS Lambda or h5pyd local mode.
