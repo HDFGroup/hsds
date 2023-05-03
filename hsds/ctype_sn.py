@@ -21,7 +21,7 @@ from .util.httpUtil import jsonResponse
 from .util.idUtil import isValidUuid, getDataNodeUrl, createObjId
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
 from .util.authUtil import validateUserPassword
-from .util.domainUtil import getDomainFromRequest, isValidDomain
+from .util.domainUtil import getDomainFromRequest, getPathForDomain, isValidDomain
 from .util.domainUtil import getBucketForDomain, verifyRoot
 from .util.hdf5dtype import validateTypeItem, getBaseTypeJson
 from .servicenode_lib import getDomainJson, getObjectJson, validateAction
@@ -108,7 +108,7 @@ async def GET_Datatype(request):
     #   (even if it's in the meta_cache)
     kwargs = {"bucket": bucket, "refresh": True, "include_attrs": include_attrs}
     type_json = await getObjectJson(app, ctype_id, **kwargs)
-    type_json["domain"] = domain
+    type_json["domain"] = getPathForDomain(domain)
 
     if getAlias:
         root_id = type_json["root"]
