@@ -645,7 +645,7 @@ async def PUT_Value(request):
                     msg = f"Request size {request.content_length} too large "
                     msg += f"for variable length data, max: {max_request_size}"
                     log.warn(msg)
-                    raise HTTPRequestEntityTooLarge(request.content_length, max_request_size)
+                    raise HTTPRequestEntityTooLarge(max_request_size, request.content_length)
 
         if not http_streaming:
             # read the request data now
