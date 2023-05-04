@@ -57,6 +57,8 @@ async def GET_Group(request):
         resp_json["links"] = group_json["links"]
     if "include_attrs" in params and params["include_attrs"]:
         resp_json["attributes"] = group_json["attributes"]
+    if "creationProperties" in group_json:
+        resp_json["creationProperties"] = group_json["creationProperties"]
 
     resp = json_response(resp_json)
     log.response(request, resp=resp)
@@ -117,6 +119,9 @@ async def POST_Group(request):
         "links": {},
         "attributes": {},
     }
+
+    if "creationProperties" in body:
+        group_json["creationProperties"] = body["creationProperties"]
 
     kwargs = {"bucket": bucket, "notify": True, "flush": True}
     await save_metadata_obj(app, group_id, group_json, **kwargs)

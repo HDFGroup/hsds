@@ -850,6 +850,32 @@ def isExtensible(dims, maxdims):
     return False
 
 
+def getDatasetCreationPropertyLayout(dset_json):
+    """ return layout json from cretion property list """
+    cpl = None
+    if "creationProperties" in dset_json:
+        cp = dset_json["creationProperties"]
+        if "layout" in cp:
+            cpl = cp["layout"]
+    return cpl
+
+
+def getDatasetLayout(dset_json):
+    """ return layout class """
+    chunk_layout = None
+    cp_layout = getDatasetCreationPropertyLayout(dset_json)
+    # check creation properties first
+    if cp_layout:
+        if "class" in cp_layout:
+            chunk_layout = cp_layout["class"]
+    # otherwise, get class prop from layout
+    if chunk_layout is None and "layout" in dset_json:
+        layout = dset_json["layout"]
+        if "class" in layout:
+            chunk_layout = layout["class"]
+    return chunk_layout
+
+
 class ItemIterator:
     """
     Class to iterator through items in a selection

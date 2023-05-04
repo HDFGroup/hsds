@@ -216,6 +216,18 @@ async def validateChunkLayout(app, shape_json, item_size, layout, bucket=None):
             msg += f"{shape_json['class']}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
+    elif layout_class == "H5D_CONTIGUOUS":
+        if "dims" in layout:
+            msg = "dims key found in layout for creation property list "
+            msg += "for H5D_CONTIGUOUS storage class"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    elif layout_class == "H5D_COMPACT":
+        if "dims" in layout:
+            msg = "dims key found in layout for creation property list "
+            msg += "for H5D_COMPACT storage class"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
     else:
         msg = f"Unexpected layout: {layout_class}"
         log.warn(msg)
@@ -870,24 +882,41 @@ async def POST_Dataset(request):
             else:
                 shape_json["maxdims"].append(maxextent)
 
-    layout = None
+    layout_props = None
     min_chunk_size = int(config.get("min_chunk_size"))
     max_chunk_size = int(config.get("max_chunk_size"))
     if "creationProperties" in body:
         creationProperties = body["creationProperties"]
+        log.debug(f"got creationProperties: {creationProperties}")
         if "layout" in creationProperties:
-            layout = creationProperties["layout"]
+            layout_props = creationProperties["layout"]
+            await validateChunkLayout(app, shape_json, item_size, layout_props, bucket=bucket)
+    else:
+        creationProperties = {}
 
-            await validateChunkLayout(app, shape_json, item_size, layout, bucket=bucket)
+    if layout_props:
+        if layout_props["class"] in ("H5D_COMPACT", "H5D_CONTIGUOUS"):
+            # tread compact and contiguous as chunked
+            layout_class = "H5D_CHUNKED"
+        else:
+            layout_class = layout_props["class"]
 
-    if layout is None and shape_json["class"] != "H5S_NULL":
-        # default to chunked layout
-        layout = {"class": "H5D_CHUNKED"}
-
-    if layout:
-        layout_class = layout["class"]
+    elif shape_json["class"] != "H5S_NULL":
+        layout_class = "H5D_CHUNKED"
     else:
         layout_class = None
+
+    if layout_class:
+        # initialize to H5D_CHUNKED
+        layout = {"class": "H5D_CHUNKED"}
+    else:
+        # null space - no layout
+        layout = None
+
+    if layout_props and "dims" in layout_props:
+        chunk_dims = layout_props["dims"]
+    else:
+        chunk_dims = None
 
     if layout_class == "H5D_CONTIGUOUS_REF":
         kwargs = {"chunk_min": min_chunk_size, "chunk_max": max_chunk_size}
@@ -895,14 +924,12 @@ async def POST_Dataset(request):
         layout["dims"] = chunk_dims
         log.debug(f"autoContiguous layout: {layout}")
 
-    if layout_class == "H5D_CHUNKED" and "dims" not in layout:
+    if layout_class == "H5D_CHUNKED" and chunk_dims is None:
         # do autochunking
         chunk_dims = guessChunk(shape_json, item_size)
-        layout["dims"] = chunk_dims
-        log.debug(f"initial autochunk layout: {layout}")
+        log.debug(f"initial autochunk layout: {chunk_dims}")
 
     if layout_class == "H5D_CHUNKED":
-        chunk_dims = layout["dims"]
         chunk_size = getChunkSize(chunk_dims, item_size)
 
         msg = f"chunk_size: {chunk_size}, min: {min_chunk_size}, "
@@ -929,6 +956,8 @@ async def POST_Dataset(request):
             msg += f"dimensions: {adjusted_chunk_dims}"
             log.debug(msg)
             layout["dims"] = adjusted_chunk_dims
+        else:
+            layout["dims"] = chunk_dims  # don't need to adjust chunk size
 
         # set partition_count if needed:
         max_chunks_per_folder = int(config.get("max_chunks_per_folder"))
@@ -982,7 +1011,6 @@ async def POST_Dataset(request):
                 log.info(msg)
 
     if layout_class in ("H5D_CHUNKED_REF", "H5D_CHUNKED_REF_INDIRECT"):
-        chunk_dims = layout["dims"]
         chunk_size = getChunkSize(chunk_dims, item_size)
 
         msg = f"chunk_size: {chunk_size}, min: {min_chunk_size}, "
@@ -998,6 +1026,7 @@ async def POST_Dataset(request):
             msg = f"chunk size: {chunk_size} greater than max size: "
             msg += f"{max_chunk_size}, for {layout_class} dataset"
             log.warn(msg)
+        layout["dims"] = chunk_dims
 
     link_id = None
     link_title = None
@@ -1023,9 +1052,8 @@ async def POST_Dataset(request):
         "shape": shape_json,
     }
 
-    if "creationProperties" in body:
+    if creationProperties:
         # TBD - validate all creationProperties
-        creationProperties = body["creationProperties"]
         if "fillValue" in creationProperties:
             # validate fill value compatible with type
             dt = createDataType(datatype)
@@ -1120,6 +1148,7 @@ async def POST_Dataset(request):
             log.debug(f"setting filters to: {f_out}")
             creationProperties["filters"] = f_out
 
+        log.debug(f"set dataset json creationPropries: {creationProperties}")
         dataset_json["creationProperties"] = creationProperties
 
     if layout is not None:

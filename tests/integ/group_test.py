@@ -306,6 +306,50 @@ class GroupTest(unittest.TestCase):
             ],
         )
 
+    def testPostWithCreationProps(self):
+        # test POST group with creation properties
+        print("testPost", self.base_domain)
+        endpoint = helper.getEndpoint()
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = endpoint + "/groups"
+
+        # create a new group
+        creation_props = {"link_creation_order": True, "rdcc_nbytes": 1024}
+        payload = {"creationProperties": creation_props}
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 0)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        group_id = rspJson["id"]
+        self.assertTrue(helper.validateId(group_id))
+
+        # verify we can do a get on the new group
+        req = endpoint + "/groups/" + group_id
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("id" in rspJson)
+        self.assertEqual(rspJson["id"], group_id)
+        self.assertTrue("root" in rspJson)
+        self.assertTrue(rspJson["root"] != group_id)
+        self.assertTrue("domain" in rspJson)
+        self.assertTrue("creationProperties" in rspJson)
+        cprops = rspJson["creationProperties"]
+        for k in ("link_creation_order", "rdcc_nbytes"):
+            self.assertTrue(k in cprops)
+            self.assertEqual(cprops[k], creation_props[k])
+
+        # self.assertEqual(rspJson["domain"], domain) # TBD
+
+        # try getting the path of the group
+        params = {"getalias": 1}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("alias" in rspJson)
+        self.assertEqual(rspJson["alias"], [])
+
     def testDelete(self):
         # test Delete
         print("testDelete", self.base_domain)
@@ -379,9 +423,7 @@ class GroupTest(unittest.TestCase):
         req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers)
         if rsp.status_code != 200:
-            print(
-                "WARNING: Failed to get domain: {}. Is test data setup?".format(domain)
-            )
+            print(f"WARNING: Failed to get domain: {domain}. Is test data setup?")
             return  # abort rest of test
 
         rspJson = json.loads(rsp.text)

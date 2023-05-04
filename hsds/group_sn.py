@@ -172,6 +172,8 @@ async def POST_Group(request):
 
     link_id = None
     link_title = None
+    creation_props = None
+
     if request.has_body:
 
         try:
@@ -197,8 +199,10 @@ async def POST_Group(request):
                     # a link
                     act = "create"
                     await validateAction(app, domain, link_id, username, act)
-            if not link_id or not link_title:
-                log.warn(f"POST Group body with no link: {body}")
+                if not link_id or not link_title:
+                    log.warn(f"POST Group body with no link: {body}")
+            if "creationProperties" in body:
+                creation_props = body["creationProperties"]
 
     # get again in case cache was invalidated
     domain_json = await getDomainJson(app, domain)
@@ -207,6 +211,8 @@ async def POST_Group(request):
     group_id = createObjId("groups", rootid=root_id)
     log.info(f"new  group id: {group_id}")
     group_json = {"id": group_id, "root": root_id}
+    if creation_props:
+        group_json["creationProperties"] = creation_props
     log.debug(f"create group, body: {group_json}")
     req = getDataNodeUrl(app, group_id) + "/groups"
     params = {}

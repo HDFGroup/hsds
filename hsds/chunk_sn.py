@@ -30,9 +30,10 @@ from .util.idUtil import isValidUuid, getDataNodeUrl
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain
 from .util.hdf5dtype import getItemSize, createDataType
-from .util.dsetUtil import getSelectionList, isNullSpace
+from .util.dsetUtil import getSelectionList, isNullSpace, getDatasetLayout
 from .util.dsetUtil import getFillValue, isExtensible, getSelectionPagination
 from .util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout
+from .util.dsetUtil import getDatasetCreationPropertyLayout
 from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId
 from .util.chunkUtil import getChunkIndex, getChunkSuffix
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
@@ -136,12 +137,23 @@ async def getChunkLocations(
     """
     Get info for chunk locations (for reference layouts)
     """
-    layout = dset_json["layout"]
+    layout_class = getDatasetLayout(dset_json)
 
-    if layout["class"] not in CHUNK_REF_LAYOUTS:
-        msg = f"skip getChunkLocations for layout class: { layout['class'] }"
+    if layout_class not in CHUNK_REF_LAYOUTS:
+        msg = f"skip getChunkLocations for layout class: {layout_class}"
         log.debug(msg)
         return
+
+    chunk_dims = None
+    if "layout" in dset_json:
+        dset_layout = dset_json["layout"]
+        log.debug(f"dset_json layout: {dset_layout}")
+        if "dims" in dset_layout:
+            chunk_dims = dset_layout["dims"]
+    if chunk_dims is None:
+        msg = "no chunk dimensions set in dataset layout"
+        log.error(msg)
+        raise HTTPInternalServerError()
 
     datashape = dset_json["shape"]
     datatype = dset_json["type"]
@@ -156,7 +168,7 @@ async def getChunkLocations(
     msg = f"getChunkLocations for dset: {dset_id} bucket: {bucket} "
     msg += f"rank: {rank} num chunk_ids: {num_chunks}"
     log.info(msg)
-    log.debug(f"getChunkLocations layout: {layout}")
+    log.debug(f"getChunkLocations layout: {layout_class}")
 
     def getChunkItem(chunkid):
         if chunk_id in chunkinfo_map:
@@ -166,7 +178,9 @@ async def getChunkLocations(
             chunkinfo_map[chunk_id] = chunk_item
         return chunk_item
 
-    if layout["class"] == "H5D_CONTIGUOUS_REF":
+    if layout_class == "H5D_CONTIGUOUS_REF":
+        layout = getDatasetCreationPropertyLayout(dset_json)
+        log.debug(f"cpl layout: {layout}")
         s3path = layout["file_uri"]
         s3size = layout["size"]
         if s3size == 0:
@@ -174,7 +188,6 @@ async def getChunkLocations(
             msg += "no allocation"
             log.info(msg)
             return
-        chunk_dims = layout["dims"]
         item_size = getItemSize(datatype)
         chunk_size = item_size
         for dim in chunk_dims:
@@ -217,7 +230,9 @@ async def getChunkLocations(
             chunk_item["s3path"] = s3path
             chunk_item["s3offset"] = s3offset
             chunk_item["s3size"] = chunk_size
-    elif layout["class"] == "H5D_CHUNKED_REF":
+    elif layout_class == "H5D_CHUNKED_REF":
+        layout = getDatasetCreationPropertyLayout(dset_json)
+        log.debug(f"cpl layout: {layout}")
         s3path = layout["file_uri"]
         chunks = layout["chunks"]
 
@@ -234,7 +249,9 @@ async def getChunkLocations(
             chunk_item["s3offset"] = s3offset
             chunk_item["s3size"] = s3size
 
-    elif layout["class"] == "H5D_CHUNKED_REF_INDIRECT":
+    elif layout_class == "H5D_CHUNKED_REF_INDIRECT":
+        layout = getDatasetCreationPropertyLayout(dset_json)
+        log.debug(f"cpl layout: {layout}")
         if "chunk_table" not in layout:
             log.error("Expected to find chunk_table in dataset layout")
             raise HTTPInternalServerError()
