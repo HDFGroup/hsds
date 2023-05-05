@@ -89,7 +89,7 @@ async def GET_Group(request):
 
     if h5path:
         # throws 404 if not found
-        kwargs = {"bucket": bucket}
+        kwargs = {"bucket": bucket, "domain": domain}
         group_id = await getObjectIdByPath(app, group_id, h5path, **kwargs)
         if not isValidUuid(group_id, "Group"):
             msg = f"No group exist with the path: {h5path}"

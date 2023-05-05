@@ -212,10 +212,11 @@ async def getObjectJson(
     return obj_json
 
 
-async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False):
+async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, domain=None):
     """Find the object at the provided h5path location.
     If not found raise 404 error.
     """
+
     msg = f"getObjectIdByPath obj_id: {obj_id} h5path: {h5path} "
     msg += f"refresh: {refresh}"
     log.info(msg)
@@ -229,6 +230,7 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False):
         if getCollectionForId(obj_id) != "groups":
             # not a group, so won't have links
             msg = f"h5path: {h5path} not found"
+            msg += f"getCollectionForId({obj_id}) returned {getCollectionForId(obj_id)}"
             log.warn(msg)
             raise HTTPNotFound()
         req = getDataNodeUrl(app, obj_id)
@@ -239,13 +241,39 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False):
             params["bucket"] = bucket
         link_json = await http_get(app, req, params=params)
         log.debug("got link_json: " + str(link_json))
-        if link_json["class"] != "H5L_TYPE_HARD":
-            # don't follow soft/external links
+
+        if link_json["class"] == "H5L_TYPE_EXTERNAL":
+            # don't follow external links
             msg = f"h5path: {h5path} not found"
             log.warn(msg)
             raise HTTPInternalServerError()
+
+        if link_json["class"] == "H5L_TYPE_SOFT":
+            # follow link to get id of object
+            path_from_link = link_json["h5path"]
+
+            if path_from_link[0] != "/":
+                # if link is by relative path, then keep the parent group the same
+                link_json["id"] = await getObjectIdByPath(app, obj_id, path_from_link,
+                                                          bucket=bucket,
+                                                          refresh=refresh,
+                                                          domain=domain)
+            else:
+                # if link is by absolute path, then replace obj id with root group
+                domain_json = await getDomainJson(app, domain)
+                verifyRoot(domain_json)
+                msg = f"domain json response = {domain_json}"
+                log.debug(msg)
+
+                link_json["id"] = await getObjectIdByPath(app, domain_json["root"],
+                                                          path_from_link,
+                                                          bucket=bucket,
+                                                          refresh=refresh,
+                                                          domain=domain)
+
         obj_id = link_json["id"]
-    # if we get here, we've traveresed the entire path and found the object
+
+    # if we get here, we've traversed the entire path and found the object
     return obj_id
 
 

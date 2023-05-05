@@ -331,7 +331,7 @@ async def GET_Dataset(request):
             verifyRoot(domain_json)
             group_id = domain_json["root"]
         # throws 404 if not found
-        kwargs = {"bucket": bucket}
+        kwargs = {"bucket": bucket, "domain": domain}
         dset_id = await getObjectIdByPath(app, group_id, h5path, **kwargs)
         if not isValidUuid(dset_id, "Dataset"):
             msg = f"No dataset exist with the path: {h5path}"
