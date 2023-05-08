@@ -44,6 +44,10 @@ async def GET_Links(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     limit = None
+    create_order = False
+    if "CreateOrder" in params and params["CreateOrder"]:
+        create_order = True
+
     if "Limit" in params:
         try:
             limit = int(params["Limit"])
@@ -74,15 +78,14 @@ async def GET_Links(request):
 
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id + "/links"
-    query_sep = "?"
-    if limit is not None:
-        req += query_sep + "Limit=" + str(limit)
-        query_sep = "&"
-    if marker is not None:
-        req += query_sep + "Marker=" + marker
 
-    log.debug("get LINKS: " + req)
     params = {}
+    if create_order:
+        params["CreateOrder"] = 1
+    if limit is not None:
+        params["Limit"] = str(limit)
+    if marker is not None:
+        params["Marker"] = marker
     if bucket:
         params["bucket"] = bucket
     links_json = await http_get(app, req, params=params)

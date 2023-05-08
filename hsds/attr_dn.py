@@ -24,12 +24,18 @@ from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
 from . import hsds_logger as log
 
 
-def index(a, x):
-    """ Locate the leftmost value exactly equal to x
-    """
-    i = bisect_left(a, x)
-    if i != len(a) and a[i] == x:
-        return i
+def _index(items, marker, create_order=False):
+    """Locate the leftmost value exactly equal to x"""
+    if create_order:
+        # list is not ordered, juse search linearly
+        for i in range(len(items)):
+            if items[i] == marker:
+                return i
+    else:
+        i = bisect_left(items, marker)
+        if i != len(items) and items[i] == marker:
+            return i
+    # not found
     return -1
 
 
@@ -45,6 +51,10 @@ async def GET_Attributes(request):
         bucket = params["bucket"]
     else:
         bucket = None
+
+    create_order = False
+    if "CreateOrder" in params and params["CreateOrder"]:
+        create_order = True
 
     include_data = False
     if "IncludeData" in params and params["IncludeData"]:
@@ -63,38 +73,54 @@ async def GET_Attributes(request):
     marker = None
     if "Marker" in params:
         marker = params["Marker"]
-        log.info("GET_Links - using Marker: {}".format(marker))
+        log.info(f"GET_Links - using Marker: {marker}")
 
     obj_json = await get_metadata_obj(app, obj_id, bucket=bucket)
 
-    log.debug("GET attributes obj_id: {} got json".format(obj_id))
+    log.debug(f"GET attributes obj_id: {obj_id} got json")
     if "attributes" not in obj_json:
-        msg = "unexpected data for obj id: {}".format(obj_id)
+        msg = f"unexpected data for obj id: {obj_id}"
         msg.error(msg)
         raise HTTPInternalServerError()
 
     # return a list of attributes based on sorted dictionary keys
     attr_dict = obj_json["attributes"]
-    attr_names = list(attr_dict.keys())
-    attr_names.sort()  # sort by key
-    # TBD: provide an option to sort by create date
+
+    titles = []
+    if create_order:
+        order_dict = {}
+        for title in attr_dict:
+            item = attr_dict[title]
+            if "created" not in item:
+                log.warning(f"expected to find 'created' key in attr item {title}")
+                continue
+            order_dict[title] = item["created"]
+        log.debug(f"order_dict: {order_dict}")
+        # now sort by created
+        for k in sorted(order_dict.items(), key=lambda item: item[1]):
+            titles.append(k[0])
+        log.debug(f"attrs by create order: {titles}")
+    else:
+        titles = list(attr_dict.keys())
+        titles.sort()  # sort by key
+        log.debug(f"attrs by lexographic order: {titles}")
 
     start_index = 0
     if marker is not None:
-        start_index = index(attr_names, marker) + 1
+        start_index = _index(titles, marker, create_order=create_order) + 1
         if start_index == 0:
             # marker not found, return 404
-            msg = "attribute marker: {}, not found".format(marker)
+            msg = f"attribute marker: {marker}, not found"
             log.warn(msg)
             raise HTTPNotFound()
 
-    end_index = len(attr_names)
+    end_index = len(titles)
     if limit is not None and (end_index - start_index) > limit:
         end_index = start_index + limit
 
     attr_list = []
     for i in range(start_index, end_index):
-        attr_name = attr_names[i]
+        attr_name = titles[i]
         src_attr = attr_dict[attr_name]
         des_attr = {}
         des_attr["created"] = src_attr["created"]

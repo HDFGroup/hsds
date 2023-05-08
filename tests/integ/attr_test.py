@@ -9,6 +9,7 @@
 # distribution tree.  If you do not have access to this file, you may        #
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
+from copy import copy
 import unittest
 import json
 import numpy as np
@@ -50,11 +51,30 @@ class AttributeTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["attributeCount"], 0)  # no attributes
 
-        attr_count = 10
+        attr_names = [
+            "first",
+            "second",
+            "third",
+            "fourth",
+            "fifth",
+            "sixth",
+            "seventh",
+            "eighth",
+            "ninth",
+            "tenth",
+            "eleventh",
+            "twelfth",
+        ]
+
+        attr_values = {}
+
+        attr_count = len(attr_names)
 
         for i in range(attr_count):
             # create attr
-            attr_name = "attr_{}".format(i)
+            attr_name = attr_names[i]
+            attr_value = i * 2
+            attr_values[attr_name] = attr_value  # save this to check value later
             attr_payload = {"type": "H5T_STD_I32LE", "value": i * 2}
             req = self.endpoint + "/groups/" + root_uuid + "/attributes/" + attr_name
             rsp = self.session.put(req, data=json.dumps(attr_payload), headers=headers)
@@ -67,89 +87,110 @@ class AttributeTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["attributeCount"], attr_count)
 
-        # get all the attributes
-        req = self.endpoint + "/groups/" + root_uuid + "/attributes"
-        rsp = self.session.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
+        for creation_order in (False, True):
+            expected_names = copy(attr_names)
 
-        self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("attributes" in rspJson)
-        attributes = rspJson["attributes"]
-        self.assertTrue(isinstance(attributes, list))
-        self.assertEqual(len(attributes), attr_count)
-        for i in range(attr_count):
-            attrJson = attributes[i]
-            self.assertTrue("name" in attrJson)
-            self.assertEqual(attrJson["name"], "attr_{}".format(i))
-            self.assertTrue("type" in attrJson)
-            type_json = attrJson["type"]
-            self.assertEqual(type_json["class"], "H5T_INTEGER")
-            self.assertEqual(type_json["base"], "H5T_STD_I32LE")
-            self.assertTrue("shape" in attrJson)
-            shapeJson = attrJson["shape"]
-            self.assertEqual(shapeJson["class"], "H5S_SCALAR")
-            # self.assertTrue("value" not in attrJson)  # TBD - change api to include value?
-            self.assertTrue("created" in attrJson)
-            self.assertTrue("href" in attrJson)
-            self.assertTrue("value" not in attrJson)
+            if creation_order:
+                # result should come back in sorted order
+                pass
+            else:
+                expected_names.sort()  # lexographic order
+                #  sorted list should be:
+                #  ['eighth', 'eleventh', 'fifth', 'first', 'fourth', 'ninth',
+                #  'second', 'seventh', 'sixth', 'tenth', 'third', 'twelfth']
+                #
 
-        # get all attributes including data
-        params = {"IncludeData": 1}
-        rsp = self.session.get(req, headers=headers, params=params)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
+            # get all the attributes
+            req = self.endpoint + "/groups/" + root_uuid + "/attributes"
+            params = {}
+            if creation_order:
+                params["CreateOrder"] = 1
+            rsp = self.session.get(req, params=params, headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
 
-        self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("attributes" in rspJson)
-        attributes = rspJson["attributes"]
-        self.assertTrue(isinstance(attributes, list))
-        self.assertEqual(len(attributes), attr_count)
-        for i in range(attr_count):
-            attrJson = attributes[i]
-            self.assertTrue("name" in attrJson)
-            self.assertEqual(attrJson["name"], "attr_{}".format(i))
-            self.assertTrue("type" in attrJson)
-            type_json = attrJson["type"]
-            self.assertEqual(type_json["class"], "H5T_INTEGER")
-            self.assertEqual(type_json["base"], "H5T_STD_I32LE")
-            self.assertTrue("shape" in attrJson)
-            shapeJson = attrJson["shape"]
-            self.assertEqual(shapeJson["class"], "H5S_SCALAR")
-            self.assertTrue("created" in attrJson)
-            self.assertTrue("href" in attrJson)
-            self.assertTrue("value" in attrJson)
-            self.assertEqual(attrJson["value"], i * 2)
+            self.assertTrue("hrefs" in rspJson)
+            self.assertTrue("attributes" in rspJson)
+            attributes = rspJson["attributes"]
+            self.assertTrue(isinstance(attributes, list))
+            self.assertEqual(len(attributes), attr_count)
+            for i in range(attr_count):
+                attrJson = attributes[i]
+                self.assertTrue("name" in attrJson)
+                self.assertEqual(attrJson["name"], expected_names[i])
+                self.assertTrue("type" in attrJson)
+                type_json = attrJson["type"]
+                self.assertEqual(type_json["class"], "H5T_INTEGER")
+                self.assertEqual(type_json["base"], "H5T_STD_I32LE")
+                self.assertTrue("shape" in attrJson)
+                shapeJson = attrJson["shape"]
+                self.assertEqual(shapeJson["class"], "H5S_SCALAR")
+                # self.assertTrue("value" not in attrJson)  # TBD - change api to include value?
+                self.assertTrue("created" in attrJson)
+                self.assertTrue("href" in attrJson)
+                self.assertTrue("value" not in attrJson)
 
-        # get 3 attributes
-        limit = 3
-        req = self.endpoint + "/groups/" + root_uuid + "/attributes?Limit=" + str(limit)
-        rsp = self.session.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
+            # get all attributes including data
+            params["IncludeData"] = 1
+            rsp = self.session.get(req, headers=headers, params=params)
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
 
-        self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("attributes" in rspJson)
-        attributes = rspJson["attributes"]
-        self.assertTrue(isinstance(attributes, list))
-        self.assertEqual(len(attributes), limit)
+            self.assertTrue("hrefs" in rspJson)
+            self.assertTrue("attributes" in rspJson)
+            attributes = rspJson["attributes"]
+            self.assertTrue(isinstance(attributes, list))
+            self.assertEqual(len(attributes), attr_count)
+            for i in range(attr_count):
+                attrJson = attributes[i]
+                self.assertTrue("name" in attrJson)
+                attr_name = attrJson["name"]
+                self.assertEqual(attr_name, expected_names[i])
+                self.assertTrue("type" in attrJson)
+                type_json = attrJson["type"]
+                self.assertEqual(type_json["class"], "H5T_INTEGER")
+                self.assertEqual(type_json["base"], "H5T_STD_I32LE")
+                self.assertTrue("shape" in attrJson)
+                shapeJson = attrJson["shape"]
+                self.assertEqual(shapeJson["class"], "H5S_SCALAR")
+                self.assertTrue("created" in attrJson)
+                self.assertTrue("href" in attrJson)
+                self.assertTrue("value" in attrJson)
+                self.assertEqual(attrJson["value"], attr_values[attr_name])
 
-        # get 3 attributes after "attr_5"
-        limit = 3
-        req = f"{self.endpoint}/groups/{root_uuid}/attributes"
-        params = {"Limit": limit, "Marker": "attr_5"}
+            # get 3 attributes
+            limit = 3
+            params["Limit"] = limit
+            req = self.endpoint + "/groups/" + root_uuid + "/attributes"
+            rsp = self.session.get(req, params=params, headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
 
-        rsp = self.session.get(req, headers=headers, params=params)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
+            self.assertTrue("hrefs" in rspJson)
+            self.assertTrue("attributes" in rspJson)
+            attributes = rspJson["attributes"]
+            self.assertTrue(isinstance(attributes, list))
+            self.assertEqual(len(attributes), limit)
 
-        self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("attributes" in rspJson)
-        attributes = rspJson["attributes"]
-        self.assertTrue(isinstance(attributes, list))
-        self.assertEqual(len(attributes), limit)
-        attrJson = attributes[0]
-        self.assertEqual(attrJson["name"], "attr_6")
+            # get 3 attributes after "fifth"
+            limit = 3
+            req = f"{self.endpoint}/groups/{root_uuid}/attributes"
+            params["Marker"] = "fifth"
+
+            rsp = self.session.get(req, headers=headers, params=params)
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+
+            self.assertTrue("hrefs" in rspJson)
+            self.assertTrue("attributes" in rspJson)
+            attributes = rspJson["attributes"]
+            self.assertTrue(isinstance(attributes, list))
+            self.assertEqual(len(attributes), limit)
+            attrJson = attributes[0]
+            if creation_order:
+                self.assertEqual(attrJson["name"], "sixth")
+            else:
+                self.assertEqual(attrJson["name"], "first")
 
     def testObjAttr(self):
         print("testObjAttr", self.base_domain)
