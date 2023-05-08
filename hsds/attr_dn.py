@@ -85,8 +85,6 @@ async def GET_Attributes(request):
 
     # return a list of attributes based on sorted dictionary keys
     attr_dict = obj_json["attributes"]
-    attr_names = list(attr_dict.keys())
-    attr_names.sort()  # sort by key
 
     titles = []
     if create_order:
