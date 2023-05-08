@@ -52,7 +52,7 @@ async def GET_Links(request):
     if not isValidUuid(group_id, obj_class="group"):
         log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
-    
+
     create_order = False
     if "CreateOrder" in params and params["CreateOrder"]:
         create_order = True

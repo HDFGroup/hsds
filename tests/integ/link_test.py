@@ -331,8 +331,7 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["linkCount"], len(link_names))
-        
-        
+
         req = helper.getEndpoint() + "/groups/" + root_id + "/links"
 
         for creation_order in (False, True):
@@ -361,9 +360,9 @@ class LinkTest(unittest.TestCase):
             # result should come back in sorted order
             expected_names = copy(link_names)
             if not creation_order:
-                expected_names.sort() # lexographic order
-                # sorted list should be:
-                # ['eighth', 'eleventh', 'fifth', 'first', 'fourth', 'ninth',
+                expected_names.sort()  # lexographic order
+                #  sorted list should be:
+                #  ['eighth', 'eleventh', 'fifth', 'first', 'fourth', 'ninth',
                 #  'second', 'seventh', 'sixth', 'tenth', 'third', 'twelfth']
                 #
 
@@ -398,7 +397,7 @@ class LinkTest(unittest.TestCase):
             if creation_order:
                 self.assertEqual(len(links), 5)
             else:
-                self.assertEqual(len(links), 4)  
+                self.assertEqual(len(links), 4)
             last_link = links[-1]
             # "twelfth" is last in either ordering
             self.assertEqual(last_link["title"], "twelfth")
@@ -423,7 +422,6 @@ class LinkTest(unittest.TestCase):
             if creation_order:
                 # expecting: "eighth", "ninth", "tenth"
                 self.assertEqual(last_link["title"], "tenth")
- 
 
     def testGet(self):
         # test getting links from an existing domain
