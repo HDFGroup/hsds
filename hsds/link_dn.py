@@ -27,11 +27,18 @@ from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
 from . import hsds_logger as log
 
 
-def _index(a, x):
+def _index(items, marker, create_order=False):
     """Locate the leftmost value exactly equal to x"""
-    i = bisect_left(a, x)
-    if i != len(a) and a[i] == x:
-        return i
+    if create_order:
+        # list is not ordered, juse search linearly
+        for i in range(len(items)):
+            if items[i] == marker:
+                return i
+    else:
+        i = bisect_left(items, marker)
+        if i != len(items) and items[i] == marker:
+            return i
+    # not found
     return -1
 
 
@@ -45,6 +52,10 @@ async def GET_Links(request):
     if not isValidUuid(group_id, obj_class="group"):
         log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
+    
+    create_order = False
+    if "CreateOrder" in params and params["CreateOrder"]:
+        create_order = True
 
     limit = None
     if "Limit" in params:
@@ -78,13 +89,29 @@ async def GET_Links(request):
 
     # return a list of links based on sorted dictionary keys
     link_dict = group_json["links"]
-    titles = list(link_dict.keys())
-    titles.sort()  # sort by key
-    # TBD: provide an option to sort by create date
+
+    titles = []
+    if create_order:
+        order_dict = {}
+        for title in link_dict:
+            item = link_dict[title]
+            if "created" not in item:
+                log.warning(f"expected to find 'created' key in link item {title}")
+                continue
+            order_dict[title] = item["created"]
+        log.debug(f"order_dict: {order_dict}")
+        # now sort by created
+        for k in sorted(order_dict.items(), key=lambda item: item[1]):
+            titles.append(k[0])
+        log.debug(f"links by create order: {titles}")
+    else:
+        titles = list(link_dict.keys())
+        titles.sort()  # sort by key
+        log.debug(f"links by lexographic order: {titles}")
 
     start_index = 0
     if marker is not None:
-        start_index = _index(titles, marker) + 1
+        start_index = _index(titles, marker, create_order=create_order) + 1
         if start_index == 0:
             # marker not found, return 404
             msg = f"Link marker: {marker}, not found"
@@ -99,6 +126,7 @@ async def GET_Links(request):
     for i in range(start_index, end_index):
         title = titles[i]
         link = copy(link_dict[title])
+        log.debug(f"link list[{i}: {link}")
         link["title"] = title
         link_list.append(link)
 
