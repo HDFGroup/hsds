@@ -49,7 +49,7 @@ async def GET_Attributes(request):
         raise HTTPBadRequest(reason=msg)
 
     if not isValidUuid(obj_id, obj_class=collection):
-        msg = "Invalid obj id: {}".format(obj_id)
+        msg = f"Invalid obj id: {obj_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
@@ -59,6 +59,9 @@ async def GET_Attributes(request):
         include_data = True
         if "ignore_nan" in params and params["ignore_nan"]:
             ignore_nan = True
+    create_order = False
+    if "CreateOrder" in params and params["CreateOrder"]:
+        create_order = True
 
     limit = None
     if "Limit" in params:
@@ -97,9 +100,11 @@ async def GET_Attributes(request):
     if marker is not None:
         params["Marker"] = marker
     if include_data:
-        params["IncludeData"] = "1"
+        params["IncludeData"] = 1
     if bucket:
         params["bucket"] = bucket
+    if create_order:
+        params["CreateOrder"] = 1
 
     log.debug(f"get attributes: {req}")
     dn_json = await http_get(app, req, params=params)

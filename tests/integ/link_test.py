@@ -357,9 +357,12 @@ class LinkTest(unittest.TestCase):
                 self.assertTrue("created" in link)
                 ret_names.append(link["title"])
 
-            # result should come back in sorted order
             expected_names = copy(link_names)
-            if not creation_order:
+
+            if creation_order:
+                # result should come back in sorted order
+                pass
+            else:
                 expected_names.sort()  # lexographic order
                 #  sorted list should be:
                 #  ['eighth', 'eleventh', 'fifth', 'first', 'fourth', 'ninth',
@@ -367,6 +370,7 @@ class LinkTest(unittest.TestCase):
                 #
 
             self.assertEqual(ret_names, expected_names)
+            print(expected_names)
 
             # get links with a result limit of 4
             limit = 4
@@ -417,11 +421,14 @@ class LinkTest(unittest.TestCase):
             self.assertTrue("links" in rspJson)
             self.assertTrue("hrefs" in rspJson)
             links = rspJson["links"]
-            self.assertEqual(len(links), 3)  # "sixth", "tenth", "third"
+            self.assertEqual(len(links), 3)
             last_link = links[-1]
             if creation_order:
                 # expecting: "eighth", "ninth", "tenth"
                 self.assertEqual(last_link["title"], "tenth")
+            else:
+                # expecting: "sixth", "tenth", "third"
+                self.assertEqual(last_link["title"], "third")
 
     def testGet(self):
         # test getting links from an existing domain
