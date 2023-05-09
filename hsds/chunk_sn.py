@@ -1091,7 +1091,7 @@ async def GET_Value(request):
     if request_size >= max_request_size and not stream_pagination:
         msg = "GET value request too large"
         log.warn(msg)
-        raise HTTPRequestEntityTooLarge(request_size, max_request_size)
+        raise HTTPRequestEntityTooLarge(max_request_size, request_size)
     if item_size != "H5T_VARIABLE" and not query:
         # this is the exact number of bytes to be returned
         content_length = request_size
@@ -1628,7 +1628,7 @@ async def POST_Value(request):
     if request_size >= max_request_size:
         msg = "POST value request too large"
         log.warn(msg)
-        raise HTTPRequestEntityTooLarge(request_size, max_request_size)
+        raise HTTPRequestEntityTooLarge(max_request_size, request_size)
     if item_size != "H5T_VARIABLE":
         # this is the exact number of bytes to be returned
         content_length = request_size
