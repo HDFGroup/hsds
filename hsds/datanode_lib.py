@@ -578,7 +578,7 @@ async def get_chunk(
             # uninitialized chunk ref
             msg = f"reference chunk not set for id: {chunk_id}, returning 404"
             log.info(msg)
-            raise  HTTPNotFound()  # not found return 404
+            raise HTTPNotFound()  # not found return 404
         if s3size == 0:
             msg = f"Unexpected get_chunk parameter - s3path: {s3path} with size 0"
             log.error(msg)
