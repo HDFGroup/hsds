@@ -277,8 +277,7 @@ async def read_chunk_hyperslab(
         if query is None and "s3path" in params:
             s3path = params["s3path"]
             # external HDF5 file, should exist
-            log.warn(f"s3path: {s3path} for S3 range get not found")
-            raise
+            log.warn(f"chunk {chunk_id} with s3path: {s3path} not found")
 
     # process response
     if array_data is None:

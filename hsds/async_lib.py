@@ -21,7 +21,8 @@ from .util.idUtil import getObjId, isValidChunkId, getCollectionForId
 from .util.chunkUtil import getDatasetId, getNumChunks, ChunkIterator
 from .util.hdf5dtype import getItemSize, createDataType
 from .util.arrayUtil import getShapeDims, getNumElements, bytesToArray
-from .util.dsetUtil import getHyperslabSelection, getFilterOps, getDatasetLayout
+from .util.dsetUtil import getHyperslabSelection, getFilterOps
+from .util.dsetUtil import getDatasetLayoutClass, getDatasetCreationPropertyLayout
 
 from .util.storUtil import getStorKeys, putStorJSONObj, getStorJSONObj
 from .util.storUtil import deleteStorObj, getStorBytes, isStorObj
@@ -78,7 +79,7 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
         msg += f"for {dset_id}"
         log.warn(msg)
         return
-    layout = dset_json["layout"]
+    layout = getDatasetCreationPropertyLayout(dset_json)
     msg = f"updateDatasetInfo - shape: {shape_json} type: {type_json} "
     msg += f"item size: {item_size} layout: {layout}"
     log.info(msg)
@@ -97,7 +98,7 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
     dataset_info["logical_bytes"] = logical_bytes
     log.debug(f"dims: {dims}")
     rank = len(dims)
-    layout_class = getDatasetLayout(dset_json)
+    layout_class = getDatasetLayoutClass(dset_json)
     msg = f"updateDatasetInfo - {dset_id} has layout_class: {layout_class}"
     log.debug(msg)
     selection = getHyperslabSelection(dims)  # select entire datashape
@@ -119,6 +120,9 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
         linked_bytes = chunk_size * num_chunks
         num_linked_chunks = num_chunks
     elif layout_class == "H5D_CHUNKED_REF":
+        if "chunks" not in layout:
+            log.error("Expected to find 'chunks' key in H5D_CHUNKED_REF layout")
+            return
         chunks = layout["chunks"]
         # chunks is a dict with tuples (offset, size)
         for chunk_id in chunks:
@@ -130,7 +134,7 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
         if "chunk_table" not in layout:
             msg = "Expected to find chunk_table in dataset layout for "
             msg += f"{dset_id}"
-            log.error()
+            log.error(msg)
             return
         chunktable_id = layout["chunk_table"]
         # get  state for dataset from DN.
@@ -143,7 +147,7 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
             msg += f"for {dset_id}"
             log.warn(msg)
             return
-        chunktable_layout = chunktable_json["layout"]
+        chunktable_layout = getDatasetCreationPropertyLayout(chunktable_json)
         log.debug(f"chunktable_layout: {chunktable_layout}")
         if not isinstance(chunktable_layout, dict):
             log.warn(f"unexpected chunktable_layout: {chunktable_id}")

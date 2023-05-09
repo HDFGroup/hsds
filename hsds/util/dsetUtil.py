@@ -851,16 +851,21 @@ def isExtensible(dims, maxdims):
 
 
 def getDatasetCreationPropertyLayout(dset_json):
-    """ return layout json from cretion property list """
+    """ return layout json from creation property list """
     cpl = None
     if "creationProperties" in dset_json:
         cp = dset_json["creationProperties"]
         if "layout" in cp:
             cpl = cp["layout"]
+    if not cpl and "layout" in dset_json:
+        # fallback to dset_json layout
+        cpl = dset_json["layout"]
+    if cpl is None:
+        log.warn(f"no layout found for {dset_json}")
     return cpl
 
 
-def getDatasetLayout(dset_json):
+def getDatasetLayoutClass(dset_json):
     """ return layout class """
     chunk_layout = None
     cp_layout = getDatasetCreationPropertyLayout(dset_json)

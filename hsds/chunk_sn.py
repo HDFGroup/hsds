@@ -30,7 +30,7 @@ from .util.idUtil import isValidUuid, getDataNodeUrl
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain
 from .util.hdf5dtype import getItemSize, createDataType
-from .util.dsetUtil import getSelectionList, isNullSpace, getDatasetLayout
+from .util.dsetUtil import getSelectionList, isNullSpace, getDatasetLayoutClass
 from .util.dsetUtil import getFillValue, isExtensible, getSelectionPagination
 from .util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout
 from .util.dsetUtil import getDatasetCreationPropertyLayout
@@ -131,13 +131,11 @@ def use_http_streaming(request, rank):
     return True
 
 
-async def getChunkLocations(
-    app, dset_id, dset_json, chunkinfo_map, chunk_ids, bucket=None
-):
+async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, bucket=None):
     """
     Get info for chunk locations (for reference layouts)
     """
-    layout_class = getDatasetLayout(dset_json)
+    layout_class = getDatasetLayoutClass(dset_json)
 
     if layout_class not in CHUNK_REF_LAYOUTS:
         msg = f"skip getChunkLocations for layout class: {layout_class}"

@@ -313,7 +313,7 @@ async def GET_Chunk(request):
         try:
             s3size = int(params["s3size"])
         except ValueError:
-            log.error(f"invalid s3size params: {params['s3sieze']}")
+            log.error(f"invalid s3size params: {params['s3size']}")
             raise HTTPBadRequest()
 
     if "query" in params:
