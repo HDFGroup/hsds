@@ -15,6 +15,7 @@
 
 import asyncio
 import time
+import traceback
 from aiohttp.web import run_app
 
 from . import config
@@ -149,14 +150,20 @@ async def bucketScan(app):
                 msg = f"bucketScan - HTTPBadRequest error scanning {root_id}: "
                 msg += f"{bre}"
                 log.error(msg)
+                tb = traceback.format_exc()
+                print("traceback:", tb)
             except HTTPInternalServerError as ise:
                 msg = "bucketScan - HTTPInternalServer error scanning "
                 msg += f"{root_id}: {ise}"
                 log.error(msg)
+                tb = traceback.format_exc()
+                print("traceback:", tb)
             except Exception as e:
                 msg = "bucketScan - Unexpected exception scanning "
                 msg += f"{root_id}: {e}"
                 log.error(msg)
+                tb = traceback.format_exc()
+                print("traceback:", tb)
 
         log.info(f"bucketScan - sleep: {async_sleep_time}")
         await asyncio.sleep(async_sleep_time)

@@ -21,7 +21,7 @@ from .util.idUtil import getObjId, isValidChunkId, getCollectionForId
 from .util.chunkUtil import getDatasetId, getNumChunks, ChunkIterator
 from .util.hdf5dtype import getItemSize, createDataType
 from .util.arrayUtil import getShapeDims, getNumElements, bytesToArray
-from .util.dsetUtil import getHyperslabSelection, getFilterOps
+from .util.dsetUtil import getHyperslabSelection, getFilterOps, getChunkDims
 from .util.dsetUtil import getDatasetLayoutClass, getDatasetCreationPropertyLayout
 
 from .util.storUtil import getStorKeys, putStorJSONObj, getStorJSONObj
@@ -96,7 +96,7 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
         num_elements = getNumElements(dims)
         logical_bytes = num_elements * item_size
     dataset_info["logical_bytes"] = logical_bytes
-    log.debug(f"dims: {dims}")
+    log.debug(f"updateDatasetInfo - dims: {dims}")
     rank = len(dims)
     layout_class = getDatasetLayoutClass(dset_json)
     msg = f"updateDatasetInfo - {dset_id} has layout_class: {layout_class}"
@@ -109,7 +109,7 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
         # In H5D_CONTIGUOUS_REF a non-compressed part of the HDF5 is divided
         # into equal size chunks, so we can just compute link bytes and num
         # chunks based on the size of the coniguous dataset
-        layout_dims = layout["dims"]
+        layout_dims = getChunkDims(dset_json)
         num_chunks = getNumChunks(selection, layout_dims)
         chunk_size = item_size
         for dim in layout_dims:

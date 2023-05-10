@@ -881,6 +881,19 @@ def getDatasetLayoutClass(dset_json):
     return chunk_layout
 
 
+def getChunkDims(dset_json):
+    """ get chunk shape for given dset_json """
+    cpl = getDatasetCreationPropertyLayout(dset_json)
+    if cpl and "dims" in cpl:
+        return cpl["dims"]
+    # otherwise, check the 'layout' key
+    if 'layout' in dset_json:
+        layout = dset_json["layout"]
+        if "dims" in layout:
+            return layout["dims"]
+    return None  # not found
+
+
 class ItemIterator:
     """
     Class to iterator through items in a selection
