@@ -896,7 +896,7 @@ async def POST_Dataset(request):
 
     if layout_props:
         if layout_props["class"] in ("H5D_COMPACT", "H5D_CONTIGUOUS"):
-            # tread compact and contiguous as chunked
+            # treat compact and contiguous as chunked
             layout_class = "H5D_CHUNKED"
         else:
             layout_class = layout_props["class"]

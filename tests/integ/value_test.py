@@ -2480,13 +2480,6 @@ class ValueTest(unittest.TestCase):
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
-        # write to the chunkinfo dataset
-        payload = {"value": chunkinfo_data}
-
-        req = self.endpoint + "/datasets/" + chunkinfo_uuid + "/value"
-        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 200)  # write value
-
         # define types we need
         s10_type = {
             "charSet": "H5T_CSET_ASCII",
@@ -2544,15 +2537,29 @@ class ValueTest(unittest.TestCase):
         params["nonstrict"] = 1  # enable SN to invoke lambda func
         rsp = self.session.get(req, params=params, headers=headers)
 
-        if rsp.status_code == 404:
-            print(
-                f"s3object: {s3path} not found, skipping hyperslab read"
-                " chunk reference indirect test"
-            )
-            return
-
         self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+        # should get one element back
+        self.assertEqual(len(value), 1)
+        item = value[0]
+        # should be all zeros since we haven't update the chunk table yet
+        self.assertEqual(len(item), len(fields))
+        self.assertEqual(item[0], "")
+        self.assertEqual(item[1], "")
+        self.assertEqual(item[2], 0)
 
+        # write the chunk locations
+        payload = {"value": chunkinfo_data}
+        chunk_table_req = self.endpoint + "/datasets/" + chunkinfo_uuid + "/value"
+        rsp = self.session.put(chunk_table_req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # write value
+
+        # read the selection again
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
@@ -2565,6 +2572,7 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(item[0], "1998.10.22")
         self.assertEqual(item[1], "MHFI")
         self.assertEqual(item[2], 3)
+
         # skip check rest of fields since float comparisons are trcky...
 
     def testChunkedRefIndirectS3UriDataset(self):
