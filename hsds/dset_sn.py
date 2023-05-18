@@ -166,7 +166,7 @@ async def validateChunkLayout(app, shape_json, item_size, layout, bucket=None):
         # storage using an auxillary dataset
         if item_size == "H5T_VARIABLE":
             # can't be used with variable types..
-            msg = "Datsets with variable types cannot be used with "
+            msg = "Datasets with variable types cannot be used with "
             msg += "reference layouts"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
@@ -197,15 +197,27 @@ async def validateChunkLayout(app, shape_json, item_size, layout, bucket=None):
             raise
         chunktable_shape = chunktable_json["shape"]
         if chunktable_shape["class"] == "H5S_NULL":
-            msg = "Null space datasets can not be used as chunk tables"
+            msg = "Null space datasets cannot be used as chunk tables"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
         chunktable_dims = getShapeDims(chunktable_shape)
-        if len(chunktable_dims) != len(space_dims):
+        if "hypershape" in layout:
+            hypershape = layout["hypershape"]
+        else:
+            hypershape = []
+            hyperdims = getShapeDims(hypershape)
+            max_hyperchunks = config.get("max_hyperchunks", default=16)
+            hyper_count = getNumElements(hyperdims)
+            if hyper_count > max_hyperchunks:
+                msg = f"hypershape uses {hyper_count} chunks, but max is {max_hyperchunks}"
+                log.warn(msg)
+                raise  HTTPBadRequest(reason=msg)
+        if len(chunktable_dims) != len(space_dims) + len(hypershape):
             msg = "Chunk table rank must be same as dataspace rank"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
+        # TBD - more checks to ensure the shapes match up
     elif layout_class == "H5D_CHUNKED":
         if "dims" not in layout:
             msg = "dims key not found in layout for creation property list"
@@ -232,7 +244,6 @@ async def validateChunkLayout(app, shape_json, item_size, layout, bucket=None):
         msg = f"Unexpected layout: {layout_class}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-
 
 async def getDatasetDetails(app, dset_id, root_id, bucket=None):
     """Get extra information about the given dataset"""

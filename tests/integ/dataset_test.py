@@ -2102,7 +2102,7 @@ class DatasetTest(unittest.TestCase):
         )
         chunkinfo_type = {"class": "H5T_COMPOUND", "fields": fields}
         req = self.endpoint + "/datasets"
-        # Store 40 chunk locations
+        # Store 600 chunk locations
         chunkinfo_dims = [20, 30]
         payload = {"type": chunkinfo_type, "shape": chunkinfo_dims}
         req = self.endpoint + "/datasets"
@@ -2169,6 +2169,97 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("chunk_table" in cpl_layout)
         self.assertEqual(cpl_layout["chunk_table"], chunkinfo_uuid)
         self.assertTrue("chunks" not in cpl)
+
+    def testHyperChunkedRefIndirectDataset(self):
+        # test Dataset where H5D_CHUNKED_REF_INDIRECT layout is used and
+        # each HSDS chunk is mapped to multiple HDF5 chunks
+        domain = self.base_domain + "/testHyperChunkedRefIndirectDataset.h5"
+        helper.setupDomain(domain)
+        print("testHyperChunkedRefIndirectDataset", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        # get domain
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # create a dataset to store chunk info
+        fields = (
+            {"name": "offset", "type": "H5T_STD_I64LE"},
+            {"name": "size", "type": "H5T_STD_I32LE"},
+        )
+        chunkinfo_type = {"class": "H5T_COMPOUND", "fields": fields}
+        req = self.endpoint + "/datasets"
+        # Store 600 HSDS chunk locations mapped to 600 x 2 x 3 target chunks
+        hypershape = [2, 3]
+        chunkinfo_dims = [20, 30, 2, 3]
+        payload = {"type": chunkinfo_type, "shape": chunkinfo_dims}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        chunkinfo_uuid = rspJson["id"]
+        self.assertTrue(helper.validateId(chunkinfo_uuid))
+
+        # create the primary dataset
+        # 20Kx30K dataset
+        dims = [20000, 30000]
+        # 1000x1000 chunks
+        chunk_layout = [1000, 1000]
+        file_uri = "s3://a-storage-bucket/some-file.h5"
+
+        layout = {
+            "class": "H5D_CHUNKED_REF_INDIRECT",
+            "file_uri": file_uri,
+            "dims": chunk_layout,
+            "hypershape": hypershape,
+            "chunk_table": chunkinfo_uuid,
+        }
+        payload = {"type": "H5T_STD_I16LE", "shape": dims}
+        payload["creationProperties"] = {"layout": layout}
+
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+
+        dset_uuid = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_uuid))
+
+        # link new dataset as 'dset'
+        name = "dset"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": dset_uuid}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # verify layout
+        req = helper.getEndpoint() + "/datasets/" + dset_uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("layout" in rspJson)
+        layout_json = rspJson["layout"]
+        self.assertTrue("class" in layout_json)
+        self.assertEqual(layout_json["class"], "H5D_CHUNKED")
+        self.assertTrue("chunks" not in layout_json)
+        chunk_dims = layout_json["dims"]
+        self.assertEqual(len(chunk_dims), 2)
+
+        self.assertTrue("creationProperties" in rspJson)
+        cpl = rspJson["creationProperties"]
+        self.assertTrue("layout" in cpl)
+        cpl_layout = cpl["layout"]
+        self.assertTrue("class" in cpl_layout)
+        self.assertEqual(cpl_layout["class"], "H5D_CHUNKED_REF_INDIRECT")
+        self.assertTrue("file_uri" in cpl_layout)
+        self.assertEqual(cpl_layout["file_uri"], file_uri)
+        self.assertTrue("chunks" not in cpl_layout)
+        self.assertTrue("chunk_table" in cpl_layout)
+        self.assertEqual(cpl_layout["chunk_table"], chunkinfo_uuid)
+        self.assertTrue("hypershape" in cpl_layout)
+        self.assertEqual(cpl_layout["hypershape"], hypershape)
 
     def testDatasetChunkPartitioning(self):
         # test Dataset partitioning logic for large datasets

@@ -100,6 +100,7 @@ The following keys will be defined for this class type:
 - "class": The string "H5D_CHUNKED_REF_INDIRECT"
 - "dims": List giving the chunk layout of the dataset
 - "file_uri":  (optional) A string giving the s3 URI to the file
+- "tgt_dims": (optional) List giving dimensions of chunks in target dataset
 - "chunk_table": A string giving the uuid of an anonymous dataset described below
 
 
@@ -118,6 +119,24 @@ Example:
         "dims": [40, 80],
         "file_uri": "s3://mybucket/mylocation/myfile.h5",
         "chunk_table": "d-7fbe2e27-87c5e1d8-f736-a6af0f-4d6950"
+    }
+```
+
+In the above example ther is a one-to-one mapping of chunks in the HSDS dataset to chunk in the HDF5 dataset.
+For cases where the sizes of the HDF5 chunks are fairly small (&lt; 2 mb per chunk), it maybe more efficient to
+have one HSDS dataset chunk map to multiple HDF5 datasest chunks.  This can be accomplished by using the tgt_shape
+dimensions with the chunk shape of the target dataset.  When this is used, the HSDS chunk layout must be a multiple 
+of the HDF5 layout for each dimension.
+
+Example:
+
+```
+"layout": {
+        "class": "H5D_CHUNKED_REF_INDIRECT", 
+        "dims": [200, 320],
+        "tgt_dims": [20,32],
+        "file_uri": "s3://mybucket/mylocation/myfile.h5",
+        "chunk_table": "d-abcdefgh-12345678-f736-a6af0f-4d6950"
     }
 ```
 
