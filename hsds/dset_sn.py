@@ -19,7 +19,7 @@ import numpy as np
 from json import JSONDecodeError
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict
 
-from .util.httpUtil import http_post, http_put, http_delete, getHref
+from .util.httpUtil import http_post, http_put, http_delete, getHref, respJsonAssemble
 from .util.httpUtil import jsonResponse
 from .util.idUtil import isValidUuid, getDataNodeUrl, createObjId, isSchema2Id
 from .util.dsetUtil import getPreviewQuery, getFilterItem
@@ -28,8 +28,8 @@ from .util.chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk
 from .util.chunkUtil import getContiguousLayout
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
 from .util.authUtil import validateUserPassword
-from .util.domainUtil import getDomainFromRequest, isValidDomain
-from .util.domainUtil import getBucketForDomain, getPathForDomain, verifyRoot
+from .util.domainUtil import getDomainFromRequest, getPathForDomain, isValidDomain
+from .util.domainUtil import getBucketForDomain, verifyRoot
 from .util.storUtil import getFilters
 from .util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson
 from .util.hdf5dtype import getItemSize
@@ -268,6 +268,7 @@ async def GET_Dataset(request):
     log.request(request)
     app = request.app
     params = request.rel_url.query
+
     include_attrs = False
 
     h5path = None
@@ -332,7 +333,7 @@ async def GET_Dataset(request):
             group_id = domain_json["root"]
         # throws 404 if not found
         kwargs = {"bucket": bucket, "domain": domain}
-        dset_id = await getObjectIdByPath(app, group_id, h5path, **kwargs)
+        dset_id, domain, _ = await getObjectIdByPath(app, group_id, h5path, **kwargs)
         if not isValidUuid(dset_id, "Dataset"):
             msg = f"No dataset exist with the path: {h5path}"
             log.warn(msg)
@@ -348,35 +349,9 @@ async def GET_Dataset(request):
     # check that we have permissions to read the object
     await validateAction(app, domain, dset_id, username, "read")
 
-    resp_json = {}
-    resp_json["id"] = dset_json["id"]
-    resp_json["root"] = dset_json["root"]
-    resp_json["shape"] = dset_json["shape"]
-    resp_json["type"] = dset_json["type"]
-    if "creationProperties" in dset_json:
-        if "ignore_nan" in params and params["ignore_nan"]:
-            # convert fillValue to "nan" if it is a np.nan
-            s = dset_json["creationProperties"]
-            d = {}
-            for k in s:
-                v = s[k]
-                if k == "fillValue" and isinstance(v, float) and np.isnan(v):
-                    d[k] = "nan"
-                else:
-                    d[k] = v
-            resp_json["creationProperties"] = d
-        else:
-            # just return the dset_json creation props as is
-            resp_json["creationProperties"] = dset_json["creationProperties"]
-    else:
-        resp_json["creationProperties"] = {}
+    dset_json = respJsonAssemble(dset_json, params, dset_id)
 
-    if "layout" in dset_json:
-        resp_json["layout"] = dset_json["layout"]
-    resp_json["attributeCount"] = dset_json["attributeCount"]
-    resp_json["created"] = dset_json["created"]
-    resp_json["lastModified"] = dset_json["lastModified"]
-    resp_json["domain"] = getPathForDomain(domain)
+    dset_json["domain"] = getPathForDomain(domain)
 
     if getAlias:
         root_id = dset_json["root"]
@@ -387,9 +362,7 @@ async def GET_Dataset(request):
         )
         if h5path:
             alias.append(h5path)
-        resp_json["alias"] = alias
-    if include_attrs:
-        resp_json["attributes"] = dset_json["attributes"]
+        dset_json["alias"] = alias
 
     hrefs = []
     dset_uri = "/datasets/" + dset_id
@@ -420,7 +393,7 @@ async def GET_Dataset(request):
             href = getHref(request, dset_uri + "/value", **kwargs)
             hrefs.append({"rel": "preview", "href": href})
 
-    resp_json["hrefs"] = hrefs
+    dset_json["hrefs"] = hrefs
 
     if verbose:
         # get allocated size and num_chunks for the dataset if available
@@ -429,13 +402,13 @@ async def GET_Dataset(request):
         )
         if dset_detail is not None:
             if "num_chunks" in dset_detail:
-                resp_json["num_chunks"] = dset_detail["num_chunks"]
+                dset_json["num_chunks"] = dset_detail["num_chunks"]
             if "allocated_bytes" in dset_detail:
-                resp_json["allocated_size"] = dset_detail["allocated_bytes"]
+                dset_json["allocated_size"] = dset_detail["allocated_bytes"]
             if "lastModified" in dset_detail:
-                resp_json["lastModified"] = dset_detail["lastModified"]
+                dset_json["lastModified"] = dset_detail["lastModified"]
 
-    resp = await jsonResponse(request, resp_json)
+    resp = await jsonResponse(request, dset_json)
     log.response(request, resp=resp)
     return resp
 

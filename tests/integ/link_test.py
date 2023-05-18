@@ -524,6 +524,306 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(link["title"], "slink")
         self.assertEqual(link["h5path"], "somevalue")
 
+    def testSoftLinkTraversal(self):
+        # test that an object can be found via path with an external link
+        # relative and absolute path
+
+        domain = self.base_domain + "/testSoftLinkTraversal.h5"
+        print("testSoftLinkTraversal", domain)
+        helper.setupDomain(domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + "/"
+
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_id = rspJson["root"]
+
+        # create group to be linked to by path
+        req = helper.getEndpoint() + "/groups"
+        headers = helper.getRequestHeaders(domain=domain)
+        rsp = self.session.post(req, headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        group_id = rspJson["id"]
+        self.assertTrue(helper.validateId(group_id))
+
+        # create hard link to group
+        link_title = "target_group"
+        req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title
+        headers = helper.getRequestHeaders(domain=domain)
+        payload = {"id": group_id}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # created
+
+        # create child of target group
+        req = helper.getEndpoint() + "/groups"
+        headers = helper.getRequestHeaders(domain=domain)
+        rsp = self.session.post(req, headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        child_group_id = rspJson["id"]
+        self.assertTrue(helper.validateId(child_group_id))
+
+        # create hard link to child of external group
+        link_title = "child_group"
+        req = helper.getEndpoint() + "/groups/" + group_id + "/links/" + link_title
+        headers = helper.getRequestHeaders(domain=domain)
+        payload = {"id": child_group_id}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertTrue(rsp.status_code, 201)  # created
+
+        # create soft link to parent group by absolute path
+        target_path = "/target_group"
+        link_title = "absolute_path_link"
+        req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title
+        payload = {"h5path": target_path}
+        headers = helper.getRequestHeaders(domain=domain)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # make a request by path with absolute path soft link along the way
+        # request without 'follow soft links' param should receive 400
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + "/" + "?h5path=/absolute_path_link/child_group"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + "/" + "?h5path=/absolute_path_link/child_group" \
+            + "&follow_soft_links=1"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        keys = ["domain", "linkCount", "attributeCount", "id"]
+        for k in keys:
+            self.assertTrue(k in rspJson)
+
+        self.assertEqual(rspJson["id"], child_group_id)
+        self.assertTrue(helper.validateId(rspJson["id"]))
+        self.assertEqual(rspJson["domain"], domain)
+        self.assertEqual(rspJson["linkCount"], 0)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        self.assertEqual(rspJson["class"], "group")
+
+        # create soft link to parent group by relative path
+        target_path = "target_group"
+        link_title = "relative_path_link"
+        req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title
+        payload = {"h5path": target_path}
+        headers = helper.getRequestHeaders(domain=domain)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # make a request by path with relative path soft link along the way
+        # request without 'follow soft links' param should receive 400
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + "/" + "?h5path=/relative_path_link/child_group"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + "/" + "?h5path=/relative_path_link/child_group" \
+            + "&follow_soft_links=1"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        keys = ["domain", "linkCount", "attributeCount", "id"]
+        for k in keys:
+            self.assertTrue(k in rspJson)
+
+        self.assertEqual(rspJson["id"], child_group_id)
+        self.assertTrue(helper.validateId(rspJson["id"]))
+        self.assertEqual(rspJson["domain"], domain)
+        self.assertEqual(rspJson["linkCount"], 0)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        self.assertEqual(rspJson["class"], "group")
+
+    def testExternalLinkTraversal(self):
+        # test that an object can be found via path with an external link
+        domain = self.base_domain + "/testExternalLinkTraversal.h5"
+        print("testExternalLinkTraversal", domain)
+        helper.setupDomain(domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + "/"
+
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_id = rspJson["root"]
+
+        # create a second domain for external links to point to
+        second_domain = self.base_domain + "/second_domain.h5"
+        helper.setupDomain(second_domain)
+        headers = helper.getRequestHeaders(domain=second_domain)
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.put(req, headers=headers)
+        self.assertTrue(rsp.status_code == 200 or rsp.status_code == 409)  # Created or exists
+
+        # get root id of second domain
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_id_2 = rspJson["root"]
+
+        # create a group under second domain
+        req = helper.getEndpoint() + "/groups"
+        headers = helper.getRequestHeaders(domain=second_domain)
+        rsp = self.session.post(req, headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        group_id = rspJson["id"]
+        self.assertTrue(helper.validateId(group_id))
+
+        # create hard link to external group
+        link_title = "external_group"
+        req = helper.getEndpoint() + "/groups/" + root_id_2 + "/links/" + link_title
+        headers = helper.getRequestHeaders(domain=second_domain)
+        payload = {"id": group_id}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # created
+
+        # create child of external group
+        req = helper.getEndpoint() + "/groups"
+        headers = helper.getRequestHeaders(domain=second_domain)
+        rsp = self.session.post(req, headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        child_group_id = rspJson["id"]
+        self.assertTrue(helper.validateId(child_group_id))
+
+        # create hard link to child of external group
+        link_title = "child_group"
+        req = helper.getEndpoint() + "/groups/" + group_id + "/links/" + link_title
+        headers = helper.getRequestHeaders(domain=second_domain)
+        payload = {"id": child_group_id}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertTrue(rsp.status_code, 201)  # created
+
+        # create external link to parent group under a different domain
+        target_path = "/external_group"
+        link_title = "external_link_to_group"
+        req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title
+        payload = {"h5path": target_path, "h5domain": second_domain}
+        headers = helper.getRequestHeaders(domain=domain)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # make a request by path with external_link along the way
+        # request without 'follow external links' param should receive 400
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + "/" + "?h5path=/external_link_to_group/child_group"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + "/" + "?h5path=/external_link_to_group/child_group" \
+            + "&follow_external_links=1"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        keys = ["domain", "linkCount", "attributeCount", "id"]
+        for k in keys:
+            self.assertTrue(k in rspJson)
+
+        self.assertEqual(rspJson["id"], child_group_id)
+        self.assertTrue(helper.validateId(rspJson["id"]))
+        self.assertEqual(rspJson["domain"], second_domain)
+        self.assertEqual(rspJson["linkCount"], 0)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        self.assertEqual(rspJson["class"], "group")
+
+    def testRelativeH5Path(self):
+        # test that an object can be found via h5path request to domain endpoint
+        domain = self.base_domain + "/testRelativeH5Path.h5"
+        print("testRelativeH5Path", domain)
+        helper.setupDomain(domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + "/"
+
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+
+        # create parent group
+        req = helper.getEndpoint() + "/groups"
+        headers = helper.getRequestHeaders(domain=domain)
+        rsp = self.session.post(req, headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        group_id = rspJson["id"]
+        self.assertTrue(helper.validateId(group_id))
+
+        # create child group
+        req = helper.getEndpoint() + "/groups"
+        headers = helper.getRequestHeaders(domain=domain)
+        rsp = self.session.post(req, headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        child_group_id = rspJson["id"]
+        self.assertTrue(helper.validateId(child_group_id))
+
+        # create hard link to child of external group
+        link_title = "child_group"
+        req = helper.getEndpoint() + "/groups/" + group_id + "/links/" + link_title
+        headers = helper.getRequestHeaders(domain=domain)
+        payload = {"id": child_group_id}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertTrue(rsp.status_code, 201)  # created
+
+        # make a request by relative h5path
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + "/" + "?h5path=child_group&parent_id=" + group_id
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        keys = ["domain", "linkCount", "attributeCount", "id"]
+        for k in keys:
+            self.assertTrue(k in rspJson)
+
+        self.assertEqual(rspJson["id"], child_group_id)
+        self.assertTrue(helper.validateId(rspJson["id"]))
+        self.assertEqual(rspJson["domain"], domain)
+        self.assertEqual(rspJson["linkCount"], 0)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        self.assertEqual(rspJson["class"], "group")
+
+    def testRootH5Path(self):
+        # test that root group can be found by h5path
+        creation_props = {"link_creation_order": True, "rdcc_nbytes": 1024}
+        domain = self.base_domain + "/testRootH5Path.h5"
+        print("testRootH5Path", domain)
+        helper.setupDomain(domain, root_gcpl=creation_props)
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + "/"
+
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_id = rspJson["root"]
+
+        # make a request by h5path
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + "/" + "?h5path=/"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        keys = ["domain", "linkCount", "attributeCount", "id"]
+        for k in keys:
+            self.assertTrue(k in rspJson)
+
+        self.assertEqual(rspJson["id"], root_id)
+        self.assertTrue(helper.validateId(rspJson["id"]))
+        self.assertEqual(rspJson["domain"], domain)
+        self.assertEqual(rspJson["linkCount"], 0)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        self.assertEqual(rspJson["class"], "group")
+
+        cprops = rspJson["creationProperties"]
+        for k in ("link_creation_order", "rdcc_nbytes"):
+            self.assertTrue(k in cprops)
+            self.assertEqual(cprops[k], creation_props[k])
+
 
 if __name__ == "__main__":
     # setup test files

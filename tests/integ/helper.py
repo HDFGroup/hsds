@@ -145,7 +145,7 @@ def getDNSDomain(domain):
     return dns_domain
 
 
-def setupDomain(domain, folder=False, username=None, password=None):
+def setupDomain(domain, folder=False, username=None, password=None, root_gcpl=None):
     """Create domain (and parent domain if needed)"""
     endpoint = config.get("hsds_endpoint")
     headers = getRequestHeaders(domain=domain, username=username, password=password)
@@ -164,9 +164,14 @@ def setupDomain(domain, folder=False, username=None, password=None):
         setupDomain(parent_domain, folder=True)
 
         headers = getRequestHeaders(domain=domain)
-        body = None
+
+        body = {}
         if folder:
-            body = {"folder": True}
+            body["folder"] = True
+        if root_gcpl is not None:
+            body["group"] = {"creationProperties": root_gcpl}
+
+        if body != {}:
             rsp = session.put(req, data=json.dumps(body), headers=headers)
         else:
             rsp = session.put(req, headers=headers)
