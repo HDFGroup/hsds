@@ -202,18 +202,21 @@ async def validateChunkLayout(app, shape_json, item_size, layout, bucket=None):
             raise HTTPBadRequest(reason=msg)
 
         chunktable_dims = getShapeDims(chunktable_shape)
-        if "hypershape" in layout:
-            hypershape = layout["hypershape"]
-        else:
-            hypershape = []
-            hyperdims = getShapeDims(hypershape)
-            max_hyperchunks = config.get("max_hyperchunks", default=16)
-            hyper_count = getNumElements(hyperdims)
-            if hyper_count > max_hyperchunks:
-                msg = f"hypershape uses {hyper_count} chunks, but max is {max_hyperchunks}"
+        if "tgt_dims" in layout:
+            tgt_dims = getShapeDims(layout["tgt_dims"])
+            max_subchunks = config.get("max_subchunks", default=16)
+            count = getNumElements(tgt_dims)
+            if count > max_subchunks:
+                msg = f"tgt_dims uses {count} chunks, but max is {max_subchunks}"
                 log.warn(msg)
-                raise  HTTPBadRequest(reason=msg)
-        if len(chunktable_dims) != len(space_dims) + len(hypershape):
+                raise HTTPBadRequest(reason=msg)
+        else:
+            tgt_dims = []
+
+        if len(chunktable_dims) != len(space_dims) + len(tgt_dims):
+            log.debug(f"chunktable_dims: {chunktable_dims}")
+            log.debug(f"space_dims: {space_dims}")
+            log.debug(f"tgt_dims: {tgt_dims}")
             msg = "Chunk table rank must be same as dataspace rank"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
@@ -244,6 +247,7 @@ async def validateChunkLayout(app, shape_json, item_size, layout, bucket=None):
         msg = f"Unexpected layout: {layout_class}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+
 
 async def getDatasetDetails(app, dset_id, root_id, bucket=None):
     """Get extra information about the given dataset"""

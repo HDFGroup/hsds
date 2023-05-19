@@ -2192,7 +2192,7 @@ class DatasetTest(unittest.TestCase):
         chunkinfo_type = {"class": "H5T_COMPOUND", "fields": fields}
         req = self.endpoint + "/datasets"
         # Store 600 HSDS chunk locations mapped to 600 x 2 x 3 target chunks
-        hypershape = [2, 3]
+        tgt_dims = [2, 3]
         chunkinfo_dims = [20, 30, 2, 3]
         payload = {"type": chunkinfo_type, "shape": chunkinfo_dims}
         req = self.endpoint + "/datasets"
@@ -2213,7 +2213,7 @@ class DatasetTest(unittest.TestCase):
             "class": "H5D_CHUNKED_REF_INDIRECT",
             "file_uri": file_uri,
             "dims": chunk_layout,
-            "hypershape": hypershape,
+            "tgt_dims": tgt_dims,
             "chunk_table": chunkinfo_uuid,
         }
         payload = {"type": "H5T_STD_I16LE", "shape": dims}
@@ -2258,8 +2258,8 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("chunks" not in cpl_layout)
         self.assertTrue("chunk_table" in cpl_layout)
         self.assertEqual(cpl_layout["chunk_table"], chunkinfo_uuid)
-        self.assertTrue("hypershape" in cpl_layout)
-        self.assertEqual(cpl_layout["hypershape"], hypershape)
+        self.assertTrue("tgt_dims" in cpl_layout)
+        self.assertEqual(cpl_layout["tgt_dims"], tgt_dims)
 
     def testDatasetChunkPartitioning(self):
         # test Dataset partitioning logic for large datasets
