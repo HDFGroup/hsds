@@ -1,4 +1,5 @@
-FROM python:3.9-slim AS hsds-base
+#FROM python:3.10 AS hsds-base
+FROM hdfgroup/hdf5lib:1.14.0 as hsds-base
 
 # Install Curl
 RUN apt-get update; apt-get -y install curl
