@@ -541,3 +541,72 @@ def squeezeArray(data):
     if can_reduce:
         data = data.squeeze()
     return data
+
+class IndexIterator(object):
+    """
+    Class to iterate through list of chunks of a given dataset
+    """
+
+    def __init__(self, shape, sel=None):
+        self._shape = shape
+        self._rank = len(self._shape)
+        self._stop = False
+        
+        if self._rank < 1:
+            raise ValueError("IndexIterator can not be used on arrays of zero rank")
+
+        if sel is None:
+            # select over entire dataset
+            slices = []
+            for dim in range(self._rank):
+                slices.append(slice(0, self._shape[dim]))
+            self._sel = tuple(slices)
+        else:
+            if isinstance(sel, slice):
+                self._sel = (sel,)
+            else:
+                self._sel = sel
+        if len(self._sel) != self._rank:
+            raise ValueError("Invalid selection - selection region must have same rank as shape")
+        self._index = []
+        for dim in range(self._rank):
+            s = self._sel[dim]
+            if s.start < 0 or s.stop > self._shape[dim] or s.stop <= s.start:
+                raise ValueError(
+                    "Invalid selection - selection region must be within dataset space"
+                )
+            self._index.append(s.start)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self._stop:
+            raise StopIteration()
+        # bump up the last index and carry forward if we run outside the selection
+        dim = self._rank - 1
+        ret_index = self._index.copy()
+        while True:
+            s = self._sel[dim]
+            if s.step:
+                step = s.step
+            else:
+                step = 1
+            s = self._sel[dim]
+            self._index[dim] += step
+
+            if self._index[dim] < s.stop:
+                # we still have room to extend along this dimensions
+                break
+
+            # reset to the start and continue iterating with higher dimension
+            self._index[dim] = s.start
+            
+            dim -= 1
+            if dim < 0:
+                # ran past last index, stop iteration on next run
+                self._stop = True
+                
+        return tuple(ret_index)
+
+

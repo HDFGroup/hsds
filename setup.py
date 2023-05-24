@@ -71,6 +71,7 @@ setup(
             "hsds-headnode = hsds.headnode:main",
             "hsds-rangeget = hsds.rangeget_proxy:main",
             "hsds-node = hsds.node_runner:main",
+            "hsds-chunklocator = hsds.chunklocator:main"
         ]
     },
 )
