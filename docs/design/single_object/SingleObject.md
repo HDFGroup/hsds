@@ -129,8 +129,8 @@ dataset to be initialized by HSDS by using the following layout for the chunk_ta
 "layout": {
     "class:": "H5D_CHUNKED",
     "dims": [10, 10],
-    "chunk_init": "hsds-chunklocator",
-    "init_args": ["s3://mybucket/mylocation/myfile.h5",]
+    "chunk_initializer": "hsds-chunklocator",
+    "initializer_args": ["s3://mybucket/mylocation/myfile.h5",]
 }
 ```
 

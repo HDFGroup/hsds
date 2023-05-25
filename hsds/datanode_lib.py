@@ -548,6 +548,18 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None, bucket=Non
 
     log.debug(f"delete_metadata_obj for {obj_id} done")
 
+async def run_chunk_initializer(
+    app, 
+    chunk_id,
+    chunk_initializer, 
+    **kwargs
+):
+    await asyncio.sleep(0)
+    log.info(f"run_chunk_initializer - chunk_id: {chunk_id} init: {chunk_initializer}")
+    for k in kwargs:
+        v = kwargs[k]
+        log.info(f"init arg[{k}] = {v}")
+
 
 async def get_chunk(
     app,
@@ -561,14 +573,14 @@ async def get_chunk(
 ):
     """
     Utility method for GET_Chunk, PUT_Chunk, and POST_CHunk
-    Get a numpy array for the chunk (possibly initizaling a new chunk
+    Get a numpy array for the chunk (possibly initializing a new chunk
     if requested)
     """
     # if the chunk cache has too many dirty items, wait till items
     # get flushed to S3
     chunk_cache = app["chunk_cache"]
     if chunk_init and s3offset > 0:
-        msg = f"unable to initiale chunk {chunk_id} for reference layouts "
+        msg = f"unable to initialize chunk {chunk_id} for reference layouts "
         log.error(msg)
         raise HTTPInternalServerError()
 
@@ -610,10 +622,33 @@ async def get_chunk(
     dims = getChunkLayout(dset_json)
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
-    layout = dset_json["layout"]
+    layout_json = dset_json["layout"]
+    log.debug(f"get_chunk {chunk_id} - dset_json: {dset_json}")
     layout_class = None
-    if "class" in layout:
-        layout_class = layout["class"]
+    if "class" in layout_json:
+        layout_class = layout_json["class"]
+    
+    # check for any chunk initializer properties
+    chunk_initializer = None
+    initializer_args = None
+
+    if "creationProperties" in dset_json:
+        cpl = dset_json["creationProperties"]
+        log.debug(f"got cpl: {cpl}")
+        if "layout" in cpl:
+            cpl_layout = cpl["layout"]
+            log.debug(f"got cpl_layout: {cpl_layout}")
+            if "chunk_initializer" in cpl_layout:
+                if s3path:
+                    msg = "s3path not valid with chunk_init_app layout"
+                    log.warning(msg)
+                else:
+                    chunk_initializer = cpl_layout["chunk_initializer"]
+                    log.debug(f"set chunk_initializer to: {chunk_initializer}")
+            if "initializer_args" in cpl_layout:
+                initializer_args = cpl_layout["initializer_args"]
+                log.debug(f"set initializer_args to : {initializer_args}")
+     
 
     dt = createDataType(type_json)
     # note - officially we should follow the order in which the filters are
@@ -728,15 +763,27 @@ async def get_chunk(
 
         if chunk_arr is None and chunk_init:
             log.debug(f"Initializing chunk {chunk_id}")
-            fill_value = getFillValue(dset_json)
-            if fill_value:
-                # need to convert list to tuples for numpy broadcast
-                if isinstance(fill_value, list):
-                    fill_value = tuple(fill_value)
-                chunk_arr = np.empty(dims, dtype=dt, order="C")
-                chunk_arr[...] = fill_value
+            if chunk_initializer:
+                kwargs = {}
+                for k in initializer_args:
+                    v = initializer_args[k]
+                    kwargs[k] = v
+                # TBD - add selection for this chunk
+                chunk_arr = await run_chunk_initializer(app, chunk_initializer, **kwargs)
+                if not chunk_arr:
+                    msg = f"chunk initializer {chunk_initializer} for {chunk_id} returned None"
+                    log.warn(msg)
             else:
-                chunk_arr = np.zeros(dims, dtype=dt, order="C")
+                # normal fill value based init   
+                fill_value = getFillValue(dset_json)
+                if fill_value:
+                    # need to convert list to tuples for numpy broadcast
+                    if isinstance(fill_value, list):
+                        fill_value = tuple(fill_value)
+                    chunk_arr = np.empty(dims, dtype=dt, order="C")
+                    chunk_arr[...] = fill_value
+                else:
+                    chunk_arr = np.zeros(dims, dtype=dt, order="C")
         else:
             log.debug(f"Chunk {chunk_id} not found")
 

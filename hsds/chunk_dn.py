@@ -326,10 +326,25 @@ async def GET_Chunk(request):
 
     dset_id = getDatasetId(chunk_id)
 
-    dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
+    dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)    
     dims = getChunkLayout(dset_json)
     log.debug(f"GET_Chunk - dset_json: {dset_json}")
     log.debug(f"GET_Chunk - got dims: {dims}")
+    layout_json = dset_json["layout"]
+    if "chunk_initializer" in layout_json:
+        if s3path:
+            msg = "s3path not valid with chunk_init_app layout"
+            log.warning(msg)
+            raise HTTPBadRequest(reason=msg)
+
+        chunk_initializer = layout_json["chunk_initializer"]
+    else:
+        chunk_initializer = None
+    if "initializer_args" in layout_json:
+        initializer_args = layout_json["initializer_args"]
+    else:
+        initializer_args = None
+
 
     # get chunk selection from query params
     if "select" in params:
@@ -345,13 +360,23 @@ async def GET_Chunk(request):
         raise HTTPInternalServerError()
     log.debug(f"GET_Chunk - got selection: {selection}")
 
-    kwargs = {"chunk_init": False}
+    kwargs = {}  
     if s3path:
         kwargs["s3path"] = s3path
         kwargs["s3offset"] = s3offset
         kwargs["s3size"] = s3size
     else:
         kwargs["bucket"] = bucket
+
+    if chunk_initializer:
+        kwargs["chunk_initializer"] = chunk_initializer
+        kwargs["chunk_init"] = True
+    else:
+        kwargs["chunk_init"] = False
+
+    if initializer_args:
+        kwargs["initializer_args"] = initializer_args
+
     chunk_arr = await get_chunk(app, chunk_id, dset_json, **kwargs)
     if chunk_arr is None:
         msg = f"chunk {chunk_id} not found"
@@ -485,7 +510,7 @@ async def POST_Chunk(request):
         except ValueError:
             log.error(f"invalid s3size params: {params['s3size']}")
             raise HTTPBadRequest()
-
+        
     chunk_id = request.match_info.get("id")
     if not chunk_id:
         msg = "Missing chunk id"
@@ -521,6 +546,7 @@ async def POST_Chunk(request):
     dset_id = getDatasetId(chunk_id)
 
     dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
+    log.debug(f"get_metadata_obj for {dset_id} returned {dset_json}")
     dims = getChunkLayout(dset_json)
     rank = len(dims)
 
@@ -528,6 +554,21 @@ async def POST_Chunk(request):
     dset_dtype = createDataType(type_json)
     output_arr = None
     chunk_init = False  # will be set to True for setting points
+    layout_json = dset_json["layout"]
+    if "chunk_initializer" in layout_json:
+        if s3path:
+            msg = "s3path not valid with chunk_init_app layout"
+            log.warning(msg)
+            raise HTTPBadRequest(reason=msg)
+
+        chunk_initializer = layout_json["chunk_initializer"]
+        chunk_init = True
+    else:
+        chunk_initializer = None
+    if "initializer_args" in layout_json:
+        initializer_args = layout_json["initializer_args"]
+    else:
+        initializer_args = None
 
     if content_type == "binary":
         # create a numpy array for incoming points
@@ -570,6 +611,13 @@ async def POST_Chunk(request):
         kwargs["s3size"] = s3size
     else:
         kwargs["bucket"] = bucket
+    if chunk_initializer:
+        kwargs["chunk_initializer"] = chunk_initializer
+
+    if initializer_args:
+        kwargs["initializer_args"] = initializer_args
+
+    kwargs["chunk_init"] = chunk_init
 
     chunk_arr = await get_chunk(app, chunk_id, dset_json, **kwargs)
     if chunk_arr is None:
