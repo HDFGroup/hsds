@@ -115,11 +115,30 @@ Example:
 ```
 "layout": {
         "class": "H5D_CHUNKED_REF_INDIRECT", 
-        "dims": [40, 80],
+        "dims": [100, 100],
         "file_uri": "s3://mybucket/mylocation/myfile.h5",
         "chunk_table": "d-7fbe2e27-87c5e1d8-f736-a6af0f-4d6950"
     }
 ```
+
+By default, the chunk_table needs be initialized by an external program (e.g. `hsload --init`) in 
+order for data in the HDF5 file to be returned correctly.  It is also possible for the chunk table
+dataset to be initialized by HSDS by using the following layout for the chunk_table dataset:
+
+```
+"layout": {
+    "class:": "H5D_CHUNKED",
+    "dims": [10, 10],
+    "chunk_init": "hsds-chunklocator",
+    "init_args": ["s3://mybucket/mylocation/myfile.h5",]
+}
+```
+
+In this example, the chunk table dataset has shape [10,10] and is chunked with one 10 x 10 chunk.  
+When the chunk table dataset if first accessed, the application specified in chunk_init will be 
+used to initalize the chunk.
+
+
 
 
 
