@@ -27,7 +27,7 @@ from aiohttp.client_exceptions import ClientError
 from aiohttp.web import json_response
 from requests.sessions import merge_setting
 
-from .util.httpUtil import http_post, http_put, http_get, http_delete, getHref
+from .util.httpUtil import getObjectClass, http_post, http_put, http_get, http_delete, getHref, respJsonAssemble
 from .util.httpUtil import jsonResponse
 from .util.idUtil import getDataNodeUrl, createObjId, getCollectionForId
 from .util.idUtil import isValidUuid, isSchema2Id, getNodeCount
@@ -703,6 +703,23 @@ async def GET_Domain(request):
     app = request.app
     params = request.rel_url.query
 
+    parent_id = None
+    include_links = False
+    include_attrs = False
+    follow_soft_links = False
+    follow_external_links = False
+
+    if "parent_id" in params and params["parent_id"]:
+        parent_id = params["parent_id"]
+    if "include_links" in params and params["include_links"]:
+        include_links = True
+    if "include_attrs" in params and params["include_attrs"]:
+        include_attrs = True
+    if "follow_soft_links" in params and params["follow_soft_links"]:
+        follow_soft_links = True
+    if "follow_external_links" in params and params["follow_external_links"]:
+        follow_external_links = True
+
     (username, pswd) = getUserPasswordFromRequest(request)
     if username is None and app["allow_noauth"]:
         username = "default"
@@ -766,15 +783,29 @@ async def GET_Domain(request):
         # if h5path is passed in, return object info for that path
         #   (if exists)
         h5path = params["h5path"]
-        root_id = domain_json["root"]
+
+        # select which object to perform path search under
+        root_id = parent_id if parent_id else domain_json["root"]
+
         # getObjectIdByPath throws 404 if not found
-        obj_id = await getObjectIdByPath(app, root_id, h5path, bucket=bucket, domain=domain)
+        obj_id, domain, _ = await getObjectIdByPath(
+            app, root_id, h5path, bucket=bucket, domain=domain,
+            follow_soft_links=follow_soft_links,
+            follow_external_links=follow_external_links)
         log.info(f"get obj_id: {obj_id} from h5path: {h5path}")
         # get authoritative state for object from DN (even if
         # it's in the meta_cache).
-        kwargs = {"refresh": True, "bucket": bucket}
+        kwargs = {"refresh": True, "bucket": bucket,
+                  "include_attrs": include_attrs, "include_links": include_links}
+
         obj_json = await getObjectJson(app, obj_id, **kwargs)
-        obj_json["domain"] = domain
+
+        obj_json = respJsonAssemble(obj_json, params, obj_id)
+
+        obj_json["domain"] = getPathForDomain(domain)
+
+        # client may not know class of object retrieved via path
+        obj_json["class"] = getObjectClass(obj_id)
         # Not bothering with hrefs for h5path lookups...
         resp = await jsonResponse(request, obj_json)
         log.response(request, resp=resp)
@@ -1120,6 +1151,7 @@ async def PUT_Domain(request):
         log.debug(f"new root group id: {root_id}")
         group_json = {"id": root_id, "root": root_id, "domain": domain}
         log.debug(f"create group for domain, body: {group_json}")
+
         if body and "group" in body:
             group_body = body["group"]
             if "creationProperties" in group_body:

@@ -16,6 +16,7 @@
 from asyncio import CancelledError
 import os
 import socket
+import numpy as np
 from aiohttp.web import json_response
 import simplejson
 from aiohttp import ClientSession, UnixConnector, TCPConnector
@@ -24,6 +25,7 @@ from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPRequestEntityTooLarge
 from aiohttp.web_exceptions import HTTPServiceUnavailable, HTTPBadRequest
 from aiohttp.client_exceptions import ClientError
+from hsds.util.idUtil import isValidUuid
 
 from .. import hsds_logger as log
 from .. import config
@@ -498,6 +500,88 @@ async def jsonResponse(resp, data, status=200, ignore_nan=False, body_only=False
         if xss_protection:
             headers["X-XSS-Protection"] = xss_protection
         return json_response(text=text, headers=headers, status=status)
+
+
+def respJsonAssemble(obj_json, params, id):
+    """
+    Populate response fields based on object type
+    """
+    log.debug("enter assemble")
+
+    if isValidUuid(id, "dataset"):
+        log.debug("assemble dataset")
+        resp_json = {}
+        resp_json["id"] = obj_json["id"]
+        resp_json["root"] = obj_json["root"]
+        resp_json["shape"] = obj_json["shape"]
+        resp_json["type"] = obj_json["type"]
+        if "creationProperties" in obj_json:
+            if "ignore_nan" in params and params["ignore_nan"]:
+                # convert fillValue to "nan" if it is a np.nan
+                s = obj_json["creationProperties"]
+                d = {}
+                for k in s:
+                    v = s[k]
+                    if k == "fillValue" and isinstance(v, float) and np.isnan(v):
+                        d[k] = "nan"
+                    else:
+                        d[k] = v
+                resp_json["creationProperties"] = d
+            else:
+                # just return the dset_json creation props as is
+                resp_json["creationProperties"] = obj_json["creationProperties"]
+        else:
+            resp_json["creationProperties"] = {}
+
+        if "layout" in obj_json:
+            resp_json["layout"] = obj_json["layout"]
+        resp_json["attributeCount"] = obj_json["attributeCount"]
+        resp_json["created"] = obj_json["created"]
+        resp_json["lastModified"] = obj_json["lastModified"]
+        if "include_attrs" in params and params["include_attrs"]:
+            resp_json["attributes"] = obj_json["attributes"]
+        return resp_json
+    elif isValidUuid(id, "group"):
+        log.debug("assemble group")
+        return obj_json
+    elif isValidUuid(id, "type"):
+        log.debug("assemble type")
+        return obj_json
+    elif isValidUuid(id, "chunk"):
+        log.debug("assemble chunk")
+        return obj_json
+    else:
+        return obj_json
+
+
+def getHeader(uri):
+    """
+    Determine domain header based on id
+    """
+    if isValidUuid(uri, "group"):
+        return "/groups/"
+    elif isValidUuid(uri, "dataset"):
+        return "/datasets/"
+    elif isValidUuid(uri, "type"):
+        return "/datatypes/"
+    else:
+        log.error("Couldn't determine proper header for type")
+        raise HTTPInternalServerError()
+
+
+def getObjectClass(uri):
+    """
+    Determine object based on id
+    """
+    if isValidUuid(uri, "group"):
+        return "group"
+    elif isValidUuid(uri, "dataset"):
+        return "dataset"
+    elif isValidUuid(uri, "type"):
+        return "datatype"
+    else:
+        log.error("Couldn't determine proper object class for id")
+        raise HTTPInternalServerError()
 
 
 def getHref(request, uri, query=None, domain=None):

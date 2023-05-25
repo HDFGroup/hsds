@@ -16,7 +16,7 @@
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPGone
 from json import JSONDecodeError
-from .util.httpUtil import http_post, http_put, http_delete, getHref
+from .util.httpUtil import http_post, http_put, http_delete, getHref, respJsonAssemble
 from .util.httpUtil import jsonResponse
 from .util.idUtil import isValidUuid, getDataNodeUrl, createObjId
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
@@ -95,7 +95,7 @@ async def GET_Datatype(request):
             group_id = domain_json["root"]
         # throws 404 if not found
         kwargs = {"bucket": bucket, "domain": domain}
-        ctype_id = await getObjectIdByPath(app, group_id, h5path, **kwargs)
+        ctype_id, domain, _ = await getObjectIdByPath(app, group_id, h5path, **kwargs)
         if not isValidUuid(ctype_id, "Datatype"):
             msg = f"No datatype exist with the path: {h5path}"
             log.warn(msg)
@@ -107,7 +107,9 @@ async def GET_Datatype(request):
     # get authoritative state for ctype from DN
     #   (even if it's in the meta_cache)
     kwargs = {"bucket": bucket, "refresh": True, "include_attrs": include_attrs}
+
     type_json = await getObjectJson(app, ctype_id, **kwargs)
+    type_json = respJsonAssemble(type_json, params, ctype_id)
     type_json["domain"] = getPathForDomain(domain)
 
     if getAlias:
