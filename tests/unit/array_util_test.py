@@ -677,25 +677,24 @@ class ArrayUtilTest(unittest.TestCase):
             i += 1
         self.assertEqual(i, 10)
         i = 0
-        for index in IndexIterator((10,), sel=slice(0,10,2)):
+        for index in IndexIterator((10,), sel=slice(0, 10, 2)):
             self.assertEqual(index, (i,))
 
             i += 2
         self.assertEqual(i, 10)
         i = 2
-        for index in IndexIterator((10,), sel=slice(2,8)):
+        for index in IndexIterator((10, ), sel=slice(2, 8)):
             self.assertEqual(index, (i,))
             i += 1
         self.assertEqual(i, 8)
         cnt = 0
-        for index in IndexIterator((4,5)):
+        for index in IndexIterator((4, 5)):
             cnt += 1
         self.assertEqual(cnt, 20)
         cnt = 0
-        for index in IndexIterator((8,10), sel=(slice(0,8,2), slice(0,10,2))):
+        for index in IndexIterator((8, 10), sel=(slice(0, 8, 2), slice(0, 10, 2))):
             cnt += 1
         self.assertEqual(cnt, 20)
-        
 
 
 if __name__ == "__main__":
