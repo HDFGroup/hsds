@@ -79,6 +79,22 @@ class AzureBlobClient:
 
         azure_stats[counter] += inc
 
+    def getURIFromKey(self, key, bucket=None):
+        """ return Azure specific URI for given key and bucket """
+        if not bucket:
+            log.error("getURIFromKey, bucket not set")
+            raise HTTPInternalServerError()
+        if not key:
+            log.error("getURIFromKey, key not set")
+            raise HTTPInternalServerError()
+        if key[0] == "/":
+            key = key[1:]
+
+        # TBD - do the proper azure specific uri
+
+        uri = f"{bucket}/{key}"
+        return uri
+
     async def get_object(self, key, bucket=None, offset=0, length=-1):
         """Return data for object at given key.
         If Range is set, return the given byte range.

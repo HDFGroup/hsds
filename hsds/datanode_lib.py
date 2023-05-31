@@ -14,6 +14,7 @@
 #
 
 import asyncio
+import json
 import time
 import numpy as np
 from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError
@@ -24,17 +25,21 @@ from .util.idUtil import isValidChunkId, getDataNodeUrl, isSchema2Id
 from .util.idUtil import getRootObjId, isRootObjId
 from .util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes
 from .util.storUtil import getStorBytes, isStorObj, deleteStorObj
-from .util.storUtil import getBucketFromStorURI, getKeyFromStorURI
+from .util.storUtil import getBucketFromStorURI, getKeyFromStorURI, getURIFromKey
 from .util.domainUtil import isValidDomain, getBucketForDomain
 from .util.attrUtil import getRequestCollectionName
 from .util.httpUtil import http_post
 from .util.dsetUtil import getChunkLayout, getFilterOps, getFillValue
-from .util.chunkUtil import getDatasetId
-from .util.arrayUtil import arrayToBytes, bytesToArray
+from .util.dsetUtil import getChunkInitializer, getSliceQueryParam
+from .util.chunkUtil import getDatasetId, getChunkSelection
+from .util.arrayUtil import arrayToBytes, bytesToArray, getShapeDims, jsonToArray
 from .util.hdf5dtype import createDataType, getItemSize
 
 from . import config
 from . import hsds_logger as log
+
+# supported initializer commands (just one at the moement)
+INITIALIZER_CMDS = ["hsds-chunklocator", ]
 
 
 def get_obj_id(request, body=None):
@@ -548,17 +553,145 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None, bucket=Non
 
     log.debug(f"delete_metadata_obj for {obj_id} done")
 
+
 async def run_chunk_initializer(
-    app, 
+    app,
     chunk_id,
-    chunk_initializer, 
-    **kwargs
+    initializer,
+    dset_json=None,
+    bucket=None
 ):
-    await asyncio.sleep(0)
-    log.info(f"run_chunk_initializer - chunk_id: {chunk_id} init: {chunk_initializer}")
-    for k in kwargs:
-        v = kwargs[k]
-        log.info(f"init arg[{k}] = {v}")
+    log.info(f"run_chunk_initializer - chunk_id: {chunk_id} init: {initializer}")
+
+    if len(initializer) == 0:
+        log.warn("expected cmd args, but found none")
+        return None
+
+    if not dset_json:
+        log.error("run_chunk_initializer - dset_json arg not set")
+        raise HTTPInternalServerError()
+
+    if bucket is None:
+        bucket = app.get_bucket()
+    filepath = None
+
+    init_app = initializer[0]
+    if init_app not in INITIALIZER_CMDS:
+        log.warn(f"initializer cmd is not supported: {init_app}")
+        return None
+
+    # example initializer args:
+    # 'hsds-chunklocator', '--h5path=/dset', '--filepath=/data/myfile.h5' '--bucket=hdf5.sample'
+    cmd_args = []
+    for arg in initializer:
+        if arg.startswith("--filepath="):
+            npos = arg.find("=") + 1
+            filepath = arg[npos:]
+            continue
+        elif arg.startswith("--bucket="):
+            npos = arg.find("=") + 1
+            bucket = arg[npos:]
+            bucket
+        else:
+            cmd_args.append(arg)
+
+    if filepath:
+        # convert to uri and add to arg list
+        log.info(f"bucket: {bucket} filepath: {filepath}")
+        fileuri = getURIFromKey(app, bucket=bucket, key=filepath)
+        log.info(f"using fileuri: {fileuri}")
+        cmd_args.append(f"--fileuri={fileuri}")
+
+    # add select option based on chunk_id
+    datashape = dset_json["shape"]
+    dims = getShapeDims(datashape)
+    log.debug(f"dataset shape: {dims}")
+    # get the chunk layout for this dataset
+    layout = getChunkLayout(dset_json)
+    log.debug(f"chunk layout: {layout}")
+
+    rank = len(dims)
+    slices = []
+    for dim in range(rank):
+        slices.append(slice(0, dims[dim], 1))
+    slices = tuple(slices)
+    chunk_selection = getChunkSelection(chunk_id, slices, layout)
+    log.debug(f"got chunk_selection: {chunk_selection}")
+    select = getSliceQueryParam(chunk_selection)
+    select_arg = f"--select={select}"
+    log.debug(f"got select arg: {select_arg}")
+    cmd_args.append(select_arg)
+
+    # set the log prefix so we can filter that out from the output
+    prefix = "chunkinit_"
+    cmd_args.append(f"--log_prefix={prefix}")
+
+    # stitch together the cmd_args to a string
+    cmd = ""
+    for cmd_arg in cmd_args:
+        cmd += f"{cmd_arg} "
+    log.debug(f"subprocessing cmd: {cmd}")
+
+    proc = await asyncio.create_subprocess_shell(
+        cmd,
+        stderr=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE
+    )
+
+    stdout, stderr = await proc.communicate()
+
+    log.info(f"{init_app} exited with {proc.returncode}")
+
+    if stderr:
+        log.warn(f'[stderr]\n{stderr.decode()}')
+    if proc.returncode != 0:
+        log.warn(f"{cmd_args[0]} returned error code; {proc.returncode}")
+        return None
+
+    if not stdout:
+        log.warn(f"no output from chunk_initializer: {init_app}")
+        return None
+
+    type_json = dset_json["type"]
+    dt = createDataType(type_json)
+
+    lines = stdout.split(b"\n")
+    log.debug(f"got {len(lines)} lines of output")
+    data = ""
+    for line in lines:
+        line = line.decode().strip()
+        if not line:
+            continue
+        if line.startswith(prefix):
+            # dump out the log line
+            print(line)
+        else:
+            log.debug(line)
+            data += line
+
+    if data is None:
+        log.warn("no data returned")
+        return None
+
+    log.debug(f"data: {data}")
+
+    # read into json array
+    try:
+        json_data = json.loads(data)
+    except json.JSONDecodeError as jde:
+        log.warn(f"unable to parse return data from chunk_initializer: {jde}")
+        return None
+
+    # initializer chunk array
+    chunk_arr = np.zeros(dims, dtype=dt, order="C")
+
+    # fill in array using the text we got back
+    # will raise ValueError if the shape doesn't work out right
+
+    chunk_arr = jsonToArray(dims, dt, json_data)
+
+    log.info(f"chunk initializer: {init_app} was successful")
+    return chunk_arr
 
 
 async def get_chunk(
@@ -578,6 +711,9 @@ async def get_chunk(
     """
     # if the chunk cache has too many dirty items, wait till items
     # get flushed to S3
+    log.debug(f"get_chunk - chunk_id: {chunk_id} bucket: {bucket} chunk_init: {chunk_init}")
+    if s3path:
+        log.debug(f"   s3path: {s3path} s3offset: {s3offset} s3size: {s3size}")
     chunk_cache = app["chunk_cache"]
     if chunk_init and s3offset > 0:
         msg = f"unable to initialize chunk {chunk_id} for reference layouts "
@@ -627,28 +763,6 @@ async def get_chunk(
     layout_class = None
     if "class" in layout_json:
         layout_class = layout_json["class"]
-    
-    # check for any chunk initializer properties
-    chunk_initializer = None
-    initializer_args = None
-
-    if "creationProperties" in dset_json:
-        cpl = dset_json["creationProperties"]
-        log.debug(f"got cpl: {cpl}")
-        if "layout" in cpl:
-            cpl_layout = cpl["layout"]
-            log.debug(f"got cpl_layout: {cpl_layout}")
-            if "chunk_initializer" in cpl_layout:
-                if s3path:
-                    msg = "s3path not valid with chunk_init_app layout"
-                    log.warning(msg)
-                else:
-                    chunk_initializer = cpl_layout["chunk_initializer"]
-                    log.debug(f"set chunk_initializer to: {chunk_initializer}")
-            if "initializer_args" in cpl_layout:
-                initializer_args = cpl_layout["initializer_args"]
-                log.debug(f"set initializer_args to : {initializer_args}")
-     
 
     dt = createDataType(type_json)
     # note - officially we should follow the order in which the filters are
@@ -660,8 +774,13 @@ async def get_chunk(
     filter_ops = getFilterOps(app, dset_json, item_size)
 
     if s3path:
-        bucket = getBucketFromStorURI(s3path)
-        s3key = getKeyFromStorURI(s3path)
+        try:
+            bucket = getBucketFromStorURI(s3path)
+            s3key = getKeyFromStorURI(s3path)
+        except ValueError as ve:
+            log.error(f"Invalid URI path: {s3path} exception: {ve}")
+            raise
+            # raise HTTPInternalServerError()
         msg = f"Using s3path bucket: {bucket} and  s3key: {s3key} "
         msg += f"offset: {s3offset} length: {s3size}"
         log.debug(msg)
@@ -702,7 +821,6 @@ async def get_chunk(
         if chunk_arr is None:
             if chunk_id not in pending_s3_read:
                 pending_s3_read[chunk_id] = time.time()
-                log.debug(f"Reading chunk {chunk_id} from S3")
 
             try:
                 kwargs = {
@@ -763,18 +881,19 @@ async def get_chunk(
 
         if chunk_arr is None and chunk_init:
             log.debug(f"Initializing chunk {chunk_id}")
-            if chunk_initializer:
+            initializer = getChunkInitializer(dset_json)
+            if initializer:
+                log.info(f"initializing chunk:{chunk_id} with initializer: {initializer}")
                 kwargs = {}
-                for k in initializer_args:
-                    v = initializer_args[k]
-                    kwargs[k] = v
+                kwargs["dset_json"] = dset_json
+                kwargs["bucket"] = bucket
                 # TBD - add selection for this chunk
-                chunk_arr = await run_chunk_initializer(app, chunk_initializer, **kwargs)
-                if not chunk_arr:
-                    msg = f"chunk initializer {chunk_initializer} for {chunk_id} returned None"
+                chunk_arr = await run_chunk_initializer(app, chunk_id, initializer, **kwargs)
+                if chunk_arr is None:
+                    msg = f"chunk initializer {initializer} for {chunk_id} returned None"
                     log.warn(msg)
             else:
-                # normal fill value based init   
+                # normal fill value based init
                 fill_value = getFillValue(dset_json)
                 if fill_value:
                     # need to convert list to tuples for numpy broadcast

@@ -188,7 +188,7 @@ def jsonToArray(data_shape, data_dtype, data_json):
     # numpy is ok with this
     if arr.size != npoints:
         msg = "Input data doesn't match selection number of elements"
-        msg += " Expected {}, but received: {}".format(npoints, arr.size)
+        msg += f" Expected {npoints}, but received: {arr.size}"
         raise ValueError(msg)
     if arr.shape != data_shape:
         arr = arr.reshape(data_shape)  # reshape to match selection
@@ -542,6 +542,7 @@ def squeezeArray(data):
         data = data.squeeze()
     return data
 
+
 class IndexIterator(object):
     """
     Class to iterate through list of chunks of a given dataset
@@ -551,7 +552,7 @@ class IndexIterator(object):
         self._shape = shape
         self._rank = len(self._shape)
         self._stop = False
-        
+
         if self._rank < 1:
             raise ValueError("IndexIterator can not be used on arrays of zero rank")
 
@@ -601,12 +602,9 @@ class IndexIterator(object):
 
             # reset to the start and continue iterating with higher dimension
             self._index[dim] = s.start
-            
             dim -= 1
             if dim < 0:
                 # ran past last index, stop iteration on next run
                 self._stop = True
-                
+
         return tuple(ret_index)
-
-

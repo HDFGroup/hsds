@@ -108,7 +108,20 @@ class FileClient:
             log.error(f"unexpected inc for file_stats: {inc}")
             return
 
-        file_stats[counter] += inc
+    def getURIFromKey(self, key, bucket=None):
+        """ return filesystem specific URI for given key and bucket """
+        if not bucket:
+            log.error("getURIFromKey, bucket not set")
+            raise HTTPInternalServerError()
+        if not key:
+            log.error("getURIFromKey, key not set")
+            raise HTTPInternalServerError()
+        if key[0] == "/":
+            key = key[1:]
+
+        uri = self._getFilePath(key=key, bucket=bucket)
+
+        return uri
 
     async def get_object(self, key, bucket=None, offset=0, length=-1):
         """Return data for object at given key.
