@@ -2207,7 +2207,7 @@ class ValueTest(unittest.TestCase):
         root_uuid = rspJson["root"]
 
         # create dataset for /g1/g1.1/dset1.1.2
-        s3path = "s3://" + hdf5_sample_bucket + "/data/hdf5test" + "/tall.h5"
+        s3path = hdf5_sample_bucket + "/data/hdf5test" + "/tall.h5"
         data = {"type": "H5T_STD_I32BE", "shape": 20}
         layout = {
             "class": "H5D_CONTIGUOUS_REF",
@@ -2295,7 +2295,7 @@ class ValueTest(unittest.TestCase):
             print(f"hdf5_sample_bucket config not set, skipping {test_name}")
             return
 
-        s3path = "s3://" + hdf5_sample_bucket + "/data/hdf5test" + "/snp500.h5"
+        s3path = hdf5_sample_bucket + "/data/hdf5test" + "/snp500.h5"
         SNP500_ROWS = 3207353
 
         snp500_json = helper.getHDF5JSON("snp500.json")
@@ -2413,7 +2413,7 @@ class ValueTest(unittest.TestCase):
             print(f"hdf5_sample_bucket config not set, skipping {test_name}")
             return
 
-        s3path = "s3://" + hdf5_sample_bucket + "/data/hdf5test" + "/snp500.h5"
+        s3path = hdf5_sample_bucket + "/data/hdf5test" + "/snp500.h5"
         SNP500_ROWS = 3207353
 
         snp500_json = helper.getHDF5JSON("snp500.json")
@@ -2580,7 +2580,7 @@ class ValueTest(unittest.TestCase):
             print(f"hdf5_sample_bucket config not set, skipping {test_name}")
             return
 
-        s3path = "s3://" + hdf5_sample_bucket + "/data/hdf5test" + "/snp500.h5"
+        s3path = hdf5_sample_bucket + "/data/hdf5test" + "/snp500.h5"
         SNP500_ROWS = 3207353
 
         snp500_json = helper.getHDF5JSON("snp500.json")

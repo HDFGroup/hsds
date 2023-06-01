@@ -665,6 +665,9 @@ async def run_chunk_initializer(
         if line.startswith(prefix):
             # dump out the log line
             print(line)
+        elif line.find(">") != -1:
+            # ignore other lines with debug output
+            pass
         else:
             log.debug(line)
             data += line
@@ -759,7 +762,7 @@ async def get_chunk(
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
     layout_json = dset_json["layout"]
-    log.debug(f"get_chunk {chunk_id} - dset_json: {dset_json}")
+    log.debug(f"dset_json: {dset_json}")
     layout_class = None
     if "class" in layout_json:
         layout_class = layout_json["class"]

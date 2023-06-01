@@ -106,6 +106,8 @@ def get_storage_info(dset, select=None):
         if not skip:
             e = (chunk_info.byte_offset, chunk_info.size)
             arr[arr_index] = e
+            log.debug(f"added arr[{arr_index}] = {e}")
+    # end chunk_callback
 
     if dset.shape is None:
         # Empty (null) dataset...
