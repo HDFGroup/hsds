@@ -297,6 +297,7 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
         log.debug(f"got chunktable data: {point_data}")
         if "file_uri" in layout:
             s3_layout_path = layout["file_uri"]
+            log.debug(f"got s3_layout_path: {s3_layout_path}")
         else:
             s3_layout_path = None
 

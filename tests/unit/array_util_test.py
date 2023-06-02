@@ -24,6 +24,7 @@ from hsds.util.arrayUtil import (
     arrayToBytes,
     bytesToArray,
     getByteArraySize,
+    IndexIterator
 )
 from hsds.util.hdf5dtype import special_dtype
 from hsds.util.hdf5dtype import check_dtype
@@ -668,6 +669,32 @@ class ArrayUtilTest(unittest.TestCase):
             e = arr[i]
             e_copy = arr_copy[i]
             self.assertTrue(np.array_equal(e, e_copy))
+
+    def testIndexIterator(self):
+        i = 0
+        for index in IndexIterator((10,)):
+            self.assertEqual(index, (i,))
+            i += 1
+        self.assertEqual(i, 10)
+        i = 0
+        for index in IndexIterator((10,), sel=slice(0, 10, 2)):
+            self.assertEqual(index, (i,))
+
+            i += 2
+        self.assertEqual(i, 10)
+        i = 2
+        for index in IndexIterator((10, ), sel=slice(2, 8)):
+            self.assertEqual(index, (i,))
+            i += 1
+        self.assertEqual(i, 8)
+        cnt = 0
+        for index in IndexIterator((4, 5)):
+            cnt += 1
+        self.assertEqual(cnt, 20)
+        cnt = 0
+        for index in IndexIterator((8, 10), sel=(slice(0, 8, 2), slice(0, 10, 2))):
+            cnt += 1
+        self.assertEqual(cnt, 20)
 
 
 if __name__ == "__main__":

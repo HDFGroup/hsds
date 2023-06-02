@@ -341,14 +341,14 @@ def getQueryParameter(request, query_name, body=None, default=None):
         try:
             val = int(val)
         except ValueError:
-            msg = "Invalid request parameter: {}".format(query_name)
+            msg = f"Invalid request parameter: {query_name}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
     if val is None:
         if default is not None:
             val = default
         else:
-            msg = "Request parameter is missing: {}".format(query_name)
+            msg = f"Request parameter is missing: {query_name}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
     return val
@@ -773,11 +773,34 @@ def getChunkLayout(dset_json):
         log.error("No layout found in dset_json")
         raise HTTPInternalServerError()
     layout_json = dset_json["layout"]
-    if layout_json["class"] not in CHUNK_LAYOUT_CLASSES:
-        log.error("Unexpected shape layout: {}".format(layout_json["class"]))
+    if "class" not in layout_json:
+        log.error(f"Expected class key for layout: {layout_json}")
+        raise HTTPInternalServerError()
+    layout_class = layout_json["class"]
+    if layout_class not in CHUNK_LAYOUT_CLASSES:
+        log.error(f"Unexpected shape layout: {layout_class}")
+        raise HTTPInternalServerError()
+    if "dims" not in layout_json:
+        log.error(f"Expected dims key in layout: {layout_json}")
         raise HTTPInternalServerError()
     layout = layout_json["dims"]
     return layout
+
+
+def getChunkInitializer(dset_json):
+    """ get initializer application and arguments if set """
+    initializer = None
+    log.debug(f"getChunkInitializer({dset_json})")
+    if "creationProperties" in dset_json:
+        cprops = dset_json["creationProperties"]
+        log.debug(f"get creationProperties: {cprops}")
+        if "layout" in cprops:
+            layout_json = cprops["layout"]
+            if "initializer" in layout_json:
+                initializer = layout_json["initializer"]
+                log.debug(f"got initializer: {initializer}")
+    log.debug(f"returning: {initializer}")
+    return initializer
 
 
 def getPreviewQuery(dims):

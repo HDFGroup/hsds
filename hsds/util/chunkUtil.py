@@ -386,7 +386,7 @@ def getChunkIndex(chunk_id):
     # go to the first underscore
     n = chunk_id.find("_") + 1
     if n == 0:
-        raise ValueError("Invalid chunk_id: {}".format(chunk_id))
+        raise ValueError(f"Invalid chunk_id: {chunk_id}")
     suffix = chunk_id[n:]
 
     index = []
@@ -538,7 +538,7 @@ def getChunkSuffix(chunk_id):
     # go to the first underscore
     n = chunk_id.find("_") + 1
     if n == 0:
-        raise ValueError("Invalid chunk_id: {}".format(chunk_id))
+        raise ValueError(f"Invalid chunk_id: {chunk_id}")
     suffix = chunk_id[n:]
     return suffix
 

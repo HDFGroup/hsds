@@ -25,7 +25,7 @@ from .util.idUtil import getS3Key, validateInPartition, isValidUuid
 from .util.storUtil import isStorObj, deleteStorObj
 from .util.hdf5dtype import createDataType
 from .util.dsetUtil import getSelectionList, getChunkLayout
-from .util.dsetUtil import getSelectionShape
+from .util.dsetUtil import getSelectionShape, getChunkInitializer
 from .util.chunkUtil import getChunkIndex, getDatasetId, chunkQuery
 from .util.chunkUtil import chunkWriteSelection, chunkReadSelection
 from .util.chunkUtil import chunkWritePoints, chunkReadPoints
@@ -76,11 +76,6 @@ async def PUT_Chunk(request):
         msg = "PUT_Chunk - bucket is None"
         log.warn(msg)
         raise HTTPInternalServerError(reason=msg)
-
-    if query:
-        chunk_init = False  # don't initalize new chunks on query update
-    else:
-        chunk_init = True
 
     try:
         validateInPartition(app, chunk_id)
@@ -138,6 +133,14 @@ async def PUT_Chunk(request):
     num_elements = 1
     for extent in mshape:
         num_elements *= extent
+
+    if getChunkInitializer(dset_json):
+        chunk_init = True
+    elif query:
+        chunk_init = False  # don't initalize new chunks on query update
+    else:
+        chunk_init = True
+
     kwargs = {"bucket": bucket, "chunk_init": chunk_init}
     chunk_arr = await get_chunk(app, chunk_id, dset_json, **kwargs)
     is_dirty = False
@@ -289,7 +292,6 @@ async def GET_Chunk(request):
         msg = f"invalid partition for obj id: {chunk_id}"
         log.error(msg)
         raise HTTPInternalServerError()
-    log.debug(f"GET_Chunk - request params: {params.keys()}")
 
     if "s3path" in params:
         s3path = params["s3path"]
@@ -328,7 +330,6 @@ async def GET_Chunk(request):
 
     dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
     dims = getChunkLayout(dset_json)
-    log.debug(f"GET_Chunk - dset_json: {dset_json}")
     log.debug(f"GET_Chunk - got dims: {dims}")
 
     # get chunk selection from query params
@@ -345,18 +346,29 @@ async def GET_Chunk(request):
         raise HTTPInternalServerError()
     log.debug(f"GET_Chunk - got selection: {selection}")
 
-    kwargs = {"chunk_init": False}
+    if getChunkInitializer(dset_json):
+        chunk_init = True
+    else:
+        chunk_init = False
+
+    kwargs = {}
     if s3path:
         kwargs["s3path"] = s3path
         kwargs["s3offset"] = s3offset
         kwargs["s3size"] = s3size
     else:
         kwargs["bucket"] = bucket
+
+    kwargs["chunk_init"] = chunk_init
+
     chunk_arr = await get_chunk(app, chunk_id, dset_json, **kwargs)
     if chunk_arr is None:
         msg = f"chunk {chunk_id} not found"
         log.warn(msg)
         raise HTTPNotFound()
+
+    if chunk_init:
+        save_chunk(app, chunk_id, dset_json, chunk_arr, bucket=bucket)
 
     if query:
 
@@ -521,13 +533,21 @@ async def POST_Chunk(request):
     dset_id = getDatasetId(chunk_id)
 
     dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
+    log.debug(f"get_metadata_obj for {dset_id} returned {dset_json}")
     dims = getChunkLayout(dset_json)
     rank = len(dims)
 
     type_json = dset_json["type"]
     dset_dtype = createDataType(type_json)
     output_arr = None
-    chunk_init = False  # will be set to True for setting points
+
+    if getChunkInitializer(dset_json):
+        chunk_init = True
+    elif put_points:
+        chunk_init = True
+    else:
+        # don't need for getting points
+        chunk_init = False
 
     if content_type == "binary":
         # create a numpy array for incoming points
@@ -549,7 +569,6 @@ async def POST_Chunk(request):
             type_fields = [("coord", np.dtype(coord_type_str)), ("value", dset_dtype)]
             point_dt = np.dtype(type_fields)
             point_shape = (num_points,)
-            chunk_init = True
         else:
             point_dt = np.dtype("uint64")
             point_shape = (num_points, rank)
@@ -575,6 +594,10 @@ async def POST_Chunk(request):
     if chunk_arr is None:
         log.warn(f"chunk {chunk_id} not found")
         raise HTTPNotFound()
+
+    if chunk_init and not put_points:
+        # lazily write chunk to storage
+        save_chunk(app, chunk_id, dset_json, chunk_arr, bucket=bucket)
 
     if put_points:
         # writing point data

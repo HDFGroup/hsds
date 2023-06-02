@@ -184,6 +184,17 @@ def getKeyFromStorURI(uri):
     return path
 
 
+def getURIFromKey(app, bucket=None, key=None):
+    """ return URI for given bucket and key """
+    client = _getStorageClient(app)
+    if not bucket:
+        bucket = app["bucket_name"]
+    if key[0] == "/":
+        key = key[1:]  # no leading slash
+    uri = client.getURIFromKey(key, bucket=bucket)
+    return uri
+
+
 async def rangegetProxy(app, bucket=None, key=None, offset=0, length=0):
     """fetch bytes from rangeget proxy"""
     if "rangeget_url" in app:

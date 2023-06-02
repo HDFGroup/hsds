@@ -1035,6 +1035,7 @@ class ValueTest(unittest.TestCase):
             item = (i * 10, i * 10 + i / 10.0)
             value.append(item)
         payload = {"value": value}
+
         req = self.endpoint + "/datasets/" + dset1d_uuid + "/value"
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
@@ -2153,19 +2154,18 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 400)  # write value
 
     def testContiguousRefDataset(self):
-        print("testContiguousRefDataset", self.base_domain)
+        test_name = "testContigousRefDataset"
+        print(test_name, self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
         hdf5_sample_bucket = config.get("hdf5_sample_bucket")
         if not hdf5_sample_bucket:
-            print(
-                "hdf5_sample_bucket config not set, skipping testContiguousRefDataset"
-            )
+            print(f"hdf5_sample_bucket config not set, skipping {test_name}")
             return
 
         tall_json = helper.getHDF5JSON("tall.json")
         if not tall_json:
-            print("tall.json file not found, skipping testContiguousRefDataset")
+            print(f"tall.json file not found, skipping {test_name}")
             return
 
         if "tall.h5" not in tall_json:
@@ -2207,7 +2207,7 @@ class ValueTest(unittest.TestCase):
         root_uuid = rspJson["root"]
 
         # create dataset for /g1/g1.1/dset1.1.2
-        s3path = "s3://" + hdf5_sample_bucket + "/data/hdf5test" + "/tall.h5"
+        s3path = hdf5_sample_bucket + "/data/hdf5test" + "/tall.h5"
         data = {"type": "H5T_STD_I32BE", "shape": 20}
         layout = {
             "class": "H5D_CONTIGUOUS_REF",
@@ -2260,10 +2260,7 @@ class ValueTest(unittest.TestCase):
         rsp = self.session.get(req, headers=headers)
 
         if rsp.status_code == 404:
-            print(
-                f"s3object: {s3path} not found, skipping hyperslab read chunk "
-                "contiguous reference test"
-            )
+            print(f"s3object: {s3path} not found, skipping {test_name}")
             return
 
         self.assertEqual(rsp.status_code, 200)
@@ -2288,21 +2285,22 @@ class ValueTest(unittest.TestCase):
             self.assertEqual(len(value[i]), 5)
 
     def testGetSelectionChunkedRefDataset(self):
-        print("testGetSelectionChunkedRefDataset", self.base_domain)
+        test_name = "testGetSelectionChunkedRefDataset"
+        print(test_name, self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
         hdf5_sample_bucket = config.get("hdf5_sample_bucket")
 
         if not hdf5_sample_bucket:
-            print("hdf5_sample_bucket config not set, skipping testChunkedRefDataset")
+            print(f"hdf5_sample_bucket config not set, skipping {test_name}")
             return
 
-        s3path = "s3://" + hdf5_sample_bucket + "/data/hdf5test" + "/snp500.h5"
+        s3path = hdf5_sample_bucket + "/data/hdf5test" + "/snp500.h5"
         SNP500_ROWS = 3207353
 
         snp500_json = helper.getHDF5JSON("snp500.json")
         if not snp500_json:
-            print("snp500.json file not found, skipping testChunkedRefDataset")
+            print(f"snp500.json file not found, skipping {test_name}")
             return
 
         if "snp500.h5" not in snp500_json:
@@ -2387,9 +2385,7 @@ class ValueTest(unittest.TestCase):
         params["nonstrict"] = 1  # allow use of aws lambda if configured
         rsp = self.session.get(req, params=params, headers=headers)
         if rsp.status_code == 404:
-            print(
-                f"s3object: {s3path} not found, skipping hyperslab read chunk reference test"
-            )
+            print(f"s3object: {s3path} not found, skipping {test_name}")
             return
 
         self.assertEqual(rsp.status_code, 200)
@@ -2408,22 +2404,21 @@ class ValueTest(unittest.TestCase):
         # skip check rest of fields since float comparisons are trcky...
 
     def testChunkedRefIndirectDataset(self):
+        test_name = "testChunkedRefIndirectDataset"
         print("testChunkedRefIndirectDataset", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
         hdf5_sample_bucket = config.get("hdf5_sample_bucket")
         if not hdf5_sample_bucket:
-            print(
-                "hdf5_sample_bucket config not set, skipping testChunkedRefIndirectDataset"
-            )
+            print(f"hdf5_sample_bucket config not set, skipping {test_name}")
             return
 
-        s3path = "s3://" + hdf5_sample_bucket + "/data/hdf5test" + "/snp500.h5"
+        s3path = hdf5_sample_bucket + "/data/hdf5test" + "/snp500.h5"
         SNP500_ROWS = 3207353
 
         snp500_json = helper.getHDF5JSON("snp500.json")
         if not snp500_json:
-            print("snp500.json file not found, skipping testChunkedRefDataset")
+            print(f"snp500.json file not found, skipping {test_name}")
             return
 
         if "snp500.h5" not in snp500_json:
@@ -2576,22 +2571,21 @@ class ValueTest(unittest.TestCase):
         # skip check rest of fields since float comparisons are trcky...
 
     def testChunkedRefIndirectS3UriDataset(self):
-        print("testChunkedRefIndirectS3UriDataset", self.base_domain)
+        test_name = "testChunkedRefIndirectS3UriDataset"
+        print(test_name, self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 
         hdf5_sample_bucket = config.get("hdf5_sample_bucket")
         if not hdf5_sample_bucket:
-            print(
-                "hdf5_sample_bucket config not set, skipping testChunkedRefIndirectDataset"
-            )
+            print(f"hdf5_sample_bucket config not set, skipping {test_name}")
             return
 
-        s3path = "s3://" + hdf5_sample_bucket + "/data/hdf5test" + "/snp500.h5"
+        s3path = hdf5_sample_bucket + "/data/hdf5test" + "/snp500.h5"
         SNP500_ROWS = 3207353
 
         snp500_json = helper.getHDF5JSON("snp500.json")
         if not snp500_json:
-            print("snp500.json file not found, skipping testChunkedRefDataset")
+            print(f"snp500.json file not found, skipping {test_name}")
             return
 
         if "snp500.h5" not in snp500_json:
@@ -2721,10 +2715,7 @@ class ValueTest(unittest.TestCase):
         rsp = self.session.get(req, params=params, headers=headers)
 
         if rsp.status_code == 404:
-            print(
-                f"s3object: {s3path} not found, skipping hyperslab read "
-                "chunk reference indirect test"
-            )
+            print(f"s3object: {s3path} not found, skipping {test_name}")
             return
 
         self.assertEqual(rsp.status_code, 200)
@@ -2742,6 +2733,140 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(item[1], "MHFI")
         self.assertEqual(item[2], 3)
         # skip check rest of fields since float comparisons are trcky...
+
+    def testChunkInitializerDataset(self):
+        test_name = "testChunkInitializerDataset"
+        print(test_name, self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+
+        hdf5_sample_bucket = config.get("hdf5_sample_bucket")
+        if not hdf5_sample_bucket:
+            print(f"hdf5_sample_bucket config not set, skipping {test_name}")
+            return
+
+        file_path = "/data/hdf5test/snp500.h5"
+
+        SNP500_ROWS = 3207353
+
+        chunk_dims = [60000]  # chunk layout used in snp500.h5 file
+        num_chunks = (SNP500_ROWS // chunk_dims[0]) + 1
+
+        # get domain
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # create table to hold chunkinfo
+        # create a dataset to store chunk info
+        fields = (
+            {"name": "offset", "type": "H5T_STD_I64LE"},
+            {"name": "size", "type": "H5T_STD_I32LE"},
+        )
+        chunkinfo_type = {"class": "H5T_COMPOUND", "fields": fields}
+        req = self.endpoint + "/datasets"
+        # Store 40 chunk locations
+        chunkinfo_dims = [num_chunks]
+        layout = {"class": "H5D_CHUNKED"}
+        layout["dims"] = chunkinfo_dims
+        initializer = ["hsds-chunklocator",
+                       "--h5path=/dset",
+                       f"--filepath={file_path}",
+                       f"--bucket={hdf5_sample_bucket}"]
+        layout["initializer"] = initializer
+
+        payload = {"type": chunkinfo_type, "shape": chunkinfo_dims}
+        payload["creationProperties"] = {"layout": layout}
+
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        chunkinfo_uuid = rspJson["id"]
+        self.assertTrue(helper.validateId(chunkinfo_uuid))
+
+        print("chunkinfo id:", chunkinfo_uuid)
+
+        # link new dataset as 'chunks'
+        name = "chunks"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": chunkinfo_uuid}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # define types we need
+        s10_type = {
+            "charSet": "H5T_CSET_ASCII",
+            "class": "H5T_STRING",
+            "length": 10,
+            "strPad": "H5T_STR_NULLPAD",
+        }
+        s4_type = {
+            "charSet": "H5T_CSET_ASCII",
+            "class": "H5T_STRING",
+            "length": 4,
+            "strPad": "H5T_STR_NULLPAD",
+        }
+        fields = (
+            {"name": "date", "type": s10_type},
+            {"name": "symbol", "type": s4_type},
+            {"name": "sector", "type": "H5T_STD_I8LE"},
+            {"name": "open", "type": "H5T_IEEE_F32LE"},
+            {"name": "high", "type": "H5T_IEEE_F32LE"},
+            {"name": "low", "type": "H5T_IEEE_F32LE"},
+            {"name": "volume", "type": "H5T_IEEE_F32LE"},
+            {"name": "close", "type": "H5T_IEEE_F32LE"},
+        )
+
+        datatype = {"class": "H5T_COMPOUND", "fields": fields}
+
+        data = {"type": datatype, "shape": [SNP500_ROWS]}
+        file_uri = f"{hdf5_sample_bucket}{file_path}"
+        layout = {
+            "class": "H5D_CHUNKED_REF_INDIRECT",
+            "file_uri": file_uri,
+            "dims": chunk_dims,
+            "chunk_table": chunkinfo_uuid,
+        }
+        data["creationProperties"] = {"layout": layout}
+
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        dset_id = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_id))
+
+        # link new dataset as 'dset'
+        name = "dset"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": dset_id}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # read a selection
+        req = self.endpoint + "/datasets/" + dset_id + "/value"
+        params = {
+            "select": "[1234567:1234568]"
+        }  # read 1 element, starting at index 1234567
+        params["nonstrict"] = 1  # enable SN to invoke lambda func
+
+        # read the selection
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+        # should get one element back
+        self.assertEqual(len(value), 1)
+        item = value[0]
+        # verify that this is what we expected to get
+        self.assertEqual(len(item), len(fields))
+        self.assertEqual(item[0], "1998.10.22")
+        self.assertEqual(item[1], "MHFI")
+        self.assertEqual(item[2], 3)
 
     def testLargeCreationProperties(self):
         # test Dataset with artifically large creation_properties data
