@@ -593,7 +593,6 @@ class IndexIterator(object):
                 step = s.step
             else:
                 step = 1
-            s = self._sel[dim]
             self._index[dim] += step
 
             if self._index[dim] < s.stop:

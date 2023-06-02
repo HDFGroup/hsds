@@ -135,7 +135,7 @@ dataset to be initialized by HSDS by using the following layout for the chunk_ta
 ```
 
 In this example, the chunk table dataset has shape [10,10] and is chunked with one 10 x 10 chunk.  
-When the chunk table dataset if first accessed, the application specified in chunk_init will be 
+When the chunk table dataset is first accessed, the application specified in chunk_init will be 
 used to initalize the chunk.
 
 

@@ -46,7 +46,7 @@ def get_chunktable_dims(dset):
         dset_extent = dset.shape[dim]
         chunk_extent = chunk_dims[dim]
 
-        if dset_extent > 0 and chunk_extent > 0:
+        if chunk_extent > 0:
             table_extent = -(dset_extent // -chunk_extent)
         else:
             table_extent = 0
@@ -116,7 +116,7 @@ def get_storage_info(dset, select=None):
 
     rank = len(dset.shape)
     if rank < 1:
-        # no chuunking for scalar datasets
+        # no chunking for scalar datasets
         log.warn("Scalar space dataset")
         return None
 
