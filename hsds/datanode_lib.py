@@ -31,7 +31,7 @@ from .util.attrUtil import getRequestCollectionName
 from .util.httpUtil import http_post
 from .util.dsetUtil import getChunkLayout, getFilterOps, getFillValue
 from .util.dsetUtil import getChunkInitializer, getSliceQueryParam
-from .util.chunkUtil import getDatasetId, getChunkSelection
+from .util.chunkUtil import getDatasetId, getChunkSelection, getChunkIndex
 from .util.arrayUtil import arrayToBytes, bytesToArray, getShapeDims, jsonToArray
 from .util.hdf5dtype import createDataType, getItemSize
 
@@ -39,7 +39,7 @@ from . import config
 from . import hsds_logger as log
 
 # supported initializer commands (just one at the moement)
-INITIALIZER_CMDS = ["hsds-chunklocator", ]
+INITIALIZER_CMDS = ["chunklocator", "arange" ]
 
 
 def get_obj_id(request, body=None):
@@ -553,6 +553,92 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None, bucket=Non
 
     log.debug(f"delete_metadata_obj for {obj_id} done")
 
+def arange_chunk_init(
+    app,
+    initializer,
+    chunk_id=None,
+    dset_json=None,
+):
+    """ run arange chunk initializer """
+    if chunk_id:
+        log.debug(f"arange_chunk_init, chunk_id: {chunk_id}")
+    else:
+        log.debug("arange_chunk_init validate")
+    datashape = dset_json["shape"]
+    dims = getShapeDims(datashape)
+    log.debug(f"dataset shape: {dims}")
+
+    if len(dims) != 1:
+        msg = "arange initializer can only be used with 1-dimensional datasets"
+        log.warn(msg)
+        raise None
+    type_json = dset_json["type"]
+    dt = createDataType(type_json)
+    if len(dt) > 1:
+        msg = "arange initializer can't be used with compound types"
+        log.warn(msg)
+        raise None
+    type_class = type_json.get("class")
+    if type_class not in ("H5T_INTEGER", "H5T_FLOAT"):
+        msg = "arange initializer: unsupported type class: {type_class}"
+        log.warn(msg)
+        raise None
+    
+    try:
+        chunk_layout = getChunkLayout(dset_json)
+    except HTTPInternalServerError:
+        msg = "non-chunked dataset"
+        log.warning(msg)
+        raise None
+        
+    chunk_index = getChunkIndex(chunk_id)
+    msg = f"arange_chunk_init - chunk_index: {chunk_index}, chunk_layout: {chunk_layout}"
+    log.debug(msg)
+
+    if len(chunk_index) != 1:
+        msg = "expected chunk_index to be one-element list, but got: {chunk_index}"
+        log.error(msg)
+        raise HTTPInternalServerError()
+    
+    chunk_index = chunk_index[0]
+    chunk_length = chunk_layout[0]
+
+    start = 0.0
+    step = 1.0
+
+    # adjust based on chunk initializer args
+    for i in range(1, len(initializer)):
+        arg = initializer[i]
+        parts = arg.split("=")
+        if len(parts) != 2:
+            log.warn(f"ignoring argument: {arg}")
+        if parts[0] == "--start":
+            start = float(parts[1])
+        elif parts[0] == "--step":
+            step = float(parts[1])
+        else:
+            log.warn(f"unexpected initializer arg: {arg}")
+
+    log.debug(f"arange_chunk_init - get arguments start: {start}, step: {step}")
+
+    # adjust start and stop to be chunk relative
+    start += chunk_index * chunk_length * step
+
+    if type_class == "H5T_INTEGER":
+        # convert arguments to ints
+        start = int(start)
+        step = int(step)
+
+    # compute stop based on start, step, and chunk length
+    stop = start + chunk_length * step
+
+    log.debug(f"arange_chunk_init - start: {start}, step: {step} stop: {stop}")
+
+    # finally - create the array
+    arr = np.arange(start, stop, step, dtype=dt)
+    log.debug(f"arr[:5]: {arr[:5]}")
+
+    return arr
 
 async def run_chunk_initializer(
     app,
@@ -579,11 +665,26 @@ async def run_chunk_initializer(
     if init_app not in INITIALIZER_CMDS:
         log.warn(f"initializer cmd is not supported: {init_app}")
         return None
+    
+    # some specific initializers can be run in process
+    # if so, just do it now
+    kwargs = {"chunk_id": chunk_id, "dset_json": dset_json}
+    if init_app == "arange":
+        # can just initialize chunk directly 
+        chunk_arr = None
+        try:
+            chunk_arr = arange_chunk_init(app, initializer, **kwargs)
+        except ValueError as ve:
+            log.error(f"arange chunk initializer raised value error: {ve}")
+        return chunk_arr
 
     # example initializer args:
     # 'hsds-chunklocator', '--h5path=/dset', '--filepath=/data/myfile.h5' '--bucket=hdf5.sample'
-    cmd_args = []
+    cmd_args = None
     for arg in initializer:
+        if cmd_args is None:
+            # app name, add "hsds-" prefix for disambiguation
+            cmd_args = [f"hsds-{arg}"]
         if arg.startswith("--filepath="):
             npos = arg.find("=") + 1
             filepath = arg[npos:]
@@ -593,6 +694,7 @@ async def run_chunk_initializer(
             bucket = arg[npos:]
             bucket
         else:
+            # options other than filepath and bucket, just pass through
             cmd_args.append(arg)
 
     if filepath:
@@ -630,7 +732,8 @@ async def run_chunk_initializer(
     cmd = ""
     for cmd_arg in cmd_args:
         cmd += f"{cmd_arg} "
-    log.debug(f"subprocessing cmd: {cmd}")
+
+    log.info(f"running subprocessing cmd: {cmd}")
 
     proc = await asyncio.create_subprocess_shell(
         cmd,
@@ -676,7 +779,7 @@ async def run_chunk_initializer(
         log.warn("no data returned")
         return None
 
-    log.debug(f"data: {data}")
+    log.debug(f"got {len(data)} data elements")
 
     # read into json array
     try:
@@ -895,8 +998,9 @@ async def get_chunk(
                 if chunk_arr is None:
                     msg = f"chunk initializer {initializer} for {chunk_id} returned None"
                     log.warn(msg)
-            else:
-                # normal fill value based init
+            
+            if chunk_arr is None:
+                # normal fill value based init or initializer failed
                 fill_value = getFillValue(dset_json)
                 if fill_value:
                     # need to convert list to tuples for numpy broadcast
