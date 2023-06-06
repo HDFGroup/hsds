@@ -39,7 +39,7 @@ from . import config
 from . import hsds_logger as log
 
 # supported initializer commands (just one at the moement)
-INITIALIZER_CMDS = ["chunklocator", "arange" ]
+INITIALIZER_CMDS = ["chunklocator", "arange"]
 
 
 def get_obj_id(request, body=None):
@@ -553,6 +553,7 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None, bucket=Non
 
     log.debug(f"delete_metadata_obj for {obj_id} done")
 
+
 def arange_chunk_init(
     app,
     initializer,
@@ -560,10 +561,9 @@ def arange_chunk_init(
     dset_json=None,
 ):
     """ run arange chunk initializer """
-    if chunk_id:
-        log.debug(f"arange_chunk_init, chunk_id: {chunk_id}")
-    else:
-        log.debug("arange_chunk_init validate")
+    log.debug(f"arange_chunk_init, chunk_id: {chunk_id}")
+    if app is None:
+        log.warn("arange_chunk_init - app not set")
     datashape = dset_json["shape"]
     dims = getShapeDims(datashape)
     log.debug(f"dataset shape: {dims}")
@@ -583,14 +583,14 @@ def arange_chunk_init(
         msg = "arange initializer: unsupported type class: {type_class}"
         log.warn(msg)
         raise None
-    
+
     try:
         chunk_layout = getChunkLayout(dset_json)
     except HTTPInternalServerError:
         msg = "non-chunked dataset"
         log.warning(msg)
         raise None
-        
+
     chunk_index = getChunkIndex(chunk_id)
     msg = f"arange_chunk_init - chunk_index: {chunk_index}, chunk_layout: {chunk_layout}"
     log.debug(msg)
@@ -599,7 +599,7 @@ def arange_chunk_init(
         msg = "expected chunk_index to be one-element list, but got: {chunk_index}"
         log.error(msg)
         raise HTTPInternalServerError()
-    
+
     chunk_index = chunk_index[0]
     chunk_length = chunk_layout[0]
 
@@ -636,9 +636,9 @@ def arange_chunk_init(
 
     # finally - create the array
     arr = np.arange(start, stop, step, dtype=dt)
-    log.debug(f"arr[:5]: {arr[:5]}")
 
     return arr
+
 
 async def run_chunk_initializer(
     app,
@@ -647,6 +647,7 @@ async def run_chunk_initializer(
     dset_json=None,
     bucket=None
 ):
+    """ initialize chunk using given initializer function """
     log.info(f"run_chunk_initializer - chunk_id: {chunk_id} init: {initializer}")
 
     if len(initializer) == 0:
@@ -665,12 +666,12 @@ async def run_chunk_initializer(
     if init_app not in INITIALIZER_CMDS:
         log.warn(f"initializer cmd is not supported: {init_app}")
         return None
-    
+
     # some specific initializers can be run in process
     # if so, just do it now
     kwargs = {"chunk_id": chunk_id, "dset_json": dset_json}
     if init_app == "arange":
-        # can just initialize chunk directly 
+        # can just initialize chunk directly
         chunk_arr = None
         try:
             chunk_arr = arange_chunk_init(app, initializer, **kwargs)
@@ -998,7 +999,7 @@ async def get_chunk(
                 if chunk_arr is None:
                     msg = f"chunk initializer {initializer} for {chunk_id} returned None"
                     log.warn(msg)
-            
+
             if chunk_arr is None:
                 # normal fill value based init or initializer failed
                 fill_value = getFillValue(dset_json)

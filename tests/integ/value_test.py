@@ -2878,19 +2878,19 @@ class ValueTest(unittest.TestCase):
         root_uuid = rspJson["root"]
 
         req = self.endpoint + "/datasets"
-        
+
         extent = 1_000_000_000   # one billion elements
-        dset_dims = [extent,]
+        dset_dims = [extent, ]
         layout = {"class": "H5D_CHUNKED"}
         layout["dims"] = dset_dims
 
-        range_start = 0 # -0.25
+        range_start = 0  # -0.25
         range_step = 1
-    
+
         initializer = ["arange",
                        f"--start={range_start}",
-                       f"--step={range_step}",]
-        
+                       f"--step={range_step}", ]
+
         payload = {"type": "H5T_STD_I64LE", "shape": dset_dims}
         payload["creationProperties"] = {"layout": layout, "initializer": initializer}
 
@@ -2901,18 +2901,17 @@ class ValueTest(unittest.TestCase):
         dset_id = rspJson["id"]
         self.assertTrue(helper.validateId(dset_id))
 
-
         # link new dataset as 'dset10'
         name = "dset10"
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
-  
+
         # read a selection
         req = self.endpoint + "/datasets/" + dset_id + "/value"
         count = 10
-        sel_start = 19_531_260 # 20_000_000 # 123_456_789
+        sel_start = 19_531_260  # 20_000_000 # 123_456_789
         sel_stop = sel_start + count
         params = {"select": f"[{sel_start}:{sel_stop}]"}  # read 10 elements
         params["nonstrict"] = 1  # enable SN to invoke lambda func
@@ -2925,12 +2924,12 @@ class ValueTest(unittest.TestCase):
         value = rspJson["value"]
         # should get extent elements back
         self.assertEqual(len(value), count)
-      
+
         expected_val = (sel_start * range_step) + range_start
         for i in range(count):
             self.assertEqual(value[i], expected_val)
             expected_val += range_step
-         
+
     def testLargeCreationProperties(self):
         # test Dataset with artifically large creation_properties data
         print("testLargeCreationProperties", self.base_domain)
