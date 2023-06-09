@@ -806,7 +806,35 @@ async def GET_Domain(request):
 
         # client may not know class of object retrieved via path
         obj_json["class"] = getObjectClass(obj_id)
-        # Not bothering with hrefs for h5path lookups...
+
+        hrefs = []
+        hrefs.append({"rel": "self", "href": getHref(request, "/")})
+        if "root" in domain_json:
+            root_uuid = domain_json["root"]
+            href = getHref(request, "/datasets")
+            hrefs.append({"rel": "database", "href": href})
+            href = getHref(request, "/groups")
+            hrefs.append({"rel": "groupbase", "href": href})
+            href = getHref(request, "/datatypes")
+            hrefs.append({"rel": "typebase", "href": href})
+            href = getHref(request, "/groups/" + root_uuid)
+            hrefs.append({"rel": "root", "href": href})
+            href = getHref(request, "/")
+            hrefs.append({"rel": "home", "href": href})
+
+        hrefs.append({"rel": "acls", "href": getHref(request, "/acls")})
+        parent_domain = getParentDomain(domain)
+        if not parent_domain or getPathForDomain(parent_domain) == "/":
+            is_toplevel = True
+        else:
+            is_toplevel = False
+        log.debug(f"href parent domain: {parent_domain}")
+        if not is_toplevel:
+            href = getHref(request, "/", domain=parent_domain)
+            hrefs.append({"rel": "parent", "href": href})
+
+        obj_json["hrefs"] = hrefs
+
         resp = await jsonResponse(request, obj_json)
         log.response(request, resp=resp)
         return resp
