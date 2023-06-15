@@ -285,7 +285,9 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
                 log.debug(msg)
                 obj_id, domain, link_json = await getObjectIdByPath(
                     app, ext_domain_json["root"], link_json["h5path"],
-                    bucket=bucket, refresh=refresh, domain=domain)
+                    bucket=bucket, refresh=refresh, domain=domain,
+                    follow_soft_links=follow_soft_links,
+                    follow_external_links=follow_external_links)
             else:
                 msg = "Cannot follow external link by relative path"
                 log.warn(msg)
@@ -303,7 +305,9 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
                 # If relative path, keep parent object the same
                 obj_id, domain, link_json = await getObjectIdByPath(
                     app, obj_id, path_from_link, bucket=bucket,
-                    refresh=refresh, domain=domain)
+                    refresh=refresh, domain=domain,
+                    follow_soft_links=follow_soft_links,
+                    follow_external_links=follow_external_links)
             else:
                 if not domain:
                     msg = "Soft link with absolute path used with no domain given"
@@ -316,7 +320,9 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
 
                 obj_id, domain, link_json = await getObjectIdByPath(
                     app, domain_json["root"], path_from_link,
-                    bucket=bucket, refresh=refresh, domain=domain)
+                    bucket=bucket, refresh=refresh, domain=domain,
+                    follow_soft_links=follow_soft_links,
+                    follow_external_links=follow_external_links)
 
         elif link_json["class"] == "H5L_TYPE_HARD":
             obj_id = link_json["id"]
@@ -356,7 +362,9 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
 
         obj_id, domain, link_json = await getObjectIdByPath(
             app, parent_id, link_json["h5path"],
-            bucket=bucket, refresh=refresh, domain=domain)
+            bucket=bucket, refresh=refresh, domain=domain,
+            follow_soft_links=follow_soft_links,
+            follow_external_links=follow_external_links)
 
     return obj_id, domain, link_json
 
