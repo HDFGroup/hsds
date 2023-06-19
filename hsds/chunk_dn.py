@@ -270,6 +270,8 @@ async def GET_Chunk(request):
     s3path = None
     s3offset = None
     s3size = None
+    hyper_dims = None
+    dims = None
     query = None
     limit = 0
 
@@ -306,25 +308,69 @@ async def GET_Chunk(request):
     log.debug(f"GET_Chunk - using bucket: {bucket}")
 
     if "s3offset" in params:
+        param_s3offset = params["s3offset"]
+        log.debug(f"s3offset param: {param_s3offset}")
         try:
-            s3offset = int(params["s3offset"])
+            if param_s3offset.find(":") > 0:
+                # colon seperated index values, convert to list
+                s3offset = list(map(int, param_s3offset.split(":")))
+            else:
+                s3offset = int(param_s3offset)
         except ValueError:
-            log.error(f"invalid s3offset params: {params['s3offset']}")
+            log.error(f"invalid s3offset params: {param_s3offset}")
             raise HTTPBadRequest()
+        log.debug(f"s3offset: {s3offset}")
+
     if "s3size" in params:
+        param_s3size = params["s3size"]
+        log.debug(f"s3size param: {param_s3size}")
         try:
-            s3size = int(params["s3size"])
+            if param_s3size.find(":") > 0:
+                s3size = list(map(int, param_s3size.split(":")))
+            else:
+                s3size = int(param_s3size)
         except ValueError:
-            log.error(f"invalid s3size params: {params['s3size']}")
+            log.error(f"invalid s3size params: {param_s3size}")
             raise HTTPBadRequest()
+        log.debug(f"s3size: {s3size}")
+
+    if "hyper_dims" in params:
+        param_hyper_dims = params["hyper_dims"]
+        try:
+            if param_hyper_dims.find(":") > 0:
+                hyper_dims = list(map(int, param_hyper_dims.split(":")))
+            else:
+                hyper_dims = [int(param_hyper_dims), ]
+        except ValueError:
+            log.error(f"invalid hyper_dims params: {param_hyper_dims}")
+            raise HTTPBadRequest()
+        log.debug(f"hyper_dims: {hyper_dims}")
 
     if "query" in params:
         query = params["query"]
         log.debug(f"got query: {query}")
 
     if "Limit" in params:
-        limit = int(params["Limit"])
+        param_limit = params["Limit"]
         log.debug(f"limit: {limit}")
+        try:
+            limit = int(param_limit)
+        except ValueError:
+            log.error(f"invalid Limit param: {param_limit}")
+            raise HTTPBadRequest()
+
+    if s3path:
+        # calculate how many chunk bytes we'll read
+        num_bytes = 0
+        if isinstance(s3size, int):
+            num_bytes = s3size
+        else:
+            # list
+            num_bytes = np.prod(s3size)
+        log.debug(f"reading {num_bytes} from {s3path}")
+        if num_bytes == 0:
+            log.warn(f"GET_Chunk for s3path: {s3path} with empty byte range")
+            raise HTTPNotFound()
 
     dset_id = getDatasetId(chunk_id)
 
@@ -356,6 +402,8 @@ async def GET_Chunk(request):
         kwargs["s3path"] = s3path
         kwargs["s3offset"] = s3offset
         kwargs["s3size"] = s3size
+        if hyper_dims:
+            kwargs["hyper_dims"] = hyper_dims
     else:
         kwargs["bucket"] = bucket
 

@@ -801,6 +801,130 @@ async def run_chunk_initializer(
     return chunk_arr
 
 
+async def get_chunk_bytes(
+        app,
+        s3key,
+        filter_ops=None,
+        bucket=None,
+        offset=0,
+        length=0,
+        item_size=0,
+        chunk_id=None,
+        chunk_dims=None,
+        hyper_dims=None
+):
+    """ For regular chunk reads, just call getStorBytes.
+        """
+    msg = f"get_chunk_bytes({chunk_id}, bucket={bucket}, offset={offset}, length={length}, "
+    msg += f"item_size={item_size}, chunk_dims={chunk_dims}, hyper_dims={hyper_dims}"
+    log.debug(msg)
+
+    if not isinstance(offset, list):
+        # regular store read
+        kwargs = {
+            "filter_ops": filter_ops,
+            "offset": offset,
+            "length": length,
+            "bucket": bucket
+        }
+
+        chunk_bytes = await getStorBytes(app, s3key, **kwargs)
+        return chunk_bytes
+
+    # intelligent range get request
+    log.debug("intelligent range get")
+
+    if hyper_dims is None:
+        log.error("intelligent range get - expected hyper_dims parameter to be set")
+        raise HTTPInternalServerError()
+
+    rank = len(chunk_dims)
+    if rank != 1:
+        msg = "only one-dimensional datasets are supported currently for intelligent range gets"
+        log.error(msg)
+        raise HTTPInternalServerError()
+
+    num_chunks = len(offset)
+    log.debug(f"get_chunk_bytes - num_chunks: {num_chunks}")
+    if len(length) != num_chunks:
+        log.error("get_chunk_bytes - expecting length and num_chunks to have same value")
+        raise HTTPInternalServerError()
+
+    # create a buffer for the hsds chunk and arrange h5 chunks within it
+    chunk_size = np.prod(chunk_dims) * item_size
+    # number of bytes in the hd5 chunk
+    h5_size = np.prod(hyper_dims) * item_size
+    chunk_bytes = bytearray(chunk_size)
+    if num_chunks > chunk_size // h5_size:
+        # shouldn't have more than this many hyperchunks
+        msg = f"get_chunk_bytes - got more than expected hyperchunks: {num_chunks}"
+        log.error(msg)
+        raise HTTPInternalServerError()
+
+    # gather all the individual h5 chunk reads into a list of tasks
+    tasks = []
+
+    for i in range(num_chunks):
+        if length[i] == 0:
+            # h5chunk not allocated
+            continue
+        kwargs = {
+            "filter_ops": filter_ops,
+            "offset": offset[i],
+            "length": length[i],
+            "bucket": bucket
+        }
+        log.debug(f"get_chunk_bytes - h5_chunk[{i}, offset: {offset[i]}, length: {length[i]}")
+        tasks.append(getStorBytes(app, s3key, **kwargs))
+
+    log.debug(f"running asyncio.gather on {len(tasks)} tasks")
+    results = await asyncio.gather(*tasks)
+    log.debug(f"asyncio.gather got results: {results}")
+    if len(results) != num_chunks:
+        log.error("unexpected number of gather results")
+        raise HTTPInternalServerError()
+    for i in range(num_chunks):
+        h5_chunk = results[i]
+        if h5_chunk is None:
+            log.warning(f"get_chunk_bytes - None returned for h5_chunk[{i}]")
+            continue
+        if len(h5_chunk) != h5_size:
+            msg = f"get_chunk_bytes - got {len(h5_chunk)} bytes for h5_chunk[{i}], "
+            msg += f"expected: {h5_size}"
+            log.error(msg)
+            continue
+        pos = h5_size * i
+        chunk_bytes[pos:(pos + h5_size)] = h5_chunk
+
+    """
+    # serial version
+    for i in range(num_chunks):
+        if length[i] == 0:
+            # h5chunk not allocated
+            continue
+        kwargs = {
+            "filter_ops": filter_ops,
+            "offset": offset[i],
+            "length": length[i],
+            "bucket": bucket
+            }
+        log.debug(f"get_chunk_bytes - h5_chunk[{i}, offset: {offset[i]}, length: {length[i]}")
+        h5_chunk = await getStorBytes(app, s3key, **kwargs)
+        if h5_chunk is None:
+            log.warning(f"get_chunk_bytes - None returned for h5_chunk[{i}]")
+            continue
+        if len(h5_chunk) != h5_size:
+            msg = f"get_chunk_bytes - got {len(h5_chunk)} bytes for h5_chunk[{i}], "
+            msg += f"expected: {h5_size}"
+            log.error(msg)
+            continue
+        pos = h5_size * i
+        chunk_bytes[pos:(pos+h5_size)] = h5_chunk
+    """
+    log.debug("get_chunk_bytes done")
+    return chunk_bytes
+
+
 async def get_chunk(
     app,
     chunk_id,
@@ -809,6 +933,7 @@ async def get_chunk(
     s3path=None,
     s3offset=0,
     s3size=0,
+    hyper_dims=None,
     chunk_init=False,
 ):
     """
@@ -821,6 +946,8 @@ async def get_chunk(
     log.debug(f"get_chunk - chunk_id: {chunk_id} bucket: {bucket} chunk_init: {chunk_init}")
     if s3path:
         log.debug(f"   s3path: {s3path} s3offset: {s3offset} s3size: {s3size}")
+    if hyper_dims is not None:
+        log.debug(f"   hyper_dims: {hyper_dims}")
     chunk_cache = app["chunk_cache"]
     if chunk_init and s3offset > 0:
         msg = f"unable to initialize chunk {chunk_id} for reference layouts "
@@ -829,6 +956,7 @@ async def get_chunk(
 
     # validate arguments
     if s3path:
+        """
         if s3size == 0 and s3offset == 0:
             # uninitialized chunk ref
             msg = f"reference chunk not set for id: {chunk_id}, returning 404"
@@ -838,6 +966,7 @@ async def get_chunk(
             msg = f"Unexpected get_chunk parameter - s3path: {s3path} with size 0"
             log.error(msg)
             raise HTTPInternalServerError()
+        """
         if bucket:
             msg = "get_chunk - bucket arg should not be used with s3path"
             log.error(msg)
@@ -851,13 +980,8 @@ async def get_chunk(
             raise HTTPInternalServerError()
         log.debug(f"get_chunk - chunk_id: {chunk_id} bucket: {bucket}")
 
-    if "oio_proxy" in app or "is_k8s" in app:
-        # TBD - rangeget proxy not supported on k8s yet
-        use_proxy = False
-    else:
-        use_proxy = True
-    msg = f"getChunk cache utilization: {chunk_cache.cacheUtilizationPercent}"
-    msg += f" per, dirty_count: {chunk_cache.dirtyCount}, "
+    msg = f"getChunk cache utilization: {chunk_cache.cacheUtilizationPercent}%, "
+    msg += f"dirty_count: {chunk_cache.dirtyCount}, "
     msg += f"mem_dirty: {chunk_cache.memDirty}"
     log.debug(msg)
 
@@ -867,9 +991,8 @@ async def get_chunk(
     item_size = getItemSize(type_json)
     layout_json = dset_json["layout"]
     log.debug(f"dset_json: {dset_json}")
-    layout_class = None
-    if "class" in layout_json:
-        layout_class = layout_json["class"]
+    layout_class = layout_json.get("class")
+    chunk_dims = getChunkLayout(dset_json)
 
     dt = createDataType(type_json)
     # note - officially we should follow the order in which the filters are
@@ -931,13 +1054,18 @@ async def get_chunk(
 
             try:
                 kwargs = {
+                    "chunk_id": chunk_id,
                     "filter_ops": filter_ops,
                     "offset": s3offset,
                     "length": s3size,
+                    "item_size": item_size,
+                    "chunk_dims": chunk_dims,
+                    "hyper_dims": hyper_dims,
                     "bucket": bucket,
-                    "use_proxy": use_proxy,
                 }
-                chunk_bytes = await getStorBytes(app, s3key, **kwargs)
+
+                chunk_bytes = await get_chunk_bytes(app, s3key, **kwargs)
+
                 if chunk_id in pending_s3_read:
                     # read complete - remove from pending map
                     elapsed_time = time.time() - pending_s3_read[chunk_id]

@@ -258,9 +258,7 @@ async def getStorJSONObj(app, key, bucket=None):
     return json_dict
 
 
-async def getStorBytes(
-    app, key, filter_ops=None, offset=0, length=-1, bucket=None, use_proxy=False
-):
+async def getStorBytes(app, key, filter_ops=None, offset=0, length=-1, bucket=None):
     """Get object identified by key and read as bytes"""
 
     client = _getStorageClient(app)
@@ -275,11 +273,6 @@ async def getStorBytes(
     msg = f"getStorBytes({bucket}/{key}, offset={offset}, length: {length})"
     log.info(msg)
 
-    default_req_size = 128 * 1024 * 1024  # 128KB
-    data_cache_max_req_size = int(
-        config.get("data_cache_max_req_size", default=default_req_size)
-    )
-
     shuffle = 0
     compressor = None
     if filter_ops:
@@ -292,11 +285,8 @@ async def getStorBytes(
             log.debug(f"using compressor: {compressor}")
 
     kwargs = {"bucket": bucket, "key": key, "offset": offset, "length": length}
-    if offset > 0 and use_proxy and length < data_cache_max_req_size:
-        # use rangeget proxy
-        data = await rangegetProxy(app, **kwargs)
-    else:
-        data = await client.get_object(**kwargs)
+
+    data = await client.get_object(**kwargs)
     if data is None or len(data) == 0:
         log.info(f"no data found for {key}")
         return data
@@ -304,8 +294,8 @@ async def getStorBytes(
     log.info(f"read: {len(data)} bytes for key: {key}")
     if length > 0 and len(data) != length:
         log.warn(f"requested {length} bytes but got {len(data)} bytes")
-    if compressor:
 
+    if compressor:
         # compressed chunk data...
 
         # first check if this was compressed with blosc

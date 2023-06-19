@@ -39,7 +39,6 @@ services:
       - ${PWD}/admin/config/:/config/
     links:
       - head
-      - rangeget
 
   sn:
     image: hdfgroup/hsds
@@ -64,22 +63,3 @@ services:
     links:
       - head
 
-  rangeget:
-    image: hdfgroup/hsds
-    restart: ${RESTART_POLICY}
-    mem_limit: ${RANGEGET_RAM}
-    environment:
-      - NODE_TYPE=rangeget
-      - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
-      - AWS_REGION=${AWS_REGION}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - LOG_LEVEL=${LOG_LEVEL}
-    ports:
-      - ${RANGEGET_PORT}
-    depends_on:
-      - head
-    volumes:
-      - ${PWD}/admin/config/:/config/
-    links:
-      - head

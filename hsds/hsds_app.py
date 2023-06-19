@@ -155,8 +155,6 @@ class HsdsApp:
                 self._dn_urls.append(dn_url)
                 self._socket_paths.append(f"{socket_dir}{socket_name}")
             self._socket_paths.append(f"{socket_dir}sn_1.sock")
-            self._socket_paths.append(f"{socket_dir}rangeget.sock")
-            rangeget_url = f"http+unix://{socket_url}rangeget.sock"
         else:
             # setup TCP/IP endpoints
             sn_url = f"http://{host}:{sn_port}"
@@ -164,13 +162,10 @@ class HsdsApp:
             for i in range(dn_count):
                 dn_url = f"http://{host}:{dn_port+i}"
                 self._dn_urls.append(dn_url)
-            rangeget_port = 6900  # TBD: pull from config
-            rangeget_url = f"http://{host}:{rangeget_port}"
 
         # sort the ports so that node_number can be determined based on dn_url
         self._dn_urls.sort()
         self._endpoint = sn_url
-        self._rangeget_url = rangeget_url
 
     @property
     def endpoint(self):
@@ -231,8 +226,8 @@ class HsdsApp:
             dn_urls_arg += dn_url
 
         pout = subprocess.PIPE  # will pipe to parent
-        # create processes for count dn nodes, sn node, and rangeget node
-        count = self._dn_count + 2  # plus 2 for rangeget proxy and sn
+        # create processes for count dn nodes and sn nodes
+        count = self._dn_count + 1  # plus 1 for sn
         # set PYTHONUNBUFFERED so we can get any output immediately
         os.environ["PYTHONUNBUFFERED"] = "1"
         # TODO: don't modify parent process env, use os.environ.copy(), set, and popen(env=)
@@ -241,7 +236,6 @@ class HsdsApp:
             "--standalone",
         ]
         common_args.append(f"--dn_urls={dn_urls_arg}")
-        common_args.append(f"--rangeget_url={self._rangeget_url}")
         common_args.append(f"--hsds_endpoint={self._endpoint}")
         if self._islambda:
             # base boto packages installed in AWS image conflicting with aiobotocore
@@ -286,12 +280,8 @@ class HsdsApp:
 
                 pargs.append(f"--sn_url={self._endpoint}")
                 pargs.append("--logfile=sn1.log")
-            elif i == 1:
-                # args for rangeget node
-                pname = "rg"
-                pargs = [py_exe, cmd_path, "--node_type=rn", "--log_prefix=rg "]
             else:
-                node_number = i - 2  # start with 0
+                node_number = i - 1  # start with 0
                 pname = f"dn{node_number}"
                 pargs = [
                     py_exe,

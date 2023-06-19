@@ -202,10 +202,27 @@ async def read_chunk_hyperslab(
     # params["select"] = select
     if "s3path" in chunk_info:
         params["s3path"] = chunk_info["s3path"]
+
     if "s3offset" in chunk_info:
-        params["s3offset"] = chunk_info["s3offset"]
+        s3offset = chunk_info["s3offset"]
+        if isinstance(s3offset, list):
+            # convert to a colon seperated string
+            s3offset = ":".join(map(str, s3offset))
+        params["s3offset"] = s3offset
+
     if "s3size" in chunk_info:
-        params["s3size"] = chunk_info["s3size"]
+        s3size = chunk_info["s3size"]
+        if isinstance(s3size, list):
+            # convert to a colon seperated string
+            s3size = ":".join(map(str, s3size))
+        params["s3size"] = s3size
+
+    if "hyper_dims" in chunk_info:
+        hyper_dims = chunk_info["hyper_dims"]
+        if isinstance(hyper_dims, list):
+            # convert to colon seperated string
+            hyper_dims = ":".join(map(str, hyper_dims))
+        params["hyper_dims"] = hyper_dims
 
     # set query-based params
     if query is not None:
@@ -633,16 +650,13 @@ class ChunkCrawler:
                 start = time.time()
                 chunk_id = await self._q.get()
                 if self._limit > 0 and self._hits >= self._limit:
-                    log.debug(
-                        "ChunkCrawler - max hits exceeded, skipping fetch for chunk: {chunk_id}"
-                    )
+                    msg = f"ChunkCrawler - maxhits exceeded, skipping fetch for chunk: {chunk_id}"
+                    log.debug(msg)
                 else:
                     dn_url = getDataNodeUrl(self._app, chunk_id)
                     if isUnixDomainUrl(dn_url):
                         # need a client per url for unix sockets
-                        client = get_http_client(
-                            self._app, url=dn_url, cache_client=True
-                        )
+                        client = get_http_client(self._app, url=dn_url, cache_client=True)
                     else:
                         # create a pool of clients and store the handles in the app dict
                         if client_name not in self._clients:

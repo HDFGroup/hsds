@@ -698,6 +698,25 @@ def getChunkRelativePoint(chunkCoord, point):
     return tr
 
 
+def get_chunktable_dims(shape_dims, chunk_dims):
+    """
+    Get the cannoncial size of the chunktable for a
+    given dataset and chunk shape"""
+    rank = len(shape_dims)
+    table_dims = []
+    for dim in range(rank):
+        dset_extent = shape_dims[dim]
+        chunk_extent = chunk_dims[dim]
+
+        if dset_extent > 0 and chunk_extent > 0:
+            table_extent = -(dset_extent // -chunk_extent)
+        else:
+            table_extent = 0
+        table_dims.append(table_extent)
+    table_dims = tuple(table_dims)
+    return table_dims
+
+
 class ChunkIterator:
     """
     Class to iterate through list of chunks given dset_id, selection,

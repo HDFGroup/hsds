@@ -4,7 +4,6 @@ import sys
 from . import config
 from . import servicenode
 from . import datanode
-from . import rangeget_proxy
 from . import headnode
 
 
@@ -43,8 +42,6 @@ def main():
         servicenode.main()
     elif node_type == "dn":
         datanode.main()
-    elif node_type == "rn":
-        rangeget_proxy.main()
     elif node_type == "head":
         headnode.main()
     else:

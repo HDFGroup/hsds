@@ -37,7 +37,7 @@ from .util.dsetUtil import getDatasetCreationPropertyLayout
 from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId
 from .util.chunkUtil import getChunkIndex, getChunkSuffix
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
-from .util.chunkUtil import getQueryDtype
+from .util.chunkUtil import getQueryDtype, get_chunktable_dims
 from .util.arrayUtil import bytesArrayToList, jsonToArray, getShapeDims
 from .util.arrayUtil import getNumElements, arrayToBytes, bytesToArray
 from .util.arrayUtil import squeezeArray
@@ -273,26 +273,61 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
 
         # convert the list of chunk_ids into a set of points to query in
         # the chunk table
+        log.debug(f"datashape: {dims}")
+        log.debug(f"chunk_dims: {chunk_dims}")
+        log.debug(f"chunktable_dims: {chunktable_dims}")
+        default_chunktable_dims = get_chunktable_dims(dims, chunk_dims)
+        log.debug(f"default_chunktable_dims: {default_chunktable_dims}")
+        table_factors = []
+        hyper_dims = []
+        ref_num_chunks = num_chunks
+        for dim in range(rank):
+            if chunktable_dims[dim] % default_chunktable_dims[dim] != 0:
+                msg = f"expected chunktable shape[{dim}] to be a factor"
+                msg += f" of {default_chunktable_dims[dim]}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            factor = chunktable_dims[dim] // default_chunktable_dims[dim]
+            table_factors.append(factor)
+            ref_num_chunks *= factor
+            hyper_dim = chunk_dims[dim] // factor
+            hyper_dims.append(hyper_dim)
+        log.debug(f"table_factors: {table_factors}")
+        log.debug(f"ref_num_chunks: {ref_num_chunks}")
+        log.debug(f"hyper_dims: {hyper_dims}")
+
         if rank == 1:
-            arr_points = np.zeros((num_chunks,), dtype=np.dtype("u8"))
+            arr_points = np.zeros((ref_num_chunks,), dtype=np.dtype("u8"))
+            table_factor = table_factors[0]
+            for i in range(num_chunks):
+                chunk_id = chunk_ids[i]
+                log.debug(f"chunk_id: {chunk_id}")
+                chunk_index = getChunkIndex(chunk_id)
+                chunk_index = chunk_index[0]
+                log.debug(f"chunk_index: {chunk_index}")
+                for j in range(table_factor):
+                    index = chunk_index * table_factor + j
+                    arr_index = i * table_factor + j
+                    arr_points[arr_index] = index
         else:
+            if ref_num_chunks != num_chunks:
+                msg = "hyperchunks not supported for multidimensional datasets"
+                log.warn(msg)
+                raise HTTPBadRequest(msg=msg)
             arr_points = np.zeros((num_chunks, rank), dtype=np.dtype("u8"))
-        for i in range(num_chunks):
-            chunk_id = chunk_ids[i]
-            log.debug(f"chunk_id for chunktable: {chunk_id}")
-            indx = getChunkIndex(chunk_id)
-            log.debug(f"get chunk indx: {indx}")
-            if rank == 1:
-                log.debug(f"convert: {indx[0]} to {indx}")
-                indx = indx[0]
-            arr_points[i] = indx
+            for i in range(num_chunks):
+                chunk_id = chunk_ids[i]
+                log.debug(f"chunk_id for chunktable: {chunk_id}")
+                indx = getChunkIndex(chunk_id)
+                log.debug(f"get chunk indx: {indx}")
+                arr_points[i] = indx
+
         msg = f"got chunktable points: {arr_points}, calling getSelectionData"
         log.debug(msg)
         # this call won't lead to a circular loop of calls since we've checked
         # that the chunktable layout is not H5D_CHUNKED_REF_INDIRECT
-        point_data = await getSelectionData(
-            app, chunktable_id, chunktable_json, points=arr_points, bucket=bucket
-        )
+        kwargs = {"points": arr_points, "bucket": bucket}
+        point_data = await getSelectionData(app, chunktable_id, chunktable_json, **kwargs)
 
         log.debug(f"got chunktable data: {point_data}")
         if "file_uri" in layout:
@@ -303,9 +338,8 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
 
         for i in range(num_chunks):
             chunk_id = chunk_ids[i]
+            chunk_item = getChunkItem(chunk_id)
             item = point_data[i]
-            s3offset = int(item[0])
-            s3size = int(item[1])
             if s3_layout_path is None:
                 if len(item) < 3:
                     msg = "expected chunk table to have three fields"
@@ -317,10 +351,27 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
                     log.debug(f"got s3path: {s3path}")
             else:
                 s3path = s3_layout_path
-            chunk_item = getChunkItem(chunk_id)
             chunk_item["s3path"] = s3path
-            chunk_item["s3offset"] = s3offset
-            chunk_item["s3size"] = s3size
+
+            if ref_num_chunks == num_chunks:
+                item = point_data[i]
+                s3offset = int(item[0])
+                s3size = int(item[1])
+                chunk_item["s3offset"] = s3offset
+                chunk_item["s3size"] = s3size
+            else:
+                factor = ref_num_chunks // num_chunks
+                s3offsets = []
+                s3sizes = []
+                for j in range(factor):
+                    item = point_data[i * factor + j]
+                    s3offset = int(item[0])
+                    s3offsets.append(s3offset)
+                    s3size = int(item[1])
+                    s3sizes.append(s3size)
+                chunk_item["s3offset"] = s3offsets
+                chunk_item["s3size"] = s3sizes
+                chunk_item["hyper_dims"] = hyper_dims
 
     else:
         log.error(f"Unexpected chunk layout: {layout['class']}")
@@ -1442,9 +1493,8 @@ async def getSelectionData(
 
     # Get information about where chunks are located
     #   Will be None except for H5D_CHUNKED_REF_INDIRECT type
-    await getChunkLocations(
-        app, dset_id, dset_json, chunkinfo, chunk_ids, bucket=bucket
-    )
+    await getChunkLocations(app, dset_id, dset_json, chunkinfo, chunk_ids, bucket=bucket)
+
     if slices is None:
         slices = await get_slices(app, None, dset_json, bucket=bucket)
 

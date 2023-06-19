@@ -628,10 +628,6 @@ def baseInit(node_type):
 
         app["dn_urls"] = dn_urls
         app["dn_ids"] = dn_ids
-        rangeget_url = config.getCmdLineArg("rangeget_url")
-        if rangeget_url:
-            log.debug(f"store rangeget_url: {rangeget_url}")
-            app["rangeget_url"] = rangeget_url
 
         # check to see if we are running in a DCOS cluster
     elif "IS_DOCKER" in os.environ:
