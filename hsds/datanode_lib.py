@@ -853,7 +853,7 @@ async def get_chunk_bytes(
     # create a buffer for the hsds chunk and arrange h5 chunks within it
     chunk_size = np.prod(chunk_dims) * item_size
     # number of bytes in the hd5 chunk
-    hyper_dims = [4000,]  # test
+    # hyper_dims = [4000,]  # test
     h5_size = np.prod(hyper_dims) * item_size
     log.debug(f"h5 chunk size: {h5_size}")
     chunk_bytes = bytearray(chunk_size)

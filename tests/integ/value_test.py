@@ -2998,7 +2998,8 @@ class ValueTest(unittest.TestCase):
             "class": "H5D_CHUNKED_REF_INDIRECT",
             "file_uri": file_uri,
             "dims": chunk_dims,
-            "chunk_table": chunkinfo_uuid,
+            "hyper_dims": [chunk_extent,],
+            "chunk_table": chunkinfo_uuid
         }
         # the linked dataset uses gzip, so set it here
         gzip_filter = {

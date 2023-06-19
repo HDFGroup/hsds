@@ -279,19 +279,21 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
         default_chunktable_dims = get_chunktable_dims(dims, chunk_dims)
         log.debug(f"default_chunktable_dims: {default_chunktable_dims}")
         table_factors = []
-        hyper_dims = []
+        if "hyper_dims" in layout:
+            hyper_dims = layout["hyper_dims"]
+        else:
+            # assume 1 to 1 matching
+            hyper_dims = chunk_dims
         ref_num_chunks = num_chunks
         for dim in range(rank):
-            if chunktable_dims[dim] % default_chunktable_dims[dim] != 0:
-                msg = f"expected chunktable shape[{dim}] to be a factor"
-                msg += f" of {default_chunktable_dims[dim]}"
+            if chunk_dims[dim] % hyper_dims[dim] != 0:
+                msg = f"expected hyper_dims [{hyper_dims[dim]}] to be a factor"
+                msg += f" of {chunk_dims[dim]}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
-            factor = chunktable_dims[dim] // default_chunktable_dims[dim]
+            factor = chunk_dims[dim] // hyper_dims[dim]
             table_factors.append(factor)
             ref_num_chunks *= factor
-            hyper_dim = chunk_dims[dim] // factor
-            hyper_dims.append(hyper_dim)
         log.debug(f"table_factors: {table_factors}")
         log.debug(f"ref_num_chunks: {ref_num_chunks}")
         log.debug(f"hyper_dims: {hyper_dims}")
