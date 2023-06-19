@@ -366,8 +366,8 @@ async def GET_Chunk(request):
             num_bytes = s3size
         else:
             # list
-            num_bytes = np.prod(s3size)
-        log.debug(f"reading {num_bytes} from {s3path}")
+            num_bytes = np.sum(s3size)
+        log.debug(f"reading {num_bytes} bytes from {s3path}")
         if num_bytes == 0:
             log.warn(f"GET_Chunk for s3path: {s3path} with empty byte range")
             raise HTTPNotFound()

@@ -853,7 +853,9 @@ async def get_chunk_bytes(
     # create a buffer for the hsds chunk and arrange h5 chunks within it
     chunk_size = np.prod(chunk_dims) * item_size
     # number of bytes in the hd5 chunk
+    hyper_dims = [4000,]  # test
     h5_size = np.prod(hyper_dims) * item_size
+    log.debug(f"h5 chunk size: {h5_size}")
     chunk_bytes = bytearray(chunk_size)
     if num_chunks > chunk_size // h5_size:
         # shouldn't have more than this many hyperchunks
@@ -874,27 +876,29 @@ async def get_chunk_bytes(
             "length": length[i],
             "bucket": bucket
         }
-        log.debug(f"get_chunk_bytes - h5_chunk[{i}, offset: {offset[i]}, length: {length[i]}")
+        log.debug(f"get_chunk_bytes - h5_chunk[{i}], offset: {offset[i]}, length: {length[i]}")
         tasks.append(getStorBytes(app, s3key, **kwargs))
 
     log.debug(f"running asyncio.gather on {len(tasks)} tasks")
     results = await asyncio.gather(*tasks)
-    log.debug(f"asyncio.gather got results: {results}")
+    log.debug(f"asyncio.gather got {len(results)} results")
     if len(results) != num_chunks:
         log.error("unexpected number of gather results")
         raise HTTPInternalServerError()
     for i in range(num_chunks):
-        h5_chunk = results[i]
-        if h5_chunk is None:
+        h5_chunk_bytes = results[i]
+        if h5_chunk_bytes is None:
             log.warning(f"get_chunk_bytes - None returned for h5_chunk[{i}]")
             continue
-        if len(h5_chunk) != h5_size:
-            msg = f"get_chunk_bytes - got {len(h5_chunk)} bytes for h5_chunk[{i}], "
+
+        if len(h5_chunk_bytes) != h5_size:
+            msg = f"get_chunk_bytes - got {len(h5_chunk_bytes)} bytes for h5_chunk[{i}], "
             msg += f"expected: {h5_size}"
             log.error(msg)
             continue
         pos = h5_size * i
-        chunk_bytes[pos:(pos + h5_size)] = h5_chunk
+        chunk_bytes[pos:(pos + h5_size)] = h5_chunk_bytes
+        log.debug(f"setting chunk_bytes[{pos}:{(pos+h5_size)}]")
 
     """
     # serial version

@@ -370,7 +370,6 @@ class LinkTest(unittest.TestCase):
                 #
 
             self.assertEqual(ret_names, expected_names)
-            print(expected_names)
 
             # get links with a result limit of 4
             limit = 4
