@@ -1170,35 +1170,3 @@ def chunkQuery(
         log.debug(f"   {i}: {rsp_arr[i]}")
 
     return rsp_arr
-
-def _find_min_pair(h5chunks, max_gap=None):
-    """ given a dict of chunk_map entries, return the two
-        chunks nearest to each other in the file.
-        If max_gap is set, chunms must be within max_gap bytes   """
-    if len(h5chunks) < 2:
-        return None
-    chunk_indices = list(h5chunks.keys())
-    min_pair = None
-    min_gap = None
-    for index_left in chunk_indices:
-        for index_right in chunk_indices:
-            if index_left == index_right:
-                continue
-            chunk_left = h5chunks[index_left]
-            chunk_right = h5chunks[index_right]
-            if chunk_left["offset"] > chunk_right["offset"]:
-                continue
-            gap = chunk_right["offset"] - (chunk_left["offset"] + chunk_left["length"])
-            if gap == 0:
-                # these two are contiguous
-                return (index_left, index_right)
-            if max_gap is not None  and gap > max_gap:
-                # too far apart
-                continue
-            if min_gap is None or gap < min_gap:
-                min_gap = gap
-                min_pair = (index_left, index_right)
-    return min_pair
-
-
-

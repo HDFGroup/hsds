@@ -34,6 +34,7 @@ from .util.dsetUtil import getChunkInitializer, getSliceQueryParam
 from .util.chunkUtil import getDatasetId, getChunkSelection, getChunkIndex
 from .util.arrayUtil import arrayToBytes, bytesToArray, getShapeDims, jsonToArray
 from .util.hdf5dtype import createDataType, getItemSize
+from .util.rangegetUtil import ChunkLocation, chunkMunge
 
 from . import config
 from . import hsds_logger as log
@@ -835,12 +836,12 @@ async def get_chunk_bytes(
     log.debug("intelligent range get")
 
     if hyper_dims is None:
-        log.error("intelligent range get - expected hyper_dims parameter to be set")
+        log.error("get_chunk_bytes - expected hyper_dims parameter to be set")
         raise HTTPInternalServerError()
 
     rank = len(chunk_dims)
     if rank != 1:
-        msg = "only one-dimensional datasets are supported currently for intelligent range gets"
+        msg = "get_chunk_bytes - only one-dimensional datasets are supported currently for intelligent range gets"
         log.error(msg)
         raise HTTPInternalServerError()
 
@@ -862,69 +863,61 @@ async def get_chunk_bytes(
         msg = f"get_chunk_bytes - got more than expected hyperchunks: {num_chunks}"
         log.error(msg)
         raise HTTPInternalServerError()
+    
+    # create a list of the chunk to be fetched
+    chunk_list = []
+    for i in range(num_chunks):
+        if length[i] == 0:
+            # ignore empty range get requests
+            continue
+        chunk_list.append(ChunkLocation(i, offset[i], length[i]))
+    
+    if len(chunk_list) == 0:
+        # nothing to fetch, return zero-initialized array
+        return chunk_bytes
+    
+    # munge adjacent chunks to reduce the number of storage
+    # requests needed
+    chunk_list = chunkMunge(chunk_list, max_gap=1024)
+
+    log.info(f"get_chunk_butes - stor get requests reduced from {num_chunks} to {len(chunk_list)}")
 
     # gather all the individual h5 chunk reads into a list of tasks
     tasks = []
 
-    for i in range(num_chunks):
-        if length[i] == 0:
-            # h5chunk not allocated
-            continue
+    for chunk_item in chunk_list:
+        if not isinstance(chunk_item, list):
+            # convert to a one-element list
+            chunk_locations = [chunk_item, ]
+        else:
+            chunk_locations = chunk_item
+
+        log.debug(f"getStorBytes processing chunk_locations {chunk_locations}")
+        # get the byte range we'll read from storage
+        item_offset = chunk_locations[0].offset
+        item_length = chunk_locations[-1].offset + chunk_locations[-1].length - item_offset
+
         kwargs = {
             "filter_ops": filter_ops,
-            "offset": offset[i],
-            "length": length[i],
-            "bucket": bucket
+            "offset": item_offset,
+            "length": item_length,
+            "chunk_locations": chunk_locations,
+            "bucket": bucket,
+            "chunk_bytes": chunk_bytes,
+            "h5_size": h5_size,
         }
-        log.debug(f"get_chunk_bytes - h5_chunk[{i}], offset: {offset[i]}, length: {length[i]}")
+        log.debug(f"get_chunk_bytes - {len(chunk_locations)} h5 chunks,  offset: {item_offset}, length: {item_length}")
         tasks.append(getStorBytes(app, s3key, **kwargs))
 
     log.debug(f"running asyncio.gather on {len(tasks)} tasks")
     results = await asyncio.gather(*tasks)
     log.debug(f"asyncio.gather got {len(results)} results")
-    if len(results) != num_chunks:
-        log.error("unexpected number of gather results")
+    if len(results) != len(chunk_list):
+        msg = "getStorBytes - unexpected number of gather results, "
+        msg += f"expected: {len(chunk_list)}, got: {len(results)}"
+        log.error(msg)
         raise HTTPInternalServerError()
-    for i in range(num_chunks):
-        h5_chunk_bytes = results[i]
-        if h5_chunk_bytes is None:
-            log.warning(f"get_chunk_bytes - None returned for h5_chunk[{i}]")
-            continue
-
-        if len(h5_chunk_bytes) != h5_size:
-            msg = f"get_chunk_bytes - got {len(h5_chunk_bytes)} bytes for h5_chunk[{i}], "
-            msg += f"expected: {h5_size}"
-            log.error(msg)
-            continue
-        pos = h5_size * i
-        chunk_bytes[pos:(pos + h5_size)] = h5_chunk_bytes
-        log.debug(f"setting chunk_bytes[{pos}:{(pos+h5_size)}]")
-
-    """
-    # serial version
-    for i in range(num_chunks):
-        if length[i] == 0:
-            # h5chunk not allocated
-            continue
-        kwargs = {
-            "filter_ops": filter_ops,
-            "offset": offset[i],
-            "length": length[i],
-            "bucket": bucket
-            }
-        log.debug(f"get_chunk_bytes - h5_chunk[{i}, offset: {offset[i]}, length: {length[i]}")
-        h5_chunk = await getStorBytes(app, s3key, **kwargs)
-        if h5_chunk is None:
-            log.warning(f"get_chunk_bytes - None returned for h5_chunk[{i}]")
-            continue
-        if len(h5_chunk) != h5_size:
-            msg = f"get_chunk_bytes - got {len(h5_chunk)} bytes for h5_chunk[{i}], "
-            msg += f"expected: {h5_size}"
-            log.error(msg)
-            continue
-        pos = h5_size * i
-        chunk_bytes[pos:(pos+h5_size)] = h5_chunk
-    """
+    
     log.debug("get_chunk_bytes done")
     return chunk_bytes
 

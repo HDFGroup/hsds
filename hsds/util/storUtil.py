@@ -257,8 +257,68 @@ async def getStorJSONObj(app, key, bucket=None):
     log.debug(msg)
     return json_dict
 
+def _uncompress(data, compressor=None, shuffle=0):
+    """ Uncompress the provided data using compessor and/or shuffle """
+    if compressor:
+        # compressed chunk data...
 
-async def getStorBytes(app, key, filter_ops=None, offset=0, length=-1, bucket=None):
+        # first check if this was compressed with blosc
+        # returns typesize, isshuffle, and memcopied
+        blosc_metainfo = codecs.blosc.cbuffer_metainfo(data)
+        if blosc_metainfo[0] > 0:
+            log.info(f"blosc compressed data for {len(data)} bytes")
+            try:
+                blosc = codecs.Blosc()
+                udata = blosc.decode(data)
+                log.info(f"uncompressed to {len(udata)} bytes")
+                data = udata
+                shuffle = 0  # blosc will unshuffle the bytes for us
+            except Exception as e:
+                msg = f"got exception: {e} using blosc decompression"
+                log.error(msg)
+                raise HTTPInternalServerError()
+        elif compressor == "zlib":
+            # data may have been compressed without blosc,
+            # try using zlib directly
+            log.info(f"using zlib to decompress {len(data)} bytes")
+            try:
+                udata = zlib.decompress(data)
+                log.info(f"uncompressed to {len(udata)} bytes")
+                data = udata
+            except zlib.error as zlib_error:
+                log.info(f"zlib_err: {zlib_error}")
+                log.error("unable to uncompress data with zlib")
+                raise HTTPInternalServerError()
+        else:
+            msg = f"don't know how to decompress data in {compressor} "
+            log.error(msg)
+            raise HTTPInternalServerError()
+
+    if shuffle > 0:
+        log.debug(f"shuffle is {shuffle}")
+        start_time = time.time()
+        unshuffled = _unshuffle(shuffle, data)
+        if unshuffled is not None:
+            log.debug(f"unshuffled to {len(unshuffled)} bytes")
+            data = unshuffled
+        finish_time = time.time()
+        elapsed = finish_time - start_time
+        msg = f"unshuffled {len(data)} bytes, {(elapsed):.2f} elapsed"
+        log.debug(msg)
+
+    return data
+
+
+async def getStorBytes(app, 
+                       key, 
+                       filter_ops=None, 
+                       offset=0, 
+                       length=-1,
+                       chunk_locations=None, 
+                       chunk_bytes=None,
+                       h5_size=None,
+                       bucket=None,
+                       ):
     """Get object identified by key and read as bytes"""
 
     client = _getStorageClient(app)
@@ -295,55 +355,46 @@ async def getStorBytes(app, key, filter_ops=None, offset=0, length=-1, bucket=No
     if length > 0 and len(data) != length:
         log.warn(f"requested {length} bytes but got {len(data)} bytes")
 
-    if compressor:
-        # compressed chunk data...
-
-        # first check if this was compressed with blosc
-        # returns typesize, isshuffle, and memcopied
-        blosc_metainfo = codecs.blosc.cbuffer_metainfo(data)
-        if blosc_metainfo[0] > 0:
-            log.info(f"blosc compressed data for {key}")
-            try:
-                blosc = codecs.Blosc()
-                udata = blosc.decode(data)
-                log.info(f"uncompressed to {len(udata)} bytes")
-                data = udata
-                shuffle = 0  # blosc will unshuffle the bytes for us
-            except Exception as e:
-                msg = f"got exception: {e} using blosc decompression for {key}"
-                log.error(msg)
-                raise HTTPInternalServerError()
-        elif compressor == "zlib":
-            # data may have been compressed without blosc,
-            # try using zlib directly
-            log.info(f"using zlib to decompress {key}")
-            try:
-                udata = zlib.decompress(data)
-                log.info(f"uncompressed to {len(udata)} bytes")
-                data = udata
-            except zlib.error as zlib_error:
-                log.info(f"zlib_err: {zlib_error}")
-                log.error(f"unable to uncompress obj: {key}")
-                raise HTTPInternalServerError()
-        else:
-            msg = f"don't know how to decompress data in {compressor} "
-            msg += f"format for {key}"
-            log.error(msg)
+    if chunk_locations:
+        log.debug(f"getStorBytes - got {len(chunk_locations)} chunk locations")
+        # uncompress chunks within the fetched data and store to 
+        # chunk bytes
+        if not h5_size:
+            log.error("getStoreBytes - h5_size not set")
             raise HTTPInternalServerError()
-
-    if shuffle > 0:
-        log.debug(f"shuffle is {shuffle}")
-        start_time = time.time()
-        unshuffled = _unshuffle(shuffle, data)
-        if unshuffled is not None:
-            log.debug(f"unshuffled to {len(unshuffled)} bytes")
-            data = unshuffled
-        finish_time = time.time()
-        elapsed = finish_time - start_time
-        msg = f"unshuffled {len(data)} bytes, {(elapsed):.2f} elapsed"
-        log.debug(msg)
-
-    return data
+        if not chunk_bytes:
+            log.error("getStoreBytes - chunk_bytes not set")
+            raise HTTPInternalServerError()
+        if len(chunk_locations) * h5_size < len(chunk_bytes):
+            log.error(f"getStoreBytes - invalid chunk_bytes length: {len(chunk_bytes)}")
+        for chunk_location in chunk_locations:
+            log.debug(f"getStoreBytes - processing chunk_location: {chunk_location}")
+            n = chunk_location.offset - offset
+            if n < 0:
+                log.warn(f"getStoreBytes - unexpected offset for chunk_location: {chunk_location}")
+                continue
+            m = n + chunk_location.length
+            log.debug(f"getStorBytes - extracting chunk from data[{n}:{m}]")
+            h5_bytes = data[n:m]
+            h5_bytes = _uncompress(h5_bytes, compressor=compressor, shuffle=shuffle)
+            if len(h5_bytes) != h5_size:
+                msg = f"expected chunk index: {chunk_location.index} to have size: "
+                msg += f"{h5_size} but got: {len(h5_bytes)}"
+                log.warning(msg)
+                continue
+            # slot into the hsds chunk
+            hs_offset = chunk_location.index * h5_size
+            if hs_offset + h5_size > len(chunk_bytes):
+                msg = f"expected chunk index: {chunk_location.index} to have offset: "
+                msg += f"less than {len(chunk_bytes) - h5_size} but got: {hs_offset}"
+                log.warning(msg)
+                continue
+            chunk_bytes[hs_offset:(hs_offset+h5_size)] = h5_bytes
+        # chunk_bytes got updated, so just return None
+        return None
+    else:
+        data = _uncompress(data, compressor=compressor, shuffle=shuffle)
+        return data
 
 
 async def putStorBytes(app, key, data, filter_ops=None, bucket=None):
