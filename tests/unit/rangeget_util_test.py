@@ -19,6 +19,7 @@ from hsds.util.rangegetUtil import (
     chunkMunge,
 )
 
+
 class RangegetutilTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(RangegetutilTest, self).__init__(*args, **kwargs)
@@ -31,11 +32,11 @@ class RangegetutilTest(unittest.TestCase):
         c3 = ChunkLocation(3, 300, 40)
         c4 = ChunkLocation(4, 340, 30)
         c_bad = ChunkLocation(5, 110, 40)  # overlaps c1
-        
+
         h5chunks = []
         munged = chunkMunge(h5chunks)
         self.assertEqual(munged, h5chunks)
-        
+
         h5chunks = [c1, ]
         munged = chunkMunge(h5chunks)
         self.assertEqual(munged, h5chunks)
@@ -45,29 +46,28 @@ class RangegetutilTest(unittest.TestCase):
         self.assertEqual(len(munged), 1)
         self.assertTrue(isinstance(munged[0], list))
         self.assertEqual(len(munged[0]), 2)
-        self.assertEqual(munged, [[c1, c2],])
+        self.assertEqual(munged, [[c1, c2], ])
 
         h5chunks = [c2, c1]
         munged = chunkMunge(h5chunks)
         self.assertEqual(len(munged), 1)
         self.assertTrue(isinstance(munged[0], list))
         self.assertEqual(len(munged[0]), 2)
-        self.assertEqual(munged, [[c1, c2],])
-        
+        self.assertEqual(munged, [[c1, c2], ])
 
         h5chunks = [c1, c2, c3, c4]
         munged = chunkMunge(h5chunks)
         self.assertEqual(len(munged), 1)
         self.assertTrue(isinstance(munged[0], list))
         self.assertEqual(len(munged[0]), 4)
-        self.assertEqual(munged, [[c1, c2, c3, c4],])
+        self.assertEqual(munged, [[c1, c2, c3, c4], ])
 
         # test with max_gap = 0
         h5chunks = [c1, c2, c3, c4]
         munged = chunkMunge(h5chunks, max_gap=0)
         self.assertEqual(len(munged), 3)
         self.assertEqual(munged, [c1, c2, [c3, c4]])
-        
+
         # test with max_gap = 70
         h5chunks = [c1, c2, c3, c4]
         munged = chunkMunge(h5chunks, max_gap=70)
@@ -79,18 +79,8 @@ class RangegetutilTest(unittest.TestCase):
             munged = chunkMunge(h5chunks)
             self.assertTrue(False)
         except ValueError:
-            pass # expected
-
-        
-
-
-
-
+            pass  # expected
 
 
 if __name__ == "__main__":
-
     unittest.main()
-
-
-

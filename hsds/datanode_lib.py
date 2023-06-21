@@ -841,7 +841,8 @@ async def get_chunk_bytes(
 
     rank = len(chunk_dims)
     if rank != 1:
-        msg = "get_chunk_bytes - only one-dimensional datasets are supported currently for intelligent range gets"
+        msg = "get_chunk_bytes - only one-dimensional datasets are supported currently "
+        msg += "for intelligent range gets"
         log.error(msg)
         raise HTTPInternalServerError()
 
@@ -863,7 +864,7 @@ async def get_chunk_bytes(
         msg = f"get_chunk_bytes - got more than expected hyperchunks: {num_chunks}"
         log.error(msg)
         raise HTTPInternalServerError()
-    
+
     # create a list of the chunk to be fetched
     chunk_list = []
     for i in range(num_chunks):
@@ -871,11 +872,11 @@ async def get_chunk_bytes(
             # ignore empty range get requests
             continue
         chunk_list.append(ChunkLocation(i, offset[i], length[i]))
-    
+
     if len(chunk_list) == 0:
         # nothing to fetch, return zero-initialized array
         return chunk_bytes
-    
+
     # munge adjacent chunks to reduce the number of storage
     # requests needed
     chunk_list = chunkMunge(chunk_list, max_gap=1024)
@@ -906,7 +907,9 @@ async def get_chunk_bytes(
             "chunk_bytes": chunk_bytes,
             "h5_size": h5_size,
         }
-        log.debug(f"get_chunk_bytes - {len(chunk_locations)} h5 chunks,  offset: {item_offset}, length: {item_length}")
+        msg = f"get_chunk_bytes - {len(chunk_locations)} h5 chunks,  "
+        msg += f"offset: {item_offset}, length: {item_length}"
+        log.debug(msg)
         tasks.append(getStorBytes(app, s3key, **kwargs))
 
     log.debug(f"running asyncio.gather on {len(tasks)} tasks")
@@ -917,7 +920,7 @@ async def get_chunk_bytes(
         msg += f"expected: {len(chunk_list)}, got: {len(results)}"
         log.error(msg)
         raise HTTPInternalServerError()
-    
+
     log.debug("get_chunk_bytes done")
     return chunk_bytes
 

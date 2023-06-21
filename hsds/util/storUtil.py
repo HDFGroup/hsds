@@ -257,6 +257,7 @@ async def getStorJSONObj(app, key, bucket=None):
     log.debug(msg)
     return json_dict
 
+
 def _uncompress(data, compressor=None, shuffle=0):
     """ Uncompress the provided data using compessor and/or shuffle """
     if compressor:
@@ -309,12 +310,12 @@ def _uncompress(data, compressor=None, shuffle=0):
     return data
 
 
-async def getStorBytes(app, 
-                       key, 
-                       filter_ops=None, 
-                       offset=0, 
+async def getStorBytes(app,
+                       key,
+                       filter_ops=None,
+                       offset=0,
                        length=-1,
-                       chunk_locations=None, 
+                       chunk_locations=None,
                        chunk_bytes=None,
                        h5_size=None,
                        bucket=None,
@@ -357,7 +358,7 @@ async def getStorBytes(app,
 
     if chunk_locations:
         log.debug(f"getStorBytes - got {len(chunk_locations)} chunk locations")
-        # uncompress chunks within the fetched data and store to 
+        # uncompress chunks within the fetched data and store to
         # chunk bytes
         if not h5_size:
             log.error("getStoreBytes - h5_size not set")
@@ -389,7 +390,7 @@ async def getStorBytes(app,
                 msg += f"less than {len(chunk_bytes) - h5_size} but got: {hs_offset}"
                 log.warning(msg)
                 continue
-            chunk_bytes[hs_offset:(hs_offset+h5_size)] = h5_bytes
+            chunk_bytes[hs_offset:(hs_offset + h5_size)] = h5_bytes
         # chunk_bytes got updated, so just return None
         return None
     else:

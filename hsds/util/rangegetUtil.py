@@ -1,7 +1,12 @@
 from operator import attrgetter
 from collections import namedtuple
 
+# HDF5 file chunk location named tuple
+#  index: index of the chunk
+#  offset: byte offset from start of HDF5 file
+#  length: number of bytes used in the file
 ChunkLocation = namedtuple("ChunkLocation", ["index", "offset", "length"])
+
 
 def _chunk_start(c):
     """ return start of byte range for given chunk or chunk list """
@@ -9,10 +14,11 @@ def _chunk_start(c):
     if isinstance(c, list):
         for e in c:
             if start is None or e.offset < start:
-                start = e.offset 
+                start = e.offset
     else:
         start = c.offset
     return start
+
 
 def _chunk_end(c):
     """ return end of byte range for given chunk or chunk list """
@@ -24,6 +30,7 @@ def _chunk_end(c):
     else:
         end = c.offset + c.length
     return end
+
 
 def _chunk_dist(chunk_left, chunk_right):
     """ return byte seperation of two h5 chunks """
@@ -39,56 +46,63 @@ def _chunk_dist(chunk_left, chunk_right):
     if dist < 0:
         raise ValueError("unexpected chunk position")
     return dist
-        
 
 
 def _find_min_pair(h5chunks, max_gap=None):
     """ Given a list of chunk_map entries which are sorted by offset,
         return the two chunks nearest to each other in the file.
-        If max_gap is set, chunms must be within max_gap bytes   
+        If max_gap is set, chunms must be within max_gap bytes
     """
     num_chunks = len(h5chunks)
 
     if num_chunks < 2:
         return None
-    
+
     min_pair = None
     min_dist = None
 
     for i in range(1, num_chunks):
-        c1 = h5chunks[i-1]
+        c1 = h5chunks[i - 1]
         c2 = h5chunks[i]
         d = _chunk_dist(c1, c2)
         if d == 0:
             # short-circuit search and just return this pair
-            return (i-1, i)
+            return (i - 1, i)
         if d > max_gap:
             continue
         if min_dist is None or d < min_dist:
-            min_pair = (i-1, i)
+            min_pair = (i - 1, i)
             min_dist = d
     return min_pair
 
-    
+
 def chunkMunge(h5chunks, max_gap=1024):
-    """ given a list of ChunkLocations, 
+    """ given a list of ChunkLocations,
          return list of list of chunk items where
          items in the list our within max_gap of each other """
-    
+
     # sort chunk locations by offset
     munged = sorted(h5chunks, key=attrgetter('offset'))
     while True:
         min_pair = _find_min_pair(munged, max_gap=max_gap)
         if min_pair is None:
+            # no min_pair, so we are done
             break
+
         left = min_pair[0]
         right = min_pair[1]
-        
+
         # combine the left and right pair, taking care to
         # return a list of ChunkLocations
         chunk_left = munged[left]
         chunk_right = munged[right]
 
+        # combine one of:
+        #   * chunk and chunk
+        #   * chunk and list of chunks
+        #   * list of chunks and chunk
+        #   * list of chunks and list of chunks
+        # result should be a list of chunks
         if isinstance(chunk_left, list):
             combined = chunk_left
         else:
@@ -98,20 +112,16 @@ def chunkMunge(h5chunks, max_gap=1024):
         else:
             combined.append(chunk_right)
 
+        # create a new list of the original entries
+        # along with our combined element
         mungier = []
         if left > 0:
             mungier.extend(munged[:left])
-
         mungier.append(combined)
-
         if right < len(munged) - 1:
-            mungier.extend(munged[(right+1):])
+            mungier.extend(munged[(right + 1):])
 
+        # repeat till we can't reduce the list size anymore
         munged = mungier
 
     return munged
-        
-                               
-            
-
-
