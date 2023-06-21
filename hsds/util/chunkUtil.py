@@ -709,6 +709,7 @@ def get_chunktable_dims(shape_dims, chunk_dims):
         chunk_extent = chunk_dims[dim]
 
         if dset_extent > 0 and chunk_extent > 0:
+            # get integer ceil of dset and chunk extents
             table_extent = -(dset_extent // -chunk_extent)
         else:
             table_extent = 0

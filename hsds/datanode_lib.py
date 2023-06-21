@@ -39,7 +39,7 @@ from .util.rangegetUtil import ChunkLocation, chunkMunge
 from . import config
 from . import hsds_logger as log
 
-# supported initializer commands (just one at the moement)
+# supported initializer commands
 INITIALIZER_CMDS = ["chunklocator", "arange"]
 
 
