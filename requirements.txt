@@ -12,4 +12,4 @@ pytz
 pyyaml
 requests-unixsocket
 simplejson
-urllib==1.26.15
+urllib<2.0.0
