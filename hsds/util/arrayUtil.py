@@ -396,7 +396,7 @@ def getElementCount(buffer, offset):
     count_bytes = bytes(buffer[n:m])
 
     try:
-        count = int(np.frombuffer(count_bytes, dtype="<i4"))
+        count = int(np.frombuffer(count_bytes, dtype="<i4")[0])
     except TypeError as e:
         msg = f"Unexpected error reading count value for varlen element: {e}"
         raise TypeError(msg)
