@@ -1,6 +1,8 @@
-aiobotocore==2.1.0
+aiohttp==3.8.4
+aiobotocore==2.5.0
 aiohttp_cors
 aiofiles
+botocore==1.29.76
 cryptography
 numcodecs
 numpy
@@ -10,4 +12,4 @@ pytz
 pyyaml
 requests-unixsocket
 simplejson
-aiohttp==3.8.1
+urllib==1.26.15

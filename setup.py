@@ -23,10 +23,19 @@ classifiers = [
     "Topic :: Scientific/Engineering",
 ]
 
+#
+# The specific versions given below are not desirable,
+# but there are needed given aiobotocore and botocore 
+# requirements (e.g. see: https://github.com/boto/botocore/issues/2926#issuecomment-1535456104) 
+# as well as matching with packages present
+# in the Docker build base image
+#
 install_requires = [
-    "aiobotocore",
+    "aiohttp==3.8.4",
+    "aiobotocore==2.5.0",
     "aiohttp_cors",
     "aiofiles",
+    "botocore==1.29.76",
     "cryptography",
     "numcodecs",
     "numpy",
@@ -36,7 +45,7 @@ install_requires = [
     "pyyaml",
     "requests-unixsocket",
     "simplejson",
-    "aiohttp",
+    "urllib3==1.26.15"
 ]
 
 
