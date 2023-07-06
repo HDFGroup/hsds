@@ -25,8 +25,8 @@ classifiers = [
 
 #
 # The specific versions given below are not desirable,
-# but there are needed given aiobotocore and botocore 
-# requirements (e.g. see: https://github.com/boto/botocore/issues/2926#issuecomment-1535456104) 
+# but there are needed given aiobotocore and botocore
+# requirements (e.g. see: https://github.com/boto/botocore/issues/2926#issuecomment-1535456104)
 # as well as matching with packages present
 # in the Docker build base image
 #
