@@ -45,7 +45,6 @@ install_requires = [
     "pyyaml",
     "requests-unixsocket",
     "simplejson",
-    "urllib3"
 ]
 
 

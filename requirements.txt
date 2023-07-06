@@ -12,4 +12,3 @@ pytz
 pyyaml
 requests-unixsocket
 simplejson
-urllib
