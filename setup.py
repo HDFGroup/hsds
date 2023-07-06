@@ -35,7 +35,7 @@ install_requires = [
     "aiobotocore==2.5.0",
     "aiohttp_cors",
     "aiofiles",
-    "botocore==1.29.76",
+    "botocore",
     "cryptography",
     "numcodecs",
     "numpy",
