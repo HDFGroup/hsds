@@ -38,7 +38,9 @@ async def GET_Group(request):
     getAlias = False
     include_links = False
     include_attrs = False
+
     group_id = request.match_info.get("id")
+
     if not group_id and "h5path" not in params:
         # no id, or path provided, so bad request
         msg = "Missing group id"
@@ -90,12 +92,13 @@ async def GET_Group(request):
     if h5path:
         # throws 404 if not found
         kwargs = {"bucket": bucket, "domain": domain}
-        group_id = await getObjectIdByPath(app, group_id, h5path, **kwargs)
+        group_id, domain, obj_json = await getObjectIdByPath(app, group_id, h5path, **kwargs)
+
         if not isValidUuid(group_id, "Group"):
             msg = f"No group exist with the path: {h5path}"
             log.warn(msg)
             raise HTTPNotFound()
-        log.info(f"get group_id: {group_id} from h5path: {h5path}")
+        log.info(f"get group_id: {group_id} from h5path: {h5path} in the domain: {domain}")
 
     # verify authorization to read the group
     await validateAction(app, domain, group_id, username, "read")
@@ -108,8 +111,10 @@ async def GET_Group(request):
         "include_attrs": include_attrs,
         "bucket": bucket,
     }
+
     group_json = await getObjectJson(app, group_id, **kwargs)
     log.debug(f"domain from request: {domain}")
+
     group_json["domain"] = getPathForDomain(domain)
     if bucket:
         group_json["bucket"] = bucket

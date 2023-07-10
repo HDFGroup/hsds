@@ -35,6 +35,7 @@ async def GET_Links(request):
     params = request.rel_url.query
 
     group_id = request.match_info.get("id")
+
     if not group_id:
         msg = "Missing group id"
         log.warn(msg)
@@ -266,6 +267,7 @@ async def PUT_Link(request):
     bucket = getBucketForDomain(domain)
     if not bucket:
         bucket = config.get("bucket_name")
+
     await validateAction(app, domain, group_id, username, "create")
 
     # for hard links, verify that the referenced id exists and is in
