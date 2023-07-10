@@ -2288,6 +2288,30 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue(chunk_size >= CHUNK_MIN)
         self.assertTrue(chunk_size <= CHUNK_MAX)
 
+    def testDatasetEmptyChunkExtent(self):
+        # Attempting to create 0-extent chunks should respond with Bad Request
+        domain = self.base_domain + "/testDatasetEmptyChunkExtent.h5"
+        helper.setupDomain(domain)
+        print("testDatasetEmptyChunkExtent", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + "/"
+
+        # create the dataset
+        req = self.endpoint + "/datasets"
+
+        dims = [1]
+        payload = {"type": "H5T_IEEE_F32LE",
+                   "shape": dims}
+
+        payload["creationProperties"] = {
+            "layout": {"class": "H5D_CHUNKED", "dims": [0]}
+        }
+
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        # Should fail with Bad Request due to invalid layout value
+        self.assertEqual(rsp.status_code, 400)  # create dataset
+
 
 if __name__ == "__main__":
     # setup test files
