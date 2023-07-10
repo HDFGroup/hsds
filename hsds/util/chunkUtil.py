@@ -30,10 +30,10 @@ def ndarray_compare(arr1, arr2):
         # both np.voids
         if arr1.size != arr2.size:
             return False
-        
+
         if len(arr1) != len(arr2):
             return False
-        
+
         for i in range(len(arr1)):
             if not ndarray_compare(arr1[i], arr2[i]):
                 return False
@@ -64,6 +64,7 @@ def ndarray_compare(arr1, arr2):
         if not ndarray_compare(arr1[i], arr2[i]):
             return False
     return True
+
 
 """
 Convert list that may contain bytes type elements to list of string elements
