@@ -17,7 +17,6 @@ import sys
 
 sys.path.append("../..")
 from hsds.util.arrayUtil import arrayToBytes, bytesToArray
-from hsds.util.chunkUtil import ndarray_compare
 from hsds.util.hdf5dtype import createDataType
 
 
