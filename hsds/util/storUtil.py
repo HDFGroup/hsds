@@ -361,18 +361,18 @@ async def getStorBytes(app,
         # uncompress chunks within the fetched data and store to
         # chunk bytes
         if not h5_size:
-            log.error("getStoreBytes - h5_size not set")
+            log.error("getStorBytes - h5_size not set")
             raise HTTPInternalServerError()
         if not chunk_bytes:
-            log.error("getStoreBytes - chunk_bytes not set")
+            log.error("getStorBytes - chunk_bytes not set")
             raise HTTPInternalServerError()
         if len(chunk_locations) * h5_size < len(chunk_bytes):
-            log.error(f"getStoreBytes - invalid chunk_bytes length: {len(chunk_bytes)}")
+            log.error(f"getStorBytes - invalid chunk_bytes length: {len(chunk_bytes)}")
         for chunk_location in chunk_locations:
             log.debug(f"getStoreBytes - processing chunk_location: {chunk_location}")
             n = chunk_location.offset - offset
             if n < 0:
-                log.warn(f"getStoreBytes - unexpected offset for chunk_location: {chunk_location}")
+                log.warn(f"getStorBytes - unexpected offset for chunk_location: {chunk_location}")
                 continue
             m = n + chunk_location.length
             log.debug(f"getStorBytes - extracting chunk from data[{n}:{m}]")

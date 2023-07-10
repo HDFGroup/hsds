@@ -8,6 +8,63 @@ DEFAULT_TYPE_SIZE = 128  # Type size case when it is variable
 PRIMES = [29, 31, 37, 41, 43, 47, 53, 59, 61, 67]  # for chunk partitioning
 
 
+# compare two numpy arrays.
+# return true if the same (exclusive of null vs. empty array)
+# false otherwise
+
+
+def ndarray_compare(arr1, arr2):
+    if not isinstance(arr1, np.ndarray) and not isinstance(arr2, np.ndarray):
+        if not isinstance(arr1, np.void) and not isinstance(arr2, np.void):
+            return arr1 == arr2
+        if isinstance(arr1, np.void) and not isinstance(arr2, np.void):
+            if arr1.size == 0 and not arr2:
+                return True
+            else:
+                return False
+        if not isinstance(arr1, np.void) and isinstance(arr2, np.void):
+            if not arr1 and arr2.size == 0:
+                return True
+            else:
+                return False
+        # both np.voids
+        if arr1.size != arr2.size:
+            return False
+        
+        if len(arr1) != len(arr2):
+            return False
+        
+        for i in range(len(arr1)):
+            if not ndarray_compare(arr1[i], arr2[i]):
+                return False
+        return True
+
+    if isinstance(arr1, np.ndarray) and not isinstance(arr2, np.ndarray):
+        # same only if arr1 is empty and arr2 is 0
+        if arr1.size == 0 and not arr2:
+            return True
+        else:
+            return False
+    if not isinstance(arr1, np.ndarray) and isinstance(arr2, np.ndarray):
+        # same only if arr1 is empty and arr2 size is 0
+        if not arr1 and arr2.size == 0:
+            return True
+        else:
+            return False
+
+    # two ndarrays...
+    if arr1.shape != arr2.shape:
+        return False
+    if arr2.dtype != arr2.dtype:
+        return False
+    nElements = np.prod(arr1.shape)
+    arr1 = arr1.reshape((nElements,))
+    arr2 = arr2.reshape((nElements,))
+    for i in range(nElements):
+        if not ndarray_compare(arr1[i], arr2[i]):
+            return False
+    return True
+
 """
 Convert list that may contain bytes type elements to list of string elements
 
@@ -803,27 +860,38 @@ def chunkWriteSelection(chunk_arr=None, slices=None, data=None):
     """
     Write data for requested chunk and selection
     """
-    log.info("chunkWriteSelection")
     dims = chunk_arr.shape
 
     rank = len(dims)
 
     if rank == 0:
         msg = "No dimension passed to chunkReadSelection"
+        log.error(msg)
         raise ValueError(msg)
     if len(slices) != rank:
         msg = "Selection rank does not match dataset rank"
+        log.error(msg)
         raise ValueError(msg)
     if len(data.shape) != rank:
         msg = "Input arr does not match dataset rank"
+        log.error(msg)
         raise ValueError(msg)
 
     updated = False
     # check if the new data modifies the array or not
-    if not np.array_equal(chunk_arr[slices], data):
-        # update chunk array
-        chunk_arr[slices] = data
-        updated = True
+    # TBD - is this worth the cost of comparing two arrays element by element?
+    try:
+        if not ndarray_compare(chunk_arr[slices], data):
+            # if not np.array_equal(chunk_arr[slices], data):
+            # update chunk array
+            chunk_arr[slices] = data
+            updated = True
+    except ValueError as ve:
+        msg = f"array_equal ValueError, chunk_arr[{slices}]: {chunk_arr[slices]} "
+        msg += f"data: {data}, data type: {type(data)} ve: {ve}"
+        log.error(msg)
+        raise
+
     return updated
 
 

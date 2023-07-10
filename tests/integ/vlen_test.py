@@ -17,6 +17,7 @@ import sys
 
 sys.path.append("../..")
 from hsds.util.arrayUtil import arrayToBytes, bytesToArray
+from hsds.util.chunkUtil import ndarray_compare
 from hsds.util.hdf5dtype import createDataType
 
 
@@ -24,6 +25,7 @@ class VlenTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(VlenTest, self).__init__(*args, **kwargs)
         self.base_domain = helper.getTestDomainName(self.__class__.__name__)
+        print(self.base_domain)
         helper.setupDomain(self.base_domain)
         self.endpoint = helper.getEndpoint()
 
@@ -77,9 +79,7 @@ class VlenTest(unittest.TestCase):
 
         # write values to dataset
         data = [
-            [
-                1,
-            ],
+            [1,],
             [1, 2],
             [1, 2, 3],
             [1, 2, 3, 4],
@@ -97,6 +97,8 @@ class VlenTest(unittest.TestCase):
         self.assertTrue("value" in rspJson)
         value = rspJson["value"]
         self.assertEqual(len(value), 4)
+        print("value:", value)
+        print("data:", data)
         for i in range(4):
             self.assertEqual(value[i], data[i])
 
@@ -221,6 +223,9 @@ class VlenTest(unittest.TestCase):
         for i in range(count):
             self.assertEqual(value[i], test_values[i])
 
+        print("data:", data)
+        print("arr:", arr)
+
         # read back a selection
         params = {"select": "[2:3]"}
         rsp = self.session.get(req, headers=headers, params=params)
@@ -291,6 +296,8 @@ class VlenTest(unittest.TestCase):
         self.assertTrue("value" in rspJson)
         value = rspJson["value"]
         self.assertEqual(len(value), nrow)
+        print("value:", value)
+        print("data:", data)
 
         for i in range(nrow):
             for j in range(ncol):

@@ -956,17 +956,6 @@ async def get_chunk(
 
     # validate arguments
     if s3path:
-        """
-        if s3size == 0 and s3offset == 0:
-            # uninitialized chunk ref
-            msg = f"reference chunk not set for id: {chunk_id}, returning 404"
-            log.info(msg)
-            raise HTTPNotFound()  # not found return 404
-        if s3size == 0:
-            msg = f"Unexpected get_chunk parameter - s3path: {s3path} with size 0"
-            log.error(msg)
-            raise HTTPInternalServerError()
-        """
         if bucket:
             msg = "get_chunk - bucket arg should not be used with s3path"
             log.error(msg)

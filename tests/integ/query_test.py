@@ -502,9 +502,8 @@ class QueryTest(unittest.TestCase):
         params["Limit"] = 1
         update_value = {"open": 999}
         payload = {"value": update_value}
-        rsp = self.session.put(
-            req, params=params, data=json.dumps(update_value), headers=headers
-        )
+        
+        rsp = self.session.put(req, params=params, data=json.dumps(update_value), headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -537,9 +536,7 @@ class QueryTest(unittest.TestCase):
         params = {"query": "open == 0"}
         update_value = {"open": -999}
         payload = {"value": update_value}
-        rsp = self.session.put(
-            req, params=params, data=json.dumps(update_value), headers=headers
-        )
+        rsp = self.session.put(req, params=params, data=json.dumps(update_value), headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("value" in rspJson)
