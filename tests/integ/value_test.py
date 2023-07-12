@@ -2540,7 +2540,7 @@ class ValueTest(unittest.TestCase):
         # should get one element back
         self.assertEqual(len(value), 1)
         item = value[0]
-        # should be all zeros since we haven't update the chunk table yet
+        # should be all zeros since we haven't updated the chunk table yet
         self.assertEqual(len(item), len(fields))
         self.assertEqual(item[0], "")
         self.assertEqual(item[1], "")
@@ -2770,14 +2770,13 @@ class ValueTest(unittest.TestCase):
         chunkinfo_dims = [num_chunks]
         layout = {"class": "H5D_CHUNKED"}
         layout["dims"] = chunkinfo_dims
-        initializer = ["hsds-chunklocator",
+        initializer = ["chunklocator",
                        "--h5path=/dset",
                        f"--filepath={file_path}",
                        f"--bucket={hdf5_sample_bucket}"]
-        layout["initializer"] = initializer
 
         payload = {"type": chunkinfo_type, "shape": chunkinfo_dims}
-        payload["creationProperties"] = {"layout": layout}
+        payload["creationProperties"] = {"layout": layout, "initializer": initializer}
 
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
@@ -2785,8 +2784,6 @@ class ValueTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         chunkinfo_uuid = rspJson["id"]
         self.assertTrue(helper.validateId(chunkinfo_uuid))
-
-        print("chunkinfo id:", chunkinfo_uuid)
 
         # link new dataset as 'chunks'
         name = "chunks"
@@ -2867,6 +2864,185 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(item[0], "1998.10.22")
         self.assertEqual(item[1], "MHFI")
         self.assertEqual(item[2], 3)
+
+    def testARangeInitializerDataset(self):
+        test_name = "testARangeInitializerDataset"
+        print(test_name, self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+
+        # get domain
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        req = self.endpoint + "/datasets"
+
+        extent = 1_000_000_000   # one billion elements
+        dset_dims = [extent, ]
+        layout = {"class": "H5D_CHUNKED"}
+        layout["dims"] = dset_dims
+
+        range_start = 0  # -0.25
+        range_step = 1
+
+        initializer = ["arange",
+                       f"--start={range_start}",
+                       f"--step={range_step}", ]
+
+        payload = {"type": "H5T_STD_I64LE", "shape": dset_dims}
+        payload["creationProperties"] = {"layout": layout, "initializer": initializer}
+
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_id = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_id))
+
+        # link new dataset as 'dset10'
+        name = "dset10"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": dset_id}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # read a selection
+        req = self.endpoint + "/datasets/" + dset_id + "/value"
+        count = 10
+        sel_start = 19_531_260  # 20_000_000 # 123_456_789
+        sel_stop = sel_start + count
+        params = {"select": f"[{sel_start}:{sel_stop}]"}  # read 10 elements
+        params["nonstrict"] = 1  # enable SN to invoke lambda func
+
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+        # should get extent elements back
+        self.assertEqual(len(value), count)
+
+        expected_val = (sel_start * range_step) + range_start
+        for i in range(count):
+            self.assertEqual(value[i], expected_val)
+            expected_val += range_step
+
+    def testIntelligentRangeGet(self):
+        test_name = "testIntelligentRangeGet"
+        print(test_name, self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+
+        hdf5_sample_bucket = config.get("hdf5_sample_bucket")
+        if not hdf5_sample_bucket:
+            print(f"hdf5_sample_bucket config not set, skipping {test_name}")
+            return
+
+        file_path = "/data/hdf5test/small1dchunk.h5"
+
+        dset_rows = 2_000_000
+        chunk_extent = 4000
+
+        chunk_dims = [chunk_extent, ]  # file uses 16KB chunk size
+        num_chunks = dset_rows // chunk_dims[0]
+
+        # get domain
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        req = self.endpoint + "/datasets"
+        # Store chunk locations
+
+        chunkinfo_dims = [num_chunks, ]
+        fields = (
+            {"name": "offset", "type": "H5T_STD_I64LE"},
+            {"name": "size", "type": "H5T_STD_I32LE"},
+        )
+        chunkinfo_type = {"class": "H5T_COMPOUND", "fields": fields}
+        layout = {"class": "H5D_CHUNKED"}
+        layout["dims"] = chunkinfo_dims
+        initializer = ["chunklocator",
+                       "--h5path=/dset",
+                       f"--filepath={file_path}",
+                       f"--bucket={hdf5_sample_bucket}"]
+
+        payload = {"type": chunkinfo_type, "shape": chunkinfo_dims}
+        payload["creationProperties"] = {"layout": layout, "initializer": initializer}
+
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        chunkinfo_uuid = rspJson["id"]
+        self.assertTrue(helper.validateId(chunkinfo_uuid))
+
+        # link new dataset as 'chunktable'
+        name = "chunktable"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": chunkinfo_uuid}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        data = {"type": "H5T_STD_I32LE", "shape": [dset_rows, ]}
+        file_uri = f"{hdf5_sample_bucket}{file_path}"
+
+        # make the dataset chunk a multiple of linked chunk shape
+        chunk_dims = [chunk_extent * 4, ]
+        layout = {
+            "class": "H5D_CHUNKED_REF_INDIRECT",
+            "file_uri": file_uri,
+            "dims": chunk_dims,
+            "hyper_dims": [chunk_extent, ],
+            "chunk_table": chunkinfo_uuid
+        }
+        # the linked dataset uses gzip, so set it here
+        gzip_filter = {
+            "class": "H5Z_FILTER_DEFLATE",
+            "id": 1,
+            "level": 9,
+            "name": "deflate",
+        }
+        data["creationProperties"] = {"layout": layout, "filters": [gzip_filter, ]}
+
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        dset_id = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_id))
+
+        # link new dataset as 'dset'
+        name = "dset"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": dset_id}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # read a selection
+        req = self.endpoint + "/datasets/" + dset_id + "/value"
+        start = 1234567
+        stop = start + 10
+        params = {
+            "select": f"[{start}:{stop}]"
+        }  # read 10 element, starting at index 1234567
+        params["nonstrict"] = 1  # enable SN to invoke lambda func
+
+        # read the selection
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+        # should get one element back
+        self.assertEqual(len(value), 10)
+        self.assertEqual(value, list(range(start, start + 10)))
 
     def testLargeCreationProperties(self):
         # test Dataset with artifically large creation_properties data

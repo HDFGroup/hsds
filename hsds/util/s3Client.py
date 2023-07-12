@@ -274,7 +274,6 @@ class S3Client:
         if not bucket:
             log.error("get_object - bucket not set")
             raise HTTPInternalServerError()
-        log.debug(f"bucket: {bucket} type: {type(bucket)}")
 
         start_time = time.time()
         log.debug(f"s3Client.get_object({bucket}/{key}) start: {start_time}")

@@ -24,8 +24,6 @@ dn_port: 6101 # Start dn ports at 6101
 dn_ram: 3g # memory for DN container (per container)
 sn_port: 5101 # Start sn ports at 5101
 sn_ram: 3g # memory for SN container
-rangeget_port: 6900 # singleton proxy at port 6900
-rangeget_ram: 2g # memory for RANGEGET container
 target_sn_count: 0 # desired number of SN containers
 target_dn_count: 0 # desire number of DN containers
 log_level: INFO    # log level.  One of ERROR, WARNING, INFO, DEBUG
@@ -54,11 +52,6 @@ metadata_mem_cache_size: 128m # 128 MB - metadata cache size per DN node
 metadata_mem_cache_expire: 3600 # expire cache items after one hour
 chunk_mem_cache_size: 128m # 128 MB - chunk cache size per DN node
 chunk_mem_cache_expire: 3600 # expire cache items after one hour
-data_cache_size: 128m # cache for rangegets
-data_cache_max_req_size: 128k # max size for rangeget fetches
-data_cache_expire_time: 3600 # expire cache items after one hour
-data_cache_page_size: 4m # page size for range get cache, set to zero to disable proxy
-data_cache_max_concurrent_read: 16 # maximum number of inflight storage read requests
 timeout: 30 # http timeout - 30 sec
 password_file: /config/passwd.txt # filepath to a text file of username/passwords. set to '' for no-auth access
 groups_file: /config/groups.txt # filepath to text file defining user groups
@@ -97,3 +90,10 @@ aws_lambda_gateway: null # use lambda endpoint for region HSDS is running in
 k8s_app_label: null # The app label for k8s deployments (use k8s_dn_label_selector instead)
 write_zero_chunks: False # write chunk to storage even when it's all zeros (or in general equal to the fill value)
 max_chunks_per_request: 1000 # maximum number of chunks to be serviced by one request
+rangeget_port: 6900 # singleton proxy at port 6900
+rangeget_ram: 2g # memory for RANGEGET container
+data_cache_size: 128m # cache for rangegets
+data_cache_max_req_size: 128k # max size for rangeget fetches
+data_cache_expire_time: 3600 # expire cache items after one hour
+data_cache_page_size: 4m # page size for range get cache, set to zero to disable proxy
+data_cache_max_concurrent_read: 16 # maximum number of inflight storage read requests

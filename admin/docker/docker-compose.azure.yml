@@ -33,7 +33,6 @@ services:
       - ${PWD}/admin/config/:/config/
     links:
       - head
-      - rangeget
 
   sn:
     image: hdfgroup/hsds
@@ -48,23 +47,6 @@ services:
       - HSDS_ENDPOINT=${HSDS_ENDPOINT}
     ports:
       - ${SN_PORT}:${SN_PORT}
-    depends_on:
-      - head
-    volumes:
-      - ${PWD}/admin/config/:/config/
-    links:
-      - head
-
-  rangeget:
-    image: hdfgroup/hsds
-    restart: ${RESTART_POLICY}
-    mem_limit: ${RANGEGET_RAM}
-    environment:
-      - NODE_TYPE=rangeget
-      - AZURE_CONNECTION_STRING=${AZURE_CONNECTION_STRING}
-      - LOG_LEVEL=${LOG_LEVEL}
-    ports:
-      - ${RANGEGET_PORT}
     depends_on:
       - head
     volumes:

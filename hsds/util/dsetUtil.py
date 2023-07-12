@@ -794,12 +794,8 @@ def getChunkInitializer(dset_json):
     if "creationProperties" in dset_json:
         cprops = dset_json["creationProperties"]
         log.debug(f"get creationProperties: {cprops}")
-        if "layout" in cprops:
-            layout_json = cprops["layout"]
-            if "initializer" in layout_json:
-                initializer = layout_json["initializer"]
-                log.debug(f"got initializer: {initializer}")
-    log.debug(f"returning: {initializer}")
+        if "initializer" in cprops:
+            initializer = cprops["initializer"]
     return initializer
 
 

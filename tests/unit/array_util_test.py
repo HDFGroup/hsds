@@ -24,64 +24,12 @@ from hsds.util.arrayUtil import (
     arrayToBytes,
     bytesToArray,
     getByteArraySize,
-    IndexIterator
+    IndexIterator,
+    ndarray_compare
 )
 from hsds.util.hdf5dtype import special_dtype
 from hsds.util.hdf5dtype import check_dtype
 from hsds.util.hdf5dtype import createDataType
-
-# compare two numpy arrays.
-# return true if the same (exclusive of null vs. empty array)
-# false otherwise
-
-
-def ndarray_compare(arr1, arr2):
-    if not isinstance(arr1, np.ndarray) and not isinstance(arr2, np.ndarray):
-        if not isinstance(arr1, np.void) and not isinstance(arr2, np.void):
-            return arr1 == arr2
-        if isinstance(arr1, np.void) and not isinstance(arr2, np.void):
-            if arr1.size == 0 and not arr2:
-                return True
-            else:
-                return False
-        if not isinstance(arr1, np.void) and isinstance(arr2, np.void):
-            if not arr1 and arr2.size == 0:
-                return True
-            else:
-                return False
-        # both np.voids
-        if arr1.size != arr2.size:
-            return False
-        for i in range(arr1.size):
-            if not ndarray_compare(arr1[i], arr2[i]):
-                return False
-        return True
-
-    if isinstance(arr1, np.ndarray) and not isinstance(arr2, np.ndarray):
-        # same only if arr1 is empty and arr2 is 0
-        if arr1.size == 0 and not arr2:
-            return True
-        else:
-            return False
-    if not isinstance(arr1, np.ndarray) and isinstance(arr2, np.ndarray):
-        # same only if arr1 is empty and arr2 is 0
-        if not arr1 and not arr2.size == 0:
-            return True
-        else:
-            return False
-
-    # two ndarrays...
-    if arr1.shape != arr2.shape:
-        return False
-    if arr2.dtype != arr2.dtype:
-        return False
-    nElements = np.prod(arr1.shape)
-    arr1 = arr1.reshape((nElements,))
-    arr2 = arr2.reshape((nElements,))
-    for i in range(nElements):
-        if not ndarray_compare(arr1[i], arr2[i]):
-            return False
-    return True
 
 
 class ArrayUtilTest(unittest.TestCase):
@@ -360,7 +308,7 @@ class ArrayUtilTest(unittest.TestCase):
         buffer = arrayToBytes(arr)
         self.assertEqual(buffer, arr.tobytes())
 
-        # convert back to arry
+        # convert back to array
         arr_copy = bytesToArray(buffer, dt, (3,))
         self.assertTrue(ndarray_compare(arr, arr_copy))
 
@@ -534,6 +482,35 @@ class ArrayUtilTest(unittest.TestCase):
 
         arr_copy = bytesToArray(buffer, dt, (4,))
         self.assertTrue(ndarray_compare(arr, arr_copy))
+
+    def testArrayCompareInt(self):
+        # Simple array
+        dt = np.dtype("<i4")
+        arr1 = np.zeros((1024, 1024), dtype=dt)
+        arr2 = np.zeros((1024, 1024), dtype=dt)
+        for _ in range(100):
+            self.assertTrue(ndarray_compare(arr1, arr2))
+        arr1[123, 456] = 42
+        self.assertFalse(ndarray_compare(arr1, arr2))
+
+    def testArrayCompareVlenInt(self):
+        # Vlen array
+        dt_vint = np.dtype("O", metadata={"vlen": "int32"})
+        dt = np.dtype([("x", "int32"), ("tag", dt_vint)])
+        arr1 = np.zeros((1024, 1024), dtype=dt)
+        arr2 = np.zeros((1024, 1024), dtype=dt)
+        e1 = (42, np.array((), dtype="int32"))
+        e2 = (84, np.array((1, 2, 3), dtype="int32"))
+        arr1[123, 456] = e1
+        arr2[123, 456] = e1
+        arr1[888, 999] = e2
+        arr2[888, 999] = e2
+
+        # performance is marginal for this case
+        for _ in range(1):
+            self.assertTrue(ndarray_compare(arr1, arr2))
+        arr2[123, 456] = e2
+        self.assertFalse(ndarray_compare(arr1, arr2))
 
     def testJsonToBytes(self):
         #

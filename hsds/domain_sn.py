@@ -27,7 +27,8 @@ from aiohttp.client_exceptions import ClientError
 from aiohttp.web import json_response
 from requests.sessions import merge_setting
 
-from .util.httpUtil import getObjectClass, http_post, http_put, http_get, http_delete, getHref, respJsonAssemble
+from .util.httpUtil import getObjectClass, http_post, http_put, http_get, http_delete
+from .util.httpUtil import getHref, respJsonAssemble
 from .util.httpUtil import jsonResponse
 from .util.idUtil import getDataNodeUrl, createObjId, getCollectionForId
 from .util.idUtil import isValidUuid, isSchema2Id, getNodeCount

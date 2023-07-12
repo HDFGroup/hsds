@@ -31,15 +31,16 @@ from .util.attrUtil import getRequestCollectionName
 from .util.httpUtil import http_post
 from .util.dsetUtil import getChunkLayout, getFilterOps, getFillValue
 from .util.dsetUtil import getChunkInitializer, getSliceQueryParam
-from .util.chunkUtil import getDatasetId, getChunkSelection
+from .util.chunkUtil import getDatasetId, getChunkSelection, getChunkIndex
 from .util.arrayUtil import arrayToBytes, bytesToArray, getShapeDims, jsonToArray
 from .util.hdf5dtype import createDataType, getItemSize
+from .util.rangegetUtil import ChunkLocation, chunkMunge
 
 from . import config
 from . import hsds_logger as log
 
-# supported initializer commands (just one at the moement)
-INITIALIZER_CMDS = ["hsds-chunklocator", ]
+# supported initializer commands
+INITIALIZER_CMDS = ["chunklocator", "arange"]
 
 
 def get_obj_id(request, body=None):
@@ -554,6 +555,92 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None, bucket=Non
     log.debug(f"delete_metadata_obj for {obj_id} done")
 
 
+def arange_chunk_init(
+    app,
+    initializer,
+    chunk_id=None,
+    dset_json=None,
+):
+    """ run arange chunk initializer """
+    log.debug(f"arange_chunk_init, chunk_id: {chunk_id}")
+    if app is None:
+        log.warn("arange_chunk_init - app not set")
+    datashape = dset_json["shape"]
+    dims = getShapeDims(datashape)
+    log.debug(f"dataset shape: {dims}")
+
+    if len(dims) != 1:
+        msg = "arange initializer can only be used with 1-dimensional datasets"
+        log.warn(msg)
+        raise None
+    type_json = dset_json["type"]
+    dt = createDataType(type_json)
+    if len(dt) > 1:
+        msg = "arange initializer can't be used with compound types"
+        log.warn(msg)
+        raise None
+    type_class = type_json.get("class")
+    if type_class not in ("H5T_INTEGER", "H5T_FLOAT"):
+        msg = "arange initializer: unsupported type class: {type_class}"
+        log.warn(msg)
+        raise None
+
+    try:
+        chunk_layout = getChunkLayout(dset_json)
+    except HTTPInternalServerError:
+        msg = "non-chunked dataset"
+        log.warning(msg)
+        raise None
+
+    chunk_index = getChunkIndex(chunk_id)
+    msg = f"arange_chunk_init - chunk_index: {chunk_index}, chunk_layout: {chunk_layout}"
+    log.debug(msg)
+
+    if len(chunk_index) != 1:
+        msg = "expected chunk_index to be one-element list, but got: {chunk_index}"
+        log.error(msg)
+        raise HTTPInternalServerError()
+
+    chunk_index = chunk_index[0]
+    chunk_length = chunk_layout[0]
+
+    start = 0.0
+    step = 1.0
+
+    # adjust based on chunk initializer args
+    for i in range(1, len(initializer)):
+        arg = initializer[i]
+        parts = arg.split("=")
+        if len(parts) != 2:
+            log.warn(f"ignoring argument: {arg}")
+        if parts[0] == "--start":
+            start = float(parts[1])
+        elif parts[0] == "--step":
+            step = float(parts[1])
+        else:
+            log.warn(f"unexpected initializer arg: {arg}")
+
+    log.debug(f"arange_chunk_init - get arguments start: {start}, step: {step}")
+
+    # adjust start and stop to be chunk relative
+    start += chunk_index * chunk_length * step
+
+    if type_class == "H5T_INTEGER":
+        # convert arguments to ints
+        start = int(start)
+        step = int(step)
+
+    # compute stop based on start, step, and chunk length
+    stop = start + chunk_length * step
+
+    log.debug(f"arange_chunk_init - start: {start}, step: {step} stop: {stop}")
+
+    # finally - create the array
+    arr = np.arange(start, stop, step, dtype=dt)
+
+    return arr
+
+
 async def run_chunk_initializer(
     app,
     chunk_id,
@@ -561,6 +648,7 @@ async def run_chunk_initializer(
     dset_json=None,
     bucket=None
 ):
+    """ initialize chunk using given initializer function """
     log.info(f"run_chunk_initializer - chunk_id: {chunk_id} init: {initializer}")
 
     if len(initializer) == 0:
@@ -580,10 +668,25 @@ async def run_chunk_initializer(
         log.warn(f"initializer cmd is not supported: {init_app}")
         return None
 
+    # some specific initializers can be run in process
+    # if so, just do it now
+    kwargs = {"chunk_id": chunk_id, "dset_json": dset_json}
+    if init_app == "arange":
+        # can just initialize chunk directly
+        chunk_arr = None
+        try:
+            chunk_arr = arange_chunk_init(app, initializer, **kwargs)
+        except ValueError as ve:
+            log.error(f"arange chunk initializer raised value error: {ve}")
+        return chunk_arr
+
     # example initializer args:
     # 'hsds-chunklocator', '--h5path=/dset', '--filepath=/data/myfile.h5' '--bucket=hdf5.sample'
-    cmd_args = []
+    cmd_args = None
     for arg in initializer:
+        if cmd_args is None:
+            # app name, add "hsds-" prefix for disambiguation
+            cmd_args = [f"hsds-{arg}"]
         if arg.startswith("--filepath="):
             npos = arg.find("=") + 1
             filepath = arg[npos:]
@@ -593,6 +696,7 @@ async def run_chunk_initializer(
             bucket = arg[npos:]
             bucket
         else:
+            # options other than filepath and bucket, just pass through
             cmd_args.append(arg)
 
     if filepath:
@@ -630,7 +734,8 @@ async def run_chunk_initializer(
     cmd = ""
     for cmd_arg in cmd_args:
         cmd += f"{cmd_arg} "
-    log.debug(f"subprocessing cmd: {cmd}")
+
+    log.info(f"running subprocessing cmd: {cmd}")
 
     proc = await asyncio.create_subprocess_shell(
         cmd,
@@ -676,7 +781,7 @@ async def run_chunk_initializer(
         log.warn("no data returned")
         return None
 
-    log.debug(f"data: {data}")
+    log.debug(f"got {len(data)} data elements")
 
     # read into json array
     try:
@@ -697,6 +802,129 @@ async def run_chunk_initializer(
     return chunk_arr
 
 
+async def get_chunk_bytes(
+        app,
+        s3key,
+        filter_ops=None,
+        bucket=None,
+        offset=0,
+        length=0,
+        item_size=0,
+        chunk_id=None,
+        chunk_dims=None,
+        hyper_dims=None
+):
+    """ For regular chunk reads, just call getStorBytes.
+        """
+    msg = f"get_chunk_bytes({chunk_id}, bucket={bucket}, offset={offset}, length={length}, "
+    msg += f"item_size={item_size}, chunk_dims={chunk_dims}, hyper_dims={hyper_dims}"
+    log.debug(msg)
+
+    if not isinstance(offset, list):
+        # regular store read
+        kwargs = {
+            "filter_ops": filter_ops,
+            "offset": offset,
+            "length": length,
+            "bucket": bucket
+        }
+
+        chunk_bytes = await getStorBytes(app, s3key, **kwargs)
+        return chunk_bytes
+
+    # intelligent range get request
+    log.debug("intelligent range get")
+
+    if hyper_dims is None:
+        log.error("get_chunk_bytes - expected hyper_dims parameter to be set")
+        raise HTTPInternalServerError()
+
+    rank = len(chunk_dims)
+    if rank != 1:
+        msg = "get_chunk_bytes - only one-dimensional datasets are supported currently "
+        msg += "for intelligent range gets"
+        log.error(msg)
+        raise HTTPInternalServerError()
+
+    num_chunks = len(offset)
+    log.debug(f"get_chunk_bytes - num_chunks: {num_chunks}")
+    if len(length) != num_chunks:
+        log.error("get_chunk_bytes - expecting length and num_chunks to have same value")
+        raise HTTPInternalServerError()
+
+    # create a buffer for the hsds chunk and arrange h5 chunks within it
+    chunk_size = np.prod(chunk_dims) * item_size
+    # number of bytes in the hd5 chunk
+    # hyper_dims = [4000,]  # test
+    h5_size = np.prod(hyper_dims) * item_size
+    log.debug(f"h5 chunk size: {h5_size}")
+    chunk_bytes = bytearray(chunk_size)
+    if num_chunks > chunk_size // h5_size:
+        # shouldn't have more than this many hyperchunks
+        msg = f"get_chunk_bytes - got more than expected hyperchunks: {num_chunks}"
+        log.error(msg)
+        raise HTTPInternalServerError()
+
+    # create a list of the chunk to be fetched
+    chunk_list = []
+    for i in range(num_chunks):
+        if length[i] == 0:
+            # ignore empty range get requests
+            continue
+        chunk_list.append(ChunkLocation(i, offset[i], length[i]))
+
+    if len(chunk_list) == 0:
+        # nothing to fetch, return zero-initialized array
+        return chunk_bytes
+
+    # munge adjacent chunks to reduce the number of storage
+    # requests needed
+    chunk_list = chunkMunge(chunk_list, max_gap=1024)
+
+    log.info(f"get_chunk_butes - stor get requests reduced from {num_chunks} to {len(chunk_list)}")
+
+    # gather all the individual h5 chunk reads into a list of tasks
+    tasks = []
+
+    for chunk_item in chunk_list:
+        if not isinstance(chunk_item, list):
+            # convert to a one-element list
+            chunk_locations = [chunk_item, ]
+        else:
+            chunk_locations = chunk_item
+
+        log.debug(f"getStorBytes processing chunk_locations {chunk_locations}")
+        # get the byte range we'll read from storage
+        item_offset = chunk_locations[0].offset
+        item_length = chunk_locations[-1].offset + chunk_locations[-1].length - item_offset
+
+        kwargs = {
+            "filter_ops": filter_ops,
+            "offset": item_offset,
+            "length": item_length,
+            "chunk_locations": chunk_locations,
+            "bucket": bucket,
+            "chunk_bytes": chunk_bytes,
+            "h5_size": h5_size,
+        }
+        msg = f"get_chunk_bytes - {len(chunk_locations)} h5 chunks,  "
+        msg += f"offset: {item_offset}, length: {item_length}"
+        log.debug(msg)
+        tasks.append(getStorBytes(app, s3key, **kwargs))
+
+    log.debug(f"running asyncio.gather on {len(tasks)} tasks")
+    results = await asyncio.gather(*tasks)
+    log.debug(f"asyncio.gather got {len(results)} results")
+    if len(results) != len(chunk_list):
+        msg = "getStorBytes - unexpected number of gather results, "
+        msg += f"expected: {len(chunk_list)}, got: {len(results)}"
+        log.error(msg)
+        raise HTTPInternalServerError()
+
+    log.debug("get_chunk_bytes done")
+    return chunk_bytes
+
+
 async def get_chunk(
     app,
     chunk_id,
@@ -705,6 +933,7 @@ async def get_chunk(
     s3path=None,
     s3offset=0,
     s3size=0,
+    hyper_dims=None,
     chunk_init=False,
 ):
     """
@@ -717,6 +946,8 @@ async def get_chunk(
     log.debug(f"get_chunk - chunk_id: {chunk_id} bucket: {bucket} chunk_init: {chunk_init}")
     if s3path:
         log.debug(f"   s3path: {s3path} s3offset: {s3offset} s3size: {s3size}")
+    if hyper_dims is not None:
+        log.debug(f"   hyper_dims: {hyper_dims}")
     chunk_cache = app["chunk_cache"]
     if chunk_init and s3offset > 0:
         msg = f"unable to initialize chunk {chunk_id} for reference layouts "
@@ -725,15 +956,6 @@ async def get_chunk(
 
     # validate arguments
     if s3path:
-        if s3size == 0 and s3offset == 0:
-            # uninitialized chunk ref
-            msg = f"reference chunk not set for id: {chunk_id}, returning 404"
-            log.info(msg)
-            raise HTTPNotFound()  # not found return 404
-        if s3size == 0:
-            msg = f"Unexpected get_chunk parameter - s3path: {s3path} with size 0"
-            log.error(msg)
-            raise HTTPInternalServerError()
         if bucket:
             msg = "get_chunk - bucket arg should not be used with s3path"
             log.error(msg)
@@ -747,13 +969,8 @@ async def get_chunk(
             raise HTTPInternalServerError()
         log.debug(f"get_chunk - chunk_id: {chunk_id} bucket: {bucket}")
 
-    if "oio_proxy" in app or "is_k8s" in app:
-        # TBD - rangeget proxy not supported on k8s yet
-        use_proxy = False
-    else:
-        use_proxy = True
-    msg = f"getChunk cache utilization: {chunk_cache.cacheUtilizationPercent}"
-    msg += f" per, dirty_count: {chunk_cache.dirtyCount}, "
+    msg = f"getChunk cache utilization: {chunk_cache.cacheUtilizationPercent}%, "
+    msg += f"dirty_count: {chunk_cache.dirtyCount}, "
     msg += f"mem_dirty: {chunk_cache.memDirty}"
     log.debug(msg)
 
@@ -763,9 +980,8 @@ async def get_chunk(
     item_size = getItemSize(type_json)
     layout_json = dset_json["layout"]
     log.debug(f"dset_json: {dset_json}")
-    layout_class = None
-    if "class" in layout_json:
-        layout_class = layout_json["class"]
+    layout_class = layout_json.get("class")
+    chunk_dims = getChunkLayout(dset_json)
 
     dt = createDataType(type_json)
     # note - officially we should follow the order in which the filters are
@@ -827,13 +1043,18 @@ async def get_chunk(
 
             try:
                 kwargs = {
+                    "chunk_id": chunk_id,
                     "filter_ops": filter_ops,
                     "offset": s3offset,
                     "length": s3size,
+                    "item_size": item_size,
+                    "chunk_dims": chunk_dims,
+                    "hyper_dims": hyper_dims,
                     "bucket": bucket,
-                    "use_proxy": use_proxy,
                 }
-                chunk_bytes = await getStorBytes(app, s3key, **kwargs)
+
+                chunk_bytes = await get_chunk_bytes(app, s3key, **kwargs)
+
                 if chunk_id in pending_s3_read:
                     # read complete - remove from pending map
                     elapsed_time = time.time() - pending_s3_read[chunk_id]
@@ -895,8 +1116,9 @@ async def get_chunk(
                 if chunk_arr is None:
                     msg = f"chunk initializer {initializer} for {chunk_id} returned None"
                     log.warn(msg)
-            else:
-                # normal fill value based init
+
+            if chunk_arr is None:
+                # normal fill value based init or initializer failed
                 fill_value = getFillValue(dset_json)
                 if fill_value:
                     # need to convert list to tuples for numpy broadcast

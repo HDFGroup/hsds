@@ -204,7 +204,7 @@ else
   if [[ $# -eq 1 ]] && [[ $1 == "--stop" ]]; then
     # use the compose file to shutdown the sevice
     echo "Running docker-compose -f ${COMPOSE_FILE} down"
-    docker-compose -f ${COMPOSE_FILE} down 
+    docker-compose -f ${COMPOSE_FILE} down
     exit 0  # can quit now
   else
     echo "Running docker-compose -f ${COMPOSE_FILE} up"

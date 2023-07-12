@@ -258,61 +258,16 @@ async def getStorJSONObj(app, key, bucket=None):
     return json_dict
 
 
-async def getStorBytes(
-    app, key, filter_ops=None, offset=0, length=-1, bucket=None, use_proxy=False
-):
-    """Get object identified by key and read as bytes"""
-
-    client = _getStorageClient(app)
-    if not bucket:
-        bucket = app["bucket_name"]
-    if key[0] == "/":
-        key = key[1:]  # no leading slash
-    if offset is None:
-        offset = 0
-    if length is None:
-        length = 0
-    msg = f"getStorBytes({bucket}/{key}, offset={offset}, length: {length})"
-    log.info(msg)
-
-    default_req_size = 128 * 1024 * 1024  # 128KB
-    data_cache_max_req_size = int(
-        config.get("data_cache_max_req_size", default=default_req_size)
-    )
-
-    shuffle = 0
-    compressor = None
-    if filter_ops:
-        log.debug(f"getStorBytes for {key} with filter_ops: {filter_ops}")
-        if "use_shuffle" in filter_ops and filter_ops["use_shuffle"]:
-            shuffle = filter_ops["item_size"]
-            log.debug("using shuffle filter")
-        if "compressor" in filter_ops:
-            compressor = filter_ops["compressor"]
-            log.debug(f"using compressor: {compressor}")
-
-    kwargs = {"bucket": bucket, "key": key, "offset": offset, "length": length}
-    if offset > 0 and use_proxy and length < data_cache_max_req_size:
-        # use rangeget proxy
-        data = await rangegetProxy(app, **kwargs)
-    else:
-        data = await client.get_object(**kwargs)
-    if data is None or len(data) == 0:
-        log.info(f"no data found for {key}")
-        return data
-
-    log.info(f"read: {len(data)} bytes for key: {key}")
-    if length > 0 and len(data) != length:
-        log.warn(f"requested {length} bytes but got {len(data)} bytes")
+def _uncompress(data, compressor=None, shuffle=0):
+    """ Uncompress the provided data using compessor and/or shuffle """
     if compressor:
-
         # compressed chunk data...
 
         # first check if this was compressed with blosc
         # returns typesize, isshuffle, and memcopied
         blosc_metainfo = codecs.blosc.cbuffer_metainfo(data)
         if blosc_metainfo[0] > 0:
-            log.info(f"blosc compressed data for {key}")
+            log.info(f"blosc compressed data for {len(data)} bytes")
             try:
                 blosc = codecs.Blosc()
                 udata = blosc.decode(data)
@@ -320,24 +275,23 @@ async def getStorBytes(
                 data = udata
                 shuffle = 0  # blosc will unshuffle the bytes for us
             except Exception as e:
-                msg = f"got exception: {e} using blosc decompression for {key}"
+                msg = f"got exception: {e} using blosc decompression"
                 log.error(msg)
                 raise HTTPInternalServerError()
         elif compressor == "zlib":
             # data may have been compressed without blosc,
             # try using zlib directly
-            log.info(f"using zlib to decompress {key}")
+            log.info(f"using zlib to decompress {len(data)} bytes")
             try:
                 udata = zlib.decompress(data)
                 log.info(f"uncompressed to {len(udata)} bytes")
                 data = udata
             except zlib.error as zlib_error:
                 log.info(f"zlib_err: {zlib_error}")
-                log.error(f"unable to uncompress obj: {key}")
+                log.error("unable to uncompress data with zlib")
                 raise HTTPInternalServerError()
         else:
             msg = f"don't know how to decompress data in {compressor} "
-            msg += f"format for {key}"
             log.error(msg)
             raise HTTPInternalServerError()
 
@@ -354,6 +308,94 @@ async def getStorBytes(
         log.debug(msg)
 
     return data
+
+
+async def getStorBytes(app,
+                       key,
+                       filter_ops=None,
+                       offset=0,
+                       length=-1,
+                       chunk_locations=None,
+                       chunk_bytes=None,
+                       h5_size=None,
+                       bucket=None,
+                       ):
+    """Get object identified by key and read as bytes"""
+
+    client = _getStorageClient(app)
+    if not bucket:
+        bucket = app["bucket_name"]
+    if key[0] == "/":
+        key = key[1:]  # no leading slash
+    if offset is None:
+        offset = 0
+    if length is None:
+        length = 0
+    msg = f"getStorBytes({bucket}/{key}, offset={offset}, length: {length})"
+    log.info(msg)
+
+    shuffle = 0
+    compressor = None
+    if filter_ops:
+        log.debug(f"getStorBytes for {key} with filter_ops: {filter_ops}")
+        if "use_shuffle" in filter_ops and filter_ops["use_shuffle"]:
+            shuffle = filter_ops["item_size"]
+            log.debug("using shuffle filter")
+        if "compressor" in filter_ops:
+            compressor = filter_ops["compressor"]
+            log.debug(f"using compressor: {compressor}")
+
+    kwargs = {"bucket": bucket, "key": key, "offset": offset, "length": length}
+
+    data = await client.get_object(**kwargs)
+    if data is None or len(data) == 0:
+        log.info(f"no data found for {key}")
+        return data
+
+    log.info(f"read: {len(data)} bytes for key: {key}")
+    if length > 0 and len(data) != length:
+        log.warn(f"requested {length} bytes but got {len(data)} bytes")
+
+    if chunk_locations:
+        log.debug(f"getStorBytes - got {len(chunk_locations)} chunk locations")
+        # uncompress chunks within the fetched data and store to
+        # chunk bytes
+        if not h5_size:
+            log.error("getStorBytes - h5_size not set")
+            raise HTTPInternalServerError()
+        if not chunk_bytes:
+            log.error("getStorBytes - chunk_bytes not set")
+            raise HTTPInternalServerError()
+        if len(chunk_locations) * h5_size < len(chunk_bytes):
+            log.error(f"getStorBytes - invalid chunk_bytes length: {len(chunk_bytes)}")
+        for chunk_location in chunk_locations:
+            log.debug(f"getStoreBytes - processing chunk_location: {chunk_location}")
+            n = chunk_location.offset - offset
+            if n < 0:
+                log.warn(f"getStorBytes - unexpected offset for chunk_location: {chunk_location}")
+                continue
+            m = n + chunk_location.length
+            log.debug(f"getStorBytes - extracting chunk from data[{n}:{m}]")
+            h5_bytes = data[n:m]
+            h5_bytes = _uncompress(h5_bytes, compressor=compressor, shuffle=shuffle)
+            if len(h5_bytes) != h5_size:
+                msg = f"expected chunk index: {chunk_location.index} to have size: "
+                msg += f"{h5_size} but got: {len(h5_bytes)}"
+                log.warning(msg)
+                continue
+            # slot into the hsds chunk
+            hs_offset = chunk_location.index * h5_size
+            if hs_offset + h5_size > len(chunk_bytes):
+                msg = f"expected chunk index: {chunk_location.index} to have offset: "
+                msg += f"less than {len(chunk_bytes) - h5_size} but got: {hs_offset}"
+                log.warning(msg)
+                continue
+            chunk_bytes[hs_offset:(hs_offset + h5_size)] = h5_bytes
+        # chunk_bytes got updated, so just return None
+        return None
+    else:
+        data = _uncompress(data, compressor=compressor, shuffle=shuffle)
+        return data
 
 
 async def putStorBytes(app, key, data, filter_ops=None, bucket=None):

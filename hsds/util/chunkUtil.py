@@ -1,5 +1,6 @@
 import numpy as np
 from .. import hsds_logger as log
+from .arrayUtil import ndarray_compare
 
 CHUNK_BASE = 16 * 1024  # Multiplier by which chunks are adjusted
 CHUNK_MIN = 512 * 1024  # Soft lower limit (512k)
@@ -698,6 +699,26 @@ def getChunkRelativePoint(chunkCoord, point):
     return tr
 
 
+def get_chunktable_dims(shape_dims, chunk_dims):
+    """
+    Get the cannoncial size of the chunktable for a
+    given dataset and chunk shape"""
+    rank = len(shape_dims)
+    table_dims = []
+    for dim in range(rank):
+        dset_extent = shape_dims[dim]
+        chunk_extent = chunk_dims[dim]
+
+        if dset_extent > 0 and chunk_extent > 0:
+            # get integer ceil of dset and chunk extents
+            table_extent = -(dset_extent // -chunk_extent)
+        else:
+            table_extent = 0
+        table_dims.append(table_extent)
+    table_dims = tuple(table_dims)
+    return table_dims
+
+
 class ChunkIterator:
     """
     Class to iterate through list of chunks given dset_id, selection,
@@ -783,27 +804,38 @@ def chunkWriteSelection(chunk_arr=None, slices=None, data=None):
     """
     Write data for requested chunk and selection
     """
-    log.info("chunkWriteSelection")
     dims = chunk_arr.shape
 
     rank = len(dims)
 
     if rank == 0:
         msg = "No dimension passed to chunkReadSelection"
+        log.error(msg)
         raise ValueError(msg)
     if len(slices) != rank:
         msg = "Selection rank does not match dataset rank"
+        log.error(msg)
         raise ValueError(msg)
     if len(data.shape) != rank:
         msg = "Input arr does not match dataset rank"
+        log.error(msg)
         raise ValueError(msg)
 
     updated = False
     # check if the new data modifies the array or not
-    if not np.array_equal(chunk_arr[slices], data):
-        # update chunk array
-        chunk_arr[slices] = data
-        updated = True
+    # TBD - is this worth the cost of comparing two arrays element by element?
+    try:
+        if not ndarray_compare(chunk_arr[slices], data):
+            # if not np.array_equal(chunk_arr[slices], data):
+            # update chunk array
+            chunk_arr[slices] = data
+            updated = True
+    except ValueError as ve:
+        msg = f"array_equal ValueError, chunk_arr[{slices}]: {chunk_arr[slices]} "
+        msg += f"data: {data}, data type: {type(data)} ve: {ve}"
+        log.error(msg)
+        raise
+
     return updated
 
 
