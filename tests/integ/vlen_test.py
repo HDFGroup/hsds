@@ -96,8 +96,7 @@ class VlenTest(unittest.TestCase):
         self.assertTrue("value" in rspJson)
         value = rspJson["value"]
         self.assertEqual(len(value), 4)
-        print("value:", value)
-        print("data:", data)
+      
         for i in range(4):
             self.assertEqual(value[i], data[i])
 
@@ -222,9 +221,6 @@ class VlenTest(unittest.TestCase):
         for i in range(count):
             self.assertEqual(value[i], test_values[i])
 
-        print("data:", data)
-        print("arr:", arr)
-
         # read back a selection
         params = {"select": "[2:3]"}
         rsp = self.session.get(req, headers=headers, params=params)
@@ -295,8 +291,6 @@ class VlenTest(unittest.TestCase):
         self.assertTrue("value" in rspJson)
         value = rspJson["value"]
         self.assertEqual(len(value), nrow)
-        print("value:", value)
-        print("data:", data)
 
         for i in range(nrow):
             for j in range(ncol):
