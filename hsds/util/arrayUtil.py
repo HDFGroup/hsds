@@ -194,7 +194,7 @@ def jsonToArray(data_shape, data_dtype, data_json):
         if arr.shape != data_shape:
             arr = arr.reshape(data_shape)  # reshape to match selection
     else:
-        arr = np.array([], dtype=data_dtype)
+        arr = np.array([]).astype(data_dtype)
 
     return arr
 

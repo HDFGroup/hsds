@@ -696,6 +696,20 @@ class ArrayUtilTest(unittest.TestCase):
             cnt += 1
         self.assertEqual(cnt, 20)
 
+    def testJsonToArrayOnNoneArray(self):
+        data_dtype = np.dtype("i4")
+        data_shape = [0, ]
+        data_json = [None]
+        arr = None
+
+        try:
+            arr = jsonToArray(data_shape, data_dtype, data_json)
+        except Exception as e:
+            print(f"Exception while testing jsonToArray on array with None elements: {e}")
+
+        self.assertTrue(len(arr) == 0)
+        self.assertTrue(arr.dtype == data_dtype)
+
 
 if __name__ == "__main__":
     # setup test files
