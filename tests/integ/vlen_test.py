@@ -96,7 +96,7 @@ class VlenTest(unittest.TestCase):
         self.assertTrue("value" in rspJson)
         value = rspJson["value"]
         self.assertEqual(len(value), 4)
-      
+
         for i in range(4):
             self.assertEqual(value[i], data[i])
 
