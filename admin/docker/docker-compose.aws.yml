@@ -55,7 +55,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL}
       - HSDS_ENDPOINT=${HSDS_ENDPOINT}
     ports:
-      - ${SN_PORT}:${SN_PORT}
+      - ${SN_PORT}:5101
     depends_on:
       - head
     volumes:

@@ -252,7 +252,17 @@ def main():
         sn_port = getPortFromUrl(sn_url)
     else:
         # create TCP url based on port address
-        sn_port = int(config.get("sn_port"))
+        sn_port_config = config.get("sn_port")
+        if isinstance(sn_port_config, str) and sn_port_config.find("-") > 0:
+            # multi-port mapping. e.g.: 5101-5104:5101
+            # just use the first int of the target port range
+            mapping = sn_port_config.split(":")
+            target_ports = mapping[0].split("-")
+            sn_port = int(target_ports[0])
+        else:
+            # regular port config
+            sn_port = int(config.get("sn_port"))
+
         sn_url = f"http://localhost:{sn_port}"
 
     if isUnixDomainUrl(sn_url):

@@ -211,10 +211,30 @@ else
     docker-compose -f ${COMPOSE_FILE} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}
   fi
 
+  # get a url to one of the SN containers
+  # if SN_PORT is just an integer (like 5101), return that
+  # if it's a port range like: 5101-5104:5101, return first port (5101 in this case)
+  ports=$(echo $SN_PORT | tr ":" "\n")
+
+  for port_range in $ports
+  do
+    break
+  done
+
+  port_numbers=$(echo $port_range | tr "-" "\n")
+  for port_number in $port_numbers
+  do
+      break
+  done
+
+
   # wait for the server to be ready
+  LOCAL_ENDPOINT="http://localhost:${port_number}"
+  echo "sending status request to: ${LOCAL_ENDPOINT}"
   for i in {1..120}
   do
-    STATUS_CODE=`curl -s -o /dev/null -w "%{http_code}" http://localhost:${SN_PORT}/about`
+    
+    STATUS_CODE=`curl -s -o /dev/null -w "%{http_code}" ${LOCAL_ENDPOINT}/about`
     if [[ $STATUS_CODE == "200" ]]; then
       echo "service ready!"
       break
