@@ -1399,7 +1399,7 @@ class DatasetTest(unittest.TestCase):
         # create the dataset
         req = self.endpoint + "/datasets"
 
-        payload = get_payload("H5T_IEEE_F32LE", fillValue="AADAfw==", encoding="Base64")
+        payload = get_payload("H5T_IEEE_F32LE", fillValue="AADAfw==", encoding="base64")
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # Dataset created
@@ -1422,7 +1422,7 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("fillValue" in creationProps)
         self.assertEqual(creationProps["fillValue"], "AADAfw==")
         self.assertTrue("fillValue_encoding" in creationProps)
-        self.assertEqual(creationProps["fillValue_encoding"], "Base64")
+        self.assertEqual(creationProps["fillValue_encoding"], "base64")
 
         # link new dataset
         req = self.endpoint + "/groups/" + root_uuid + "/links/dset2"
