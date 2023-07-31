@@ -15,7 +15,6 @@
 #
 
 import math
-import numpy as np
 from json import JSONDecodeError
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict
 
@@ -23,7 +22,7 @@ from .util.httpUtil import http_post, http_put, http_delete, getHref, respJsonAs
 from .util.httpUtil import jsonResponse
 from .util.idUtil import isValidUuid, getDataNodeUrl, createObjId, isSchema2Id
 from .util.dsetUtil import getPreviewQuery, getFilterItem
-from .util.arrayUtil import getNumElements, getShapeDims
+from .util.arrayUtil import getNumElements, getShapeDims, getNumpyValue
 from .util.chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk
 from .util.chunkUtil import getContiguousLayout
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
@@ -1031,26 +1030,29 @@ async def POST_Dataset(request):
             # validate fill value compatible with type
             dt = createDataType(datatype)
             fill_value = creationProperties["fillValue"]
-            is_nan = False
-            if dt.kind == "f":
-                if isinstance(fill_value, str) and fill_value == "nan":
-                    is_nan = True
+            if "fillValue_encoding" in creationProperties:
+                fill_value_encoding = creationProperties["fillValue_encoding"]
 
-            if is_nan:
-                # use np.nan as fill value
-                # TBD: this needs to be fixed up for compound types
-                log.debug("converting 'nan' to np.nan for fillValue")
-                creationProperties["fillValue"] = np.nan
-            else:
-                if isinstance(fill_value, list):
-                    fill_value = tuple(fill_value)
-                try:
-                    np.asarray(fill_value, dtype=dt)
-                except (TypeError, ValueError):
-                    msg = f"Fill value {fill_value} not compatible with "
-                    msg += f"dataset type: {datatype}"
+                if fill_value_encoding not in ("None", "base64"):
+                    msg = f"unexpected value for fill_value_encoding: {fill_value_encoding}"
                     log.warn(msg)
                     raise HTTPBadRequest(reason=msg)
+                else:
+                    # should see a string in this case
+                    if not isinstance(fill_value, str):
+                        msg = f"unexpected fill value: {fill_value} "
+                        msg += f"for encoding: {fill_value_encoding}"
+                        log.warn(msg)
+                        raise HTTPBadRequest(reason=msg)
+            else:
+                fill_value_encoding = None
+
+            try:
+                getNumpyValue(fill_value, dt=dt, encoding=fill_value_encoding)
+            except ValueError:
+                msg = f"invalid fill value: {fill_value}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
 
         if "filters" in creationProperties:
             # convert to standard representation

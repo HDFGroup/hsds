@@ -29,10 +29,10 @@ from .util.storUtil import getBucketFromStorURI, getKeyFromStorURI, getURIFromKe
 from .util.domainUtil import isValidDomain, getBucketForDomain
 from .util.attrUtil import getRequestCollectionName
 from .util.httpUtil import http_post
-from .util.dsetUtil import getChunkLayout, getFilterOps, getFillValue
+from .util.dsetUtil import getChunkLayout, getFilterOps
 from .util.dsetUtil import getChunkInitializer, getSliceQueryParam
 from .util.chunkUtil import getDatasetId, getChunkSelection, getChunkIndex
-from .util.arrayUtil import arrayToBytes, bytesToArray, getShapeDims, jsonToArray
+from .util.arrayUtil import arrayToBytes, bytesToArray, getShapeDims, jsonToArray, getNumpyValue
 from .util.hdf5dtype import createDataType, getItemSize
 from .util.rangegetUtil import ChunkLocation, chunkMunge
 
@@ -1119,11 +1119,14 @@ async def get_chunk(
 
             if chunk_arr is None:
                 # normal fill value based init or initializer failed
-                fill_value = getFillValue(dset_json)
+                fill_value = None
+                if "creationProperties" in dset_json:
+                    cprops = dset_json["creationProperties"]
+                    if "fillValue" in cprops:
+                        fill_value_prop = cprops["fillValue"]
+                        encoding = cprops.get("fillValue_encoding")
+                        fill_value = getNumpyValue(fill_value_prop, dt=dt, encoding=encoding)
                 if fill_value:
-                    # need to convert list to tuples for numpy broadcast
-                    if isinstance(fill_value, list):
-                        fill_value = tuple(fill_value)
                     chunk_arr = np.empty(dims, dtype=dt, order="C")
                     chunk_arr[...] = fill_value
                 else:

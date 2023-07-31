@@ -25,7 +25,8 @@ from hsds.util.arrayUtil import (
     bytesToArray,
     getByteArraySize,
     IndexIterator,
-    ndarray_compare
+    ndarray_compare,
+    getNumpyValue
 )
 from hsds.util.hdf5dtype import special_dtype
 from hsds.util.hdf5dtype import check_dtype
@@ -672,6 +673,71 @@ class ArrayUtilTest(unittest.TestCase):
         for index in IndexIterator((8, 10), sel=(slice(0, 8, 2), slice(0, 10, 2))):
             cnt += 1
         self.assertEqual(cnt, 20)
+
+    def testGetNumpyValue(self):
+        # test int conversion
+        dt = np.dtype("<i4")
+        val = getNumpyValue(42, dt=dt)
+        self.assertTrue(isinstance(val, np.int32))
+        self.assertEqual(42, val)
+
+        # test int with base64 encoding
+        dt = np.dtype("<i4")
+        val = getNumpyValue("KgAAAA==", dt=dt, encoding="base64")
+        self.assertTrue(isinstance(val, np.int32))
+        self.assertEqual(42, val)
+
+        # test float with base64 encoding
+        dt = np.dtype("f4")
+        val = getNumpyValue("AADAfw==", dt=dt, encoding="base64")
+        self.assertTrue(isinstance(val, np.float32))
+        self.assertTrue(val != val)
+
+        # test fixed length string conversion
+        dt = np.dtype("S5")
+        val = getNumpyValue("hello", dt=dt)
+        self.assertTrue(isinstance(val, np.bytes_))
+        self.assertEqual(val, b"hello")
+
+        # base64 encoded string
+        dt = np.dtype("S5")
+        val = getNumpyValue("aGVsbG8=", dt=dt, encoding="base64")
+        self.assertTrue(isinstance(val, np.bytes_))
+        self.assertEqual(val, b"hello")
+
+        # test variable length string conversion
+        dt = np.dtype("O", metadata={"vlen": bytes})
+        val = getNumpyValue("hello", dt=dt)
+        self.assertTrue(isinstance(val, str))
+        self.assertEqual(val, "hello")
+
+        # test compound type
+        dt = np.dtype([('int', "<i4"), ('str', "S4")])
+        val = getNumpyValue((42, "hdf5"), dt=dt)
+        self.assertTrue(isinstance(val, np.void))
+        self.assertEqual(val[0], 42)
+        self.assertEqual(val[1], b'hdf5')
+
+        # test compound type encoded
+        dt = np.dtype([('int', "<i4"), ('str', "S4")])
+        val = getNumpyValue("KgAAAGhkZjU=", dt=dt, encoding="base64")
+        self.assertTrue(isinstance(val, np.void))
+        self.assertEqual(val[0], 42)
+        self.assertEqual(val[1], b'hdf5')
+
+        # test nan string
+        dt = np.dtype("f4")
+        val = getNumpyValue("nan", dt=dt)
+        self.assertTrue(isinstance(val, np.float32))
+        self.assertTrue(val != val)
+
+        # test invalid base64 length
+        try:
+            dt = np.dtype("<i8")
+            getNumpyValue("KgAAAA==", dt=dt, encoding="base64")
+            self.assertTrue(False)
+        except ValueError:
+            pass  # expected
 
 
 if __name__ == "__main__":
