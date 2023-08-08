@@ -157,11 +157,11 @@ async def store(group_name):
 
     for key, val in things.items():
         logging.debug(f"{key}: {val}")
-        if type(val) == dict:
+        if isinstance(val, dict):
             logging.debug("dict")
             val_grp_id = await create_group(group_id, key)
             logging.debug(f"got val_grp_id: {val_grp_id}")
-        elif type(val) == ThingItem:
+        elif isinstance(val, ThingItem):
             logging.info(f"ThingItem - create_group_attributes name for group: {group_id} ")
             val_grp_id = await create_group(group_id, key)
             await create_attribute(val_grp_id, "name", val.name)
@@ -177,7 +177,7 @@ async def store_items(grp_names):
     session = ClientSession(loop=loop, connector=TCPConnector(limit=max_tcp_connections))
     globals["client"] = session
     xs = stream.iterate(grp_names) | pipe.map(store, ordered=False, task_limit=task_limit)
-    await(xs)
+    await xs
     await session.close()
 
 
