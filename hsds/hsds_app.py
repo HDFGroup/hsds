@@ -59,12 +59,15 @@ def get_cmd_dir():
         logging.info(f"using cmd_dir: {cmd_dir}")
         return cmd_dir
 
-    sys_bin_dir = os.path.join(sys.exec_prefix, "bin")
-    if os.path.isdir(sys_bin_dir):
-        logging.debug(f"sys bin_dir: {sys_bin_dir}")
-        if os.path.isfile(os.path.join(sys_bin_dir, hsds_shortcut)):
-            logging.info(f"using cmd_dir: {sys_bin_dir}")
-            return sys_bin_dir
+    # look for binaries in exec_prefix in "bin" or "Scripts"
+    #   (Anaconda seems to use Scripts on Windows)
+    for bin_dir in ("bin", "Scripts"):
+        sys_bin_dir = os.path.join(sys.exec_prefix, bin_dir)
+        if os.path.isdir(sys_bin_dir):
+            logging.debug(f"sys bin_dir: {sys_bin_dir}")
+            if os.path.isfile(os.path.join(sys_bin_dir, hsds_shortcut)):
+                logging.info(f"using cmd_dir: {sys_bin_dir}")
+                return sys_bin_dir
 
     # fall back to just use __file__.parent
     bin_dir = Path(__file__).parent
