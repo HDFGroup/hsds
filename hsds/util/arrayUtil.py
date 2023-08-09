@@ -11,18 +11,19 @@
 ##############################################################################
 
 import math
+import base64
+import binascii
 import numpy as np
 
-MAX_VLEN_ELEMENT = 1000000  # restrict largest vlen element to one million
-
-"""
-Convert list that may contain bytes type elements to list of string elements
-
-TBD: Need to deal with non-string byte data (hexencode?)
-"""
+MAX_VLEN_ELEMENT = 1_000_000  # restrict largest vlen element to one million
 
 
 def bytesArrayToList(data):
+    """
+    Convert list that may contain bytes type elements to list of string elements
+
+    TBD: Need to deal with non-string byte data (hexencode?)
+    """
     if type(data) in (bytes, str):
         is_list = False
     elif isinstance(data, (np.ndarray, np.generic)):
@@ -52,13 +53,11 @@ def bytesArrayToList(data):
     return out
 
 
-"""
-Convert a list to a tuple, recursively.
-Example. [[1,2],[3,4]] -> ((1,2),(3,4))
-"""
-
-
 def toTuple(rank, data):
+    """
+    Convert a list to a tuple, recursively.
+    Example. [[1,2],[3,4]] -> ((1,2),(3,4))
+    """
     if type(data) in (list, tuple):
         if rank > 0:
             return list(toTuple(rank - 1, x) for x in data)
@@ -68,24 +67,20 @@ def toTuple(rank, data):
         return data
 
 
-"""
-Get size in bytes of a numpy array.
-"""
-
-
 def getArraySize(arr):
+    """
+    Get size in bytes of a numpy array.
+    """
     nbytes = arr.dtype.itemsize
     for n in arr.shape:
         nbytes *= n
     return nbytes
 
 
-"""
-Helper - get num elements defined by a shape
-"""
-
-
 def getNumElements(dims):
+    """
+    Get num elements defined by a shape
+    """
     num_elements = 0
     if isinstance(dims, int):
         num_elements = dims
@@ -98,13 +93,11 @@ def getNumElements(dims):
     return num_elements
 
 
-"""
-Get dims from a given shape json.  Return [1,] for Scalar datasets,
-  None for null dataspaces
-"""
-
-
 def getShapeDims(shape):
+    """
+    Get dims from a given shape json.  Return [1,] for Scalar datasets,
+    None for null dataspaces
+    """
     dims = None
     if isinstance(shape, int):
         dims = [
@@ -138,13 +131,10 @@ def getShapeDims(shape):
     return dims
 
 
-"""
-Return numpy array from the given json array.
-"""
-
-
 def jsonToArray(data_shape, data_dtype, data_json):
-    # utility function to initialize vlen array
+    """
+    Return numpy array from the given json array.
+    """
     def fillVlenArray(rank, data, arr, index):
         for i in range(len(data)):
             if rank > 1:
@@ -199,12 +189,10 @@ def jsonToArray(data_shape, data_dtype, data_json):
     return arr
 
 
-"""
-Return True if the type contains variable length elements
-"""
-
-
 def isVlen(dt):
+    """
+    Return True if the type contains variable length elements
+    """
     is_vlen = False
     if len(dt) > 1:
         names = dt.names
@@ -218,12 +206,10 @@ def isVlen(dt):
     return is_vlen
 
 
-"""
-Get number of byte needed to given element as a bytestream
-"""
-
-
 def getElementSize(e, dt):
+    """
+    Get number of byte needed to given element as a bytestream
+    """
     # print(f"getElementSize - e: {e}  dt: {dt} metadata: {dt.metadata}")
     if len(dt) > 1:
         count = 0
@@ -267,12 +253,10 @@ def getElementSize(e, dt):
     return count
 
 
-"""
-Get number of bytes needed to store given numpy array as a bytestream
-"""
-
-
 def getByteArraySize(arr):
+    """
+    Get number of bytes needed to store given numpy array as a bytestream
+    """
     if not isVlen(arr.dtype):
         return arr.itemsize * math.prod(arr.shape)
     nElements = math.prod(arr.shape)
@@ -285,12 +269,10 @@ def getByteArraySize(arr):
     return count
 
 
-"""
-Copy to buffer at given offset
-"""
-
-
 def copyBuffer(src, des, offset):
+    """
+    Copy to buffer at given offset
+    """
     # print(f"copyBuffer - src: {src} offset: {offset}")
     # TBD: just do: des[offset:] = src[:]  ?
     for i in range(len(src)):
@@ -300,12 +282,10 @@ def copyBuffer(src, des, offset):
     return offset + len(src)
 
 
-"""
-Copy element to bytearray
-"""
-
-
 def copyElement(e, dt, buffer, offset):
+    """
+    Copy element to bytearray
+    """
     # print(f"copyElement - dt: {dt}  offset: {offset}")
     if len(dt) > 1:
         for name in dt.names:
@@ -388,12 +368,10 @@ def copyElement(e, dt, buffer, offset):
     return offset
 
 
-"""
-Get the count value from persisted vlen array
-"""
-
-
 def getElementCount(buffer, offset):
+    """
+    Get the count value from persisted vlen array
+    """
     n = offset
     m = offset + 4
     count_bytes = bytes(buffer[n:m])
@@ -412,12 +390,10 @@ def getElementCount(buffer, offset):
     return count
 
 
-"""
-Read element from bytearrray
-"""
-
-
 def readElement(buffer, offset, arr, index, dt):
+    """
+    Read element from bytearrray
+    """
     # print(f"readElement, offset: {offset}, index: {index} dt: {dt}")
 
     if len(dt) > 1:
@@ -473,12 +449,10 @@ def readElement(buffer, offset, arr, index, dt):
     return offset
 
 
-"""
-Return byte representation of numpy array
-"""
-
-
 def arrayToBytes(arr):
+    """
+    Return byte representation of numpy array
+    """
     if not isVlen(arr.dtype):
         # can just return normal numpy bytestream
         return arr.tobytes()
@@ -494,12 +468,10 @@ def arrayToBytes(arr):
     return bytes(buffer)
 
 
-"""
-Create numpy array based on byte representation
-"""
-
-
 def bytesToArray(data, dt, shape):
+    """
+    Create numpy array based on byte representation
+    """
     # print(f"bytesToArray({len(data)}, {dt}, {shape}")
     nelements = getNumElements(shape)
     if not isVlen(dt):
@@ -523,15 +495,46 @@ def bytesToArray(data, dt, shape):
     return arr
 
 
-"""
-Reduce dimensions by removing any 1-extent dimensions.
-Just return input if no 1-extent dimensions
+def getNumpyValue(value, dt=None, encoding=None):
+    """
+    Return value as numpy type for given dtype and encoding
+    Encoding is expected to be one of None or "base64"
+    """
+    # create a scalar numpy array
+    arr = np.zeros((), dtype=dt)
 
-Note: only works with ndarrays (for now at least)
-"""
+    if encoding and not isinstance(value, str):
+        msg = "Expected value to be string to use encoding"
+        raise ValueError(msg)
+
+    if encoding == "base64":
+        try:
+            data = base64.decodebytes(value.encode("utf-8"))
+        except binascii.Error:
+            msg = "Unable to decode base64 string: {value}"
+            # log.warn(msg)
+            raise ValueError(msg)
+        arr = bytesToArray(data, dt, ())
+    else:
+        if isinstance(value, list):
+            # convert to tuple
+            value = tuple(value)
+        elif dt.kind == "f" and isinstance(value, str) and value == "nan":
+            value = np.NaN
+        else:
+            # use as is
+            pass
+        arr = np.asarray(value, dtype=dt)
+    return arr[()]
 
 
 def squeezeArray(data):
+    """
+    Reduce dimensions by removing any 1-extent dimensions.
+    Just return input if no 1-extent dimensions
+
+    Note: only works with ndarrays (for now at least)
+    """
     if not isinstance(data, np.ndarray):
         raise TypeError("expected ndarray")
     if len(data.shape) <= 1:
@@ -612,13 +615,11 @@ class IndexIterator(object):
         return tuple(ret_index)
 
 
-# compare two numpy arrays.
-# return true if the same (exclusive of null vs. empty array)
-# false otherwise
-# TBD: this is slow for multi-megabyte vlen arrays, needs to be optimized
-
-
 def ndarray_compare(arr1, arr2):
+    # compare two numpy arrays.
+    # return true if the same (exclusive of null vs. empty array)
+    # false otherwise
+    # TBD: this is slow for multi-megabyte vlen arrays, needs to be optimized
     if not isinstance(arr1, np.ndarray) and not isinstance(arr2, np.ndarray):
         if not isinstance(arr1, np.void) and not isinstance(arr2, np.void):
             return arr1 == arr2

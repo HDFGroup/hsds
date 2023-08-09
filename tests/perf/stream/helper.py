@@ -53,7 +53,7 @@ def getRangeGetEndpoint():
 
 def validateId(id):
     """Return true if the parameter looks like a UUID"""
-    if type(id) != str:
+    if not isinstance(id, str):
         # should be a string
         return False
     if len(id) != 38:

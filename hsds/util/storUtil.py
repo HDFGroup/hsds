@@ -18,13 +18,10 @@ import time
 import json
 import zlib
 import numcodecs as codecs
-from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
-from aiohttp.client_exceptions import ClientError
-from asyncio import CancelledError
+from aiohttp.web_exceptions import HTTPInternalServerError
 
 
 from .. import hsds_logger as log
-from .httpUtil import http_get
 from .s3Client import S3Client
 
 try:
@@ -193,45 +190,6 @@ def getURIFromKey(app, bucket=None, key=None):
         key = key[1:]  # no leading slash
     uri = client.getURIFromKey(key, bucket=bucket)
     return uri
-
-
-async def rangegetProxy(app, bucket=None, key=None, offset=0, length=0):
-    """fetch bytes from rangeget proxy"""
-    if "rangeget_url" in app:
-        req = app["rangeget_url"] + "/"
-    else:
-        rangeget_port = config.get("rangeget_port")
-        if "is_docker" in app:
-            rangeget_host = "rangeget"
-        else:
-            rangeget_host = "127.0.0.1"
-        req = f"http://{rangeget_host}:{rangeget_port}/"
-    log.debug(f"rangeGetProxy: {req}")
-    params = {}
-    params["bucket"] = bucket
-    params["key"] = key
-    params["offset"] = offset
-    params["length"] = length
-
-    try:
-        data = await http_get(app, req, params=params)
-        log.debug(f"rangeget request: {req}, read {len(data)} bytes")
-    except HTTPNotFound:
-        # external HDF5 file, should exist
-        log.warn(f"range get request not found for params: {params}")
-        raise
-    except ClientError as ce:
-        log.error(f"Error for rangeget({req}): {ce} ")
-        raise HTTPInternalServerError()
-    except CancelledError as cle:
-        log.warn(f"CancelledError for rangeget request({req}): {cle}")
-        return None
-
-    if len(data) != length:
-        msg = f"expected {length} bytes for rangeget {bucket}{key}, "
-        msg += f"but got: {len(data)}"
-        log.warn(msg)
-    return data
 
 
 async def getStorJSONObj(app, key, bucket=None):

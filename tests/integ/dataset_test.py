@@ -1370,7 +1370,65 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("creationProperties" in rspJson)
         creationProps = rspJson["creationProperties"]
         self.assertTrue("fillValue" in creationProps)
-        self.assertTrue(np.isnan(creationProps["fillValue"]))
+        fillValue = creationProps["fillValue"]
+        self.assertEqual(fillValue, "nan")
+
+    def testNaNFillValueBase64Encoded(self):
+        # test Dataset with simple type and fill value that is incompatible with the type
+        domain = self.base_domain + "/testNaNFillValueBase64Encoded.h5"
+        helper.setupDomain(domain)
+        print("testNaNFillValueBase64Encoded", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+
+        # get domain
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        def get_payload(dset_type, fillValue=None, encoding=None):
+            payload = {"type": dset_type, "shape": 10}
+            if fillValue is not None:
+                cprops = {"fillValue": fillValue}
+                if encoding:
+                    cprops["fillValue_encoding"] = encoding
+                payload["creationProperties"] = cprops
+            return payload
+
+        # create the dataset
+        req = self.endpoint + "/datasets"
+
+        payload = get_payload("H5T_IEEE_F32LE", fillValue="AADAfw==", encoding="base64")
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # Dataset created
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson["id"]
+
+        # link new dataset
+        req = self.endpoint + "/groups/" + root_uuid + "/links/dset1"
+        payload = {"id": dset_uuid}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # verify creationProperties
+        req = helper.getEndpoint() + "/datasets/" + dset_uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("creationProperties" in rspJson)
+        creationProps = rspJson["creationProperties"]
+        self.assertTrue("fillValue" in creationProps)
+        self.assertEqual(creationProps["fillValue"], "AADAfw==")
+        self.assertTrue("fillValue_encoding" in creationProps)
+        self.assertEqual(creationProps["fillValue_encoding"], "base64")
+
+        # link new dataset
+        req = self.endpoint + "/groups/" + root_uuid + "/links/dset2"
+        payload = {"id": dset_uuid}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
 
     def testAutoChunk1dDataset(self):
         # test Dataset where chunk layout is set automatically

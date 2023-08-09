@@ -78,7 +78,7 @@ class VlenTest(unittest.TestCase):
 
         # write values to dataset
         data = [
-            [1,],
+            [1, ],
             [1, 2],
             [1, 2, 3],
             [1, 2, 3, 4],

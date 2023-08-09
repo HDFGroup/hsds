@@ -837,20 +837,6 @@ def getPreviewQuery(dims):
     return select
 
 
-def getFillValue(dset_json):
-    """
-    Return fill value if defined, otherwise return None
-    """
-    fill_value = None
-    if "creationProperties" in dset_json:
-        cprops = dset_json["creationProperties"]
-        if "fillValue" in cprops:
-            fill_value = cprops["fillValue"]
-            if isinstance(fill_value, list):
-                fill_value = tuple(fill_value)
-    return fill_value
-
-
 def isExtensible(dims, maxdims):
     """
     Determine if the dataset can be extended

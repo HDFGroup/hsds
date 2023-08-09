@@ -27,11 +27,11 @@ from .util.httpUtil import http_get, http_put, http_post, get_http_client
 from .util.httpUtil import isUnixDomainUrl
 from .util.idUtil import getDataNodeUrl, getNodeCount
 from .util.hdf5dtype import createDataType
-from .util.dsetUtil import getFillValue, getSliceQueryParam
+from .util.dsetUtil import getSliceQueryParam
 from .util.dsetUtil import getSelectionShape, getChunkLayout
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
 from .util.chunkUtil import getChunkIdForPartition, getQueryDtype
-from .util.arrayUtil import jsonToArray, getShapeDims
+from .util.arrayUtil import jsonToArray, getShapeDims, getNumpyValue
 from .util.arrayUtil import getNumElements, arrayToBytes, bytesToArray
 from . import config
 from . import hsds_logger as log
@@ -401,10 +401,17 @@ async def read_point_sel(
     params["action"] = "get"
     params["count"] = num_points
 
-    fill_value = getFillValue(dset_json)
-
     np_arr_rsp = None
     dt = np_arr.dtype
+
+    fill_value = None
+    # initialize to fill_value if specified
+    if "creationProperties" in dset_json:
+        cprops = dset_json["creationProperties"]
+        if "fillValue" in cprops:
+            fill_value_prop = cprops["fillValue"]
+            encoding = cprops.get("fillValue_encoding")
+            fill_value = getNumpyValue(fill_value_prop, dt=dt, encoding=encoding)
 
     def defaultArray():
         # no data, return zero array
