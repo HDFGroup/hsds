@@ -551,7 +551,7 @@ def getNumpyTypename(hdf5TypeName, typeClass=None):
 
 def createBaseDataType(typeItem):
     dtRet = None
-    if type(typeItem) == str:
+    if isinstance(typeItem, str):
         # should be one of the predefined types
         dtName = getNumpyTypename(typeItem)
         dtRet = np.dtype(dtName)
@@ -717,7 +717,7 @@ def createDataType(typeItem):
         dtRet = np.dtype(dtName)
         return dtRet  # return predefined type
 
-    if type(typeItem) != dict:
+    if not isinstance(typeItem, dict):
         raise TypeError("invalid type")
 
     if "class" not in typeItem:
@@ -735,7 +735,7 @@ def createDataType(typeItem):
         subtypes = []
         for field in fields:
 
-            if type(field) != dict:
+            if not isinstance(field, dict):
                 raise TypeError("Expected dictionary type for field")
             if "name" not in field:
                 raise KeyError("'name' missing from field")

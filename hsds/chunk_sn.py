@@ -31,7 +31,7 @@ from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain
 from .util.hdf5dtype import getItemSize, createDataType
 from .util.dsetUtil import getSelectionList, isNullSpace, getDatasetLayoutClass
-from .util.dsetUtil import getFillValue, isExtensible, getSelectionPagination
+from .util.dsetUtil import isExtensible, getSelectionPagination
 from .util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout
 from .util.dsetUtil import getDatasetCreationPropertyLayout
 from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId
@@ -40,7 +40,7 @@ from .util.chunkUtil import getChunkCoverage, getDataCoverage
 from .util.chunkUtil import getQueryDtype, get_chunktable_dims
 from .util.arrayUtil import bytesArrayToList, jsonToArray, getShapeDims
 from .util.arrayUtil import getNumElements, arrayToBytes, bytesToArray
-from .util.arrayUtil import squeezeArray
+from .util.arrayUtil import squeezeArray, getNumpyValue
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from .util.boolparser import BooleanParser
 from .servicenode_lib import getObjectJson, validateAction
@@ -1372,10 +1372,19 @@ async def doReadSelection(
             log.error(msg)
             raise HTTPBadRequest(reason=msg)
 
-        arr = np.zeros(np_shape, dtype=dset_dtype, order="C")
-        fill_value = getFillValue(dset_json)
-        if fill_value is not None:
+        # initialize to fill_value if specified
+        fill_value = None
+        if "creationProperties" in dset_json:
+            cprops = dset_json["creationProperties"]
+            if "fillValue" in cprops:
+                fill_value_prop = cprops["fillValue"]
+                encoding = cprops.get("fillValue_encoding")
+                fill_value = getNumpyValue(fill_value_prop, dt=dset_dtype, encoding=encoding)
+        if fill_value:
+            arr = np.empty(np_shape, dtype=dset_dtype, order="C")
             arr[...] = fill_value
+        else:
+            arr = np.zeros(np_shape, dtype=dset_dtype, order="C")
 
     crawler = ChunkCrawler(
         app,
