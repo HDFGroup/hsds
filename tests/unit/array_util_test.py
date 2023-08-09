@@ -738,7 +738,7 @@ class ArrayUtilTest(unittest.TestCase):
             self.assertTrue(False)
         except ValueError:
             pass  # expected
-        
+
     def testJsonToArrayOnNoneArray(self):
         data_dtype = np.dtype("i4")
         data_shape = [0, ]
