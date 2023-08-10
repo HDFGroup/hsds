@@ -270,6 +270,10 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
             # find domain object is stored under
             domain = link_json["h5domain"]
 
+            if domain.startswith("hdf5:/"):
+                # strip off prefix
+                domain = domain[6:]
+
             if bucket:
                 domain = bucket + domain
 

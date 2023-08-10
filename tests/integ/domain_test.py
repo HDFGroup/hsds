@@ -174,6 +174,15 @@ class DomainTest(unittest.TestCase):
         root_uuid_3 = rspJson["root"]
         self.assertEqual(root_uuid, root_uuid_3)
 
+        # "domain" param with "hdf5://" prefix
+        params = {"domain": f"hdf5:/{domain}"}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(rsp.headers["content-type"], "application/json; charset=utf-8")
+        rspJson = json.loads(rsp.text)
+        root_uuid_3 = rspJson["root"]
+        self.assertEqual(root_uuid, root_uuid_3)
+
         # verify that request with invalid domain fails
         domain = domain[1:]  # strip off the '/'
         params = {"domain": domain}

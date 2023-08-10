@@ -1164,7 +1164,7 @@ async def PUT_Domain(request):
         linked_json = await getDomainJson(app, l_d, reload=True)
         log.debug(f"got linked json: {linked_json}")
         if "root" not in linked_json:
-            msg = "Folder domains cannot ber used as link target"
+            msg = "Folder domains cannot be used as link target"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         root_id = linked_json["root"]
