@@ -14,8 +14,6 @@ import os
 cfg = {
     "hsds_endpoint": "http://localhost:5101",
     # or 'http+unix://%2Ftmp%2Fhs%2Fsn_1.sock' for socket
-    "head_endpoint": "http://localhost:5100",
-    "rangeget_endpoint": "http://localhost:6900",
     "user_name": "test_user1",
     "user_password": "test",
     "user2_name": "test_user2",

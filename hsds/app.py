@@ -15,24 +15,33 @@ import json
 import sys
 import logging
 import time
-import uuid
 
 from .hsds_app import HsdsApp
+from . import config
 
 _HELP_USAGE = "Starts hsds a REST-based service for HDF5 data."
 
 _HELP_EPILOG = """Examples:
 
+- with a POSIX-based storage using a directory: ./hsdata for storage:
+
+  hsds --root_dir ~/hsdata
+
+- with POSIX-based storage and config settings and password file:
+
+  hsds --root_dir ~/hsdata --password-file ./admin/config/passwd.txt \
+  --config_dir ./admin/config
+
 - with minio data storage:
 
   hsds --s3-gateway http://localhost:6007 --access-key-id demo:demo
       --secret-access-key DEMO_PASS --password-file ./admin/config/passwd.txt
-      --bucket-name hsds.test
 
-- with a POSIX-based storage for 'hsds.test' sub-folder in the './data'
-  folder:
+- with AWS S3 storage and a bucket in the us-west-2 region:
 
-  hsds --bucket-dir ./data/hsds.test
+  hsds --s3-gateway http://s3.us-west-2.amazonaws.com --access-key-id ${AWS_ACCESS_KEY_ID} \
+      --secret-access-key ${AWS_SECRET_ACCESS_KEY} --password-file ./admin/config/passwd.txt
+
 """
 
 # maximum number of characters if socket directory is given
@@ -139,14 +148,13 @@ def main():
         epilog=_HELP_EPILOG,
     )
 
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument(
+    parser.add_argument(
         "--root_dir",
         type=str,
         dest="root_dir",
         help="Directory where to store the object store data",
     )
-    group.add_argument(
+    parser.add_argument(
         "--bucket_name",
         nargs=1,
         type=str,
@@ -197,7 +205,7 @@ def main():
     )
     parser.add_argument(
         "--count",
-        default=1,
+        default=4,
         type=int,
         dest="dn_count",
         help="Number of dn sub-processes to create.",
@@ -251,6 +259,9 @@ def main():
         username = args.hs_username
     elif "HS_USERNAME" in userConfig:
         username = userConfig["HS_USERNAME"]
+    elif not args.password_file:
+        # no password file, add the login name as user
+        username = os.getlogin()
     else:
         username = None
 
@@ -260,7 +271,7 @@ def main():
     elif "HS_PASSWORD" in userConfig:
         password = userConfig["HS_PASSWORD"]
     else:
-        password = "1234"
+        password = os.getlogin()
 
     if username:
         kwargs["username"] = username
@@ -271,38 +282,23 @@ def main():
             sys.exit(f"password file: {args.password_file} not found")
         kwargs["password_file"] = args.password_file
 
-    if args.host:
-        # use TCP connect
-        kwargs["host"] = args.host
+    # use unix domain socket if a socket dir is set
+    if args.socket_dir:
+        socket_dir = os.path.abspath(args.socket_dir)
+        if not os.path.isdir(socket_dir):
+            raise FileNotFoundError(f"directory: {socket_dir} not found")
+        kwargs["socket_dir"] = socket_dir
+    else:
+        # USE TCP connect
+        if args.host:
+            kwargs["host"] = args.host
+        else:
+            kwargs["host"] = "localhost"
         # sn_port only relevant for TCP connections
         if args.port:
             kwargs["sn_port"] = args.port
         else:
             kwargs["sn_port"] = 5101  # TBD - use config
-    else:
-        # choose a tmp directory for socket if one is not provided
-        if args.socket_dir:
-            socket_dir = os.path.abspath(args.socket_dir)
-            if not os.path.isdir(socket_dir):
-                raise FileNotFoundError(f"directory: {socket_dir} not found")
-        else:
-            if "TMP" in os.environ:
-                # This should be set at least on Windows
-                tmp_dir = os.environ["TMP"]
-                print("set tmp_dir:", tmp_dir)
-            else:
-                tmp_dir = "/tmp"
-            if not os.path.isdir(tmp_dir):
-                raise FileNotFoundError(f"directory {tmp_dir} not found")
-            rand_name = uuid.uuid4().hex[:8]
-            socket_dir = os.path.join(tmp_dir, f"hs{rand_name}")
-            print("using socket dir:", socket_dir)
-            if len(socket_dir) > MAX_SOCKET_DIR_PATH_LEN:
-                raise ValueError(
-                    f"length of socket_dir must be less than: {MAX_SOCKET_DIR_PATH_LEN}"
-                )
-            os.mkdir(socket_dir)
-        kwargs["socket_dir"] = socket_dir
 
     if args.logfile:
         logfile = os.path.abspath(args.logfile)
@@ -328,6 +324,27 @@ def main():
 
     if args.dn_count:
         kwargs["dn_count"] = args.dn_count
+
+    if args.bucket_name:
+        bucket_name = args.bucket_name
+    else:
+        bucket_name = config.get("bucket_name")
+    if not bucket_name:
+        sys.exit("bucket_name not set")
+    if args.root_dir:
+        root_dir = args.root_dir
+    else:
+        root_dir = config.get("root_dir")
+    if not root_dir:
+        # check that AWS_S3_GATEWAY or AZURE_CONNECTION_STRING is set
+        if not config.get("aws_s3_gateway") and not config.get("azure_connection_string"):
+            sys.exit("root_dir not set (and no S3 or Azure connection info)")
+    else:
+        if not os.path.isdir(root_dir):
+            sys.exit(f"directory: {root_dir} not found")
+        bucket_path = os.path.join(root_dir, bucket_name)
+        if not os.path.isdir(bucket_path):
+            os.mkdir(bucket_path)
 
     app = HsdsApp(**kwargs)
     app.run()

@@ -1123,11 +1123,6 @@ async def PUT_Domain(request):
     else:
         is_toplevel = False
 
-    if is_toplevel and not is_folder:
-        msg = "Only folder domains can be created at the top-level"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-
     if is_toplevel and not isAdminUser(app, username):
         msg = "creation of top-level domains is only supported by admin users"
         log.warn(msg)
