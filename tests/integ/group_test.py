@@ -60,16 +60,20 @@ class GroupTest(unittest.TestCase):
         self.assertTrue("attributeCount" in rspJson)
 
         # try get with a different user (who has read permission)
-        headers = helper.getRequestHeaders(
-            domain=self.base_domain, username="test_user2"
-        )
-        rsp = self.session.get(req, headers=headers)
-        if config.get("default_public"):
-            self.assertEqual(rsp.status_code, 200)
-            rspJson = json.loads(rsp.text)
-            self.assertEqual(rspJson["root"], root_uuid)
+        user2_name = config.get("user2_name")
+        if user2_name:
+            headers = helper.getRequestHeaders(
+                domain=self.base_domain, username=user2_name
+            )
+            rsp = self.session.get(req, headers=headers)
+            if config.get("default_public"):
+                self.assertEqual(rsp.status_code, 200)
+                rspJson = json.loads(rsp.text)
+                self.assertEqual(rspJson["root"], root_uuid)
+            else:
+                self.assertEqual(rsp.status_code, 403)
         else:
-            self.assertEqual(rsp.status_code, 403)
+            print("user2_name not set")
 
         # try to do a GET with a different domain (should fail)
         another_domain = helper.getParentDomain(self.base_domain)
@@ -217,6 +221,11 @@ class GroupTest(unittest.TestCase):
         self.assertEqual(rspJson["alias"], [])
 
         # try POST with user who doesn't have create permission on this domain
+        test_user2 = config.get("user2_name")  # some tests will be skipped if not set
+        if not test_user2:
+            print("test_user2 not set")
+            return
+
         headers = helper.getRequestHeaders(
             domain=self.base_domain, username="test_user2"
         )
@@ -385,11 +394,15 @@ class GroupTest(unittest.TestCase):
         # self.assertEqual(rspJson["domain"], self.base_domain)  #TBD
 
         # try DELETE with user who doesn't have create permission on this domain
-        headers = helper.getRequestHeaders(
-            domain=self.base_domain, username="test_user2"
-        )
-        rsp = self.session.delete(req, headers=headers)
-        self.assertEqual(rsp.status_code, 403)  # forbidden
+        test_user2 = config.get("user2_name")  # some tests will be skipped if not set
+        if test_user2:
+            headers = helper.getRequestHeaders(
+                domain=self.base_domain, username="test_user2"
+            )
+            rsp = self.session.delete(req, headers=headers)
+            self.assertEqual(rsp.status_code, 403)  # forbidden
+        else:
+            print("test_user2 not set")
 
         # try to do a DELETE with a different domain (should fail)
         another_domain = helper.getParentDomain(self.base_domain)

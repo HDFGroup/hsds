@@ -103,9 +103,12 @@ class AclTest(unittest.TestCase):
         # try fetching an ACL from a user who doesn't have readACL permissions
         req = helper.getEndpoint() + "/acls/" + username
         user2name = config.get("user2_name")
-        headers = helper.getRequestHeaders(domain=self.base_domain, username=user2name)
-        rsp = self.session.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 403)  # forbidden
+        if user2name:
+            headers = helper.getRequestHeaders(domain=self.base_domain, username=user2name)
+            rsp = self.session.get(req, headers=headers)
+            self.assertEqual(rsp.status_code, 403)  # forbidden
+        else:
+            print("user2_name not set")
 
     def testGetAcls(self):
         print("testGetAcls", self.base_domain)
@@ -224,9 +227,12 @@ class AclTest(unittest.TestCase):
         # try fetching ACLs from a user who doesn't have readACL permissions
         req = helper.getEndpoint() + "/acls"
         user2name = config.get("user2_name")
-        headers = helper.getRequestHeaders(domain=self.base_domain, username=user2name)
-        rsp = self.session.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 403)  # forbidden
+        if user2name:
+            headers = helper.getRequestHeaders(domain=self.base_domain, username=user2name)
+            rsp = self.session.get(req, headers=headers)
+            self.assertEqual(rsp.status_code, 403)  # forbidden
+        else:
+            print("user2name not set")
 
     def testPutAcl(self):
         print("testPutAcl", self.base_domain)
@@ -234,6 +240,9 @@ class AclTest(unittest.TestCase):
 
         # create an ACL for "test_user2" with read and update access
         user2name = config.get("user2_name")
+        if not user2name:
+            print("user2_name not set")
+            return
         req = helper.getEndpoint() + "/acls/" + user2name
         perm = {"read": True, "update": True}
 

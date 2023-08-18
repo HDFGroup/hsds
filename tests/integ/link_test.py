@@ -15,6 +15,7 @@ import time
 import json
 import uuid
 import helper
+import config
 
 
 class LinkTest(unittest.TestCase):
@@ -36,6 +37,7 @@ class LinkTest(unittest.TestCase):
         helper.setupDomain(domain)
         headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + "/"
+        test_user2 = config.get("user2_name")  # some tests will be skipped if not set
 
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -66,12 +68,16 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 404)  # link doesn't exist yet
 
         # try creating a link with a different user (should fail)
-        headers = helper.getRequestHeaders(domain=domain, username="test_user2")
-        payload = {"id": grp1_id}
-        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 403)  # forbidden
+        if test_user2:
+            headers = helper.getRequestHeaders(domain=domain, username=test_user2)
+            payload = {"id": grp1_id}
+            rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+            self.assertEqual(rsp.status_code, 403)  # forbidden
+        else:
+            print("test_user2 name not set")
 
         # create "/g1" with original user
+        payload = {"id": grp1_id}
         headers = helper.getRequestHeaders(domain=domain)
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # created
@@ -107,10 +113,13 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(rspJson["linkCount"], 1)  # link count is 1
 
         # try deleting link with a different user (should fail)
-        headers = helper.getRequestHeaders(domain=domain, username="test_user2")
-        req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title
-        rsp = self.session.delete(req, headers=headers)
-        self.assertEqual(rsp.status_code, 403)  # forbidden
+        if test_user2:
+            headers = helper.getRequestHeaders(domain=domain, username=test_user2)
+            req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title
+            rsp = self.session.delete(req, headers=headers)
+            self.assertEqual(rsp.status_code, 403)  # forbidden
+        else:
+            print("user2_name not set")
 
         # delete the link with original user
         req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title

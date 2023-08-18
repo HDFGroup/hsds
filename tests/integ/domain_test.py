@@ -281,6 +281,7 @@ class DomainTest(unittest.TestCase):
         domain = "/home"
         print("testGetTopLevelDomain", domain)
         headers = helper.getRequestHeaders(domain=domain)
+        user_name = config.get("user_name")
 
         req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers)
@@ -291,7 +292,7 @@ class DomainTest(unittest.TestCase):
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("class" in rspJson)
         self.assertEqual(rspJson["class"], "folder")
-        domain = "test_user1.home"
+        domain = f"{user_name}.home"
         headers = helper.getRequestHeaders(domain=domain)
 
         req = helper.getEndpoint() + "/"
@@ -564,6 +565,11 @@ class DomainTest(unittest.TestCase):
     def testAclInheritence(self):
         # this test is here (rather than acl_test.py) since we need to create domains in a folder
         print("testAclInheritence", self.base_domain)
+        user2name = config.get("user2_name")
+        if not user2name:
+            print("user2_name not set, skipping test")
+            return
+
         folder = self.base_domain + "/a_folder"
         headers = helper.getRequestHeaders(domain=folder)
         req = helper.getEndpoint() + "/"
@@ -573,7 +579,6 @@ class DomainTest(unittest.TestCase):
         default_public = config.get("default_public")
 
         # create an ACL for "test_user2" with read and update access
-        user2name = config.get("user2_name")
         req = helper.getEndpoint() + "/acls/" + user2name
         perm = {"read": True, "update": True}
 
@@ -809,9 +814,12 @@ class DomainTest(unittest.TestCase):
 
         # try deleting the domain with a user who doesn't have permissions'
         user2_name = config.get("user2_name")
-        headers = helper.getRequestHeaders(domain=self.base_domain, username=user2_name)
-        rsp = self.session.delete(req, headers=headers)
-        self.assertEqual(rsp.status_code, 403)  # forbidden
+        if user2_name:
+            headers = helper.getRequestHeaders(domain=self.base_domain, username=user2_name)
+            rsp = self.session.delete(req, headers=headers)
+            self.assertEqual(rsp.status_code, 403)  # forbidden
+        else:
+            print("user2_name not set")
 
         # delete the domain (with the orginal user)
         headers = helper.getRequestHeaders(domain=domain)
@@ -849,27 +857,35 @@ class DomainTest(unittest.TestCase):
             msg += "environment variables to enable"
             print(msg)
 
-        # try creating a folder using the owner flag
-        try:
-            admin_username = config.get("admin_username")
-            admin_passwd = config.get("admin_password")
-            username = config.get("user2_name")
-            new_domain = f"{self.base_domain}/{username}_folder"
-            body = {"folder": True, "owner": username}
-            headers = helper.getRequestHeaders(
-                domain=new_domain, username=admin_username, password=admin_passwd
-            )
-            rsp = self.session.put(req, headers=headers, data=json.dumps(body))
-            self.assertEqual(rsp.status_code, 201)
+        username = config.get("user2_name")
+        admin_username = config.get("admin_username")
 
-            headers = helper.getRequestHeaders(domain=new_domain, username=username)
-            rsp = self.session.get(req, headers=headers)
-            self.assertEqual(rsp.status_code, 200)
-            rspJson = json.loads(rsp.text)
-        except KeyError:
-            msg = "Skipping domain create with owner test, set ADMIN_USERNAME"
-            msg += " and ADMIN_PASSWORD environment variables to enable"
-            print(msg)
+        if username and admin_username:
+
+            # try creating a folder using the owner flag
+            try:
+                admin_passwd = config.get("admin_password")
+                new_domain = f"{self.base_domain}/{username}_folder"
+                body = {"folder": True, "owner": username}
+                headers = helper.getRequestHeaders(
+                    domain=new_domain, username=admin_username, password=admin_passwd
+                )
+                rsp = self.session.put(req, headers=headers, data=json.dumps(body))
+                self.assertEqual(rsp.status_code, 201)
+
+                headers = helper.getRequestHeaders(domain=new_domain, username=username)
+                rsp = self.session.get(req, headers=headers)
+                self.assertEqual(rsp.status_code, 200)
+                rspJson = json.loads(rsp.text)
+            except KeyError:
+                msg = "Skipping domain create with owner test, set ADMIN_USERNAME"
+                msg += " and ADMIN_PASSWORD environment variables to enable"
+                print(msg)
+        else:
+            if not username:
+                print("user2_name not set")
+            elif not admin_username:
+                print("admin_username not set")
 
     def testDomainCollections(self):
         domain = helper.getTestDomain("tall.h5")

@@ -19,7 +19,7 @@ import time
 from .hsds_app import HsdsApp
 from . import config
 
-_HELP_USAGE = "Starts hsds a REST-based service for HDF5 data."
+_HELP_USAGE = "Starts HSDS, a REST-based service for HDF5 data."
 
 _HELP_EPILOG = """Examples:
 

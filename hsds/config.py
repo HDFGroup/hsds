@@ -86,7 +86,6 @@ def _load_cfg():
         debug("set default location for config dirs")
         config_dirs = ["./", "/config", "/etc/hsds/"]  # default locations
     for config_dir in config_dirs:
-        eprint("using config_dir:", config_dir)
         file_name = os.path.join(config_dir, "config.yml")
         debug("checking config path:", file_name)
         if os.path.isfile(file_name):

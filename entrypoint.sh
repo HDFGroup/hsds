@@ -22,10 +22,6 @@ elif [ $NODE_TYPE == "head_node" ]; then
   echo "running hsds-headnode"
   export PYTHONUNBUFFERED="1"
   hsds-headnode
-elif [ $NODE_TYPE == "rangeget" ]; then
-  echo "running hsds-rangeget"
-  export PYTHONUNBUFFERED="1"
-  hsds-rangeget
 else
   echo "Unknown NODE_TYPE: " $NODE_TYPE
 fi

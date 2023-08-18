@@ -14,6 +14,7 @@ import unittest
 import json
 import numpy as np
 import helper
+import config
 
 
 class AttributeTest(unittest.TestCase):
@@ -238,11 +239,15 @@ class AttributeTest(unittest.TestCase):
             self.assertEqual(rsp.status_code, 404)  # not found
 
             # try adding the attribute as a different user
-            headers = helper.getRequestHeaders(
-                domain=self.base_domain, username="test_user2"
-            )
-            rsp = self.session.put(req, data=json.dumps(attr_payload), headers=headers)
-            self.assertEqual(rsp.status_code, 403)  # forbidden
+            user2_name = config.get("user2_name")
+            if user2_name:
+                headers = helper.getRequestHeaders(
+                    domain=self.base_domain, username="test_user2"
+                )
+                rsp = self.session.put(req, data=json.dumps(attr_payload), headers=headers)
+                self.assertEqual(rsp.status_code, 403)  # forbidden
+            else:
+                print("user2_name not set")
 
             # try adding again with original user, but outside this domain
             another_domain = helper.getParentDomain(self.base_domain)
