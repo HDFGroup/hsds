@@ -843,16 +843,16 @@ class DomainTest(unittest.TestCase):
         rsp = self.session.get(root_req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
-        # delete the domain with the admin account
-        try:
-            admin_username = config.get("admin_username")
+        admin_username = config.get("admin_username")
+        if admin_username:
+            # delete the domain with the admin account
             admin_passwd = config.get("admin_password")
             headers = helper.getRequestHeaders(
                 domain=domain, username=admin_username, password=admin_passwd
             )
             rsp = self.session.delete(req, headers=headers)
             self.assertEqual(rsp.status_code, 200)
-        except KeyError:
+        else:
             msg = "Skipping admin delete test, set ADMIN_USERNAME and ADMIN_PASSWORD"
             msg += "environment variables to enable"
             print(msg)

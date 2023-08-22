@@ -18,6 +18,8 @@ cfg = {
     "user_password": "test",
     "user2_name": "test_user2",
     "user2_password": "test",
+    "admin_username": "",
+    "admin_password": "",
     "test_noauth": True,
     "default_public": False,  # set to true if the server makes new domains publicly readable
     "bucket_name": "",  # bucket name to be used for requests

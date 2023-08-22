@@ -93,7 +93,6 @@ def getTestDomainName(name):
 
 def getRequestHeaders(domain=None, username=None, bucket=None, password=None, **kwargs):
     """Get default request headers for domain"""
-    print("getRequestHearders", username, password)
     if username is None:
         username = config.get("user_name")
         if password is None:
