@@ -249,19 +249,25 @@ def main():
         print(f"unsupported log_level: {log_level_cfg}, using INFO instead")
         log_level = logging.INFO
 
-    print("set logging to:", log_level)
+    print("set logging to::", log_level)
     logging.basicConfig(level=log_level)
 
     userConfig = UserConfig()
 
-    # set username based on command line, .hscfg, $USER, or $JUPYTERHUB_USER
+    login_username = None
+    try:
+        login_username = os.getlogin()
+    except OSError:
+        pass  # ignore
+
+    # set username based on command line, .hscfg, or login user
     if args.hs_username:
         username = args.hs_username
     elif "HS_USERNAME" in userConfig:
         username = userConfig["HS_USERNAME"]
     elif not args.password_file:
         # no password file, add the login name as user
-        username = os.getlogin()
+        username = login_username
     else:
         username = None
 
@@ -271,7 +277,7 @@ def main():
     elif "HS_PASSWORD" in userConfig:
         password = userConfig["HS_PASSWORD"]
     else:
-        password = os.getlogin()
+        password = login_username
 
     if username:
         kwargs["username"] = username
