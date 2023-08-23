@@ -514,7 +514,7 @@ def getNumpyValue(value, dt=None, encoding=None):
             msg = "Unable to decode base64 string: {value}"
             # log.warn(msg)
             raise ValueError(msg)
-        arr = bytesToArray(data, dt, ())
+        arr = bytesToArray(data, dt, dt.shape)
     else:
         if isinstance(value, list):
             # convert to tuple
@@ -524,7 +524,7 @@ def getNumpyValue(value, dt=None, encoding=None):
         else:
             # use as is
             pass
-        arr = np.asarray(value, dtype=dt)
+        arr = np.asarray(value, dtype=dt.base)
     return arr[()]
 
 
