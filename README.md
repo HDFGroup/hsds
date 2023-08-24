@@ -5,27 +5,27 @@
 HSDS is a web service that implements a REST-based web service for HDF5 data stores.
 Data can be stored in either a POSIX files system, or using object-based storage such as
 AWS S3, Azure Blob Storage, or [MinIO](https://min.io).
-HSDS can be run a single machine or on a cluster using Kubernetes (or AKS on Microsoft Azure).
+HSDS can be run a single machine with or without Docker or on a cluster using Kubernetes (or AKS on Microsoft Azure).
 
 In addition, HSDS can be run in serverless mode with AWS Lambda or h5pyd local mode.
 
 ## Quick Start
 
-Make sure you have Python 3, Pip, and git installed, then:
+Make sure you have Python 3 and Pip installed, then:
 
-1.  Clone this repo: `$ git clone https://github.com/HDFGroup/hsds`
-2.  Go to the hsds directory: `$ cd hsds`
-3.  Run install: `$ python setup.py install` OR install from pypi: `$ pip install hsds`
-4.  Setup password file: `$ cp admin/config/passwd.default admin/config/passwd.txt`
-5.  Create a directory the server will use to store data, and then set the ROOT_DIR environment variable to point to it: `$ mkdir hsds_data; export ROOT_DIR="${PWD}/hsds_data"`  For Windows: `C:> set ROOT_DIR=%CD%\hsds_data`
-6.  Create the hsds test bucket: `$ mkdir hsds_data/hsdstest`
-7.  Start server: `$ ./runall.sh --no-docker`  For Windows: `C:> runall.bat`
-8.  In a new shell, set environment variables for the admin account: `$ export ADMIN_USERNAME=admin` and `$ export ADMIN_PASSWORD=admin` (adjust for any changes made to the passwd.txt file).  For Windows - use the corresponding set commands
-9. Run the test suite: `$ python testall.py --skip_unit`
-10. (Optional) Post install setup (test data, home folders, cli tools, etc): [docs/post_install.md](docs/post_install.md)
-11. (Optional) Install the h5pyd package for an h5py compatible api and tool suite: https://github.com/HDFGroup/h5pyd
+1.  Run install: `$ ./build.sh` from source tree OR install from pypi: `$ pip install hsds`
+2.  Create a directory the server will use to store data, example: `$ mkdir ~/hsds_data`
+3.  Start server: `$ hsds --root_dir ~/hsds_data`
+4.  Run the test suite. In a separate terminal run:
+    -  Set user_name: `$ export USER_NAME=$USER`
+    -  Set user_password: `$ export USER_PASSWORD=$USER`
+    -  Set admin name: `$ export ADMIN_USER=$USER`
+    -  Set admin password: `$ $export ADMIN_PASSWORD=$USER`
+    -  Run test suite: `$ python testall.py --skip_unit`
+5. (Optional) Install the h5pyd package for an h5py compatible api and tool suite: https://github.com/HDFGroup/h5pyd
+6. (Optional) Post install setup (test data, home folders, cli tools, etc): [docs/post_install.md](docs/post_install.md)
 
-To shut down the server, and the server was started with the --no-docker option, just control-C.
+To shut down the server, and the server is not running in Docker, just control-C.
 
 If using docker, run: `$ ./stopall.sh`
 

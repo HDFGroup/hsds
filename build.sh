@@ -31,7 +31,7 @@ pip install --upgrade build
 
 echo "running build"
 python -m build
-pip install dist/hsds-8.8.2.tar.gz
+pip install -v .
 
 command -v docker 
 if [ $? -ne 1 ]; then

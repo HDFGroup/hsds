@@ -22,7 +22,7 @@ COPY entrypoint.sh  /
 RUN /bin/bash -c 'cd /usr/local/src/hsds; \
                   pip install build;\
                   python -m build;\
-                  pip install dist/hsds-0.8.2.tar.gz;\
+                  pip install -v . ;\
                   cd -'
 
 EXPOSE 5100-5999
