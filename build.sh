@@ -27,11 +27,17 @@ if [ $run_pyflakes ]; then
     fi
 fi
 
-echo "running setup.py"
-python setup.py install
+pip install --upgrade build
 
-echo "clean stopped containers"
-docker rm -v $(docker ps -aq -f status=exited)
+echo "running build"
+python -m build
+pip install -v .
 
-echo "building docker image"
-docker build -t hdfgroup/hsds .
+command -v docker 
+if [ $? -ne 1 ]; then
+    echo "clean stopped containers"
+    docker rm -v $(docker ps -aq -f status=exited)
+
+    echo "building docker image"
+    docker build -t hdfgroup/hsds .
+fi

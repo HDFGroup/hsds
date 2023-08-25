@@ -42,13 +42,21 @@ def getCmdLineArg(x):
     # return value of command-line option
     # use "--x=val" to set option 'x' to 'val'
     # use "--x" for boolean flags
+
     option = "--" + x + "="
     for i in range(1, len(sys.argv)):
         arg = sys.argv[i]
+        if i < len(sys.argv) - 1:
+            next_arg = sys.argv[i + 1]
+        else:
+            next_arg = None
         if arg == "--" + x:
-            # boolean flag
             debug(f"got cmd line flag for {x}")
-            return True
+            if next_arg is None or next_arg.startswith("-"):
+                # treat as a boolean flag
+                return True
+            else:
+                return next_arg
         elif arg.startswith(option):
             # found an override
             nlen = len(option)
@@ -69,6 +77,7 @@ def _load_cfg():
         config_dir = getCmdLineArg("config_dir")
 
     if config_dir:
+        eprint("got command line arg for config_dir:", config_dir)
         config_dirs.append(config_dir)
     if not config_dirs and "CONFIG_DIR" in os.environ:
         config_dirs.append(os.environ["CONFIG_DIR"])

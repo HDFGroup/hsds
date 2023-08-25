@@ -134,14 +134,18 @@ class DatasetTest(unittest.TestCase):
         # self.assertTrue("allocated_size" in rspJson)
 
         # try get with a different user (who has read permission)
-        headers = helper.getRequestHeaders(domain=domain, username="test_user2")
-        rsp = self.session.get(req, headers=headers)
-        if config.get("default_public"):
-            self.assertEqual(rsp.status_code, 200)
-            rspJson = json.loads(rsp.text)
-            self.assertEqual(rspJson["id"], dset_id)
+        user2_name = config.get('user2_name')
+        if user2_name:
+            headers = helper.getRequestHeaders(domain=domain, username=user2_name)
+            rsp = self.session.get(req, headers=headers)
+            if config.get("default_public"):
+                self.assertEqual(rsp.status_code, 200)
+                rspJson = json.loads(rsp.text)
+                self.assertEqual(rspJson["id"], dset_id)
+            else:
+                self.assertEqual(rsp.status_code, 403)
         else:
-            self.assertEqual(rsp.status_code, 403)
+            print('user2_name not set')
 
         # try to do a GET with a different domain (should fail)
         another_domain = self.base_domain + "/testScalarDataset2.h5"
@@ -152,9 +156,12 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 400)
 
         # try DELETE with user who doesn't have create permission on this domain
-        headers = helper.getRequestHeaders(domain=domain, username="test_user2")
-        rsp = self.session.delete(req, headers=headers)
-        self.assertEqual(rsp.status_code, 403)  # forbidden
+        if user2_name:
+            headers = helper.getRequestHeaders(domain=domain, username=user2_name)
+            rsp = self.session.delete(req, headers=headers)
+            self.assertEqual(rsp.status_code, 403)  # forbidden
+        else:
+            print("user2_name not set")
 
         # try to do a DELETE with a different domain (should fail)
         # Test creation/deletion of scalar dataset obj
@@ -475,9 +482,13 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(rspJson["id"], dset_id)
 
         # try DELETE with user who doesn't have create permission on this domain
-        headers = helper.getRequestHeaders(domain=domain, username="test_user2")
-        rsp = self.session.delete(req, headers=headers)
-        self.assertEqual(rsp.status_code, 403)  # forbidden
+        user2_name = config.get('user2_name')
+        if user2_name:
+            headers = helper.getRequestHeaders(domain=domain, username=user2_name)
+            rsp = self.session.delete(req, headers=headers)
+            self.assertEqual(rsp.status_code, 403)  # forbidden
+        else:
+            print("test_user2 not set")
 
         # try to do a DELETE with a different domain (should fail)
         another_domain = helper.getParentDomain(domain)

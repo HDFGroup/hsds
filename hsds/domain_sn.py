@@ -1123,11 +1123,6 @@ async def PUT_Domain(request):
     else:
         is_toplevel = False
 
-    if is_toplevel and not is_folder:
-        msg = "Only folder domains can be created at the top-level"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-
     if is_toplevel and not isAdminUser(app, username):
         msg = "creation of top-level domains is only supported by admin users"
         log.warn(msg)
@@ -1164,7 +1159,7 @@ async def PUT_Domain(request):
         linked_json = await getDomainJson(app, l_d, reload=True)
         log.debug(f"got linked json: {linked_json}")
         if "root" not in linked_json:
-            msg = "Folder domains cannot ber used as link target"
+            msg = "Folder domains cannot be used as link target"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         root_id = linked_json["root"]

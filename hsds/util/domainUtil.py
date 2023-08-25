@@ -213,6 +213,10 @@ def getDomainFromRequest(request, validate=True, allow_dns=True):
     if not domain:
         raise ValueError("no domain")
 
+    if domain.startswith("hdf5:/"):
+        # strip off the prefix to make following logic easier
+        domain = domain[6:]
+
     if domain[0] != "/":
         # DNS style hostname
         if validate:

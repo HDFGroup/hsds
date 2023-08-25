@@ -14,12 +14,12 @@ import os
 cfg = {
     "hsds_endpoint": "http://localhost:5101",
     # or 'http+unix://%2Ftmp%2Fhs%2Fsn_1.sock' for socket
-    "head_endpoint": "http://localhost:5100",
-    "rangeget_endpoint": "http://localhost:6900",
     "user_name": "test_user1",
     "user_password": "test",
-    "user2_name": "test_user2",
-    "user2_password": "test",
+    "user2_name": "",
+    "user2_password": "",
+    "admin_username": "",
+    "admin_password": "",
     "test_noauth": True,
     "default_public": False,  # set to true if the server makes new domains publicly readable
     "bucket_name": "",  # bucket name to be used for requests

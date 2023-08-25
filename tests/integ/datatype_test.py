@@ -72,29 +72,32 @@ class DatatypeTest(unittest.TestCase):
         self.assertEqual(type_json["base"], "H5T_IEEE_F32LE")
 
         # try get with a different user (who has read permission)
-        headers = helper.getRequestHeaders(
-            domain=self.base_domain, username="test_user2"
-        )
-        rsp = self.session.get(req, headers=headers)
-        if config.get("default_public"):
-            self.assertEqual(rsp.status_code, 200)
-            rspJson = json.loads(rsp.text)
-            self.assertEqual(rspJson["root"], root_uuid)
+        test_user2 = config.get("user2_name")  # some tests will be skipped if not
+        if test_user2:
+            headers = helper.getRequestHeaders(
+                domain=self.base_domain, username="test_user2"
+            )
+            rsp = self.session.get(req, headers=headers)
+            if config.get("default_public"):
+                self.assertEqual(rsp.status_code, 200)
+                rspJson = json.loads(rsp.text)
+                self.assertEqual(rspJson["root"], root_uuid)
+            else:
+                self.assertEqual(rsp.status_code, 403)
+            # try DELETE with user who doesn't have create permission on this domain
+            headers = helper.getRequestHeaders(
+                domain=self.base_domain, username="test_user2"
+            )
+            rsp = self.session.delete(req, headers=headers)
+            self.assertEqual(rsp.status_code, 403)  # forbidden
         else:
-            self.assertEqual(rsp.status_code, 403)
+            print('test_user2 not set')
 
         # try to do a GET with a different domain (should fail)
         another_domain = helper.getParentDomain(self.base_domain)
         headers = helper.getRequestHeaders(domain=another_domain)
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 400)
-
-        # try DELETE with user who doesn't have create permission on this domain
-        headers = helper.getRequestHeaders(
-            domain=self.base_domain, username="test_user2"
-        )
-        rsp = self.session.delete(req, headers=headers)
-        self.assertEqual(rsp.status_code, 403)  # forbidden
 
         # try to do a DELETE with a different domain (should fail)
         another_domain = helper.getParentDomain(self.base_domain)

@@ -1,0 +1,90 @@
+[build-system]
+requires = [
+    "setuptools >=61",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hsds"
+description = "Rest-based Web Service for HDF data"
+authors = [
+    {name = "John Readey", email = "jreadey@hdfgroup.org"},
+]
+maintainers = [
+    {name = "John Readey", email = "jradey@hdfgroup.org"},
+]
+license = {text = "Apache V2"}
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Licence",
+    "Operating System :: Unix",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Database",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+requires-python = ">=3.8"
+version = "0.8.2"
+
+dependencies = [
+   "aiohttp == 3.8.5",
+    "aiobotocore == 2.5.0",
+    "aiohttp_cors",
+    "aiofiles",
+    "botocore",
+    "cryptography",
+    "numcodecs",
+    "numpy",
+    "psutil",
+    "pyjwt",
+    "pytz",
+    "pyyaml",
+    "requests-unixsocket",
+    "simplejson",
+]
+
+[project.optional-dependencies]
+azure = ["azure-storage-blob"]
+
+[project.readme]
+text = """\
+HSDS is a web service that implements a REST-based web service for HDF5 data stores.
+Data can be stored in either a POSIX files system, or using object-based storage such as
+AWS S3, Azure Blob Storage, or [MinIO](https://min.io).
+HSDS can be run a single machine or on a cluster using Kubernetes (or AKS on Microsoft Azure).
+
+In addition, HSDS can be run in serverless mode with AWS Lambda or h5pyd local mode.
+"""
+content-type = "text/x-rst"
+
+[project.urls]
+Homepage = "https://www.hdfgroup.org/solutions/highly-scalable-data-service-hsds/"
+Source = "https://github.com/HDFGroup/hsds"
+Documentation = "https://github.com/HDFGroup/hsds/docs"
+"Release notes" = "https://github.com/HDFGroup/hsds/releases/tag/v0.8.0"
+"Discussion forum" = "https://forum.hdfgroup.org/c/hsds/"
+
+[tool.setuptools]
+packages = ["hsds", "hsds.util", "admin"]
+include-package-data = false
+
+[tool.setuptools.package-data]
+# to ignore .pxd and .pyx files in wheels
+#"*" = ["*.yml"]
+admin = ["config/config.yml"]
+
+[project.scripts]
+hsds = "hsds.app:main"
+hsds-datanode = "hsds.datanode:main"
+hsds-servicenode = "hsds.servicenode:main"
+hsds-headnode = "hsds.headnode:main"
+hsds-node = "hsds.node_runner:main"
+hsds-chunklocator = "hsds.chunklocator:main"
+

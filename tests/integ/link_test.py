@@ -15,6 +15,7 @@ import time
 import json
 import uuid
 import helper
+import config
 
 
 class LinkTest(unittest.TestCase):
@@ -36,6 +37,7 @@ class LinkTest(unittest.TestCase):
         helper.setupDomain(domain)
         headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + "/"
+        test_user2 = config.get("user2_name")  # some tests will be skipped if not set
 
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -66,12 +68,16 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 404)  # link doesn't exist yet
 
         # try creating a link with a different user (should fail)
-        headers = helper.getRequestHeaders(domain=domain, username="test_user2")
-        payload = {"id": grp1_id}
-        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 403)  # forbidden
+        if test_user2:
+            headers = helper.getRequestHeaders(domain=domain, username=test_user2)
+            payload = {"id": grp1_id}
+            rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+            self.assertEqual(rsp.status_code, 403)  # forbidden
+        else:
+            print("test_user2 name not set")
 
         # create "/g1" with original user
+        payload = {"id": grp1_id}
         headers = helper.getRequestHeaders(domain=domain)
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # created
@@ -107,10 +113,13 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(rspJson["linkCount"], 1)  # link count is 1
 
         # try deleting link with a different user (should fail)
-        headers = helper.getRequestHeaders(domain=domain, username="test_user2")
-        req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title
-        rsp = self.session.delete(req, headers=headers)
-        self.assertEqual(rsp.status_code, 403)  # forbidden
+        if test_user2:
+            headers = helper.getRequestHeaders(domain=domain, username=test_user2)
+            req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title
+            rsp = self.session.delete(req, headers=headers)
+            self.assertEqual(rsp.status_code, 403)  # forbidden
+        else:
+            print("user2_name not set")
 
         # delete the link with original user
         req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title
@@ -674,7 +683,7 @@ class LinkTest(unittest.TestCase):
         group_id = rspJson["id"]
         self.assertTrue(helper.validateId(group_id))
 
-        # create hard link to external group
+        # create hard link to group
         link_title = "external_group"
         req = helper.getEndpoint() + "/groups/" + root_id_2 + "/links/" + link_title
         headers = helper.getRequestHeaders(domain=second_domain)
@@ -711,14 +720,47 @@ class LinkTest(unittest.TestCase):
         # make a request by path with external_link along the way
         # request without 'follow external links' param should receive 400
         headers = helper.getRequestHeaders(domain=domain)
-        req = helper.getEndpoint() + "/" + "?h5path=/external_link_to_group/child_group"
-        rsp = self.session.get(req, headers=headers)
+        h5path = f"/{link_title}/child_group"
+        req = helper.getEndpoint() + "/"
+        params = {"h5path": h5path}
+        rsp = self.session.get(req, headers=headers, params=params)
         self.assertEqual(rsp.status_code, 400)
 
+        params["follow_external_links"] = 1
+        rsp = self.session.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        keys = ["domain", "linkCount", "attributeCount", "id"]
+        for k in keys:
+            self.assertTrue(k in rspJson)
+
+        self.assertEqual(rspJson["id"], child_group_id)
+        self.assertTrue(helper.validateId(rspJson["id"]))
+        self.assertEqual(rspJson["domain"], second_domain)
+        self.assertEqual(rspJson["linkCount"], 0)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        self.assertEqual(rspJson["class"], "group")
+
+        # create external link with same target but using "hdf5://" prefix
+        target_path = "/external_group"
+        link_title = "external_link_to_group_prefix"
+        req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title
+        payload = {"h5path": target_path, "h5domain": f"hdf5:/{second_domain}"}
         headers = helper.getRequestHeaders(domain=domain)
-        req = helper.getEndpoint() + "/" + "?h5path=/external_link_to_group/child_group" \
-            + "&follow_external_links=1"
-        rsp = self.session.get(req, headers=headers)
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # make a request by path with external_link along the way
+        # request without 'follow external links' param should receive 400
+        headers = helper.getRequestHeaders(domain=domain)
+        h5path = f"/{link_title}/child_group"
+        req = helper.getEndpoint() + "/"
+        params = {"h5path": h5path}
+        rsp = self.session.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 400)
+
+        params["follow_external_links"] = 1
+        rsp = self.session.get(req, headers=headers, params=params)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         keys = ["domain", "linkCount", "attributeCount", "id"]

@@ -274,6 +274,8 @@ class HsdsApp:
                 pargs = [py_exe, cmd_path, "--node_type=sn", "--log_prefix=sn "]
                 if self._username:
                     pargs.append(f"--hs_username={self._username}")
+                    # make this user admin
+                    pargs.append(f"--admin_user={self._username}")
                 if self._password:
                     pargs.append(f"--hs_password={self._password}")
                 if self._password_file:
