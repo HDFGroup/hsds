@@ -11,15 +11,15 @@ authors = [
     {name = "John Readey", email = "jreadey@hdfgroup.org"},
 ]
 maintainers = [
-    {name = "John Readey", email = "jradey@hdfgroup.org"},
+    {name = "John Readey", email = "jreadey@hdfgroup.org"},
 ]
-license = {text = "Apache V2"}
+license = {text = "Apache Software License"}
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Intended Audience :: Information Technology",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: Apache Licence",
+    "License :: OSI Approved :: Apache Software License",
     "Operating System :: Unix",
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS :: MacOS X",
