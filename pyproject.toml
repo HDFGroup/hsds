@@ -11,9 +11,9 @@ authors = [
     {name = "John Readey", email = "jreadey@hdfgroup.org"},
 ]
 maintainers = [
-    {name = "John Readey", email = "jradey@hdfgroup.org"},
+    {name = "John Readey", email = "jreadey@hdfgroup.org"},
 ]
-license = {text = "Apache V2"}
+license = {text = "OSI Approved :: Apache Software License"}
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
