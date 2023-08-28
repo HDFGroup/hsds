@@ -67,7 +67,7 @@ content-type = "text/x-rst"
 [project.urls]
 Homepage = "https://www.hdfgroup.org/solutions/highly-scalable-data-service-hsds/"
 Source = "https://github.com/HDFGroup/hsds"
-Documentation = "https://github.com/HDFGroup/hsds/docs"
+Documentation = "https://github.com/HDFGroup/hsds/tree/master/docs"
 "Release notes" = "https://github.com/HDFGroup/hsds/releases/tag/v0.8.0"
 "Discussion forum" = "https://forum.hdfgroup.org/c/hsds/"
 
