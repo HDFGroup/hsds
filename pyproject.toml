@@ -34,10 +34,11 @@ requires-python = ">=3.8"
 version = "0.8.2"
 
 dependencies = [
-   "aiohttp == 3.8.5",
+    "aiohttp == 3.8.5",
     "aiobotocore == 2.5.0",
     "aiohttp_cors",
     "aiofiles",
+    "azure-storage-blob",
     "botocore",
     "cryptography",
     "numcodecs",
@@ -51,7 +52,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-azure = ["azure-storage-blob"]
+azure = []
 
 [project.readme]
 text = """\
@@ -60,7 +61,7 @@ Data can be stored in either a POSIX files system, or using object-based storage
 AWS S3, Azure Blob Storage, or [MinIO](https://min.io).
 HSDS can be run a single machine or on a cluster using Kubernetes (or AKS on Microsoft Azure).
 
-In addition, HSDS can be run in serverless mode with AWS Lambda or h5pyd local mode.
+In addition, HSDS can b  e run in serverless mode with AWS Lambda or h5pyd local mode.
 """
 content-type = "text/x-rst"
 
