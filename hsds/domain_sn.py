@@ -526,7 +526,7 @@ async def get_domains(request):
             domainNames = domainNames.split(",")
     else:
         s3prefix = prefix[1:]
-        log.debug(f"get_domains - listing S3 keys for {s3prefix}")
+        log.debug(f"get_domains - listing keys for {s3prefix}")
         kwargs = {
             "include_stats": False,
             "prefix": s3prefix,
@@ -534,7 +534,7 @@ async def get_domains(request):
             "bucket": bucket,
         }
         s3keys = await getStorKeys(app, **kwargs)
-        log.debug(f"get_domains - getS3Keys returned: {len(s3keys)} keys")
+        log.debug(f"get_domains - getStorKeys returned: {len(s3keys)} keys")
 
         for s3key in s3keys:
             if s3key[-1] != "/":
@@ -543,7 +543,7 @@ async def get_domains(request):
             if len(s3key) > 1 and s3key[-2] == "/":
                 # trim off double slash
                 s3key = s3key[:-1]
-            log.debug(f"get_domains - got s3key: {s3key}")
+            log.debug(f"get_domains - got key: {s3key}")
             domain = "/" + s3key[:-1]
             if pattern:
                 # do a pattern match on the basename
@@ -1353,7 +1353,7 @@ async def DELETE_Domain(request):
         index = domain.find("/")
         nlen = index + 1
         s3prefix = domain[nlen:] + "/"
-        log.info(f"checking s3key with prefix: {s3prefix} in bucket: {bucket}")
+        log.info(f"checking key with prefix: {s3prefix} in bucket: {bucket}")
         kwargs = {
             "include_stats": False,
             "prefix": s3prefix,

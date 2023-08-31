@@ -13,7 +13,7 @@ In addition, HSDS can be run in serverless mode with AWS Lambda or h5pyd local m
 
 Make sure you have Python 3 and Pip installed, then:
 
-1.  Run install: `$ ./build.sh` from source tree OR install from pypi: `$ pip install hsds`
+1.  Run install: `$ ./build.sh --nolint` from source tree OR install from pypi: `$ pip install hsds`
 2.  Create a directory the server will use to store data, example: `$ mkdir ~/hsds_data`
 3.  Start server: `$ hsds --root_dir ~/hsds_data`
 4.  Run the test suite. In a separate terminal run:

@@ -3,7 +3,6 @@ from asyncio import CancelledError
 import datetime
 import time
 from azure.storage.blob.aio import BlobServiceClient
-from azure.storage.blob import BlobPrefix
 from azure.core.exceptions import AzureError
 from .. import hsds_logger as log
 
@@ -380,6 +379,7 @@ class AzureBlobClient:
         deliminator="/",
         callback=None,
     ):
+        key_names = {} if include_stats else []
         continuation_token = None
         count = 0
         while True:
@@ -389,7 +389,6 @@ class AzureBlobClient:
                 "results_per_page": CALLBACK_MAX_COUNT,
             }
             keyList = client.walk_blobs(**kwargs).by_page(continuation_token)
-            key_names = {} if include_stats else []
             async for key in await keyList.__anext__():
                 key_name = key["name"]
                 log.debug(f"walk_blobs got: {key_name}")
@@ -411,8 +410,6 @@ class AzureBlobClient:
                         log.debug("skip name thaat doesn't end in '/'")
                         # only return folders
                         continue
-                    if len(key_names) >= CALLBACK_MAX_COUNT:
-                        break
                     key_names.append(key_name)
                     count += 1
             if callback:
@@ -422,84 +419,18 @@ class AzureBlobClient:
                     callback(self._app, key_names)
                 key_names = {} if include_stats else []
             token = keyList.continuation_token
-            if not token or len(key_names) >= CALLBACK_MAX_COUNT:
+            if not token:
                 # got all the keys (or as many as requested)
                 log.debug("walk_blobs complete")
                 break
             else:
                 # keep going
                 continuation_token = keyList.continuation_token
-        log.info(f"walk_blob_hierarchy, returning {count} items")
+        log.info(f"walk_blobs, returning {count} items")
         if not callback and count != len(key_names):
             msg = f"expected {count} keys in return list "
             msg += f"but got {len(key_names)}"
             log.warning(msg)
-        return key_names
-
-    async def walk_blob_hierarchy(
-        self, client, prefix="", include_stats=False, callback=None
-    ):
-        log.info(f"walk_blob_hierarchy, prefix: {prefix}")
-
-        key_names = None
-
-        async def do_callback(callback, keynames):
-            if iscoroutinefunction(callback):
-                await callback(self._app, key_names)
-            else:
-                callback(self._app, key_names)
-
-        key_names = key_names = {} if include_stats else []
-        count = 0
-        async for item in client.walk_blobs(name_starts_with=prefix):
-            nlen = len(prefix)
-            short_name = item.name[nlen:]
-            if isinstance(item, BlobPrefix):
-                log.debug(f"walk_blob_hierarchy - BlobPrefix: {short_name}")
-                kwargs = {
-                    "prefix": item.name,
-                    "include_stats": include_stats,
-                    "callback": callback,
-                }
-                key_names = await self.walk_blob_hierarchy(client, **kwargs)
-            else:
-                kwargs = {"nme_starts_with": item.name}
-                async for item in client.list_blobs(**kwargs):
-                    key_name = item["name"]
-                    log.debug(f"walk_blob_hierarchy - got name: {key_name}")
-                    if include_stats:
-                        ETag = item["etag"]
-                        lastModified = int(item["last_modified"].timestamp())
-                        data_size = item["size"]
-                        key_tags = {
-                            "ETag": ETag,
-                            "Size": data_size,
-                            "LastModified": lastModified,
-                        }
-                        key_names[key_name] = key_tags
-                    else:
-                        # just add the blob name to the list
-                        key_names.append(item["name"])
-                    count += 1
-                    if callback and len(key_names) >= CALLBACK_MAX_COUNT:
-                        msg = "walk_blob_hierarchy, invoking callback "
-                        msg += f"with {len(key_names)} items"
-                        log.debug(msg)
-                        await do_callback(callback, key_names)
-                        key_names = key_names = {} if include_stats else []
-            if callback:
-                msg = "walk_blob_hierarchy, invoking callback "
-                msg += f"with {len(key_names)} items"
-                log.debug(msg)
-                await do_callback(callback, key_names)
-                key_names = {} if include_stats else []
-
-        log.info(f"walk_blob_hierarchy, returning {count} items")
-        if not callback and count != len(key_names):
-            msg = f"expected {count} keys in return list "
-            msg += f"but got {len(key_names)}"
-            log.warning(msg)
-
         return key_names
 
     async def list_keys(
@@ -539,7 +470,6 @@ class AzureBlobClient:
                     "callback": callback,
                 }
                 key_names = await self.walk_blobs(client, **kwargs)
-                # key_names = await self.walk_blob_hierarchy(client, **kwargs)
         except CancelledError as cle:
             self._azure_stats_increment("error_count")
             msg = f"azureBlobClient.CancelledError for list_keys: {cle}"
