@@ -410,8 +410,6 @@ class AzureBlobClient:
                         log.debug("skip name thaat doesn't end in '/'")
                         # only return folders
                         continue
-                    if len(key_names) >= CALLBACK_MAX_COUNT:
-                        break
                     key_names.append(key_name)
                     count += 1
             if callback:
@@ -421,7 +419,7 @@ class AzureBlobClient:
                     callback(self._app, key_names)
                 key_names = {} if include_stats else []
             token = keyList.continuation_token
-            if not token or len(key_names) >= CALLBACK_MAX_COUNT:
+            if not token:
                 # got all the keys (or as many as requested)
                 log.debug("walk_blobs complete")
                 break
