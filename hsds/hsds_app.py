@@ -65,9 +65,13 @@ def get_cmd_dir():
         sys_bin_dir = os.path.join(sys.exec_prefix, bin_dir)
         if os.path.isdir(sys_bin_dir):
             logging.debug(f"sys bin_dir: {sys_bin_dir}")
-            if os.path.isfile(os.path.join(sys_bin_dir, hsds_shortcut)):
-                logging.info(f"using cmd_dir: {sys_bin_dir}")
-                return sys_bin_dir
+            hsds_executable = os.path.join(sys_bin_dir, hsds_shortcut)
+            # window builds add on a .exe suffix,
+            # so check with and without the suffix
+            for suffix in ("", ".exe"):
+                if os.path.isfile(hsds_executable + suffix):
+                    logging.info(f"using cmd_dir: {sys_bin_dir}")
+                    return sys_bin_dir
 
     # fall back to just use __file__.parent
     bin_dir = Path(__file__).parent
@@ -260,11 +264,11 @@ class HsdsApp:
 
         py_exe = sys.executable
         cmd_path = os.path.join(self._cmd_dir, "hsds-node")
+
         if not os.path.isfile(cmd_path):
-            # search corresponding location for windows installs
-            cmd_path = os.path.join(sys.exec_prefix, "Scripts")
-            cmd_path = os.path.join(cmd_path, "hsds-node-script.py")
-            if not os.path.isfile(cmd_path):
+            if os.path.isfile(cmd_path + ".exe"):
+                cmd_path += ".exe"
+            else:
                 raise FileNotFoundError("can't find hsds-node executable")
 
         for i in range(count):

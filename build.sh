@@ -27,7 +27,7 @@ if [ $run_pyflakes ]; then
     fi
 fi
 
-pip install --upgrade build
+#pip install --upgrade build
 
 echo "running build"
 python -m build
