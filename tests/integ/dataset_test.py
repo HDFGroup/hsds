@@ -681,6 +681,12 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
 
+        # reduce the size to 5 elements
+        # payload = {"shape": 5}
+        # rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        # self.assertEqual(rsp.status_code, 201)
+        # rspJson = json.loads(rsp.text)
+
         # verify updated-shape using the GET shape request
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
