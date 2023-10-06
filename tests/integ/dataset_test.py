@@ -675,17 +675,20 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("maxdims" in shape)
         self.assertEqual(shape["maxdims"][0], 20)
 
+        # Write values different than fill value for later check
+        nonFillValue = 1.1
+        data = [nonFillValue] * 10
+        payload = {"value": data}
+        req = helper.getEndpoint() + "/datasets/" + dset_uuid + "/value"
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
         # resize the dataset to 15 elements
         payload = {"shape": 15}
+        req = helper.getEndpoint() + "/datasets/" + dset_uuid + "/shape"
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
-
-        # reduce the size to 5 elements
-        # payload = {"shape": 5}
-        # rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
-        # self.assertEqual(rsp.status_code, 201)
-        # rspJson = json.loads(rsp.text)
 
         # verify updated-shape using the GET shape request
         rsp = self.session.get(req, headers=headers)
@@ -699,8 +702,49 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("maxdims" in shape)
         self.assertEqual(shape["maxdims"][0], 20)
 
+        # reduce the size to 5 elements
+        payload = {"shape": 5}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+
+        # verify updated-shape using the GET shape request
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("shape" in rspJson)
+        shape = rspJson["shape"]
+        self.assertEqual(shape["class"], "H5S_SIMPLE")
+        self.assertEqual(len(shape["dims"]), 1)
+        self.assertEqual(shape["dims"][0], 5)  # decreased to 5
+        self.assertTrue("maxdims" in shape)
+        self.assertEqual(shape["maxdims"][0], 20)
+
+        # Increase size to 10 elements
+        payload = {"shape": 10}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+
+        # Read from newly extended dataspace; should be equal to fill value
+        req = helper.getEndpoint() + "/datasets/" + dset_uuid + "/value"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+
+        def approxEqual(a, b, eps):
+            return abs(a / b - 1) < eps
+
+        for i in range(5):
+            self.assertTrue(approxEqual(rspJson["value"][i], nonFillValue, 0.000001))
+        for i in range(5, 10):
+            self.assertTrue(approxEqual(rspJson["value"][i], 3.12, 0.000001))
+
         # resize the dataset to 25 elements (should fail)
         payload = {"shape": 25}
+        req = helper.getEndpoint() + "/datasets/" + dset_uuid + "/shape"
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 409)
 
