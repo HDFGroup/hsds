@@ -681,12 +681,6 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
 
-        # reduce the size to 5 elements
-        # payload = {"shape": 5}
-        # rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
-        # self.assertEqual(rsp.status_code, 201)
-        # rspJson = json.loads(rsp.text)
-
         # verify updated-shape using the GET shape request
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -696,6 +690,24 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(shape["class"], "H5S_SIMPLE")
         self.assertEqual(len(shape["dims"]), 1)
         self.assertEqual(shape["dims"][0], 15)  # increased to 15
+        self.assertTrue("maxdims" in shape)
+        self.assertEqual(shape["maxdims"][0], 20)
+
+        # reduce the size to 5 elements
+        payload = {"shape": 5}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+
+        # verify updated-shape using the GET shape request
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("shape" in rspJson)
+        shape = rspJson["shape"]
+        self.assertEqual(shape["class"], "H5S_SIMPLE")
+        self.assertEqual(len(shape["dims"]), 1)
+        self.assertEqual(shape["dims"][0], 5)  # decreased to 5
         self.assertTrue("maxdims" in shape)
         self.assertEqual(shape["maxdims"][0], 20)
 

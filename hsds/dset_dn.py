@@ -273,13 +273,7 @@ async def PUT_DatasetShape(request):
         # e.g. another client has already extended the shape since the SN
         # verified it
         shape_update = body["shape"]
-        log.debug("shape_update: {}".format(shape_update))
-
-        for i in range(len(dims)):
-            if shape_update[i] < dims[i]:
-                msg = "Dataspace can not be made smaller"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
+        log.debug(f"shape_update: {shape_update}")
 
         # Update the shape!
         for i in range(len(dims)):
