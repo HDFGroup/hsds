@@ -77,7 +77,7 @@ def get_obj_id(request, body=None):
 
 
 async def notify_root(app, root_id, bucket=None):
-    """flag to write to S3"""
+    """flag to indicate domain state has changed """
 
     log.info(f"notify_root: {root_id}, bucket={bucket}")
     if not isValidUuid(root_id) or not isSchema2Id(root_id):

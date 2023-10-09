@@ -98,8 +98,8 @@ async def bucketScan(app):
     log.info("bucketScan start")
 
     async_sleep_time = int(config.get("async_sleep_time"))
-    scan_wait_time = async_sleep_time * 6  # default to ~1min
-    log.info("scan_wait_time: {}".format(scan_wait_time))
+    scan_wait_time = async_sleep_time  # default to ~1min
+    log.info(f"scan_wait_time: {scan_wait_time}")
 
     # update/initialize root object before starting node updates
 

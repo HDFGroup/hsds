@@ -286,12 +286,16 @@ async def POST_Root(request):
         bucket = params["bucket"]
     else:
         bucket = None
+    if "timestamp" in params:
+        timestamp = params["timestamp"]
+    else:
+        timestamp = time.time()
 
     log.info(f"POST_Root: {root_id} bucket: {bucket}")
 
-    # add id to be scanned by the s3sync task
+    # add id to be scanned by the bucket scan task
     root_scan_ids = app["root_scan_ids"]
-    root_scan_ids[root_id] = (bucket, time.time())
+    root_scan_ids[root_id] = (bucket, timestamp)
 
     resp_json = {}
 

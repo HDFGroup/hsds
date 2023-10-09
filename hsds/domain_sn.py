@@ -946,6 +946,16 @@ async def doFlush(app, root_id, bucket=None):
         return dn_ids
 
 
+async def getScanTime(app, root_id, bucket=None):
+    """ Return timestamp for the last scan of the given root id """
+    root_scan = None
+    log.debug(f"getScanTime: {root_id}")
+    root_info = await getRootInfo(app, root_id, bucket=bucket)
+    if root_info:
+        log.debug(f"getScanTime root_info: {root_info}")
+    return root_scan
+
+
 async def PUT_Domain(request):
     """HTTP method to create a new domain"""
     log.request(request)
@@ -1010,6 +1020,14 @@ async def PUT_Domain(request):
         do_flush = True
     else:
         do_flush = False
+
+    if "rescan" in params and params["rescan"]:
+        do_rescan = True
+    elif body and "rescan" in body and body["rescan"]:
+        do_rescan = False
+    else:
+        do_rescan = True
+
     if do_flush:
         # flush domain - update existing domain rather than create
         # a new resource
@@ -1045,11 +1063,13 @@ async def PUT_Domain(request):
         else:
             log.info("flush called on folder, ignoring")
             status_code = 204
-        resp = await jsonResponse(request, rsp_json, status=status_code)
-        log.response(request, resp=resp)
-        return resp
+        if not do_rescan:
+            # send the response now
+            resp = await jsonResponse(request, rsp_json, status=status_code)
+            log.response(request, resp=resp)
+            return resp
 
-    if "rescan" in params and params["rescan"]:
+    if do_rescan:
         # refresh scan info for the domain
         log.info(f"rescan for domain: {domain}")
         domain_json = await getDomainJson(app, domain, reload=True)
@@ -1066,14 +1086,30 @@ async def PUT_Domain(request):
                 log.info(msg)
                 raise HTTPBadRequest(reashon=msg)
             aclCheck(app, domain_json, "update", username)
-            log.info(f"notify_root: {root_id}")
+            log.debug(f"notify_root: {root_id}")
             notify_req = getDataNodeUrl(app, root_id) + "/roots/" + root_id
-            post_params = {}
+            post_params = {"timestamp": 0}  # have scan run immediately
             if bucket:
                 post_params["bucket"] = bucket
+            req_send_time = time.time()
             await http_post(app, notify_req, data={}, params=post_params)
+
+            # Poll until the scan_complete time is greater than
+            # req_send_time or 3 minutes have elapsed
+            MAX_WAIT_TIME = 180
+            while True:
+                scan_time = getScanTime(app, root_id, bucket=bucket)
+                if scan_time > req_send_time:
+                    log.info(f"scan complete for root: {root_id}")
+                    break
+                if time.time() - req_send_time > MAX_WAIT_TIME:
+                    log.warn(f"scan failed to complete in {MAX_WAIT_TIME} seconds for {root_id}")
+                    raise HTTPServiceUnavailable()
+                await asyncio.sleep(0.1)  # avoid busy wait
             resp = json_response(None, status=204)  # No Content response
             return resp
+
+    # from here we are just doing a normal new domain creation
 
     is_folder = False
     owner = username
