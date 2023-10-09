@@ -1007,6 +1007,8 @@ async def PUT_Domain(request):
             raise HTTPBadRequest(reason=msg)
         log.debug(f"PUT domain with body: {body}")
 
+    log.debug(f"params: {params}")
+
     if "getdnids" in params and params["getdnids"]:
         getdnids = True
     elif body and "getdnids" in body and body["getdnids"]:
@@ -1024,9 +1026,11 @@ async def PUT_Domain(request):
     if "rescan" in params and params["rescan"]:
         do_rescan = True
     elif body and "rescan" in body and body["rescan"]:
-        do_rescan = False
-    else:
         do_rescan = True
+    else:
+        do_rescan = False
+
+    log.debug(f"do_flush: {do_flush}  do_rescan: {do_rescan}")
 
     if do_flush:
         # flush domain - update existing domain rather than create

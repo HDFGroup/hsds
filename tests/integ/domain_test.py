@@ -395,10 +395,10 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 204)
 
         # test with rescan param
-        #params["rescan"] = 1
-        #rsp = self.session.put(req, params=params, headers=headers)
+        # params["rescan"] = 1
+        # rsp = self.session.put(req, params=params, headers=headers)
         # should get a NO_CONTENT code,
-        #self.assertEqual(rsp.status_code, 204)
+        # self.assertEqual(rsp.status_code, 204)
 
         # try doing a un-authenticated request
         if config.get("test_noauth") and config.get("default_public"):
