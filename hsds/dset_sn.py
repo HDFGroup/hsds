@@ -621,15 +621,22 @@ async def PUT_DatasetShape(request):
         msg = "Extent of update shape request does not match dataset sahpe"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    shape_reduction = False
     for i in range(rank):
         if shape_update and shape_update[i] < dims[i]:
-            msg = "Dataspace can not be made smaller"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+            shape_reduction = True
+            if shape_update[i] < 0:
+                msg = "Extension dimension can not be made less than zero"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
         if shape_update and maxdims[i] != 0 and shape_update[i] > maxdims[i]:
-            msg = "Database can not be extended past max extent"
+            msg = "Extension dimension can not be extended past max extent"
             log.warn(msg)
             raise HTTPConflict()
+    if shape_reduction:
+        log.info("Shape extent reduced for dataset")
+        # TBD - ensure any chunks that are outside the new shape region are
+        # deleted
     if extend_dim < 0 or extend_dim >= rank:
         msg = "Extension dimension must be less than rank and non-negative"
         log.warn(msg)

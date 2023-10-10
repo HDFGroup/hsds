@@ -30,10 +30,9 @@ from .util.idUtil import isValidUuid, getDataNodeUrl
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain
 from .util.hdf5dtype import getItemSize, createDataType
-from .util.dsetUtil import getSelectionList, isNullSpace, getDatasetLayoutClass
+from .util.dsetUtil import getSelectionList, isNullSpace, getDatasetLayout, getDatasetLayoutClass
 from .util.dsetUtil import isExtensible, getSelectionPagination
 from .util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout
-from .util.dsetUtil import getDatasetCreationPropertyLayout
 from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId
 from .util.chunkUtil import getChunkIndex, getChunkSuffix
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
@@ -177,7 +176,7 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
         return chunk_item
 
     if layout_class == "H5D_CONTIGUOUS_REF":
-        layout = getDatasetCreationPropertyLayout(dset_json)
+        layout = getDatasetLayout(dset_json)
         log.debug(f"cpl layout: {layout}")
         s3path = layout["file_uri"]
         s3size = layout["size"]
@@ -229,7 +228,7 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
             chunk_item["s3offset"] = s3offset
             chunk_item["s3size"] = chunk_size
     elif layout_class == "H5D_CHUNKED_REF":
-        layout = getDatasetCreationPropertyLayout(dset_json)
+        layout = getDatasetLayout(dset_json)
         log.debug(f"cpl layout: {layout}")
         s3path = layout["file_uri"]
         chunks = layout["chunks"]
@@ -248,7 +247,7 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
             chunk_item["s3size"] = s3size
 
     elif layout_class == "H5D_CHUNKED_REF_INDIRECT":
-        layout = getDatasetCreationPropertyLayout(dset_json)
+        layout = getDatasetLayout(dset_json)
         log.debug(f"cpl layout: {layout}")
         if "chunk_table" not in layout:
             log.error("Expected to find chunk_table in dataset layout")

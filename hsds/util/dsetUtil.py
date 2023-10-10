@@ -855,48 +855,46 @@ def isExtensible(dims, maxdims):
     return False
 
 
-def getDatasetCreationPropertyLayout(dset_json):
-    """ return layout json from creation property list """
-    cpl = None
+def getDatasetLayout(dset_json):
+    """ Return layout json from creation property list or layout json """
+    layout = None
+
     if "creationProperties" in dset_json:
         cp = dset_json["creationProperties"]
         if "layout" in cp:
-            cpl = cp["layout"]
-    if not cpl and "layout" in dset_json:
-        # fallback to dset_json layout
-        cpl = dset_json["layout"]
-    if cpl is None:
-        log.warn(f"no layout found for {dset_json}")
-    return cpl
+            layout = cp["layout"]
+    if not layout and "layout" in dset_json:
+        layout = dset_json["layout"]
+    if not layout:
+        log.warn(f"no layout for {dset_json}")
+    return layout
 
 
 def getDatasetLayoutClass(dset_json):
     """ return layout class """
-    chunk_layout = None
-    cp_layout = getDatasetCreationPropertyLayout(dset_json)
-    # check creation properties first
-    if cp_layout:
-        if "class" in cp_layout:
-            chunk_layout = cp_layout["class"]
-    # otherwise, get class prop from layout
-    if chunk_layout is None and "layout" in dset_json:
-        layout = dset_json["layout"]
-        if "class" in layout:
-            chunk_layout = layout["class"]
-    return chunk_layout
+    layout = getDatasetLayout(dset_json)
+    if layout and "class" in layout:
+        layout_class = layout["class"]
+    else:
+        layout_class = None
+    return layout_class
 
 
 def getChunkDims(dset_json):
     """ get chunk shape for given dset_json """
-    cpl = getDatasetCreationPropertyLayout(dset_json)
-    if cpl and "dims" in cpl:
-        return cpl["dims"]
-    # otherwise, check the 'layout' key
-    if 'layout' in dset_json:
-        layout = dset_json["layout"]
-        if "dims" in layout:
-            return layout["dims"]
-    return None  # not found
+
+    layout = getDatasetLayout(dset_json)
+    if layout and "dims" in layout:
+        return layout["dims"]
+    else:
+        # H5D_COMPACT and H5D_CONTIGUOUS will not have a dims key
+        # Check the layout dict in dset_json to see if it's
+        # defined there
+        if "layout" in dset_json:
+            layout = dset_json["layout"]
+            if "dims" in layout:
+                return layout["dims"]
+    return None
 
 
 class ItemIterator:
