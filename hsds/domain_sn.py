@@ -948,11 +948,16 @@ async def doFlush(app, root_id, bucket=None):
 
 async def getScanTime(app, root_id, bucket=None):
     """ Return timestamp for the last scan of the given root id """
-    root_scan = None
+    root_scan = 0
     log.debug(f"getScanTime: {root_id}")
     root_info = await getRootInfo(app, root_id, bucket=bucket)
     if root_info:
         log.debug(f"getScanTime root_info: {root_info}")
+        if "scan_complete" in root_info:
+            root_scan = root_info["scan_complete"]  # timestamp last scan was finished
+        else:
+            log.warn("scan_complete key not found in root_info")
+
     return root_scan
 
 
@@ -1101,15 +1106,17 @@ async def PUT_Domain(request):
             # Poll until the scan_complete time is greater than
             # req_send_time or 3 minutes have elapsed
             MAX_WAIT_TIME = 180
+            RESCAN_SLEEP_TIME = 0.1
             while True:
-                scan_time = getScanTime(app, root_id, bucket=bucket)
+                scan_time = await getScanTime(app, root_id, bucket=bucket)
                 if scan_time > req_send_time:
                     log.info(f"scan complete for root: {root_id}")
                     break
                 if time.time() - req_send_time > MAX_WAIT_TIME:
                     log.warn(f"scan failed to complete in {MAX_WAIT_TIME} seconds for {root_id}")
                     raise HTTPServiceUnavailable()
-                await asyncio.sleep(0.1)  # avoid busy wait
+                log.debug(f"do_rescan sleeping for {RESCAN_SLEEP_TIME}s")
+                await asyncio.sleep(RESCAN_SLEEP_TIME)  # avoid busy wait
             resp = json_response(None, status=204)  # No Content response
             return resp
 

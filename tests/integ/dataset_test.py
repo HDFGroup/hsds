@@ -70,7 +70,8 @@ class DatasetTest(unittest.TestCase):
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        for name in (
+
+        expected_keys = [
             "id",
             "shape",
             "hrefs",
@@ -81,7 +82,9 @@ class DatasetTest(unittest.TestCase):
             "lastModified",
             "root",
             "domain",
-        ):
+        ]
+
+        for name in expected_keys:
             self.assertTrue(name in rspJson)
         self.assertEqual(rspJson["id"], dset_id)
         self.assertEqual(rspJson["root"], root_uuid)
@@ -117,26 +120,34 @@ class DatasetTest(unittest.TestCase):
         rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        for name in (
-            "id",
-            "shape",
-            "hrefs",
-            "layout",
-            "creationProperties",
-            "attributeCount",
-            "created",
-            "lastModified",
-            "root",
-            "domain",
-        ):
+
+        for name in expected_keys:
             self.assertTrue(name in rspJson)
-        # self.assertTrue("num_chunks" in rspJson)
-        # self.assertTrue("allocated_size" in rspJson)
+
+        # flush to storage and force an immediate rescan
+        domain_req = self.endpoint + "/"
+        domain_params = {"flush": 1, "rescan": 1}
+        rsp = self.session.put(domain_req, params=domain_params, headers=headers)
+        # should get a NO_CONTENT code,
+        self.assertEqual(rsp.status_code, 204)
+
+        # do a get and verify the additional keys are present
+        expected_keys.append("num_chunks")
+        expected_keys.append("allocated_size")
+
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+
+        for name in expected_keys:
+            self.assertTrue(name in rspJson)
 
         # try get with a different user (who has read permission)
         user2_name = config.get('user2_name')
-        if user2_name:
-            headers = helper.getRequestHeaders(domain=domain, username=user2_name)
+        user2_password = config.get('user2_password')
+        if user2_name and user2_password:
+            kwargs = {"domain": domain, "username": user2_name, "password": user2_password}
+            headers = helper.getRequestHeaders(**kwargs)
             rsp = self.session.get(req, headers=headers)
             if config.get("default_public"):
                 self.assertEqual(rsp.status_code, 200)
@@ -145,7 +156,7 @@ class DatasetTest(unittest.TestCase):
             else:
                 self.assertEqual(rsp.status_code, 403)
         else:
-            print('user2_name not set')
+            print('user2 credentials not set')
 
         # try to do a GET with a different domain (should fail)
         another_domain = self.base_domain + "/testScalarDataset2.h5"
@@ -161,7 +172,7 @@ class DatasetTest(unittest.TestCase):
             rsp = self.session.delete(req, headers=headers)
             self.assertEqual(rsp.status_code, 403)  # forbidden
         else:
-            print("user2_name not set")
+            print("user2 credentials not set")
 
         # try to do a DELETE with a different domain (should fail)
         # Test creation/deletion of scalar dataset obj

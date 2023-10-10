@@ -32,7 +32,7 @@ log_prefix: null # Prefix text to append to log entries
 max_tcp_connections: 100 # max number of inflight tcp connections
 head_sleep_time: 10 # max sleep time between health checks for head node
 node_sleep_time: 10 # max sleep time between health checks for SN/DN nodes
-async_sleep_time: 10 # max sleep time between async task runs
+async_sleep_time: 1 # max sleep time between async task runs
 s3_sync_interval: 1 # time to wait between s3_sync checks (in sec)
 s3_age_time: 1 # time to wait since last update to write an object to S3
 s3_sync_task_timeout: 10 # time to cancel write task if no response

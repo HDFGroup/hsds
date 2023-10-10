@@ -38,6 +38,26 @@ class ValueTest(unittest.TestCase):
             domain, username=username, password=password, session=self.session
         )
 
+    def checkVerbose(self, dset_id, headers=None, expected=None):
+        # do a flush with rescan, then check the expected return values are correct
+        req = f"{self.endpoint}/"
+        params = {"flush": 1, "rescan": 1}
+        rsp = self.session.put(req, params=params, headers=headers)
+        # should get a NO_CONTENT code,
+        self.assertEqual(rsp.status_code, 204)
+
+        # do a get and verify the additional keys are
+        req = f"{self.endpoint}/datasets/{dset_id}"
+        params = {"verbose": 1}
+
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+
+        for k in expected:
+            self.assertTrue(k in rspJson)
+            self.assertEqual(rspJson[k], expected[k])
+
         # main
 
     def testPut1DDataset(self):
@@ -136,6 +156,10 @@ class ValueTest(unittest.TestCase):
         params = {"select": "[2:18]"}  # read 6 elements, starting at index 2
         rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 400)
+
+        # check values we should get from a verbose query
+        expected = {"num_chunks": 1, "allocated_size": 40}
+        self.checkVerbose(dset_id, headers=headers, expected=expected)
 
     def testPut1DDatasetBinary(self):
         # Test PUT value for 1d dataset using binary data
@@ -243,6 +267,10 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(data[2], 0)
         self.assertEqual(data[3], 0)
 
+        # check values we should get from a verbose query
+        expected = {"num_chunks": 1, "allocated_size": 40}
+        self.checkVerbose(dset_id, headers=headers, expected=expected)
+
     def testPut2DDataset(self):
         """Test PUT value for 2d dataset"""
         print("testPut2DDataset", self.base_domain)
@@ -345,6 +373,9 @@ class ValueTest(unittest.TestCase):
                 [120, 121, 122],
             ],
         )
+        # check values we should get from a verbose query
+        expected = {"num_chunks": 1, "allocated_size": 128}
+        self.checkVerbose(dset_id, headers=headers, expected=expected)
 
     def testPut2DDatasetBinary(self):
         # Test PUT value for 2d dataset
@@ -453,6 +484,10 @@ class ValueTest(unittest.TestCase):
         data = rsp.content
         self.assertEqual(len(data), 12)
         self.assertEqual(data, bin_data)
+
+        # check values we should get from a verbose query
+        expected = {"num_chunks": 1, "allocated_size": 128}
+        self.checkVerbose(dset_id, headers=headers, expected=expected)
 
     def testPutSelection1DDataset(self):
         """Test PUT value with selection for 1d dataset"""

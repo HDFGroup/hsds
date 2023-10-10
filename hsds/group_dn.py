@@ -282,16 +282,21 @@ async def POST_Root(request):
         log.error(f"Expected root id but got: {root_id}")
         raise HTTPInternalServerError()
     params = request.rel_url.query
+    log.debug(f"POST_Root params: {params}")
     if "bucket" in params:
         bucket = params["bucket"]
     else:
         bucket = None
     if "timestamp" in params:
-        timestamp = params["timestamp"]
+        try:
+            timestamp = int(params["timestamp"])
+        except ValueError:
+            log.error("unexpected value for timestamp: {params}")
+            raise HTTPInternalServerError()
     else:
         timestamp = time.time()
 
-    log.info(f"POST_Root: {root_id} bucket: {bucket}")
+    log.info(f"POST_Root: {root_id} bucket: {bucket} timestamp: {timestamp}")
 
     # add id to be scanned by the bucket scan task
     root_scan_ids = app["root_scan_ids"]

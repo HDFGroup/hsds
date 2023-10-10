@@ -98,8 +98,10 @@ async def bucketScan(app):
     log.info("bucketScan start")
 
     async_sleep_time = int(config.get("async_sleep_time"))
+    short_sleep_time = float(async_sleep_time) / 10.0
     scan_wait_time = async_sleep_time  # default to ~1min
     log.info(f"scan_wait_time: {scan_wait_time}")
+    last_action = time.time()  # keep track of the last time any work was done
 
     # update/initialize root object before starting node updates
 
@@ -165,8 +167,16 @@ async def bucketScan(app):
                 tb = traceback.format_exc()
                 print("traceback:", tb)
 
-        log.info(f"bucketScan - sleep: {async_sleep_time}")
-        await asyncio.sleep(async_sleep_time)
+            last_action = time.time()
+
+        now = time.time()
+        if (now - last_action) > async_sleep_time:
+            sleep_time = async_sleep_time  # long nap
+        else:
+            sleep_time = short_sleep_time  # shot nap
+
+        log.info(f"bucketScan - sleep: {sleep_time}")
+        await asyncio.sleep(sleep_time)
 
     # shouldn't ever get here
     log.error("bucketScan terminating unexpectedly")
