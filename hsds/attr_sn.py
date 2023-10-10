@@ -383,7 +383,7 @@ async def PUT_Attribute(request):
 
     # ready to add attribute now
     req = getDataNodeUrl(app, obj_id)
-    req += "/" + collection + "/" + obj_id + "/attributes/" + attr_name
+    req += f"/{collection}/{obj_id}/attributes/{attr_name}"
     log.info("PUT Attribute: " + req)
 
     attr_json = {}
