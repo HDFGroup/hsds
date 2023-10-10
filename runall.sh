@@ -29,7 +29,7 @@ config_value() {
 
 # script to startup hsds service
 if [[ $# -eq 1 ]] && ([[ $1 == "-h" ]] || [[ $1 == "--help" ]]); then
-   echo "Usage: runall.sh [--no-docker] [--no-docker-tcp] [--stop] [--config] [count] "
+   echo "Usage: runall.sh [--no-docker] [--no-docker-tcp] [--stop] [--config] [dn_count] [sn_count]"
    echo "  --no-docker: run server as set of processes rather than Docker containers (using unix sockets)"
    echo "  --no-docker-tcp: run server as set of processes rather than Docker containers (using tcp)"
    echo "  --stop: shutdown the server (Docker only)"
@@ -38,40 +38,28 @@ if [[ $# -eq 1 ]] && ([[ $1 == "-h" ]] || [[ $1 == "--help" ]]); then
    exit 1
 fi
 
-if [[ $# -gt 0 ]]; then
+
+DOCKER_CMD="up"
+
+while [[ $# -gt 0 ]]; do
   if [[ $1 == "--no-docker" ]]; then
     export NO_DOCKER=1
-
-    if [[ $# -gt 1 ]] ; then
-      export CORES=$2
-    fi
   elif [[ $1 == "--no-docker-tcp" ]]; then
     export NO_DOCKER=1
     export USE_TCP=1
-
-    if [[ $# -gt 1 ]] ; then
-      export CORES=$2
-    fi
-
   elif [[ $1 == "--stop" ]]; then
     echo "stopping"
+    export DOCKER_CMD="down"
   elif [[ $1 == "--config" ]]; then
     PRINT_CONFIG=1
+  elif  [[ -z ${DN_CORES} ]]; then
+    export DN_CORES=$1
   else
-    export CORES=$1
+    export SN_CORES=$1
   fi
-fi
+  shift
+done
 
-if [[ ${CORES} ]]; then
-  export DN_CORES=${CORES}
-else
-  export DN_CORES=4
-fi
-
-if [[ -z $SN_CORES ]]; then
-  # Use 1 SN_CORE unless there's an environment variable set
-  export SN_CORES=1
-fi
 
 if [[ -z $CONFIG_DIR ]]; then
   export CONFIG_DIR="admin/config"
@@ -105,8 +93,19 @@ config_value "DN_PORT" && export DN_PORT=$rv
 config_value "DN_RAM" && export DN_RAM=$rv
 config_value "SN_PORT" && export SN_PORT=$rv
 config_value "SN_RAM" && export SN_RAM=$rv
-config_value "RANGEGET_PORT" && export RANGEGET_PORT=$rv
-config_value "RANGEGET_RAM" && export RANGEGET_RAM=$rv
+
+
+if [[ -z ${DN_CORES} ]]; then
+  export DN_CORES=4
+fi
+
+if [[ -z $SN_CORES ]]; then
+  # Use 1 SN_CORE by default
+  export SN_CORES=1
+  export SN_PORT_RANGE=$SN_PORT
+else
+  export SN_PORT_RANGE=$SN_PORT-$((SN_PORT + SN_CORES - 1))
+fi
 
 
 if [[ ${NO_DOCKER} ]]; then
@@ -201,13 +200,13 @@ if [[ $NO_DOCKER ]] ; then
   fi
   # this will run until server is killed by ^C
 else
-  if [[ $# -eq 1 ]] && [[ $1 == "--stop" ]]; then
+  if [[ $DOCKER_CMD == "down" ]]; then
     # use the compose file to shutdown the sevice
     echo "Running docker-compose -f ${COMPOSE_FILE} down"
     docker-compose -f ${COMPOSE_FILE} down
     exit 0  # can quit now
   else
-    echo "Running docker-compose -f ${COMPOSE_FILE} up"
+    echo "Running docker-compose -f ${COMPOSE_FILE} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}"
     docker-compose -f ${COMPOSE_FILE} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}
   fi
 

@@ -44,7 +44,7 @@ services:
       - BUCKET_NAME=${BUCKET_NAME}
       - HSDS_ENDPOINT=${HSDS_ENDPOINT}
     ports:
-      - ${SN_PORT}:${SN_PORT}
+      - ${SN_PORT_RANGE}:${SN_PORT}
     depends_on:
       - head
     volumes:
