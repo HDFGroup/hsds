@@ -321,6 +321,7 @@ class DomainTest(unittest.TestCase):
             self.assertTrue(k in rspJson)
 
         root_id = rspJson["root"]
+        print("root_id:", root_id)
 
         # verify that putting the same domain again fails with a 409 error
         rsp = self.session.put(req, headers=headers)
@@ -392,8 +393,32 @@ class DomainTest(unittest.TestCase):
         body = {"flush": 1}
         rsp = self.session.put(req, data=json.dumps(body), headers=headers)
         # should get a NO_CONTENT code,
-        # c.f. https://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html#sec9.6
         self.assertEqual(rsp.status_code, 204)
+
+        # test with rescan param
+        params["rescan"] = 1
+        rsp = self.session.put(req, params=params, headers=headers)
+        # should get a NO_CONTENT code,
+        self.assertEqual(rsp.status_code, 204)
+
+        # fetch the domain details
+        params = {"verbose": 1}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("num_groups" in rspJson)
+        self.assertEqual(rspJson["num_groups"], 1)
+        self.assertTrue("num_datasets" in rspJson)
+        self.assertEqual(rspJson["num_datasets"], 0)
+        self.assertTrue("num_datatypes" in rspJson)
+        self.assertEqual(rspJson["num_datatypes"], 0)
+        self.assertTrue("allocated_bytes" in rspJson)
+        # allocated_bytes should be zero since we have no chunks
+
+        self.assertEqual(rspJson["allocated_bytes"], 0)
+        # total_size may change slightly based on specifics of JSON serialization
+        self.assertTrue(rspJson["total_size"] > 100)
+        self.assertTrue(rspJson["total_size"] < 600)
 
         # try doing a un-authenticated request
         if config.get("test_noauth") and config.get("default_public"):
