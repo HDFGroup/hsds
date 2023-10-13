@@ -843,7 +843,6 @@ def isExtensible(dims, maxdims):
     """
     if maxdims is None or len(dims) == 0:
         return False
-    log.debug(f"isExtensible - dims: {dims} maxdims: {maxdims}")
     rank = len(dims)
     if len(maxdims) != rank:
         raise ValueError("rank of maxdims does not match dataset")

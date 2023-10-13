@@ -203,7 +203,7 @@ async def getObjectJson(
         if bucket:
             params["bucket"] = bucket
         req += "/" + collection + "/" + obj_id
-
+        log.debug(f"getObjectJson - fetching {obj_id} from {req}")
         # throws 404 if doesn't exist
         obj_json = await http_get(app, req, params=params)
         meta_cache[obj_id] = obj_json
@@ -211,7 +211,7 @@ async def getObjectJson(
         msg = f"Object: {obj_id} not found, req: {req}, params: {params}"
         log.warn(msg)
         raise HTTPNotFound()
-
+    
     return obj_json
 
 

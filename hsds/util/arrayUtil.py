@@ -93,6 +93,8 @@ def getNumElements(dims):
     return num_elements
 
 
+
+
 def getShapeDims(shape):
     """
     Get dims from a given shape json.  Return [1,] for Scalar datasets,
@@ -131,7 +133,7 @@ def getShapeDims(shape):
     return dims
 
 
-def jsonToArray(data_shape, data_dtype, data_json):
+def jsonToArray(data_shape, data_dtype, data_json, broadcast=False):
     """
     Return numpy array from the given json array.
     """
@@ -143,7 +145,7 @@ def jsonToArray(data_shape, data_dtype, data_json):
                 arr[index] = data[i]
                 index += 1
         return index
-
+    
     # need some special conversion for compound types --
     # each element must be a tuple, but the JSON decoder
     # gives us a list instead.
@@ -160,9 +162,7 @@ def jsonToArray(data_shape, data_dtype, data_json):
             converted_data = toTuple(np_shape_rank, data_json)
         data_json = converted_data
     else:
-        data_json = [
-            data_json,
-        ]  # listify
+        data_json = [data_json,]  # listify
 
     if not (None in data_json):
         if isVlen(data_dtype):
@@ -178,9 +178,17 @@ def jsonToArray(data_shape, data_dtype, data_json):
         # allow if the array is a scalar and the selection shape is one element,
         # numpy is ok with this
         if arr.size != npoints:
-            msg = "Input data doesn't match selection number of elements"
-            msg += f" Expected {npoints}, but received: {arr.size}"
-            raise ValueError(msg)
+            if broadcast:
+                # try to broadcast to the target shape
+                # if it fails, a ValueError exception will be raised
+                arr_tgt = np.zeros(data_shape, dtype=data_dtype)
+                arr_tgt[...] = arr
+                # worked!  use arr_tgt as arr
+                arr = arr_tgt
+            else:
+                msg = "Input data doesn't match selection number of elements"
+                msg += f" Expected {npoints}, but received: {arr.size}"
+                raise ValueError(msg)
         if arr.shape != data_shape:
             arr = arr.reshape(data_shape)  # reshape to match selection
     else:
@@ -368,10 +376,11 @@ def copyElement(e, dt, buffer, offset):
     return offset
 
 
-def getElementCount(buffer, offset):
+def getElementCount(buffer, offset=0):
     """
     Get the count value from persisted vlen array
     """
+
     n = offset
     m = offset + 4
     count_bytes = bytes(buffer[n:m])
@@ -425,7 +434,7 @@ def readElement(buffer, offset, arr, index, dt):
                 offset = readElement(buffer, offset, e, i, dt)
             e.reshape(dt.shape)
         else:
-            count = getElementCount(buffer, offset)
+            count = getElementCount(buffer, offset=offset)
             offset += 4
             n = offset
             m = offset + count
@@ -472,17 +481,18 @@ def bytesToArray(data, dt, shape):
     """
     Create numpy array based on byte representation
     """
-    # print(f"bytesToArray({len(data)}, {dt}, {shape}")
-    nelements = getNumElements(shape)
     if not isVlen(dt):
         # regular numpy from string
         arr = np.frombuffer(data, dtype=dt)
     else:
+        nelements = getNumElements(shape)
+       
         arr = np.zeros((nelements,), dtype=dt)
         offset = 0
         for index in range(nelements):
             offset = readElement(data, offset, arr, index, dt)
-    arr = arr.reshape(shape)
+    if shape is not None:
+        arr = arr.reshape(shape)
     # check that we can update the array if needed
     # Note: this seems to have been required starting with numpuy v 1.17
     # Setting the flag directly is not recommended.

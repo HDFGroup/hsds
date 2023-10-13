@@ -3063,9 +3063,7 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + "/datasets/" + dset_id + "/value"
         start = 1234567
         stop = start + 10
-        params = {
-            "select": f"[{start}:{stop}]"
-        }  # read 10 element, starting at index 1234567
+        params = {"select": f"[{start}:{stop}]"}  # read 10 element, starting at index 1234567
         params["nonstrict"] = 1  # enable SN to invoke lambda func
 
         # read the selection
@@ -3078,6 +3076,7 @@ class ValueTest(unittest.TestCase):
         # should get one element back
         self.assertEqual(len(value), 10)
         self.assertEqual(value, list(range(start, start + 10)))
+        
 
     def testLargeCreationProperties(self):
         # test Dataset with artifically large creation_properties data
@@ -3141,6 +3140,83 @@ class ValueTest(unittest.TestCase):
             self.assertEqual(ret_values[i], 24)
             self.assertEqual(ret_values[i + 5], 42)
 
+    def testValueReinitialization(self):
+        # Test the dataset values get reset after a reduction and resize
+         
+        print("testValueReinitialization", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+    
+         
+        # get domain
+        req = f"{self.endpoint}/"
+        rsp = self.session.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # create the dataset
+        req = f"{self.endpoint}/datasets"
+        payload = {"type": "H5T_STD_I32LE", "shape": 10, "maxdims": 10}
+        payload["creationProperties"] = {"fillValue": 42}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_uuid))
+
+        # link new dataset as 'dset'
+        name = "dset"
+        req = f"{self.endpoint}/groups/{root_uuid}/links/{name}"
+        payload = {"id": dset_uuid}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # write to the dset
+        req = f"{self.endpoint}/datasets/{dset_uuid}/value"
+        data = list(range(10))  # write 0-9
+        payload = {"value": data[0:10]}
+        params = {"select": "[0:10]"}
+
+        rsp = self.session.put(req, data=json.dumps(payload), params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # read back the data
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], data)
+        
+        # resize the dataset to 5 elements
+        req =f"{self.endpoint}/datasets/{dset_uuid}/shape"
+        payload = {"shape": 5}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        
+        # read back the remaining elements
+        req = f"{self.endpoint}/datasets/{dset_uuid}/value"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], data[:5])
+
+        # resize back to 10
+        req =f"{self.endpoint}/datasets/{dset_uuid}/shape"
+        payload = {"shape": 10}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+
+        # read all 10 data values
+        req = f"{self.endpoint}/datasets/{dset_uuid}/value"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        ret_value = rspJson["value"]
 
 if __name__ == "__main__":
     # setup test files

@@ -20,7 +20,7 @@ from aiohttp.web_exceptions import HTTPNotFound, HTTPServiceUnavailable
 from aiohttp.web import json_response, StreamResponse
 
 from .util.httpUtil import request_read, getContentType
-from .util.arrayUtil import bytesToArray, arrayToBytes
+from .util.arrayUtil import bytesToArray, arrayToBytes, getShapeDims
 from .util.idUtil import getS3Key, validateInPartition, isValidUuid
 from .util.storUtil import isStorObj, deleteStorObj
 from .util.hdf5dtype import createDataType
@@ -137,7 +137,7 @@ async def PUT_Chunk(request):
     if getChunkInitializer(dset_json):
         chunk_init = True
     elif query:
-        chunk_init = False  # don't initalize new chunks on query update
+        chunk_init = False  # don't initialize new chunks on query update
     else:
         chunk_init = True
 
@@ -221,6 +221,8 @@ async def PUT_Chunk(request):
     else:
         # regular chunk update
 
+        broadcast = 0  # broadcast update
+
         # check that the content_length is what we expect
         if itemsize != "H5T_VARIABLE":
             log.debug(f"expect content_length: {num_elements*itemsize}")
@@ -229,10 +231,14 @@ async def PUT_Chunk(request):
         actual = request.content_length
         if itemsize != "H5T_VARIABLE":
             expected = num_elements * itemsize
-            if expected != actual:
+            if expected % actual != 0:
                 msg = f"Expected content_length of: {expected}, but got: {actual}"
                 log.error(msg)
                 raise HTTPBadRequest(reason=msg)
+            else:
+                broadcast = expected // actual
+                if broadcast != 1:
+                    log.info(f"broadcast chunk write: {broadcast}")
 
         # create a numpy array for incoming data
         input_bytes = await request_read(request)
@@ -375,6 +381,8 @@ async def GET_Chunk(request):
     dset_id = getDatasetId(chunk_id)
 
     dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
+    shape_dims = getShapeDims(dset_json["shape"])
+    log.debug(f"shape_dims: {shape_dims}")
     dims = getChunkLayout(dset_json)
     log.debug(f"GET_Chunk - got dims: {dims}")
 
@@ -385,6 +393,9 @@ async def GET_Chunk(request):
         select = None  # get slices for entire datashape
     if select is not None:
         log.debug(f"GET_Chunk - using select string: {select}")
+    else:
+        log.debug("GET_Chunk - no selection string")
+
     try:
         selection = getSelectionList(select, dims)
     except ValueError as ve:

@@ -494,6 +494,7 @@ async def PUT_Value(request):
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
             log.info(f"append_rows: {append_rows}")
+       
         if append_rows:
             for key in ("start", "stop", "step"):
                 if key in body:
@@ -509,6 +510,7 @@ async def PUT_Value(request):
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
             log.info(f"append_dim: {append_dim}")
+        
 
     # get state for dataset from DN.
     dset_json = await getObjectJson(app, dset_id, bucket=bucket, refresh=False)
@@ -624,6 +626,8 @@ async def PUT_Value(request):
     else:
         http_streaming = True
 
+    http_streaming = False  # test
+
     # body could also contain a point selection specifier
     if body and "points" in body:
         if append_rows:
@@ -709,11 +713,13 @@ async def PUT_Value(request):
                 log.warn(msg)
                 raise  # re-throw
 
+            """
             if len(binary_data) != request.content_length:
                 msg = f"Read {len(binary_data)} bytes, expecting: "
                 msg += f"{request.content_length}"
                 log.error(msg)
                 raise HTTPBadRequest(reason=msg)
+            """
 
     if append_rows:
         for i in range(rank):
@@ -753,38 +759,87 @@ async def PUT_Value(request):
         raise HTTPBadRequest(reason=msg)
 
     arr = None  # np array to hold request data
-    if binary_data and isinstance(item_size, int):
-        # binary, fixed item_size
-        if num_elements * item_size != len(binary_data):
-            msg = f"Expected: {num_elements*item_size} bytes, "
-            msg += f"but got: {len(binary_data)}, "
-            msg += f"num_elements: {num_elements}, item_size: {item_size}"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        if num_elements * item_size > max_request_size:
-            msg = f"read {num_elements*item_size} bytes, greater than {max_request_size}"
-            log.warn(msg)
-        arr = np.fromstring(binary_data, dtype=dset_dtype)
-        try:
-            arr = arr.reshape(np_shape)  # conform to selection shape
-        except ValueError:
-            msg = "Bad Request: binary input data doesn't match selection"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+    if binary_data:
+        if item_size == "H5T_VARIABLE":
+            
+            # binary variable length data
+            try:
+                arr = bytesToArray(binary_data, dset_dtype, np_shape)
+            except ValueError as ve:
+                log.warn(f"bytesToArray value error: {ve}")
+                raise HTTPBadRequest()
+            
+            num_req_elements = getNumElements(arr.shape)
+            log.debug(f"binary variable data element count: {num_req_elements}")
+        else:
+            # fixed item size
+            if len(binary_data) % item_size != 0:
+                msg = f"Expected request size to be a multiple of {item_size}, "
+                msg += f"but {len(binary_data)} bytes received"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            
+            # check against max request size
+            if num_elements * item_size > max_request_size:
+                msg = f"read {num_elements*item_size} bytes, greater than {max_request_size}"
+                log.warn(msg)
+
+            num_req_elements = len(binary_data) // item_size
+        
+        # if the req item count is less than expected,
+        # check to see if it is a broadcast request
+        broadcast_shape = None
+        if num_req_elements != num_elements and not append_rows:
+            broadcast_shape = [1,]
+            for ndim in range(rank):
+                if num_req_elements == np.prod(broadcast_shape):
+                    break
+                np_shape_extent = np_shape[rank - 1 - ndim]
+                if ndim == 0:
+                    broadcast_shape = [np_shape_extent,]
+                else:
+                    broadcast_shape = [np_shape_extent].extend(broadcast_shape)
+                log.debug(f"trying broadcast_shape: {broadcast_shape}")
+            if len(broadcast_shape) == rank:
+                msg = f"Unexpected request size: {len(binary_data)}, "
+                msg += f"for num_elements: {num_elements} with item_size: {item_size}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+
+        # read bytes into a one-dimensional numpy array  
+        if item_size != "H5T_VARIABLE":
+            """
+            # binary variable length data
+            try:
+                arr = bytesToArray(binary_data, dset_dtype, (num_elements,))
+            except ValueError as ve:
+                log.warn(f"Unable to parse variable length data: {ve}")
+                raise HTTPBadRequest()
+            """
+            arr = np.fromstring(binary_data, dtype=dset_dtype)
+            
+        if broadcast_shape:
+            log.info(f"broadcasting from {broadcast_shape} to {np_shape}")
+            arr = arr.reshape(broadcast_shape)
+            tmp_arr = np.zeros(np_shape, dtype=dset_dtype)
+            tmp_arr[...] = arr
+            arr = tmp_arr
+        else:
+            try:
+                arr = arr.reshape(np_shape)  # conform to selection shape
+            except ValueError:
+                msg = "Bad Request: binary input data doesn't match selection"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
         msg = f"PUT value - numpy array shape: {arr.shape} dtype: {arr.dtype}"
         log.debug(msg)
-    elif binary_data and item_size == "H5T_VARIABLE":
-        # binary variable length data
-        try:
-            arr = bytesToArray(binary_data, dset_dtype, np_shape)
-        except ValueError as ve:
-            log.warn(f"bytesToArray value error: {ve}")
-            raise HTTPBadRequest()
+    
     elif request_type == "json":
         # get array from json input
         try:
             msg = "input data doesn't match selection"
-            arr = jsonToArray(np_shape, dset_dtype, json_data)
+            # only enable broadcast if not appending
+            arr = jsonToArray(np_shape, dset_dtype, json_data, broadcast=(False if append_rows else True))
         except ValueError:
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
@@ -1051,7 +1106,10 @@ async def GET_Value(request):
     bucket = getBucketForDomain(domain)
 
     # get state for dataset from DN.
-    dset_json = await getObjectJson(app, dset_id, bucket=bucket)
+    # Note - refreshShape will do a refresh if the dataset is extensible
+    #   i.e. we need to make sure we have the correct shape dimensions
+    # 
+    dset_json = await getObjectJson(app, dset_id, bucket=bucket, refresh=True)
     type_json = dset_json["type"]
     dset_dtype = createDataType(type_json)
 

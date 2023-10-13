@@ -21,10 +21,10 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict
 from .util.httpUtil import http_post, http_put, http_delete, getHref, respJsonAssemble
 from .util.httpUtil import jsonResponse
 from .util.idUtil import isValidUuid, getDataNodeUrl, createObjId, isSchema2Id
-from .util.dsetUtil import getPreviewQuery, getFilterItem
+from .util.dsetUtil import getPreviewQuery, getFilterItem, getChunkLayout
 from .util.arrayUtil import getNumElements, getShapeDims, getNumpyValue
 from .util.chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk
-from .util.chunkUtil import getContiguousLayout
+from .util.chunkUtil import getContiguousLayout, getChunkIds
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
 from .util.authUtil import validateUserPassword
 from .util.domainUtil import getDomainFromRequest, getPathForDomain, isValidDomain
@@ -621,6 +621,7 @@ async def PUT_DatasetShape(request):
         msg = "Extent of update shape request does not match dataset sahpe"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    
     shape_reduction = False
     for i in range(rank):
         if shape_update and shape_update[i] < dims[i]:
@@ -633,14 +634,34 @@ async def PUT_DatasetShape(request):
             msg = "Extension dimension can not be extended past max extent"
             log.warn(msg)
             raise HTTPConflict()
-    if shape_reduction:
-        log.info("Shape extent reduced for dataset")
-        # TBD - ensure any chunks that are outside the new shape region are
-        # deleted
+    
     if extend_dim < 0 or extend_dim >= rank:
         msg = "Extension dimension must be less than rank and non-negative"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    
+    if shape_reduction:
+        log.info(f"Shape extent reduced for dataset (rank: {rank})")
+
+        # need to re-initialize any values that are now outside the shape
+        layout = getChunkLayout(dset_json)
+        log.debug(f"got layout: {layout}")
+        for n in range(rank):
+            if dims[n] <= shape_update[i]:
+                log.debug(f"skip dimension {n}")
+                continue
+            log.debug(f"reinitialize for dimension: {n}")
+            slices = []
+            for m in range(rank):
+                if m == n:
+                    s = slice(shape_update[m], dims[m], 1)
+                else:
+                    # just select the entire extent
+                    s = slice(0, dims[m])
+                slices.append(s)
+            log.debug(f"shape_reinitialize - got slices: {slices} for dimension: {n}")
+            chunk_ids = getChunkIds(dset_id, slices, layout)
+            log.debug(f"got chunkIds: {chunk_ids}")
 
     # send request onto DN
     req = getDataNodeUrl(app, dset_id) + "/datasets/" + dset_id + "/shape"
@@ -663,6 +684,9 @@ async def PUT_DatasetShape(request):
     except HTTPConflict:
         log.warn("got 409 extending dataspace")
         raise
+
+    
+
 
     resp = await jsonResponse(request, json_resp, status=201)
     log.response(request, resp=resp)

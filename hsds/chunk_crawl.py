@@ -309,16 +309,13 @@ async def read_chunk_hyperslab(
             # TBD: this needs to be fixed up for variable length dtypes
             nrows = len(array_data) // query_dtype.itemsize
             try:
-                chunk_arr = bytesToArray(
-                    array_data,
-                    query_dtype,
-                    [
-                        nrows,
-                    ],
-                )
+                chunk_arr = bytesToArray(array_data, query_dtype, (nrows,))
             except ValueError as ve:
                 log.warn(f"bytesToArray ValueError: {ve}")
                 raise HTTPBadRequest()
+            if chunk_arr.shape[0] != nrows:
+                log.error(f"expected chunk shape to be ({nrows},), but got {chunk_arr.shape[0]}")
+                raise HTTPInternalServerError()
             # save result to chunk_info
             # chunk results will be merged later
             chunk_info["query_rsp"] = chunk_arr

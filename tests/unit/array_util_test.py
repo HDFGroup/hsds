@@ -205,9 +205,7 @@ class ArrayUtilTest(unittest.TestCase):
             4,
         ]
         data = [
-            [
-                1,
-            ],
+            [1,],
             [1, 2],
             [1, 2, 3],
             [1, 2, 3, 4],
@@ -292,6 +290,95 @@ class ArrayUtilTest(unittest.TestCase):
         self.assertTrue(isinstance(e, tuple))
         self.assertEqual(e, (id0, id1, id2))
 
+
+    def testJsonToArrayBroadcast(self):
+        dt = np.dtype("i4")
+        shape = [10,]
+        data = [42,]
+        out = jsonToArray(shape, dt, data, broadcast=True)
+
+        self.assertTrue(isinstance(out, np.ndarray))
+        self.assertEqual(out.shape, (10,))
+        for i in range(10):
+            self.assertEqual(out[i], 42)
+
+        # compound type
+        dt = np.dtype([("a", "i4"), ("b", "S5")])
+        shape = [10,]
+        data = [[6, "six"],]
+        out = jsonToArray(shape, dt, data, broadcast=True)
+
+        self.assertTrue(isinstance(out, np.ndarray))
+        self.assertEqual(out.shape, (10,))
+        for i in range(10):
+            e = out[i]
+            self.assertEqual(e[0], 6)
+            self.assertEqual(e[1], b'six')
+
+        # VLEN str
+        dt = special_dtype(vlen=str)
+        data = ["hello",]
+             
+        shape = [10,]
+        
+        out = jsonToArray(shape, dt, data, broadcast=True)
+        self.assertTrue("vlen" in out.dtype.metadata)
+        self.assertEqual(out.dtype.metadata["vlen"], str)
+        self.assertEqual(out.dtype.kind, "O")
+        self.assertEqual(out.shape, (10,))
+        for i in range(10):
+            e = out[i]
+            self.assertEqual(out[0], data[0])
+
+        # two dimensional target
+        dt = np.dtype("i4")
+        shape = [10,2]
+        data = [42,]
+        out = jsonToArray(shape, dt, data, broadcast=True)
+
+        self.assertTrue(isinstance(out, np.ndarray))
+        self.assertEqual(out.shape, (10,2))
+        for i in range(10):
+            for j in range(2):
+                self.assertEqual(out[i,j], 42)
+
+        dt = np.dtype("i4")
+        shape = [10,2]
+        data = [69,96]
+        out = jsonToArray(shape, dt, data, broadcast=True)
+
+        self.assertTrue(isinstance(out, np.ndarray))
+        self.assertEqual(out.shape, (10,2))
+        for i in range(10):
+            self.assertEqual(out[i,0], 69)
+            self.assertEqual(out[i,1], 96)
+
+        # three dimensional target
+        dt = np.dtype("i4")
+        shape = [10, 3, 2]
+        data = [[0,1],[2,3],[4,5]]
+        out = jsonToArray(shape, dt, data, broadcast=True)
+
+        self.assertTrue(isinstance(out, np.ndarray))
+        self.assertEqual(out.shape, (10, 3, 2))
+        for i in range(10):
+            for j in range(3):
+                for k in range(2):
+                    self.assertEqual(out[i,j,k], j * 2 + k)
+
+
+        # verify ValueError returning if broadcast rules don't apply
+        dt = np.dtype("i4")
+        shape = [5,]
+        data = [1, 2]
+
+        try:
+            jsonToArray(shape, dt, data, broadcast=True)
+            self.assertTrue(False)
+        except ValueError:
+            pass  # expected  
+
+
     def testToBytes(self):
         # Simple array
         dt = np.dtype("<i4")
@@ -329,11 +416,7 @@ class ArrayUtilTest(unittest.TestCase):
         # VLEN of int32's
         dt = np.dtype("O", metadata={"vlen": np.dtype("int32")})
         arr = np.zeros((4,), dtype=dt)
-        arr[0] = np.int32(
-            [
-                1,
-            ]
-        )
+        arr[0] = np.int32([1, ])
         arr[1] = np.int32([1, 2])
         arr[2] = 0  # test un-intialized value
         arr[3] = np.int32([1, 2, 3])
@@ -519,9 +602,7 @@ class ArrayUtilTest(unittest.TestCase):
         # VLEN int
         #
         dt = special_dtype(vlen=np.dtype("int32"))
-        shape = [
-            4,
-        ]
+        shape = [4,]
         data = [
             [
                 1,
@@ -547,7 +628,7 @@ class ArrayUtilTest(unittest.TestCase):
         self.assertEqual(buffer, expected)
 
         # convert back to array
-        arr_copy = bytesToArray(buffer, dt, (4,))
+        arr_copy = bytesToArray(buffer, dt, shape)
         # np.array_equal doesn't work for object arrays
         self.assertEqual(arr.dtype, arr_copy.dtype)
         self.assertEqual(arr.shape, arr_copy.shape)
@@ -560,9 +641,7 @@ class ArrayUtilTest(unittest.TestCase):
         #
         dt_str = np.dtype("O", metadata={"vlen": str})
         dt = np.dtype([("x", "i4"), ("tag", dt_str)])
-        shape = [
-            4,
-        ]
+        shape = [4, ]
         data = [[42, "Hello"], [0, 0], [0, 0], [84, "Bye"]]
         arr = jsonToArray(shape, dt, data)
         self.assertTrue(isinstance(arr, np.ndarray))
@@ -592,9 +671,7 @@ class ArrayUtilTest(unittest.TestCase):
         #
         dt_arr_str = np.dtype("(2,)O", metadata={"vlen": str})
         dt = np.dtype([("x", "i4"), ("tag", dt_arr_str)])
-        shape = [
-            4,
-        ]
+        shape = [4,]
         data = [
             [42, ["hi", "bye"]],
             [0, [0, 0]],
@@ -609,7 +686,7 @@ class ArrayUtilTest(unittest.TestCase):
         self.assertEqual(buffer.find(b"bye"), 14)
         self.assertEqual(buffer.find(b"hi-hi"), 49)
         self.assertEqual(buffer.find(b"bye-bye"), 58)
-        arr_copy = bytesToArray(buffer, dt, (4,))
+        arr_copy = bytesToArray(buffer, dt, shape)
 
         self.assertEqual(arr.dtype, arr_copy.dtype)
         self.assertEqual(arr.shape, arr_copy.shape)
@@ -623,9 +700,7 @@ class ArrayUtilTest(unittest.TestCase):
         #
         dt_arr_str = np.dtype("(2,)O", metadata={"vlen": bytes})
         dt = np.dtype([("x", "i4"), ("tag", dt_arr_str)])
-        shape = [
-            4,
-        ]
+        shape = [4,]
         data = [
             [42, [b"hi", b"bye"]],
             [0, [0, 0]],
@@ -640,7 +715,7 @@ class ArrayUtilTest(unittest.TestCase):
         self.assertEqual(buffer.find(b"bye"), 14)
         self.assertEqual(buffer.find(b"hi-hi"), 49)
         self.assertEqual(buffer.find(b"bye-bye"), 58)
-        arr_copy = bytesToArray(buffer, dt, (4,))
+        arr_copy = bytesToArray(buffer, dt, shape)
 
         self.assertEqual(arr.dtype, arr_copy.dtype)
         self.assertEqual(arr.shape, arr_copy.shape)
