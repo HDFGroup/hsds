@@ -93,8 +93,6 @@ def getNumElements(dims):
     return num_elements
 
 
-
-
 def getShapeDims(shape):
     """
     Get dims from a given shape json.  Return [1,] for Scalar datasets,
@@ -145,7 +143,7 @@ def jsonToArray(data_shape, data_dtype, data_json, broadcast=False):
                 arr[index] = data[i]
                 index += 1
         return index
-    
+
     # need some special conversion for compound types --
     # each element must be a tuple, but the JSON decoder
     # gives us a list instead.
@@ -486,7 +484,7 @@ def bytesToArray(data, dt, shape):
         arr = np.frombuffer(data, dtype=dt)
     else:
         nelements = getNumElements(shape)
-       
+
         arr = np.zeros((nelements,), dtype=dt)
         offset = 0
         for index in range(nelements):

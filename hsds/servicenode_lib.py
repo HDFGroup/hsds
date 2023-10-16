@@ -211,7 +211,7 @@ async def getObjectJson(
         msg = f"Object: {obj_id} not found, req: {req}, params: {params}"
         log.warn(msg)
         raise HTTPNotFound()
-    
+
     return obj_json
 
 

@@ -621,7 +621,7 @@ async def PUT_DatasetShape(request):
         msg = "Extent of update shape request does not match dataset sahpe"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    
+
     shape_reduction = False
     for i in range(rank):
         if shape_update and shape_update[i] < dims[i]:
@@ -634,12 +634,12 @@ async def PUT_DatasetShape(request):
             msg = "Extension dimension can not be extended past max extent"
             log.warn(msg)
             raise HTTPConflict()
-    
+
     if extend_dim < 0 or extend_dim >= rank:
         msg = "Extension dimension must be less than rank and non-negative"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    
+
     if shape_reduction:
         log.info(f"Shape extent reduced for dataset (rank: {rank})")
 
@@ -684,9 +684,6 @@ async def PUT_DatasetShape(request):
     except HTTPConflict:
         log.warn("got 409 extending dataspace")
         raise
-
-    
-
 
     resp = await jsonResponse(request, json_resp, status=201)
     log.response(request, resp=resp)

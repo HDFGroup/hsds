@@ -3076,7 +3076,6 @@ class ValueTest(unittest.TestCase):
         # should get one element back
         self.assertEqual(len(value), 10)
         self.assertEqual(value, list(range(start, start + 10)))
-        
 
     def testLargeCreationProperties(self):
         # test Dataset with artifically large creation_properties data
@@ -3142,11 +3141,10 @@ class ValueTest(unittest.TestCase):
 
     def testValueReinitialization(self):
         # Test the dataset values get reset after a reduction and resize
-         
+
         print("testValueReinitialization", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
-    
-         
+
         # get domain
         req = f"{self.endpoint}/"
         rsp = self.session.get(req, headers=headers)
@@ -3187,14 +3185,14 @@ class ValueTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("value" in rspJson)
         self.assertEqual(rspJson["value"], data)
-        
+
         # resize the dataset to 5 elements
-        req =f"{self.endpoint}/datasets/{dset_uuid}/shape"
+        req = f"{self.endpoint}/datasets/{dset_uuid}/shape"
         payload = {"shape": 5}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
-        
+
         # read back the remaining elements
         req = f"{self.endpoint}/datasets/{dset_uuid}/value"
         rsp = self.session.get(req, headers=headers)
@@ -3204,7 +3202,7 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(rspJson["value"], data[:5])
 
         # resize back to 10
-        req =f"{self.endpoint}/datasets/{dset_uuid}/shape"
+        req = f"{self.endpoint}/datasets/{dset_uuid}/shape"
         payload = {"shape": 10}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
@@ -3216,7 +3214,10 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("value" in rspJson)
-        ret_value = rspJson["value"]
+        value = rspJson["value"]
+        print("value:", value)
+        # TBD: verify values are getting reinitialized
+
 
 if __name__ == "__main__":
     # setup test files

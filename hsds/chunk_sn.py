@@ -422,6 +422,8 @@ async def PUT_Value(request):
     params = request.rel_url.query
     append_rows = None  # this is a append update or not
     append_dim = 0
+    num_elements = None
+    element_count = None
     if "append" in params and params["append"]:
         try:
             append_rows = int(params["append"])
@@ -449,6 +451,15 @@ async def PUT_Value(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         query = params["query"]
+
+    if "element_count" in params:
+        try:
+            element_count = int(params["element_count"])
+        except ValueError:
+            msg = "invalid element_count"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        log.debug(f"element_count param: {element_count}")
 
     dset_id = request.match_info.get("id")
     if not dset_id:
@@ -494,7 +505,7 @@ async def PUT_Value(request):
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
             log.info(f"append_rows: {append_rows}")
-       
+
         if append_rows:
             for key in ("start", "stop", "step"):
                 if key in body:
@@ -510,7 +521,6 @@ async def PUT_Value(request):
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
             log.info(f"append_dim: {append_dim}")
-        
 
     # get state for dataset from DN.
     dset_json = await getObjectJson(app, dset_id, bucket=bucket, refresh=False)
@@ -713,14 +723,6 @@ async def PUT_Value(request):
                 log.warn(msg)
                 raise  # re-throw
 
-            """
-            if len(binary_data) != request.content_length:
-                msg = f"Read {len(binary_data)} bytes, expecting: "
-                msg += f"{request.content_length}"
-                log.error(msg)
-                raise HTTPBadRequest(reason=msg)
-            """
-
     if append_rows:
         for i in range(rank):
             if i == append_dim:
@@ -748,29 +750,44 @@ async def PUT_Value(request):
         np_shape = getSelectionShape(slices)
     else:
         # point update
-        np_shape = (num_points,)
+        np_shape = [num_points,]
 
     log.debug(f"selection shape: {np_shape}")
-    num_elements = getNumElements(np_shape)
-    log.debug(f"selection num elements: {num_elements}")
-    if num_elements <= 0:
+    if np.prod(np_shape) == 0:
         msg = "Selection is empty"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
+    if element_count is not None:
+        # if this is set to something other than the number of
+        # elements in np_shape, should be a value that can
+        # be used for broadcasting
+        for n in range(rank):
+            msg = f"{element_count} vs np.prod({np_shape[:n+1]}): {np.prod(np_shape[:(n+1)])}"
+            log.debug(msg)
+            if element_count == np.prod(np_shape) // np.prod(np_shape[:(n + 1)]):
+                num_elements = element_count
+                log.debug(f"broadcast with: {element_count} elements is valid ")
+                break
+        if num_elements is None:
+            # this never got set, so element count must be invalid for this shape
+            msg = f"element_count {element_count} not compatible with selection shape: {np_shape}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    else:
+        # set num_elements based on selection shape
+        num_elements = getNumElements(np_shape)
+    log.debug(f"selection num elements: {num_elements}")
+
     arr = None  # np array to hold request data
     if binary_data:
         if item_size == "H5T_VARIABLE":
-            
             # binary variable length data
             try:
-                arr = bytesToArray(binary_data, dset_dtype, np_shape)
+                arr = bytesToArray(binary_data, dset_dtype, [num_elements,])
             except ValueError as ve:
                 log.warn(f"bytesToArray value error: {ve}")
                 raise HTTPBadRequest()
-            
-            num_req_elements = getNumElements(arr.shape)
-            log.debug(f"binary variable data element count: {num_req_elements}")
         else:
             # fixed item size
             if len(binary_data) % item_size != 0:
@@ -778,68 +795,46 @@ async def PUT_Value(request):
                 msg += f"but {len(binary_data)} bytes received"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
-            
+
+            if len(binary_data) // item_size != num_elements:
+                msg = f"expected {item_size * num_elements} bytes but got {len(binary_data)}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+
             # check against max request size
             if num_elements * item_size > max_request_size:
                 msg = f"read {num_elements*item_size} bytes, greater than {max_request_size}"
                 log.warn(msg)
 
-            num_req_elements = len(binary_data) // item_size
-        
-        # if the req item count is less than expected,
-        # check to see if it is a broadcast request
-        broadcast_shape = None
-        if num_req_elements != num_elements and not append_rows:
-            broadcast_shape = [1,]
-            for ndim in range(rank):
-                if num_req_elements == np.prod(broadcast_shape):
-                    break
-                np_shape_extent = np_shape[rank - 1 - ndim]
-                if ndim == 0:
-                    broadcast_shape = [np_shape_extent,]
-                else:
-                    broadcast_shape = [np_shape_extent].extend(broadcast_shape)
-                log.debug(f"trying broadcast_shape: {broadcast_shape}")
-            if len(broadcast_shape) == rank:
-                msg = f"Unexpected request size: {len(binary_data)}, "
-                msg += f"for num_elements: {num_elements} with item_size: {item_size}"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-
-        # read bytes into a one-dimensional numpy array  
-        if item_size != "H5T_VARIABLE":
-            """
-            # binary variable length data
-            try:
-                arr = bytesToArray(binary_data, dset_dtype, (num_elements,))
-            except ValueError as ve:
-                log.warn(f"Unable to parse variable length data: {ve}")
-                raise HTTPBadRequest()
-            """
             arr = np.fromstring(binary_data, dtype=dset_dtype)
-            
-        if broadcast_shape:
-            log.info(f"broadcasting from {broadcast_shape} to {np_shape}")
-            arr = arr.reshape(broadcast_shape)
-            tmp_arr = np.zeros(np_shape, dtype=dset_dtype)
-            tmp_arr[...] = arr
-            arr = tmp_arr
-        else:
-            try:
-                arr = arr.reshape(np_shape)  # conform to selection shape
-            except ValueError:
-                msg = "Bad Request: binary input data doesn't match selection"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
+            log.debug(f"read fixed type array: {arr}")
+
+        if element_count is not None:
+            # broad cast data into numpy array
+            arr_tmp = np.zeros(np_shape, dtype=dset_dtype)
+            arr_tmp[...] = arr
+            arr = arr_tmp
+        try:
+            arr = arr.reshape(np_shape)  # conform to selection shape
+        except ValueError:
+            msg = "Bad Request: binary input data doesn't match selection"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
         msg = f"PUT value - numpy array shape: {arr.shape} dtype: {arr.dtype}"
         log.debug(msg)
-    
+
     elif request_type == "json":
         # get array from json input
         try:
             msg = "input data doesn't match selection"
             # only enable broadcast if not appending
-            arr = jsonToArray(np_shape, dset_dtype, json_data, broadcast=(False if append_rows else True))
+            if num_elements < np.prod(np_shape):
+                broadcast = True
+            else:
+                broadcast = False
+            log.debug(f"np_shape: {np_shape}, broadcast: {broadcast}")
+            arr = jsonToArray(np_shape, dset_dtype, json_data, broadcast=broadcast)
         except ValueError:
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
@@ -1108,7 +1103,7 @@ async def GET_Value(request):
     # get state for dataset from DN.
     # Note - refreshShape will do a refresh if the dataset is extensible
     #   i.e. we need to make sure we have the correct shape dimensions
-    # 
+
     dset_json = await getObjectJson(app, dset_id, bucket=bucket, refresh=True)
     type_json = dset_json["type"]
     dset_dtype = createDataType(type_json)
