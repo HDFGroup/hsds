@@ -629,6 +629,7 @@ async def PUT_Value(request):
     binary_data = None
     points = None  # used for point selection writes
     np_shape = []  # shape of incoming data
+    bc_shape = []  # shape of broadcast array (if element_count is set)
     slices = []  # selection area to write to
 
     if item_size == 'H5T_VARIABLE' or not use_http_streaming(request, rank):
@@ -762,13 +763,18 @@ async def PUT_Value(request):
         # if this is set to something other than the number of
         # elements in np_shape, should be a value that can
         # be used for broadcasting
-        for n in range(rank):
-            msg = f"{element_count} vs np.prod({np_shape[:n+1]}): {np.prod(np_shape[:(n+1)])}"
-            log.debug(msg)
-            if element_count == np.prod(np_shape) // np.prod(np_shape[:(n + 1)]):
-                num_elements = element_count
-                log.debug(f"broadcast with: {element_count} elements is valid ")
-                break
+        if element_count == 1:
+            num_elements = 1
+            bc_shape = [1,]
+            log.debug(f"broadcasting one element to {np_shape}")
+        else:
+        
+            for n in range(rank-1):
+                bc_shape = np_shape[rank - n - 1]
+                if element_count == np.prod(bc_shape):
+                    num_elements = element_count
+                    log.debug(f"broadcast with: {element_count} elements is valid with shape: {bc_shape} ")
+                    break
         if num_elements is None:
             # this never got set, so element count must be invalid for this shape
             msg = f"element_count {element_count} not compatible with selection shape: {np_shape}"
@@ -809,8 +815,9 @@ async def PUT_Value(request):
             arr = np.fromstring(binary_data, dtype=dset_dtype)
             log.debug(f"read fixed type array: {arr}")
 
-        if element_count is not None:
-            # broad cast data into numpy array
+        if bc_shape:
+            # broadcast received data into numpy array
+            arr = arr.reshape(bc_shape)
             arr_tmp = np.zeros(np_shape, dtype=dset_dtype)
             arr_tmp[...] = arr
             arr = arr_tmp
