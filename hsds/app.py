@@ -156,7 +156,6 @@ def main():
     )
     parser.add_argument(
         "--bucket_name",
-        nargs=1,
         type=str,
         dest="bucket_name",
         help='Name of the bucket to use (e.g., "hsds.test").',
