@@ -156,7 +156,6 @@ def main():
     )
     parser.add_argument(
         "--bucket_name",
-        nargs=1,
         type=str,
         dest="bucket_name",
         help='Name of the bucket to use (e.g., "hsds.test").',
@@ -313,7 +312,6 @@ def main():
     else:
         socket_dir = os.path.abspath(args.socket_dir)
         logfile = os.path.join(socket_dir, "hs.log")
-    print("logfile:", logfile)
     kwargs["logfile"] = logfile
 
     if args.root_dir:
