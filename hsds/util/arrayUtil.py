@@ -131,7 +131,7 @@ def getShapeDims(shape):
     return dims
 
 
-def jsonToArray(data_shape, data_dtype, data_json, broadcast=False):
+def jsonToArray(data_shape, data_dtype, data_json):
     """
     Return numpy array from the given json array.
     """
@@ -176,17 +176,9 @@ def jsonToArray(data_shape, data_dtype, data_json, broadcast=False):
         # allow if the array is a scalar and the selection shape is one element,
         # numpy is ok with this
         if arr.size != npoints:
-            if broadcast:
-                # try to broadcast to the target shape
-                # if it fails, a ValueError exception will be raised
-                arr_tgt = np.zeros(data_shape, dtype=data_dtype)
-                arr_tgt[...] = arr
-                # worked!  use arr_tgt as arr
-                arr = arr_tgt
-            else:
-                msg = "Input data doesn't match selection number of elements"
-                msg += f" Expected {npoints}, but received: {arr.size}"
-                raise ValueError(msg)
+            msg = "Input data doesn't match selection number of elements"
+            msg += f" Expected {npoints}, but received: {arr.size}"
+            raise ValueError(msg)
         if arr.shape != data_shape:
             arr = arr.reshape(data_shape)  # reshape to match selection
     else:
