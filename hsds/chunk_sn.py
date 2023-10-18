@@ -591,7 +591,6 @@ async def PUT_Value(request):
             method=request.method,
         )
 
-        log.debug(f"arr shape: {arr_rsp.shape}")
         response_type = getAcceptType(request)
 
         if response_type == "binary":
@@ -632,12 +631,10 @@ async def PUT_Value(request):
     bc_shape = []  # shape of broadcast array (if element_count is set)
     slices = []  # selection area to write to
 
-    if item_size == 'H5T_VARIABLE' or not use_http_streaming(request, rank):
+    if item_size == 'H5T_VARIABLE' or element_count or not use_http_streaming(request, rank):
         http_streaming = False
     else:
         http_streaming = True
-
-    http_streaming = False  # test
 
     # body could also contain a point selection specifier
     if body and "points" in body:
@@ -766,14 +763,15 @@ async def PUT_Value(request):
         if element_count == 1:
             num_elements = 1
             bc_shape = [1,]
-            log.debug(f"broadcasting one element to {np_shape}")
+            log.debug(f"broadcasting one element to shape: {np_shape}")
         else:
-        
-            for n in range(rank-1):
-                bc_shape = np_shape[rank - n - 1]
+            bc_shape = []
+            for n in range(rank - 1):
+                bc_shape.insert(0, np_shape[rank - n - 1])
                 if element_count == np.prod(bc_shape):
                     num_elements = element_count
-                    log.debug(f"broadcast with: {element_count} elements is valid with shape: {bc_shape} ")
+                    msg = f"broadcast with: {element_count} elements valid for shape: {bc_shape}"
+                    log.debug(msg)
                     break
         if num_elements is None:
             # this never got set, so element count must be invalid for this shape
@@ -836,12 +834,22 @@ async def PUT_Value(request):
         try:
             msg = "input data doesn't match selection"
             # only enable broadcast if not appending
-            if num_elements < np.prod(np_shape):
-                broadcast = True
+
+            if bc_shape:
+                arr = jsonToArray(bc_shape, dset_dtype, json_data)
             else:
-                broadcast = False
-            log.debug(f"np_shape: {np_shape}, broadcast: {broadcast}")
-            arr = jsonToArray(np_shape, dset_dtype, json_data, broadcast=broadcast)
+                arr = jsonToArray(np_shape, dset_dtype, json_data)
+
+            log.debug(f"jsonToArray returned: {arr}")
+            if num_elements != np.prod(arr.shape):
+                msg = f"expected {num_elements} elements, but got {np.prod(arr.shape)}"
+                raise HTTPBadRequest(reason=msg)
+
+            if bc_shape:
+                # broadcast to target
+                arr_tmp = np.zeros(np_shape, dtype=dset_dtype)
+                arr_tmp[...] = arr
+                arr = arr_tmp
         except ValueError:
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
@@ -953,8 +961,6 @@ async def PUT_Value(request):
                     msg = f"bytesToArray value error for page: {page_number+1}: {ve}"
                     log.warn(msg)
                     raise HTTPBadRequest(reason=msg)
-                if len(select_shape) == 2:
-                    log.debug(f"arr test value[0,0]: {arr[0,0]}")
 
             try:
                 chunk_ids = getChunkIds(dset_id, page, layout)
@@ -963,9 +969,8 @@ async def PUT_Value(request):
                 raise HTTPInternalServerError()
             log.debug(f"chunk_ids: {chunk_ids}")
             if len(chunk_ids) > max_chunks:
-                log.warn(
-                    f"got {len(chunk_ids)} for page: {page_number+1}.  max_chunks: {max_chunks} "
-                )
+                msg = f"got {len(chunk_ids)} for page: {page_number+1}.  max_chunks: {max_chunks}"
+                log.warn(msg)
 
             crawler = ChunkCrawler(
                 app,
