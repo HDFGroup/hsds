@@ -985,9 +985,8 @@ async def PUT_Value(request):
             crawler_status = crawler.get_status()
 
             if crawler_status not in (200, 201):
-                log.warn(
-                    f"crawler failed for page: {page_number+1} with status: {crawler_status}"
-                )
+                msg = f"crawler failed for page: {page_number+1} with status: {crawler_status}"
+                log.warn(msg)
             else:
                 log.info("crawler write_chunk_hyperslab successful")
 

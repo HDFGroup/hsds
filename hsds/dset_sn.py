@@ -15,6 +15,7 @@
 #
 
 import math
+import numpy as np
 from json import JSONDecodeError
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict
 
@@ -34,6 +35,7 @@ from .util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson
 from .util.hdf5dtype import getItemSize
 from .servicenode_lib import getDomainJson, getObjectJson, getPathForObjectId
 from .servicenode_lib import getObjectIdByPath, validateAction, getRootInfo
+from .chunk_crawl import ChunkCrawler
 from . import config
 from . import hsds_logger as log
 
@@ -644,6 +646,24 @@ async def PUT_DatasetShape(request):
         log.info(f"Shape extent reduced for dataset (rank: {rank})")
 
         # need to re-initialize any values that are now outside the shape
+        # first get the fill value
+        fill_value = None
+        type_json = dset_json["type"]
+        dt = createDataType(type_json)
+
+        if "creationProperties" in dset_json:
+            fill_value = None
+            cprops = dset_json["creationProperties"]
+            if "fillValue" in cprops:
+                fill_value_prop = cprops["fillValue"]
+                encoding = cprops.get("fillValue_encoding")
+                fill_value = getNumpyValue(fill_value_prop, dt=dt, encoding=encoding)
+        if fill_value:
+            arr = np.empty((1,), dtype=dt, order="C")
+            arr[...] = fill_value
+        else:
+            arr = np.zeros([1,], dtype=dt, order="C")
+
         layout = getChunkLayout(dset_json)
         log.debug(f"got layout: {layout}")
         for n in range(rank):
@@ -662,6 +682,28 @@ async def PUT_DatasetShape(request):
             log.debug(f"shape_reinitialize - got slices: {slices} for dimension: {n}")
             chunk_ids = getChunkIds(dset_id, slices, layout)
             log.debug(f"got chunkIds: {chunk_ids}")
+
+            chunk_ids.sort()
+
+            crawler = ChunkCrawler(
+                app,
+                chunk_ids,
+                dset_json=dset_json,
+                bucket=bucket,
+                slices=slices,
+                arr=arr,
+                action="write_chunk_hyperslab",
+            )
+            await crawler.crawl()
+
+            crawler_status = crawler.get_status()
+
+            if crawler_status not in (200, 201):
+                msg = f"crawler failed for shape reinitialize with status: {crawler_status}"
+                log.warn(msg)
+            else:
+                msg = f"crawler success for reinitialization with slices: {slices}"
+                log.info(msg)
 
     # send request onto DN
     req = getDataNodeUrl(app, dset_id) + "/datasets/" + dset_id + "/shape"
