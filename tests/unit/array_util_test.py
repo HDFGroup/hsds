@@ -290,7 +290,6 @@ class ArrayUtilTest(unittest.TestCase):
         self.assertTrue(isinstance(e, tuple))
         self.assertEqual(e, (id0, id1, id2))
 
-    
     def testToBytes(self):
         # Simple array
         dt = np.dtype("<i4")
