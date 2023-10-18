@@ -677,3 +677,26 @@ def ndarray_compare(arr1, arr2):
     else:
         # can just us np array_compare
         return np.array_equal(arr1, arr2)
+
+
+def getBroadcastShape(mshape, element_count):
+    # if element_count is less than the number of elements
+    # defined by mshape, return a numpy compatible broadcast
+    # shape that contains element_count elements.
+    # If non exists return None
+
+    if np.prod(mshape) == element_count:
+        return None
+
+    if element_count == 1:
+        # this always works
+        return [1,]
+
+    bcshape = []
+    rank = len(mshape)
+    for n in range(rank - 1):
+        bcshape.insert(0, mshape[rank - n - 1])
+        if element_count == np.prod(bcshape):
+            return bcshape  # have a match
+
+    return None  # no broadcast found

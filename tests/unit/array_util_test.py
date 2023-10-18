@@ -27,7 +27,8 @@ from hsds.util.arrayUtil import (
     getByteArraySize,
     IndexIterator,
     ndarray_compare,
-    getNumpyValue
+    getNumpyValue,
+    getBroadcastShape
 )
 from hsds.util.hdf5dtype import special_dtype
 from hsds.util.hdf5dtype import check_dtype
@@ -794,6 +795,26 @@ class ArrayUtilTest(unittest.TestCase):
 
         self.assertTrue(len(arr) == 0)
         self.assertTrue(arr.dtype == data_dtype)
+
+    def testGetBroadcastShape(self):
+        bcshape = getBroadcastShape([1, ], 1)
+        self.assertEqual(bcshape, None)
+        bcshape = getBroadcastShape([2, 3], 6)
+        self.assertEqual(bcshape, None)
+        bcshape = getBroadcastShape([2, 3], 5)
+        self.assertEqual(bcshape, None)
+
+        bcshape = getBroadcastShape([4, 5], 1)
+        self.assertEqual(bcshape, [1, ])
+        bcshape = getBroadcastShape([4, 5], 5)
+        self.assertEqual(bcshape, [5, ])
+
+        bcshape = getBroadcastShape([2, 3, 5], 1)
+        self.assertEqual(bcshape, [1, ])
+        bcshape = getBroadcastShape([2, 3, 5], 5)
+        self.assertEqual(bcshape, [5, ])
+        bcshape = getBroadcastShape([2, 3, 5], 15)
+        self.assertEqual(bcshape, [3, 5])
 
 
 if __name__ == "__main__":

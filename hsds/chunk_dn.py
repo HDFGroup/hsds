@@ -20,7 +20,7 @@ from aiohttp.web_exceptions import HTTPNotFound, HTTPServiceUnavailable
 from aiohttp.web import json_response, StreamResponse
 
 from .util.httpUtil import request_read, getContentType
-from .util.arrayUtil import bytesToArray, arrayToBytes, getShapeDims
+from .util.arrayUtil import bytesToArray, arrayToBytes, getShapeDims, getBroadcastShape
 from .util.idUtil import getS3Key, validateInPartition, isValidUuid
 from .util.storUtil import isStorObj, deleteStorObj
 from .util.hdf5dtype import createDataType
@@ -48,6 +48,7 @@ async def PUT_Chunk(request):
     limit = 0
     bucket = None
     input_arr = None
+    element_count = None
 
     if "query" in params:
         query = params["query"]
@@ -76,6 +77,15 @@ async def PUT_Chunk(request):
         msg = "PUT_Chunk - bucket is None"
         log.warn(msg)
         raise HTTPInternalServerError(reason=msg)
+
+    if "element_count" in params:
+        try:
+            element_count = int(params["element_count"])
+        except ValueError:
+            msg = "invalid element_count"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        log.debug(f"element_count param: {element_count}")
 
     try:
         validateInPartition(app, chunk_id)
@@ -130,9 +140,16 @@ async def PUT_Chunk(request):
     log.debug(f"PUT_Chunk slices: {selection}")
 
     mshape = getSelectionShape(selection)
-    num_elements = 1
-    for extent in mshape:
-        num_elements *= extent
+    if element_count is not None:
+        bcshape = getBroadcastShape(mshape, element_count)
+        log.debug(f"ussing bcshape: {bcshape}")
+    else:
+        bcshape = None
+
+    if bcshape:
+        num_elements = np.prod(bcshape)
+    else:
+        num_elements = np.prod(mshape)
 
     if getChunkInitializer(dset_json):
         chunk_init = True
@@ -220,9 +237,6 @@ async def PUT_Chunk(request):
         return
     else:
         # regular chunk update
-
-        broadcast = 0  # broadcast update
-
         # check that the content_length is what we expect
         if itemsize != "H5T_VARIABLE":
             log.debug(f"expect content_length: {num_elements*itemsize}")
@@ -235,10 +249,6 @@ async def PUT_Chunk(request):
                 msg = f"Expected content_length of: {expected}, but got: {actual}"
                 log.error(msg)
                 raise HTTPBadRequest(reason=msg)
-            else:
-                broadcast = expected // actual
-                if broadcast != 1:
-                    log.info(f"broadcast chunk write: {broadcast}")
 
         # create a numpy array for incoming data
         input_bytes = await request_read(request)
@@ -249,7 +259,16 @@ async def PUT_Chunk(request):
             log.error(msg)
             raise HTTPInternalServerError()
 
-        input_arr = bytesToArray(input_bytes, dt, mshape)
+        input_arr = bytesToArray(input_bytes, dt, [num_elements, ])
+        if bcshape:
+            input_arr = input_arr.reshape(bcshape)
+            log.debug(f"broadcasting {bcshape} to mshape {mshape}")
+            arr_tmp = np.zeros(mshape, dtype=dt)
+            arr_tmp[...] = input_arr
+            input_arr = arr_tmp
+        else:
+            input_arr = input_arr.reshape(mshape)
+
         kwargs = {"chunk_arr": chunk_arr, "slices": selection, "data": input_arr}
         is_dirty = chunkWriteSelection(**kwargs)
 

@@ -39,7 +39,7 @@ from .util.chunkUtil import getChunkCoverage, getDataCoverage
 from .util.chunkUtil import getQueryDtype, get_chunktable_dims
 from .util.arrayUtil import bytesArrayToList, jsonToArray, getShapeDims
 from .util.arrayUtil import getNumElements, arrayToBytes, bytesToArray
-from .util.arrayUtil import squeezeArray, getNumpyValue
+from .util.arrayUtil import squeezeArray, getNumpyValue, getBroadcastShape
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from .util.boolparser import BooleanParser
 from .servicenode_lib import getObjectJson, validateAction
@@ -760,24 +760,15 @@ async def PUT_Value(request):
         # if this is set to something other than the number of
         # elements in np_shape, should be a value that can
         # be used for broadcasting
-        if element_count == 1:
-            num_elements = 1
-            bc_shape = [1,]
-            log.debug(f"broadcasting one element to shape: {np_shape}")
-        else:
-            bc_shape = []
-            for n in range(rank - 1):
-                bc_shape.insert(0, np_shape[rank - n - 1])
-                if element_count == np.prod(bc_shape):
-                    num_elements = element_count
-                    msg = f"broadcast with: {element_count} elements valid for shape: {bc_shape}"
-                    log.debug(msg)
-                    break
-        if num_elements is None:
+        bc_shape = getBroadcastShape(np_shape, element_count)
+
+        if bc_shape is None:
             # this never got set, so element count must be invalid for this shape
             msg = f"element_count {element_count} not compatible with selection shape: {np_shape}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
+        # element_count will be what we expected to see
+        num_elements = element_count
     else:
         # set num_elements based on selection shape
         num_elements = getNumElements(np_shape)
@@ -816,15 +807,23 @@ async def PUT_Value(request):
         if bc_shape:
             # broadcast received data into numpy array
             arr = arr.reshape(bc_shape)
-            arr_tmp = np.zeros(np_shape, dtype=dset_dtype)
-            arr_tmp[...] = arr
-            arr = arr_tmp
-        try:
-            arr = arr.reshape(np_shape)  # conform to selection shape
-        except ValueError:
-            msg = "Bad Request: binary input data doesn't match selection"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+            if element_count == 1:
+                log.debug("will send broadcast set to DN nodes")
+            else:
+                # need to instantiate the full np_shape since chunk boundries
+                # will effect how individual chunks get set
+                arr_tmp = np.zeros(np_shape, dtype=dset_dtype)
+                arr_tmp[...] = arr
+                arr = arr_tmp
+
+        if element_count != 1:
+            try:
+                arr = arr.reshape(np_shape)  # conform to selection shape
+            except ValueError:
+                msg = "Bad Request: binary input data doesn't match selection "
+                msg += f"reshaping {arr.shape} to {np_shape}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
 
         msg = f"PUT value - numpy array shape: {arr.shape} dtype: {arr.dtype}"
         log.debug(msg)
@@ -845,7 +844,7 @@ async def PUT_Value(request):
                 msg = f"expected {num_elements} elements, but got {np.prod(arr.shape)}"
                 raise HTTPBadRequest(reason=msg)
 
-            if bc_shape:
+            if bc_shape and element_count != 1:
                 # broadcast to target
                 arr_tmp = np.zeros(np_shape, dtype=dset_dtype)
                 arr_tmp[...] = arr

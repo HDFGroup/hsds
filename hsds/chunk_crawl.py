@@ -70,20 +70,41 @@ async def write_chunk_hyperslab(
         log.error(f"No type found in dset_json: {dset_json}")
         raise HTTPInternalServerError()
 
+    params = {}
     layout = getChunkLayout(dset_json)
     chunk_sel = getChunkCoverage(chunk_id, slices, layout)
     log.debug(f"chunk_sel: {chunk_sel}")
     data_sel = getDataCoverage(chunk_id, slices, layout)
     log.debug(f"data_sel: {data_sel}")
     log.debug(f"arr.shape: {arr.shape}")
-    arr_chunk = arr[data_sel]
+
+    # broadcast data if arr has one element and no stride is set
+    do_broadcast = True
+    if np.prod(arr.shape) != 1:
+        do_broadcast = False
+    else:
+        for s in slices:
+            if s.step is None:
+                continue
+            if s.step > 1:
+                do_broadcast = False
+
+    if do_broadcast:
+        log.debug(f"broadcasting {arr}")
+        # just broadcast data value across selection
+        params["element_count"] = 1
+        arr_chunk = arr
+    else:
+        arr_chunk = arr[data_sel]
+
     req = getDataNodeUrl(app, chunk_id)
     req += "/chunks/" + chunk_id
 
-    log.debug(f"PUT chunk req: {req}")
     data = arrayToBytes(arr_chunk)
+
+    log.debug(f"PUT chunk req: {req}, {len(data)} bytes")
+
     # pass itemsize, type, dimensions, and selection as query params
-    params = {}
     select = getSliceQueryParam(chunk_sel)
     params["select"] = select
     if bucket:
