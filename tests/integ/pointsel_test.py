@@ -1583,6 +1583,86 @@ class PointSelTest(unittest.TestCase):
         self.assertEqual(len(data), 3 * 4)
         self.assertEqual(data, b"\x1e\x00\x00\x00 \x00\x00\x00#\x00\x00\x00")
 
+    def testShapeUpdate(self):
+        
+        # Test selecting points after shape has been updated
+        print("testShapeUpdate", self.base_domain)
+
+        points = [75,]
+            
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create dataset
+        data = {"type": "H5T_STD_I32LE", "shape": (100,), "maxdims": (100,)}
+
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        dset_id = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_id))
+
+        # link new dataset as 'dset1d'
+        name = "dset"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": dset_id}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # write to the dset
+        data = list(range(100))
+        data.reverse()  # 99, 98, ..., 0
+
+        payload = {"value": data}
+        req = self.endpoint + "/datasets/" + dset_id + "/value"
+
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        body = {"points": points}
+        # read selected points
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        ret_value = rspJson["value"]
+        self.assertEqual(len(ret_value), len(points))
+        expected_result = [24, ]
+         
+        self.assertEqual(ret_value, expected_result)
+
+        # resize the dataset to the small shape
+        req = self.endpoint + "/datasets/" + dset_id + "/shape"
+        payload = {"shape": 50}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+
+        # should get a 400 now
+        req = self.endpoint + "/datasets/" + dset_id + "/value"
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+
+        # resize back to large shape
+        payload = {"shape": 100}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+
+        # read point again
+        req = self.endpoint + "/datasets/" + dset_id + "/value"
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+
 
 if __name__ == "__main__":
     # setup test files
