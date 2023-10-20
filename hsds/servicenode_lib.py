@@ -215,6 +215,31 @@ async def getObjectJson(
     return obj_json
 
 
+async def getDsetJson(app, dset_id,
+                      bucket=None,
+                      refresh=False,
+                      include_links=False,
+                      include_attrs=False):
+    kwargs = {}
+    kwargs["bucket"] = bucket
+    kwargs["refresh"] = refresh
+    kwargs["include_links"] = include_links
+    kwargs["include_attrs"] = include_attrs
+    dset_json = await getObjectJson(app, dset_id, **kwargs)
+    if refresh:
+        # can just return the json
+        return dset_json
+
+    # check to see if the dataspace is mutable
+    # if so, refresh if necessary
+    datashape = dset_json["shape"]
+    if "maxdims" in datashape:
+        log.debug("getDsetJson - refreshing json for mutable shape")
+        kwargs["refresh"] = True
+        dset_json = await getObjectJson(app, dset_id, **kwargs)
+    return dset_json
+
+
 async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, domain=None,
                             follow_soft_links=False, follow_external_links=False):
     """Find the object at the provided h5path location.

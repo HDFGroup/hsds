@@ -42,7 +42,7 @@ from .util.arrayUtil import getNumElements, arrayToBytes, bytesToArray
 from .util.arrayUtil import squeezeArray, getNumpyValue, getBroadcastShape
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from .util.boolparser import BooleanParser
-from .servicenode_lib import getObjectJson, validateAction
+from .servicenode_lib import getDsetJson, validateAction
 from .chunk_crawl import ChunkCrawler
 from . import config
 from . import hsds_logger as log
@@ -72,7 +72,7 @@ def get_hrefs(request, dset_json):
     return hrefs
 
 
-async def get_slices(app, select, dset_json, bucket=None):
+def get_slices(app, select, dset_json):
     """Get desired slices from selection query param string or json value.
     If select is none or empty, slices for entire datashape will be
     returned.
@@ -87,35 +87,14 @@ async def get_slices(app, select, dset_json, bucket=None):
         raise HTTPBadRequest(reason=msg)
 
     dims = getShapeDims(datashape)  # throws 400 for HS_NULL dsets
-    maxdims = getDsetMaxDims(dset_json)
 
-    # refetch the dims if the dataset is extensible and request or hasn't
-    # provided an explicit region
-    if isExtensible(dims, maxdims) and (select is None or not select):
-        kwargs = {"bucket": bucket, "refresh": True}
-        dset_json = await getObjectJson(app, dset_id, **kwargs)
-        dims = getShapeDims(dset_json["shape"])
-
-    slices = None  # selection for read
-    if isExtensible and select:
-        try:
-            slices = getSelectionList(select, dims)
-        except ValueError:
-            # exception might be due to us having stale version of dims,
-            # so use refresh
-            kwargs = {"bucket": bucket, "refresh": True}
-            dset_json = await getObjectJson(app, dset_id, **kwargs)
-            dims = getShapeDims(dset_json["shape"])
-            slices = None  # retry below
-
-    if slices is None:
-        try:
-            slices = getSelectionList(select, dims)
-        except ValueError:
-            msg = f"Invalid selection: {select} on dims: {dims} "
-            msg += f"for dataset: {dset_id}"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+    try:
+        slices = getSelectionList(select, dims)
+    except ValueError:
+        msg = f"Invalid selection: {select} on dims: {dims} "
+        msg += f"for dataset: {dset_id}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
     return slices
 
 
@@ -254,8 +233,7 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
             raise HTTPInternalServerError()
         chunktable_id = layout["chunk_table"]
         # get  state for dataset from DN.
-        kwargs = {"bucket": bucket, "refresh": False}
-        chunktable_json = await getObjectJson(app, chunktable_id, **kwargs)
+        chunktable_json = await getDsetJson(app, chunktable_id, bucket=bucket)
         # log.debug(f"chunktable_json: {chunktable_json}")
         chunktable_dims = getShapeDims(chunktable_json["shape"])
         chunktable_layout = chunktable_json["layout"]
@@ -523,7 +501,7 @@ async def PUT_Value(request):
             log.info(f"append_dim: {append_dim}")
 
     # get state for dataset from DN.
-    dset_json = await getObjectJson(app, dset_id, bucket=bucket, refresh=False)
+    dset_json = await getDsetJson(app, dset_id, bucket=bucket)
 
     layout = None
     datashape = dset_json["shape"]
@@ -568,7 +546,7 @@ async def PUT_Value(request):
                 raise HTTPBadRequest(reason=msg)
 
         select = params.get("select")
-        slices = await get_slices(app, select, dset_json, bucket=bucket)
+        slices = get_slices(app, select, dset_json)
         if "Limit" in params:
             try:
                 limit = int(params["Limit"])
@@ -676,12 +654,6 @@ async def PUT_Value(request):
                 log.warn("unable to append to dataspace")
                 raise HTTPConflict()
 
-    # refetch the dims if the dataset is extensible
-    if isExtensible(dims, maxdims):
-        kwargs = {"bucket": bucket, "refresh": True}
-        dset_json = await getObjectJson(app, dset_id, **kwargs)
-        dims = getShapeDims(dset_json["shape"])
-
     if request_type == "json":
         if "value" in body:
             json_data = body["value"]
@@ -737,10 +709,10 @@ async def PUT_Value(request):
 
     elif points is None:
         if body and "start" in body and "stop" in body:
-            slices = await get_slices(app, body, dset_json, bucket=bucket)
+            slices = get_slices(app, body, dset_json)
         else:
             select = params.get("select")
-            slices = await get_slices(app, select, dset_json, bucket=bucket)
+            slices = get_slices(app, select, dset_json)
 
         # The selection parameters will determine expected put value shape
         log.debug(f"PUT Value selection: {slices}")
@@ -992,7 +964,7 @@ async def PUT_Value(request):
 
     else:
         #
-        # Do point PUT
+        # Do point post
         #
         log.debug(f"num_points: {num_points}")
 
@@ -1111,10 +1083,10 @@ async def GET_Value(request):
     bucket = getBucketForDomain(domain)
 
     # get state for dataset from DN.
-    # Note - refreshShape will do a refresh if the dataset is extensible
+    # Note - this will do a refresh if the dataset is extensible
     #   i.e. we need to make sure we have the correct shape dimensions
 
-    dset_json = await getObjectJson(app, dset_id, bucket=bucket, refresh=True)
+    dset_json = await getDsetJson(app, dset_id, bucket=bucket)
     type_json = dset_json["type"]
     dset_dtype = createDataType(type_json)
 
@@ -1137,7 +1109,7 @@ async def GET_Value(request):
     select = params.get("select")
     if select:
         log.debug(f"select query param: {select}")
-    slices = await get_slices(app, select, dset_json, bucket=bucket)
+    slices = get_slices(app, select, dset_json)
     log.debug(f"GET Value selection: {slices}")
 
     limit = 0
@@ -1569,7 +1541,7 @@ async def getSelectionData(
     await getChunkLocations(app, dset_id, dset_json, chunkinfo, chunk_ids, bucket=bucket)
 
     if slices is None:
-        slices = await get_slices(app, None, dset_json, bucket=bucket)
+        slices = get_slices(app, None, dset_json)
 
     if points is None:
         # get chunk selections for hyperslab select
@@ -1649,7 +1621,7 @@ async def POST_Value(request):
         raise HTTPBadRequest(reason=msg)
 
     # get  state for dataset from DN.
-    dset_json = await getObjectJson(app, dset_id, bucket=bucket)
+    dset_json = await getDsetJson(app, dset_id, bucket=bucket)
 
     datashape = dset_json["shape"]
     if datashape["class"] == "H5S_NULL":
@@ -1691,7 +1663,7 @@ async def POST_Value(request):
         elif "select" in body:
             select = body["select"]
             log.debug(f"select: {select}")
-            slices = await get_slices(app, select, dset_json, bucket=bucket)
+            slices = get_slices(app, select, dset_json)
             log.debug(f"got slices: {slices}")
         else:
             msg = "Expected points or select key in request body"
