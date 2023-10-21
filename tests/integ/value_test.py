@@ -3331,7 +3331,7 @@ class ValueTest(unittest.TestCase):
 
         # define two different shapes that we'll switch between
         # min extent in each dimension is 20 for the point setup to work
-        large_shape = (110, 120, 130)
+        large_shape = (220, 120, 130)
         small_shape = (55, 60, 70)
 
         # setup some points on the diagonal
@@ -3398,11 +3398,13 @@ class ValueTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("value" in rspJson)
         ret_value = rspJson["value"]
+        print(ret_value)
 
         for i in range(10):
             pt = points[i]
             n = ret_value[i]
-            if pt[0] >= small_shape[0] and pt[1] >= small_shape[1] and pt[2] >= small_shape[2]:
+            print(f"{pt}: {n}")
+            if pt[0] >= small_shape[0] or pt[1] >= small_shape[1] or pt[2] >= small_shape[2]:
                 self.assertEqual(n, 0)
             else:
                 self.assertEqual(n, 1)

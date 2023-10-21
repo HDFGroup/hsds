@@ -34,7 +34,7 @@ from .util.storUtil import getFilters
 from .util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson
 from .util.hdf5dtype import getItemSize
 from .servicenode_lib import getDomainJson, getObjectJson, getDsetJson, getPathForObjectId
-from .servicenode_lib import getObjectIdByPath, validateAction, getRootInfo
+from .servicenode_lib import getObjectIdByPath, validateAction, getRootInfo, removeChunks
 from .chunk_crawl import ChunkCrawler
 from . import config
 from . import hsds_logger as log
@@ -524,6 +524,7 @@ async def PUT_DatasetShape(request):
     shape_update = None
     extend = 0
     extend_dim = 0
+    hrefs = []  # tBD - definae HATEOS refs to return
 
     dset_id = request.match_info.get("id")
     if not dset_id:
@@ -556,13 +557,16 @@ async def PUT_DatasetShape(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
+    if "shape" in data and "extend" in data:
+        msg = "PUT shape must have shape or extend key in body but not both"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
     if "shape" in data:
         shape_update = data["shape"]
         if isinstance(shape_update, int):
             # convert to a list
-            shape_update = [
-                shape_update,
-            ]
+            shape_update = [shape_update, ]
         log.debug(f"shape_update: {shape_update}")
 
     if "extend" in data:
@@ -619,6 +623,23 @@ async def PUT_DatasetShape(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
+    if extend_dim < 0 or extend_dim >= rank:
+        msg = "Extension dimension must be less than rank and non-negative"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    if shape_update is None:
+        # construct a shape update using original dims and extend dim and value
+        shape_update = dims.copy()
+        shape_update[extend_dim] = extend
+
+    if shape_update == dims:
+        log.info("shape update is same as current dims, no action needed")
+        json_resp = {"hrefs:", hrefs}
+        resp = await jsonResponse(request, json_resp, status=200)
+        log.response(request, resp=resp)
+        return resp
+
     shape_reduction = False
     for i in range(rank):
         if shape_update and shape_update[i] < dims[i]:
@@ -631,11 +652,6 @@ async def PUT_DatasetShape(request):
             msg = "Extension dimension can not be extended past max extent"
             log.warn(msg)
             raise HTTPConflict()
-
-    if extend_dim < 0 or extend_dim >= rank:
-        msg = "Extension dimension must be less than rank and non-negative"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
 
     if shape_reduction:
         log.info(f"Shape extent reduced for dataset (rank: {rank})")
@@ -718,17 +734,19 @@ async def PUT_DatasetShape(request):
             else:
                 log.info(f"no chunks need updating for shape reduction over dim {m}")
 
+        log.debug("chunk reinitialization complete")
         if delete_ids:
             delete_ids = list(delete_ids)
             delete_ids.sort()
             log.debug(f"these ids will need to be deleted: {delete_ids}")
+            await removeChunks(app, delete_ids, bucket=bucket)
         else:
             log.info("no chunks need deletion for shape reduction")
 
     # send request onto DN
     req = getDataNodeUrl(app, dset_id) + "/datasets/" + dset_id + "/shape"
 
-    json_resp = {"hrefs": []}
+    json_resp = {"hrefs": hrefs}
     params = {}
     if bucket:
         params["bucket"] = bucket
