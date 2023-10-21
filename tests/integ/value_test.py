@@ -3398,12 +3398,10 @@ class ValueTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("value" in rspJson)
         ret_value = rspJson["value"]
-        print(ret_value)
 
         for i in range(10):
             pt = points[i]
             n = ret_value[i]
-            print(f"{pt}: {n}")
             if pt[0] >= small_shape[0] or pt[1] >= small_shape[1] or pt[2] >= small_shape[2]:
                 self.assertEqual(n, 0)
             else:

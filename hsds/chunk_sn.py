@@ -39,10 +39,11 @@ from .util.chunkUtil import getChunkCoverage, getDataCoverage
 from .util.chunkUtil import getQueryDtype, get_chunktable_dims
 from .util.arrayUtil import bytesArrayToList, jsonToArray, getShapeDims
 from .util.arrayUtil import getNumElements, arrayToBytes, bytesToArray
-from .util.arrayUtil import squeezeArray, getNumpyValue, getBroadcastShape
+from .util.arrayUtil import squeezeArray, getBroadcastShape
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from .util.boolparser import BooleanParser
 from .servicenode_lib import getDsetJson, validateAction
+from .dset_lib import getFillValue
 from .chunk_crawl import ChunkCrawler
 from . import config
 from . import hsds_logger as log
@@ -1407,13 +1408,8 @@ async def doReadSelection(
             raise HTTPBadRequest(reason=msg)
 
         # initialize to fill_value if specified
-        fill_value = None
-        if "creationProperties" in dset_json:
-            cprops = dset_json["creationProperties"]
-            if "fillValue" in cprops:
-                fill_value_prop = cprops["fillValue"]
-                encoding = cprops.get("fillValue_encoding")
-                fill_value = getNumpyValue(fill_value_prop, dt=dset_dtype, encoding=encoding)
+        fill_value = getFillValue(dset_json)
+
         if fill_value:
             arr = np.empty(np_shape, dtype=dset_dtype, order="C")
             arr[...] = fill_value

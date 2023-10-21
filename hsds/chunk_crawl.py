@@ -31,8 +31,10 @@ from .util.dsetUtil import getSliceQueryParam
 from .util.dsetUtil import getSelectionShape, getChunkLayout
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
 from .util.chunkUtil import getChunkIdForPartition, getQueryDtype
-from .util.arrayUtil import jsonToArray, getShapeDims, getNumpyValue
+from .util.arrayUtil import jsonToArray, getShapeDims
 from .util.arrayUtil import getNumElements, arrayToBytes, bytesToArray
+from .dset_lib import getFillValue
+
 from . import config
 from . import hsds_logger as log
 
@@ -422,14 +424,8 @@ async def read_point_sel(
     np_arr_rsp = None
     dt = np_arr.dtype
 
-    fill_value = None
     # initialize to fill_value if specified
-    if "creationProperties" in dset_json:
-        cprops = dset_json["creationProperties"]
-        if "fillValue" in cprops:
-            fill_value_prop = cprops["fillValue"]
-            encoding = cprops.get("fillValue_encoding")
-            fill_value = getNumpyValue(fill_value_prop, dt=dt, encoding=encoding)
+    fill_value = getFillValue(dset_json)
 
     def defaultArray():
         # no data, return zero array

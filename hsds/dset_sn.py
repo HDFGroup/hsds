@@ -15,7 +15,6 @@
 #
 
 import math
-import numpy as np
 from json import JSONDecodeError
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict
 
@@ -35,6 +34,7 @@ from .util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson
 from .util.hdf5dtype import getItemSize
 from .servicenode_lib import getDomainJson, getObjectJson, getDsetJson, getPathForObjectId
 from .servicenode_lib import getObjectIdByPath, validateAction, getRootInfo, removeChunks
+from .dset_lib import getFillValue
 from .chunk_crawl import ChunkCrawler
 from . import config
 from . import hsds_logger as log
@@ -658,22 +658,7 @@ async def PUT_DatasetShape(request):
 
         # need to re-initialize any values that are now outside the shape
         # first get the fill value
-        fill_value = None
-        type_json = dset_json["type"]
-        dt = createDataType(type_json)
-
-        if "creationProperties" in dset_json:
-            fill_value = None
-            cprops = dset_json["creationProperties"]
-            if "fillValue" in cprops:
-                fill_value_prop = cprops["fillValue"]
-                encoding = cprops.get("fillValue_encoding")
-                fill_value = getNumpyValue(fill_value_prop, dt=dt, encoding=encoding)
-        if fill_value:
-            arr = np.empty((1,), dtype=dt, order="C")
-            arr[...] = fill_value
-        else:
-            arr = np.zeros([1,], dtype=dt, order="C")
+        arr = getFillValue(dset_json)
 
         layout = getChunkLayout(dset_json)
         log.debug(f"got layout: {layout}")
