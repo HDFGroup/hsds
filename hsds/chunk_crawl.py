@@ -31,9 +31,8 @@ from .util.dsetUtil import getSliceQueryParam
 from .util.dsetUtil import getSelectionShape, getChunkLayout
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
 from .util.chunkUtil import getChunkIdForPartition, getQueryDtype
-from .util.arrayUtil import jsonToArray, getShapeDims
+from .util.arrayUtil import jsonToArray, getShapeDims, getNumpyValue
 from .util.arrayUtil import getNumElements, arrayToBytes, bytesToArray
-from .dset_lib import getFillValue
 
 from . import config
 from . import hsds_logger as log
@@ -43,6 +42,33 @@ CHUNK_REF_LAYOUTS = (
     "H5D_CHUNKED_REF",
     "H5D_CHUNKED_REF_INDIRECT",
 )
+
+
+def getFillValue(dset_json):
+    """ Return the fill value of the given dataset as a numpy array.
+      If no fill value is defined, return an zero array of given type """
+
+    # NOTE - this is copy of the function in dset_lib, but needed to put
+    # here to avoid circular dependency
+
+    fill_value = None
+    type_json = dset_json["type"]
+    dt = createDataType(type_json)
+
+    if "creationProperties" in dset_json:
+        cprops = dset_json["creationProperties"]
+        if "fillValue" in cprops:
+            fill_value_prop = cprops["fillValue"]
+            log.debug(f"got fo;;+value_prop: {fill_value_prop}")
+            encoding = cprops.get("fillValue_encoding")
+            fill_value = getNumpyValue(fill_value_prop, dt=dt, encoding=encoding)
+    if fill_value:
+        arr = np.empty((1,), dtype=dt, order="C")
+        arr[...] = fill_value
+    else:
+        arr = np.zeros([1,], dtype=dt, order="C")
+
+    return arr
 
 
 async def write_chunk_hyperslab(

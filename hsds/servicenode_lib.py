@@ -13,19 +13,16 @@
 # utility methods for service node handlers
 #
 
-import asyncio
-
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
-from aiohttp.client_exceptions import ClientOSError, ClientError
+from aiohttp.client_exceptions import ClientOSError
 
 from .util.authUtil import getAclKeys
-from .util.idUtil import getDataNodeUrl, getCollectionForId, isSchema2Id
-from .util.idUtil import getS3Key
+from .util.idUtil import getDataNodeUrl, getCollectionForId, isSchema2Id, getS3Key
 from .util.linkUtil import h5Join
 from .util.storUtil import getStorJSONObj, isStorObj
 from .util.authUtil import aclCheck
-from .util.httpUtil import http_get, http_delete
+from .util.httpUtil import http_get
 from .util.domainUtil import getBucketForDomain, verifyRoot
 
 from . import hsds_logger as log
@@ -487,54 +484,3 @@ async def getRootInfo(app, root_id, bucket=None):
         return None
 
     return info_json
-
-
-async def removeChunks(app, chunk_ids, bucket=None):
-    """ Remove chunks with the given ids """
-
-    log.info(f"removeChunks, {len(chunk_ids)} chunks")
-    log.debug(f"removeChunks for: {chunk_ids}")
-
-    dn_urls = app["dn_urls"]
-    if not dn_urls:
-        log.error("removeChunks request, but no dn_urls")
-        raise HTTPInternalServerError()
-
-    log.debug(f"doFlush - dn_urls: {dn_urls}")
-    params = {}
-    if bucket:
-        params["bucket"] = bucket
-    failed_count = 0
-
-    try:
-        tasks = []
-        for chunk_id in chunk_ids:
-            dn_url = getDataNodeUrl(app, chunk_id)
-            req = dn_url + "/chunks/" + chunk_id
-            task = asyncio.ensure_future(http_delete(app, req, params=params))
-            tasks.append(task)
-        done, pending = await asyncio.wait(tasks)
-        if pending:
-            # should be empty since we didn't use return_when parameter
-            log.error("removeChunks - got pending tasks")
-            raise HTTPInternalServerError()
-        for task in done:
-            if task.exception():
-                exception_type = type(task.exception())
-                msg = f"removeChunks - task had exception: {exception_type}"
-                log.warn(msg)
-                failed_count += 1
-
-    except ClientError as ce:
-        msg = f"removeChunks - ClientError: {ce}"
-        log.error(msg)
-        raise HTTPInternalServerError()
-    except asyncio.CancelledError as cle:
-        log.error(f"removeChunks - CancelledError: {cle}")
-        raise HTTPInternalServerError()
-
-    if failed_count:
-        msg = f"removeChunks, failed count: {failed_count}"
-        log.error(msg)
-    else:
-        log.info(f"removeChunks complete for {len(chunk_ids)} chunks - no errors")

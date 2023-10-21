@@ -16,15 +16,16 @@
 
 import math
 from json import JSONDecodeError
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound
+from aiohttp.web_exceptions import HTTPConflict, HTTPInternalServerError
 
 from .util.httpUtil import http_post, http_put, http_delete, getHref, respJsonAssemble
 from .util.httpUtil import jsonResponse
 from .util.idUtil import isValidUuid, getDataNodeUrl, createObjId, isSchema2Id
-from .util.dsetUtil import getPreviewQuery, getFilterItem, getChunkLayout
+from .util.dsetUtil import getPreviewQuery, getFilterItem
 from .util.arrayUtil import getNumElements, getShapeDims, getNumpyValue
 from .util.chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk
-from .util.chunkUtil import getContiguousLayout, getChunkIds, getChunkSelection
+from .util.chunkUtil import getContiguousLayout
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
 from .util.authUtil import validateUserPassword
 from .util.domainUtil import getDomainFromRequest, getPathForDomain, isValidDomain
@@ -33,9 +34,8 @@ from .util.storUtil import getFilters
 from .util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson
 from .util.hdf5dtype import getItemSize
 from .servicenode_lib import getDomainJson, getObjectJson, getDsetJson, getPathForObjectId
-from .servicenode_lib import getObjectIdByPath, validateAction, getRootInfo, removeChunks
-from .dset_lib import getFillValue
-from .chunk_crawl import ChunkCrawler
+from .servicenode_lib import getObjectIdByPath, validateAction, getRootInfo
+from .dset_lib import reduceShape
 from . import config
 from . import hsds_logger as log
 
@@ -655,78 +655,11 @@ async def PUT_DatasetShape(request):
 
     if shape_reduction:
         log.info(f"Shape extent reduced for dataset (rank: {rank})")
-
-        # need to re-initialize any values that are now outside the shape
-        # first get the fill value
-        arr = getFillValue(dset_json)
-
-        layout = getChunkLayout(dset_json)
-        log.debug(f"got layout: {layout}")
-        delete_ids = set()  # chunk ids that will need to be deleted
-        for n in range(rank):
-            if dims[n] <= shape_update[i]:
-                log.debug(f"skip dimension {n}")
-                continue
-            log.debug(f"reinitialize for dimension: {n}")
-            slices = []
-            update_ids = set()  # chunk ids that will need to be updated
-
-            for m in range(rank):
-                if m == n:
-                    s = slice(shape_update[m], dims[m], 1)
-                else:
-                    # just select the entire extent
-                    s = slice(0, dims[m], 1)
-                slices.append(s)
-            log.debug(f"shape_reinitialize - got slices: {slices} for dimension: {n}")
-            chunk_ids = getChunkIds(dset_id, slices, layout)
-            log.debug(f"got chunkIds: {chunk_ids}")
-
-            # separate ids into those that overlap the new shape
-            # vs. those that follow entirely outside the new shape.
-            # The former will need to be partiaally reset, the latter
-            # will need to be deleted
-            for chunk_id in chunk_ids:
-                if getChunkSelection(chunk_id, slices, layout) is None:
-                    delete_ids.add(chunk_id)
-                else:
-                    update_ids.add(chunk_id)
-
-            if update_ids:
-                update_ids = list(update_ids)
-                update_ids.sort()
-                log.debug(f"these ids will need to be updated: {update_ids}")
-
-                crawler = ChunkCrawler(
-                    app,
-                    update_ids,
-                    dset_json=dset_json,
-                    bucket=bucket,
-                    slices=slices,
-                    arr=arr,
-                    action="write_chunk_hyperslab",
-                )
-                await crawler.crawl()
-
-                crawler_status = crawler.get_status()
-
-                if crawler_status not in (200, 201):
-                    msg = f"crawler failed for shape reinitialize with status: {crawler_status}"
-                    log.warn(msg)
-                else:
-                    msg = f"crawler success for reinitialization with slices: {slices}"
-                    log.info(msg)
-            else:
-                log.info(f"no chunks need updating for shape reduction over dim {m}")
-
-        log.debug("chunk reinitialization complete")
-        if delete_ids:
-            delete_ids = list(delete_ids)
-            delete_ids.sort()
-            log.debug(f"these ids will need to be deleted: {delete_ids}")
-            await removeChunks(app, delete_ids, bucket=bucket)
-        else:
-            log.info("no chunks need deletion for shape reduction")
+        try:
+            await reduceShape(app, dset_json, shape_update, bucket=bucket)
+        except ValueError as ve:
+            msg = f"reduceShape for {dset_id} to {shape_update} resulted in exception: {ve}"
+            raise HTTPInternalServerError()
 
     # send request onto DN
     req = getDataNodeUrl(app, dset_id) + "/datasets/" + dset_id + "/shape"
