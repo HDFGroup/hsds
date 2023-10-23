@@ -18,11 +18,13 @@ from aiohttp.client_exceptions import ClientError
 from .util.hdf5dtype import createDataType
 from .util.arrayUtil import getNumpyValue
 from .util.dsetUtil import getChunkLayout
-from .util.chunkUtil import getChunkIds, getChunkSelection
-from .util.idUtil import getDataNodeUrl
+from .util.chunkUtil import getChunkCoordinate
+from .util.idUtil import getDataNodeUrl, isSchema2Id, getS3Key, getObjId
+from .util.storUtil import getStorKeys
 from .util.httpUtil import http_delete
 
 from . import hsds_logger as log
+from . import config
 from .chunk_crawl import ChunkCrawler
 
 
@@ -103,6 +105,58 @@ async def removeChunks(app, chunk_ids, bucket=None):
         log.info(f"removeChunks complete for {len(chunk_ids)} chunks - no errors")
 
 
+async def getAllocatedChunkIds(app, dset_id, bucket=None):
+    """ Return the set of allocated chunk ids for the give dataset.
+        If slices is given, just return chunks that interesect with the slice region """
+
+    log.info(f"getAllocatedChunkIds for {dset_id}")
+
+    if not isSchema2Id(dset_id):
+        msg = f"no tabulation for schema v1 id: {dset_id} returning "
+        msg += "null results"
+        log.warn(msg)
+        return {}
+
+    if not bucket:
+        bucket = config.get("bucket_name")
+    if not bucket:
+        raise ValueError(f"no bucket defined for getAllocatedChunkIds for {dset_id}")
+
+    root_key = getS3Key(dset_id)
+    log.debug(f"got root_key: {root_key}")
+
+    if not root_key.endswith("/.dataset.json"):
+        raise ValueError("unexpected root key")
+
+    root_prefix = root_key[: -(len(".dataset.json"))]
+
+    log.debug(f"scanRoot - using prefix: {root_prefix}")
+
+    kwargs = {
+        "prefix": root_prefix,
+        "include_stats": False,
+        "bucket": bucket,
+    }
+    s3keys = await getStorKeys(app, **kwargs)
+
+    # getStoreKeys will pick up the dataset.json as well,
+    # so go through and discard
+    chunk_ids = []
+    for s3key in s3keys:
+        if s3key.endswith("json"):
+            # ignore metadata items
+            continue
+        try:
+            chunk_id = getObjId(s3key)
+        except ValueError:
+            log.warn(f"ignoring s3key: {s3key}")
+            continue
+        chunk_ids.append(chunk_id)
+
+    log.debug(f"getAllocattedChunkIds - got {len(chunk_ids)} ids")
+    return chunk_ids
+
+
 async def reduceShape(app, dset_json, shape_update, bucket=None):
     """ Given an existing dataset and a new shape,
         Reinitialize and edge chunks and delete any chunks
@@ -122,42 +176,68 @@ async def reduceShape(app, dset_json, shape_update, bucket=None):
     arr = getFillValue(dset_json)
 
     # and the chunk layout
-    layout = getChunkLayout(dset_json)
+    layout = tuple(getChunkLayout(dset_json))
     log.debug(f"got layout: {layout}")
-    delete_ids = set()  # chunk ids that will need to be deleted
-    for n in range(rank):
-        if dims[n] <= shape_update[n]:
-            log.debug(f"skip dimension {n}")
+
+    # get all chunk ids for chunks that have been allocated
+    chunk_ids = await getAllocatedChunkIds(app, dset_id, bucket=bucket)
+    chunk_ids.sort()
+
+    log.debug(f"got chunkIds: {chunk_ids}")
+
+    # separate ids into three groups:
+    #   A: those are entirely inside the new shape region - no action needed
+    #   B: those that overlap the new shape - will need the edge portion reinitialized
+    #   C: those that are entirely outside the new shape - will need to be deleted
+
+    delete_ids = []  # chunk ids for chunk that that will need to be deleted
+    update_ids = []  # chunk ids for chunks that will need to be reinitialized
+
+    for chunk_id in chunk_ids:
+        log.debug(f"chunk_id: {chunk_id}")
+        chunk_coord = getChunkCoordinate(chunk_id, layout)
+        log.debug(f"chunk_coord: {chunk_coord}")
+        skip = True
+        for i in range(rank):
+            if chunk_coord[i] + layout[i] > shape_update[i]:
+                skip = False
+                break
+        if skip:
+            log.debug(f"chunk_id {chunk_id} no action needed")
             continue
-        log.debug(f"reinitialize for dimension: {n}")
-        slices = []
-        update_ids = set()  # chunk ids that will need to be updated
 
-        for m in range(rank):
-            if m == n:
-                s = slice(shape_update[m], dims[m], 1)
-            else:
-                # just select the entire extent
-                s = slice(0, dims[m], 1)
-            slices.append(s)
-        log.debug(f"shape_reinitialize - got slices: {slices} for dimension: {n}")
-        chunk_ids = getChunkIds(dset_id, slices, layout)
-        log.debug(f"got chunkIds: {chunk_ids}")
+        reinit = False
+        for n in range(rank):
+            if chunk_coord[n] < shape_update[n]:
+                reinit = True
+                break
+        if reinit:
+            log.debug("chunk reinit")
+            update_ids.append(chunk_id)
+        else:
+            log.debug("chunk delete")
+            delete_ids.append(chunk_id)
 
-        # separate ids into those that overlap the new shape
-        # vs. those that follow entirely outside the new shape.
-        # The former will need to be partiaally reset, the latter
-        # will need to be deleted
-        for chunk_id in chunk_ids:
-            if getChunkSelection(chunk_id, slices, layout) is None:
-                delete_ids.add(chunk_id)
-            else:
-                update_ids.add(chunk_id)
+    msg = f"reduceShape - from {len(chunk_ids)} chunks, {len(update_ids)} will need to be "
+    msg += f"updated and {len(delete_ids)} will need to deleted"
+    log.info(msg)
 
-        if update_ids:
-            update_ids = list(update_ids)
-            update_ids.sort()
-            log.debug(f"these ids will need to be updated: {update_ids}")
+    if update_ids:
+        log.debug(f"these ids will need to be updated: {update_ids}")
+
+        # For multidimensional datasets, may need multiple hyperslab writes
+        # go through each dimension and calculate region to update
+
+        for n in range(rank):
+            slices = []
+
+            for m in range(rank):
+                if m == n:
+                    s = slice(shape_update[m], dims[m], 1)
+                else:
+                    # just select the entire extent
+                    s = slice(0, dims[m], 1)
+                slices.append(s)
 
             crawler = ChunkCrawler(
                 app,
@@ -178,10 +258,11 @@ async def reduceShape(app, dset_json, shape_update, bucket=None):
             else:
                 msg = f"crawler success for reinitialization with slices: {slices}"
                 log.info(msg)
-        else:
-            log.info(f"no chunks need updating for shape reduction over dim {m}")
+    else:
+        log.info("no chunks need updating for shape reduction")
 
     log.debug("chunk reinitialization complete")
+
     if delete_ids:
         delete_ids = list(delete_ids)
         delete_ids.sort()

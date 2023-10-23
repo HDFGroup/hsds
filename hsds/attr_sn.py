@@ -377,7 +377,7 @@ async def PUT_Attribute(request):
             msg = "Bad Request: input data doesn't match selection"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        log.info(f"Got: {arr.size} array elements")
+        log.debug(f"Got: {arr.size} array elements")
     else:
         value = None
 
@@ -717,7 +717,7 @@ async def PUT_AttributeValue(request):
             msg = "Bad Request: input data doesn't match selection"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-    log.info(f"Got: {arr.size} array elements")
+    log.debug(f"Got: {arr.size} array elements")
 
     # ready to add attribute now
     attr_json = {}

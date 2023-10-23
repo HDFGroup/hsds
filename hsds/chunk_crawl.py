@@ -16,6 +16,7 @@
 
 import asyncio
 import time
+import traceback
 import random
 from asyncio import CancelledError
 import numpy as np
@@ -100,7 +101,11 @@ async def write_chunk_hyperslab(
 
     params = {}
     layout = getChunkLayout(dset_json)
+    log.debug(f"getChunkCoverage({chunk_id}, {slices}, {layout})")
     chunk_sel = getChunkCoverage(chunk_id, slices, layout)
+    if chunk_sel is None:
+        log.warn(f"getChunkCoverage returned None for: {chunk_id}, {slices}, {layout}")
+        return
     log.debug(f"chunk_sel: {chunk_sel}")
     data_sel = getDataCoverage(chunk_id, slices, layout)
     log.debug(f"data_sel: {data_sel}")
@@ -857,26 +862,23 @@ class ChunkCrawler:
                 )
             except HTTPServiceUnavailable as sue:
                 status_code = 503
-                log.warn(
-                    f"HTTPServiceUnavailable for {self._action}({chunk_id}): {sue}"
-                )
+                msg = f"HTTPServiceUnavailable for {self._action}({chunk_id}): {sue}"
+                log.warn(msg)
             except Exception as e:
                 status_code = 500
-                log.error(
-                    f"Unexpected exception {type(e)} for {self._action}({chunk_id}): {e} "
-                )
+                msg = f"Unexpected exception {type(e)} for {self._action}({chunk_id}): {e} "
+                log.error(msg)
+                tb = traceback.format_exc()
+                print("traceback:", tb)
             retry += 1
             if status_code == 200:
                 break
             if retry == max_retries:
-                log.error(
-                    f"ChunkCrawler action: {self._action} failed after: {retry} retries"
-                )
+                msg = f"ChunkCrawler action: {self._action} failed after: {retry} retries"
+                log.error(msg)
             else:
                 sleep_time = retry_exp * 2 ** retry + random.uniform(0, 0.1)
-                log.warn(
-                    f"ChunkCrawler.doWork - retry: {retry}, sleeping for {sleep_time:.2f}"
-                )
+                msg = f"ChunkCrawler.doWork - retry: {retry}, sleeping for {sleep_time:.2f}"
                 await asyncio.sleep(sleep_time)
 
         # save status_code

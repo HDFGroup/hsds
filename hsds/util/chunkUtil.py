@@ -557,7 +557,6 @@ def getChunkCoordinate(chunk_id, layout):
     coord = getChunkIndex(chunk_id)
     for i in range(len(layout)):
         coord[i] *= layout[i]
-
     return coord
 
 
@@ -611,7 +610,12 @@ def getChunkCoverage(chunk_id, slices, layout):
     """
     chunk_index = getChunkIndex(chunk_id)
     chunk_sel = getChunkSelection(chunk_id, slices, layout)
+    if not chunk_sel:
+        log.warn(f"slices: {slices} does intersect chunk: {chunk_id}")
+        return None
     rank = len(layout)
+    if len(slices) != rank:
+        raise ValueError(f"invalid slices value for dataset of rank: {rank}")
     sel = []
     for dim in range(rank):
         s = chunk_sel[dim]

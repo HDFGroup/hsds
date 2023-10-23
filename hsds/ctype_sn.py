@@ -72,7 +72,10 @@ async def GET_Datatype(request):
             msg = "h5paths must be absolute"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        log.info(f"GET_Datatype, h5path: {h5path}")
+        msg = f"GET_Datatype, h5path: {h5path}"
+        if group_id:
+            msg += f" group_id: {group_id}"
+        log.info(msg)
 
     username, pswd = getUserPasswordFromRequest(request)
     if username is None and app["allow_noauth"]:

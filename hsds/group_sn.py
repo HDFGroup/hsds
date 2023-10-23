@@ -62,7 +62,10 @@ async def GET_Group(request):
             msg = "h5paths must be absolute if no parent id is provided"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        log.info(f"GET_Group, h5path: {h5path}")
+        msg = f"GET_Group, h5path: {h5path}"
+        if group_id:
+            msg += f" group_id: {group_id}"
+        log.info(msg)
     if "include_links" in params and params["include_links"]:
         include_links = True
     if "include_attrs" in params and params["include_attrs"]:

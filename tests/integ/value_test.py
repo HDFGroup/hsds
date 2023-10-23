@@ -3331,7 +3331,7 @@ class ValueTest(unittest.TestCase):
 
         # define two different shapes that we'll switch between
         # min extent in each dimension is 20 for the point setup to work
-        large_shape = (220, 120, 130)
+        large_shape = (2200, 120, 130)
         small_shape = (55, 60, 70)
 
         # setup some points on the diagonal

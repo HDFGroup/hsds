@@ -34,7 +34,7 @@ from .util.storUtil import getFilters
 from .util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson
 from .util.hdf5dtype import getItemSize
 from .servicenode_lib import getDomainJson, getObjectJson, getDsetJson, getPathForObjectId
-from .servicenode_lib import getObjectIdByPath, validateAction, getRootInfo
+from .servicenode_lib import getObjectIdByPath, validateAction, getRootInfo, doFlush
 from .dset_lib import reduceShape
 from . import config
 from . import hsds_logger as log
@@ -306,7 +306,10 @@ async def GET_Dataset(request):
             msg = "h5paths must be absolute"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        log.info(f"GET_Dataset, h5path: {h5path}")
+        msg = f"GET_Dataset, h5path: {h5path}"
+        if group_id:
+            msg += f" group_id: {group_id}"
+        log.info(msg)
 
     username, pswd = getUserPasswordFromRequest(request)
     if username is None and app["allow_noauth"]:
@@ -655,10 +658,14 @@ async def PUT_DatasetShape(request):
 
     if shape_reduction:
         log.info(f"Shape extent reduced for dataset (rank: {rank})")
+        root_id = dset_json["root"]
+        # need to do a flush to know which chunks to update or delete
+        await doFlush(app, root_id, bucket=bucket)
         try:
             await reduceShape(app, dset_json, shape_update, bucket=bucket)
         except ValueError as ve:
             msg = f"reduceShape for {dset_id} to {shape_update} resulted in exception: {ve}"
+            log.error(msg)
             raise HTTPInternalServerError()
 
     # send request onto DN
