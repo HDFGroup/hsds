@@ -109,8 +109,7 @@ class BroadcastTest(unittest.TestCase):
     def testPut1DDatasetBinary(self):
         # Test PUT value with broadcast for 1d dataset using binary data
         print("testPut1DDatasetBinary", self.base_domain)
-        NUM_ELEMENTS = 10  # 1000000 - this value is hitting nginx request size limit
-
+        NUM_ELEMENTS = 10  
         headers = helper.getRequestHeaders(domain=self.base_domain)
         headers_bin_req = helper.getRequestHeaders(domain=self.base_domain)
         headers_bin_req["Content-Type"] = "application/octet-stream"

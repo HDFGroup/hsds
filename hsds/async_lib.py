@@ -20,9 +20,9 @@ from .util.idUtil import isValidUuid, isSchema2Id, getS3Key, isS3ObjKey
 from .util.idUtil import getObjId, isValidChunkId, getCollectionForId
 from .util.chunkUtil import getDatasetId, getNumChunks, ChunkIterator
 from .util.hdf5dtype import getItemSize, createDataType
-from .util.arrayUtil import getShapeDims, getNumElements, bytesToArray
+from .util.arrayUtil import getNumElements, bytesToArray
 from .util.dsetUtil import getHyperslabSelection, getFilterOps, getChunkDims
-from .util.dsetUtil import getDatasetLayoutClass, getDatasetLayout
+from .util.dsetUtil import getDatasetLayoutClass, getDatasetLayout, getShapeDims
 
 from .util.storUtil import getStorKeys, putStorJSONObj, getStorJSONObj
 from .util.storUtil import deleteStorObj, getStorBytes, isStorObj

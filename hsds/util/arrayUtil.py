@@ -93,44 +93,6 @@ def getNumElements(dims):
     return num_elements
 
 
-def getShapeDims(shape):
-    """
-    Get dims from a given shape json.  Return [1,] for Scalar datasets,
-    None for null dataspaces
-    """
-    dims = None
-    if isinstance(shape, int):
-        dims = [
-            shape,
-        ]
-    elif isinstance(shape, list) or isinstance(shape, tuple):
-        dims = shape  # can use as is
-    elif isinstance(shape, str):
-        # only valid string value is H5S_NULL
-        if shape != "H5S_NULL":
-            raise ValueError("Invalid value for shape")
-        dims = None
-    elif isinstance(shape, dict):
-        if "class" not in shape:
-            raise ValueError("'class' key not found in shape")
-        if shape["class"] == "H5S_NULL":
-            dims = None
-        elif shape["class"] == "H5S_SCALAR":
-            dims = [
-                1,
-            ]
-        elif shape["class"] == "H5S_SIMPLE":
-            if "dims" not in shape:
-                raise ValueError("'dims' key expected for shape")
-            dims = shape["dims"]
-        else:
-            raise ValueError("Unknown shape class: {}".format(shape["class"]))
-    else:
-        raise ValueError("Unexpected shape class: {}".format(type(shape)))
-
-    return dims
-
-
 def jsonToArray(data_shape, data_dtype, data_json):
     """
     Return numpy array from the given json array.

@@ -20,11 +20,11 @@ from aiohttp.web_exceptions import HTTPNotFound, HTTPServiceUnavailable
 from aiohttp.web import json_response, StreamResponse
 
 from .util.httpUtil import request_read, getContentType
-from .util.arrayUtil import bytesToArray, arrayToBytes, getShapeDims, getBroadcastShape
+from .util.arrayUtil import bytesToArray, arrayToBytes, getBroadcastShape
 from .util.idUtil import getS3Key, validateInPartition, isValidUuid
 from .util.storUtil import isStorObj, deleteStorObj
 from .util.hdf5dtype import createDataType
-from .util.dsetUtil import getSelectionList, getChunkLayout
+from .util.dsetUtil import getSelectionList, getChunkLayout, getShapeDims
 from .util.dsetUtil import getSelectionShape, getChunkInitializer
 from .util.chunkUtil import getChunkIndex, getDatasetId, chunkQuery
 from .util.chunkUtil import chunkWriteSelection, chunkReadSelection

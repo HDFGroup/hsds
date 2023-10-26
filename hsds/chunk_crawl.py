@@ -28,11 +28,11 @@ from .util.httpUtil import http_get, http_put, http_post, get_http_client
 from .util.httpUtil import isUnixDomainUrl
 from .util.idUtil import getDataNodeUrl, getNodeCount
 from .util.hdf5dtype import createDataType
-from .util.dsetUtil import getSliceQueryParam
+from .util.dsetUtil import getSliceQueryParam, getShapeDims
 from .util.dsetUtil import getSelectionShape, getChunkLayout
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
 from .util.chunkUtil import getChunkIdForPartition, getQueryDtype
-from .util.arrayUtil import jsonToArray, getShapeDims, getNumpyValue
+from .util.arrayUtil import jsonToArray, getNumpyValue
 from .util.arrayUtil import getNumElements, arrayToBytes, bytesToArray
 
 from . import config
@@ -50,7 +50,7 @@ def getFillValue(dset_json):
       If no fill value is defined, return an zero array of given type """
 
     # NOTE - this is copy of the function in dset_lib, but needed to put
-    # here to avoid circular dependency
+    # here to avoid a circular dependency
 
     fill_value = None
     type_json = dset_json["type"]
@@ -60,7 +60,7 @@ def getFillValue(dset_json):
         cprops = dset_json["creationProperties"]
         if "fillValue" in cprops:
             fill_value_prop = cprops["fillValue"]
-            log.debug(f"got fo;;+value_prop: {fill_value_prop}")
+            log.debug(f"got fill_value_prop: {fill_value_prop}")
             encoding = cprops.get("fillValue_encoding")
             fill_value = getNumpyValue(fill_value_prop, dt=dt, encoding=encoding)
     if fill_value:
@@ -179,18 +179,6 @@ async def read_chunk_hyperslab(
         return
 
     msg = f"read_chunk_hyperslab, chunk_id: {chunk_id},"
-    """
-    msg += " slices: ["
-    for s in slices:
-        if isinstance(s, slice):
-            msg += f"{s},"
-        else:
-            if len(s) > 5:
-                # avoid large output lines
-                msg += f"[{s[0]}, {s[1]}, ..., {s[-2]}, {s[-1]}],"
-            else:
-                msg += f"{s},"
-    """
     msg += f" bucket: {bucket}"
     if query is not None:
         msg += f" query: {query} limit: {limit}"

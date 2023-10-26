@@ -22,8 +22,8 @@ from aiohttp.web_exceptions import HTTPConflict, HTTPInternalServerError
 from .util.httpUtil import http_post, http_put, http_delete, getHref, respJsonAssemble
 from .util.httpUtil import jsonResponse
 from .util.idUtil import isValidUuid, getDataNodeUrl, createObjId, isSchema2Id
-from .util.dsetUtil import getPreviewQuery, getFilterItem
-from .util.arrayUtil import getNumElements, getShapeDims, getNumpyValue
+from .util.dsetUtil import getPreviewQuery, getFilterItem, getShapeDims
+from .util.arrayUtil import getNumElements, getNumpyValue
 from .util.chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk
 from .util.chunkUtil import getContiguousLayout
 from .util.authUtil import getUserPasswordFromRequest, aclCheck

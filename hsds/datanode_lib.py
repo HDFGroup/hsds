@@ -29,10 +29,10 @@ from .util.storUtil import getBucketFromStorURI, getKeyFromStorURI, getURIFromKe
 from .util.domainUtil import isValidDomain, getBucketForDomain
 from .util.attrUtil import getRequestCollectionName
 from .util.httpUtil import http_post
-from .util.dsetUtil import getChunkLayout, getFilterOps
+from .util.dsetUtil import getChunkLayout, getFilterOps, getShapeDims
 from .util.dsetUtil import getChunkInitializer, getSliceQueryParam
 from .util.chunkUtil import getDatasetId, getChunkSelection, getChunkIndex
-from .util.arrayUtil import arrayToBytes, bytesToArray, getShapeDims, jsonToArray
+from .util.arrayUtil import arrayToBytes, bytesToArray, jsonToArray
 from .util.hdf5dtype import createDataType, getItemSize
 from .util.rangegetUtil import ChunkLocation, chunkMunge
 
