@@ -41,6 +41,7 @@ CHUNK_REF_LAYOUTS = (
     "H5D_CHUNKED_REF_INDIRECT",
 )
 
+
 def getFillValue(dset_json):
     """ Return the fill value of the given dataset as a numpy array.
       If no fill value is defined, return an zero array of given type """
@@ -316,7 +317,6 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
     return chunkinfo_map
 
 
-
 def get_chunkmap_selections(chunk_map, chunk_ids, slices, dset_json):
     """Update chunk_map with chunk and data selections for the
     given set of slices
@@ -369,6 +369,7 @@ def get_chunk_selections(chunk_map, chunk_ids, slices, dset_json):
         data_sel = getDataCoverage(chunk_id, slices, layout)
         log.debug(f"get_chunk_selections - data_sel: {data_sel}")
         item["data_sel"] = data_sel
+
 
 async def getSelectionData(
     app,
@@ -588,7 +589,6 @@ async def doReadSelection(
     return arr
 
 
-
 async def removeChunks(app, chunk_ids, bucket=None):
     """ Remove chunks with the given ids """
 
@@ -735,12 +735,11 @@ async def reduceShape(app, dset_json, shape_update, bucket=None):
         log.debug(f"chunk_id: {chunk_id}")
         chunk_coord = getChunkCoordinate(chunk_id, layout)
         log.debug(f"chunk_coord: {chunk_coord}")
-        
-        
+
         if np.all(np.add(chunk_coord, layout) <= shape_update):
             log.debug(f"chunk_id {chunk_id} no action needed")
             continue
-        
+
         if np.any(chunk_coord < shape_update):
             log.debug(f"{chunk_id} reinit")
             update_ids.append(chunk_id)

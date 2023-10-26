@@ -347,7 +347,6 @@ def getShapeDims(shape):
     return dims
 
 
-
 def getQueryParameter(request, query_name, body=None, default=None):
     """
     Herlper function, get query parameter value from request.
@@ -623,7 +622,6 @@ def get_slices(select, dset_json):
         log.warn(msg)
         raise
     return slices
-
 
 
 def getSelectionPagination(select, dims, itemsize, max_request_size):

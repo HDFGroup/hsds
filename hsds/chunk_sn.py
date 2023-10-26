@@ -76,7 +76,6 @@ def use_http_streaming(request, rank):
     return True
 
 
-
 async def PUT_Value(request):
     """
     Handler for PUT /<dset_uuid>/value request
@@ -241,7 +240,7 @@ async def PUT_Value(request):
         except ValueError as ve:
             log.warn(f"Invalid selection: {ve}")
             raise HTTPBadRequest(reason="Invalid selection")
-        
+
         if "Limit" in params:
             try:
                 limit = int(params["Limit"])
@@ -663,7 +662,7 @@ async def PUT_Value(request):
 
     else:
         #
-        # Do point post
+        # Do point put
         #
         log.debug(f"num_points: {num_points}")
 
@@ -813,7 +812,7 @@ async def GET_Value(request):
     except ValueError as ve:
         log.warn(f"Invalid selection: {ve}")
         raise HTTPBadRequest(reason="Invalid selection")
-    
+
     log.debug(f"GET Value selection: {slices}")
 
     limit = 0
@@ -1048,7 +1047,6 @@ async def GET_Value(request):
         raise HTTPInternalServerError()
 
     return resp
-
 
 
 async def POST_Value(request):
