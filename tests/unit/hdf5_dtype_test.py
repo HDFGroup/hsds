@@ -91,12 +91,12 @@ class Hdf5dtypeTest(unittest.TestCase):
 
     def testBaseStringUTFTypeItem(self):
         dt = np.dtype("U3")
-        try:
-            typeItem = hdf5dtype.getTypeItem(dt)
-            self.assertTrue(typeItem is not None)  # avoid pyflakes error
-            self.assertTrue(False)  # expected exception
-        except TypeError:
-            pass  # expected
+        typeItem = hdf5dtype.getTypeItem(dt)
+        self.assertEqual(typeItem["class"], "H5T_STRING")
+        # type item length in bytes (may no actual be enough space for some UTF strings)
+        self.assertEqual(typeItem["length"], 3)
+        self.assertEqual(typeItem["strPad"], "H5T_STR_NULLPAD")
+        self.assertEqual(typeItem["charSet"], "H5T_CSET_UTF8")
 
     def testBaseVLenAsciiTypeItem(self):
         dt = special_dtype(vlen=bytes)
@@ -388,13 +388,14 @@ class Hdf5dtypeTest(unittest.TestCase):
         self.assertEqual(typeSize, 6)
 
     def testCreateBaseUnicodeType(self):
-        typeItem = {"class": "H5T_STRING", "charSet": "H5T_CSET_UTF8", "length": 32}
-        try:
-            dt = hdf5dtype.createDataType(typeItem)
-            self.assertTrue(dt is not None)
-            self.assertTrue(False)  # expected exception
-        except TypeError:
-            pass
+        typeItem = {"class": "H5T_STRING", "charSet": "H5T_CSET_UTF8", "length": 6}
+
+        dt = hdf5dtype.createDataType(typeItem)
+        typeSize = hdf5dtype.getItemSize(typeItem)
+        self.assertTrue(dt is not None)
+        self.assertEqual(dt.name, "str192")
+        self.assertEqual(dt.kind, "U")
+        self.assertEqual(typeSize, 6)
 
     def testCreateNullTermStringType(self):
         typeItem = {

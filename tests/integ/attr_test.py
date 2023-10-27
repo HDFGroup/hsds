@@ -517,7 +517,7 @@ class AttributeTest(unittest.TestCase):
 
     def testPutVLenUTF8String(self):
         # Test PUT value for 1d attribute with fixed length UTF-8 string
-        print("testPutFixedUTF8String", self.base_domain)
+        print("testPutVLenUTF8String", self.base_domain)
 
         headers = helper.getRequestHeaders(domain=self.base_domain)
         req = self.endpoint + "/"
@@ -531,13 +531,7 @@ class AttributeTest(unittest.TestCase):
 
         # create attr
         text = "I'm an UTF-8 null terminated string"
-        text_length = len(text) + 1
-        fixed_str_type = {
-            "charSet": "H5T_CSET_UTF8",
-            "class": "H5T_STRING",
-            "length": text_length,
-            "strPad": "H5T_STR_NULLTERM",
-        }
+
         variable_str_type = {
             "charSet": "H5T_CSET_UTF8",
             "class": "H5T_STRING",
@@ -545,12 +539,6 @@ class AttributeTest(unittest.TestCase):
             "strPad": "H5T_STR_NULLTERM",
         }
         scalar_shape = {"class": "H5S_SCALAR"}
-        data = {"type": fixed_str_type, "shape": scalar_shape, "value": text}
-        attr_name = "str_attr"
-        req = self.endpoint + "/groups/" + root_uuid + "/attributes/" + attr_name
-        # Should fail since UTF8 with fixed width is not supported
-        rsp = self.session.put(req, data=json.dumps(data), headers=headers)
-        self.assertEqual(rsp.status_code, 400)
 
         data = {"type": variable_str_type, "shape": scalar_shape, "value": text}
         attr_name = "str_attr"
@@ -571,6 +559,56 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(type_json["class"], "H5T_STRING")
         self.assertTrue("length" in type_json)
         self.assertEqual(type_json["length"], "H5T_VARIABLE")
+        self.assertTrue("strPad" in type_json)
+        self.assertEqual(type_json["strPad"], "H5T_STR_NULLTERM")
+        self.assertTrue("charSet" in type_json)
+        self.assertEqual(type_json["charSet"], "H5T_CSET_UTF8")
+
+    def testPutFixedUTF8String(self):
+        # Test PUT value for 1d attribute with fixed length UTF-8 string
+        print("testPutFixedUTF8String", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create attr
+        text = "this is the chinese character for the number eight: \u516b"
+
+        text_length = len(text) + 1
+        fixed_str_type = {
+            "charSet": "H5T_CSET_UTF8",
+            "class": "H5T_STRING",
+            "length": text_length,
+            "strPad": "H5T_STR_NULLTERM",
+        }
+
+        scalar_shape = {"class": "H5S_SCALAR"}
+        data = {"type": fixed_str_type, "shape": scalar_shape, "value": text}
+        attr_name = "str_attr"
+        req = self.endpoint + "/groups/" + root_uuid + "/attributes/" + attr_name
+        rsp = self.session.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # read attr
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], text)
+        self.assertTrue("type" in rspJson)
+        type_json = rspJson["type"]
+        self.assertTrue("class" in type_json)
+        self.assertEqual(type_json["class"], "H5T_STRING")
+        self.assertTrue("length" in type_json)
+        self.assertEqual(type_json["length"], text_length)
         self.assertTrue("strPad" in type_json)
         self.assertEqual(type_json["strPad"], "H5T_STR_NULLTERM")
         self.assertTrue("charSet" in type_json)
