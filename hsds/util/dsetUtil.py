@@ -309,6 +309,44 @@ def getSelectionShape(selection):
     return shape
 
 
+def getShapeDims(shape):
+    """
+    Get dims from a given shape json.  Return [1,] for Scalar datasets,
+    None for null dataspaces
+    """
+    dims = None
+    if isinstance(shape, int):
+        dims = [
+            shape,
+        ]
+    elif isinstance(shape, list) or isinstance(shape, tuple):
+        dims = shape  # can use as is
+    elif isinstance(shape, str):
+        # only valid string value is H5S_NULL
+        if shape != "H5S_NULL":
+            raise ValueError("Invalid value for shape")
+        dims = None
+    elif isinstance(shape, dict):
+        if "class" not in shape:
+            raise ValueError("'class' key not found in shape")
+        if shape["class"] == "H5S_NULL":
+            dims = None
+        elif shape["class"] == "H5S_SCALAR":
+            dims = [
+                1,
+            ]
+        elif shape["class"] == "H5S_SIMPLE":
+            if "dims" not in shape:
+                raise ValueError("'dims' key expected for shape")
+            dims = shape["dims"]
+        else:
+            raise ValueError("Unknown shape class: {}".format(shape["class"]))
+    else:
+        raise ValueError("Unexpected shape class: {}".format(type(shape)))
+
+    return dims
+
+
 def getQueryParameter(request, query_name, body=None, default=None):
     """
     Herlper function, get query parameter value from request.
@@ -558,6 +596,32 @@ def getSelectionList(select, dims):
             select_list.append(s)
     # end dimension loop
     return tuple(select_list)
+
+
+def get_slices(select, dset_json):
+    """Get desired slices from selection query param string or json value.
+    If select is none or empty, slices for entire datashape will be
+    returned.
+    Refretch dims if the dataset is extensible
+    """
+
+    dset_id = dset_json["id"]
+    datashape = dset_json["shape"]
+    if datashape["class"] == "H5S_NULL":
+        msg = "Null space datasets can not be used as target for GET value"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    dims = getShapeDims(datashape)  # throws 400 for HS_NULL dsets
+
+    try:
+        slices = getSelectionList(select, dims)
+    except ValueError:
+        msg = f"Invalid selection: {select} on dims: {dims} "
+        msg += f"for dataset: {dset_id}"
+        log.warn(msg)
+        raise
+    return slices
 
 
 def getSelectionPagination(select, dims, itemsize, max_request_size):
@@ -843,7 +907,6 @@ def isExtensible(dims, maxdims):
     """
     if maxdims is None or len(dims) == 0:
         return False
-    log.debug(f"isExtensible - dims: {dims} maxdims: {maxdims}")
     rank = len(dims)
     if len(maxdims) != rank:
         raise ValueError("rank of maxdims does not match dataset")

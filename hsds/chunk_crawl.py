@@ -16,6 +16,7 @@
 
 import asyncio
 import time
+import traceback
 import random
 from asyncio import CancelledError
 import numpy as np
@@ -27,12 +28,13 @@ from .util.httpUtil import http_get, http_put, http_post, get_http_client
 from .util.httpUtil import isUnixDomainUrl
 from .util.idUtil import getDataNodeUrl, getNodeCount
 from .util.hdf5dtype import createDataType
-from .util.dsetUtil import getSliceQueryParam
+from .util.dsetUtil import getSliceQueryParam, getShapeDims
 from .util.dsetUtil import getSelectionShape, getChunkLayout
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
 from .util.chunkUtil import getChunkIdForPartition, getQueryDtype
-from .util.arrayUtil import jsonToArray, getShapeDims, getNumpyValue
+from .util.arrayUtil import jsonToArray, getNumpyValue
 from .util.arrayUtil import getNumElements, arrayToBytes, bytesToArray
+
 from . import config
 from . import hsds_logger as log
 
@@ -41,6 +43,33 @@ CHUNK_REF_LAYOUTS = (
     "H5D_CHUNKED_REF",
     "H5D_CHUNKED_REF_INDIRECT",
 )
+
+
+def getFillValue(dset_json):
+    """ Return the fill value of the given dataset as a numpy array.
+      If no fill value is defined, return an zero array of given type """
+
+    # NOTE - this is copy of the function in dset_lib, but needed to put
+    # here to avoid a circular dependency
+
+    fill_value = None
+    type_json = dset_json["type"]
+    dt = createDataType(type_json)
+
+    if "creationProperties" in dset_json:
+        cprops = dset_json["creationProperties"]
+        if "fillValue" in cprops:
+            fill_value_prop = cprops["fillValue"]
+            log.debug(f"got fill_value_prop: {fill_value_prop}")
+            encoding = cprops.get("fillValue_encoding")
+            fill_value = getNumpyValue(fill_value_prop, dt=dt, encoding=encoding)
+    if fill_value:
+        arr = np.empty((1,), dtype=dt, order="C")
+        arr[...] = fill_value
+    else:
+        arr = np.zeros([1,], dtype=dt, order="C")
+
+    return arr
 
 
 async def write_chunk_hyperslab(
@@ -70,20 +99,45 @@ async def write_chunk_hyperslab(
         log.error(f"No type found in dset_json: {dset_json}")
         raise HTTPInternalServerError()
 
+    params = {}
     layout = getChunkLayout(dset_json)
+    log.debug(f"getChunkCoverage({chunk_id}, {slices}, {layout})")
     chunk_sel = getChunkCoverage(chunk_id, slices, layout)
+    if chunk_sel is None:
+        log.warn(f"getChunkCoverage returned None for: {chunk_id}, {slices}, {layout}")
+        return
     log.debug(f"chunk_sel: {chunk_sel}")
     data_sel = getDataCoverage(chunk_id, slices, layout)
     log.debug(f"data_sel: {data_sel}")
     log.debug(f"arr.shape: {arr.shape}")
-    arr_chunk = arr[data_sel]
+
+    # broadcast data if arr has one element and no stride is set
+    do_broadcast = True
+    if np.prod(arr.shape) != 1:
+        do_broadcast = False
+    else:
+        for s in slices:
+            if s.step is None:
+                continue
+            if s.step > 1:
+                do_broadcast = False
+
+    if do_broadcast:
+        log.debug(f"broadcasting {arr}")
+        # just broadcast data value across selection
+        params["element_count"] = 1
+        arr_chunk = arr
+    else:
+        arr_chunk = arr[data_sel]
+
     req = getDataNodeUrl(app, chunk_id)
     req += "/chunks/" + chunk_id
 
-    log.debug(f"PUT chunk req: {req}")
     data = arrayToBytes(arr_chunk)
+
+    log.debug(f"PUT chunk req: {req}, {len(data)} bytes")
+
     # pass itemsize, type, dimensions, and selection as query params
-    params = {}
     select = getSliceQueryParam(chunk_sel)
     params["select"] = select
     if bucket:
@@ -125,18 +179,6 @@ async def read_chunk_hyperslab(
         return
 
     msg = f"read_chunk_hyperslab, chunk_id: {chunk_id},"
-    """
-    msg += " slices: ["
-    for s in slices:
-        if isinstance(s, slice):
-            msg += f"{s},"
-        else:
-            if len(s) > 5:
-                # avoid large output lines
-                msg += f"[{s[0]}, {s[1]}, ..., {s[-2]}, {s[-1]}],"
-            else:
-                msg += f"{s},"
-    """
     msg += f" bucket: {bucket}"
     if query is not None:
         msg += f" query: {query} limit: {limit}"
@@ -309,16 +351,13 @@ async def read_chunk_hyperslab(
             # TBD: this needs to be fixed up for variable length dtypes
             nrows = len(array_data) // query_dtype.itemsize
             try:
-                chunk_arr = bytesToArray(
-                    array_data,
-                    query_dtype,
-                    [
-                        nrows,
-                    ],
-                )
+                chunk_arr = bytesToArray(array_data, query_dtype, (nrows,))
             except ValueError as ve:
                 log.warn(f"bytesToArray ValueError: {ve}")
                 raise HTTPBadRequest()
+            if chunk_arr.shape[0] != nrows:
+                log.error(f"expected chunk shape to be ({nrows},), but got {chunk_arr.shape[0]}")
+                raise HTTPInternalServerError()
             # save result to chunk_info
             # chunk results will be merged later
             chunk_info["query_rsp"] = chunk_arr
@@ -404,14 +443,8 @@ async def read_point_sel(
     np_arr_rsp = None
     dt = np_arr.dtype
 
-    fill_value = None
     # initialize to fill_value if specified
-    if "creationProperties" in dset_json:
-        cprops = dset_json["creationProperties"]
-        if "fillValue" in cprops:
-            fill_value_prop = cprops["fillValue"]
-            encoding = cprops.get("fillValue_encoding")
-            fill_value = getNumpyValue(fill_value_prop, dt=dt, encoding=encoding)
+    fill_value = getFillValue(dset_json)
 
     def defaultArray():
         # no data, return zero array
@@ -817,26 +850,23 @@ class ChunkCrawler:
                 )
             except HTTPServiceUnavailable as sue:
                 status_code = 503
-                log.warn(
-                    f"HTTPServiceUnavailable for {self._action}({chunk_id}): {sue}"
-                )
+                msg = f"HTTPServiceUnavailable for {self._action}({chunk_id}): {sue}"
+                log.warn(msg)
             except Exception as e:
                 status_code = 500
-                log.error(
-                    f"Unexpected exception {type(e)} for {self._action}({chunk_id}): {e} "
-                )
+                msg = f"Unexpected exception {type(e)} for {self._action}({chunk_id}): {e} "
+                log.error(msg)
+                tb = traceback.format_exc()
+                print("traceback:", tb)
             retry += 1
             if status_code == 200:
                 break
             if retry == max_retries:
-                log.error(
-                    f"ChunkCrawler action: {self._action} failed after: {retry} retries"
-                )
+                msg = f"ChunkCrawler action: {self._action} failed after: {retry} retries"
+                log.error(msg)
             else:
                 sleep_time = retry_exp * 2 ** retry + random.uniform(0, 0.1)
-                log.warn(
-                    f"ChunkCrawler.doWork - retry: {retry}, sleeping for {sleep_time:.2f}"
-                )
+                msg = f"ChunkCrawler.doWork - retry: {retry}, sleeping for {sleep_time:.2f}"
                 await asyncio.sleep(sleep_time)
 
         # save status_code

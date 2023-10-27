@@ -29,15 +29,16 @@ from .util.storUtil import getBucketFromStorURI, getKeyFromStorURI, getURIFromKe
 from .util.domainUtil import isValidDomain, getBucketForDomain
 from .util.attrUtil import getRequestCollectionName
 from .util.httpUtil import http_post
-from .util.dsetUtil import getChunkLayout, getFilterOps
+from .util.dsetUtil import getChunkLayout, getFilterOps, getShapeDims
 from .util.dsetUtil import getChunkInitializer, getSliceQueryParam
 from .util.chunkUtil import getDatasetId, getChunkSelection, getChunkIndex
-from .util.arrayUtil import arrayToBytes, bytesToArray, getShapeDims, jsonToArray, getNumpyValue
+from .util.arrayUtil import arrayToBytes, bytesToArray, jsonToArray
 from .util.hdf5dtype import createDataType, getItemSize
 from .util.rangegetUtil import ChunkLocation, chunkMunge
 
 from . import config
 from . import hsds_logger as log
+from .dset_lib import getFillValue
 
 # supported initializer commands
 INITIALIZER_CMDS = ["chunklocator", "arange"]
@@ -1119,13 +1120,8 @@ async def get_chunk(
 
             if chunk_arr is None:
                 # normal fill value based init or initializer failed
-                fill_value = None
-                if "creationProperties" in dset_json:
-                    cprops = dset_json["creationProperties"]
-                    if "fillValue" in cprops:
-                        fill_value_prop = cprops["fillValue"]
-                        encoding = cprops.get("fillValue_encoding")
-                        fill_value = getNumpyValue(fill_value_prop, dt=dt, encoding=encoding)
+                fill_value = getFillValue(dset_json)
+
                 if fill_value:
                     chunk_arr = np.empty(dims, dtype=dt, order="C")
                     chunk_arr[...] = fill_value

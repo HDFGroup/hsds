@@ -16,13 +16,14 @@
 
 import math
 from json import JSONDecodeError
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound
+from aiohttp.web_exceptions import HTTPConflict, HTTPInternalServerError
 
 from .util.httpUtil import http_post, http_put, http_delete, getHref, respJsonAssemble
 from .util.httpUtil import jsonResponse
 from .util.idUtil import isValidUuid, getDataNodeUrl, createObjId, isSchema2Id
-from .util.dsetUtil import getPreviewQuery, getFilterItem
-from .util.arrayUtil import getNumElements, getShapeDims, getNumpyValue
+from .util.dsetUtil import getPreviewQuery, getFilterItem, getShapeDims
+from .util.arrayUtil import getNumElements, getNumpyValue
 from .util.chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk
 from .util.chunkUtil import getContiguousLayout
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
@@ -32,8 +33,9 @@ from .util.domainUtil import getBucketForDomain, verifyRoot
 from .util.storUtil import getFilters
 from .util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson
 from .util.hdf5dtype import getItemSize
-from .servicenode_lib import getDomainJson, getObjectJson, getPathForObjectId
-from .servicenode_lib import getObjectIdByPath, validateAction, getRootInfo
+from .servicenode_lib import getDomainJson, getObjectJson, getDsetJson, getPathForObjectId
+from .servicenode_lib import getObjectIdByPath, validateAction, getRootInfo, doFlush
+from .dset_lib import reduceShape
 from . import config
 from . import hsds_logger as log
 
@@ -187,9 +189,7 @@ async def validateChunkLayout(app, shape_json, item_size, layout, bucket=None):
             raise HTTPBadRequest(reason=msg)
         # verify the chunk table exists and is of reasonable shape
         try:
-            chunktable_json = await getObjectJson(
-                app, chunktable_id, bucket=bucket, refresh=False
-            )
+            chunktable_json = await getDsetJson(app, chunktable_id, bucket=bucket)
         except HTTPNotFound:
             msg = f"chunk table id: {chunktable_id} not found"
             log.warn(msg)
@@ -306,7 +306,10 @@ async def GET_Dataset(request):
             msg = "h5paths must be absolute"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        log.info(f"GET_Dataset, h5path: {h5path}")
+        msg = f"GET_Dataset, h5path: {h5path}"
+        if group_id:
+            msg += f" group_id: {group_id}"
+        log.info(msg)
 
     username, pswd = getUserPasswordFromRequest(request)
     if username is None and app["allow_noauth"]:
@@ -341,9 +344,8 @@ async def GET_Dataset(request):
 
     # get authoritative state for dataset from DN (even if it's
     # in the meta_cache).
-    dset_json = await getObjectJson(
-        app, dset_id, refresh=True, include_attrs=include_attrs, bucket=bucket
-    )
+    kwargs = {"refresh": True, "include_attrs": include_attrs, "bucket": bucket}
+    dset_json = await getDsetJson(app, dset_id, **kwargs)
 
     # check that we have permissions to read the object
     await validateAction(app, domain, dset_id, username, "read")
@@ -442,7 +444,7 @@ async def GET_DatasetType(request):
 
     # get authoritative state for group from DN (even if it's in
     # the meta_cache).
-    dset_json = await getObjectJson(app, dset_id, refresh=True, bucket=bucket)
+    dset_json = await getDsetJson(app, dset_id, refresh=True, bucket=bucket)
 
     await validateAction(app, domain, dset_id, username, "read")
 
@@ -494,7 +496,7 @@ async def GET_DatasetShape(request):
 
     # get authoritative state for dataset from DN (even if it's in
     # the meta_cache).
-    dset_json = await getObjectJson(app, dset_id, refresh=True, bucket=bucket)
+    dset_json = await getDsetJson(app, dset_id, refresh=True, bucket=bucket)
 
     await validateAction(app, domain, dset_id, username, "read")
 
@@ -525,6 +527,7 @@ async def PUT_DatasetShape(request):
     shape_update = None
     extend = 0
     extend_dim = 0
+    hrefs = []  # tBD - definae HATEOS refs to return
 
     dset_id = request.match_info.get("id")
     if not dset_id:
@@ -557,13 +560,16 @@ async def PUT_DatasetShape(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
+    if "shape" in data and "extend" in data:
+        msg = "PUT shape must have shape or extend key in body but not both"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
     if "shape" in data:
         shape_update = data["shape"]
         if isinstance(shape_update, int):
             # convert to a list
-            shape_update = [
-                shape_update,
-            ]
+            shape_update = [shape_update, ]
         log.debug(f"shape_update: {shape_update}")
 
     if "extend" in data:
@@ -599,9 +605,7 @@ async def PUT_DatasetShape(request):
     # verify the user has permission to update shape
     await validateAction(app, domain, dset_id, username, "update")
 
-    # get authoritative state for dataset from DN (even if it's in the
-    # meta_cache).
-    dset_json = await getObjectJson(app, dset_id, refresh=True, bucket=bucket)
+    dset_json = await getDsetJson(app, dset_id, bucket=bucket)
     shape_orig = dset_json["shape"]
     log.debug(f"shape_orig: {shape_orig}")
 
@@ -621,6 +625,24 @@ async def PUT_DatasetShape(request):
         msg = "Extent of update shape request does not match dataset sahpe"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+
+    if extend_dim < 0 or extend_dim >= rank:
+        msg = "Extension dimension must be less than rank and non-negative"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    if shape_update is None:
+        # construct a shape update using original dims and extend dim and value
+        shape_update = dims.copy()
+        shape_update[extend_dim] = extend
+
+    if shape_update == dims:
+        log.info("shape update is same as current dims, no action needed")
+        json_resp = {"hrefs:", hrefs}
+        resp = await jsonResponse(request, json_resp, status=200)
+        log.response(request, resp=resp)
+        return resp
+
     shape_reduction = False
     for i in range(rank):
         if shape_update and shape_update[i] < dims[i]:
@@ -633,19 +655,23 @@ async def PUT_DatasetShape(request):
             msg = "Extension dimension can not be extended past max extent"
             log.warn(msg)
             raise HTTPConflict()
+
     if shape_reduction:
-        log.info("Shape extent reduced for dataset")
-        # TBD - ensure any chunks that are outside the new shape region are
-        # deleted
-    if extend_dim < 0 or extend_dim >= rank:
-        msg = "Extension dimension must be less than rank and non-negative"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
+        log.info(f"Shape extent reduced for dataset (rank: {rank})")
+        root_id = dset_json["root"]
+        # need to do a flush to know which chunks to update or delete
+        await doFlush(app, root_id, bucket=bucket)
+        try:
+            await reduceShape(app, dset_json, shape_update, bucket=bucket)
+        except ValueError as ve:
+            msg = f"reduceShape for {dset_id} to {shape_update} resulted in exception: {ve}"
+            log.error(msg)
+            raise HTTPInternalServerError()
 
     # send request onto DN
     req = getDataNodeUrl(app, dset_id) + "/datasets/" + dset_id + "/shape"
 
-    json_resp = {"hrefs": []}
+    json_resp = {"hrefs": hrefs}
     params = {}
     if bucket:
         params["bucket"] = bucket

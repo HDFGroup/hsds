@@ -93,44 +93,6 @@ def getNumElements(dims):
     return num_elements
 
 
-def getShapeDims(shape):
-    """
-    Get dims from a given shape json.  Return [1,] for Scalar datasets,
-    None for null dataspaces
-    """
-    dims = None
-    if isinstance(shape, int):
-        dims = [
-            shape,
-        ]
-    elif isinstance(shape, list) or isinstance(shape, tuple):
-        dims = shape  # can use as is
-    elif isinstance(shape, str):
-        # only valid string value is H5S_NULL
-        if shape != "H5S_NULL":
-            raise ValueError("Invalid value for shape")
-        dims = None
-    elif isinstance(shape, dict):
-        if "class" not in shape:
-            raise ValueError("'class' key not found in shape")
-        if shape["class"] == "H5S_NULL":
-            dims = None
-        elif shape["class"] == "H5S_SCALAR":
-            dims = [
-                1,
-            ]
-        elif shape["class"] == "H5S_SIMPLE":
-            if "dims" not in shape:
-                raise ValueError("'dims' key expected for shape")
-            dims = shape["dims"]
-        else:
-            raise ValueError("Unknown shape class: {}".format(shape["class"]))
-    else:
-        raise ValueError("Unexpected shape class: {}".format(type(shape)))
-
-    return dims
-
-
 def jsonToArray(data_shape, data_dtype, data_json):
     """
     Return numpy array from the given json array.
@@ -160,9 +122,7 @@ def jsonToArray(data_shape, data_dtype, data_json):
             converted_data = toTuple(np_shape_rank, data_json)
         data_json = converted_data
     else:
-        data_json = [
-            data_json,
-        ]  # listify
+        data_json = [data_json,]  # listify
 
     if not (None in data_json):
         if isVlen(data_dtype):
@@ -368,10 +328,11 @@ def copyElement(e, dt, buffer, offset):
     return offset
 
 
-def getElementCount(buffer, offset):
+def getElementCount(buffer, offset=0):
     """
     Get the count value from persisted vlen array
     """
+
     n = offset
     m = offset + 4
     count_bytes = bytes(buffer[n:m])
@@ -425,7 +386,7 @@ def readElement(buffer, offset, arr, index, dt):
                 offset = readElement(buffer, offset, e, i, dt)
             e.reshape(dt.shape)
         else:
-            count = getElementCount(buffer, offset)
+            count = getElementCount(buffer, offset=offset)
             offset += 4
             n = offset
             m = offset + count
@@ -472,17 +433,18 @@ def bytesToArray(data, dt, shape):
     """
     Create numpy array based on byte representation
     """
-    # print(f"bytesToArray({len(data)}, {dt}, {shape}")
-    nelements = getNumElements(shape)
     if not isVlen(dt):
         # regular numpy from string
         arr = np.frombuffer(data, dtype=dt)
     else:
+        nelements = getNumElements(shape)
+
         arr = np.zeros((nelements,), dtype=dt)
         offset = 0
         for index in range(nelements):
             offset = readElement(data, offset, arr, index, dt)
-    arr = arr.reshape(shape)
+    if shape is not None:
+        arr = arr.reshape(shape)
     # check that we can update the array if needed
     # Note: this seems to have been required starting with numpuy v 1.17
     # Setting the flag directly is not recommended.
@@ -677,3 +639,26 @@ def ndarray_compare(arr1, arr2):
     else:
         # can just us np array_compare
         return np.array_equal(arr1, arr2)
+
+
+def getBroadcastShape(mshape, element_count):
+    # if element_count is less than the number of elements
+    # defined by mshape, return a numpy compatible broadcast
+    # shape that contains element_count elements.
+    # If non exists return None
+
+    if np.prod(mshape) == element_count:
+        return None
+
+    if element_count == 1:
+        # this always works
+        return [1,]
+
+    bcshape = []
+    rank = len(mshape)
+    for n in range(rank - 1):
+        bcshape.insert(0, mshape[rank - n - 1])
+        if element_count == np.prod(bcshape):
+            return bcshape  # have a match
+
+    return None  # no broadcast found

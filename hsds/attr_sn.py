@@ -27,8 +27,9 @@ from .util.domainUtil import getBucketForDomain, verifyRoot
 from .util.attrUtil import validateAttributeName, getRequestCollectionName
 from .util.hdf5dtype import validateTypeItem, getBaseTypeJson
 from .util.hdf5dtype import createDataType, getItemSize
-from .util.arrayUtil import jsonToArray, getShapeDims, getNumElements
+from .util.arrayUtil import jsonToArray, getNumElements
 from .util.arrayUtil import bytesArrayToList
+from .util.dsetUtil import getShapeDims
 from .servicenode_lib import getDomainJson, getObjectJson, validateAction
 from . import hsds_logger as log
 from . import config
@@ -377,7 +378,7 @@ async def PUT_Attribute(request):
             msg = "Bad Request: input data doesn't match selection"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        log.info(f"Got: {arr.size} array elements")
+        log.debug(f"Got: {arr.size} array elements")
     else:
         value = None
 
@@ -717,7 +718,7 @@ async def PUT_AttributeValue(request):
             msg = "Bad Request: input data doesn't match selection"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-    log.info(f"Got: {arr.size} array elements")
+    log.debug(f"Got: {arr.size} array elements")
 
     # ready to add attribute now
     attr_json = {}

@@ -13,17 +13,18 @@
 # utility methods for service node handlers
 #
 
+import asyncio
+
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
-from aiohttp.client_exceptions import ClientOSError
+from aiohttp.client_exceptions import ClientOSError, ClientError
 
 from .util.authUtil import getAclKeys
-from .util.idUtil import getDataNodeUrl, getCollectionForId, isSchema2Id
-from .util.idUtil import getS3Key
+from .util.idUtil import getDataNodeUrl, getCollectionForId, isSchema2Id, getS3Key
 from .util.linkUtil import h5Join
 from .util.storUtil import getStorJSONObj, isStorObj
 from .util.authUtil import aclCheck
-from .util.httpUtil import http_get
+from .util.httpUtil import http_get, http_put
 from .util.domainUtil import getBucketForDomain, verifyRoot
 
 from . import hsds_logger as log
@@ -203,7 +204,7 @@ async def getObjectJson(
         if bucket:
             params["bucket"] = bucket
         req += "/" + collection + "/" + obj_id
-
+        log.debug(f"getObjectJson - fetching {obj_id} from {req}")
         # throws 404 if doesn't exist
         obj_json = await http_get(app, req, params=params)
         meta_cache[obj_id] = obj_json
@@ -213,6 +214,31 @@ async def getObjectJson(
         raise HTTPNotFound()
 
     return obj_json
+
+
+async def getDsetJson(app, dset_id,
+                      bucket=None,
+                      refresh=False,
+                      include_links=False,
+                      include_attrs=False):
+    kwargs = {}
+    kwargs["bucket"] = bucket
+    kwargs["refresh"] = refresh
+    kwargs["include_links"] = include_links
+    kwargs["include_attrs"] = include_attrs
+    dset_json = await getObjectJson(app, dset_id, **kwargs)
+    if refresh:
+        # can just return the json
+        return dset_json
+
+    # check to see if the dataspace is mutable
+    # if so, refresh if necessary
+    datashape = dset_json["shape"]
+    if "maxdims" in datashape:
+        log.debug("getDsetJson - refreshing json for mutable shape")
+        kwargs["refresh"] = True
+        dset_json = await getObjectJson(app, dset_id, **kwargs)
+    return dset_json
 
 
 async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, domain=None,
@@ -460,3 +486,56 @@ async def getRootInfo(app, root_id, bucket=None):
         return None
 
     return info_json
+
+
+async def doFlush(app, root_id, bucket=None):
+    """return wnen all DN nodes have wrote any pending changes to S3"""
+    log.info(f"doFlush {root_id}")
+    params = {"flush": 1}
+    if bucket:
+        params["bucket"] = bucket
+    dn_urls = app["dn_urls"]
+    dn_ids = []
+    log.debug(f"doFlush - dn_urls: {dn_urls}")
+    failed_count = 0
+
+    try:
+        tasks = []
+        for dn_url in dn_urls:
+            req = dn_url + "/groups/" + root_id
+            task = asyncio.ensure_future(http_put(app, req, params=params))
+            tasks.append(task)
+        done, pending = await asyncio.wait(tasks)
+        if pending:
+            # should be empty since we didn't use return_when parameter
+            log.error("doFlush - got pending tasks")
+            raise HTTPInternalServerError()
+        for task in done:
+            if task.exception():
+                exception_type = type(task.exception())
+                msg = f"doFlush - task had exception: {exception_type}"
+                log.warn(msg)
+                failed_count += 1
+            else:
+                json_rsp = task.result()
+                log.debug(f"PUT /groups rsp: {json_rsp}")
+                if json_rsp and "id" in json_rsp:
+                    dn_ids.append(json_rsp["id"])
+                else:
+                    log.error("expected dn_id in flush response from DN")
+    except ClientError as ce:
+        msg = f"doFlush - ClientError for http_put('/groups/{root_id}'): {ce}"
+        log.error(msg)
+        raise HTTPInternalServerError()
+    except asyncio.CancelledError as cle:
+        log.error(f"doFlush - CancelledError '/groups/{root_id}'): {cle}")
+        raise HTTPInternalServerError()
+    msg = f"doFlush for {root_id} complete, failed: {failed_count} "
+    msg += f"out of {len(dn_urls)}"
+    log.info(msg)
+    if failed_count > 0:
+        log.error(f"doFlush fail count: {failed_count} returning 500")
+        raise HTTPInternalServerError()
+    else:
+        log.info("doFlush no fails, returning dn ids")
+        return dn_ids

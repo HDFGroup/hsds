@@ -1569,12 +1569,7 @@ class PointSelTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
-        self.assertEqual(
-            rspJson["value"],
-            [
-                [30, 32, 35],
-            ],
-        )
+        self.assertEqual(rspJson["value"], [[30, 32, 35],], )
 
         # read a coordinate selection with binary response
         rsp = self.session.post(req, data=json.dumps(body), headers=headers_bin_rsp)

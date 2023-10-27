@@ -3063,9 +3063,7 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + "/datasets/" + dset_id + "/value"
         start = 1234567
         stop = start + 10
-        params = {
-            "select": f"[{start}:{stop}]"
-        }  # read 10 element, starting at index 1234567
+        params = {"select": f"[{start}:{stop}]"}  # read 10 element, starting at index 1234567
         params["nonstrict"] = 1  # enable SN to invoke lambda func
 
         # read the selection
@@ -3140,6 +3138,274 @@ class ValueTest(unittest.TestCase):
         for i in range(5):
             self.assertEqual(ret_values[i], 24)
             self.assertEqual(ret_values[i + 5], 42)
+
+    def testValueReinitialization1D(self):
+        # Test the dataset values get reset after a reduction and resize
+
+        print("testValueReinitialization1D", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+
+        # get domain
+        req = f"{self.endpoint}/"
+        rsp = self.session.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # create the dataset
+        req = f"{self.endpoint}/datasets"
+        payload = {"type": "H5T_STD_I32LE", "shape": 10, "maxdims": 10}
+        payload["creationProperties"] = {"fillValue": 42}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_uuid))
+
+        # link new dataset as 'dset'
+        name = "dset"
+        req = f"{self.endpoint}/groups/{root_uuid}/links/{name}"
+        payload = {"id": dset_uuid}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # write to the dset
+        req = f"{self.endpoint}/datasets/{dset_uuid}/value"
+        data = list(range(10))  # write 0-9
+        payload = {"value": data[0:10]}
+        params = {"select": "[0:10]"}
+
+        rsp = self.session.put(req, data=json.dumps(payload), params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # read back the data
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], data)
+
+        # resize the dataset to 5 elements
+        req = f"{self.endpoint}/datasets/{dset_uuid}/shape"
+        payload = {"shape": 5}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+
+        # read back the remaining elements
+        req = f"{self.endpoint}/datasets/{dset_uuid}/value"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], data[:5])
+
+        # resize back to 10
+        req = f"{self.endpoint}/datasets/{dset_uuid}/shape"
+        payload = {"shape": 10}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+
+        # read all 10 data values
+        req = f"{self.endpoint}/datasets/{dset_uuid}/value"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+        self.assertEqual(value[0:5], data[0:5])
+        self.assertEqual(value[5:10], [42,] * 5)
+
+    def testShapeReinitialization2D(self):
+        # Test the dataset values get reset after a reduction and resize
+
+        print("testShapeReinitialization2D", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+
+        # get domain
+        req = f"{self.endpoint}/"
+        rsp = self.session.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # create the dataset
+        req = f"{self.endpoint}/datasets"
+        payload = {"type": "H5T_STD_I32LE", "shape": [12, 15], "maxdims": [12, 15]}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_uuid))
+
+        # link new dataset as 'dset'
+        name = "dset"
+        req = f"{self.endpoint}/groups/{root_uuid}/links/{name}"
+        payload = {"id": dset_uuid}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # write to the dset
+        req = f"{self.endpoint}/datasets/{dset_uuid}/value"
+        data = []
+        for i in range(12):
+            row = []
+            for j in range(15):
+                row.append(i * j)
+            data.append(row)
+        payload = {"value": data}
+        params = {"select": "[0:12, 0:15]"}
+
+        rsp = self.session.put(req, data=json.dumps(payload), params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # read back the data
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], data)
+
+        # resize the dataset to 10 x 10 array
+        req = f"{self.endpoint}/datasets/{dset_uuid}/shape"
+        payload = {"shape": [10, 10]}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+
+        # read back the remaining elements
+        req = f"{self.endpoint}/datasets/{dset_uuid}/value"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+        self.assertEqual(len(value), 10)
+        for i in range(10):
+            row = value[i]
+            self.assertEqual(len(row), 10)
+            for j in range(10):
+                self.assertEqual(row[j], i * j)
+
+        # resize back to 12, 15
+        req = f"{self.endpoint}/datasets/{dset_uuid}/shape"
+        payload = {"shape": [12, 15]}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+
+        # read all the data values
+        req = f"{self.endpoint}/datasets/{dset_uuid}/value"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+
+        # check that the re-extended area is zero's
+        self.assertEqual(len(value), 12)
+        for i in range(12):
+            row = value[i]
+            self.assertEqual(len(row), 15)
+            for j in range(15):
+                if j < 10 and i < 10:
+                    self.assertEqual(row[j], i * j)
+                else:
+                    self.assertEqual(row[j], 0)
+
+    def testShapeReinitialization3D(self):
+        # Test the dataset values get reset after a reduction and resize
+
+        print("testPointReinitialization3D", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+
+        # get domain
+        req = f"{self.endpoint}/"
+        rsp = self.session.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # define two different shapes that we'll switch between
+        # min extent in each dimension is 20 for the point setup to work
+        large_shape = (2200, 120, 130)
+        small_shape = (55, 60, 70)
+
+        # setup some points on the diagonal
+        # space some points apart equally
+        delta = (large_shape[0] // 10, large_shape[1] // 10, large_shape[2] // 10)
+        offset = (5, 5, 5)
+        points = []
+        for i in range(10):
+            if i == 0:
+                pt = offset
+            else:
+                last_pt = points[i - 1]
+                pt = (last_pt[0] + delta[0], last_pt[1] + delta[1], last_pt[2] + delta[2])
+            for n in range(3):
+                if pt[n] >= large_shape[n]:
+                    raise ValueError("pt outside extent")
+            points.append(pt)
+
+        # create the dataset
+        req = f"{self.endpoint}/datasets"
+        payload = {"type": "H5T_STD_I32LE", "shape": large_shape, "maxdims": large_shape}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_uuid))
+
+        # link new dataset as 'dset'
+        name = "dset"
+        req = f"{self.endpoint}/groups/{root_uuid}/links/{name}"
+        payload = {"id": dset_uuid}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        value = [1, ] * 10  # set value of each pt to one
+
+        # write 1's to all the point locations
+        payload = {"points": points, "value": value}
+        req = f"{self.endpoint}/datasets/{dset_uuid}/value"
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # resize the dataset to the small shape
+        req = f"{self.endpoint}/datasets/{dset_uuid}/shape"
+        payload = {"shape": small_shape}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+
+        # resize back to large shape
+        req = f"{self.endpoint}/datasets/{dset_uuid}/shape"
+        payload = {"shape": large_shape}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+
+        # read all the data values
+        req = f"{self.endpoint}/datasets/{dset_uuid}/value"
+        body = {"points": points}
+        # read selected points
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        ret_value = rspJson["value"]
+
+        for i in range(10):
+            pt = points[i]
+            n = ret_value[i]
+            if pt[0] >= small_shape[0] or pt[1] >= small_shape[1] or pt[2] >= small_shape[2]:
+                self.assertEqual(n, 0)
+            else:
+                self.assertEqual(n, 1)
 
 
 if __name__ == "__main__":

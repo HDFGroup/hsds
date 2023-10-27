@@ -311,7 +311,10 @@ def getNumChunks(selection, layout):
     for i in range(len(selection)):
         s = selection[i]
         c = layout[i]  # chunk size
+
         if isinstance(s, slice):
+            if s.step is None:
+                s = slice(s.start, s.stop, 1)
             if s.step > 1:
                 num_points = frac((s.stop - s.start), s.step)
                 w = num_points * s.step - (s.step - 1)
@@ -475,6 +478,8 @@ def getChunkIds(dset_id, selection, layout, dim=0, prefix=None, chunk_ids=None):
     s = selection[dim]
     c = layout[dim]
     # log.debug(f"getChunkIds - layout: {layout}")
+    if isinstance(s, slice) and s.step is None:
+        s = slice(s.start, s.stop, 1)
 
     if isinstance(s, slice) and s.step > c:
         # chunks may not be contiguous,  skip along the selection and add
@@ -552,7 +557,6 @@ def getChunkCoordinate(chunk_id, layout):
     coord = getChunkIndex(chunk_id)
     for i in range(len(layout)):
         coord[i] *= layout[i]
-
     return coord
 
 
@@ -570,6 +574,8 @@ def getChunkSelection(chunk_id, slices, layout):
         c = layout[dim]
         n = chunk_index[dim] * c
         if isinstance(s, slice):
+            if s.step is None:
+                s = slice(s.start, s.stop, 1)
             if s.start >= n + c:
                 return None  # null intersection
             if s.stop < n:
@@ -604,7 +610,12 @@ def getChunkCoverage(chunk_id, slices, layout):
     """
     chunk_index = getChunkIndex(chunk_id)
     chunk_sel = getChunkSelection(chunk_id, slices, layout)
+    if not chunk_sel:
+        log.warn(f"slices: {slices} does intersect chunk: {chunk_id}")
+        return None
     rank = len(layout)
+    if len(slices) != rank:
+        raise ValueError(f"invalid slices value for dataset of rank: {rank}")
     sel = []
     for dim in range(rank):
         s = chunk_sel[dim]
@@ -653,6 +664,8 @@ def getDataCoverage(chunk_id, slices, layout):
         c = chunk_sel[dim]
         s = slices[dim]
         if isinstance(s, slice):
+            if s.step is None:
+                s = slice(s.start, s.stop, 1)
             if c.step != s.step:
                 msg = "expecting step for chunk selection to be the "
                 msg += "same as data selection"
@@ -1163,6 +1176,8 @@ def chunkQuery(
 
     # adjust the index to correspond with the dataset
     s = slices[0]
+    if s.step is None:
+        s = slice(s.start, s.stop, 1)
     start = s.start + chunk_coord[0]
     if start > 0:
         # can just increment every value by same amount

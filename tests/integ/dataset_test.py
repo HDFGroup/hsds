@@ -836,7 +836,23 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("root" in rspJson)
         root_uuid = rspJson["root"]
 
-        # create the dataset
+        # create non-extendable dataset
+        req = self.endpoint + "/datasets"
+        payload = {"type": "H5T_STD_I32LE", "shape": 10}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_uuid))
+
+        # try extending it (should fail)
+        req = self.endpoint + "/datasets/" + dset_uuid + "/shape"
+        payload = {"extend": 5}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+
+        # create extendable dataset
         req = self.endpoint + "/datasets"
         payload = {"type": "H5T_STD_I32LE", "shape": 10, "maxdims": 20}
         req = self.endpoint + "/datasets"

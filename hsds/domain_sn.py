@@ -13,7 +13,6 @@
 # service node of hsds cluster
 #
 
-from asyncio import CancelledError
 import asyncio
 import json
 import os.path as op
@@ -23,7 +22,6 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
 from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPConflict, HTTPServiceUnavailable
 from aiohttp import ClientResponseError
-from aiohttp.client_exceptions import ClientError
 from aiohttp.web import json_response
 from requests.sessions import merge_setting
 
@@ -41,7 +39,7 @@ from .util.storUtil import getStorKeys, getCompressors
 from .util.boolparser import BooleanParser
 from .util.globparser import globmatch
 from .servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath
-from .servicenode_lib import getRootInfo, checkBucketAccess
+from .servicenode_lib import getRootInfo, checkBucketAccess, doFlush
 from .basenode import getVersion
 from . import hsds_logger as log
 from . import config
@@ -891,59 +889,6 @@ async def GET_Domain(request):
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp
-
-
-async def doFlush(app, root_id, bucket=None):
-    """return wnen all DN nodes have wrote any pending changes to S3"""
-    log.info(f"doFlush {root_id}")
-    params = {"flush": 1}
-    if bucket:
-        params["bucket"] = bucket
-    dn_urls = app["dn_urls"]
-    dn_ids = []
-    log.debug(f"doFlush - dn_urls: {dn_urls}")
-    failed_count = 0
-
-    try:
-        tasks = []
-        for dn_url in dn_urls:
-            req = dn_url + "/groups/" + root_id
-            task = asyncio.ensure_future(http_put(app, req, params=params))
-            tasks.append(task)
-        done, pending = await asyncio.wait(tasks)
-        if pending:
-            # should be empty since we didn't use return_when parameter
-            log.error("doFlush - got pending tasks")
-            raise HTTPInternalServerError()
-        for task in done:
-            if task.exception():
-                exception_type = type(task.exception())
-                msg = f"doFlush - task had exception: {exception_type}"
-                log.warn(msg)
-                failed_count += 1
-            else:
-                json_rsp = task.result()
-                log.debug(f"PUT /groups rsp: {json_rsp}")
-                if json_rsp and "id" in json_rsp:
-                    dn_ids.append(json_rsp["id"])
-                else:
-                    log.error("expected dn_id in flush response from DN")
-    except ClientError as ce:
-        msg = f"doFlush - ClientError for http_put('/groups/{root_id}'): {ce}"
-        log.error(msg)
-        raise HTTPInternalServerError()
-    except CancelledError as cle:
-        log.error(f"doFlush - CancelledError '/groups/{root_id}'): {cle}")
-        raise HTTPInternalServerError()
-    msg = f"doFlush for {root_id} complete, failed: {failed_count} "
-    msg += f"out of {len(dn_urls)}"
-    log.info(msg)
-    if failed_count > 0:
-        log.error(f"doFlush fail count: {failed_count} returning 500")
-        raise HTTPInternalServerError()
-    else:
-        log.info("doFlush no fails, returning dn ids")
-        return dn_ids
 
 
 async def getScanTime(app, root_id, bucket=None):
