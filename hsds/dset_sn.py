@@ -30,7 +30,7 @@ from .util.authUtil import getUserPasswordFromRequest, aclCheck
 from .util.authUtil import validateUserPassword
 from .util.domainUtil import getDomainFromRequest, getPathForDomain, isValidDomain
 from .util.domainUtil import getBucketForDomain, verifyRoot
-from .util.storUtil import getFilters
+from .util.storUtil import getSupportedFilters
 from .util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson
 from .util.hdf5dtype import getItemSize
 from .servicenode_lib import getDomainJson, getObjectJson, getDsetJson, getPathForObjectId
@@ -1092,7 +1092,7 @@ async def POST_Dataset(request):
             # refer to https://hdf5-json.readthedocs.io/en/latest/bnf/\
             # filters.html#grammar-token-filter_list
             f_in = creationProperties["filters"]
-            supported_filters = getFilters(include_compressors=True)
+            supported_filters = getSupportedFilters(include_compressors=True)
             log.debug(f"supported_compressors: {supported_filters}")
 
             log.debug(f"filters provided in creationProperties: {f_in}")

@@ -1055,10 +1055,16 @@ class DatasetTest(unittest.TestCase):
             "level": 9,
             "name": "deflate",
         }
+        fletcher32_filter = {
+            "class": "H5Z_FILTER_FLETCHER32",
+            "id": 3,
+            "name": "fletcher32"
+        }
         payload["creationProperties"] = {
             "layout": {"class": "H5D_CHUNKED", "dims": [1, 390, 512]},
             "filters": [
                 gzip_filter,
+                fletcher32_filter,
             ],
         }
         req = self.endpoint + "/datasets"
@@ -1094,7 +1100,7 @@ class DatasetTest(unittest.TestCase):
         cpl = rspJson["creationProperties"]
         self.assertTrue("filters") in cpl
         filters = cpl["filters"]
-        self.assertEqual(len(filters), 1)
+        self.assertEqual(len(filters), 2)
         filter = filters[0]
         self.assertTrue("class") in filter
         self.assertEqual(filter["class"], "H5Z_FILTER_DEFLATE")
@@ -1102,6 +1108,12 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(filter["level"], 9)
         self.assertTrue("id" in filter)
         self.assertEqual(filter["id"], 1)
+
+        filter = filters[1]
+        self.assertTrue("class") in filter
+        self.assertEqual(filter["class"], "H5Z_FILTER_FLETCHER32")
+        self.assertTrue("id" in filter)
+        self.assertEqual(filter["id"], 3)
 
     def testCreationPropertiesContiguousDataset(self):
         # test Dataset with creation property list

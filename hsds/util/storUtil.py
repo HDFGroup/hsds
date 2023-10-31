@@ -62,10 +62,11 @@ def getCompressors():
     return compressors
 
 
-def getFilters(include_compressors=True):
+def getSupportedFilters(include_compressors=True):
     """return list of other supported filters"""
     filters = [
         "shuffle",
+        "fletcher32",
     ]
     if include_compressors:
         filters.extend(getCompressors())
