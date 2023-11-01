@@ -9,43 +9,6 @@ DEFAULT_TYPE_SIZE = 128  # Type size case when it is variable
 PRIMES = [29, 31, 37, 41, 43, 47, 53, 59, 61, 67]  # for chunk partitioning
 
 
-"""
-Convert list that may contain bytes type elements to list of string elements
-
-TBD: code copy from arrayUtil.py
-"""
-
-
-def _bytesArrayToList(data):
-    if type(data) in (bytes, str):
-        is_list = False
-    elif isinstance(data, (np.ndarray, np.generic)):
-        if len(data.shape) == 0:
-            is_list = False
-            data = data.tolist()  # tolist will return a scalar in this case
-            if type(data) in (list, tuple):
-                is_list = True
-            else:
-                is_list = False
-        else:
-            is_list = True
-    elif type(data) in (list, tuple):
-        is_list = True
-    else:
-        is_list = False
-
-    if is_list:
-        out = []
-        for item in data:
-            out.append(_bytesArrayToList(item))  # recursive call
-    elif type(data) is bytes:
-        out = data.decode("utf-8")
-    else:
-        out = data
-
-    return out
-
-
 def getChunkSize(layout, type_size):
     """Return chunk size given layout.
     i.e. just the product of the values in the list.

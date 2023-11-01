@@ -44,9 +44,16 @@ def bytesArrayToList(data):
     if is_list:
         out = []
         for item in data:
-            out.append(bytesArrayToList(item))  # recursive call
+            try:
+                rec_item = bytesArrayToList(item)  # recursive call
+                out.append(rec_item)
+            except ValueError as err:
+                raise err
     elif type(data) is bytes:
-        out = data.decode("utf-8")
+        try:
+            out = data.decode("utf-8")
+        except UnicodeDecodeError as err:
+            raise ValueError(err)
     else:
         out = data
 
@@ -125,6 +132,13 @@ def jsonToArray(data_shape, data_dtype, data_json):
                 index += 1
         return index
 
+    if (data_json is None):
+        return np.array([]).astype(data_dtype)
+
+    if (isinstance(data_json, (list, tuple))):
+        if None in data_json:
+            return np.array([]).astype(data_dtype)
+
     # need some special conversion for compound types --
     # each element must be a tuple, but the JSON decoder
     # gives us a list instead.
@@ -145,27 +159,24 @@ def jsonToArray(data_shape, data_dtype, data_json):
             data_json = data_json.encode("utf8")
         data_json = [data_json,]  # listify
 
-    if not (None in data_json):
-        if isVlen(data_dtype):
-            arr = np.zeros((npoints,), dtype=data_dtype)
-            fillVlenArray(np_shape_rank, data_json, arr, 0)
-        else:
-            try:
-                arr = np.array(data_json, dtype=data_dtype)
-            except UnicodeEncodeError as ude:
-                msg = "Unable to encode data"
-                raise ValueError(msg) from ude
-        # raise an exception of the array shape doesn't match the selection shape
-        # allow if the array is a scalar and the selection shape is one element,
-        # numpy is ok with this
-        if arr.size != npoints:
-            msg = "Input data doesn't match selection number of elements"
-            msg += f" Expected {npoints}, but received: {arr.size}"
-            raise ValueError(msg)
-        if arr.shape != data_shape:
-            arr = arr.reshape(data_shape)  # reshape to match selection
+    if isVlen(data_dtype):
+        arr = np.zeros((npoints,), dtype=data_dtype)
+        fillVlenArray(np_shape_rank, data_json, arr, 0)
     else:
-        arr = np.array([]).astype(data_dtype)
+        try:
+            arr = np.array(data_json, dtype=data_dtype)
+        except UnicodeEncodeError as ude:
+            msg = "Unable to encode data"
+            raise ValueError(msg) from ude
+    # raise an exception of the array shape doesn't match the selection shape
+    # allow if the array is a scalar and the selection shape is one element,
+    # numpy is ok with this
+    if arr.size != npoints:
+        msg = "Input data doesn't match selection number of elements"
+        msg += f" Expected {npoints}, but received: {arr.size}"
+        raise ValueError(msg)
+    if arr.shape != data_shape:
+        arr = arr.reshape(data_shape)  # reshape to match selection
 
     return arr
 

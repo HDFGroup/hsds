@@ -806,6 +806,17 @@ class ArrayUtilTest(unittest.TestCase):
         bcshape = getBroadcastShape([2, 3, 5], 15)
         self.assertEqual(bcshape, [3, 5])
 
+    def testJsonToArrayOnNoneCompoundArray(self):
+        # compound type
+        dt = np.dtype([("a", "i4"), ("b", "S5")])
+        shape = [1,]
+        data = None
+
+        arr = jsonToArray(shape, dt, data)
+
+        self.assertEqual(len(arr), 0)
+        self.assertEqual(arr.dtype, dt)
+
 
 if __name__ == "__main__":
     # setup test files

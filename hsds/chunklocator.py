@@ -215,7 +215,10 @@ def main():
                 log.warn(msg)
                 sys.exit(-1)
             log.info(f"got chunk array shape: {arr.shape}")
-            json_data = bytesArrayToList(arr)
+            try:
+                json_data = bytesArrayToList(arr)
+            except ValueError as err:
+                raise err
             # print list data to stdout
             print(json_data)
             log.info(f"got {len(json_data)} json elements")
