@@ -600,6 +600,7 @@ class AttributeTest(unittest.TestCase):
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
+        print(rspJson)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
         self.assertEqual(rspJson["value"], text)
@@ -609,6 +610,70 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(type_json["class"], "H5T_STRING")
         self.assertTrue("length" in type_json)
         self.assertEqual(type_json["length"], text_length)
+        self.assertTrue("strPad" in type_json)
+        self.assertEqual(type_json["strPad"], "H5T_STR_NULLTERM")
+        self.assertTrue("charSet" in type_json)
+        self.assertEqual(type_json["charSet"], "H5T_CSET_UTF8")
+
+    def testPutFixedUTF8StringBinary(self):
+        # Test PUT value for 1d attribute with fixed length UTF-8 string in binary
+        print("testPutFixedUTF8StringBinary", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create attr with json
+        character_text = "this is the chinese character for the number eight: \u516b"
+
+        binary_text = bytearray(character_text, "UTF-8")
+        byte_length = len(binary_text)
+
+        fixed_str_type = {
+            "charSet": "H5T_CSET_UTF8",
+            "class": "H5T_STRING",
+            "length": byte_length,  # Null byte explicitly included
+            "strPad": "H5T_STR_NULLTERM",
+        }
+
+        scalar_shape = {"class": "H5S_SCALAR"}
+        data = {"type": fixed_str_type, "shape": scalar_shape}
+        attr_name = "fixed_unicode_str_attr_binary"
+        req = self.endpoint + "/groups/" + root_uuid + "/attributes/" + attr_name
+        rsp = self.session.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # write to attr in binary
+        attr_name = "fixed_unicode_str_attr_binary"
+        req = self.endpoint + "/groups/" + root_uuid + "/attributes/" + attr_name + "/value"
+        headers["Content-Type"] = "application/octet-stream"
+        rsp = self.session.put(req, data=binary_text, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # read attr
+        headers["Content-Type"] = "application/json"
+        req = self.endpoint + "/groups/" + root_uuid + "/attributes/" + attr_name
+
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        print(rspJson)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        print(f"Retrieved UTF8 string: {rspJson['value']}")
+        self.assertEqual(rspJson["value"], character_text)
+        self.assertTrue("type" in rspJson)
+        type_json = rspJson["type"]
+        self.assertTrue("class" in type_json)
+        self.assertEqual(type_json["class"], "H5T_STRING")
+        self.assertTrue("length" in type_json)
+        self.assertEqual(type_json["length"], byte_length)
         self.assertTrue("strPad" in type_json)
         self.assertEqual(type_json["strPad"], "H5T_STR_NULLTERM")
         self.assertTrue("charSet" in type_json)
@@ -1340,7 +1405,7 @@ class AttributeTest(unittest.TestCase):
         rsp = self.session.put(req, data=data, headers=headers_bin_req)
         self.assertEqual(rsp.status_code, 200)
 
-        # try writing to few bytes, should fail
+        # try writing too few bytes, should fail
         data = bytearray(extent)
         for i in range(extent):
             data[i] = 255
