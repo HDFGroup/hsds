@@ -344,19 +344,20 @@ def getTypeItem(dt, metadata=None):
         type_info["strPad"] = "H5T_STR_NULLPAD"
     elif dt.base.kind == "U":
         # Fixed length unicode type
+        print("fixed UTF, itemsize:", dt.itemsize)
         ref_check = check_dtype(ref=dt.base)
         if ref_check is not None:
             raise TypeError("unexpected reference type")
 
-        # Fixed length UTF8 string type
+        # Fixed length string type with unicode support
         type_info["class"] = "H5T_STRING"
 
         # this can be problematic if the encoding of the string is not valid,
-        # or reqires too many bytes.  Use unicode sting length * 4 to handle all
+        # or reqires too many bytes.  Use variable length strings to handle all
         # UTF8 strings correctly
         type_info["charSet"] = "H5T_CSET_UTF8"
         # convert from UTF32 length to a fixed length
-        type_info["length"] = dt.itemsize // 4
+        type_info["length"] = dt.itemsize
         type_info["strPad"] = "H5T_STR_NULLPAD"
 
     elif dt.kind == "b":
@@ -627,7 +628,9 @@ def createBaseDataType(typeItem):
             if typeItem["charSet"] == "H5T_CSET_ASCII":
                 type_code = "S"
             elif typeItem["charSet"] == "H5T_CSET_UTF8":
-                type_code = "U"
+                # use the same type_code as ascii strings
+                # (othewise, numpy will reserve bytes for UTF32 representation)
+                type_code = "S"
             else:
                 raise TypeError("unexpected 'charSet' value")
             # a fixed size string

@@ -116,9 +116,7 @@ class ArrayUtilTest(unittest.TestCase):
 
         # compound type
         dt = np.dtype([("a", "i4"), ("b", "S5")])
-        shape = [
-            2,
-        ]
+        shape = [2, ]
         data = [[4, "four"], [5, "five"]]
         out = jsonToArray(shape, dt, data)
         self.assertTrue(isinstance(out, np.ndarray))
@@ -131,9 +129,7 @@ class ArrayUtilTest(unittest.TestCase):
         e1 = out[1].tolist()
         self.assertEqual(e1, (5, b"five"))
 
-        shape = [
-            1,
-        ]
+        shape = [1, ]
         data = [
             [6, "six"],
         ]
@@ -148,10 +144,8 @@ class ArrayUtilTest(unittest.TestCase):
 
         # VLEN ascii
         dt = special_dtype(vlen=bytes)
-        data = [b"one", b"two", b"three", "four", b"five"]
-        shape = [
-            5,
-        ]
+        data = [b"one", b"two", b"three", b"four", b"five"]
+        shape = [5, ]
         out = jsonToArray(shape, dt, data)
         self.assertTrue("vlen" in out.dtype.metadata)
         self.assertEqual(out.dtype.metadata["vlen"], bytes)
@@ -160,17 +154,15 @@ class ArrayUtilTest(unittest.TestCase):
         # TBD: code does not actually enforce use of bytes vs. str,
         #  probably not worth the effort to fix
         self.assertEqual(out[2], b"three")
-        self.assertEqual(out[3], "four")
+        self.assertEqual(out[3], b"four")
 
         # VLEN str
         dt = special_dtype(vlen=str)
         data = [
-            ["part 1 - section A", "part 1 - section B"],
-            ["part 2 - section A", "part 2 - section B"],
+            [b"part 1 - section A", b"part 1 - section B"],
+            [b"part 2 - section A", b"part 2 - section B"],
         ]
-        shape = [
-            2,
-        ]
+        shape = [2,]
         out = jsonToArray(shape, dt, data)
         self.assertTrue("vlen" in out.dtype.metadata)
         self.assertEqual(out.dtype.metadata["vlen"], str)
@@ -182,29 +174,22 @@ class ArrayUtilTest(unittest.TestCase):
         # VLEN Scalar str
         dt = special_dtype(vlen=str)
         data = "I'm a string!"
-        shape = [
-            1,
-        ]
+        shape = [1, ]
         out = jsonToArray(shape, dt, data)
 
         # VLEN unicode
         dt = special_dtype(vlen=bytes)
         data = ["one", "two", "three", "four", "five"]
-        shape = [
-            5,
-        ]
+        shape = [5, ]
         out = jsonToArray(shape, dt, data)
         self.assertTrue("vlen" in out.dtype.metadata)
         self.assertEqual(out.dtype.metadata["vlen"], bytes)
         self.assertEqual(out.dtype.kind, "O")
-        # TBD: this should show up as bytes, but may not be worth the effort
-        self.assertEqual(out[2], "three")
+        self.assertEqual(out[2], b"three")
 
         # VLEN data
         dt = special_dtype(vlen=np.dtype("int32"))
-        shape = [
-            4,
-        ]
+        shape = [4, ]
         data = [
             [1,],
             [1, 2],
@@ -228,15 +213,11 @@ class ArrayUtilTest(unittest.TestCase):
         shape = [2, 2]
         data = [
             [
-                [
-                    0,
-                ],
+                [0,],
                 [1, 2],
             ],
             [
-                [
-                    1,
-                ],
+                [1,],
                 [2, 3],
             ],
         ]
@@ -257,20 +238,16 @@ class ArrayUtilTest(unittest.TestCase):
         vlen_type = {"class": "H5T_VLEN", "base": ref_type}
         dt = createDataType(vlen_type)  # np datatype
 
-        id0 = "g-a4f455b2-c8cf-11e7-8b73-0242ac110009"
-        id1 = "g-a50af844-c8cf-11e7-8b73-0242ac110009"
-        id2 = "g-a5236276-c8cf-11e7-8b73-0242ac110009"
+        id0 = b"g-a4f455b2-c8cf-11e7-8b73-0242ac110009"
+        id1 = b"g-a50af844-c8cf-11e7-8b73-0242ac110009"
+        id2 = b"g-a5236276-c8cf-11e7-8b73-0242ac110009"
 
         data = [
-            [
-                id0,
-            ],
+            [id0, ],
             [id0, id1],
             [id0, id1, id2],
         ]
-        shape = [
-            3,
-        ]
+        shape = [3, ]
         out = jsonToArray(shape, dt, data)
         self.assertTrue(isinstance(out, np.ndarray))
         base_type = check_dtype(vlen=out.dtype)
@@ -513,12 +490,34 @@ class ArrayUtilTest(unittest.TestCase):
         #
         # VLEN int
         #
+
+        def array_equal(a, b):
+            """ compare two values element by element."""
+            if type(a) in (list, tuple, np.void, np.ndarray):
+                if len(a) != len(b):
+                    print("number of elements doesn't match")
+                    return False
+                nelements = len(a)
+                for i in range(nelements):
+                    if not array_equal(a[i], b[i]):
+                        return False
+            else:
+                # treat a string and bytes as equal if the utf-8 encoding
+                # of the string is equal to the byte encoding
+                if isinstance(a, str):
+                    a = a.encode("utf8")
+                if isinstance(b, str):
+                    b = b.encode("utf8")
+                if a != b:
+                    print(f"{a} != {b}")
+                    return False
+
+            return True
+
         dt = special_dtype(vlen=np.dtype("int32"))
         shape = [4,]
         data = [
-            [
-                1,
-            ],
+            [1,],
             [1, 2],
             [1, 2, 3],
             [1, 2, 3, 4],
@@ -573,10 +572,7 @@ class ArrayUtilTest(unittest.TestCase):
         # np.array_equal doesn't work for object arrays
         self.assertEqual(arr.dtype, arr_copy.dtype)
         self.assertEqual(arr.shape, arr_copy.shape)
-        for i in range(4):
-            e = arr[i]
-            e_copy = arr_copy[i]
-            self.assertTrue(np.array_equal(e, e_copy))
+        self.assertTrue(array_equal(arr, arr_copy))
 
         #
         # VLEN utf with array type
@@ -602,10 +598,7 @@ class ArrayUtilTest(unittest.TestCase):
 
         self.assertEqual(arr.dtype, arr_copy.dtype)
         self.assertEqual(arr.shape, arr_copy.shape)
-        for i in range(4):
-            e = arr[i]
-            e_copy = arr_copy[i]
-            self.assertTrue(np.array_equal(e, e_copy))
+        self.assertTrue(array_equal(e, e_copy))
 
         #
         # VLEN ascii with array type
@@ -631,10 +624,7 @@ class ArrayUtilTest(unittest.TestCase):
 
         self.assertEqual(arr.dtype, arr_copy.dtype)
         self.assertEqual(arr.shape, arr_copy.shape)
-        for i in range(4):
-            e = arr[i]
-            e_copy = arr_copy[i]
-            self.assertTrue(np.array_equal(e, e_copy))
+        self.assertTrue(array_equal(e, e_copy))
 
     def testIndexIterator(self):
         i = 0

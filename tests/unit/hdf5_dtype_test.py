@@ -94,7 +94,7 @@ class Hdf5dtypeTest(unittest.TestCase):
         typeItem = hdf5dtype.getTypeItem(dt)
         self.assertEqual(typeItem["class"], "H5T_STRING")
         # type item length in bytes (may no actual be enough space for some UTF strings)
-        self.assertEqual(typeItem["length"], 3)
+        self.assertEqual(typeItem["length"], 12)
         self.assertEqual(typeItem["strPad"], "H5T_STR_NULLPAD")
         self.assertEqual(typeItem["charSet"], "H5T_CSET_UTF8")
 
@@ -393,8 +393,8 @@ class Hdf5dtypeTest(unittest.TestCase):
         dt = hdf5dtype.createDataType(typeItem)
         typeSize = hdf5dtype.getItemSize(typeItem)
         self.assertTrue(dt is not None)
-        self.assertEqual(dt.name, "str192")
-        self.assertEqual(dt.kind, "U")
+        self.assertEqual(dt.name, "bytes48")
+        self.assertEqual(dt.kind, "S")
         self.assertEqual(typeSize, 6)
 
     def testCreateNullTermStringType(self):

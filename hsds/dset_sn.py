@@ -801,12 +801,15 @@ async def POST_Dataset(request):
             shape_json["dims"] = dims
             rank = 1
         elif isinstance(shape, str):
-            # only valid string value is H5S_NULL
-            if shape != "H5S_NULL":
+            # only valid string value is H5S_NULL or H5S_SCALAR
+            if shape == "H5S_NULL":
+                shape_json["class"] = "H5S_NULL"
+            elif shape == "H5S_SCALAR":
+                shape_json["class"] = "H5S_SCALAR"
+            else:
                 msg = "POST Datset with invalid shape value"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
-            shape_json["class"] = "H5S_NULL"
         elif isinstance(shape, list):
             if len(shape) == 0:
                 shape_json["class"] = "H5S_SCALAR"
