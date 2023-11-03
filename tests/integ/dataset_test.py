@@ -56,7 +56,7 @@ class DatasetTest(unittest.TestCase):
         helper.validateId(root_uuid)
 
         # create a dataset obj
-        data = {"type": "H5T_IEEE_F32LE"}
+        data = {"type": "H5T_IEEE_F32LE", "shape": "H5S_SCALAR"}
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
@@ -207,6 +207,8 @@ class DatasetTest(unittest.TestCase):
         helper.validateId(root_uuid)
 
         # create a dataset obj
+        # using an empty list for shape is equivalent to using
+        # "H5S_SCALAR"
         data = {"type": "H5T_IEEE_F32LE", "shape": []}
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(data), headers=headers)

@@ -3407,6 +3407,181 @@ class ValueTest(unittest.TestCase):
             else:
                 self.assertEqual(n, 1)
 
+    def testPutFixedUTF8StringDataset(self):
+        # Test PUT value for 1d attribute with fixed length UTF-8 string
+        print("testPutFixedUTF8StringDataset", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+
+        # get domain
+        req = f"{self.endpoint}/"
+        rsp = self.session.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+        req = helper.getEndpoint() + "/"
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create dataset
+        req = self.endpoint + "/datasets"
+
+        text = "this is the chinese character for the number eight: \u516b"
+
+        # size of datatype is in bytes
+        byte_data = bytearray(text, "UTF-8")
+        byte_length = len(byte_data)
+
+        fixed_str_type = {
+            "charSet": "H5T_CSET_UTF8",
+            "class": "H5T_STRING",
+            "length": byte_length + 1,
+            "strPad": "H5T_STR_NULLTERM",
+        }
+
+        data = {"type": fixed_str_type, "shape": "H5S_SCALAR"}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_uuid))
+        self.assertTrue("type" in rspJson)
+        type_json = rspJson["type"]
+        self.assertTrue("class" in type_json)
+        self.assertEqual(type_json["class"], "H5T_STRING")
+        self.assertTrue("length" in type_json)
+        self.assertEqual(type_json["length"], byte_length + 1)
+        self.assertTrue("strPad" in type_json)
+        self.assertEqual(type_json["strPad"], "H5T_STR_NULLTERM")
+        self.assertTrue("charSet" in type_json)
+        self.assertEqual(type_json["charSet"], "H5T_CSET_UTF8")
+
+        # link new dataset
+        name = "fixed_utf8_str_dset"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": dset_uuid}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # write fixed utf8 string to dset
+        data = {"value": text}
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = self.session.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # read value back from dset
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], text)
+
+        # write different utf8 string of same overall byte length
+        text = "this is the chinese character for the number eight: 888"
+        new_byte_length = len(bytearray(text, "UTF-8"))
+        self.assertEqual(byte_length, new_byte_length)
+
+        data = {"value": text}
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = self.session.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # read value back from dset
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], text)
+
+    def testPutFixedUTF8StringDatasetBinary(self):
+        # Test PUT value for 1d attribute with fixed length UTF-8 string in binary
+        print("testPutFixedUTF8StringDatasetBinary", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        headers_bin_req = helper.getRequestHeaders(domain=self.base_domain)
+        headers_bin_req["Content-Type"] = "application/octet-stream"
+        headers_bin_rsp = helper.getRequestHeaders(domain=self.base_domain)
+        headers_bin_rsp["accept"] = "application/octet-stream"
+
+        req = helper.getEndpoint() + "/"
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create dataset
+        req = self.endpoint + "/datasets"
+
+        text = "this is the chinese character for the number eight: \u516b"
+        # size of datatype is in bytes
+        binary_text = bytearray(text, "UTF-8")
+        byte_length = len(binary_text)
+
+        fixed_str_type = {
+            "charSet": "H5T_CSET_UTF8",
+            "class": "H5T_STRING",
+            "length": byte_length,
+            "strPad": "H5T_STR_NULLTERM",
+        }
+
+        data = {"type": fixed_str_type, "shape": "H5S_SCALAR"}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_uuid))
+
+        # link new dataset
+        name = "fixed_utf8_str_dset_binary"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": dset_uuid}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # write fixed utf8 binary string to dset
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = self.session.put(req, data=binary_text, headers=headers_bin_req)
+        self.assertEqual(rsp.status_code, 200)
+
+        # read value back from dset as json
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], text)
+
+        # read value back as binary
+        rsp = self.session.get(req, headers=headers_bin_rsp)
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(rsp.text, text)
+
+        # write different utf8 binary string of same overall byte length
+        text = "this is the chinese character for the number eight: 888"
+        binary_text = bytearray(text, "UTF-8")
+        new_byte_length = len(binary_text)
+        self.assertEqual(byte_length, new_byte_length)
+
+        # read as JSON
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = self.session.put(req, data=binary_text, headers=headers_bin_req)
+        self.assertEqual(rsp.status_code, 200)
+
+        # read as binary
+        rsp = self.session.get(req, headers=headers_bin_rsp)
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(rsp.text, text)
+
 
 if __name__ == "__main__":
     # setup test files

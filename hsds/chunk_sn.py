@@ -509,7 +509,6 @@ async def PUT_Value(request):
             else:
                 arr = jsonToArray(np_shape, dset_dtype, json_data)
 
-            log.debug(f"jsonToArray returned: {arr}")
             if num_elements != np.prod(arr.shape):
                 msg = f"expected {num_elements} elements, but got {np.prod(arr.shape)}"
                 raise HTTPBadRequest(reason=msg)
@@ -520,13 +519,13 @@ async def PUT_Value(request):
                 arr_tmp[...] = arr
                 arr = arr_tmp
         except ValueError:
-            log.warn(msg)
+            log.warn(f"ValueError: {msg}")
             raise HTTPBadRequest(reason=msg)
         except TypeError:
-            log.warn(msg)
+            log.warn(f"TypeError: {msg}")
             raise HTTPBadRequest(reason=msg)
         except IndexError:
-            log.warn(msg)
+            log.warn(f"IndexError: {msg}")
             raise HTTPBadRequest(reason=msg)
         log.debug(f"got json arr: {arr.shape}")
     else:

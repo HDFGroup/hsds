@@ -64,6 +64,8 @@ def toTuple(rank, data):
         else:
             return tuple(toTuple(rank - 1, x) for x in data)
     else:
+        if isinstance(data, str):
+            data = data.encode("utf8")
         return data
 
 
@@ -91,6 +93,23 @@ def getNumElements(dims):
     else:
         raise ValueError("Unexpected argument")
     return num_elements
+
+
+def isVlen(dt):
+    """
+    Return True if the type contains variable length elements
+    """
+    is_vlen = False
+    if len(dt) > 1:
+        names = dt.names
+        for name in names:
+            if isVlen(dt[name]):
+                is_vlen = True
+                break
+    else:
+        if dt.metadata and "vlen" in dt.metadata:
+            is_vlen = True
+    return is_vlen
 
 
 def jsonToArray(data_shape, data_dtype, data_json):
@@ -122,6 +141,8 @@ def jsonToArray(data_shape, data_dtype, data_json):
             converted_data = toTuple(np_shape_rank, data_json)
         data_json = converted_data
     else:
+        if isinstance(data_json, str):
+            data_json = data_json.encode("utf8")
         data_json = [data_json,]  # listify
 
     if not (None in data_json):
@@ -147,23 +168,6 @@ def jsonToArray(data_shape, data_dtype, data_json):
         arr = np.array([]).astype(data_dtype)
 
     return arr
-
-
-def isVlen(dt):
-    """
-    Return True if the type contains variable length elements
-    """
-    is_vlen = False
-    if len(dt) > 1:
-        names = dt.names
-        for name in names:
-            if isVlen(dt[name]):
-                is_vlen = True
-                break
-    else:
-        if dt.metadata and "vlen" in dt.metadata:
-            is_vlen = True
-    return is_vlen
 
 
 def getElementSize(e, dt):

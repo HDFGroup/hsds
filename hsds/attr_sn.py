@@ -649,6 +649,7 @@ async def PUT_AttributeValue(request):
         raise HTTPBadRequest(reason=msg)
 
     np_shape = getShapeDims(attr_shape)
+    log.debug(f"np_shape: {np_shape}")
     type_json = dn_json["type"]
     np_dtype = createDataType(type_json)  # np datatype
 
@@ -697,6 +698,10 @@ async def PUT_AttributeValue(request):
         # convert to JSON for transmission to DN
         data = arr.tolist()
         value = bytesArrayToList(data)
+        if attr_shape["class"] == "H5S_SCALAR":
+            # just send the value, not a list
+            value = value[0]
+
     else:
         try:
             body = await request.json()
