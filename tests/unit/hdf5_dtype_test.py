@@ -394,7 +394,7 @@ class Hdf5dtypeTest(unittest.TestCase):
         typeSize = hdf5dtype.getItemSize(typeItem)
         self.assertTrue(dt is not None)
         self.assertEqual(dt.name, "bytes48")
-        self.assertEqual(dt.kind, "S")
+        self.assertEqual(dt.kind, "S")  # uses byte
         self.assertEqual(typeSize, 6)
 
     def testCreateNullTermStringType(self):

@@ -1107,6 +1107,7 @@ async def POST_Dataset(request):
 
             f_out = []
             for filter in f_in:
+                log.debug(f"filter: {filter}")
                 if isinstance(filter, int) or isinstance(filter, str):
                     item = getFilterItem(filter)
                     if not item:
