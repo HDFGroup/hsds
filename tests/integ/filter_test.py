@@ -279,7 +279,6 @@ class FilterTest(unittest.TestCase):
         self.assertEqual(len(row), 1)
         self.assertEqual(row[0], 22)
 
-
     def testDeshuffling(self):
         """Test the shuffle filter implementation used with a known data file."""
         print("testDeshuffling", self.base_domain)
