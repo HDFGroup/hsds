@@ -105,7 +105,7 @@ def get_storage_info(dset, select=None):
             arr_index.append(n - s.start)
         if not skip:
             e = (chunk_info.byte_offset, chunk_info.size)
-            arr[arr_index] = e
+            arr[tuple(arr_index)] = e
             log.debug(f"added arr[{arr_index}] = {e}")
     # end chunk_callback
 
