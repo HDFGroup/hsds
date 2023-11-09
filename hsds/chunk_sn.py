@@ -291,7 +291,8 @@ async def PUT_Value(request):
             try:
                 json_query_data = bytesArrayToList(data)
             except ValueError as err:
-                raise HTTPBadRequest(f"Cannot decode provided bytes to list: {err}")
+                msg = f"Cannot decode provided bytes to list: {err}"
+                raise HTTPBadRequest(reason=msg)
             rsp_json["value"] = json_query_data
             rsp_json["hrefs"] = get_hrefs(request, dset_json)
             resp = await jsonResponse(request, rsp_json)
@@ -1026,7 +1027,8 @@ async def GET_Value(request):
             try:
                 json_data = bytesArrayToList(data)
             except ValueError as err:
-                raise HTTPBadRequest(f"Cannot decode bytes to list: {err}")
+                msg = f"Cannot decode bytes to list: {err}"
+                raise HTTPBadRequest(reason=msg)
             datashape = dset_json["shape"]
 
             if datashape["class"] == "H5S_SCALAR":
@@ -1287,7 +1289,8 @@ async def POST_Value(request):
             try:
                 json_data = bytesArrayToList(data)
             except ValueError as err:
-                raise HTTPBadRequest(f"Cannot decode bytes to list: {err}")
+                msg = f"Cannot decode bytes to list: {err}"
+                raise HTTPBadRequest(reason=msg)
             resp_json["value"] = json_data
             resp_json["hrefs"] = get_hrefs(request, dset_json)
             resp_body = await jsonResponse(

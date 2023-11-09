@@ -132,10 +132,10 @@ def jsonToArray(data_shape, data_dtype, data_json):
                 index += 1
         return index
 
-    if (data_json is None):
+    if data_json is None:
         return np.array([]).astype(data_dtype)
 
-    if (isinstance(data_json, (list, tuple))):
+    if isinstance(data_json, (list, tuple)):
         if None in data_json:
             return np.array([]).astype(data_dtype)
 

@@ -375,7 +375,7 @@ async def PUT_Attribute(request):
         try:
             arr = jsonToArray(np_dims, arr_dtype, value)
         except ValueError as e:
-            if (value is None):
+            if value is None:
                 arr = np.array([]).astype(arr_dtype)
             else:
                 msg = f"Bad Request: input data doesn't match selection: {e}"
@@ -544,7 +544,7 @@ async def GET_AttributeValue(request):
         try:
             arr = jsonToArray(np_shape, arr_dtype, dn_json["value"])
         except ValueError as e:
-            if (dn_json["value"] is None):
+            if dn_json["value"] is None:
                 arr = np.array([]).astype(arr_dtype)
             else:
                 msg = f"Bad Request: input data doesn't match selection: {e}"
@@ -707,7 +707,8 @@ async def PUT_AttributeValue(request):
         try:
             value = bytesArrayToList(data)
         except ValueError as err:
-            raise HTTPBadRequest(f"Cannot decode bytes to list: {err}")
+            msg = f"Cannot decode bytes to list: {err}"
+            raise HTTPBadRequest(reason=msg)
 
         if attr_shape["class"] == "H5S_SCALAR":
             # just send the value, not a list
@@ -731,7 +732,7 @@ async def PUT_AttributeValue(request):
         try:
             arr = jsonToArray(np_shape, np_dtype, value)
         except ValueError as e:
-            if (value is None):
+            if value is None:
                 arr = np.array([]).astype(np_dtype)
             else:
                 msg = f"Bad Request: input data doesn't match selection: {e}"
