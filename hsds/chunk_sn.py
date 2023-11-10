@@ -288,7 +288,11 @@ async def PUT_Value(request):
             rsp_json = {}
             data = arr_rsp.tolist()
             log.debug(f"got rsp data {len(data)} points")
-            json_query_data = bytesArrayToList(data)
+            try:
+                json_query_data = bytesArrayToList(data)
+            except ValueError as err:
+                msg = f"Cannot decode provided bytes to list: {err}"
+                raise HTTPBadRequest(reason=msg)
             rsp_json["value"] = json_query_data
             rsp_json["hrefs"] = get_hrefs(request, dset_json)
             resp = await jsonResponse(request, rsp_json)
@@ -1020,8 +1024,11 @@ async def GET_Value(request):
                 arr = squeezeArray(arr)
 
             data = arr.tolist()
-            json_data = bytesArrayToList(data)
-
+            try:
+                json_data = bytesArrayToList(data)
+            except ValueError as err:
+                msg = f"Cannot decode bytes to list: {err}"
+                raise HTTPBadRequest(reason=msg)
             datashape = dset_json["shape"]
 
             if datashape["class"] == "H5S_SCALAR":
@@ -1279,7 +1286,11 @@ async def POST_Value(request):
             resp_json = {}
             data = arr_rsp.tolist()
             log.debug(f"got rsp data {len(data)} points")
-            json_data = bytesArrayToList(data)
+            try:
+                json_data = bytesArrayToList(data)
+            except ValueError as err:
+                msg = f"Cannot decode bytes to list: {err}"
+                raise HTTPBadRequest(reason=msg)
             resp_json["value"] = json_data
             resp_json["hrefs"] = get_hrefs(request, dset_json)
             resp_body = await jsonResponse(

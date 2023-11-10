@@ -374,10 +374,13 @@ async def PUT_Attribute(request):
         log.debug(f"attribute value: {value}")
         try:
             arr = jsonToArray(np_dims, arr_dtype, value)
-        except ValueError:
-            msg = "Bad Request: input data doesn't match selection"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+        except ValueError as e:
+            if value is None:
+                arr = np.array([]).astype(arr_dtype)
+            else:
+                msg = f"Bad Request: input data doesn't match selection: {e}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
         log.debug(f"Got: {arr.size} array elements")
     else:
         value = None
@@ -540,10 +543,13 @@ async def GET_AttributeValue(request):
         np_shape = getShapeDims(shape_json)
         try:
             arr = jsonToArray(np_shape, arr_dtype, dn_json["value"])
-        except ValueError:
-            msg = "Bad Request: input data doesn't match selection"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+        except ValueError as e:
+            if dn_json["value"] is None:
+                arr = np.array([]).astype(arr_dtype)
+            else:
+                msg = f"Bad Request: input data doesn't match selection: {e}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
         output_data = arr.tobytes()
         msg = f"GET AttributeValue - returning {len(output_data)} "
         msg += "bytes binary data"
@@ -697,7 +703,13 @@ async def PUT_AttributeValue(request):
         arr = arr.reshape(np_shape)  # conform to selection shape
         # convert to JSON for transmission to DN
         data = arr.tolist()
-        value = bytesArrayToList(data)
+
+        try:
+            value = bytesArrayToList(data)
+        except ValueError as err:
+            msg = f"Cannot decode bytes to list: {err}"
+            raise HTTPBadRequest(reason=msg)
+
         if attr_shape["class"] == "H5S_SCALAR":
             # just send the value, not a list
             value = value[0]
@@ -719,10 +731,13 @@ async def PUT_AttributeValue(request):
         # validate that the value agrees with type/shape
         try:
             arr = jsonToArray(np_shape, np_dtype, value)
-        except ValueError:
-            msg = "Bad Request: input data doesn't match selection"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+        except ValueError as e:
+            if value is None:
+                arr = np.array([]).astype(np_dtype)
+            else:
+                msg = f"Bad Request: input data doesn't match selection: {e}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
     log.debug(f"Got: {arr.size} array elements")
 
     # ready to add attribute now
