@@ -17,9 +17,10 @@
 import time
 import json
 import zlib
+import numpy as np
 import numcodecs as codecs
+from bitshuffle import bitshuffle, bitunshuffle
 from aiohttp.web_exceptions import HTTPInternalServerError
-
 
 from .. import hsds_logger as log
 from .s3Client import S3Client
@@ -44,6 +45,9 @@ except ImportError:
 
 from .. import config
 
+BYTE_SHUFFLE = 1
+BIT_SHUFFLE = 2
+
 
 def getCompressors():
     """return available compressors"""
@@ -65,6 +69,7 @@ def getCompressors():
 def getSupportedFilters(include_compressors=True):
     """return list of other supported filters"""
     filters = [
+        "bitshuffle",
         "shuffle",
         "fletcher32",
     ]
@@ -85,16 +90,116 @@ def getBloscThreads():
     return nthreads
 
 
-def _shuffle(element_size, chunk):
-    shuffler = codecs.Shuffle(element_size)
-    arr = shuffler.encode(chunk)
+def _shuffle(codec, data, item_size=4):
+    if codec == 1:
+        # byte shuffle, use numcodecs Shuffle
+        shuffler = codecs.Shuffle(item_size)
+        arr = shuffler.encode(data)
+    elif codec == 2:
+        # bit shuffle, use bitshuffle packge
+        if isinstance(data, bytes):
+            # bitshufle is expecting numpy array
+            data = np.frombuffer(data, dtype=np.dtype("uint8"))
+        arr = bitshuffle(data)
+    else:
+        log.error(f"Unexpected codec: {codec} for _shuffle")
+        raise ValueError()
     return arr.tobytes()
 
 
-def _unshuffle(element_size, chunk):
-    shuffler = codecs.Shuffle(element_size)
-    arr = shuffler.decode(chunk)
+def _unshuffle(codec, data, item_size=4):
+    if codec == 1:
+        # byte shuffle, use numcodecs Shuffle
+        shuffler = codecs.Shuffle(item_size)
+        arr = shuffler.decode(data)
+    elif codec == 2:
+        # bit shuffle, use bitshuffle
+        if isinstance(data, bytes):
+            # bitshufle is expecting numpy array
+            data = np.frombuffer(data, dtype=np.dtype("uint8"))
+        arr = bitunshuffle(data)
+
     return arr.tobytes()
+
+
+def _uncompress(data, compressor=None, shuffle=0, item_size=4):
+    """ Uncompress the provided data using compessor and/or shuffle """
+    log.debug(f"_uncompress(compressor={compressor}, shuffle={shuffle})")
+    if compressor:
+        if compressor in ("gzip", "deflate"):
+            # blosc referes to this as zlib
+            compressor = "zlib"
+        # first check if this was compressed with blosc
+        # returns typesize, isshuffle, and memcopied
+        blosc_metainfo = codecs.blosc.cbuffer_metainfo(data)
+        if blosc_metainfo[0] > 0:
+            log.info(f"blosc compressed data for {len(data)} bytes")
+            try:
+                blosc = codecs.Blosc()
+                udata = blosc.decode(data)
+                log.info(f"blosc uncompressed to {len(udata)} bytes")
+                data = udata
+                if shuffle == BYTE_SHUFFLE:
+                    shuffle = 0  # blosc will unshuffle the bytes for us
+            except Exception as e:
+                msg = f"got exception: {e} using blosc decompression"
+                log.error(msg)
+                raise HTTPInternalServerError()
+        elif compressor == "zlib":
+            # data may have been compressed without blosc,
+            # try using zlib directly
+            log.info(f"using zlib to decompress {len(data)} bytes")
+            try:
+                udata = zlib.decompress(data)
+                log.info(f"uncompressed to {len(udata)} bytes")
+                data = udata
+            except zlib.error as zlib_error:
+                log.info(f"zlib_err: {zlib_error}")
+                log.error("unable to uncompress data with zlib")
+                raise HTTPInternalServerError()
+        else:
+            msg = f"don't know how to decompress data in {compressor} "
+            log.error(msg)
+            raise HTTPInternalServerError()
+    if shuffle:
+        start_time = time.time()
+        data = _unshuffle(shuffle, data, item_size=item_size)
+        finish_time = time.time()
+        elapsed = finish_time - start_time
+        msg = f"unshuffled {len(data)} bytes, {(elapsed):.2f} elapsed"
+        log.debug(msg)
+
+    return data
+
+
+def _compress(data, compressor=None, clevel=5, shuffle=0, item_size=4):
+    log.debug(f"_uncompress(compressor={compressor}, shuffle={shuffle})")
+    if shuffle == 2:
+        # bit shuffle the data before applying the compressor
+        log.debug("bitshuffling data")
+        data = _shuffle(shuffle, data, item_size=item_size)
+        shuffle = 0  # don't do any blosc shuffling
+
+    if compressor:
+        if compressor in ("gzip", "deflate"):
+            # blosc referes to this as zlib
+            compressor = "zlib"
+        cdata = None
+        # try with blosc compressor
+        try:
+            blosc = codecs.Blosc(cname=compressor, clevel=clevel, shuffle=shuffle)
+            cdata = blosc.encode(data)
+            msg = f"compressed from {len(data)} bytes to {len(cdata)} bytes "
+            msg += f"using filter: {blosc.cname} with level: {blosc.clevel}"
+            log.info(msg)
+        except Exception as e:
+            log.error(f"got exception using blosc encoding: {e}")
+            raise HTTPInternalServerError()
+
+        if cdata is not None:
+            data = cdata  # used compress data
+
+    return data
 
 
 def _getStorageClient(app):
@@ -217,58 +322,6 @@ async def getStorJSONObj(app, key, bucket=None):
     return json_dict
 
 
-def _uncompress(data, compressor=None, shuffle=0):
-    """ Uncompress the provided data using compessor and/or shuffle """
-    if compressor:
-        # compressed chunk data...
-
-        # first check if this was compressed with blosc
-        # returns typesize, isshuffle, and memcopied
-        blosc_metainfo = codecs.blosc.cbuffer_metainfo(data)
-        if blosc_metainfo[0] > 0:
-            log.info(f"blosc compressed data for {len(data)} bytes")
-            try:
-                blosc = codecs.Blosc()
-                udata = blosc.decode(data)
-                log.info(f"uncompressed to {len(udata)} bytes")
-                data = udata
-                shuffle = 0  # blosc will unshuffle the bytes for us
-            except Exception as e:
-                msg = f"got exception: {e} using blosc decompression"
-                log.error(msg)
-                raise HTTPInternalServerError()
-        elif compressor == "zlib":
-            # data may have been compressed without blosc,
-            # try using zlib directly
-            log.info(f"using zlib to decompress {len(data)} bytes")
-            try:
-                udata = zlib.decompress(data)
-                log.info(f"uncompressed to {len(udata)} bytes")
-                data = udata
-            except zlib.error as zlib_error:
-                log.info(f"zlib_err: {zlib_error}")
-                log.error("unable to uncompress data with zlib")
-                raise HTTPInternalServerError()
-        else:
-            msg = f"don't know how to decompress data in {compressor} "
-            log.error(msg)
-            raise HTTPInternalServerError()
-
-    if shuffle > 0:
-        log.debug(f"shuffle is {shuffle}")
-        start_time = time.time()
-        unshuffled = _unshuffle(shuffle, data)
-        if unshuffled is not None:
-            log.debug(f"unshuffled to {len(unshuffled)} bytes")
-            data = unshuffled
-        finish_time = time.time()
-        elapsed = finish_time - start_time
-        msg = f"unshuffled {len(data)} bytes, {(elapsed):.2f} elapsed"
-        log.debug(msg)
-
-    return data
-
-
 async def getStorBytes(app,
                        key,
                        filter_ops=None,
@@ -294,15 +347,20 @@ async def getStorBytes(app,
     log.info(msg)
 
     shuffle = 0
+    item_size = 4
     compressor = None
     if filter_ops:
         log.debug(f"getStorBytes for {key} with filter_ops: {filter_ops}")
-        if "use_shuffle" in filter_ops and filter_ops["use_shuffle"]:
+        if filter_ops.get("shuffle") == "shuffle":
             shuffle = filter_ops["item_size"]
             log.debug("using shuffle filter")
+        elif filter_ops.get("shuffle") == "bitshuffle":
+            shuffle = 2
+            log.debug("using bitshuffle filter")
         if "compressor" in filter_ops:
             compressor = filter_ops["compressor"]
             log.debug(f"using compressor: {compressor}")
+        item_size = filter_ops["item_size"]
 
     kwargs = {"bucket": bucket, "key": key, "offset": offset, "length": length}
 
@@ -336,7 +394,8 @@ async def getStorBytes(app,
             m = n + chunk_location.length
             log.debug(f"getStorBytes - extracting chunk from data[{n}:{m}]")
             h5_bytes = data[n:m]
-            h5_bytes = _uncompress(h5_bytes, compressor=compressor, shuffle=shuffle)
+            kwargs = {"compressor": compressor, "shuffle": shuffle, "item_size": item_size}
+            h5_bytes = _uncompress(h5_bytes, **kwargs)
             if len(h5_bytes) != h5_size:
                 msg = f"expected chunk index: {chunk_location.index} to have size: "
                 msg += f"{h5_size} but got: {len(h5_bytes)}"
@@ -353,7 +412,7 @@ async def getStorBytes(app,
         # chunk_bytes got updated, so just return None
         return None
     else:
-        data = _uncompress(data, compressor=compressor, shuffle=shuffle)
+        data = _uncompress(data, compressor=compressor, shuffle=shuffle, item_size=item_size)
         return data
 
 
@@ -365,32 +424,23 @@ async def putStorBytes(app, key, data, filter_ops=None, bucket=None):
         bucket = app["bucket_name"]
     if key[0] == "/":
         key = key[1:]  # no leading slash
-    shuffle = -1  # auto-shuffle
+    shuffle = 0
     clevel = 5
     cname = None  # compressor name
+    item_size = 4
     if filter_ops:
         if "compressor" in filter_ops:
             cname = filter_ops["compressor"]
-        if "use_shuffle" in filter_ops and not filter_ops["use_shuffle"]:
-            shuffle = 0  # client indicates to turn off shuffling
+        if "shuffle" in filter_ops:
+            shuffle = filter_ops["shuffle"]
         if "level" in filter_ops:
             clevel = filter_ops["level"]
+        item_size = filter_ops["item_size"]
     msg = f"putStorBytes({bucket}/{key}), {len(data)} bytes shuffle: {shuffle}"
-    msg += f" compressor: {cname} level: {clevel}"
+    msg += f" compressor: {cname} level: {clevel}, item_size: {item_size}"
     log.info(msg)
 
-    if cname:
-        try:
-            blosc = codecs.Blosc(cname=cname, clevel=clevel, shuffle=shuffle)
-            cdata = blosc.encode(data)
-            # TBD: add cname in blosc constructor
-            msg = f"compressed from {len(data)} bytes to {len(cdata)} bytes "
-            msg += f"using filter: {blosc.cname} with level: {blosc.clevel}"
-            log.info(msg)
-            data = cdata
-        except Exception as e:
-            log.error(f"got exception using blosc encoding: {e}")
-            raise HTTPInternalServerError()
+    data = _compress(data, compressor=cname, clevel=clevel, shuffle=shuffle, item_size=item_size)
 
     rsp = await client.put_object(key, data, bucket=bucket)
 

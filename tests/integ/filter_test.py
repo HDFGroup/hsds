@@ -217,11 +217,72 @@ class FilterTest(unittest.TestCase):
         self.assertEqual(len(row), 1)
         self.assertEqual(row[0], 22)
 
+    def testBitShuffleAndDeflate(self):
+        # test Dataset with creation property list
+        print("testBitShuffleAndDeflate", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        # get domain
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # create the dataset
+        req = self.endpoint + "/datasets"
+
+        # Create ~1MB dataset
+
+        payload = {"type": "H5T_STD_I32LE", "shape": [1024, 1024]}
+        # define deflate compression
+        gzip_filter = {
+            "class": "H5Z_FILTER_DEFLATE",
+            "id": 1,
+            "level": 9,
+            "name": "deflate",
+        }
+        # and bit shuffle
+        bitshuffle_filter = {"class": "H5Z_FILTER_BITSHUFFLE", "id": 32008, "name": "bitshuffle"}
+        payload["creationProperties"] = {"filters": [bitshuffle_filter, gzip_filter]}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_uuid))
+
+        # link new dataset as 'dset'
+        name = "dset"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": dset_uuid}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # write a horizontal strip of 22s
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        data = [22] * 1024
+        payload = {"start": [512, 0], "stop": [513, 1024], "value": data}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # read back the 512,512 element
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"  # test
+        params = {"select": "[512:513,512:513]"}  # read  1 element
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+        self.assertEqual(len(value), 1)
+        row = value[0]
+        self.assertEqual(len(row), 1)
+        self.assertEqual(row[0], 22)
+
     def testDeshuffling(self):
         """Test the shuffle filter implementation used with a known data file."""
         print("testDeshuffling", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
-        return
 
         hdf5_sample_bucket = config.get("hdf5_sample_bucket")
         if not hdf5_sample_bucket:
@@ -267,7 +328,7 @@ class FilterTest(unittest.TestCase):
         root_uuid = rspJson["root"]
 
         # Sample file URI...
-        furi = f"s3://{hdf5_sample_bucket}/data/hdf5test/sample-shuffle-data.h5"
+        furi = f"{hdf5_sample_bucket}/data/hdf5test/sample-shuffle-data.h5"
 
         # Create HSDS datasets and test reading shuffled data from an HDF5 file...
         for name, dt, numpy_dt in dset_info:

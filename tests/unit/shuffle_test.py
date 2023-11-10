@@ -15,7 +15,7 @@ import numpy as np
 import time
 
 sys.path.append("../..")
-from hsds.util.storUtil import _shuffle, _unshuffle
+from hsds.util.storUtil import _shuffle, _unshuffle, BIT_SHUFFLE, BYTE_SHUFFLE
 
 
 class ShuffleUtilTest(unittest.TestCase):
@@ -23,7 +23,7 @@ class ShuffleUtilTest(unittest.TestCase):
         super(ShuffleUtilTest, self).__init__(*args, **kwargs)
         # main
 
-    def testShuffle(self):
+    def testByteShuffle(self):
         arr = np.zeros((3,), dtype="<u2")
         arr[0] = 0x0001
         arr[1] = 0x0002
@@ -31,26 +31,39 @@ class ShuffleUtilTest(unittest.TestCase):
         data = arr.tobytes()
         fmt = "{:02X}{:02X} " * (len(data) // 2)
         self.assertEqual(fmt.format(*data), "0100 0200 0300 ")
-        shuffled = _shuffle(2, data)
+
+        # Byte Shuffle
+        shuffled = _shuffle(BYTE_SHUFFLE, data, item_size=2)
         self.assertEqual(fmt.format(*shuffled), "0102 0300 0000 ")
-        unshuffled = _unshuffle(2, shuffled)
+        unshuffled = _unshuffle(BYTE_SHUFFLE, shuffled, item_size=2)
         self.assertEqual(fmt.format(*data), "0100 0200 0300 ")
         for i in range(len(data)):
             self.assertEqual(data[i], unshuffled[i])
+
+    def testBitShuffle(self):
+        arr = np.array(list(range(100)), dtype="<u2")
+        data = arr.tobytes()
+        # Bit Shuffle
+        shuffled = _shuffle(BIT_SHUFFLE, data, item_size=2)
+        self.assertTrue(shuffled != data)
+        unshuffled = _unshuffle(BIT_SHUFFLE, shuffled, item_size=2)
+        arr_copy = np.frombuffer(unshuffled, dtype="<u2")
+        self.assertTrue(np.array_equal(arr, arr_copy))
 
     def testTime(self):
         arr = np.random.rand(1000, 1000)
         now = time.time()
         data = arr.tobytes()
-        shuffled = _shuffle(8, data)
+        item_size = arr.dtype.itemsize
+        shuffled = _shuffle(BYTE_SHUFFLE, data, item_size=item_size)
 
         self.assertEqual(len(data), len(shuffled))
-        unshuffled = _unshuffle(8, shuffled)
+        unshuffled = _unshuffle(BYTE_SHUFFLE, shuffled, item_size=item_size)
         elapsed = time.time() - now
 
         # this was taking ~0.04 s with an i7
         # without numba, time was 2.4s (60x slower)
-        # print("time:", elapsed)
+        print(f"time: {elapsed:.3f}")
         self.assertTrue(elapsed < 0.1, f"Elapsed time: {elapsed}")
 
         self.assertEqual(len(shuffled), len(unshuffled))

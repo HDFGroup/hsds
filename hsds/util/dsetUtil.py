@@ -40,6 +40,7 @@ FILTER_DEFS = (
     ("H5Z_FILTER_SNAPPY", 32003, "snappy"),
     ("H5Z_FILTER_LZ4", 32004, "lz4"),
     ("H5Z_FILTER_LZ4HC", 32005, "lz4hc"),
+    ("H5Z_FILTER_BITSHUFFLE", 32008, "bitshuffle"),
     ("H5Z_FILTER_ZSTD", 32015, "zstd"),
 )
 
@@ -78,6 +79,7 @@ def getFilterItem(key):
     """
     Return filter code, id, and name, based on an id, a name or a code.
     """
+
     if key == "deflate":
         key = "gzip"  # use gzip as equivalent
     for item in FILTER_DEFS:
@@ -123,14 +125,15 @@ def getCompressionFilter(dset_json):
 def getShuffleFilter(dset_json):
     """Return shuffle filter, or None"""
     filters = getFilters(dset_json)
+    FILTER_CLASSES = ("H5Z_FILTER_SHUFFLE", "H5Z_FILTER_BITSHUFFLE")
     for filter in filters:
-        try:
-            if filter["class"] == "H5Z_FILTER_SHUFFLE":
-                log.debug(f"Shuffle filter is used: {filter}")
-                return filter
-        except KeyError:
+        if "class" not in filter:
             log.warn(f"filter option: {filter} with no class key")
             continue
+        filter_class = filter["class"]
+        if filter_class in FILTER_CLASSES:
+            return filter
+
     log.debug("Shuffle filter not used")
     return None
 
@@ -149,17 +152,21 @@ def getFilterOps(app, dset_json, item_size):
     filter_ops = {}
 
     shuffleFilter = getShuffleFilter(dset_json)
-    if shuffleFilter:
-        filter_ops["use_shuffle"] = True
+    if shuffleFilter and item_size != "H5T_VARIABLE":
+        shuffle_name = shuffleFilter["name"]
+        if shuffle_name == "shuffle":
+            filter_ops["shuffle"] = 1  # use regular shuffle
+        elif shuffle_name == "bitshuffle":
+            filter_ops["shuffle"] = 2  # use bitshuffle
+        else:
+            log.warn(f"unexpected shuffleFilter: {shuffle_name}")
+            filter_ops["shuffle"] = 0  # no shuffle
+    else:
+        filter_ops["shuffle"] = 0  # no shuffle
 
     if compressionFilter:
         if compressionFilter["class"] == "H5Z_FILTER_DEFLATE":
             filter_ops["compressor"] = "zlib"  # blosc compressor
-            if shuffleFilter:
-                filter_ops["use_shuffle"] = True
-            else:
-                # for HDF5-style compression, use shuffle only if it turned on
-                filter_ops["use_shuffle"] = False
         else:
             if "name" in compressionFilter:
                 filter_ops["compressor"] = compressionFilter["name"]
@@ -170,10 +177,7 @@ def getFilterOps(app, dset_json, item_size):
         else:
             filter_ops["level"] = int(compressionFilter["level"])
 
-    if filter_ops:
         filter_ops["item_size"] = item_size
-        if item_size == "H5T_VARIABLE":
-            filter_ops["use_shuffle"] = False
         log.debug(f"save filter ops: {filter_ops} for {dset_id}")
         filter_map[dset_id] = filter_ops  # save
         return filter_ops
