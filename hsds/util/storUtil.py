@@ -72,6 +72,8 @@ def getSupportedFilters(include_compressors=True):
         "bitshuffle",
         "shuffle",
         "fletcher32",
+        "nbit",        # No-op
+        "scaleoffset"  # No-op
     ]
     if include_compressors:
         filters.extend(getCompressors())

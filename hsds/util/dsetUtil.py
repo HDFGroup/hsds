@@ -34,7 +34,7 @@ FILTER_DEFS = (
     ("H5Z_FILTER_FLETCHER32", 3, "fletcher32"),
     ("H5Z_FILTER_SZIP", 4, "szip"),
     ("H5Z_FILTER_NBIT", 5, "nbit"),
-    ("H5Z_FILTER_SCALEOFFSET", 6, "scaleoffet"),
+    ("H5Z_FILTER_SCALEOFFSET", 6, "scaleoffset"),
     ("H5Z_FILTER_LZF", 32000, "lzf"),
     ("H5Z_FILTER_BLOSC", 32001, "blosclz"),
     ("H5Z_FILTER_SNAPPY", 32003, "snappy"),
