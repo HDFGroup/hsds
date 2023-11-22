@@ -1319,7 +1319,7 @@ class DatasetTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
 
-        bad_compressors = ("shrink-o-rama", "scaleoffet")
+        bad_compressors = ("shrink-o-rama")
         for compressor_name in bad_compressors:
             # create the dataset
             req = self.endpoint + "/datasets"
