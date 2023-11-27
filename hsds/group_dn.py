@@ -145,7 +145,7 @@ async def PUT_Group(request):
     Used to flush all objects under a root group to S3
     """
 
-    flush_time_out = config.get("s3_sync_interval") * 2
+    flush_timeout = config.get("flush_timeout", default=10)
     flush_sleep_interval = config.get("flush_sleep_interval")
     log.request(request)
     app = request.app
@@ -186,7 +186,7 @@ async def PUT_Group(request):
     log.debug(f"flushop - waiting on {len(flush_set)} items")
 
     if len(flush_set) > 0:
-        while time.time() - flush_start < flush_time_out:
+        while time.time() - flush_start < flush_timeout:
             await asyncio.sleep(flush_sleep_interval)  # wait a bit
             # check to see if the items in our flush set are still there
             remaining_set = set()
@@ -210,7 +210,7 @@ async def PUT_Group(request):
 
     if len(flush_set) > 0:
         msg = f"flushop - {len(flush_set)} items not updated after "
-        msg += f"{flush_time_out} seconds"
+        msg += f"{flush_timeout} seconds"
         log.warn(msg)
         log.debug(f"flush set: {flush_set}")
         raise HTTPServiceUnavailable()

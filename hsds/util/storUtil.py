@@ -98,7 +98,7 @@ def _shuffle(codec, data, item_size=4):
         shuffler = codecs.Shuffle(item_size)
         arr = shuffler.encode(data)
     elif codec == 2:
-        # bit shuffle, use bitshuffle packge
+        # bit shuffle, use bitshuffle package
         if isinstance(data, bytes):
             # bitshufle is expecting numpy array
             data = np.frombuffer(data, dtype=np.dtype("uint8"))
@@ -353,15 +353,22 @@ async def getStorBytes(app,
     compressor = None
     if filter_ops:
         log.debug(f"getStorBytes for {key} with filter_ops: {filter_ops}")
-        if filter_ops.get("shuffle") == "shuffle":
-            shuffle = filter_ops["item_size"]
-            log.debug("using shuffle filter")
-        elif filter_ops.get("shuffle") == "bitshuffle":
-            shuffle = 2
-            log.debug("using bitshuffle filter")
+        if "shuffle" in filter_ops:
+            shuffle = filter_ops["shuffle"]
+            if shuffle == 1:
+                log.debug("using shuffle filter")
+            elif shuffle == 2:
+                log.debug("using bitshuffle filter")
+            else:
+                log.debug("no shuffle filter")
+        else:
+            log.debug("shuffle filter not set in filter_ops")
+
         if "compressor" in filter_ops:
             compressor = filter_ops["compressor"]
             log.debug(f"using compressor: {compressor}")
+        else:
+            log.debug("compressor not set in filter ops")
         item_size = filter_ops["item_size"]
 
     kwargs = {"bucket": bucket, "key": key, "offset": offset, "length": length}

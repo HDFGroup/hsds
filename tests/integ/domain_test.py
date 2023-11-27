@@ -321,7 +321,6 @@ class DomainTest(unittest.TestCase):
             self.assertTrue(k in rspJson)
 
         root_id = rspJson["root"]
-        print("root_id:", root_id)
 
         # verify that putting the same domain again fails with a 409 error
         rsp = self.session.put(req, headers=headers)

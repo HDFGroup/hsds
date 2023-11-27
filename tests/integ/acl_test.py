@@ -232,7 +232,7 @@ class AclTest(unittest.TestCase):
             rsp = self.session.get(req, headers=headers)
             self.assertEqual(rsp.status_code, 403)  # forbidden
         else:
-            print("user2name not set")
+            print("user2_name not set")
 
     def testPutAcl(self):
         print("testPutAcl", self.base_domain)

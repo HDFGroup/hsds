@@ -127,12 +127,16 @@ def getShuffleFilter(dset_json):
     filters = getFilters(dset_json)
     FILTER_CLASSES = ("H5Z_FILTER_SHUFFLE", "H5Z_FILTER_BITSHUFFLE")
     for filter in filters:
+        log.debug(f"filter: {filter}")
         if "class" not in filter:
             log.warn(f"filter option: {filter} with no class key")
             continue
         filter_class = filter["class"]
         if filter_class in FILTER_CLASSES:
+            log.debug(f"found filter: {filter}")
             return filter
+        else:
+            log.warn(f"unexpected filter class: {filter_class}")
 
     log.debug("Shuffle filter not used")
     return None
@@ -177,9 +181,11 @@ def getFilterOps(app, dset_json, item_size):
         else:
             filter_ops["level"] = int(compressionFilter["level"])
 
+    if filter_ops:
         filter_ops["item_size"] = item_size
         log.debug(f"save filter ops: {filter_ops} for {dset_id}")
         filter_map[dset_id] = filter_ops  # save
+
         return filter_ops
     else:
         return None
