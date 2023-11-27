@@ -42,6 +42,7 @@ dependencies = [
     "bitshuffle",
     "botocore",
     "cryptography",
+    "h5py >= 3.6.0",
     "numcodecs",
     "numpy",
     "psutil",
@@ -50,6 +51,7 @@ dependencies = [
     "pyyaml",
     "requests-unixsocket",
     "simplejson",
+    "s3fs",
 ]
 
 [project.optional-dependencies]
