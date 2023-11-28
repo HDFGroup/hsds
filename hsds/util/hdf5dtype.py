@@ -662,9 +662,9 @@ def createBaseDataType(typeItem):
         if isinstance(arrayBaseType, dict):
             if "class" not in arrayBaseType:
                 raise KeyError("'class' not provided for array base type")
-            type_classes = ("H5T_INTEGER", "H5T_FLOAT", "H5T_STRING")
+            type_classes = ("H5T_INTEGER", "H5T_FLOAT", "H5T_STRING", "H5T_ARRAY")
             if arrayBaseType["class"] not in type_classes:
-                msg = "Array Type base type must be integer, float, or string"
+                msg = "Array Type base type must be integer, float, string, or array"
                 raise TypeError(msg)
         baseType = createDataType(arrayBaseType)
         metadata = None

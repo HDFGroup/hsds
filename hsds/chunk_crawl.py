@@ -67,7 +67,7 @@ def getFillValue(dset_json):
         arr = np.empty((1,), dtype=dt, order="C")
         arr[...] = fill_value
     else:
-        arr = np.zeros([1,], dtype=dt, order="C")
+        arr = None
 
     return arr
 
@@ -448,7 +448,7 @@ async def read_point_sel(
 
     def defaultArray():
         # no data, return zero array
-        if fill_value:
+        if fill_value is not None:
             arr = np.empty((num_points,), dtype=dt)
             arr[...] = fill_value
         else:

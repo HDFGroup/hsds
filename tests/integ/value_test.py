@@ -3588,6 +3588,101 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.text, text)
 
+    def testCreateArrayDataset(self):
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        array_dims = [5]
+        num_arrays = 3
+
+        datatype = {
+            "class": "H5T_ARRAY",
+            "base": {
+                "class": "H5T_INTEGER",
+                "base": "H5T_STD_I64LE"
+            },
+            "dims": array_dims
+        }
+
+        payload = {
+            "type": datatype,
+            "shape": num_arrays,
+        }
+
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+
+        rspJson = json.loads(rsp.text)
+        array_dset_uuid = rspJson["id"]
+        self.assertTrue(helper.validateId(array_dset_uuid))
+
+        # verify the shape of the dataset
+        req = self.endpoint + "/datasets/" + array_dset_uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # get dataset
+        rspJson = json.loads(rsp.text)
+        shape = rspJson["shape"]
+        self.assertEqual(shape["class"], "H5S_SIMPLE")
+        self.assertEqual(shape["dims"], [num_arrays])
+
+    def testCreateNestedArrayDataset(self):
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        base_array_dims = [2]
+        nested_array_dims = [3]
+        num_nested_arrays = 4
+
+        nested_array_dtype = {
+            "class": "H5T_ARRAY",
+            "base": {
+                "class": "H5T_ARRAY",
+                "base": {
+                    "class": "H5T_INTEGER",
+                    "base": "H5T_STD_I64LE"
+                },
+                "dims": base_array_dims
+            },
+            "dims": nested_array_dims
+        }
+
+        payload = {
+            "type": nested_array_dtype,
+            "shape": num_nested_arrays,
+        }
+
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+
+        rspJson = json.loads(rsp.text)
+        array_dset_uuid = rspJson["id"]
+        self.assertTrue(helper.validateId(array_dset_uuid))
+
+        # verify the shape of the dataset
+        req = self.endpoint + "/datasets/" + array_dset_uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # get dataset
+        rspJson = json.loads(rsp.text)
+        shape = rspJson["shape"]
+        self.assertEqual(shape["class"], "H5S_SIMPLE")
+        self.assertEqual(shape["dims"], [num_nested_arrays])
+
 
 if __name__ == "__main__":
     # setup test files

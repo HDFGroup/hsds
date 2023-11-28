@@ -61,7 +61,7 @@ def getFillValue(dset_json):
         arr = np.empty((1,), dtype=dt, order="C")
         arr[...] = fill_value
     else:
-        arr = np.zeros([1,], dtype=dt, order="C")
+        arr = None
 
     return arr
 
@@ -526,7 +526,7 @@ async def doReadSelection(
         # initialize to fill_value if specified
         fill_value = getFillValue(dset_json)
 
-        if fill_value:
+        if fill_value is not None:
             arr = np.empty(np_shape, dtype=dset_dtype, order="C")
             arr[...] = fill_value
         else:
@@ -712,6 +712,12 @@ async def reduceShape(app, dset_json, shape_update, bucket=None):
 
     # get the fill value
     arr = getFillValue(dset_json)
+
+    type_json = dset_json["type"]
+    dt = createDataType(type_json)
+
+    if arr is None:
+        arr = np.zeros([1], dtype=dt, order="C")
 
     # and the chunk layout
     layout = tuple(getChunkLayout(dset_json))
