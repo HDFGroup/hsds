@@ -219,6 +219,12 @@ class ValueTest(unittest.TestCase):
         rsp = self.session.put(req, data=data, headers=headers_bin_req)
         self.assertEqual(rsp.status_code, 200)
 
+        # Try writing less than the expected number of bytes
+        # should return a 400 status
+        partial_data = data[4:]
+        rsp = self.session.put(req, data=partial_data, headers=headers_bin_req)
+        self.assertEqual(rsp.status_code, 400)
+
         # read back the data
         rsp = self.session.get(req, headers=headers_bin_rsp)
         self.assertEqual(rsp.status_code, 200)
@@ -3564,7 +3570,7 @@ class ValueTest(unittest.TestCase):
         # read value back as binary
         rsp = self.session.get(req, headers=headers_bin_rsp)
         self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.text, text)
+        self.assertEqual(rsp.content, binary_text)
 
         # write different utf8 binary string of same overall byte length
         text = "this is the chinese character for the number eight: 888"

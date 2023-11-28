@@ -600,7 +600,6 @@ class AttributeTest(unittest.TestCase):
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        print(rspJson)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
         self.assertEqual(rspJson["value"], text)
@@ -663,10 +662,8 @@ class AttributeTest(unittest.TestCase):
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        print(rspJson)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
-        print(f"Retrieved UTF8 string: {rspJson['value']}")
         self.assertEqual(rspJson["value"], character_text)
         self.assertTrue("type" in rspJson)
         type_json = rspJson["type"]
@@ -741,9 +738,7 @@ class AttributeTest(unittest.TestCase):
             "base": {"class": "H5T_INTEGER", "base": "H5T_STD_I32LE"},
         }
         value = [
-            [
-                1,
-            ],
+            [1, ],
             [1, 2],
             [1, 2, 3],
             [1, 2, 3, 4],
@@ -776,12 +771,7 @@ class AttributeTest(unittest.TestCase):
         self.assertTrue("class" in shape_json)
         self.assertEqual(shape_json["class"], "H5S_SIMPLE")
         self.assertTrue("dims" in shape_json)
-        self.assertEqual(
-            shape_json["dims"],
-            [
-                4,
-            ],
-        )
+        self.assertEqual(shape_json["dims"], [4, ])
 
     def testPutInvalid(self):
         print("testPutInvalid", self.base_domain)
@@ -1019,9 +1009,7 @@ class AttributeTest(unittest.TestCase):
         vlen_type = {"class": "H5T_VLEN", "base": ref_type}
         attr_name = "obj_ref"
         value = [
-            [
-                g1_1_id,
-            ],
+            [g1_1_id, ],
             [g1_1_id, g1_2_id],
             [g1_1_id, g1_2_id, g1_3_id],
         ]
@@ -1050,12 +1038,7 @@ class AttributeTest(unittest.TestCase):
         self.assertTrue("class" in rsp_shape)
         self.assertEqual(rsp_shape["class"], "H5S_SIMPLE")
         self.assertTrue("dims" in rsp_shape)
-        self.assertEqual(
-            rsp_shape["dims"],
-            [
-                3,
-            ],
-        )
+        self.assertEqual(rsp_shape["dims"], [3, ])
         self.assertTrue("value" in rspJson)
         vlen_values = rspJson["value"]
         self.assertEqual(len(vlen_values), 3)
@@ -1123,9 +1106,7 @@ class AttributeTest(unittest.TestCase):
         ]
         data = {
             "type": compound_type,
-            "shape": [
-                1,
-            ],
+            "shape": [1, ],
             "value": value,
         }
         req = self.endpoint + "/groups/" + g1_id + "/attributes/" + attr_name
@@ -1173,19 +1154,9 @@ class AttributeTest(unittest.TestCase):
         self.assertTrue("class" in rsp_shape)
         self.assertEqual(rsp_shape["class"], "H5S_SIMPLE")
         self.assertTrue("dims" in rsp_shape)
-        self.assertEqual(
-            rsp_shape["dims"],
-            [
-                1,
-            ],
-        )
+        self.assertEqual(rsp_shape["dims"], [1, ])
         self.assertTrue("value" in rspJson)
-        self.assertEqual(
-            rspJson["value"],
-            [
-                [dset_id, 0],
-            ],
-        )
+        self.assertEqual(rspJson["value"], [[dset_id, 0], ])
 
     def testPutNoData(self):
         # Test PUT value for 1d attribute without any data provided

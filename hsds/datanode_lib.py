@@ -992,6 +992,7 @@ async def get_chunk(
     # also note - get deflate and shuffle will update the deflate and
     # shuffle map so that the s3sync will do the right thing
     filter_ops = getFilterOps(app, dset_json, item_size)
+    log.debug(f"filter_ops: {filter_ops}")
 
     if s3path:
         try:
@@ -1035,7 +1036,7 @@ async def get_chunk(
                     break
             if chunk_arr is None:
                 msg = f"s3 read for chunk {chunk_id} timed-out, "
-                msg += "initiaiting a new read"
+                msg += "initiating a new read"
                 log.warn(msg)
 
         if chunk_arr is None:

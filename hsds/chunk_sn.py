@@ -1040,7 +1040,7 @@ async def GET_Value(request):
             resp_body = await jsonResponse(
                 resp, resp_json, ignore_nan=ignore_nan, body_only=True
             )
-            log.debug(f"jsonResponse returned: {resp_body}")
+            log.debug(f"jsonResponse returned: {len(resp_body)} items")
             resp_body = resp_body.encode("utf-8")
             await resp.write(resp_body)
         await resp.write_eof()
@@ -1296,7 +1296,7 @@ async def POST_Value(request):
             resp_body = await jsonResponse(
                 resp, resp_json, ignore_nan=ignore_nan, body_only=True
             )
-            log.debug(f"jsonResponse returned: {resp_body}")
+            log.debug(f"jsonResponse returned: {len(resp_body)} items")
             resp_body = resp_body.encode("utf-8")
             await resp.write(resp_body)
     except Exception as e:
