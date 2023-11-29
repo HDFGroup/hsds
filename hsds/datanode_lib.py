@@ -30,10 +30,10 @@ from .util.domainUtil import isValidDomain, getBucketForDomain
 from .util.attrUtil import getRequestCollectionName
 from .util.httpUtil import http_post
 from .util.dsetUtil import getChunkLayout, getFilterOps, getShapeDims
-from .util.dsetUtil import getChunkInitializer, getSliceQueryParam
+from .util.dsetUtil import getChunkInitializer, getSliceQueryParam, getFilters
 from .util.chunkUtil import getDatasetId, getChunkSelection, getChunkIndex
 from .util.arrayUtil import arrayToBytes, bytesToArray, jsonToArray
-from .util.hdf5dtype import createDataType, getItemSize
+from .util.hdf5dtype import createDataType
 from .util.rangegetUtil import ChunkLocation, chunkMunge
 
 from . import config
@@ -810,13 +810,15 @@ async def get_chunk_bytes(
         bucket=None,
         offset=0,
         length=0,
-        item_size=0,
+        dtype=None,
         chunk_id=None,
         chunk_dims=None,
         hyper_dims=None
 ):
     """ For regular chunk reads, just call getStorBytes.
         """
+    item_size = dtype.itemsize
+
     msg = f"get_chunk_bytes({chunk_id}, bucket={bucket}, offset={offset}, length={length}, "
     msg += f"item_size={item_size}, chunk_dims={chunk_dims}, hyper_dims={hyper_dims}"
     log.debug(msg)
@@ -906,6 +908,8 @@ async def get_chunk_bytes(
             "chunk_locations": chunk_locations,
             "bucket": bucket,
             "chunk_bytes": chunk_bytes,
+            "chunk_shape": chunk_dims,
+            "dtype": dtype,
             "h5_size": h5_size,
         }
         msg = f"get_chunk_bytes - {len(chunk_locations)} h5 chunks,  "
@@ -978,20 +982,21 @@ async def get_chunk(
     chunk_arr = None
     dims = getChunkLayout(dset_json)
     type_json = dset_json["type"]
-    item_size = getItemSize(type_json)
+    dt = createDataType(type_json)
     layout_json = dset_json["layout"]
-    log.debug(f"dset_json: {dset_json}")
     layout_class = layout_json.get("class")
     chunk_dims = getChunkLayout(dset_json)
 
-    dt = createDataType(type_json)
     # note - officially we should follow the order in which the filters are
     # defined in the filter_list,
     # but since we currently have just deflate and shuffle we will always
     # apply deflate then shuffle on read, and shuffle then deflate on write
     # also note - get deflate and shuffle will update the deflate and
     # shuffle map so that the s3sync will do the right thing
-    filter_ops = getFilterOps(app, dset_json, item_size)
+
+    filters = getFilters(dset_json)
+    dset_id = dset_json["id"]
+    filter_ops = getFilterOps(app, dset_id, filters, dtype=dt, chunk_shape=chunk_dims)
     log.debug(f"filter_ops: {filter_ops}")
 
     if s3path:
@@ -1049,7 +1054,7 @@ async def get_chunk(
                     "filter_ops": filter_ops,
                     "offset": s3offset,
                     "length": s3size,
-                    "item_size": item_size,
+                    "dtype": dt,
                     "chunk_dims": chunk_dims,
                     "hyper_dims": hyper_dims,
                     "bucket": bucket,
@@ -1144,9 +1149,13 @@ def save_chunk(app, chunk_id, dset_json, chunk_arr, bucket=None):
         log.error(f"Chunk {chunk_id} not in partition")
         raise HTTPInternalServerError()
 
-    item_size = getItemSize(dset_json["type"])
+    dset_id = dset_json["id"]
+    dtype = createDataType(dset_json["type"])
+    chunk_shape = getChunkLayout(dset_json)
+
     # will store filter options into app['filter_map']
-    getFilterOps(app, dset_json, item_size)
+    filters = getFilters(dset_json)
+    getFilterOps(app, dset_id, filters, dtype=dtype, chunk_shape=chunk_shape)
 
     chunk_cache = app["chunk_cache"]
     if chunk_id not in chunk_cache:
