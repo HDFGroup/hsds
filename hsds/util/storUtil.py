@@ -15,7 +15,6 @@
 # Abstracts S3 API vs Azure vs Posix storage access
 #
 import json
-import struct
 import time
 import zlib
 import numpy as np
@@ -43,12 +42,11 @@ except ImportError:
         log.error("ImportError for FileClient")
         return None
 
-
 from .. import config
 
 BYTE_SHUFFLE = 1
 BIT_SHUFFLE = 2
-
+BIT_SHUFFLE_DEFAULT_BLOCKSIZE = 2048
 
 def getCompressors():
     """return available compressors"""
@@ -89,30 +87,53 @@ def setBloscThreads(nthreads):
 def getBloscThreads():
     """Get the number of blosc threads to be used for compression"""
     nthreads = codecs.blosc.get_nthreads()
-
     return nthreads
 
 
 def _shuffle(codec, data, chunk_shape=None, dtype=None):
-    item_size = dtype.item_size
+    item_size = dtype.itemsize
+    chunk_size = int(np.prod(chunk_shape)) * item_size
+    block_size = None
     if codec == 1:
         # byte shuffle, use numcodecs Shuffle
         shuffler = codecs.Shuffle(item_size)
         arr = shuffler.encode(data)
+        return arr.tobytes()
     elif codec == 2:
         # bit shuffle, use bitshuffle package
         # bitshufle is expecting numpy array
+        block_size = BIT_SHUFFLE_DEFAULT_BLOCKSIZE  # todo - get user option
         data = np.frombuffer(data, dtype=dtype)
-        data = data.reshape()
-        arr = bitshuffle.compress_lz4(data)
+        data = data.reshape(chunk_shape)
+        log.debug("bitshuffle.compress_lz4 - chunk_size: {chunk_size} block_size: {block_size}")
+        arr = bitshuffle.compress_lz4(data, block_size)
+
     else:
         log.error(f"Unexpected codec: {codec} for _shuffle")
         raise ValueError()
-    return arr.tobytes()
+    
+    arr_bytes = arr.tobytes()
+    if block_size:
+        # prepend a 12 byte header with:
+        #   uint64 value of chunk_size
+        #   uint32 value of block_size
+        
+        # unfortunate we need to do a data copy here
+        # don't see a way to preappend to the bytes we
+        # get from numpy
+        buffer = bytearray(len(arr_bytes) + 12)
+        buffer[0:8] = int(chunk_size).to_bytes(8, "little")
+        buffer[8:12] = int(block_size*item_size).to_bytes(4, "little")
+        buffer[12:] = arr_bytes
+        arr_bytes = bytes(buffer)
+
+    return arr_bytes
 
 
 def _unshuffle(codec, data, dtype=None, chunk_shape=None):
-    item_size = dtype.item_size
+    item_size = dtype.itemsize
+    chunk_size = int(np.prod(chunk_shape)) * item_size
+
     if codec == 1:
         # byte shuffle, use numcodecs Shuffle
         shuffler = codecs.Shuffle(item_size)
@@ -121,25 +142,41 @@ def _unshuffle(codec, data, dtype=None, chunk_shape=None):
         # bit shuffle, use bitshuffle
         # bitshufle is expecting numpy array
         data = np.frombuffer(data, dtype=np.dtype("uint8"))
-        if len(data) != np.prod(chunk_shape) * item_size:
-            # use lz4 uncompress with bitshuffle
-            total_nbytes, block_nbytes = struct.unpack(">QI", data[:12])
-            block_size = block_nbytes // dtype.itemsize
-            msg = f"got bitshuffle header - total_nbytes: {total_nbytes}, "
-            msg += f"block_nbytes: {block_nbytes}"
-            log.debug(msg)
-            data = data[12:]
+        if len(data) < 12:
+            # there should be at least 12 bytes for the header
+            msg = f"got {len(data)} bytes for bitshuffle, "
+            msg += f"expected {12 + len(chunk_size)} bytes"
+            raise HTTPInternalServerError()
+        
+        # use lz4 uncompress with bitshuffle
+        total_nbytes = int.from_bytes(data[:8], "little")
+        block_nbytes = int.from_bytes(data[8:12], "little")
+        if total_nbytes != chunk_size:
+            msg = f"header reports total_bytes to be {total_nbytes} bytes,"
+            msg += f"expected {chunk_size} bytes"
+            log.error(msg)
+            raise HTTPInternalServerError()
+                
+        # header has block size, so use that
+        block_size = block_nbytes // dtype.itemsize
+        msg = f"got bitshuffle header - total_nbytes: {total_nbytes}, "
+        msg += f"block_nbytes: {block_nbytes}, block_size: {block_size}"
+        log.debug(msg)
+        data = data[12:]
+        
+        try: 
             arr = bitshuffle.decompress_lz4(data, chunk_shape, dtype, block_size)
-        else:
-            # just shufled, no compression
-            arr = bitshuffle.bitunshuffle(data)
-
+        except Exception as e:
+            log.error(f"except using bitshuffle.decompress_lz4: {e}")
+            raise HTTPInternalServerError()
+        
     return arr.tobytes()
 
 
 def _uncompress(data, compressor=None, shuffle=0, dtype=None, chunk_shape=None):
     """ Uncompress the provided data using compessor and/or shuffle """
     log.debug(f"_uncompress(compressor={compressor}, shuffle={shuffle})")
+    start_time = time.time()
     if compressor:
         if compressor in ("gzip", "deflate"):
             # blosc referes to this as zlib
@@ -176,30 +213,36 @@ def _uncompress(data, compressor=None, shuffle=0, dtype=None, chunk_shape=None):
             msg = f"don't know how to decompress data in {compressor} "
             log.error(msg)
             raise HTTPInternalServerError()
-    if shuffle:
-        start_time = time.time()
+    if shuffle: 
         data = _unshuffle(shuffle, data, dtype=dtype, chunk_shape=chunk_shape)
-        finish_time = time.time()
-        elapsed = finish_time - start_time
-        msg = f"unshuffled {len(data)} bytes, {(elapsed):.2f} elapsed"
-        log.debug(msg)
+    finish_time = time.time()
+    elapsed = finish_time - start_time
+    msg = f"uncompressed {len(data)} bytes, {(elapsed):.3f}s elapsed"
+    log.debug(msg)
 
     return data
 
 
 def _compress(data, compressor=None, clevel=5, shuffle=0, dtype=None, chunk_shape=None):
-    log.debug(f"_uncompress(compressor={compressor}, shuffle={shuffle})")
+    if not compressor and shuffle != 2:
+        # nothing to do
+        return data
+    log.debug(f"_compress(compressor={compressor}, shuffle={shuffle})")
+    start_time = time.time()
+    data_size = len(data)
     if shuffle == 2:
         # bit shuffle the data before applying the compressor
         log.debug("bitshuffling data")
-        data = _shuffle(shuffle, data, dtype=dtype, chunk_shape=chunk_shape)
+        try:
+            data = _shuffle(shuffle, data, dtype=dtype, chunk_shape=chunk_shape)
+        except Exception as e:
+            log.error(f"got exception using bitshuffle: {e}")
         shuffle = 0  # don't do any blosc shuffling
 
     if compressor:
         if compressor in ("gzip", "deflate"):
             # blosc referes to this as zlib
             compressor = "zlib"
-        cdata = None
         # try with blosc compressor
         try:
             blosc = codecs.Blosc(cname=compressor, clevel=clevel, shuffle=shuffle)
@@ -209,10 +252,18 @@ def _compress(data, compressor=None, clevel=5, shuffle=0, dtype=None, chunk_shap
             log.info(msg)
         except Exception as e:
             log.error(f"got exception using blosc encoding: {e}")
-            raise HTTPInternalServerError()
+    else:
+        # no compressor, just pass back the shuffled data
+        cdata = data
 
-        if cdata is not None:
-            data = cdata  # used compress data
+    if cdata is not None:
+        finish_time = time.time()
+        elapsed = finish_time - start_time
+        ratio = data_size * 100.0 / len(cdata)
+        msg = f"compressed {data_size} bytes to {len(cdata)} bytes, "
+        msg += f"ratio: {ratio:.2f}%, {(elapsed):.3f}s elapsed"
+        log.debug(msg)
+        data = cdata  # use compressed data
 
     return data
 
