@@ -1123,7 +1123,7 @@ async def get_chunk(
                 # normal fill value based init or initializer failed
                 fill_value = getFillValue(dset_json)
 
-                if fill_value:
+                if fill_value is not None:
                     chunk_arr = np.empty(dims, dtype=dt, order="C")
                     chunk_arr[...] = fill_value
                 else:
