@@ -107,7 +107,7 @@ def _shuffle(codec, data, chunk_shape=None, dtype=None):
 
         data = np.frombuffer(data, dtype=dtype)
         data = data.reshape(chunk_shape)
-        log.debug("bitshuffle.compress_lz4 - chunk_size: {chunk_size} block_size: {block_size}")
+        log.debug(f"bitshuffle.compress_lz4 - chunk_size: {chunk_size} block_size: {block_size}")
         arr = bitshuffle.compress_lz4(data, block_size)
 
     else:
