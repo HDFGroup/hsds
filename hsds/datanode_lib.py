@@ -908,8 +908,6 @@ async def get_chunk_bytes(
             "chunk_locations": chunk_locations,
             "bucket": bucket,
             "chunk_bytes": chunk_bytes,
-            "chunk_shape": chunk_dims,
-            "dtype": dtype,
             "h5_size": h5_size,
         }
         msg = f"get_chunk_bytes - {len(chunk_locations)} h5 chunks,  "

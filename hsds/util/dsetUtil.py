@@ -74,6 +74,7 @@ CHUNK_LAYOUT_CLASSES = (
     "H5D_CONTIGUOUS_REF",
 )
 
+
 # copied from arrayUtil.py
 def isVlen(dt):
     """
@@ -171,7 +172,7 @@ def getFilterOps(app, dset_id, filters, dtype=None, chunk_shape=None):
     filter_ops = {}
 
     shuffleFilter = getShuffleFilter(filters)
-    
+
     if shuffleFilter and not isVlen(dtype):
         shuffle_name = shuffleFilter["name"]
         if shuffle_name == "shuffle":

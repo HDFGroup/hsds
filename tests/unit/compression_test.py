@@ -63,7 +63,6 @@ class CompressionUtilTest(unittest.TestCase):
         kwargs["shuffle"] = BIT_SHUFFLE
         kwargs["compressor"] = None
         cdata = _compress(data, **kwargs)
-        ratio = len(data) * 100.0 / len(cdata)
         self.assertTrue(len(cdata) != len(data))
         data_copy = _uncompress(cdata, **kwargs)
         self.assertEqual(data, data_copy)
