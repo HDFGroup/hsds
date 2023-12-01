@@ -24,7 +24,7 @@ class CompressionUtilTest(unittest.TestCase):
         # main
 
     def testCompression(self):
-        shape = 1_000_000
+        shape = (1_000_000, )
         dt = np.dtype("<i4")
         arr = np.random.randint(0, 200, shape, dtype=dt)
 
@@ -32,7 +32,7 @@ class CompressionUtilTest(unittest.TestCase):
         compressors = getCompressors()
         print(compressors)
 
-        kwargs = {"item_size": dt.itemsize}
+        kwargs = {"dtype": dt, "chunk_shape": shape}
 
         for compressor in compressors:
 
@@ -45,19 +45,27 @@ class CompressionUtilTest(unittest.TestCase):
             data_copy = _uncompress(cdata, **kwargs)
             self.assertEqual(data, data_copy)
 
-            print(f"testing compressor: {compressor} with bit shuffle")
-            kwargs["shuffle"] = BIT_SHUFFLE
-            cdata = _compress(data, **kwargs)
-            self.assertTrue(len(cdata) != len(data))
-            data_copy = _uncompress(cdata, **kwargs)
-            self.assertEqual(data, data_copy)
-
             print(f"testing compressor: {compressor} with byte shuffle")
             kwargs["shuffle"] = BYTE_SHUFFLE
             cdata = _compress(data, **kwargs)
             self.assertTrue(len(cdata) != len(data))
             data_copy = _uncompress(cdata, **kwargs)
             self.assertEqual(data, data_copy)
+
+    def testBitShuffle(self):
+        shape = (1_000_000, )
+        dt = np.dtype("<i4")
+        arr = np.random.randint(0, 200, shape, dtype=dt)
+
+        data = arr.tobytes()
+        # bitshuffle has a built in compressor, so test it separately
+        kwargs = {"dtype": dt, "chunk_shape": shape}
+        kwargs["shuffle"] = BIT_SHUFFLE
+        kwargs["compressor"] = None
+        cdata = _compress(data, **kwargs)
+        self.assertTrue(len(cdata) != len(data))
+        data_copy = _uncompress(cdata, **kwargs)
+        self.assertEqual(data, data_copy)
 
     def testZLibCompression(self):
         shape = 1_000_000
@@ -67,7 +75,7 @@ class CompressionUtilTest(unittest.TestCase):
         data = arr.tobytes()
         # compress with zlib and verify we can uncompress the data again
         cdata = zlib.compress(data)
-        kwargs = {"item_size": dt.itemsize, "compressor": "zlib"}
+        kwargs = {"dtype": dt, "compressor": "zlib"}
         data_copy = _uncompress(cdata, **kwargs)
         self.assertEqual(data, data_copy)
 

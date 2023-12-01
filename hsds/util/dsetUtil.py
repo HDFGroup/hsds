@@ -75,6 +75,24 @@ CHUNK_LAYOUT_CLASSES = (
 )
 
 
+# copied from arrayUtil.py
+def isVlen(dt):
+    """
+    Return True if the type contains variable length elements
+    """
+    is_vlen = False
+    if len(dt) > 1:
+        names = dt.names
+        for name in names:
+            if isVlen(dt[name]):
+                is_vlen = True
+                break
+    else:
+        if dt.metadata and "vlen" in dt.metadata:
+            is_vlen = True
+    return is_vlen
+
+
 def getFilterItem(key):
     """
     Return filter code, id, and name, based on an id, a name or a code.
@@ -100,9 +118,8 @@ def getFilters(dset_json):
     return filters
 
 
-def getCompressionFilter(dset_json):
+def getCompressionFilter(filters):
     """Return compression filter from filters, or None"""
-    filters = getFilters(dset_json)
     for filter in filters:
         if "class" not in filter:
             msg = f"filter option: {filter} with no class key"
@@ -122,9 +139,8 @@ def getCompressionFilter(dset_json):
     return None
 
 
-def getShuffleFilter(dset_json):
+def getShuffleFilter(filters):
     """Return shuffle filter, or None"""
-    filters = getFilters(dset_json)
     FILTER_CLASSES = ("H5Z_FILTER_SHUFFLE", "H5Z_FILTER_BITSHUFFLE")
     for filter in filters:
         log.debug(f"filter: {filter}")
@@ -142,21 +158,22 @@ def getShuffleFilter(dset_json):
     return None
 
 
-def getFilterOps(app, dset_json, item_size):
+def getFilterOps(app, dset_id, filters, dtype=None, chunk_shape=None):
     """Get list of filter operations to be used for this dataset"""
     filter_map = app["filter_map"]
-    dset_id = dset_json["id"]
+
     if dset_id in filter_map:
         log.debug(f"returning filter from filter_map {filter_map[dset_id]}")
         return filter_map[dset_id]
 
-    compressionFilter = getCompressionFilter(dset_json)
+    compressionFilter = getCompressionFilter(filters)
     log.debug(f"got compressionFilter: {compressionFilter}")
 
     filter_ops = {}
 
-    shuffleFilter = getShuffleFilter(dset_json)
-    if shuffleFilter and item_size != "H5T_VARIABLE":
+    shuffleFilter = getShuffleFilter(filters)
+
+    if shuffleFilter and not isVlen(dtype):
         shuffle_name = shuffleFilter["name"]
         if shuffle_name == "shuffle":
             filter_ops["shuffle"] = 1  # use regular shuffle
@@ -182,7 +199,9 @@ def getFilterOps(app, dset_json, item_size):
             filter_ops["level"] = int(compressionFilter["level"])
 
     if filter_ops:
-        filter_ops["item_size"] = item_size
+        # save the chunk shape and dtype
+        filter_ops["chunk_shape"] = chunk_shape
+        filter_ops["dtype"] = dtype
         log.debug(f"save filter ops: {filter_ops} for {dset_id}")
         filter_map[dset_id] = filter_ops  # save
 

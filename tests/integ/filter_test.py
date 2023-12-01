@@ -11,6 +11,7 @@
 ##############################################################################
 import unittest
 import json
+import hashlib
 import numpy as np
 import helper
 import config
@@ -217,6 +218,61 @@ class FilterTest(unittest.TestCase):
         self.assertEqual(len(row), 1)
         self.assertEqual(row[0], 22)
 
+    def testBitShuffle(self):
+        # test Dataset with creation property list
+        print("testBitShuffle", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        # get domain
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # create the dataset
+        req = self.endpoint + "/datasets"
+
+        # Create ~1MB dataset
+        payload = {"type": "H5T_STD_I32LE", "shape": [1024, 1024]}
+
+        # bit shuffle
+        bitshuffle_filter = {"class": "H5Z_FILTER_BITSHUFFLE", "id": 32008, "name": "bitshuffle"}
+        payload["creationProperties"] = {"filters": [bitshuffle_filter, ]}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_uuid))
+
+        # link new dataset as 'dset'
+        name = "dset"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": dset_uuid}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # write a horizontal strip of 22s
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        data = [22] * 1024
+        payload = {"start": [512, 0], "stop": [513, 1024], "value": data}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # read back the 512,512 element
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"  # test
+        params = {"select": "[512:513,512:513]"}  # read  1 element
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+        self.assertEqual(len(value), 1)
+        row = value[0]
+        self.assertEqual(len(row), 1)
+        self.assertEqual(row[0], 22)
+
     def testBitShuffleAndDeflate(self):
         # test Dataset with creation property list
         print("testBitShuffleAndDeflate", self.base_domain)
@@ -385,6 +441,87 @@ class FilterTest(unittest.TestCase):
                 ),
                 f'Different values for "{name}" dataset',
             )
+
+    def testBitDeshuffling(self):
+        """Test the bitshuffle filter implementation used with a known data file."""
+        print("testBitDeshuffling", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+
+        # offset and size of the file's one and only chunk
+        CHUNK_OFFSET = 6864
+        CHUNK_SIZE = 3432249
+        CHUNK_SHAPE = (1, 2167, 2070)
+        CHUNK_HASH = "5595cc6303dde20228fe9a0dc23c2a75"
+        # Sample file URI...
+        hdf5_sample_bucket = config.get("hdf5_sample_bucket")
+        furi = f"{hdf5_sample_bucket}/data/hdf5test/bitshuffle.h5"
+
+        hdf5_sample_bucket = config.get("hdf5_sample_bucket")
+        if not hdf5_sample_bucket:
+            print("hdf5_sample_bucket config not set, skipping testShuffleFilter")
+            return
+
+        # Get domain
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson, '"root" JSON key missing')
+        root_uuid = rspJson["root"]
+
+        # Create the HSDS dataset that points to the test shuffled data...
+        payload = {
+            "type": {"base": "H5T_STD_U32LE", "class": "H5T_INTEGER"},
+            "shape": CHUNK_SHAPE,
+            "creationProperties":
+            {
+                "filters":
+                [
+                    {"class": "H5Z_FILTER_BITSHUFFLE", "id": 32008, "name": "bitshuffle"}
+                ],
+                "layout":
+                {
+                    "class": "H5D_CHUNKED_REF",
+                    "file_uri": furi,
+                    "dims": CHUNK_SHAPE,
+                    "chunks": {"0_0_0": (CHUNK_OFFSET, CHUNK_SIZE)}
+                },
+            },
+        }
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201, rsp.text)
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_uuid))
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + "dset"
+        payload = {"id": dset_uuid}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201, rsp.text)
+
+        # Read dataset's test values...
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+
+        headers_bin_rsp = helper.getRequestHeaders(domain=self.base_domain)
+        headers_bin_rsp["accept"] = "application/octet-stream"
+
+        rsp = self.session.get(req, headers=headers_bin_rsp)
+        if rsp.status_code == 404:
+            print(f"File object: {furi} not found, skipping " "shuffle filter test")
+            return
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(rsp.headers["Content-Type"], "application/octet-stream")
+        data = rsp.content
+        expected_bytes = np.prod(CHUNK_SHAPE) * 4
+        self.assertEqual(len(data), expected_bytes)
+
+        arr = np.frombuffer(data, dtype=np.uint32)
+        arr = arr.reshape(CHUNK_SHAPE)
+        # if it's all zeros, it's likely the rangeget request failed
+        self.assertTrue(arr.max() > 0)
+        # compare the hash of the values we got with expected hash
+        hash_object = hashlib.md5(data)
+        md5_hash = hash_object.hexdigest()
+        self.assertEqual(md5_hash, CHUNK_HASH)
 
 
 if __name__ == "__main__":

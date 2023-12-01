@@ -83,6 +83,7 @@ dn_retry_backoff_exp: 0.1 # backoff factor for retries
 xss_protection: "1; mode=block"  # Include in response headers if set
 allow_any_bucket_read: true  # enable reads to buckets other than default bucket
 allow_any_bucket_write: true # enable writes to buckets other than default bucket
+bit_shuffle_default_blocksize: 2048 # default blocksize for bitshuffle filter
 # DEPRECATED - the remaining config values are not used in currently but kept for backward compatibility with older container images
 aws_lambda_chunkread_function: null # name of aws lambda function for chunk reading
 aws_lambda_threshold: 4 # number of chunks per node per request to reach before using lambda
