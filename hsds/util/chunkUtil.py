@@ -747,7 +747,7 @@ class ChunkIterator:
         return chunk_id
 
 
-def chunkReadSelection(chunk_arr, slices=None):
+def chunkReadSelection(chunk_arr, slices=None, fields=None):
     """
     Return data from requested chunk and selection
     """
@@ -772,6 +772,25 @@ def chunkReadSelection(chunk_arr, slices=None):
 
     # get requested data
     output_arr = chunk_arr[slices]
+
+    if fields:
+        dtype_items = []
+        if len(fields) > 1:
+            for field in fields:
+                dtype_items.append((field, chunk_arr.dtype[field]))
+            select_dtype = np.dtype(dtype_items)
+        else:
+            # don't need a compound type
+            select_dtype = chunk_arr.dtype[fields[0]]
+        # create an array with just the given fields
+        arr = np.zeros(chunk_arr.shape, select_dtype)
+        # slot in each of the given fields
+        if len(fields) > 1:
+            for field in fields:
+                arr[field] = output_arr[field]
+        else:
+            arr[...] = output_arr[fields[0]]
+        output_arr = arr  # return this
 
     return output_arr
 

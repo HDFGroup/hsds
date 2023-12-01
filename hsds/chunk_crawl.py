@@ -224,17 +224,15 @@ async def read_chunk_hyperslab(
             raise HTTPInternalServerError()
         point_index = chunk_info["indices"]
         method = "POST"
-        chunk_shape = [
-            len(point_list),
-        ]
+        chunk_shape = [len(point_list), ]
         log.debug(f"point selection - chunk_shape: {chunk_shape}")
 
     type_json = dset_json["type"]
-    dt = createDataType(type_json)
+    dset_dt = createDataType(type_json)
     if query is None and query_update is None:
         query_dtype = None
     else:
-        query_dtype = getQueryDtype(dt)
+        query_dtype = getQueryDtype(np_arr.dtype)
 
     chunk_arr = None
     array_data = None
@@ -265,6 +263,9 @@ async def read_chunk_hyperslab(
             # convert to colon seperated string
             hyper_dims = ":".join(map(str, hyper_dims))
         params["hyper_dims"] = hyper_dims
+    if len(np_arr.dtype) < len(dset_dt):
+        # field selection, pass in the field names
+        params["fields"] = ",".join(np_arr.dtype.names)
 
     # set query-based params
     if query is not None:
@@ -364,7 +365,10 @@ async def read_chunk_hyperslab(
         else:
             # convert binary data to numpy array
             try:
-                chunk_arr = bytesToArray(array_data, dt, chunk_shape)
+                log.debug(f"array_data:  {array_data}")
+                log.debug(f"np_arr.dtype: {np_arr.dtype}")
+                log.debug(f"chunk_shape: {chunk_shape}")
+                chunk_arr = bytesToArray(array_data, np_arr.dtype, chunk_shape)
             except ValueError as ve:
                 log.warn(f"bytesToArray ValueError: {ve}")
                 raise HTTPBadRequest()

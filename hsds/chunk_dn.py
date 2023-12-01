@@ -422,6 +422,11 @@ async def GET_Chunk(request):
         raise HTTPInternalServerError()
     log.debug(f"GET_Chunk - got selection: {selection}")
 
+    if "fields" in params:
+        select_fields = params["fields"].split(",")
+    else:
+        select_fields = [] 
+
     if getChunkInitializer(dset_json):
         chunk_init = True
     else:
@@ -447,9 +452,8 @@ async def GET_Chunk(request):
 
     if chunk_init:
         save_chunk(app, chunk_id, dset_json, chunk_arr, bucket=bucket)
-
+     
     if query:
-
         try:
             parser = BooleanParser(query)
         except Exception as e:
@@ -488,7 +492,7 @@ async def GET_Chunk(request):
             raise HTTPNotFound()
     else:
         # read selected data from chunk
-        output_arr = chunkReadSelection(chunk_arr, slices=selection)
+        output_arr = chunkReadSelection(chunk_arr, slices=selection, fields=select_fields)
 
     # write response
     if output_arr is not None:

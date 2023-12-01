@@ -816,7 +816,30 @@ async def GET_Value(request):
         log.warn(f"Invalid selection: {ve}")
         raise HTTPBadRequest(reason="Invalid selection")
 
+    fields_param = params.get("fields")
+    if fields_param:
+        log.debug(f"fields param: {fields_param}")
+        select_fields = [fields_param,]  # tbd, process multiple field names
+        if select_fields:
+            if len(dset_dtype) == 0:
+                msg = "fields query parameter can only be used with compound type datasets"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            field_names = set(dset_dtype.names)
+            select_dtype_items = []
+            for select_field in select_fields:
+                if select_field not in field_names:
+                    msg = f"select field: {select_field} is not defined in dataset type"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
+                select_dtype_items.append((select_field, dset_dtype[select_field]))
+            select_dtype = np.dtype(select_dtype_items)
+            log.debug(f"using select dtype: {select_dtype}")
+    else:
+        select_dtype = dset_dtype  # return all fields
+
     log.debug(f"GET Value selection: {slices}")
+    log.debug(f"dset_dtype: {dset_dtype}, select_dtype: {select_dtype}")
 
     limit = 0
     if "Limit" in params:
@@ -935,6 +958,7 @@ async def GET_Value(request):
                         dset_id,
                         dset_json,
                         page,
+                        select_dtype=select_dtype,
                         query=query,
                         bucket=bucket,
                         limit=limit,

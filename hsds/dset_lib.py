@@ -376,6 +376,7 @@ async def getSelectionData(
     dset_id,
     dset_json,
     slices=None,
+    select_dtype=None,
     points=None,
     query=None,
     query_update=None,
@@ -452,6 +453,7 @@ async def getSelectionData(
         chunk_ids,
         dset_json,
         slices=slices,
+        select_dtype=select_dtype,
         points=points,
         query=query,
         query_update=query_update,
@@ -468,6 +470,7 @@ async def doReadSelection(
     chunk_ids,
     dset_json,
     slices=None,
+    select_dtype=None,
     points=None,
     query=None,
     query_update=None,
@@ -478,11 +481,14 @@ async def doReadSelection(
     """read selection utility function"""
     log.info(f"doReadSelection - number of chunk_ids: {len(chunk_ids)}")
     log.debug(f"doReadSelection - chunk_ids: {chunk_ids}")
+    log.debug(f"doReadSelection - select_dtype: {select_dtype}")
 
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
     log.debug(f"item size: {item_size}")
     dset_dtype = createDataType(type_json)  # np datatype
+    if select_dtype is None:
+        select_dtype = dset_dtype
     if query is None:
         query_dtype = None
     else:
@@ -494,9 +500,7 @@ async def doReadSelection(
 
     if points is not None:
         # point selection
-        np_shape = [
-            len(points),
-        ]
+        np_shape = [len(points), ]
     elif query is not None:
         # return shape will be determined by number of matches
         np_shape = None
@@ -527,10 +531,10 @@ async def doReadSelection(
         fill_value = getFillValue(dset_json)
 
         if fill_value is not None:
-            arr = np.empty(np_shape, dtype=dset_dtype, order="C")
+            arr = np.empty(np_shape, dtype=select_dtype, order="C")
             arr[...] = fill_value
         else:
-            arr = np.zeros(np_shape, dtype=dset_dtype, order="C")
+            arr = np.zeros(np_shape, dtype=select_dtype, order="C")
 
     crawler = ChunkCrawler(
         app,
