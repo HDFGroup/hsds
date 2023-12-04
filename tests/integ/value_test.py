@@ -1104,9 +1104,6 @@ class ValueTest(unittest.TestCase):
             tol = 0.1  # tbd: investiage why results need such a high tolerance
             self.assertTrue(abs(item[1] - expected[1]) < tol)
 
-        self.assertEqual(readData[0][0], 42)
-        self.assertEqual(readData[1][0], 10)
-
         # read back just the "temp" field of the compound type
         params = {"fields": "temp"}
         rsp = self.session.get(req, params=params, headers=headers)
@@ -1122,6 +1119,31 @@ class ValueTest(unittest.TestCase):
             self.assertEqual(len(elem), 1)
             expected = i * 10 if i > 0 else 42
             self.assertEqual(elem[0], expected)
+
+        rev_temp = readData[::-1]  # reverse the value list
+        params = {"fields": "temp"}
+        payload = {"value": rev_temp}
+        req = self.endpoint + "/datasets/" + dset1d_uuid + "/value"
+        rsp = self.session.put(req, data=json.dumps(payload), params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # write value
+
+        # read back the data again
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+
+        readData = rspJson["value"]
+        self.assertEqual(len(readData), num_elements)
+        for i in range(num_elements):
+            item = readData[i]
+            self.assertEqual(len(item), 2)
+            x = (num_elements - i - 1) * 10 if i < 9 else 42
+            y = i * 10 + i / 10 if i > 0 else 0.42
+            expected = (x, y)
+            self.assertEqual(item[0], expected[0])
+            tol = 0.1
+            self.assertTrue(abs(item[1] - expected[1]) < tol)
+
         #
         # create 2d dataset
         #
@@ -2480,7 +2502,7 @@ class ValueTest(unittest.TestCase):
         # should get one element back (still have the select param...)
         self.assertEqual(len(value), 1)
         item = value[0]
-        print(item)
+
         # verify that this is what we expected to get
         self.assertEqual(len(item), 3)
         self.assertEqual(item[0], "1998.10.22")
