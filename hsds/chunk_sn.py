@@ -29,7 +29,7 @@ from .util.httpUtil import request_read, jsonResponse, isAWSLambda
 from .util.idUtil import isValidUuid, getDataNodeUrl
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain
-from .util.hdf5dtype import getItemSize, createDataType
+from .util.hdf5dtype import getItemSize, getSubType, createDataType
 from .util.dsetUtil import isNullSpace, get_slices, getShapeDims
 from .util.dsetUtil import isExtensible, getSelectionPagination
 from .util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout
@@ -215,6 +215,28 @@ async def PUT_Value(request):
     item_size = getItemSize(type_json)
     max_request_size = int(config.get("max_request_size"))
 
+    fields_param = params.get("fields")
+    if fields_param:
+        log.debug(f"fields param: {fields_param}")
+        select_fields = fields_param.split(":")
+        if select_fields:
+            if len(dset_dtype) == 0:
+                msg = "fields query parameter can only be used with compound type datasets"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            field_names = set(dset_dtype.names)
+            select_dtype_items = []
+            for select_field in select_fields:
+                if select_field not in field_names:
+                    msg = f"select field: {select_field} is not defined in dataset type"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
+                select_dtype_items.append((select_field, dset_dtype[select_field]))
+            select_dtype = np.dtype(select_dtype_items)
+            log.debug(f"using select dtype: {select_dtype}")
+    else:
+        select_dtype = dset_dtype  # return all fields
+
     if query:
         # divert here if we are doing a put query
         # returns array data like a GET query request
@@ -300,7 +322,6 @@ async def PUT_Value(request):
         return resp
 
     # Resume regular PUT_Value processing without query update
-    dset_dtype = createDataType(type_json)  # np datatype
     binary_data = None
     points = None  # used for point selection writes
     np_shape = []  # shape of incoming data
@@ -453,7 +474,7 @@ async def PUT_Value(request):
         if item_size == "H5T_VARIABLE":
             # binary variable length data
             try:
-                arr = bytesToArray(binary_data, dset_dtype, [num_elements,])
+                arr = bytesToArray(binary_data, select_dtype, [num_elements,])
             except ValueError as ve:
                 log.warn(f"bytesToArray value error: {ve}")
                 raise HTTPBadRequest()
@@ -486,7 +507,7 @@ async def PUT_Value(request):
             else:
                 # need to instantiate the full np_shape since chunk boundries
                 # will effect how individual chunks get set
-                arr_tmp = np.zeros(np_shape, dtype=dset_dtype)
+                arr_tmp = np.zeros(np_shape, dtype=select_dtype)
                 arr_tmp[...] = arr
                 arr = arr_tmp
 
@@ -509,9 +530,9 @@ async def PUT_Value(request):
             # only enable broadcast if not appending
 
             if bc_shape:
-                arr = jsonToArray(bc_shape, dset_dtype, json_data)
+                arr = jsonToArray(bc_shape, select_dtype, json_data)
             else:
-                arr = jsonToArray(np_shape, dset_dtype, json_data)
+                arr = jsonToArray(np_shape, select_dtype, json_data)
 
             if num_elements != np.prod(arr.shape):
                 msg = f"expected {num_elements} elements, but got {np.prod(arr.shape)}"
@@ -519,7 +540,7 @@ async def PUT_Value(request):
 
             if bc_shape and element_count != 1:
                 # broadcast to target
-                arr_tmp = np.zeros(np_shape, dtype=dset_dtype)
+                arr_tmp = np.zeros(np_shape, dtype=select_dtype)
                 arr_tmp[...] = arr
                 arr = arr_tmp
         except ValueError:
@@ -602,16 +623,13 @@ async def PUT_Value(request):
             num_chunks = getNumChunks(page, layout)
             log.debug(f"num_chunks: {num_chunks}")
             if num_chunks > max_chunks:
-                log.warn(
-                    f"PUT value chunk count: {num_chunks} exceeds max_chunks: {max_chunks}"
-                )
+                msg = f"PUT value chunk count: {num_chunks} exceeds max_chunks: {max_chunks}"
+                log.warn(msg)
             select_shape = getSelectionShape(page)
             log.debug(f"got select_shape: {select_shape} for page: {page}")
             num_bytes = math.prod(select_shape) * item_size
             if arr is None or page_number > 0:
-                log.debug(
-                    f"page: {page_number} reading {num_bytes} from request stream"
-                )
+                log.debug(f"page: {page_number} reading {num_bytes} from request stream")
                 # read page of data from input stream
                 try:
                     page_bytes = await request_read(request, count=num_bytes)
@@ -628,7 +646,7 @@ async def PUT_Value(request):
                 log.debug(f"read {len(page_bytes)} for page: {page_number+1}")
                 bytes_streamed += len(page_bytes)
                 try:
-                    arr = bytesToArray(page_bytes, dset_dtype, select_shape)
+                    arr = bytesToArray(page_bytes, select_dtype, select_shape)
                 except ValueError as ve:
                     msg = f"bytesToArray value error for page: {page_number+1}: {ve}"
                     log.warn(msg)
@@ -820,21 +838,12 @@ async def GET_Value(request):
     if fields_param:
         log.debug(f"fields param: {fields_param}")
         select_fields = fields_param.split(":")
-        if select_fields:
-            if len(dset_dtype) == 0:
-                msg = "fields query parameter can only be used with compound type datasets"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-            field_names = set(dset_dtype.names)
-            select_dtype_items = []
-            for select_field in select_fields:
-                if select_field not in field_names:
-                    msg = f"select field: {select_field} is not defined in dataset type"
-                    log.warn(msg)
-                    raise HTTPBadRequest(reason=msg)
-                select_dtype_items.append((select_field, dset_dtype[select_field]))
-            select_dtype = np.dtype(select_dtype_items)
-            log.debug(f"using select dtype: {select_dtype}")
+        try:
+            select_dtype = getSubType(dset_dtype, select_fields)
+        except TypeError as te:
+            msg = f"Invalid fields query parameter: {te}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
     else:
         select_dtype = dset_dtype  # return all fields
 

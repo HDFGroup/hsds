@@ -822,3 +822,20 @@ def getBaseTypeJson(type_name):
     else:
         raise TypeError("Invalid type name")
     return type_json
+
+def getSubType(dt_parent, fields):
+    """ Return a dtype that is a compound type composed of
+        the fields given in the field_names list
+    """
+    if len(dt_parent) == 0:
+        raise TypeError("getSubType - parent must be compound type")
+    field_names = set(dt_parent.names)
+    dt_items = []
+    for field in fields:
+        if field not in field_names:
+            raise TypeError(f"field: {field} is not defined in parent type")
+                   
+        dt_items.append((field, dt_parent[field]))
+    dt = np.dtype(dt_items)
+
+    return dt

@@ -802,12 +802,15 @@ def chunkWriteSelection(chunk_arr=None, slices=None, data=None):
     """
     Write data for requested chunk and selection
     """
+
+    log.debug(f"chunkWriteSelection for slices: {slices}")
     dims = chunk_arr.shape
+    log.debug(f"data: {data}")
 
     rank = len(dims)
 
     if rank == 0:
-        msg = "No dimension passed to chunkReadSelection"
+        msg = "No dimension passed to chunkWriteSelection"
         log.error(msg)
         raise ValueError(msg)
     if len(slices) != rank:
@@ -819,20 +822,47 @@ def chunkWriteSelection(chunk_arr=None, slices=None, data=None):
         log.error(msg)
         raise ValueError(msg)
 
+    field_update = False
+    if len(data.dtype) > 0:
+        if len(data.dtype) < len(chunk_arr.dtype):
+            field_update = True
+            log.debug(f"ChunkWriteSelection for fields: {data.dtype.names}")
+        else:
+            log.debug("ChunkWriteSelection for all fields")
+
     updated = False
-    # check if the new data modifies the array or not
-    # TBD - is this worth the cost of comparing two arrays element by element?
     try:
-        if not ndarray_compare(chunk_arr[slices], data):
-            # if not np.array_equal(chunk_arr[slices], data):
-            # update chunk array
-            chunk_arr[slices] = data
-            updated = True
+        if field_update:
+            arr = chunk_arr[slices]
+            # update each field of the selected region in the chunk
+            updated = False
+            field_updates = []
+            for field in data.dtype.names:
+                if not ndarray_compare(arr[field], data[field]):
+                    # update the field
+                    arr[field] = data[field]
+                    updated = True
+                    field_updates.append(field)
+            if updated:
+                # write back to the chunk
+                chunk_arr[slices] = arr[...]
+                log.debug(f"updated chunk arr for fields: {field_updates}")
+        else:
+            # check if the new data modifies the array or not
+            # TBD - is this worth the cost of comparing two arrays element by element?
+            log.debug(f"ndcompare: {chunk_arr[slices]} to {data}")
+            if not ndarray_compare(chunk_arr[slices], data):
+                # update chunk array
+                chunk_arr[slices] = data
+                updated = True
     except ValueError as ve:
         msg = f"array_equal ValueError, chunk_arr[{slices}]: {chunk_arr[slices]} "
         msg += f"data: {data}, data type: {type(data)} ve: {ve}"
         log.error(msg)
         raise
+
+    log.debug(f"ChunkWriteSelection - chunk updated: {updated}")
+    log.debug(f"chunk_arr: {chunk_arr}")
 
     return updated
 

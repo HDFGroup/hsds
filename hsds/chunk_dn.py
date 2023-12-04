@@ -23,7 +23,7 @@ from .util.httpUtil import request_read, getContentType
 from .util.arrayUtil import bytesToArray, arrayToBytes, getBroadcastShape
 from .util.idUtil import getS3Key, validateInPartition, isValidUuid
 from .util.storUtil import isStorObj, deleteStorObj
-from .util.hdf5dtype import createDataType
+from .util.hdf5dtype import createDataType, getSubType
 from .util.dsetUtil import getSelectionList, getChunkLayout, getShapeDims
 from .util.dsetUtil import getSelectionShape, getChunkInitializer
 from .util.chunkUtil import getChunkIndex, getDatasetId, chunkQuery
@@ -60,15 +60,19 @@ async def PUT_Chunk(request):
         msg = "Missing chunk id"
         log.error(msg)
         raise HTTPBadRequest(reason=msg)
+
     if not isValidUuid(chunk_id, "Chunk"):
         msg = f"Invalid chunk id: {chunk_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
+    log.debug(f"PUT_Chunk - id: {chunk_id}")
+
     if not request.has_body:
         msg = "PUT Value with no body"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+
     if "bucket" in params:
         bucket = params["bucket"]
         log.debug(f"PUT_Chunk using bucket: {bucket}")
@@ -99,7 +103,12 @@ async def PUT_Chunk(request):
         log.error(msg)
         raise HTTPBadRequest(reason=msg)
 
-    log.debug(f"PUT_Chunk - id: {chunk_id}")
+    if "fields" in params:
+        select_fields = params["fields"].split(":")
+        log.debug(f"PUT_Chunk - got fields: {select_fields}")
+    else:
+        select_fields = []
+        log.debug("PUT_Chunk - no select fields")
 
     # verify we have at least min_chunk_size free in the chunk cache
     # otherwise, have the client try a bit later
@@ -118,7 +127,12 @@ async def PUT_Chunk(request):
     rank = len(dims)
 
     type_json = dset_json["type"]
-    dt = createDataType(type_json)
+    dset_dt = createDataType(type_json)
+    if select_fields:
+        select_dt = getSubType(dset_dt, select_fields)
+    else:
+        select_dt = dset_dt
+
     if "size" in type_json:
         itemsize = type_json["size"]
     else:
@@ -142,7 +156,7 @@ async def PUT_Chunk(request):
     mshape = getSelectionShape(selection)
     if element_count is not None:
         bcshape = getBroadcastShape(mshape, element_count)
-        log.debug(f"ussing bcshape: {bcshape}")
+        log.debug(f"using bcshape: {bcshape}")
     else:
         bcshape = None
 
@@ -170,7 +184,7 @@ async def PUT_Chunk(request):
             raise HTTPNotFound()
 
     if query:
-        if not dt.fields:
+        if not dset_dt.fields:
             log.error("expected compound dtype for PUT query")
             raise HTTPInternalServerError()
         if rank != 1:
@@ -239,7 +253,7 @@ async def PUT_Chunk(request):
         # regular chunk update
         # check that the content_length is what we expect
         if itemsize != "H5T_VARIABLE":
-            log.debug(f"expect content_length: {num_elements*itemsize}")
+            log.debug(f"expected content_length: {num_elements*itemsize}")
         log.debug(f"actual content_length: {request.content_length}")
 
         actual = request.content_length
@@ -259,11 +273,11 @@ async def PUT_Chunk(request):
             log.error(msg)
             raise HTTPInternalServerError()
 
-        input_arr = bytesToArray(input_bytes, dt, [num_elements, ])
+        input_arr = bytesToArray(input_bytes, select_dt, [num_elements, ])
         if bcshape:
             input_arr = input_arr.reshape(bcshape)
             log.debug(f"broadcasting {bcshape} to mshape {mshape}")
-            arr_tmp = np.zeros(mshape, dtype=dt)
+            arr_tmp = np.zeros(mshape, dtype=select_dt)
             arr_tmp[...] = input_arr
             input_arr = arr_tmp
         else:

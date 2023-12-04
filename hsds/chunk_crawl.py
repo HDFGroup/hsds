@@ -84,7 +84,7 @@ async def write_chunk_hyperslab(
     if not bucket:
         bucket = config.get("bucket_name")
 
-    msg = f"write_chunk_hyperslab, chunk_id:{chunk_id}, slices:{slices}, "
+    msg = f"write_chunk_hyperslab, chunk_id: {chunk_id}, slices: {slices}, "
     msg += f"bucket: {bucket}"
     log.info(msg)
     if "layout" not in dset_json:
@@ -95,11 +95,20 @@ async def write_chunk_hyperslab(
         log.debug(f"using partition_chunk_id: {partition_chunk_id}")
         chunk_id = partition_chunk_id  # replace the chunk_id
 
+    params = {}
+
     if "type" not in dset_json:
         log.error(f"No type found in dset_json: {dset_json}")
         raise HTTPInternalServerError()
+    type_json = dset_json["type"]
+    dset_dtype = createDataType(type_json)
 
-    params = {}
+    if len(arr.dtype) < len(dset_dtype):
+        # field selection, pass in the field names
+        fields_param = ":".join(arr.dtype.names)
+        log.debug(f"setting fields_param to: {fields_param}")
+        params["fields"] = fields_param
+
     layout = getChunkLayout(dset_json)
     log.debug(f"getChunkCoverage({chunk_id}, {slices}, {layout})")
     chunk_sel = getChunkCoverage(chunk_id, slices, layout)
@@ -201,6 +210,8 @@ async def read_chunk_hyperslab(
     if "type" not in dset_json:
         log.error(f"No type found in dset_json: {dset_json}")
         raise HTTPInternalServerError()
+    type_json = dset_json["type"]
+    dset_dt = createDataType(type_json)
 
     chunk_shape = None  # expected return array shape
     chunk_sel = None  # for hyperslab
@@ -231,8 +242,6 @@ async def read_chunk_hyperslab(
         chunk_shape = [len(point_list), ]
         log.debug(f"point selection - chunk_shape: {chunk_shape}")
 
-    type_json = dset_json["type"]
-    dset_dt = createDataType(type_json)
     if query is None and query_update is None:
         query_dtype = None
     else:
@@ -269,7 +278,11 @@ async def read_chunk_hyperslab(
         params["hyper_dims"] = hyper_dims
     if np_arr is not None and len(np_arr.dtype) < len(dset_dt):
         # field selection, pass in the field names
-        params["fields"] = ":".join(np_arr.dtype.names)
+        fields_param = ":".join(np_arr.dtype.names)
+        log.debug(f"setting fields param to: {fields_param}")
+        params["fields"] = fields_param
+    else:
+        log.debug("no fields param")
 
     # set query-based params
     if query is not None:
