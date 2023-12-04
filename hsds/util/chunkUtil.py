@@ -774,6 +774,7 @@ def chunkReadSelection(chunk_arr, slices=None, fields=None):
     output_arr = chunk_arr[slices]
 
     if fields:
+        log.debug(f"ChunkReadSelection fields: {fields}")
         dtype_items = []
         if len(fields) > 1:
             for field in fields:
@@ -782,12 +783,14 @@ def chunkReadSelection(chunk_arr, slices=None, fields=None):
         else:
             # don't need a compound type
             select_dtype = chunk_arr.dtype[fields[0]]
+        log.debug(f"select_dtype: {select_dtype}")
         # create an array with just the given fields
-        arr = np.zeros(chunk_arr.shape, select_dtype)
+        arr = np.zeros(output_arr.shape, select_dtype)
         # slot in each of the given fields
         if len(fields) > 1:
             for field in fields:
                 arr[field] = output_arr[field]
+            log.debug(f"arr: {arr}")
         else:
             arr[...] = output_arr[fields[0]]
         output_arr = arr  # return this

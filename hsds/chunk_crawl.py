@@ -178,6 +178,10 @@ async def read_chunk_hyperslab(
         log.error("expected chunk_map to be set")
         return
 
+    if np_arr is None and query is None:
+        log.error("expected np_arr to be set")
+        return
+
     msg = f"read_chunk_hyperslab, chunk_id: {chunk_id},"
     msg += f" bucket: {bucket}"
     if query is not None:
@@ -232,7 +236,7 @@ async def read_chunk_hyperslab(
     if query is None and query_update is None:
         query_dtype = None
     else:
-        query_dtype = getQueryDtype(np_arr.dtype)
+        query_dtype = getQueryDtype(dset_dt)
 
     chunk_arr = None
     array_data = None
@@ -263,9 +267,9 @@ async def read_chunk_hyperslab(
             # convert to colon seperated string
             hyper_dims = ":".join(map(str, hyper_dims))
         params["hyper_dims"] = hyper_dims
-    if len(np_arr.dtype) < len(dset_dt):
+    if np_arr is not None and len(np_arr.dtype) < len(dset_dt):
         # field selection, pass in the field names
-        params["fields"] = ",".join(np_arr.dtype.names)
+        params["fields"] = ":".join(np_arr.dtype.names)
 
     # set query-based params
     if query is not None:
@@ -324,14 +328,10 @@ async def read_chunk_hyperslab(
             array_data = await http_get(app, req, params=params, client=client)
             log.debug(f"http_get {req}, returned {len(array_data)} bytes")
         elif method == "PUT":
-            array_data = await http_put(
-                app, req, data=body, params=params, client=client
-            )
+            array_data = await http_put(app, req, data=body, params=params, client=client)
             log.debug(f"http_put {req}, returned {len(array_data)} bytes")
         else:  # POST
-            array_data = await http_post(
-                app, req, data=body, params=params, client=client
-            )
+            array_data = await http_post(app, req, data=body, params=params, client=client)
             log.debug(f"http_post {req}, returned {len(array_data)} bytes")
     except HTTPNotFound:
         if query is None and "s3path" in params:
@@ -365,7 +365,6 @@ async def read_chunk_hyperslab(
         else:
             # convert binary data to numpy array
             try:
-                log.debug(f"array_data:  {array_data}")
                 log.debug(f"np_arr.dtype: {np_arr.dtype}")
                 log.debug(f"chunk_shape: {chunk_shape}")
                 chunk_arr = bytesToArray(array_data, np_arr.dtype, chunk_shape)
@@ -381,9 +380,9 @@ async def read_chunk_hyperslab(
                 raise HTTPInternalServerError()
             chunk_arr = chunk_arr.reshape(chunk_shape)
 
-            log.info(f"chunk_arr shape: {chunk_arr.shape}")
-            log.info(f"data_sel: {data_sel}")
-            log.info(f"np_arr shape: {np_arr.shape}")
+            log.debug(f"chunk_arr shape: {chunk_arr.shape}, dtype: {chunk_arr.dtype}")
+            log.debug(f"data_sel: {data_sel}")
+            log.debug(f"np_arr shape: {np_arr.shape}")
 
             if point_list is not None:
                 # point selection
@@ -880,6 +879,5 @@ class ChunkCrawler:
             if "query_rsp" in item:
                 query_rsp = item["query_rsp"]
                 self._hits += len(query_rsp)
-        log.info(
-            f"ChunkCrawler - worker status for chunk {chunk_id}: {self._status_map[chunk_id]}"
-        )
+        msg = f"ChunkCrawler - worker status for chunk {chunk_id}: {self._status_map[chunk_id]}"
+        log.info(msg)

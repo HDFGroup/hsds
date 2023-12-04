@@ -423,9 +423,10 @@ async def GET_Chunk(request):
     log.debug(f"GET_Chunk - got selection: {selection}")
 
     if "fields" in params:
-        select_fields = params["fields"].split(",")
+        select_fields = params["fields"].split(":")
+        log.debug(f"GET_Chunk - got fields: {select_fields}")
     else:
-        select_fields = [] 
+        select_fields = []
 
     if getChunkInitializer(dset_json):
         chunk_init = True
@@ -452,7 +453,7 @@ async def GET_Chunk(request):
 
     if chunk_init:
         save_chunk(app, chunk_id, dset_json, chunk_arr, bucket=bucket)
-     
+
     if query:
         try:
             parser = BooleanParser(query)

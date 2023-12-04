@@ -819,7 +819,7 @@ async def GET_Value(request):
     fields_param = params.get("fields")
     if fields_param:
         log.debug(f"fields param: {fields_param}")
-        select_fields = [fields_param,]  # tbd, process multiple field names
+        select_fields = fields_param.split(":")
         if select_fields:
             if len(dset_dtype) == 0:
                 msg = "fields query parameter can only be used with compound type datasets"
@@ -1010,6 +1010,7 @@ async def GET_Value(request):
                 dset_id,
                 dset_json,
                 slices,
+                select_dtype=select_dtype,
                 query=query,
                 bucket=bucket,
                 limit=limit,

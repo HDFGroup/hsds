@@ -558,10 +558,11 @@ async def doReadSelection(
         log.info(f"doReadSelection raising BadRequest error:  {crawler_status}")
         raise HTTPBadRequest()
     if crawler_status not in (200, 201):
-        log.info(
-            f"doReadSelection raising HTTPInternalServerError for status:  {crawler_status}"
-        )
+        msg = f"doReadSelection raising HTTPInternalServerError for status:  {crawler_status}"
+        log.info(msg)
         raise HTTPInternalServerError()
+
+    log.debug(f"ret arr: f{arr}")
 
     if query is not None:
         # combine chunk responses and return
