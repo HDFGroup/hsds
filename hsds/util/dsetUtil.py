@@ -375,7 +375,23 @@ def getShapeDims(shape):
 
     return dims
 
-
+def isSelectAll(slices, dims):
+    """ return True if the selection covers the entire dataspace """
+    if len(slices) != len(dims):
+        raise ValueError("isSelectAll - dimensions don't match")
+    is_all = True
+    for (s, dim) in zip(slices, dims):
+        if s.step is not None and s.step != 1:
+            is_all = False
+            break
+        if s.start != 0:
+            is_all = False
+            break
+        if s.stop != dim:
+            is_all = False
+            break
+    return is_all
+    
 def getQueryParameter(request, query_name, body=None, default=None):
     """
     Herlper function, get query parameter value from request.

@@ -16,18 +16,18 @@ import numpy as np
 
 from aiohttp.client_exceptions import ClientError
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
-from .util.hdf5dtype import createDataType, getItemSize
 from .util.arrayUtil import getNumpyValue
+from .util.boolparser import BooleanParser
 from .util.dsetUtil import isNullSpace, getDatasetLayout, getDatasetLayoutClass
 from .util.dsetUtil import getChunkLayout, getSelectionShape, getShapeDims, get_slices
 from .util.chunkUtil import getChunkCoordinate, getChunkIndex, getChunkSuffix
 from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
 from .util.chunkUtil import getQueryDtype, get_chunktable_dims
-
+from .util.hdf5dtype import createDataType, getItemSize
+from .util.httpUtil import http_delete
 from .util.idUtil import getDataNodeUrl, isSchema2Id, getS3Key, getObjId
 from .util.storUtil import getStorKeys
-from .util.httpUtil import http_delete
 
 from .servicenode_lib import getDsetJson
 from .chunk_crawl import ChunkCrawler
@@ -371,6 +371,28 @@ def get_chunk_selections(chunk_map, chunk_ids, slices, dset_json):
         item["data_sel"] = data_sel
 
 
+def getParser(query, dtype):
+    """ get query BooleanParser.  If query contains variables that
+       arent' part of the data type, throw a HTTPBadRequest exception. """
+
+    try:
+        parser = BooleanParser(query)
+    except Exception:
+        msg = f"query: {query} is not valid"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    field_names = set(dtype.names)
+    variables = parser.getVariables()
+    for variable in variables:
+        if variable not in field_names:
+            msg = f"query variable {variable} not valid"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+    return parser
+    
+
 async def getSelectionData(
     app,
     dset_id,
@@ -381,8 +403,7 @@ async def getSelectionData(
     query=None,
     query_update=None,
     bucket=None,
-    limit=0,
-    method="GET",
+    limit=0
 ):
     """Read selected slices and return numpy array"""
     log.debug("getSelectionData")
@@ -443,10 +464,6 @@ async def getSelectionData(
         get_chunk_selections(chunkinfo, chunk_ids, slices, dset_json)
 
     log.debug(f"chunkinfo_map: {chunkinfo}")
-
-    if method == "OPTIONS":
-        # skip doing any big data load for options request
-        return None
 
     arr = await doReadSelection(
         app,
