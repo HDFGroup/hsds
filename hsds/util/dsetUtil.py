@@ -306,6 +306,7 @@ def getHyperslabSelection(dsetshape, start=None, stop=None, step=None):
         slices.append(s)
     return tuple(slices)
 
+
 def getSelectionShape(selection):
     """Return the shape of the given selection.
     Examples (selection -> returned shape):
@@ -374,6 +375,7 @@ def getShapeDims(shape):
 
     return dims
 
+
 def isSelectAll(slices, dims):
     """ return True if the selection covers the entire dataspace """
     if len(slices) != len(dims):
@@ -390,7 +392,8 @@ def isSelectAll(slices, dims):
             is_all = False
             break
     return is_all
-    
+
+
 def getQueryParameter(request, query_name, body=None, default=None):
     """
     Herlper function, get query parameter value from request.

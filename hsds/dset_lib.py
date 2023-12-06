@@ -391,7 +391,7 @@ def getParser(query, dtype):
             raise HTTPBadRequest(reason=msg)
 
     return parser
-    
+
 
 async def getSelectionData(
     app,
@@ -716,6 +716,7 @@ async def getAllocatedChunkIds(app, dset_id, bucket=None):
     log.debug(f"getAllocattedChunkIds - got {len(chunk_ids)} ids")
     return chunk_ids
 
+
 async def extendShape(app, dset_json, nelements, axis=0, bucket=None):
     """ extend the shape of the dataset by nelements along given axis """
     dset_id = dset_json["id"]
@@ -785,7 +786,7 @@ async def extendShape(app, dset_json, nelements, axis=0, bucket=None):
 
     log.debug(f"extendShape returning slices: {slices}")
     return slices
-            
+
 
 async def reduceShape(app, dset_json, shape_update, bucket=None):
     """ Given an existing dataset and a new shape,

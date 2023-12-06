@@ -74,6 +74,7 @@ def use_http_streaming(request, rank):
         return False
     return True
 
+
 def _isAppend(params, body=None):
     """ return True if append values are specified in params or body """
     if isinstance(body, dict) and "append" in body and body["append"]:
@@ -90,7 +91,7 @@ def _getAppendDim(params, body=None):
     if isinstance(body, dict):
         if "append_dim" in body:
             append_dim_param = body["append_dim"]
-           
+
     if append_dim_param is None:
         # check query param
         if "append_dim" in params:
@@ -113,7 +114,7 @@ def _getAppendDim(params, body=None):
 def _getAppendRows(params, dset_json, body=None):
     """ get append rows value from query param or body """
     append_rows = None
-    
+
     if isinstance(body, dict) and "append" in body and body["append"]:
         try:
             append_rows = int(body["append"])
@@ -121,7 +122,7 @@ def _getAppendRows(params, dset_json, body=None):
             msg = "invalid append value in body"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-    elif "append" in params  and params["append"]:
+    elif "append" in params and params["append"]:
         try:
             append_rows = int(params["append"])
         except ValueError:
@@ -160,7 +161,7 @@ def _getAppendRows(params, dset_json, body=None):
             msg = "invalid append_dim"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        
+
         if maxdims[append_dim] != 0:
             if dims[append_dim] + append_rows > maxdims[append_dim]:
                 log.warn("unable to append to dataspace")
@@ -168,17 +169,19 @@ def _getAppendRows(params, dset_json, body=None):
 
     return append_rows
 
+
 def _isSelect(params, body=None):
     """ return True if select param or select is set in request body
     """
     if "select" in params and params["select"]:
         return True
-          
+
     if isinstance(body, dict):
         for key in ("start", "stop", "step"):
             if key in body and body[key]:
                 return True
     return False
+
 
 def _getSelect(params, dset_json, body=None):
     """ return selection region if any as a list
@@ -187,7 +190,7 @@ def _getSelect(params, dset_json, body=None):
     try:
         if body and "start" in body and "stop" in body:
             slices = get_slices(body, dset_json)
-        else: 
+        else:
             select = params.get("select")
             slices = get_slices(select, dset_json)
     except ValueError as ve:
@@ -200,7 +203,7 @@ def _getSelect(params, dset_json, body=None):
         raise HTTPBadRequest(reason=msg)
 
     return slices
-    
+
 
 def _getSelectDtype(params, dset_dtype, body=None):
     """ if a field list is defined in params or body,
@@ -222,12 +225,13 @@ def _getSelectDtype(params, dset_dtype, body=None):
         except TypeError as te:
             msg = f"invalid fields selection: {te}"
             log.warn(msg)
-            raise HTTPBadRequest(reason=msg)   
+            raise HTTPBadRequest(reason=msg)
         log.debug(f"using select dtype: {select_dtype}")
     else:
         select_dtype = dset_dtype  # return all fields
-    
+
     return select_dtype
+
 
 def _getLimit(params, body=None):
     if isinstance(body, dict) and "Limit" in body:
@@ -269,6 +273,7 @@ def _getPoints(body, rank=1):
         raise HTTPBadRequest(reason=msg)
     return points
 
+
 def _getQuery(params, dtype, rank=1, body=None):
     if "query" in params:
         query = params["query"]
@@ -292,8 +297,9 @@ def _getQuery(params, dtype, rank=1, body=None):
             log.warn(msg)
 
         # following will throw HTTPBadRequest if query is malformed
-        getParser(query, dtype)  
+        getParser(query, dtype)
     return query
+
 
 def _getElementCount(params, body=None):
     """ get element count as query param or body key """
@@ -314,11 +320,12 @@ def _getElementCount(params, body=None):
         log.debug(f"element_count body: {element_count}")
     else:
         element_count = None
-    
+
     return element_count
 
+
 async def _getRequestData(request, http_streaming=True):
-    """ get input data from request 
+    """ get input data from request
         return dict for json input, bytes for non-streaming binary
         or None, for streaming """
 
@@ -368,6 +375,7 @@ async def _getRequestData(request, http_streaming=True):
                 raise  # re-throw
     return input_data
 
+
 async def arrayResponse(arr, request, dset_json):
     """ return the array as binary or json response based on accept type """
     response_type = getAcceptType(request)
@@ -402,16 +410,18 @@ async def arrayResponse(arr, request, dset_json):
             raise HTTPBadRequest(reason=msg)
         rsp_json["value"] = json_query_data
         rsp_json["hrefs"] = get_hrefs(request, dset_json)
-        
+
         resp = await jsonResponse(request, rsp_json)
     return resp
 
-async def _doPointWrite(app, request,
-    points=None,
-    data=None,
-    dset_json=None,
-    bucket=None
-):
+
+async def _doPointWrite(app,
+                        request,
+                        points=None,
+                        data=None,
+                        dset_json=None,
+                        bucket=None
+                        ):
     """ write the given points to the dataset """
 
     num_points = len(points)
@@ -419,7 +429,7 @@ async def _doPointWrite(app, request,
     dset_id = dset_json["id"]
     layout = getChunkLayout(dset_json)
     datashape = dset_json["shape"]
-    dims = getShapeDims(datashape)  
+    dims = getShapeDims(datashape)
     rank = len(dims)
 
     chunk_dict = {}  # chunk ids to list of points in chunk
@@ -493,14 +503,15 @@ async def _doPointWrite(app, request,
         log.info("doPointWrite success")
 
 
-async def _doHyperslabWrite(app, request, 
-    page_number=0, 
-    page=None, 
-    data=None,
-    dset_json=None,
-    select_dtype=None,
-    bucket=None
-):
+async def _doHyperslabWrite(app,
+                            request,
+                            page_number=0,
+                            page=None,
+                            data=None,
+                            dset_json=None,
+                            select_dtype=None,
+                            bucket=None
+                            ):
     """ write the given page selection to the dataset """
     dset_id = dset_json["id"]
     log.info(f"_doHyperslabWrite on {dset_id} - page: {page_number}")
@@ -541,7 +552,7 @@ async def _doHyperslabWrite(app, request,
             raise HTTPBadRequest(reason=msg)
     else:
         arr = data  # use array provided to function
-    
+
     try:
         chunk_ids = getChunkIds(dset_id, page, layout)
     except ValueError:
@@ -586,7 +597,7 @@ async def PUT_Value(request):
     num_elements = None
     element_count = None
     limit = None  # query limit
-    
+
     arr_rsp = None  # array data to return if any
 
     if not request.has_body:
@@ -670,7 +681,7 @@ async def PUT_Value(request):
     query = _getQuery(params, dset_dtype, rank=rank, body=body)
 
     element_count = _getElementCount(params, body=body)
-    
+
     if item_size == 'H5T_VARIABLE' or element_count or not use_http_streaming(request, rank):
         http_streaming = False
     else:
@@ -695,7 +706,7 @@ async def PUT_Value(request):
         resp = await arrayResponse(arr_rsp, request, dset_json)
         log.response(request, resp=resp)
         return resp
-    
+
     # regular PUT_Value processing without query update
     binary_data = None
     np_shape = []  # shape of incoming data
@@ -703,7 +714,7 @@ async def PUT_Value(request):
     input_data = await _getRequestData(request, http_streaming=http_streaming)
     # could be int, list, str, bytes, or  None
     log.debug(f"got input data type: {type(input_data)}")
-    
+
     if append_rows:
         # extend datashape and set slices to shape of appended region
         # make sure any other dimensions are non-zero
@@ -864,14 +875,14 @@ async def PUT_Value(request):
                 kwargs["data"] = arr
             else:
                 kwargs["data"] = None
-            # do write for one page selection  
+            # do write for one page selection
             await _doHyperslabWrite(app, request, **kwargs)
     else:
         #
         # Do point put
         #
         kwargs = {"points": points, "data": arr, "dset_json": dset_json, "bucket": bucket}
-        await _doPointWrite(app, request, **kwargs)    
+        await _doPointWrite(app, request, **kwargs)
 
     # write successful
 
@@ -936,7 +947,7 @@ async def GET_Value(request):
 
     # Get query parameter for selection
     slices = _getSelect(params, dset_json)
-     
+
     fields_param = params.get("fields")
     if fields_param:
         log.debug(f"fields param: {fields_param}")
@@ -954,7 +965,7 @@ async def GET_Value(request):
     log.debug(f"dset_dtype: {dset_dtype}, select_dtype: {select_dtype}")
 
     limit = _getLimit(params)
-     
+
     if "ignore_nan" in params and params["ignore_nan"]:
         ignore_nan = True
     else:

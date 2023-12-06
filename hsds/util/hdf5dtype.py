@@ -834,7 +834,7 @@ def getSubType(dt_parent, fields):
         raise TypeError("null field specification")
     if isinstance(fields, str):
         fields = [fields,]  # convert to a list
-    
+
     field_names = set(dt_parent.names)
     dt_items = []
     for field in fields:
