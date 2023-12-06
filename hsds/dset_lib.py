@@ -15,7 +15,7 @@ import math
 import numpy as np
 
 from aiohttp.client_exceptions import ClientError
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPConflict, HTTPInternalServerError
 from .util.arrayUtil import getNumpyValue
 from .util.boolparser import BooleanParser
 from .util.dsetUtil import isNullSpace, getDatasetLayout, getDatasetLayoutClass
@@ -25,7 +25,7 @@ from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
 from .util.chunkUtil import getQueryDtype, get_chunktable_dims
 from .util.hdf5dtype import createDataType, getItemSize
-from .util.httpUtil import http_delete
+from .util.httpUtil import http_delete, http_put
 from .util.idUtil import getDataNodeUrl, isSchema2Id, getS3Key, getObjId
 from .util.storUtil import getStorKeys
 
@@ -716,6 +716,76 @@ async def getAllocatedChunkIds(app, dset_id, bucket=None):
     log.debug(f"getAllocattedChunkIds - got {len(chunk_ids)} ids")
     return chunk_ids
 
+async def extendShape(app, dset_json, nelements, axis=0, bucket=None):
+    """ extend the shape of the dataset by nelements along given axis """
+    dset_id = dset_json["id"]
+    datashape = dset_json["shape"]
+    dims = getShapeDims(datashape)
+    rank = len(dims)
+    log.info(f"extendShape of {dset_id} dims: {dims} by {nelements} on axis: {axis}")
+    # do some sanity checks here
+    if rank == 0:
+        msg = "can't change shape of scalar or null space dataset"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    if axis >= rank:
+        msg = f"extendShape, invalid axis {axis} for dataset of rank: {rank}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    req = getDataNodeUrl(app, dset_id) + "/datasets/" + dset_id + "/shape"
+    body = {"extend": nelements, "extend_dim": axis}
+    params = {}
+    if bucket:
+        params["bucket"] = bucket
+    selection = None
+    try:
+        shape_rsp = await http_put(app, req, data=body, params=params)
+        log.info(f"got shape put rsp: {shape_rsp}")
+        if "selection" in shape_rsp:
+            selection = shape_rsp["selection"]
+    except HTTPConflict:
+        log.warn("got 409 extending dataspace for PUT value")
+        raise
+    if not selection:
+        log.error("expected to get selection in PUT shape response")
+        raise HTTPInternalServerError()
+
+    # selection should be in the format [:,n:m,:].
+    # extract n and m and use it to update the slice for the
+    # appending dimension
+    if not selection.startswith("[") or not selection.endswith("]"):
+        log.error("Unexpected selection in PUT shape response")
+        raise HTTPInternalServerError()
+    selection = selection[1:-1]  # strip off bracketss
+    fields = selection.split(",")
+    msg = f"extendShape - unexpected response for dataset of rank {rank}: {selection}"
+    if len(fields) != rank:
+        log.error(msg)
+        raise HTTPInternalServerError()
+    slices = []
+    for (field, extent) in zip(fields, dims):
+        if field == ":":
+            s = slice(0, extent, 1)
+        else:
+            bounds = field.split(":")
+            if len(bounds) != 2:
+                # reuse msg
+                log.error(msg)
+                raise HTTPInternalServerError()
+            try:
+                lb = int(bounds[0])
+                ub = int(bounds[1])
+            except ValueError:
+                # reuse msg
+                log.error(msg)
+                raise HTTPInternalServerError()
+            s = slice(lb, ub, 1)
+        slices.append(s)
+
+    log.debug(f"extendShape returning slices: {slices}")
+    return slices
+            
 
 async def reduceShape(app, dset_json, shape_update, bucket=None):
     """ Given an existing dataset and a new shape,

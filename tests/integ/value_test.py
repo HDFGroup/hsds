@@ -2133,7 +2133,7 @@ class ValueTest(unittest.TestCase):
 
         # create the dataset with a 0-sized shape
         req = self.endpoint + "/datasets"
-        payload = {"type": "H5T_STD_I32LE", "shape": [0, 0], "maxdims": [0, 0]}
+        payload = {"type": "H5T_STD_I32LE", "shape": [1, 0], "maxdims": [0, 0]}
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset

@@ -491,9 +491,7 @@ def getChunkIds(dset_id, selection, layout, dim=0, prefix=None, chunk_ids=None):
                     chunk_ids.append(chunk_id)
                 else:
                     chunk_id += "_"  # dimension seperator
-                    getChunkIds(
-                        dset_id, selection, layout, dim + 1, chunk_id, chunk_ids
-                    )
+                    getChunkIds(dset_id, selection, layout, dim + 1, chunk_id, chunk_ids)
                 last_chunk_index = chunk_index
 
     # got the complete list, return it!

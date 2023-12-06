@@ -306,7 +306,6 @@ def getHyperslabSelection(dsetshape, start=None, stop=None, step=None):
         slices.append(s)
     return tuple(slices)
 
-
 def getSelectionShape(selection):
     """Return the shape of the given selection.
     Examples (selection -> returned shape):
