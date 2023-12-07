@@ -243,9 +243,7 @@ class QueryTest(unittest.TestCase):
         if "snp500.h5" not in snp500_json:
             self.assertTrue(False)
 
-        chunk_dims = [
-            60000,
-        ]  # chunk layout used in snp500.h5 file
+        chunk_dims = [60000, ]  # chunk layout used in snp500.h5 file
         num_chunks = (SNP500_ROWS // chunk_dims[0]) + 1
 
         chunk_info = snp500_json["snp500.h5"]

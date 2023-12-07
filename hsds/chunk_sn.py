@@ -30,7 +30,7 @@ from .util.idUtil import isValidUuid
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain
 from .util.hdf5dtype import getItemSize, getSubType, createDataType
-from .util.dsetUtil import isNullSpace, get_slices, getShapeDims
+from .util.dsetUtil import isNullSpace, isScalarSpace, get_slices, getShapeDims
 from .util.dsetUtil import isExtensible, getSelectionPagination
 from .util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout
 from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId
@@ -75,11 +75,23 @@ def use_http_streaming(request, rank):
     return True
 
 
+def _isIgnoreNan(params, body=None):
+    kw = "ignore_nan"
+    if isinstance(body, dict) and kw in params and params[kw]:
+        ignore_nan = bool(body)
+    elif kw in params and params[kw]:
+        ignore_nan = True
+    else:
+        ignore_nan = False
+    return ignore_nan
+
+
 def _isAppend(params, body=None):
     """ return True if append values are specified in params or body """
-    if isinstance(body, dict) and "append" in body and body["append"]:
+    kw = "append"
+    if isinstance(body, dict) and kw in body and body[kw]:
         isAppend = True
-    elif "append" in params and params["append"]:
+    elif kw in params and params[kw]:
         isAppend = True
     else:
         isAppend = False
@@ -88,14 +100,15 @@ def _isAppend(params, body=None):
 
 def _getAppendDim(params, body=None):
     append_dim_param = None
+    kw = "append_dim"
     if isinstance(body, dict):
-        if "append_dim" in body:
-            append_dim_param = body["append_dim"]
+        if kw in body:
+            append_dim_param = body[kw]
 
     if append_dim_param is None:
         # check query param
-        if "append_dim" in params:
-            append_dim_param = params["append_dim"]
+        if kw in params:
+            append_dim_param = params[kw]
 
     if append_dim_param is not None:
         try:
@@ -114,17 +127,18 @@ def _getAppendDim(params, body=None):
 def _getAppendRows(params, dset_json, body=None):
     """ get append rows value from query param or body """
     append_rows = None
+    kw = "append"
 
-    if isinstance(body, dict) and "append" in body and body["append"]:
+    if isinstance(body, dict) and kw in body and body[kw]:
         try:
-            append_rows = int(body["append"])
+            append_rows = int(body[kw])
         except ValueError:
             msg = "invalid append value in body"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-    elif "append" in params and params["append"]:
+    elif kw in params and params[kw]:
         try:
-            append_rows = int(params["append"])
+            append_rows = int(params[kw])
         except ValueError:
             msg = "invalid append query param"
             log.warn(msg)
@@ -210,10 +224,11 @@ def _getSelectDtype(params, dset_dtype, body=None):
       create a sub-type of the dset dtype.  Else,
       just return the dset dtype. """
 
-    if isinstance(body, dict) and "fields" in body:
-        select_fields = body["fields"]
-    elif "fields" in params:
-        fields_param = params.get("fields")
+    kw = "fields"
+    if isinstance(body, dict) and kw in body:
+        select_fields = body[kw]
+    elif kw in params:
+        fields_param = params.get(kw)
         log.debug(f"fields param: {fields_param}")
         select_fields = fields_param.split(":")
     else:
@@ -234,11 +249,12 @@ def _getSelectDtype(params, dset_dtype, body=None):
 
 
 def _getLimit(params, body=None):
-    if isinstance(body, dict) and "Limit" in body:
-        limit = body["Limit"]
-    elif "Limit" in params:
+    kw = "Limit"
+    if isinstance(body, dict) and kw in body:
+        limit = body[kw]
+    elif kw in params:
         try:
-            limit = int(params["Limit"])
+            limit = int(params[kw])
         except ValueError:
             msg = "Limit param must be positive int"
             log.warning(msg)
@@ -275,12 +291,16 @@ def _getPoints(body, rank=1):
 
 
 def _getQuery(params, dtype, rank=1, body=None):
-    if "query" in params:
-        query = params["query"]
-    elif isinstance(body, dict) and "query" in body:
-        query = body["query"]
+    """ get query parameter and validate if set """
+
+    kw = "query"
+    if isinstance(body, dict) and kw in body:
+        query = body[kw]
+    elif kw in params:
+        query = params[kw]
     else:
         query = None
+
     if query:
         if _isAppend(params, body=body):
             msg = "Query string can not be used with append parameter"
@@ -303,21 +323,23 @@ def _getQuery(params, dtype, rank=1, body=None):
 
 def _getElementCount(params, body=None):
     """ get element count as query param or body key """
-    if "element_count" in params:
-        try:
-            element_count = int(params["element_count"])
-        except ValueError:
-            msg = "invalid element_count"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        log.debug(f"element_count param: {element_count}")
-    elif isinstance(body, dict) and "element_count" in body:
-        element_count = body["element_count"]
+    kw = "element_count"
+
+    if isinstance(body, dict) and kw in body:
+        element_count = body[kw]
         if not isinstance(element_count, int):
             msg = f"expected int value for element_count, but got: {type(element_count)}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         log.debug(f"element_count body: {element_count}")
+    elif kw in params:
+        try:
+            element_count = int(params[kw])
+        except ValueError:
+            msg = "invalid element_count"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        log.debug(f"{kw} param: {element_count}")
     else:
         element_count = None
 
@@ -639,7 +661,7 @@ async def PUT_Value(request):
     dset_json = await getDsetJson(app, dset_id, bucket=bucket)
 
     datashape = dset_json["shape"]
-    if datashape["class"] == "H5S_NULL":
+    if isNullSpace(dset_json):
         msg = "Null space datasets can not be used as target for PUT value"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -948,18 +970,8 @@ async def GET_Value(request):
     # Get query parameter for selection
     slices = _getSelect(params, dset_json)
 
-    fields_param = params.get("fields")
-    if fields_param:
-        log.debug(f"fields param: {fields_param}")
-        select_fields = fields_param.split(":")
-        try:
-            select_dtype = getSubType(dset_dtype, select_fields)
-        except TypeError as te:
-            msg = f"Invalid fields query parameter: {te}"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-    else:
-        select_dtype = dset_dtype  # return all fields
+    # dtype for selection, or just dset_dtype if no fields are given
+    select_dtype = _getSelectDtype(params, dset_dtype)
 
     log.debug(f"GET Value selection: {slices}")
     log.debug(f"dset_dtype: {dset_dtype}, select_dtype: {select_dtype}")
@@ -1076,9 +1088,8 @@ async def GET_Value(request):
 
                     if query and limit > 0:
                         query_rows = arr.shape[0]
-                        log.debug(
-                            f"streaming page {page_number} returned {query_rows} rows"
-                        )
+                        msg = f"streaming page {page_number} returned {query_rows} rows"
+                        log.debug(msg)
                         limit -= query_rows
                         if limit <= 0:
                             log.debug("skipping remaining pages, query limit reached")
@@ -1200,12 +1211,6 @@ async def POST_Value(request):
 
     log.info(f"POST_Value, dataset id: {dset_id}")
 
-    username, pswd = getUserPasswordFromRequest(request)
-    if username is None and app["allow_noauth"]:
-        username = "default"
-    else:
-        await validateUserPassword(app, username, pswd)
-
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
         msg = f"Invalid domain: {domain}"
@@ -1213,14 +1218,18 @@ async def POST_Value(request):
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
 
+    username, pswd = getUserPasswordFromRequest(request)
+    if username is None and app["allow_noauth"]:
+        username = "default"
+    else:
+        await validateUserPassword(app, username, pswd)
+    await validateAction(app, domain, dset_id, username, "read")
+
     accept_type = getAcceptType(request)
     response_type = accept_type  # will adjust later if binary not possible
 
     params = request.rel_url.query
-    if "ignore_nan" in params and params["ignore_nan"]:
-        ignore_nan = True
-    else:
-        ignore_nan = False
+    ignore_nan = _isIgnoreNan(params)
 
     request_type = getContentType(request)
     log.debug(f"POST value - request_type is {request_type}")
@@ -1233,23 +1242,21 @@ async def POST_Value(request):
     # get  state for dataset from DN.
     dset_json = await getDsetJson(app, dset_id, bucket=bucket)
 
-    datashape = dset_json["shape"]
-    if datashape["class"] == "H5S_NULL":
+    if isNullSpace(dset_json):
         msg = "POST value not supported for datasets with NULL shape"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if datashape["class"] == "H5S_SCALAR":
+    if isScalarSpace(dset_json):
         msg = "POST value not supported for datasets with SCALAR shape"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    datashape = dset_json["shape"]
     dims = getShapeDims(datashape)
     rank = len(dims)
 
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
     log.debug(f"item size: {item_size}")
-
-    await validateAction(app, domain, dset_id, username, "read")
 
     # read body data
     slices = None  # this will be set for hyperslab selection
@@ -1311,19 +1318,13 @@ async def POST_Value(request):
     if points is not None:
         log.debug(f"got {len(points)} num_points")
 
-    # get expected content_length
-    item_size = getItemSize(type_json)
-    log.debug(f"item size: {item_size}")
-
     # get the shape of the response array
     if slices:
         # hyperslab post
         np_shape = getSelectionShape(slices)
     else:
         # point selection
-        np_shape = [
-            len(points),
-        ]
+        np_shape = [len(points), ]
 
     log.debug(f"selection shape: {np_shape}")
 

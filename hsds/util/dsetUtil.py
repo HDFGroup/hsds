@@ -234,6 +234,27 @@ def isNullSpace(dset_json):
         return False
 
 
+def isScalarSpace(dset_json):
+    """ return true if this is a scalar dataset """
+    datashape = dset_json["shape"]
+    is_scalar = False
+    if datashape["class"] == "H5S_NULL":
+        is_scalar = False
+    elif datashape["class"] == "H5S_SCALAR":
+        is_scalar = True
+    else:
+        if "dims" not in datashape:
+            log.warn(f"expected to find dims key in shape_json: {datashape}")
+            is_scalar = False
+        else:
+            dims = datashape["dims"]
+            if len(dims) == 0:
+                # guess this properly be a H5S_SCALAR class
+                # but treat this as equivalent
+                is_scalar = True
+    return is_scalar
+
+
 def getHyperslabSelection(dsetshape, start=None, stop=None, step=None):
     """
     Get slices given lists of start, stop, step values

@@ -579,8 +579,6 @@ async def doReadSelection(
         log.info(msg)
         raise HTTPInternalServerError()
 
-    log.debug(f"ret arr: f{arr}")
-
     if query is not None:
         # combine chunk responses and return
         if limit > 0 and crawler._hits > limit:

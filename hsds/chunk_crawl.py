@@ -776,9 +776,9 @@ class ChunkCrawler:
                         bucket=self._bucket,
                         client=client,
                     )
-                    log.debug(
-                        f"write_chunk_hyperslab - got 200 status for chunk_id: {chunk_id}"
-                    )
+
+                    msg = f"write_chunk_hyperslab - got 200 status for chunk_id: {chunk_id}"
+                    log.debug(msg)
                     status_code = 200
                 elif self._action == "read_point_sel":
                     if not isinstance(self._points, dict):
@@ -786,9 +786,9 @@ class ChunkCrawler:
                         status_code = 500
                         break
                     if chunk_id not in self._points:
-                        log.error(
-                            f"ChunkCrawler - read_point_sel, no entry for chunk: {chunk_id}"
-                        )
+                        msg = "ChunkCrawler - read_point_sel, "
+                        msg += f"no entry for chunk: {chunk_id}"
+                        log.error(msg)
                         status_code = 500
                         break
                     item = self._points[chunk_id]
@@ -806,9 +806,8 @@ class ChunkCrawler:
                         bucket=self._bucket,
                         client=client,
                     )
-                    log.debug(
-                        f"read_point_sel - got 200 status for chunk_id: {chunk_id}"
-                    )
+                    msg = f"read_point_sel - got 200 status for chunk_id: {chunk_id}"
+                    log.debug(msg)
                     status_code = 200
                 elif self._action == "write_point_sel":
                     if not isinstance(self._points, dict):
@@ -816,9 +815,9 @@ class ChunkCrawler:
                         status_code = 500
                         break
                     if chunk_id not in self._points:
-                        log.error(
-                            f"ChunkCrawler - read_point_sel, no entry for chunk: {chunk_id}"
-                        )
+                        msg = "ChunkCrawler - read_point_sel, "
+                        msg += f"no entry for chunk: {chunk_id}"
+                        log.error(msg)
                         status_code = 500
                         break
                     item = self._points[chunk_id]
@@ -835,9 +834,8 @@ class ChunkCrawler:
                         bucket=self._bucket,
                         client=client,
                     )
-                    log.debug(
-                        f"read_point_sel - got 200 status for chunk_id: {chunk_id}"
-                    )
+                    msg = f"read_point_sel - got 200 status for chunk_id: {chunk_id}"
+                    log.debug(msg)
                     status_code = 200
                 else:
                     log.error(f"ChunkCrawler - unexpected action: {self._action}")
@@ -846,9 +844,8 @@ class ChunkCrawler:
 
             except ClientError as ce:
                 status_code = 500
-                log.warn(
-                    f"ClientError {type(ce)} for {self._action}({chunk_id}): {ce} "
-                )
+                msg = f"ClientError {type(ce)} for {self._action}({chunk_id}): {ce} "
+                log.warn(msg)
             except CancelledError as cle:
                 status_code = 503
                 log.warn(f"CancelledError for {self._action}({chunk_id}): {cle}")
@@ -861,9 +858,8 @@ class ChunkCrawler:
                 break
             except HTTPInternalServerError as ise:
                 status_code = 500
-                log.warn(
-                    f"HTTPInternalServerError for {self._action}({chunk_id}): {ise}"
-                )
+                msg = f"HTTPInternalServerError for {self._action}({chunk_id}): {ise}"
+                log.warn(msg)
             except HTTPServiceUnavailable as sue:
                 status_code = 503
                 msg = f"HTTPServiceUnavailable for {self._action}({chunk_id}): {sue}"
