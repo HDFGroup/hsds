@@ -109,9 +109,7 @@ class PointSelTest(unittest.TestCase):
         self.assertTrue("value" in rspJson)
         ret_value = rspJson["value"]
         self.assertEqual(len(ret_value), len(points))
-        expected_result = [
-            0,
-        ] * len(points)
+        expected_result = [0, ] * len(points)
         self.assertEqual(ret_value, expected_result)
 
         # write to the dset
@@ -706,15 +704,12 @@ class PointSelTest(unittest.TestCase):
 
         # do a point selection
         req = self.endpoint + "/datasets/" + dset_id + "/value"
-        points = [
-            1234567,
-        ]
+        points = [1234567, ]
         body = {"points": points}
         rsp = self.session.post(req, data=json.dumps(body), headers=headers)
         if rsp.status_code == 404:
-            print(
-                "s3object: {} not found, skipping point chunk ref test".format(s3path)
-            )
+            msg = "s3object: {s3path} not found, skipping point chunk ref test"
+            print(msg)
         else:
             self.assertEqual(rsp.status_code, 200)
             rspJson = json.loads(rsp.text)
@@ -732,9 +727,9 @@ class PointSelTest(unittest.TestCase):
 
         hdf5_sample_bucket = config.get("hdf5_sample_bucket")
         if not hdf5_sample_bucket:
-            print(
-                "hdf5_sample_bucket config not set, skipping testPostChunkedRefIndirectDataset"
-            )
+            msg = "hdf5_sample_bucket config not set, "
+            msg += "skipping testPostChunkedRefIndirectDataset"
+            print(msg)
             return
 
         s3path = "s3://" + hdf5_sample_bucket + "/data/hdf5test" + "/snp500.h5"
@@ -748,9 +743,7 @@ class PointSelTest(unittest.TestCase):
         if "snp500.h5" not in snp500_json:
             self.assertTrue(False)
 
-        chunk_dims = [
-            60000,
-        ]  # chunk layout used in snp500.h5 file
+        chunk_dims = [60000,]  # chunk layout used in snp500.h5 file
         num_chunks = (SNP500_ROWS // chunk_dims[0]) + 1
 
         chunk_info = snp500_json["snp500.h5"]
@@ -868,17 +861,13 @@ class PointSelTest(unittest.TestCase):
 
         # do a point selection
         req = self.endpoint + "/datasets/" + dset_id + "/value"
-        points = [
-            1234567,
-        ]
+        points = [1234567, ]
         body = {"points": points}
         rsp = self.session.post(req, data=json.dumps(body), headers=headers)
         if rsp.status_code == 404:
-            print(
-                "s3object: {} not found, skipping point read chunk reference indirect test".format(
-                    s3path
-                )
-            )
+            msg = f"s3object: {s3path} not found, "
+            msg += "skipping point read chunk reference indirect test"
+            print(msg)
             return
 
         self.assertEqual(rsp.status_code, 200)
@@ -911,9 +900,7 @@ class PointSelTest(unittest.TestCase):
         data["creationProperties"] = {
             "layout": {
                 "class": "H5D_CHUNKED",
-                "dims": [
-                    20,
-                ],
+                "dims": [20, ],
             }
         }
 
@@ -960,9 +947,7 @@ class PointSelTest(unittest.TestCase):
             97,
         ]
         # write 1's at indexes that are prime
-        value = [
-            1,
-        ] * len(primes)
+        value = [1,] * len(primes)
 
         # write 1's to all the prime indexes
         payload = {"points": primes, "value": value}
@@ -1038,9 +1023,7 @@ class PointSelTest(unittest.TestCase):
         points = []
         for i in range(20):
             points.append((i, i))
-        value = [
-            1,
-        ] * 20
+        value = [1, ] * 20
 
         # write 1's to all the point locations
         payload = {"points": points, "value": value}
@@ -1084,9 +1067,7 @@ class PointSelTest(unittest.TestCase):
         data["creationProperties"] = {
             "layout": {
                 "class": "H5D_CHUNKED",
-                "dims": [
-                    20,
-                ],
+                "dims": [20, ],
             }
         }
 
@@ -1348,9 +1329,7 @@ class PointSelTest(unittest.TestCase):
         self.assertTrue(helper.validateId(dset_id))
 
         # write to the dset
-        data = [
-            42,
-        ]
+        data = [42, ]
 
         payload = {"value": data}
         req = self.endpoint + "/datasets/" + dset_id + "/value"
@@ -1358,9 +1337,7 @@ class PointSelTest(unittest.TestCase):
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
-        points = [
-            0,
-        ]
+        points = [0, ]
         body = {"points": points}
         # read selected points
         rsp = self.session.post(req, data=json.dumps(body), headers=headers)
@@ -1577,6 +1554,119 @@ class PointSelTest(unittest.TestCase):
         data = rsp.content
         self.assertEqual(len(data), 3 * 4)
         self.assertEqual(data, b"\x1e\x00\x00\x00 \x00\x00\x00#\x00\x00\x00")
+
+    def testPostCompoundDataset(self):
+
+        # Test selecting points in a compound dataset using POST value
+        print("testPostCompoundDataset", self.base_domain)
+
+        points = [
+            2,
+            3,
+            5,
+            7,
+            11,
+            13,
+            17,
+            19,
+            23,
+            29,
+            31,
+            37,
+            41,
+            43,
+            47,
+            53,
+            59,
+            61,
+            67,
+            71,
+            73,
+            79,
+            83,
+            97,
+            98,
+        ]
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create dataset
+        # pass in layout specification so that we can test selection across chunk boundries
+        data = {"type": "H5T_STD_I32LE", "shape": (100,)}
+        #
+        # create 1d dataset
+        #
+
+        field_names = ("x1", "X2", "x3", "X4", "X5")
+
+        fields = []
+        for field_name in field_names:
+            field = {"name": field_name, "type": "H5T_STD_I32LE"}
+            fields.append(field)
+
+        datatype = {"class": "H5T_COMPOUND", "fields": fields}
+
+        num_elements = 100
+        payload = {"type": datatype, "shape": num_elements}
+
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        dset_id = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_id))
+
+        # link new dataset as 'dset_compound'
+        name = "dset"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": dset_id}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # try reading points from uninitialized chunks
+        body = {"points": points}
+        req = self.endpoint + "/datasets/" + dset_id + "/value"
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        ret_value = rspJson["value"]
+        self.assertEqual(len(ret_value), len(points))
+        for i in range(len(points)):
+            self.assertEqual(ret_value[i], [0, 0, 0, 0, 0])
+
+        # write to the dset by fields
+        for field in field_names:
+            x = int(field[1])  # get the number part of the field name
+            data = [(x * i) for i in range(num_elements)]
+
+            payload = {"value": data, "fields": field}
+            req = self.endpoint + "/datasets/" + dset_id + "/value"
+
+            rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+
+        # read back selected points by field
+        for field in field_names:
+            x = int(field[1])
+            body = {"points": points, "fields": field}
+            rsp = self.session.post(req, data=json.dumps(body), headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+            self.assertTrue("value" in rspJson)
+            ret_value = rspJson["value"]
+            self.assertEqual(len(ret_value), len(points))
+            for i in range(len(points)):
+                self.assertEqual(ret_value[i], [x * points[i]])
+            return
 
 
 if __name__ == "__main__":

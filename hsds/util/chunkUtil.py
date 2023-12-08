@@ -745,7 +745,7 @@ class ChunkIterator:
         return chunk_id
 
 
-def chunkReadSelection(chunk_arr, slices=None, fields=None):
+def chunkReadSelection(chunk_arr, slices=None, select_dt=None):
     """
     Return data from requested chunk and selection
     """
@@ -761,6 +761,10 @@ def chunkReadSelection(chunk_arr, slices=None, fields=None):
     log.debug(f"got selection: {slices}")
     slices = tuple(slices)
 
+    if select_dt is None:
+        # no field selection
+        select_dt = chunk_arr.dtype
+
     if len(slices) != rank:
         msg = "Selection rank does not match shape rank"
         raise ValueError(msg)
@@ -771,20 +775,13 @@ def chunkReadSelection(chunk_arr, slices=None, fields=None):
     # get requested data
     output_arr = chunk_arr[slices]
 
-    if fields:
-        log.debug(f"ChunkReadSelection fields: {fields}")
-        dtype_items = []
-        if len(fields) > 1:
-            for field in fields:
-                dtype_items.append((field, chunk_arr.dtype[field]))
-            select_dtype = np.dtype(dtype_items)
-        else:
-            # don't need a compound type
-            select_dtype = chunk_arr.dtype[fields[0]]
-        log.debug(f"select_dtype: {select_dtype}")
+    if len(select_dt) < len(dt):
+        # do a field selection
+        log.debug(f"select_dtype: {select_dt}")
         # create an array with just the given fields
-        arr = np.zeros(output_arr.shape, select_dtype)
+        arr = np.zeros(output_arr.shape, select_dt)
         # slot in each of the given fields
+        fields = select_dt.names
         if len(fields) > 1:
             for field in fields:
                 arr[field] = output_arr[field]
@@ -865,7 +862,12 @@ def chunkWriteSelection(chunk_arr=None, slices=None, data=None):
     return updated
 
 
-def chunkReadPoints(chunk_id=None, chunk_layout=None, chunk_arr=None, point_arr=None):
+def chunkReadPoints(chunk_id=None,
+                    chunk_layout=None,
+                    chunk_arr=None,
+                    point_arr=None,
+                    select_dt=None
+                    ):
     """
     Read points from given chunk
     """
@@ -880,6 +882,8 @@ def chunkReadPoints(chunk_id=None, chunk_layout=None, chunk_arr=None, point_arr=
         raise ValueError(msg)
 
     dset_dtype = chunk_arr.dtype
+    if select_dt is None:
+        select_dt = dset_dtype  # no field selection
 
     # verify chunk_layout
     if len(chunk_layout) != rank:
@@ -903,19 +907,32 @@ def chunkReadPoints(chunk_id=None, chunk_layout=None, chunk_arr=None, point_arr=
 
     log.debug(f"got {num_points} points")
 
-    output_arr = np.zeros((num_points,), dtype=dset_dtype)
+    output_arr = np.zeros((num_points,), dtype=select_dt)
 
     chunk_coord = getChunkCoordinate(chunk_id, chunk_layout)
 
     for i in range(num_points):
+        # TBD: there's likely a better way to do this that
+        # doesn't require iterating through each point...
         point = point_arr[i, :]
         tr_point = getChunkRelativePoint(chunk_coord, point)
         val = chunk_arr[tuple(tr_point)]
+        if len(select_dt) < len(dset_dtype):
+            # just update the relevant fields
+            subfield_val = []
+            for (x, field) in zip(val, dset_dtype.names):
+                if field in select_dt.names:
+                    subfield_val.append(x)
+            val = tuple(subfield_val)
         output_arr[i] = val
     return output_arr
 
 
-def chunkWritePoints(chunk_id=None, chunk_layout=None, chunk_arr=None, point_arr=None):
+def chunkWritePoints(chunk_id=None,
+                     chunk_layout=None,
+                     chunk_arr=None,
+                     point_arr=None,
+                     select_dt=None):
     """
     Write points to given chunk
     """
@@ -933,11 +950,13 @@ def chunkWritePoints(chunk_id=None, chunk_layout=None, chunk_arr=None, point_arr
         msg = "Expected point array to be one dimensional"
         raise ValueError(msg)
     dset_dtype = chunk_arr.dtype
+    if select_dt is None:
+        select_dt = dset_dtype  # no field selection
     log.debug(f"dtype: {dset_dtype}")
     log.debug(f"point_arr: {point_arr}")
 
     # point_arr should have the following type:
-    #       (coord1, coord2, ...) | dset_dtype
+    #       (coord1, coord2, ...) | select_dtype
     comp_dtype = point_arr.dtype
     if len(comp_dtype) != 2:
         msg = "expected compound type for point array"
@@ -955,7 +974,7 @@ def chunkWritePoints(chunk_id=None, chunk_layout=None, chunk_arr=None, point_arr
             msg = "unexpected shape for point array"
             raise ValueError(msg)
         dt_1 = comp_dtype[1]
-        if dt_1 != dset_dtype:
+        if dt_1 != select_dt:
             msg = "unexpected dtype for point array"
             raise ValueError(msg)
 
@@ -982,6 +1001,17 @@ def chunkWritePoints(chunk_id=None, chunk_layout=None, chunk_arr=None, point_arr
         log.debug(f"relative coordinate: {coord}")
 
         val = elem[1]  # value
+        if len(select_dt) < len(dset_dtype):
+            # get the element from the chunk
+            chunk_val = list(chunk_arr[coord])
+            # and just update the relevant fields
+            index = 0
+            for (x, field) in zip(val, dset_dtype.names):
+                if field in select_dt.names:
+                    chunk_val[index] = x
+                index += 1
+            val = tuple(chunk_val)  # this will get written back
+
         chunk_arr[coord] = val  # update the point
 
 
@@ -1076,9 +1106,7 @@ def getQueryDtype(dt):
         else:
             break
 
-    dt_fields = [
-        (index_name, "uint64"),
-    ]
+    dt_fields = [(index_name, "uint64"), ]
     for i in range(len(dt)):
         dt_fields.append((dt.names[i], dt[i]))
     query_dt = np.dtype(dt_fields)
@@ -1093,14 +1121,15 @@ def chunkQuery(
     slices=None,
     query=None,
     query_update=None,
+    select_dt=None,
     limit=0,
 ):
     """
     Run query on chunk and selection
     """
-    log.debug(
-        f"chunkQuery - chunk_id: {chunk_id} query: {query} slices: {slices}, limit: {limit}"
-    )
+    msg = f"chunkQuery - chunk_id: {chunk_id} query: {query} slices: {slices}, "
+    msg += f"limit: {limit} select_dt: {select_dt}"
+    log.debug(msg)
 
     if not isinstance(chunk_arr, np.ndarray):
         raise TypeError("unexpected array type")
@@ -1110,6 +1139,8 @@ def chunkQuery(
     rank = len(dims)
 
     dset_dt = chunk_arr.dtype
+    if select_dt is None:
+        select_dt = dset_dt
 
     if rank != 1:
         msg = "Query operations only supported on one-dimensional datasets"
@@ -1199,9 +1230,10 @@ def chunkQuery(
         for i in range(nrows):
             where_indices[i] = where_indices[i] + (s.step - 1) * i
 
-    dt_rsp = getQueryDtype(dset_dt)
+    dt_rsp = getQueryDtype(select_dt)
     # construct response array
     rsp_arr = np.zeros((nrows,), dtype=dt_rsp)
+    field_names = select_dt.names
     for field in field_names:
         rsp_arr[field] = where_result[field]
     index_name = dt_rsp.names[0]

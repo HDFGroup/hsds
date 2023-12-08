@@ -163,6 +163,7 @@ async def read_chunk_hyperslab(
     chunk_id,
     dset_json,
     np_arr,
+    select_dtype=None,
     query=None,
     query_update=None,
     limit=0,
@@ -187,7 +188,7 @@ async def read_chunk_hyperslab(
         log.error("expected chunk_map to be set")
         return
 
-    if np_arr is None and query is None:
+    if np_arr is None and select_dtype is None:
         log.error("expected np_arr to be set")
         return
 
@@ -242,10 +243,13 @@ async def read_chunk_hyperslab(
         chunk_shape = [len(point_list), ]
         log.debug(f"point selection - chunk_shape: {chunk_shape}")
 
+    if select_dtype is None and np_arr is not None:
+        select_dtype = np_arr.dtype
+
     if query is None and query_update is None:
         query_dtype = None
     else:
-        query_dtype = getQueryDtype(dset_dt)
+        query_dtype = getQueryDtype(select_dtype)
 
     chunk_arr = None
     array_data = None
@@ -276,9 +280,9 @@ async def read_chunk_hyperslab(
             # convert to colon seperated string
             hyper_dims = ":".join(map(str, hyper_dims))
         params["hyper_dims"] = hyper_dims
-    if np_arr is not None and len(np_arr.dtype) < len(dset_dt):
+    if len(select_dtype) < len(dset_dt):
         # field selection, pass in the field names
-        fields_param = ":".join(np_arr.dtype.names)
+        fields_param = ":".join(select_dtype.names)
         log.debug(f"setting fields param to: {fields_param}")
         params["fields"] = fields_param
     else:
@@ -609,6 +613,7 @@ class ChunkCrawler:
         bucket=None,
         slices=None,
         arr=None,
+        select_dtype=None,
         query=None,
         query_update=None,
         limit=0,
@@ -627,6 +632,7 @@ class ChunkCrawler:
         self._chunk_map = chunk_map
         self._dset_json = dset_json
         self._arr = arr
+        self._select_dtype = select_dtype
         self._points = points
         self._query = query
         self._query_update = query_update
@@ -755,6 +761,7 @@ class ChunkCrawler:
                         chunk_id,
                         self._dset_json,
                         self._arr,
+                        select_dtype=self._select_dtype,
                         query=self._query,
                         query_update=self._query_update,
                         limit=self._limit,

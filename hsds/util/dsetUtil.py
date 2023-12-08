@@ -467,29 +467,22 @@ def _getSelectionStringFromRequestBody(body):
         raise KeyError("no start key")
     start_val = body["start"]
     if not isinstance(start_val, (list, tuple)):
-        start_val = [
-            start_val,
-        ]
+        start_val = [start_val, ]
     rank = len(start_val)
     if "stop" not in body:
         raise KeyError("no stop key")
     stop_val = body["stop"]
     if not isinstance(stop_val, (list, tuple)):
-        stop_val = [
-            stop_val,
-        ]
+        stop_val = [stop_val, ]
     if len(stop_val) != rank:
         raise ValueError("start and stop values have different ranks")
     if "step" in body:
         step_val = body["step"]
         if not isinstance(step_val, (list, tuple)):
-            step_val = [
-                step_val,
-            ]
+            step_val = [step_val, ]
         if len(step_val) != rank:
-            raise ValueError(
-                "step values have differnt rank from start and stop selections"
-            )
+            msg = "step values have differnt rank from start and stop selections"
+            raise ValueError(msg)
     else:
         step_val = None
     selection = []
@@ -557,7 +550,7 @@ def _getSelectElements(select):
 def getSelectionList(select, dims):
     """Return tuple of slices and/or coordinate list for the given selection"""
     select_list = []
-
+    log.debug(f"getSelectionList, {select} dims: {dims}")
     if isinstance(select, dict):
         select = _getSelectionStringFromRequestBody(select)
 
@@ -616,9 +609,8 @@ def getSelectionList(select, dims):
                 except ValueError:
                     raise ValueError(f"Invalid selection - start value for dim {dim}")
                 if start < 0 or start >= extent:
-                    raise ValueError(
-                        f"Invalid selection - start value out of range for dim {dim}"
-                    )
+                    msg = f"Invalid selection - start value out of range for dim {dim}"
+                    raise ValueError(msg)
             if len(fields[1]) == 0:
                 stop = extent
             else:
@@ -627,9 +619,8 @@ def getSelectionList(select, dims):
                 except ValueError:
                     raise ValueError(f"Invalid selection - stop value for dim {dim}")
                 if stop < 0 or stop > extent or stop <= start:
-                    raise ValueError(
-                        f"Invalid selection - stop value out of range for dim {dim}"
-                    )
+                    msg = f"Invalid selection - stop value out of range for dim {dim}"
+                    raise ValueError(msg)
             if len(fields) == 3:
                 # get step value
                 if len(fields[2]) == 0:
@@ -638,13 +629,11 @@ def getSelectionList(select, dims):
                     try:
                         step = int(fields[2])
                     except ValueError:
-                        raise ValueError(
-                            f"Invalid selection - step value for dim {dim}"
-                        )
+                        msg = f"Invalid selection - step value for dim {dim}"
+                        raise ValueError(msg)
                     if step <= 0:
-                        raise ValueError(
-                            f"Invalid selection - step value out of range for dim {dim}"
-                        )
+                        msg = f"Invalid selection - step value out of range for dim {dim}"
+                        raise ValueError(msg)
             else:
                 step = 1
             s = slice(start, stop, step)
@@ -656,13 +645,12 @@ def getSelectionList(select, dims):
             except ValueError:
                 raise ValueError(f"Invalid selection - index value for dim {dim}")
             if index < 0 or index >= extent:
-                raise ValueError(
-                    f"Invalid selection - index value out of range for dim {dim}"
-                )
-
+                msg = f"Invalid selection - index value out of range for dim {dim}"
+                raise ValueError(msg)
             s = slice(index, index + 1, 1)
             select_list.append(s)
     # end dimension loop
+    log.debug(f"select_list: {select_list}")
     return tuple(select_list)
 
 

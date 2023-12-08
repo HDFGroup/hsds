@@ -160,32 +160,54 @@ class QueryTest(unittest.TestCase):
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
 
         for query_headers in (headers, headers_bin_rsp):
+            kwargs = {}
+
             if query_headers.get("accept") == "application/octet-stream":
-                expect_bin = True
+                kwargs["expect_bin"] = True
             else:
-                expect_bin = False
+                kwargs["expect_bin"] = False
+
             # read first row with AAPL
             params = {"query": "stock_symbol == b'AAPL'", "Limit": 1}
-            expected_indices = (1,)
             rsp = self.session.get(req, params=params, headers=query_headers)
-            verifyQueryRsp(
-                rsp, expected_indices=expected_indices, expect_bin=expect_bin
-            )
+            kwargs["expected_indices"] = (1,)
+
+            verifyQueryRsp(rsp, **kwargs)
 
             # read all rows with APPL
             params = {"query": "stock_symbol == b'AAPL'"}
             rsp = self.session.get(req, params=params, headers=query_headers)
-            # self.assertTrue("hrefs" in rspJson)
-            verifyQueryRsp(rsp, expected_indices=(1, 4, 7, 10), expect_bin=expect_bin)
+            expected_indices = (1, 4, 7, 10)
+            kwargs["expected_indices"] = expected_indices
+
+            verifyQueryRsp(rsp, **kwargs)
+
+            # return just open and close fields
+            params = {"query": "stock_symbol == b'AAPL'", "fields": "open:close"}
+            # just do json to keep the verification simple
+            rsp = self.session.get(req, params=params, headers=headers)
+            # need to check this one by hand
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+            query_rsp = rspJson["value"]
+            self.assertEqual(len(query_rsp), 4)
+            for i in range(4):
+                item = query_rsp[i]
+                self.assertEqual(len(item), 3)
+                self.assertEqual(item[0], expected_indices[i])
+            # expected_indices will be the same
 
             params["select"] = "[2:12]"
+            del params["fields"]  # remove key from last test
             rsp = self.session.get(req, params=params, headers=query_headers)
-            verifyQueryRsp(rsp, expected_indices=(4, 7, 10), expect_bin=expect_bin)
+            kwargs["expected_indices"] = (4, 7, 10)
+            verifyQueryRsp(rsp, **kwargs)
 
             # combine with Limit
             params["Limit"] = 2
             rsp = self.session.get(req, params=params, headers=query_headers)
-            verifyQueryRsp(rsp, expected_indices=(4, 7), expect_bin=expect_bin)
+            kwargs["expected_indices"] = (4, 7)
+            verifyQueryRsp(rsp, **kwargs)
 
             # try bad Limit
             params["Limit"] = "abc"
@@ -211,15 +233,16 @@ class QueryTest(unittest.TestCase):
             params = {"query": "(open > 3000) & (open < 3100)"}
             rsp = self.session.get(req, params=params, headers=query_headers)
             self.assertEqual(rsp.status_code, 200)
-            verifyQueryRsp(
-                rsp, expected_indices=(0, 1, 3, 5, 11), expect_bin=expect_bin
-            )
+            kwargs["expected_indices"] = (0, 1, 3, 5, 11)
+            verifyQueryRsp(rsp, **kwargs)
 
             # query for a zero sector field (should return none)
             params = {"query": "open == 0"}  # query for zero sector
             rsp = self.session.get(req, params=params, headers=headers)
             self.assertEqual(rsp.status_code, 200)
-            verifyQueryRsp(rsp, expected_indices=(), expect_bin=False)
+            kwargs["expected_indices"] = ()
+            kwargs["expect_bin"] = False  # will always get json for null response
+            verifyQueryRsp(rsp, **kwargs)
 
     def testChunkedRefIndirectDataset(self):
         print("testChunkedRefIndirectDatasetQuery", self.base_domain)
@@ -414,7 +437,7 @@ class QueryTest(unittest.TestCase):
         datatype = {"class": "H5T_COMPOUND", "fields": fields}
 
         num_elements = 12
-        payload = {"type": datatype, "shape": num_elements}  # , 'maxdims': maxdims}
+        payload = {"type": datatype, "shape": num_elements}
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset

@@ -191,6 +191,8 @@ def _isSelect(params, body=None):
         return True
 
     if isinstance(body, dict):
+        if "select" in body and body["select"]:
+            return True
         for key in ("start", "stop", "step"):
             if key in body and body[key]:
                 return True
@@ -200,22 +202,39 @@ def _isSelect(params, body=None):
 def _getSelect(params, dset_json, body=None):
     """ return selection region if any as a list
       of slices. """
-
+    slices = None
+    log.debug(f"_getSelect  params: {params} body: {body}")
     try:
-        if body and "start" in body and "stop" in body:
-            slices = get_slices(body, dset_json)
-        else:
+        if body and isinstance(body, dict):
+            if "select" in body and body["select"]:
+                select = body.get("select")
+                slices = get_slices(select, dset_json)
+            elif "start" in body and "stop" in body:
+                slices = get_slices(body, dset_json)
+        if "select" in params and params["select"]:
             select = params.get("select")
+            if slices:
+                msg = "select defined in both request body and query parameters"
+                raise ValueError(msg)
             slices = get_slices(select, dset_json)
     except ValueError as ve:
         log.warn(f"Invalid selection: {ve}")
         raise HTTPBadRequest(reason="Invalid selection")
 
-    if _isAppend(params, body=body) and select:
+    if _isAppend(params, body=body) and slices:
         msg = "append can't be used with selection"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
+    if not slices:
+        # just return the entire dataspace
+        datashape = dset_json["shape"]
+        dims = getShapeDims(datashape)
+        slices = []
+        for dim in dims:
+            s = slice(0, dim, 1)
+            slices.append(s)
+    log.debug(f"_getSelect returning: {slices}")
     return slices
 
 
@@ -672,7 +691,6 @@ async def PUT_Value(request):
     type_json = dset_json["type"]
     dset_dtype = createDataType(type_json)
     item_size = getItemSize(type_json)
-    select_dtype = _getSelectDtype(params, dset_dtype, body=body)
 
     if request_type == "json":
         try:
@@ -684,6 +702,7 @@ async def PUT_Value(request):
 
         log.debug(f"got body: {body}")
 
+    select_dtype = _getSelectDtype(params, dset_dtype, body=body)
     append_rows = _getAppendRows(params, dset_json, body=body)
 
     if append_rows:
@@ -698,6 +717,7 @@ async def PUT_Value(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
+    # if there's no selection parameter, this will return entire dataspace
     slices = _getSelect(params, dset_json, body=body)
 
     query = _getQuery(params, dset_dtype, rank=rank, body=body)
@@ -1256,12 +1276,14 @@ async def POST_Value(request):
 
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
+    dset_dtype = createDataType(type_json)
     log.debug(f"item size: {item_size}")
 
     # read body data
     slices = None  # this will be set for hyperslab selection
     points = None  # this will be set for point selection
     point_dt = np.dtype("u8")  # use unsigned long for point index
+
     if request_type == "json":
         try:
             body = await request.json()
@@ -1269,6 +1291,17 @@ async def POST_Value(request):
             msg = "Unable to load JSON body"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
+
+    if _isSelect(params, body=body) and "points" in body:
+        msg = "Unexpected points and select key in request body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    slices = _getSelect(params, dset_json, body=body)
+    select_dtype = _getSelectDtype(params, dset_dtype, body=body)
+    log.debug(f"got select_dtype: {select_dtype}")
+
+    if request_type == "json":
         if "points" in body:
             points_list = body["points"]
             if not isinstance(points_list, list):
@@ -1277,16 +1310,8 @@ async def POST_Value(request):
                 raise HTTPBadRequest(reason=msg)
             points = np.asarray(points_list, dtype=point_dt)
             log.debug(f"get {len(points)} points from json request")
-        elif "select" in body:
-            select = body["select"]
-            log.debug(f"select: {select}")
-            try:
-                slices = get_slices(select, dset_json)
-            except ValueError as ve:
-                log.warn(f"Invalid selection: {ve}")
-                raise HTTPBadRequest(reason="Invalid selection")
-            log.debug(f"got slices: {slices}")
-        else:
+
+        elif not _isSelect(params, body=body):
             msg = "Expected points or select key in request body"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
@@ -1319,7 +1344,7 @@ async def POST_Value(request):
         log.debug(f"got {len(points)} num_points")
 
     # get the shape of the response array
-    if slices:
+    if _isSelect(params, body=body):
         # hyperslab post
         np_shape = getSelectionShape(slices)
     else:
@@ -1387,10 +1412,11 @@ async def POST_Value(request):
         await resp.prepare(request)
 
         kwargs = {"bucket": bucket}
-        if slices is not None:
+        if points is None:
             kwargs["slices"] = slices
-        if points is not None:
+        else:
             kwargs["points"] = points
+        kwargs["select_dtype"] = select_dtype
         log.debug(f"getSelectionData kwargs: {kwargs}")
 
         arr_rsp = await getSelectionData(app, dset_id, dset_json, **kwargs)

@@ -237,10 +237,8 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
             table_factor = table_factors[0]
             for i in range(num_chunks):
                 chunk_id = chunk_ids[i]
-                log.debug(f"chunk_id: {chunk_id}")
                 chunk_index = getChunkIndex(chunk_id)
                 chunk_index = chunk_index[0]
-                log.debug(f"chunk_index: {chunk_index}")
                 for j in range(table_factor):
                     index = chunk_index * table_factor + j
                     arr_index = i * table_factor + j
@@ -253,12 +251,10 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
             arr_points = np.zeros((num_chunks, rank), dtype=np.dtype("u8"))
             for i in range(num_chunks):
                 chunk_id = chunk_ids[i]
-                log.debug(f"chunk_id for chunktable: {chunk_id}")
                 indx = getChunkIndex(chunk_id)
-                log.debug(f"get chunk indx: {indx}")
                 arr_points[i] = indx
 
-        msg = f"got chunktable points: {arr_points}, calling getSelectionData"
+        msg = f"got chunktable - {len(arr_points)} entries, calling getSelectionData"
         log.debug(msg)
         # this call won't lead to a circular loop of calls since we've checked
         # that the chunktable layout is not H5D_CHUNKED_REF_INDIRECT
@@ -313,7 +309,7 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
         log.error(f"Unexpected chunk layout: {layout['class']}")
         raise HTTPInternalServerError()
 
-    log.debug(f"returning chunkinfo_map: {chunkinfo_map}")
+    log.debug(f"returning chunkinfo_map: {len(chunkinfo_map)} items")
     return chunkinfo_map
 
 
@@ -463,7 +459,7 @@ async def getSelectionData(
         # get chunk selections for hyperslab select
         get_chunk_selections(chunkinfo, chunk_ids, slices, dset_json)
 
-    log.debug(f"chunkinfo_map: {chunkinfo}")
+    log.debug(f"chunkinfo_map: {len(chunkinfo)} items")
 
     arr = await doReadSelection(
         app,
@@ -510,7 +506,8 @@ async def doReadSelection(
         query_dtype = None
     else:
         log.debug(f"query: {query} limit: {limit}")
-        query_dtype = getQueryDtype(dset_dtype)
+        query_dtype = getQueryDtype(select_dtype)
+        log.debug(f"query_dtype: {query_dtype}")
 
     # create array to hold response data
     arr = None
@@ -564,6 +561,7 @@ async def doReadSelection(
         query_update=query_update,
         limit=limit,
         arr=arr,
+        select_dtype=select_dtype,
         action="read_chunk_hyperslab",
     )
     await crawler.crawl()
