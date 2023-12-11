@@ -158,6 +158,8 @@ def request(req):
         if max_task_count and active_tasks > max_task_count:
             warning(f"more than {max_task_count} tasks, returning 503")
             raise HTTPServiceUnavailable()
+        else:
+            debug(f"active_tasks: {active_tasks} max_tasks: {max_task_count}")
 
 
 def response(req, resp=None, code=None, message=None):
@@ -178,9 +180,28 @@ def response(req, resp=None, code=None, message=None):
 
     log_level = config["log_level"]
 
-    if log_level <= level:
+    if log_level == DEBUG:
         prefix = config["prefix"]
         ts = _timestamp()
 
+        num_tasks = len(asyncio.all_tasks())
+        active_tasks = _activeTaskCount()
+
+        debug(f"rsp - num tasks: {num_tasks} active tasks: {active_tasks}")
+
         s = "{}{} RSP> <{}> ({}): {}"
         print(s.format(prefix, ts, code, message, req.path))
+
+    elif log_level <= level:
+        prefix = config["prefix"]
+        ts = _timestamp()
+
+        num_tasks = len(asyncio.all_tasks())
+        active_tasks = _activeTaskCount()
+
+        debug(f"num tasks: {num_tasks} active tasks: {active_tasks}")
+
+        s = "{}{} RSP> <{}> ({}): {}"
+        print(s.format(prefix, ts, code, message, req.path))
+    else:
+        pass

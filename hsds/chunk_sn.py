@@ -599,7 +599,10 @@ async def _doHyperslabWrite(app,
     except ValueError:
         log.warn("getChunkIds failed")
         raise HTTPInternalServerError()
-    log.debug(f"chunk_ids: {chunk_ids}")
+    if len(chunk_ids) < 10:
+        log.debug(f"chunk_ids: {chunk_ids}")
+    else:
+        log.debug(f"chunk_ids: {chunk_ids[:10]} ...")
     if len(chunk_ids) > max_chunks:
         msg = f"got {len(chunk_ids)} for page: {page_number}.  max_chunks: {max_chunks}"
         log.warn(msg)

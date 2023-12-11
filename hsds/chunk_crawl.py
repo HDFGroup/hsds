@@ -201,7 +201,18 @@ async def read_chunk_hyperslab(
         log.warn(f"expected to find {chunk_id} in chunk_map")
         return
     chunk_info = chunk_map[chunk_id]
-    log.debug(f"using chunk_map entry for {chunk_id}: {chunk_info}")
+    log.debug(f"using chunk_map entry for {chunk_id}")
+    if "points" in chunk_info:
+        points = chunk_info["points"]
+        log.debug(f"chunkinfo {len(points)} points")
+    elif "chunk_sel" in chunk_info:
+        chunk_sel = chunk_info["chunk_sel"]
+        log.debug(f"chunkinfo - chunk_sel: {chunk_sel}")
+    elif "data_sel" in chunk_info:
+        data_sel = chunk_info["data_sel"]
+        log.debug(f"chunkinfo - data_sel: {data_sel}")
+    else:
+        log.warn(f"unexpected chunkinfo: {chunk_info}")
 
     partition_chunk_id = getChunkIdForPartition(chunk_id, dset_json)
     if partition_chunk_id != chunk_id:
@@ -624,7 +635,10 @@ class ChunkCrawler:
         max_tasks_per_node = config.get("max_tasks_per_node_per_request", default=16)
         client_pool_count = config.get("client_pool_count", default=10)
         log.info(f"ChunkCrawler.__init__  {len(chunk_ids)} chunks, action={action}")
-        log.debug(f"ChunkCrawler - chunk_ids: {chunk_ids}")
+        if len(chunk_ids) < 10:
+            log.debug(f"ChunkCrawler - chunk_ids: {chunk_ids}")
+        else:
+            log.debug(f"ChunkCrawler - chunk_ids: {chunk_ids[:10]} ...")
 
         self._app = app
         self._slices = slices
@@ -652,6 +666,7 @@ class ChunkCrawler:
             self._max_tasks = max_tasks
         else:
             self._max_tasks = len(chunk_ids)
+        log.debug(f"ChunkCrawler max_tasks: {max_tasks}")
 
         if self._max_tasks >= client_pool_count:
             self._client_pool = 1
@@ -705,7 +720,8 @@ class ChunkCrawler:
         this_task = asyncio.current_task()
         task_name = this_task.get_name()
         log.info(f"ChunkCrawler - work method for task: {task_name}")
-        client_name = f"{task_name}.{random.randrange(0,self._client_pool)}"
+        task_suffix = random.randrange(0, self._client_pool)
+        client_name = f"{task_name}.{task_suffix}"
         log.info(f"ChunkCrawler - client_name: {client_name}")
         while True:
             try:
@@ -769,9 +785,8 @@ class ChunkCrawler:
                         bucket=self._bucket,
                         client=client,
                     )
-                    log.debug(
-                        f"read_chunk_hyperslab - got 200 status for chunk_id: {chunk_id}"
-                    )
+                    msg = f"read_chunk_hyperslab - got 200 status for chunk_id: {chunk_id}"
+                    log.debug(msg)
                     status_code = 200
                 elif self._action == "write_chunk_hyperslab":
                     await write_chunk_hyperslab(

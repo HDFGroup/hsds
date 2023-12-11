@@ -317,7 +317,7 @@ def get_chunkmap_selections(chunk_map, chunk_ids, slices, dset_json):
     """Update chunk_map with chunk and data selections for the
     given set of slices
     """
-    log.debug(f"get_chunkmap_selections - chunk_ids: {chunk_ids}")
+    log.debug(f"get_chunkmap_selections - {len(chunk_ids)} chunk_ids")
     if not slices:
         log.debug("no slices set, returning")
         return  # nothing to do
@@ -344,7 +344,7 @@ def get_chunk_selections(chunk_map, chunk_ids, slices, dset_json):
     """Update chunk_map with chunk and data selections for the
     given set of slices
     """
-    log.debug(f"get_chunk_selections - chunk_ids: {chunk_ids}")
+    log.debug(f"get_chunk_selections - {len(chunk_ids)} chunk_ids")
     if not slices:
         log.debug("no slices set, returning")
         return  # nothing to do
@@ -358,9 +358,8 @@ def get_chunk_selections(chunk_map, chunk_ids, slices, dset_json):
             chunk_map[chunk_id] = item
 
         chunk_sel = getChunkCoverage(chunk_id, slices, layout)
-        log.debug(
-            f"get_chunk_selections - chunk_id: {chunk_id}, chunk_sel: {chunk_sel}"
-        )
+        msg = f"get_chunk_selections - chunk_id: {chunk_id}, chunk_sel: {chunk_sel}"
+        log.debug(msg)
         item["chunk_sel"] = chunk_sel
         data_sel = getDataCoverage(chunk_id, slices, layout)
         log.debug(f"get_chunk_selections - data_sel: {data_sel}")
@@ -493,7 +492,10 @@ async def doReadSelection(
 ):
     """read selection utility function"""
     log.info(f"doReadSelection - number of chunk_ids: {len(chunk_ids)}")
-    log.debug(f"doReadSelection - chunk_ids: {chunk_ids}")
+    if len(chunk_ids) < 10:
+        log.debug(f"chunk_ids: {chunk_ids}")
+    else:
+        log.debug(f"chunk_ids: {chunk_ids[:10]} ...")
     log.debug(f"doReadSelection - select_dtype: {select_dtype}")
 
     type_json = dset_json["type"]

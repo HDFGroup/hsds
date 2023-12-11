@@ -220,10 +220,13 @@ def _uncompress(data, compressor=None, shuffle=0, level=None, dtype=None, chunk_
             raise HTTPInternalServerError()
     if shuffle:
         data = _unshuffle(shuffle, data, dtype=dtype, chunk_shape=chunk_shape)
-    finish_time = time.time()
-    elapsed = finish_time - start_time
-    msg = f"uncompressed {len(data)} bytes, {(elapsed):.3f}s elapsed"
-    log.debug(msg)
+
+    if compressor or shuffle:
+        # log the decompression time
+        finish_time = time.time()
+        elapsed = finish_time - start_time
+        msg = f"uncompressed {len(data)} bytes, {(elapsed):.3f}s elapsed"
+        log.debug(msg)
 
     return data
 

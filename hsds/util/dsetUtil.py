@@ -910,12 +910,13 @@ def getChunkLayout(dset_json):
 def getChunkInitializer(dset_json):
     """ get initializer application and arguments if set """
     initializer = None
-    log.debug(f"getChunkInitializer({dset_json})")
     if "creationProperties" in dset_json:
         cprops = dset_json["creationProperties"]
         log.debug(f"get creationProperties: {cprops}")
         if "initializer" in cprops:
             initializer = cprops["initializer"]
+            dset_id = dset_json["id"]
+            log.debug(f"returning chunk initializer: {initializer} for dset: {dset_id}")
     return initializer
 
 
