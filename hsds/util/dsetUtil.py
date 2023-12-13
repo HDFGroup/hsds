@@ -234,6 +234,27 @@ def isNullSpace(dset_json):
         return False
 
 
+def isScalarSpace(dset_json):
+    """ return true if this is a scalar dataset """
+    datashape = dset_json["shape"]
+    is_scalar = False
+    if datashape["class"] == "H5S_NULL":
+        is_scalar = False
+    elif datashape["class"] == "H5S_SCALAR":
+        is_scalar = True
+    else:
+        if "dims" not in datashape:
+            log.warn(f"expected to find dims key in shape_json: {datashape}")
+            is_scalar = False
+        else:
+            dims = datashape["dims"]
+            if len(dims) == 0:
+                # guess this properly be a H5S_SCALAR class
+                # but treat this as equivalent
+                is_scalar = True
+    return is_scalar
+
+
 def getHyperslabSelection(dsetshape, start=None, stop=None, step=None):
     """
     Get slices given lists of start, stop, step values
@@ -376,6 +397,24 @@ def getShapeDims(shape):
     return dims
 
 
+def isSelectAll(slices, dims):
+    """ return True if the selection covers the entire dataspace """
+    if len(slices) != len(dims):
+        raise ValueError("isSelectAll - dimensions don't match")
+    is_all = True
+    for (s, dim) in zip(slices, dims):
+        if s.step is not None and s.step != 1:
+            is_all = False
+            break
+        if s.start != 0:
+            is_all = False
+            break
+        if s.stop != dim:
+            is_all = False
+            break
+    return is_all
+
+
 def getQueryParameter(request, query_name, body=None, default=None):
     """
     Herlper function, get query parameter value from request.
@@ -428,29 +467,22 @@ def _getSelectionStringFromRequestBody(body):
         raise KeyError("no start key")
     start_val = body["start"]
     if not isinstance(start_val, (list, tuple)):
-        start_val = [
-            start_val,
-        ]
+        start_val = [start_val, ]
     rank = len(start_val)
     if "stop" not in body:
         raise KeyError("no stop key")
     stop_val = body["stop"]
     if not isinstance(stop_val, (list, tuple)):
-        stop_val = [
-            stop_val,
-        ]
+        stop_val = [stop_val, ]
     if len(stop_val) != rank:
         raise ValueError("start and stop values have different ranks")
     if "step" in body:
         step_val = body["step"]
         if not isinstance(step_val, (list, tuple)):
-            step_val = [
-                step_val,
-            ]
+            step_val = [step_val, ]
         if len(step_val) != rank:
-            raise ValueError(
-                "step values have differnt rank from start and stop selections"
-            )
+            msg = "step values have differnt rank from start and stop selections"
+            raise ValueError(msg)
     else:
         step_val = None
     selection = []
@@ -518,7 +550,7 @@ def _getSelectElements(select):
 def getSelectionList(select, dims):
     """Return tuple of slices and/or coordinate list for the given selection"""
     select_list = []
-
+    log.debug(f"getSelectionList, {select} dims: {dims}")
     if isinstance(select, dict):
         select = _getSelectionStringFromRequestBody(select)
 
@@ -577,9 +609,8 @@ def getSelectionList(select, dims):
                 except ValueError:
                     raise ValueError(f"Invalid selection - start value for dim {dim}")
                 if start < 0 or start >= extent:
-                    raise ValueError(
-                        f"Invalid selection - start value out of range for dim {dim}"
-                    )
+                    msg = f"Invalid selection - start value out of range for dim {dim}"
+                    raise ValueError(msg)
             if len(fields[1]) == 0:
                 stop = extent
             else:
@@ -588,9 +619,8 @@ def getSelectionList(select, dims):
                 except ValueError:
                     raise ValueError(f"Invalid selection - stop value for dim {dim}")
                 if stop < 0 or stop > extent or stop <= start:
-                    raise ValueError(
-                        f"Invalid selection - stop value out of range for dim {dim}"
-                    )
+                    msg = f"Invalid selection - stop value out of range for dim {dim}"
+                    raise ValueError(msg)
             if len(fields) == 3:
                 # get step value
                 if len(fields[2]) == 0:
@@ -599,13 +629,11 @@ def getSelectionList(select, dims):
                     try:
                         step = int(fields[2])
                     except ValueError:
-                        raise ValueError(
-                            f"Invalid selection - step value for dim {dim}"
-                        )
+                        msg = f"Invalid selection - step value for dim {dim}"
+                        raise ValueError(msg)
                     if step <= 0:
-                        raise ValueError(
-                            f"Invalid selection - step value out of range for dim {dim}"
-                        )
+                        msg = f"Invalid selection - step value out of range for dim {dim}"
+                        raise ValueError(msg)
             else:
                 step = 1
             s = slice(start, stop, step)
@@ -617,13 +645,12 @@ def getSelectionList(select, dims):
             except ValueError:
                 raise ValueError(f"Invalid selection - index value for dim {dim}")
             if index < 0 or index >= extent:
-                raise ValueError(
-                    f"Invalid selection - index value out of range for dim {dim}"
-                )
-
+                msg = f"Invalid selection - index value out of range for dim {dim}"
+                raise ValueError(msg)
             s = slice(index, index + 1, 1)
             select_list.append(s)
     # end dimension loop
+    log.debug(f"select_list: {select_list}")
     return tuple(select_list)
 
 
@@ -883,12 +910,13 @@ def getChunkLayout(dset_json):
 def getChunkInitializer(dset_json):
     """ get initializer application and arguments if set """
     initializer = None
-    log.debug(f"getChunkInitializer({dset_json})")
     if "creationProperties" in dset_json:
         cprops = dset_json["creationProperties"]
         log.debug(f"get creationProperties: {cprops}")
         if "initializer" in cprops:
             initializer = cprops["initializer"]
+            dset_id = dset_json["id"]
+            log.debug(f"returning chunk initializer: {initializer} for dset: {dset_id}")
     return initializer
 
 

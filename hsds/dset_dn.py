@@ -206,7 +206,7 @@ async def PUT_DatasetShape(request):
     dset_id = request.match_info.get("id")
 
     if not isValidUuid(dset_id, obj_class="dataset"):
-        log.error("Unexpected type_id: {}".format(dset_id))
+        log.error(f"Unexpected dset_id: {dset_id}")
         raise HTTPInternalServerError()
 
     body = await request.json()

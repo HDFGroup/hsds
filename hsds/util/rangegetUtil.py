@@ -51,7 +51,7 @@ def _chunk_dist(chunk_left, chunk_right):
 def _find_min_pair(h5chunks, max_gap=None):
     """ Given a list of chunk_map entries which are sorted by offset,
         return the indicies of the two chunks nearest to each other in the file.
-        If max_gap is set, chunms must be within max_gap bytes
+        If max_gap is set, chunks must be within max_gap bytes
     """
     num_chunks = len(h5chunks)
 

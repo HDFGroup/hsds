@@ -1095,9 +1095,54 @@ class ValueTest(unittest.TestCase):
         self.assertTrue("value" in rspJson)
 
         readData = rspJson["value"]
+        self.assertEqual(len(readData), num_elements)
+        for i in range(num_elements):
+            item = readData[i]
+            self.assertEqual(len(item), 2)
+            expected = (i * 10, i * 10 + i / 10.0) if i > 0 else (42, 0.42)
+            self.assertEqual(item[0], expected[0])
+            tol = 0.1  # tbd: investiage why results need such a high tolerance
+            self.assertTrue(abs(item[1] - expected[1]) < tol)
 
-        self.assertEqual(readData[0][0], 42)
-        self.assertEqual(readData[1][0], 10)
+        # read back just the "temp" field of the compound type
+        params = {"fields": "temp"}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+
+        readData = rspJson["value"]
+        self.assertEqual(len(readData), num_elements)
+        for i in range(num_elements):
+            elem = readData[i]
+            self.assertEqual(len(elem), 1)
+            expected = i * 10 if i > 0 else 42
+            self.assertEqual(elem[0], expected)
+
+        rev_temp = readData[::-1]  # reverse the value list
+        params = {"fields": "temp"}
+        payload = {"value": rev_temp}
+        req = self.endpoint + "/datasets/" + dset1d_uuid + "/value"
+        rsp = self.session.put(req, data=json.dumps(payload), params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # write value
+
+        # read back the data again
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+
+        readData = rspJson["value"]
+        self.assertEqual(len(readData), num_elements)
+        for i in range(num_elements):
+            item = readData[i]
+            self.assertEqual(len(item), 2)
+            x = (num_elements - i - 1) * 10 if i < 9 else 42
+            y = i * 10 + i / 10 if i > 0 else 0.42
+            expected = (x, y)
+            self.assertEqual(item[0], expected[0])
+            tol = 0.1
+            self.assertTrue(abs(item[1] - expected[1]) < tol)
 
         #
         # create 2d dataset
@@ -1145,6 +1190,22 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(readData[0][1], [0, 0.5])
         self.assertEqual(readData[1][1], [10, 10.5])
 
+        # read back just the "temp" field of the compound type
+        params = {"fields": "temp"}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+
+        readData = rspJson["value"]
+        for i in range(dims[0]):
+            row = readData[i]
+            for j in range(dims[1]):
+                item = row[j]
+                self.assertEqual(len(item), 1)
+                self.assertEqual(item[0], i * 10)
+
     def testSimpleTypeFillValue(self):
         # test Dataset with simple type and fill value
         print("testSimpleTypeFillValue", self.base_domain)
@@ -1184,16 +1245,12 @@ class ValueTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
-        expected_value = [
-            42,
-        ]
+        expected_value = [42, ]
         expected_value *= 10
         self.assertEqual(rspJson["value"], expected_value)
 
         # write some values
-        value = [
-            24,
-        ]
+        value = [24, ]
         value *= 5
         payload = {"start": 0, "stop": 5, "value": value}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
@@ -1258,9 +1315,7 @@ class ValueTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         shape = rspJson["shape"]
         self.assertEqual(shape["class"], "H5S_SIMPLE")
-        expected_value = [
-            40,
-        ]
+        expected_value = [40, ]
         self.assertEqual(shape["dims"], expected_value)
 
         # read the default values
@@ -1344,16 +1399,12 @@ class ValueTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
-        expected_value = [
-            fill_value,
-        ]
+        expected_value = [fill_value, ]
         expected_value *= 10
         self.assertEqual(rspJson["value"], expected_value)
 
         # write some values
-        value = [
-            "hello",
-        ]
+        value = ["hello", ]
         value *= 5
         payload = {"start": 0, "stop": 5, "value": value}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
@@ -1427,9 +1478,7 @@ class ValueTest(unittest.TestCase):
             self.assertEqual(ret_values[i], None)
 
         # write some values
-        value = [
-            3.12,
-        ]
+        value = [3.12, ]
         value *= 5
         payload = {"start": 0, "stop": 5, "value": value}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
@@ -2084,7 +2133,7 @@ class ValueTest(unittest.TestCase):
 
         # create the dataset with a 0-sized shape
         req = self.endpoint + "/datasets"
-        payload = {"type": "H5T_STD_I32LE", "shape": [0, 0], "maxdims": [0, 0]}
+        payload = {"type": "H5T_STD_I32LE", "shape": [1, 0], "maxdims": [0, 0]}
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
@@ -2420,9 +2469,7 @@ class ValueTest(unittest.TestCase):
 
         # read a selection
         req = self.endpoint + "/datasets/" + dset_id + "/value"
-        params = {
-            "select": "[1234567:1234568]"
-        }  # read 1 element, starting at index 1234567
+        params = {"select": "[1234567:1234568]"}  # read 1 element, starting at index 1234567
         params["nonstrict"] = 1  # allow use of aws lambda if configured
         rsp = self.session.get(req, params=params, headers=headers)
         if rsp.status_code == 404:
@@ -2443,6 +2490,24 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(item[1], "MHFI")
         self.assertEqual(item[2], 3)
         # skip check rest of fields since float comparisons are trcky...
+
+        # do a select with just the fields: date, symbol, sector
+        params["fields"] = "date:symbol:sector"
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+        # should get one element back (still have the select param...)
+        self.assertEqual(len(value), 1)
+        item = value[0]
+
+        # verify that this is what we expected to get
+        self.assertEqual(len(item), 3)
+        self.assertEqual(item[0], "1998.10.22")
+        self.assertEqual(item[1], "MHFI")
+        self.assertEqual(item[2], 3)
 
     def testChunkedRefIndirectDataset(self):
         test_name = "testChunkedRefIndirectDataset"

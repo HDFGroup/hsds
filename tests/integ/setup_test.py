@@ -49,10 +49,7 @@ class SetupTest(unittest.TestCase):
 
         req = helper.getEndpoint() + '/'
         params = {"domain": home_domain}
-        print("req:", req)
-        print("domain:", home_domain)
         rsp = self.session.get(req, params=params, headers=headers)
-        print("/home get status:", rsp.status_code)
 
         if rsp.status_code == 404:
             if not admin_headers:
@@ -67,7 +64,6 @@ class SetupTest(unittest.TestCase):
                                    data=json.dumps(body),
                                    params=params,
                                    headers=admin_headers)
-            print("put request status:", rsp.status_code)
             self.assertEqual(rsp.status_code, 201)
             # do the original request again
             rsp = self.session.get(req, params=params, headers=headers)
@@ -76,18 +72,15 @@ class SetupTest(unittest.TestCase):
                   "set env variable for USER_PASSWORD")
             self.assertTrue(False)
 
-        print("got status code:", rsp.status_code)
         self.assertEqual(rsp.status_code, 200)
 
         rspJson = json.loads(rsp.text)
-        print("home folder json:", rspJson)
         for k in ("owner", "created", "lastModified"):
             self.assertTrue(k in rspJson)
         self.assertFalse("root" in rspJson)  # no root -> folder
 
         params = {"domain": user_domain}
         rsp = self.session.get(req, params=params, headers=headers)
-        print(f"{user_domain} get status: {rsp.status_code}")
         if rsp.status_code == 404:
             if not admin_headers:
                 print(f"{user_domain} folder doesn't exist, set ADMIN_USERNAME "
@@ -106,7 +99,6 @@ class SetupTest(unittest.TestCase):
 
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        print("user folder:", rspJson)
         self.assertFalse("root" in rspJson)  # no root group for folder domain
         self.assertTrue("owner" in rspJson)
         self.assertTrue("hrefs" in rspJson)

@@ -15,19 +15,19 @@ import math
 import numpy as np
 
 from aiohttp.client_exceptions import ClientError
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
-from .util.hdf5dtype import createDataType, getItemSize
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPConflict, HTTPInternalServerError
 from .util.arrayUtil import getNumpyValue
+from .util.boolparser import BooleanParser
 from .util.dsetUtil import isNullSpace, getDatasetLayout, getDatasetLayoutClass
 from .util.dsetUtil import getChunkLayout, getSelectionShape, getShapeDims, get_slices
 from .util.chunkUtil import getChunkCoordinate, getChunkIndex, getChunkSuffix
 from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
 from .util.chunkUtil import getQueryDtype, get_chunktable_dims
-
+from .util.hdf5dtype import createDataType, getItemSize
+from .util.httpUtil import http_delete, http_put
 from .util.idUtil import getDataNodeUrl, isSchema2Id, getS3Key, getObjId
 from .util.storUtil import getStorKeys
-from .util.httpUtil import http_delete
 
 from .servicenode_lib import getDsetJson
 from .chunk_crawl import ChunkCrawler
@@ -237,10 +237,8 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
             table_factor = table_factors[0]
             for i in range(num_chunks):
                 chunk_id = chunk_ids[i]
-                log.debug(f"chunk_id: {chunk_id}")
                 chunk_index = getChunkIndex(chunk_id)
                 chunk_index = chunk_index[0]
-                log.debug(f"chunk_index: {chunk_index}")
                 for j in range(table_factor):
                     index = chunk_index * table_factor + j
                     arr_index = i * table_factor + j
@@ -253,12 +251,10 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
             arr_points = np.zeros((num_chunks, rank), dtype=np.dtype("u8"))
             for i in range(num_chunks):
                 chunk_id = chunk_ids[i]
-                log.debug(f"chunk_id for chunktable: {chunk_id}")
                 indx = getChunkIndex(chunk_id)
-                log.debug(f"get chunk indx: {indx}")
                 arr_points[i] = indx
 
-        msg = f"got chunktable points: {arr_points}, calling getSelectionData"
+        msg = f"got chunktable - {len(arr_points)} entries, calling getSelectionData"
         log.debug(msg)
         # this call won't lead to a circular loop of calls since we've checked
         # that the chunktable layout is not H5D_CHUNKED_REF_INDIRECT
@@ -313,7 +309,7 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
         log.error(f"Unexpected chunk layout: {layout['class']}")
         raise HTTPInternalServerError()
 
-    log.debug(f"returning chunkinfo_map: {chunkinfo_map}")
+    log.debug(f"returning chunkinfo_map: {len(chunkinfo_map)} items")
     return chunkinfo_map
 
 
@@ -321,7 +317,7 @@ def get_chunkmap_selections(chunk_map, chunk_ids, slices, dset_json):
     """Update chunk_map with chunk and data selections for the
     given set of slices
     """
-    log.debug(f"get_chunkmap_selections - chunk_ids: {chunk_ids}")
+    log.debug(f"get_chunkmap_selections - {len(chunk_ids)} chunk_ids")
     if not slices:
         log.debug("no slices set, returning")
         return  # nothing to do
@@ -348,7 +344,7 @@ def get_chunk_selections(chunk_map, chunk_ids, slices, dset_json):
     """Update chunk_map with chunk and data selections for the
     given set of slices
     """
-    log.debug(f"get_chunk_selections - chunk_ids: {chunk_ids}")
+    log.debug(f"get_chunk_selections - {len(chunk_ids)} chunk_ids")
     if not slices:
         log.debug("no slices set, returning")
         return  # nothing to do
@@ -362,13 +358,34 @@ def get_chunk_selections(chunk_map, chunk_ids, slices, dset_json):
             chunk_map[chunk_id] = item
 
         chunk_sel = getChunkCoverage(chunk_id, slices, layout)
-        log.debug(
-            f"get_chunk_selections - chunk_id: {chunk_id}, chunk_sel: {chunk_sel}"
-        )
+        msg = f"get_chunk_selections - chunk_id: {chunk_id}, chunk_sel: {chunk_sel}"
+        log.debug(msg)
         item["chunk_sel"] = chunk_sel
         data_sel = getDataCoverage(chunk_id, slices, layout)
         log.debug(f"get_chunk_selections - data_sel: {data_sel}")
         item["data_sel"] = data_sel
+
+
+def getParser(query, dtype):
+    """ get query BooleanParser.  If query contains variables that
+       arent' part of the data type, throw a HTTPBadRequest exception. """
+
+    try:
+        parser = BooleanParser(query)
+    except Exception:
+        msg = f"query: {query} is not valid"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    field_names = set(dtype.names)
+    variables = parser.getVariables()
+    for variable in variables:
+        if variable not in field_names:
+            msg = f"query variable {variable} not valid"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+    return parser
 
 
 async def getSelectionData(
@@ -376,12 +393,12 @@ async def getSelectionData(
     dset_id,
     dset_json,
     slices=None,
+    select_dtype=None,
     points=None,
     query=None,
     query_update=None,
     bucket=None,
-    limit=0,
-    method="GET",
+    limit=0
 ):
     """Read selected slices and return numpy array"""
     log.debug("getSelectionData")
@@ -441,17 +458,14 @@ async def getSelectionData(
         # get chunk selections for hyperslab select
         get_chunk_selections(chunkinfo, chunk_ids, slices, dset_json)
 
-    log.debug(f"chunkinfo_map: {chunkinfo}")
-
-    if method == "OPTIONS":
-        # skip doing any big data load for options request
-        return None
+    log.debug(f"chunkinfo_map: {len(chunkinfo)} items")
 
     arr = await doReadSelection(
         app,
         chunk_ids,
         dset_json,
         slices=slices,
+        select_dtype=select_dtype,
         points=points,
         query=query,
         query_update=query_update,
@@ -468,6 +482,7 @@ async def doReadSelection(
     chunk_ids,
     dset_json,
     slices=None,
+    select_dtype=None,
     points=None,
     query=None,
     query_update=None,
@@ -477,26 +492,31 @@ async def doReadSelection(
 ):
     """read selection utility function"""
     log.info(f"doReadSelection - number of chunk_ids: {len(chunk_ids)}")
-    log.debug(f"doReadSelection - chunk_ids: {chunk_ids}")
+    if len(chunk_ids) < 10:
+        log.debug(f"chunk_ids: {chunk_ids}")
+    else:
+        log.debug(f"chunk_ids: {chunk_ids[:10]} ...")
+    log.debug(f"doReadSelection - select_dtype: {select_dtype}")
 
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
     log.debug(f"item size: {item_size}")
     dset_dtype = createDataType(type_json)  # np datatype
+    if select_dtype is None:
+        select_dtype = dset_dtype
     if query is None:
         query_dtype = None
     else:
         log.debug(f"query: {query} limit: {limit}")
-        query_dtype = getQueryDtype(dset_dtype)
+        query_dtype = getQueryDtype(select_dtype)
+        log.debug(f"query_dtype: {query_dtype}")
 
     # create array to hold response data
     arr = None
 
     if points is not None:
         # point selection
-        np_shape = [
-            len(points),
-        ]
+        np_shape = [len(points), ]
     elif query is not None:
         # return shape will be determined by number of matches
         np_shape = None
@@ -527,10 +547,10 @@ async def doReadSelection(
         fill_value = getFillValue(dset_json)
 
         if fill_value is not None:
-            arr = np.empty(np_shape, dtype=dset_dtype, order="C")
+            arr = np.empty(np_shape, dtype=select_dtype, order="C")
             arr[...] = fill_value
         else:
-            arr = np.zeros(np_shape, dtype=dset_dtype, order="C")
+            arr = np.zeros(np_shape, dtype=select_dtype, order="C")
 
     crawler = ChunkCrawler(
         app,
@@ -543,6 +563,7 @@ async def doReadSelection(
         query_update=query_update,
         limit=limit,
         arr=arr,
+        select_dtype=select_dtype,
         action="read_chunk_hyperslab",
     )
     await crawler.crawl()
@@ -554,9 +575,8 @@ async def doReadSelection(
         log.info(f"doReadSelection raising BadRequest error:  {crawler_status}")
         raise HTTPBadRequest()
     if crawler_status not in (200, 201):
-        log.info(
-            f"doReadSelection raising HTTPInternalServerError for status:  {crawler_status}"
-        )
+        msg = f"doReadSelection raising HTTPInternalServerError for status:  {crawler_status}"
+        log.info(msg)
         raise HTTPInternalServerError()
 
     if query is not None:
@@ -693,6 +713,77 @@ async def getAllocatedChunkIds(app, dset_id, bucket=None):
 
     log.debug(f"getAllocattedChunkIds - got {len(chunk_ids)} ids")
     return chunk_ids
+
+
+async def extendShape(app, dset_json, nelements, axis=0, bucket=None):
+    """ extend the shape of the dataset by nelements along given axis """
+    dset_id = dset_json["id"]
+    datashape = dset_json["shape"]
+    dims = getShapeDims(datashape)
+    rank = len(dims)
+    log.info(f"extendShape of {dset_id} dims: {dims} by {nelements} on axis: {axis}")
+    # do some sanity checks here
+    if rank == 0:
+        msg = "can't change shape of scalar or null space dataset"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    if axis >= rank:
+        msg = f"extendShape, invalid axis {axis} for dataset of rank: {rank}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    req = getDataNodeUrl(app, dset_id) + "/datasets/" + dset_id + "/shape"
+    body = {"extend": nelements, "extend_dim": axis}
+    params = {}
+    if bucket:
+        params["bucket"] = bucket
+    selection = None
+    try:
+        shape_rsp = await http_put(app, req, data=body, params=params)
+        log.info(f"got shape put rsp: {shape_rsp}")
+        if "selection" in shape_rsp:
+            selection = shape_rsp["selection"]
+    except HTTPConflict:
+        log.warn("got 409 extending dataspace for PUT value")
+        raise
+    if not selection:
+        log.error("expected to get selection in PUT shape response")
+        raise HTTPInternalServerError()
+
+    # selection should be in the format [:,n:m,:].
+    # extract n and m and use it to update the slice for the
+    # appending dimension
+    if not selection.startswith("[") or not selection.endswith("]"):
+        log.error("Unexpected selection in PUT shape response")
+        raise HTTPInternalServerError()
+    selection = selection[1:-1]  # strip off bracketss
+    fields = selection.split(",")
+    msg = f"extendShape - unexpected response for dataset of rank {rank}: {selection}"
+    if len(fields) != rank:
+        log.error(msg)
+        raise HTTPInternalServerError()
+    slices = []
+    for (field, extent) in zip(fields, dims):
+        if field == ":":
+            s = slice(0, extent, 1)
+        else:
+            bounds = field.split(":")
+            if len(bounds) != 2:
+                # reuse msg
+                log.error(msg)
+                raise HTTPInternalServerError()
+            try:
+                lb = int(bounds[0])
+                ub = int(bounds[1])
+            except ValueError:
+                # reuse msg
+                log.error(msg)
+                raise HTTPInternalServerError()
+            s = slice(lb, ub, 1)
+        slices.append(s)
+
+    log.debug(f"extendShape returning slices: {slices}")
+    return slices
 
 
 async def reduceShape(app, dset_json, shape_update, bucket=None):
