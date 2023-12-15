@@ -14,6 +14,7 @@
 #
 
 import asyncio
+import json
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
@@ -25,7 +26,9 @@ from .util.linkUtil import h5Join
 from .util.storUtil import getStorJSONObj, isStorObj
 from .util.authUtil import aclCheck
 from .util.httpUtil import http_get, http_put
-from .util.domainUtil import getBucketForDomain, verifyRoot
+from .util.domainUtil import getBucketForDomain, verifyRoot, getLimits
+from .util.storUtil import getCompressors
+from .basenode import getVersion
 
 from . import hsds_logger as log
 
@@ -70,6 +73,88 @@ async def getDomainJson(app, domain, reload=False):
 
     domain_cache[domain] = domain_json  # add to cache
     return domain_json
+
+
+async def getDomainResponse(app, domain_json, bucket=None, verbose=False):
+    """ construct JSON response for domain request """
+    rsp_json = {}
+    if "root" in domain_json:
+        rsp_json["root"] = domain_json["root"]
+        rsp_json["class"] = "domain"
+    else:
+        rsp_json["class"] = "folder"
+    if "owner" in domain_json:
+        rsp_json["owner"] = domain_json["owner"]
+    if "created" in domain_json:
+        rsp_json["created"] = domain_json["created"]
+
+    lastModified = 0
+    if "lastModified" in domain_json:
+        lastModified = domain_json["lastModified"]
+    totalSize = len(json.dumps(domain_json))
+    metadata_bytes = 0
+    allocated_bytes = 0
+    linked_bytes = 0
+    num_chunks = 0
+    num_linked_chunks = 0
+    md5_sum = ""
+
+    if verbose and "root" in domain_json:
+        root_id = domain_json["root"]
+        root_info = await getRootInfo(app, root_id, bucket=bucket)
+        if root_info:
+            allocated_bytes = root_info["allocated_bytes"]
+            totalSize += allocated_bytes
+            if "linked_bytes" in root_info:
+                linked_bytes += root_info["linked_bytes"]
+                totalSize += linked_bytes
+            if "num_linked_chunks" in root_info:
+                num_linked_chunks = root_info["num_linked_chunks"]
+            if "metadata_bytes" in root_info:
+                # this key was added for schema v2
+                metadata_bytes = root_info["metadata_bytes"]
+                totalSize += metadata_bytes
+            if root_info["lastModified"] > lastModified:
+                lastModified = root_info["lastModified"]
+            if "md5_sum" in root_info:
+                md5_sum = root_info["md5_sum"]
+
+            num_groups = root_info["num_groups"]
+            num_datatypes = root_info["num_datatypes"]
+            num_datasets = len(root_info["datasets"])
+            num_chunks = root_info["num_chunks"]
+            rsp_json["scan_info"] = root_info  # return verbose info here
+
+        else:
+            # root info not available - just return 0 for these values
+            allocated_bytes = 0
+            totalSize = 0
+            num_groups = 0
+            num_datasets = 0
+            num_datatypes = 0
+            num_chunks = 0
+
+        num_objects = num_groups + num_datasets + num_datatypes + num_chunks
+        rsp_json["num_groups"] = num_groups
+        rsp_json["num_datasets"] = num_datasets
+        rsp_json["num_datatypes"] = num_datatypes
+        rsp_json["num_objects"] = num_objects
+        rsp_json["total_size"] = totalSize
+        rsp_json["allocated_bytes"] = allocated_bytes
+        rsp_json["num_objects"] = num_objects
+        rsp_json["metadata_bytes"] = metadata_bytes
+        rsp_json["linked_bytes"] = linked_bytes
+        rsp_json["num_chunks"] = num_chunks
+        rsp_json["num_linked_chunks"] = num_linked_chunks
+        rsp_json["md5_sum"] = md5_sum
+
+    # pass back config parameters the client may care about
+
+    rsp_json["limits"] = getLimits()
+    rsp_json["compressors"] = getCompressors()
+    rsp_json["version"] = getVersion()
+    rsp_json["lastModified"] = lastModified
+    return rsp_json
 
 
 def checkBucketAccess(app, bucket, action="read"):
@@ -313,11 +398,14 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
             if link_json["h5path"][0] == '/':
                 msg = "External link by absolute path"
                 log.debug(msg)
+                kwargs = {}
+                kwargs["bucket"] = bucket
+                kwargs["refresh"] = refresh
+                kwargs["domain"] = domain
+                kwargs["follow_soft_links"] = follow_soft_links
+                kwargs["follow_external_links"] = follow_external_links
                 obj_id, domain, link_json = await getObjectIdByPath(
-                    app, ext_domain_json["root"], link_json["h5path"],
-                    bucket=bucket, refresh=refresh, domain=domain,
-                    follow_soft_links=follow_soft_links,
-                    follow_external_links=follow_external_links)
+                    app, ext_domain_json["root"], link_json["h5path"], **kwargs)
             else:
                 msg = "Cannot follow external link by relative path"
                 log.warn(msg)

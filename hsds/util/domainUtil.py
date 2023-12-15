@@ -13,6 +13,7 @@
 import os.path as op
 from aiohttp.web_exceptions import HTTPBadRequest
 
+from .. import config
 #
 # Domain utilities
 #
@@ -287,3 +288,13 @@ def verifyRoot(domain_json):
         # can't use hsds logger, since it would create a circular dependency
         print("WARN> " + msg)
         raise HTTPBadRequest(reason=msg)
+
+
+def getLimits():
+    """return limits the client may need"""
+    limits = {}
+    limits["min_chunk_size"] = int(config.get("min_chunk_size"))
+    limits["max_chunk_size"] = int(config.get("max_chunk_size"))
+    limits["max_request_size"] = int(config.get("max_request_size"))
+
+    return limits

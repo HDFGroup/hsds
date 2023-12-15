@@ -137,6 +137,70 @@ async def GET_Attributes(request):
     return resp
 
 
+async def POST_Attributes(request):
+    """ Return JSON for attribute collection
+    """
+    log.request(request)
+    app = request.app
+
+    if not request.has_body:
+        msg = "POST_Attributes with no body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    body = await request.json()
+    if "attributes" not in body:
+        msg = f"POST_Attributes expected attributes in body but got: {body.keys()}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    titles = body["attributes"]  # list of attribute names to fetch
+
+    params = request.rel_url.query
+
+    obj_id = get_obj_id(request)
+    if "bucket" in params:
+        bucket = params["bucket"]
+    else:
+        bucket = None
+
+    include_data = False
+    log.debug(f"got params: {params}")
+    if "IncludeData" in params and params["IncludeData"]:
+        include_data = True
+        log.debug("include attr data")
+
+    obj_json = await get_metadata_obj(app, obj_id, bucket=bucket)
+
+    log.debug(f"Get attributes obj_id: {obj_id} got json")
+    if "attributes" not in obj_json:
+        msg = f"unexpected data for obj id: {obj_id}"
+        msg.error(msg)
+        raise HTTPInternalServerError()
+
+    # return a list of attributes based on sorted dictionary keys
+    attr_dict = obj_json["attributes"]
+    attr_list = []
+
+    for attr_name in titles:
+        if attr_name not in attr_dict:
+            continue
+        src_attr = attr_dict[attr_name]
+        des_attr = {}
+        des_attr["created"] = src_attr["created"]
+        des_attr["type"] = src_attr["type"]
+        des_attr["shape"] = src_attr["shape"]
+        des_attr["name"] = attr_name
+        if include_data:
+            des_attr["value"] = src_attr["value"]
+        attr_list.append(des_attr)
+
+    resp_json = {"attributes": attr_list}
+    resp = json_response(resp_json)
+    log.response(request, resp=resp)
+    return resp
+
+
 async def GET_Attribute(request):
     """HTTP GET method to return JSON for /(obj)/<id>/attributes/<name>
     """

@@ -309,7 +309,10 @@ async def http_post(app, url, data=None, params=None, client=None):
     """
     Helper function  - async HTTP POST
     """
-    log.info(f"http_post('{url}', {len(data)} bytes)")
+    msg = f"http_post('{url}'"
+    if isinstance(data, bytes):
+        msg += f" {len(data)} bytes"
+    log.info(msg)
     if client is None:
         client = get_http_client(app, url=url)
     url = get_http_std_url(url)
@@ -378,7 +381,7 @@ async def http_put(app, url, data=None, params=None, client=None):
         client = get_http_client(app, url=url)
     url = get_http_std_url(url)
     if isinstance(data, bytes):
-        log.debug("setting http_put for binary")
+        log.debug(f"setting http_put for binary, {len(data)} bytes")
         kwargs = {"data": data}
     else:
         log.debug("setting http_put for json")

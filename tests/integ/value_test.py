@@ -1660,9 +1660,8 @@ class ValueTest(unittest.TestCase):
         req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers)
         if rsp.status_code != 200:
-            print(
-                "WARNING: Failed to get domain: {}. Is test data setup?".format(domain)
-            )
+            msg = f"WARNING: Failed to get domain: {domain}. Is test data setup?"
+            print(msg)
             return  # abort rest of test
         domainJson = json.loads(rsp.text)
         root_uuid = domainJson["root"]

@@ -18,9 +18,9 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 from aiohttp.web import StreamResponse
 from json import JSONDecodeError
 
-from .util.httpUtil import http_get, http_put, http_delete, getHref
+from .util.httpUtil import http_get, http_put, http_delete, http_post, getHref
 from .util.httpUtil import getAcceptType, jsonResponse
-from .util.idUtil import isValidUuid, getDataNodeUrl
+from .util.idUtil import isValidUuid, getDataNodeUrl, getCollectionForId
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain, verifyRoot
@@ -30,7 +30,9 @@ from .util.hdf5dtype import createDataType, getItemSize
 from .util.arrayUtil import jsonToArray, getNumElements
 from .util.arrayUtil import bytesArrayToList
 from .util.dsetUtil import getShapeDims
+
 from .servicenode_lib import getDomainJson, getObjectJson, validateAction
+from .domain_crawl import DomainCrawler
 from . import hsds_logger as log
 from . import config
 
@@ -343,18 +345,14 @@ async def PUT_Attribute(request):
             # use H5S_SIMPLE as class
             if isinstance(shape_body, list) and len(shape_body) == 0:
                 shape_json["class"] = "H5S_SCALAR"
-                dims = [
-                    1,
-                ]
+                dims = [1, ]
             else:
                 shape_json["class"] = "H5S_SIMPLE"
                 dims = getShapeDims(shape_body)
                 shape_json["dims"] = dims
     else:
         shape_json["class"] = "H5S_SCALAR"
-        dims = [
-            1,
-        ]
+        dims = [1, ]
 
     if "value" in body:
         if dims is None:
@@ -762,5 +760,216 @@ async def PUT_AttributeValue(request):
     req_rsp = {"hrefs": hrefs}
     # attribute creation successful
     resp = await jsonResponse(request, req_rsp)
+    log.response(request, resp=resp)
+    return resp
+
+
+async def _get_attributes(app, obj_id, attr_names,
+                          include_data=False,
+                          ignore_nan=False,
+                          bucket=None
+                          ):
+    """ get the requested set of attributes from the object"""
+    collection = getCollectionForId(obj_id)
+    node_url = getDataNodeUrl(app, obj_id)
+    req = f"{node_url}/{collection}/{obj_id}/attributes"
+    log.debug(f"POST Attributes: {req}")
+    params = {}
+    if include_data:
+        params["IncludeData"] = 1
+    if ignore_nan:
+        params["ignore_nan"] = 1
+    if bucket:
+        params["bucket"] = bucket
+    data = {"attributes": attr_names}
+    log.debug(f"using params: {params}")
+    dn_json = await http_post(app, req, data=data, params=params)
+    log.debug(f"got attributes json from dn for obj_id: {dn_json}")
+
+    if len(dn_json) < len(attr_names):
+        msg = f"POST attributes requested {len(attr_names)}, "
+        msg += f"but only {len(dn_json)} were returned"
+        log.warn(msg)
+
+    log.debug(f"got attributes json from dn for obj_id: {obj_id}")
+    if "attributes" not in dn_json:
+        msg = f"expected attributes key from dn, but got: {dn_json}"
+        raise HTTPInternalServerError()
+
+    attributes = dn_json["attributes"]
+    log.debug(f"got attributes: {attributes}")
+    return attributes
+
+
+async def POST_Attributes(request):
+    """HTTP method to get multiple attribute values"""
+    log.request(request)
+    app = request.app
+    log.info("POST_Attributes")
+    # returns datasets|groups|datatypes
+    collection = getRequestCollectionName(request)
+
+    if not request.has_body:
+        msg = "POST Attributes with no body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    try:
+        body = await request.json()
+    except JSONDecodeError:
+        msg = "Unable to load JSON body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    if "attr_names" in body:
+        attr_names = body["attr_names"]
+        if not isinstance(attr_names, list):
+            msg = f"expected list for attr_names but got: {type(attr_names)}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    else:
+        attr_names = None
+
+    if "obj_ids" in body:
+        obj_ids = body["obj_ids"]
+        if not isinstance(obj_ids, list):
+            msg = f"expected list for attr_names but got: {type(obj_ids)}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    else:
+        obj_ids = None
+
+    if attr_names is None and obj_ids is None:
+        # should have an items list with id and attr_names for each item
+        if "items" not in body:
+            msg = "items list must be provided if attr_names and obj_ids are not"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        items = body["items"]
+    else:
+        # construct an item list from attr_names and obj_ids
+        items = []
+        if obj_ids is None:
+            obj_id = request.match_info.get("id")
+            if not obj_id:
+                msg = "no object id in request"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            obj_ids = [obj_id, ]
+        if attr_names is None:
+            msg = "attr_names not set in request body"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        for obj_id in obj_ids:
+            item = {"id": obj_id, "attr_names": attr_names}
+            items.append(item)
+
+    log.debug(f"POST Attributes items: {items}")
+
+    # do a check that everything is as it should with the item list
+    for item in items:
+        if "id" not in item or "attr_names" not in item:
+            msg = f"invalid item for POST Attributes: {item}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        obj_id = item["id"]
+        if not isValidUuid(obj_id):
+            msg = f"Invalid object id: {obj_id}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        attr_names = item["attr_names"]
+        if not isinstance(attr_names, list):
+            msg = f"expected list for attr_names but got: {type(attr_names)}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        for attr_name in attr_names:
+            validateAttributeName(attr_name)  # raises HTTPBadRequest if invalid
+
+    username, pswd = getUserPasswordFromRequest(request)
+    if username is None and app["allow_noauth"]:
+        username = "default"
+    else:
+        await validateUserPassword(app, username, pswd)
+
+    domain = getDomainFromRequest(request)
+    if not isValidDomain(domain):
+        msg = f"Invalid domain value: {domain}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    bucket = getBucketForDomain(domain)
+
+    accept_type = getAcceptType(request)
+    if accept_type != "json":
+        msg = f"{accept_type} response requested for POST Attributes, "
+        msg += "but only json is supported"
+        log.warn(msg)
+
+    # get domain JSON
+    domain_json = await getDomainJson(app, domain)
+    verifyRoot(domain_json)
+
+    # TBD - verify that the obj_id belongs to the given domain
+    await validateAction(app, domain, obj_id, username, "read")
+
+    params = request.rel_url.query
+    log.debug(f"got params: {params}")
+    include_data = False
+    ignore_nan = False
+    if "IncludeData" in params and params["IncludeData"]:
+        include_data = True
+    if "ignore_nan" in params and params["ignore_nan"]:
+        ignore_nan = True
+    kwargs = {"bucket": bucket, "include_data": include_data, "ignore_nan": ignore_nan}
+
+    resp_json = {}
+
+    if len(items) == 0:
+        msg = "no obj ids specified for POST Attributes"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    elif len(items) == 1:
+        # just make a request the datanode
+        item = items[0]
+        obj_id = item["id"]
+        attr_names = item["attr_names"]
+        attributes = await _get_attributes(app, obj_id, attr_names, **kwargs)
+
+        # mixin hrefs
+        for attribute in attributes:
+            attr_name = attribute["name"]
+            attr_href = f"/{collection}/{obj_id}/attributes/{attr_name}"
+            attribute["href"] = getHref(request, attr_href)
+
+        resp_json["attributes"] = attributes
+    else:
+        # get multi obj
+        # mixin some additonal kwargs
+        kwargs["follow_links"] = False
+
+        crawler = DomainCrawler(app, items, **kwargs)
+        await crawler.crawl()
+
+        msg = f"DomainCrawler returning: {len(crawler._obj_dict)} objects"
+        log.info(msg)
+        attributes = crawler._obj_dict
+        # mixin hrefs
+        for obj_id in attributes.keys():
+            obj_attributes = attributes[obj_id]
+            for attribute in obj_attributes:
+                attr_name = attribute["name"]
+                attr_href = f"/{collection}/{obj_id}/attributes/{attr_name}"
+                attribute["href"] = getHref(request, attr_href)
+        log.debug(f"got attributes: {attributes}")
+        resp_json["attributes"] = attributes
+
+    hrefs = []
+    obj_uri = "/" + collection + "/" + obj_id
+    href = getHref(request, obj_uri + "/attributes")
+    hrefs.append({"rel": "self", "href": href})
+    hrefs.append({"rel": "home", "href": getHref(request, "/")})
+    hrefs.append({"rel": "owner", "href": getHref(request, obj_uri)})
+    resp_json["hrefs"] = hrefs
+
+    resp = await jsonResponse(request, resp_json, ignore_nan=ignore_nan)
     log.response(request, resp=resp)
     return resp
