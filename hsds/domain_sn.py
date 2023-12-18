@@ -112,12 +112,14 @@ async def getDomainObjects(app, root_id, include_attrs=False, bucket=None):
     log.info(f"getDomainObjects for root: {root_id}")
     max_objects_limit = int(config.get("domain_req_max_objects_limit", default=500))
 
-    kwargs = {
+    crawler_params = {
         "include_attrs": include_attrs,
         "bucket": bucket,
+        "follow_links": True,
         "max_objects_limit": max_objects_limit,
     }
-    crawler = DomainCrawler(app, [{"id": root_id}, ], **kwargs)
+    
+    crawler = DomainCrawler(app, [root_id, ], action="get_obj", params=crawler_params)
     await crawler.crawl()
     if len(crawler._obj_dict) >= max_objects_limit:
         msg = "getDomainObjects - too many objects:  "

@@ -328,9 +328,7 @@ async def get_metadata_obj(app, obj_id, bucket=None):
     if isValidDomain(obj_id):
         domain_bucket = getBucketForDomain(obj_id)
         if bucket and domain_bucket and bucket != domain_bucket:
-            msg = (
-                f"get_metadata_obj for domain: {obj_id} but bucket param was: {bucket}"
-            )
+            msg = f"get_metadata_obj for domain: {obj_id} but bucket param was: {bucket}"
             log.error(msg)
             raise HTTPInternalServerError()
         if not bucket:

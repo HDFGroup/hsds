@@ -366,9 +366,7 @@ def getShapeDims(shape):
     """
     dims = None
     if isinstance(shape, int):
-        dims = [
-            shape,
-        ]
+        dims = [shape, ]
     elif isinstance(shape, list) or isinstance(shape, tuple):
         dims = shape  # can use as is
     elif isinstance(shape, str):

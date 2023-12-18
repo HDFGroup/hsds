@@ -716,6 +716,7 @@ async def POST_Dataset(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
+    log.debug(f"got body: {body}")
     # get domain, check authorization
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
@@ -725,6 +726,7 @@ async def POST_Dataset(request):
     bucket = getBucketForDomain(domain)
 
     domain_json = await getDomainJson(app, domain, reload=True)
+    log.debug(f"got domain_json: {domain_json}")
     root_id = domain_json["root"]
 
     # throws exception if not allowed
@@ -741,6 +743,7 @@ async def POST_Dataset(request):
         raise HTTPBadRequest(reason=msg)
 
     datatype = body["type"]
+    log.debug(f"got datatype: {datatype}")
     if isinstance(datatype, str) and datatype.startswith("t-"):
         # Committed type - fetch type json from DN
         ctype_id = datatype
@@ -793,11 +796,10 @@ async def POST_Dataset(request):
         shape_json["class"] = "H5S_SCALAR"
     else:
         shape = body["shape"]
+        log.debug(f"got shape: {shape}")
         if isinstance(shape, int):
             shape_json["class"] = "H5S_SIMPLE"
-            dims = [
-                shape,
-            ]
+            dims = [shape, ]
             shape_json["dims"] = dims
             rank = 1
         elif isinstance(shape, str):
@@ -1040,6 +1042,7 @@ async def POST_Dataset(request):
     link_title = None
     if "link" in body:
         link_body = body["link"]
+        log.debug(f"got link_body: {link_body}")
         if "id" in link_body:
             link_id = link_body["id"]
         if "name" in link_body:
@@ -1051,7 +1054,7 @@ async def POST_Dataset(request):
             await validateAction(app, domain, link_id, username, "create")
 
     dset_id = createObjId("datasets", rootid=root_id)
-    log.info(f"new  dataset id: {dset_id}")
+    log.info(f"new dataset id: {dset_id}")
 
     dataset_json = {
         "id": dset_id,

@@ -239,23 +239,21 @@ async def GET_Attribute(request):
     return resp
 
 
-async def PUT_Attribute(request):
-    """ Handler for PUT /(obj)/<id>/attributes/<name>
+async def PUT_Attributes(request):
+    """ Handler for PUT /(obj)/<id>/attributes
     """
     log.request(request)
     app = request.app
     params = request.rel_url.query
+    log.debug(f"got PUT_Attributes params: {params}")
     obj_id = get_obj_id(request)
-
-    attr_name = request.match_info.get('name')
-    log.info("PUT attribute {} in {}".format(attr_name, obj_id))
-    validateAttributeName(attr_name)
 
     if not request.has_body:
         log.error("PUT_Attribute with no body")
         raise HTTPBadRequest(message="body expected")
 
     body = await request.json()
+    log.debug(f"PUT Attribute body: {body}")  # remove this to avoid verbosity
     if "bucket" in params:
         bucket = params["bucket"]
     elif "bucket" in body:
@@ -267,68 +265,89 @@ async def PUT_Attribute(request):
     if "replace" in params and params["replace"]:
         replace = True
         log.info("replace attribute")
-    datatype = None
-    shape = None
-    value = None
 
-    if "type" not in body:
-        log.error("PUT attribute with no type in body")
-        raise HTTPInternalServerError()
+    if "attributes" in body:
+        items = body["attributes"]
+    else:
+        # make it look like a dictionary anyway to make
+        # the processing more consistent
+        items = {}
+        if "name" not in body:
+            log.error("PUT attribute with no name in body")
+            raise HTTPInternalServerError()
+        attr_name = body["name"]
+        attribute = {}
+        if "type" in body:
+            attribute["type"] = body["type"]
+        if "shape" in body:
+            attribute["shape"] = body["shape"]
+        if "value" in body:
+            attribute["value"] = body["value"]
+        items[attr_name] = attribute
+    
+    # validate input
+    for attr_name in items:
+        validateAttributeName(attr_name)
+        attr_json = items[attr_name]
+        if "type" not in attr_json:
+            log.error("PUT attribute with no type in body")
+            raise HTTPInternalServerError()
+        if "shape" not in attr_json:
+            log.error("PUT attribute with no shape in body")
+            raise HTTPInternalServerError()
 
-    datatype = body["type"]
-
-    if "shape" not in body:
-        log.error("PUT attribute with no shape in body")
-        raise HTTPInternalServerError()
-    shape = body["shape"]
-
-    if "value" in body:
-        value = body["value"]
+    log.info(f"PUT {len(items)} attributes to obj_id: {obj_id} bucket: {bucket}")
 
     obj_json = await get_metadata_obj(app, obj_id, bucket=bucket)
-    log.debug(f"PUT attribute obj_id: {obj_id} bucket: {bucket} got json")
-
     if "attributes" not in obj_json:
         log.error(f"unexpected obj data for id: {obj_id}")
         raise HTTPInternalServerError()
 
     attributes = obj_json["attributes"]
-    if attr_name in attributes and not replace:
-        # Attribute already exists, return a 409
-        msg = f"Attempt to overwrite attribute: {attr_name} "
-        msg += f"in obj_id: {obj_id}"
-        log.warn(msg)
-        raise HTTPConflict()
 
-    if replace and attr_name not in attributes:
-        # Replace requires attribute exists
-        msg = f"Attempt to update missing attribute: {attr_name} "
-        msg += f"in obj_id: {obj_id}"
-        log.warn()
-        raise HTTPNotFound()
-
-    if replace:
-        orig_attr = attributes[attr_name]
-        create_time = orig_attr["created"]
-    else:
-        create_time = time.time()
-
-    # ok - all set, create attribute obj
-    attr_json = {"type": datatype,
-                 "shape": shape,
-                 "value": value,
-                 "created": create_time}
-    attributes[attr_name] = attr_json
+    # check for conflicts, also set timestamp
+    create_time = time.time()
+    new_attribute = False  # set this if we have any new attributes
+    for attr_name in items:
+        attribute = items[attr_name]
+        if attr_name in attributes:
+            log.debug(f"attribute {attr_name} exists")
+            if replace:
+                # don't change the create timestamp
+                log.debug(f"attribute {attr_name} exists, but will be updated")
+                old_item = attributes[attr_name]
+                attribute["created"] = old_item["created"]
+            else:
+                # Attribute already exists, return a 409
+                msg = f"Attempt to overwrite attribute: {attr_name} "
+                msg += f"in obj_id: {obj_id}"
+                log.warn(msg)
+                raise HTTPConflict()
+        else:
+            # set the timestamp
+            log.debug(f"new attribute {attr_name}")
+            attribute["created"] = create_time
+            new_attribute = True
+      
+    # ok - all set, create the attributes
+    for attr_name in items:
+        log.debug(f"adding attribute {attr_name}")
+        attr_json = items[attr_name]
+        attributes[attr_name] = attr_json
 
     # write back to S3, save to metadata cache
     await save_metadata_obj(app, obj_id, obj_json, bucket=bucket)
 
-    resp_json = {}
+    if new_attribute:
+        status = 201
+    else:
+        status = 200
 
-    resp = json_response(resp_json, status=201)
+    resp_json = {"status": status}
+
+    resp = json_response(resp_json, status=status)
     log.response(request, resp=resp)
     return resp
-
 
 async def DELETE_Attribute(request):
     """HTTP DELETE method for /(obj)/<id>/attributes/<name>
