@@ -49,6 +49,7 @@ max_task_count: 100 # maximum number of concurrent tasks before server will retu
 max_tasks_per_node_per_request: 16 # maximum number of inflight tasks to to each node per request
 aio_max_pool_connections: 64 # number of connections to keep in conection pool for aiobotocore requests
 client_pool_count: 10 # pool count for SessionClient
+aio_max_line_size: 67584 # max size of a single line of http in aiohttp application
 metadata_mem_cache_size: 128m # 128 MB - metadata cache size per DN node
 metadata_mem_cache_expire: 3600 # expire cache items after one hour
 chunk_mem_cache_size: 128m # 128 MB - chunk cache size per DN node

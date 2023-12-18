@@ -553,8 +553,10 @@ def baseInit(node_type):
     log.setLogConfig(log_level, prefix=prefix, timestamps=log_timestamps)
 
     # create the app object
+    aio_max_line_size = config.get("aio_max_line_size")
+
     log.info("Application baseInit")
-    app = Application()
+    app = Application(handler_args={"max_line_size": aio_max_line_size})
 
     app["node_state"] = "INITIALIZING"
     app["node_number"] = -1
