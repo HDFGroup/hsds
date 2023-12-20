@@ -44,7 +44,7 @@ async def init():
 
     # call app.router.add_get() here to add node-specific routes
     #
-    
+
     #
     # domain paths
     #
@@ -52,7 +52,7 @@ async def init():
     app.router.add_route("GET", path, GET_Domain)
     app.router.add_route("DELETE", path, DELETE_Domain)
     app.router.add_route("PUT", path, PUT_Domain)
-    
+
     path = "/domains"
     app.router.add_route("GET", path, GET_Domains)
 
@@ -62,109 +62,109 @@ async def init():
     path = "/acls/{username}"
     app.router.add_route("GET", path, GET_ACL)
     app.router.add_route("PUT", path, PUT_ACL)
-    
+
     path = "/acls"
     app.router.add_route("GET", path, GET_ACLs)
-    
+
     #
     # groups paths
     #
     path = "/groups/"
     app.router.add_route("GET", path, GET_Group)
-    
+
     path = "/groups"
     app.router.add_route("GET", path, GET_Groups)
     app.router.add_route("POST", path, POST_Group)
-    
+
     path = "/groups/{id}"
     app.router.add_route("GET", path, GET_Group)
     app.router.add_route("DELETE", path, DELETE_Group)
-    
+
     path = "/groups/{id}/links"
     app.router.add_route("GET", path, GET_Links)
-    
+
     path = "/groups/{id}/links/{title}"
     app.router.add_route("GET", path, GET_Link)
     app.router.add_route("DELETE", path, DELETE_Link)
     app.router.add_route("PUT", path, PUT_Link)
 
-    path = "/groups/{id}/attributes" 
+    path = "/groups/{id}/attributes"
     app.router.add_route("GET", path, GET_Attributes)
     app.router.add_route("POST", path, POST_Attributes)
     app.router.add_route("PUT", path, PUT_Attributes)
-    
+
     path = "/groups/{id}/attributes/{name}"
     app.router.add_route("GET", path, GET_Attribute)
     app.router.add_route("DELETE", path, DELETE_Attribute)
     app.router.add_route("PUT", path, PUT_Attribute)
-    
+
     path = "/groups/{id}/attributes/{name}/value"
     app.router.add_route("GET", path, GET_AttributeValue)
     app.router.add_route("PUT", path, PUT_AttributeValue)
-    
+
     #
     # datatypes paths
     #
     path = "/datatypes"
     app.router.add_route("GET", path, GET_Datatypes)
     app.router.add_route("POST", path, POST_Datatype)
-    
+
     path = "/datatypes/"
     app.router.add_route("GET", path, GET_Datatype)
-    
+
     path = "/datatypes/{id}"
     app.router.add_route("GET", path, GET_Datatype)
     app.router.add_route("DELETE", path, DELETE_Datatype)
-    
+
     path = "/datatypes/{id}/attributes"
     app.router.add_route("GET", path, GET_Attributes)
     app.router.add_route("POST", path, POST_Attributes)
     app.router.add_route("PUT", path, PUT_Attributes)
-    
+
     path = "/datatypes/{id}/attributes/{name}"
     app.router.add_route("GET", path, GET_Attribute)
     app.router.add_route("DELETE", path, DELETE_Attribute)
     app.router.add_route("PUT", path, PUT_Attribute)
-    
+
     path = "/datatypes/{id}/attributes/{name}/value"
     app.router.add_route("GET", path, GET_AttributeValue)
     app.router.add_route("PUT", path, PUT_AttributeValue)
-    
+
     #
     # datasets paths
     #
     path = "/datasets/{id}"
     app.router.add_route("GET", path, GET_Dataset)
     app.router.add_route("DELETE", path, DELETE_Dataset)
-    
+
     path = "/datasets/"
     app.router.add_route("GET", path, GET_Dataset)
 
     path = "/datasets"
     app.router.add_route("GET", path, GET_Datasets)
     app.router.add_route("POST", path, POST_Dataset)
-    
+
     path = "/datasets/{id}/shape"
     app.router.add_route("GET", path, GET_DatasetShape)
     app.router.add_route("PUT", path, PUT_DatasetShape)
-    
+
     path = "/datasets/{id}/type"
     app.router.add_route("GET", path, GET_DatasetType)
-    
+
     path = "/datasets/{id}/attributes"
     app.router.add_route("GET", path, GET_Attributes)
     app.router.add_route("POST", path, POST_Attributes)
     app.router.add_route("PUT", path, PUT_Attributes)
-    
+
     path = "/datasets/{id}/attributes/{name}"
     app.router.add_route("GET", path, GET_Attribute)
     app.router.add_route("DELETE", path, DELETE_Attribute)
     app.router.add_route("PUT", path, PUT_Attribute)
-    
+
     path = "/datasets/{id}/attributes/{name}/value"
     app.router.add_route("GET", path, GET_AttributeValue)
     app.router.add_route("PUT", path, PUT_AttributeValue)
-    
+
     path = "/datasets/{id}/value"
     app.router.add_route("PUT", path, PUT_Value)
     app.router.add_route("GET", path, GET_Value)

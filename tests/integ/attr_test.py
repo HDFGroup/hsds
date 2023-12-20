@@ -297,7 +297,8 @@ class AttributeTest(unittest.TestCase):
 
             # set the replace param and we should get a 200
             params = {"replace": 1}
-            rsp = self.session.put(req, params=params, data=json.dumps(attr_payload), headers=headers)
+            data = json.dumps(attr_payload)
+            rsp = self.session.put(req, params=params, data=data, headers=headers)
             self.assertEqual(rsp.status_code, 200)  # OK
 
             # delete the attribute
@@ -1703,7 +1704,14 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(len(root_attrs), 2)
         dset_attrs = attributes[dset_id]
         self.assertEqual(len(dset_attrs), 1)  # one of the ones we asked for didn't exist
-    
+
+        # test with no providing all attribute names - should return all attributes
+        # for set of obj ids
+        # data = {"obj_ids": obj_ids}
+        # req = helper.getEndpoint() + "/groups/" + root_id + "/attributes"
+        # rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        # self.assertEqual(rsp.status_code, 200)
+
     def testPutAttributeMultiple(self):
         print("testPutAttributeMultiple", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
@@ -1742,7 +1750,7 @@ class AttributeTest(unittest.TestCase):
 
         grp_names = [f"group{i+1}" for i in range(grp_count)]
         grp_ids = []
-                     
+
         for grp_name in grp_names:
             # create sub_groups
             req = self.endpoint + "/groups"
@@ -1772,11 +1780,11 @@ class AttributeTest(unittest.TestCase):
         attributes = {}
         extent = 10
         for i in range(attr_count):
-            value = [i*10 + j for j in range(extent)]
+            value = [i * 10 + j for j in range(extent)]
             data = {"type": "H5T_STD_I32LE", "shape": extent, "value": value}
             attr_name = f"attr{i+1:04d}"
             attributes[attr_name] = data
-        """
+
         # write attributes to the dataset
         data = {"attributes": attributes}
         req = self.endpoint + "/datasets/" + dset_id + "/attributes"
@@ -1798,22 +1806,42 @@ class AttributeTest(unittest.TestCase):
             self.assertTrue("value" in attr)
             attr_value = attr["value"]
             self.assertEqual(len(attr_value), extent)
-            self.assertEqual(attr_value, [i*10+j for j in range(extent)])
+            self.assertEqual(attr_value, [i * 10 + j for j in range(extent)])
 
         # try writing again, should get 409
         rsp = self.session.put(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 409)
-        """
 
         # write attributes to the three group objects
-        print(grp_ids)
         data = {"obj_ids": grp_ids, "attributes": attributes}
         req = self.endpoint + "/groups/" + root_id + "/attributes"
         rsp = self.session.put(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
+        # do a write with different attributes to different groups
+        attributes = {}
+        base_ord = ord('A')
+        for i in range(grp_count):
+            obj_id = grp_ids[i]
+            obj_attrs = {}
+            for j in range(i + 1):
+                value = [i * 10000 + (j + 1) * 100 + k for k in range(extent)]
+                data = {"type": "H5T_STD_I32LE", "shape": extent, "value": value}
+                attr_name = f"attr_{chr(base_ord + j)}"
+                obj_attrs[attr_name] = data
+            attributes[obj_id] = {"attributes": obj_attrs}
+
+        # write attributes to the three group objects
+        # attr_A to obj_id[0], attr_A and attr_B to obj_id[1], etc
+        data = {"obj_ids": attributes}  # no "attributes" key this time
+        req = self.endpoint + "/groups/" + root_id + "/attributes"
+        rsp = self.session.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
         # do a get attributes on the three group objects to verify
-        for grp_id in grp_ids:
+        for i in range(grp_count):
+            grp_id = grp_ids[i]
+            print(f"grp_id: {grp_id}")
             # do a get on the attributes
             params = {"IncludeData": 1}
             req = self.endpoint + "/groups/" + grp_id + "/attributes"
@@ -1822,23 +1850,32 @@ class AttributeTest(unittest.TestCase):
             rspJson = json.loads(rsp.text)
             self.assertTrue("attributes" in rspJson)
             ret_attrs = rspJson["attributes"]
-            self.assertEqual(len(ret_attrs), attr_count)
-            for i in range(attr_count):
-                attr = ret_attrs[i]
+            # expect the 4 attributes we wrote in the first post
+            # plus (i+1) in the second post
+            self.assertEqual(len(ret_attrs), attr_count + i + 1)
+            for j in range(len(ret_attrs)):
+                attr = ret_attrs[j]
                 self.assertTrue("name" in attr)
-                self.assertEqual(attr["name"], f"attr{i+1:04d}")
+                if j < attr_count:
+                    # should see attr0001, attr0002, etc.
+                    expected_name = f"attr{j + 1:04d}"
+                    expected_value = [j * 10 + k for k in range(extent)]
+                else:
+                    # should see attr_A, attr_B, etc.
+                    expected_name = f"attr_{chr(base_ord + j - attr_count)}"
+                    min_val = i * 10000 + (j + 1 - attr_count) * 100
+                    expected_value = [min_val + k for k in range(extent)]
+
+                self.assertEqual(attr["name"], expected_name)
                 self.assertTrue("value" in attr)
                 attr_value = attr["value"]
                 self.assertEqual(len(attr_value), extent)
-                self.assertEqual(attr_value, [i*10+j for j in range(extent)])
+                self.assertEqual(attr_value, expected_value)
 
         # try writing again, should get 409
-        req = self.endpoint + "/groups/" + root_id + "/attributes"        
+        req = self.endpoint + "/groups/" + root_id + "/attributes"
         rsp = self.session.put(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 409)
-
-
-
 
 
 if __name__ == "__main__":

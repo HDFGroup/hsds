@@ -18,7 +18,7 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 from aiohttp.web import StreamResponse
 from json import JSONDecodeError
 
-from .util.httpUtil import http_get, http_put, http_delete, http_post, getHref
+from .util.httpUtil import http_get, http_put, http_delete, getHref
 from .util.httpUtil import getAcceptType, jsonResponse
 from .util.idUtil import isValidUuid, getDataNodeUrl, getCollectionForId, getRootObjId
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
@@ -31,7 +31,7 @@ from .util.arrayUtil import jsonToArray, getNumElements
 from .util.arrayUtil import bytesArrayToList
 from .util.dsetUtil import getShapeDims
 
-from .servicenode_lib import getDomainJson, getObjectJson, validateAction
+from .servicenode_lib import getDomainJson, getObjectJson, validateAction, getAttributes
 from .domain_crawl import DomainCrawler
 from . import hsds_logger as log
 from . import config
@@ -206,6 +206,7 @@ async def GET_Attribute(request):
     log.response(request, resp=resp)
     return resp
 
+
 async def _getTypeFromRequest(app, body, obj_id=None, bucket=None):
     """ return a type json from the request body """
     if "type" not in body:
@@ -213,7 +214,6 @@ async def _getTypeFromRequest(app, body, obj_id=None, bucket=None):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     datatype = body["type"]
-    log.debug(f"got datatype: {datatype} from request")
 
     if isinstance(datatype, str) and datatype.startswith("t-"):
         # Committed type - fetch type json from DN
@@ -234,7 +234,6 @@ async def _getTypeFromRequest(app, body, obj_id=None, bucket=None):
             # convert predefined type string (e.g. "H5T_STD_I32LE") to
             # corresponding json representation
             datatype = getBaseTypeJson(datatype)
-            log.debug(f"got datatype: {datatype}")
         except TypeError:
             msg = "PUT attribute with invalid predefined type"
             log.warn(msg)
@@ -254,10 +253,9 @@ async def _getTypeFromRequest(app, body, obj_id=None, bucket=None):
         msg = f"ValueError creating type: {ve}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    
+
     return datatype
 
- 
 
 def _getShapeFromRequest(body):
     """ get shape json from request body """
@@ -306,10 +304,12 @@ def _getShapeFromRequest(body):
                 shape_json["dims"] = dims
     else:
         shape_json["class"] = "H5S_SCALAR"
-    
+
     return shape_json
 
+
 def _getValueFromRequest(body, data_type, data_shape):
+    """ Get attribute value from request json """
     dims = getShapeDims(data_shape)
     if "value" in body:
         if dims is None:
@@ -323,26 +323,24 @@ def _getValueFromRequest(body, data_type, data_shape):
             np_dims = [1, ]
         else:
             np_dims = dims
-        log.debug(f"attribute dims: {np_dims}")
-        log.debug(f"attribute value: {value}")
+
+        # verify that the input data matches the array shape and type
         try:
-            arr = jsonToArray(np_dims, arr_dtype, value)
+            jsonToArray(np_dims, arr_dtype, value)
         except ValueError as e:
-            if value is None:
-                arr = np.array([]).astype(arr_dtype)
-            else:
-                msg = f"Bad Request: input data doesn't match selection: {e}"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-        log.debug(f"Got: {arr.size} array elements")
+            msg = f"Bad Request: input data doesn't match selection: {e}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
     else:
         value = None
-    
+
     return value
 
+
 async def _getAttributeFromRequest(app, req_json, obj_id=None, bucket=None):
+    """ return attribute from given request json """
     attr_item = {}
-    attr_type = await _getTypeFromRequest(app, req_json, obj_id=obj_id, bucket=bucket) 
+    attr_type = await _getTypeFromRequest(app, req_json, obj_id=obj_id, bucket=bucket)
     attr_shape = _getShapeFromRequest(req_json)
     attr_item = {"type": attr_type, "shape": attr_shape}
     attr_value = _getValueFromRequest(req_json, attr_type, attr_shape)
@@ -354,21 +352,23 @@ async def _getAttributeFromRequest(app, req_json, obj_id=None, bucket=None):
 
 
 async def _getAttributesFromRequest(request, req_json, obj_id=None, bucket=None):
-    """ read the given JSON dictinary and return dict of attribute json """ 
- 
+    """ read the given JSON dictinary and return dict of attribute json """
+
     app = request.app
     attr_items = {}
-    kwargs = {"obj_id": obj_id, "bucket": bucket}
+    kwargs = {"obj_id": obj_id}
+    if bucket:
+        kwargs["bucket"] = bucket
     if "attributes" in req_json:
         attributes = req_json["attributes"]
         if not isinstance(attributes, dict):
             msg = f"expected list for attributes but got: {type(attributes)}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        # read each attr_item and canonicalize the shape, type, verify value    
+        # read each attr_item and canonicalize the shape, type, verify value
         for attr_name in attributes:
             attr_json = attributes[attr_name]
-            attr_item = await _getAttributeFromRequest(app, attr_json, **kwargs)    
+            attr_item = await _getAttributeFromRequest(app, attr_json, **kwargs)
             attr_items[attr_name] = attr_item
 
     elif "type" in req_json:
@@ -383,13 +383,14 @@ async def _getAttributesFromRequest(request, req_json, obj_id=None, bucket=None)
             msg = "Missing attribute name"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        
+
         attr_items[attr_name] = attr_item
     else:
-        log.warn(f"no attribute defined in req_json: {req_json}")
+        log.debug(f"_getAttributes from request - no attribute defined in {req_json}")
 
     return attr_items
-  
+
+
 async def PUT_Attribute(request):
     """HTTP method to create a new attribute"""
     log.request(request)
@@ -408,10 +409,11 @@ async def PUT_Attribute(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     attr_name = request.match_info.get("name")
-    log.debug(f"Attribute name: [{attr_name}]")
-    validateAttributeName(attr_name)
+    if attr_name:
+        log.debug(f"Attribute name: [{attr_name}]")
+        validateAttributeName(attr_name)
 
-    log.info(f"PUT Attribute id: {obj_id} name: {attr_name}")
+    log.info(f"PUT Attributes id: {obj_id} name: {attr_name}")
     username, pswd = getUserPasswordFromRequest(request)
     # write actions need auth
     await validateUserPassword(app, username, pswd)
@@ -446,13 +448,13 @@ async def PUT_Attribute(request):
     attr_json = await _getAttributeFromRequest(app, body, **kwargs)
     attr_json["name"] = attr_name
     log.debug(f"got attr_json: {attr_json}")
-    
+
     # ready to add attribute now
     req = getDataNodeUrl(app, obj_id)
     req += f"/{collection}/{obj_id}/attributes"
     log.info(f"PUT Attribute: {req}")
 
-    params = {}  
+    params = {}
     if "replace" in req_params and req_params["replace"]:
         # allow attribute to be overwritten
         log.debug("setting replace for PUT Atttribute")
@@ -504,8 +506,6 @@ async def PUT_Attributes(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    log.debug(f"got body: {body}")
-
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
         msg = f"Invalid domain: {domain}"
@@ -513,7 +513,7 @@ async def PUT_Attributes(request):
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
 
-    params = {}  
+    params = {}
     if "replace" in req_params and req_params["replace"]:
         # allow attribute to be overwritten
         log.debug("setting replace for PUT Atttribute")
@@ -527,25 +527,26 @@ async def PUT_Attributes(request):
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
     verifyRoot(domain_json)
-    
+
     req_obj_id = request.match_info.get("id")
     if not req_obj_id:
         req_obj_id = domain_json["root"]
     kwargs = {"obj_id": req_obj_id, "bucket": bucket}
     attr_items = await _getAttributesFromRequest(request, body, **kwargs)
-    
+
     if attr_items:
         log.debug(f"PUT Attribute {len(attr_items)} attibutes to add")
     else:
         log.debug("no attributes defined yet")
 
     # next, sort out where these attributes are going to
-    
+
     obj_ids = {}
     if "obj_ids" in body:
         body_ids = body["obj_ids"]
         if isinstance(body_ids, list):
-            # multi cast the attributes
+            # multi cast the attributes - each attribute  in attr-items
+            # will be written to each of the objects identified by obj_id
             if not attr_items:
                 msg = "no attributes provided"
                 log.warn(msg)
@@ -562,6 +563,9 @@ async def PUT_Attributes(request):
                 msg += f"{len(obj_ids)} objects"
                 log.info(msg)
         elif isinstance(body_ids, dict):
+            # each value is body_ids is a set of attriutes to write to the object
+            # unlike the above case, different attributes can be written to
+            # different objects
             if attr_items:
                 msg = "attributes defined outside the obj_ids dict"
                 log.warn(msg)
@@ -572,12 +576,13 @@ async def PUT_Attributes(request):
                         msg = f"Invalid object id: {obj_id}"
                         log.warn(msg)
                         raise HTTPBadRequest(reason=msg)
-                id_json = body_ids[obj_id]
-                kwargs = {"obj_id": obj_id, "bucket": bucket}
-                obj_items = _getAttributesFromRequest(request, id_json, **kwargs)
-                if obj_items:
-                    obj_ids[obj_id] = obj_items
-            
+                    id_json = body_ids[obj_id]
+
+                    kwargs = {"obj_id": obj_id, "bucket": bucket}
+                    obj_items = await _getAttributesFromRequest(request, id_json, **kwargs)
+                    if obj_items:
+                        obj_ids[obj_id] = obj_items
+
                 # write different attributes to different objects
                 msg = f"put attributes over {len(obj_ids)} objects"
         else:
@@ -591,9 +596,9 @@ async def PUT_Attributes(request):
             msg = "Missing object id"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        obj_ids[obj_id] = attr_items  # make it look like a list for consistency      
+        obj_ids[obj_id] = attr_items  # make it look like a list for consistency
 
-    log.debug(f"obj_ids: {obj_ids}")
+    log.debug(f"got {len(obj_ids)} obj_ids")
 
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, req_obj_id, username, "create")
@@ -611,10 +616,10 @@ async def PUT_Attributes(request):
         req = getDataNodeUrl(app, obj_id)
         collection = getCollectionForId(obj_id)
         req += f"/{collection}/{obj_id}/attributes"
-        log.info(f"PUT Attribute: {req}")
+        log.info(f"PUT Attributes: {req}")
         data = {"attributes": attr_json}
         put_rsp = await http_put(app, req, data=data, params=params)
-        log.info(f"PUT Attribute resp: {put_rsp}")
+        log.info(f"PUT Attribute sresp: {put_rsp}")
 
         if "status" in put_rsp:
             status = put_rsp["status"]
@@ -622,12 +627,12 @@ async def PUT_Attributes(request):
             status = 201
     else:
         # put multi obj
-       
+
         # mixin some additonal kwargs
         crawler_params = {"follow_links": False}
         if bucket:
             crawler_params["bucket"] = bucket
-         
+
         crawler = DomainCrawler(app, obj_ids, action="put_attr", params=crawler_params)
         await crawler.crawl()
 
@@ -643,7 +648,7 @@ async def PUT_Attributes(request):
                     status = item_status
 
         log.info("DomainCrawler done for put_attrs action")
-  
+
     hrefs = []  # TBD
     req_rsp = {"hrefs": hrefs}
     # attribute creation successful
@@ -1010,48 +1015,12 @@ async def PUT_AttributeValue(request):
     return resp
 
 
-async def _get_attributes(app, obj_id, attr_names,
-                          IncludeData=False,
-                          ignore_nan=False,
-                          bucket=None
-                          ):
-    """ get the requested set of attributes from the object"""
-    collection = getCollectionForId(obj_id)
-    node_url = getDataNodeUrl(app, obj_id)
-    req = f"{node_url}/{collection}/{obj_id}/attributes"
-    log.debug(f"POST Attributes: {req}")
-    params = {}
-    if IncludeData:
-        params["IncludeData"] = 1
-    if ignore_nan:
-        params["ignore_nan"] = 1
-    if bucket:
-        params["bucket"] = bucket
-    data = {"attributes": attr_names}
-    log.debug(f"using params: {params}")
-    dn_json = await http_post(app, req, data=data, params=params)
-    log.debug(f"got attributes json from dn for obj_id: {dn_json}")
-
-    if len(dn_json) < len(attr_names):
-        msg = f"POST attributes requested {len(attr_names)}, "
-        msg += f"but only {len(dn_json)} were returned"
-        log.warn(msg)
-
-    log.debug(f"got attributes json from dn for obj_id: {obj_id}")
-    if "attributes" not in dn_json:
-        msg = f"expected attributes key from dn, but got: {dn_json}"
-        raise HTTPInternalServerError()
-
-    attributes = dn_json["attributes"]
-    log.debug(f"got attributes: {attributes}")
-    return attributes
-
-
 async def POST_Attributes(request):
     """HTTP method to get multiple attribute values"""
     log.request(request)
     app = request.app
     log.info("POST_Attributes")
+    req_id = request.match_info.get("id")
 
     if not request.has_body:
         msg = "POST Attributes with no body"
@@ -1083,16 +1052,15 @@ async def POST_Attributes(request):
         msg = "expected body to contain one of attr_names, obj_ids keys"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-        
+
     # construct an item list from attr_names and obj_ids
     items = {}
     if obj_ids is None:
-        obj_id = request.match_info.get("id")
-        if not obj_id:
+        if not req_id:
             msg = "no object id in request"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        items[obj_id] = attr_names
+        items[req_id] = attr_names
     elif isinstance(obj_ids, list):
         if attr_names is None:
             msg = "attr_names must be provided if obj_ids is a list"
@@ -1122,7 +1090,7 @@ async def POST_Attributes(request):
             log.warn(msg)
 
         attr_names = items[obj_id]
-        
+
         if not isinstance(attr_names, list):
             msg = f"expected list for attr_names but got: {type(attr_names)}"
             log.warn(msg)
@@ -1158,13 +1126,10 @@ async def POST_Attributes(request):
 
     params = request.rel_url.query
     log.debug(f"got params: {params}")
-    include_data = False
-    ignore_nan = False
-    if "IncludeData" in params and params["IncludeData"]:
-        include_data = True
-    if "ignore_nan" in params and params["ignore_nan"]:
+    if params.get("ignore_nan"):
         ignore_nan = True
-    kwargs = {"bucket": bucket, "IncludeData": include_data, "ignore_nan": ignore_nan}
+    else:
+        ignore_nan = False
 
     resp_json = {}
 
@@ -1177,7 +1142,12 @@ async def POST_Attributes(request):
         obj_id = list(items.keys())[0]
         collection = getCollectionForId(obj_id)
         attr_names = items[obj_id]
-        attributes = await _get_attributes(app, obj_id, attr_names, **kwargs)
+        kwargs = {"attr_names": attr_names, "bucket": bucket}
+        if params.get("IncludeData"):
+            kwargs["include_data"] = True
+        if params.get("ignore_nan"):
+            kwargs["ignore_nan"] = True
+        attributes = await getAttributes(app, obj_id, **kwargs)
 
         # mixin hrefs
         for attribute in attributes:
@@ -1189,10 +1159,12 @@ async def POST_Attributes(request):
     else:
         # get multi obj
         # don't follow links!
-        crawler_params = {"follow_links": False}
-        # mixin kwargs
-        for k in kwargs:
-            crawler_params[k] = kwargs[k]
+        crawler_params = {"follow_links": False, "bucket": bucket}
+        # mixin params
+        if params.get("IncludeData"):
+            crawler_params["include_data"] = True
+        if params.get("ignore_nan"):
+            crawler_params["ignore_nan"] = True
 
         crawler = DomainCrawler(app, items, action="get_attr", params=crawler_params)
         await crawler.crawl()
@@ -1212,7 +1184,8 @@ async def POST_Attributes(request):
         resp_json["attributes"] = attributes
 
     hrefs = []
-    obj_uri = "/" + collection + "/" + obj_id
+    collection = getCollectionForId(req_id)
+    obj_uri = "/" + collection + "/" + req_id
     href = getHref(request, obj_uri + "/attributes")
     hrefs.append({"rel": "self", "href": href})
     hrefs.append({"rel": "home", "href": getHref(request, "/")})

@@ -196,6 +196,7 @@ async def POST_Attributes(request):
         attr_list.append(des_attr)
 
     resp_json = {"attributes": attr_list}
+    log.debug(f"POST attributes returning: {resp_json}")
     resp = json_response(resp_json)
     log.response(request, resp=resp)
     return resp
@@ -253,7 +254,6 @@ async def PUT_Attributes(request):
         raise HTTPBadRequest(message="body expected")
 
     body = await request.json()
-    log.debug(f"PUT Attribute body: {body}")  # remove this to avoid verbosity
     if "bucket" in params:
         bucket = params["bucket"]
     elif "bucket" in body:
@@ -284,7 +284,7 @@ async def PUT_Attributes(request):
         if "value" in body:
             attribute["value"] = body["value"]
         items[attr_name] = attribute
-    
+
     # validate input
     for attr_name in items:
         validateAttributeName(attr_name)
@@ -328,7 +328,7 @@ async def PUT_Attributes(request):
             log.debug(f"new attribute {attr_name}")
             attribute["created"] = create_time
             new_attribute = True
-      
+
     # ok - all set, create the attributes
     for attr_name in items:
         log.debug(f"adding attribute {attr_name}")
@@ -348,6 +348,7 @@ async def PUT_Attributes(request):
     resp = json_response(resp_json, status=status)
     log.response(request, resp=resp)
     return resp
+
 
 async def DELETE_Attribute(request):
     """HTTP DELETE method for /(obj)/<id>/attributes/<name>

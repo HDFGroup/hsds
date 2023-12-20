@@ -25,7 +25,7 @@ from .util.idUtil import getDataNodeUrl, getCollectionForId, isSchema2Id, getS3K
 from .util.linkUtil import h5Join
 from .util.storUtil import getStorJSONObj, isStorObj
 from .util.authUtil import aclCheck
-from .util.httpUtil import http_get, http_put
+from .util.httpUtil import http_get, http_put, http_post
 from .util.domainUtil import getBucketForDomain, verifyRoot, getLimits
 from .util.storUtil import getCompressors
 from .basenode import getVersion
@@ -254,6 +254,10 @@ async def getObjectJson(
     meta_cache = app["meta_cache"]
     obj_json = None
 
+    msg = f"GetObjectJson - obj_id: {obj_id} refresh: {refresh} "
+    msg += f"include_links: {include_links} include_attrs: {include_attrs}"
+    log.debug(msg)
+
     if include_links or include_attrs:
         # links and attributes are subject to change, so always refresh
         refresh = True
@@ -292,11 +296,21 @@ async def getObjectJson(
         log.debug(f"getObjectJson - fetching {obj_id} from {req}")
         # throws 404 if doesn't exist
         obj_json = await http_get(app, req, params=params)
-        meta_cache[obj_id] = obj_json
+
     if obj_json is None:
         msg = f"Object: {obj_id} not found, req: {req}, params: {params}"
         log.warn(msg)
         raise HTTPNotFound()
+
+    # store object in meta_cache (but don't include links or attributes,
+    #   since they are volatile)
+    cache_obj = {}
+    for k in obj_json:
+        if k in ("links", "attributes"):
+            continue
+        cache_obj[k] = obj_json[k]
+    meta_cache[obj_id] = cache_obj
+    log.debug(f"stored {cache_obj} in meta_cache")
 
     return obj_json
 
@@ -627,3 +641,53 @@ async def doFlush(app, root_id, bucket=None):
     else:
         log.info("doFlush no fails, returning dn ids")
         return dn_ids
+
+
+async def getAttributes(app, obj_id,
+                        attr_names=None,
+                        include_data=False,
+                        ignore_nan=False,
+                        bucket=None
+                        ):
+    """ get the requested set of attributes from the given object """
+    if attr_names is None:
+        # TBD - fetch all attributes is this is None?
+        msg = "getAttributes expected attr_names"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    collection = getCollectionForId(obj_id)
+    node_url = getDataNodeUrl(app, obj_id)
+    req = f"{node_url}/{collection}/{obj_id}/attributes"
+    log.debug(f"POST Attributes: {req}")
+    params = {}
+    if include_data:
+        params["IncludeData"] = 1
+    if ignore_nan:
+        params["ignore_nan"] = 1
+    if bucket:
+        params["bucket"] = bucket
+    data = {"attributes": attr_names}
+    log.debug(f"using params: {params}")
+    dn_json = await http_post(app, req, data=data, params=params)
+    log.debug(f"attributes POST response: for obj_id {obj_id} got: {dn_json}")
+
+    log.debug(f"got attributes json from dn for obj_id: {obj_id}")
+    if "attributes" not in dn_json:
+        msg = f"expected attributes key from dn, but got: {dn_json}"
+        log.error(msg)
+        raise HTTPInternalServerError()
+
+    attributes = dn_json["attributes"]
+    if not isinstance(attributes, list):
+        msg = f"was expecting list of attributes, but got: {type(attributes)}"
+        log.error(msg)
+        raise HTTPInternalServerError()
+
+    if len(attributes) < len(attr_names):
+        msg = f"POST attributes requested {len(attr_names)}, "
+        msg += f"but only {len(dn_json)} were returned"
+        log.warn(msg)
+
+    log.debug(f"got attributes: {attributes}")
+    return attributes

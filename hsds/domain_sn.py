@@ -109,7 +109,7 @@ async def getDomainObjects(app, root_id, include_attrs=False, bucket=None):
     keyed by obj id
     """
 
-    log.info(f"getDomainObjects for root: {root_id}")
+    log.info(f"getDomainObjects for root: {root_id}, include_attrs: {include_attrs}")
     max_objects_limit = int(config.get("domain_req_max_objects_limit", default=500))
 
     crawler_params = {
@@ -118,7 +118,7 @@ async def getDomainObjects(app, root_id, include_attrs=False, bucket=None):
         "follow_links": True,
         "max_objects_limit": max_objects_limit,
     }
-    
+
     crawler = DomainCrawler(app, [root_id, ], action="get_obj", params=crawler_params)
     await crawler.crawl()
     if len(crawler._obj_dict) >= max_objects_limit:
@@ -418,6 +418,7 @@ async def GET_Domain(request):
     log.request(request)
     app = request.app
     params = request.rel_url.query
+    log.debug(f"GET_Domain query params: {params}")
 
     parent_id = None
     include_links = False
@@ -513,6 +514,7 @@ async def GET_Domain(request):
         # it's in the meta_cache).
         kwargs = {"refresh": True, "bucket": bucket,
                   "include_attrs": include_attrs, "include_links": include_links}
+        log.debug(f"kwargs for getObjectJson: {kwargs}")
 
         obj_json = await getObjectJson(app, obj_id, **kwargs)
 
@@ -560,11 +562,10 @@ async def GET_Domain(request):
     rsp_json = await getDomainResponse(app, domain_json, **kwargs)
 
     # include domain objects if requested
-    if "getobjs" in params and params["getobjs"] and "root" in domain_json:
+    if params.get("getobjs") and "root" in domain_json:
+
+        log.debug("getting all domain objects")
         root_id = domain_json["root"]
-        include_attrs = False
-        if "include_attrs" in params and params["include_attrs"]:
-            include_attrs = True
         kwargs = {"include_attrs": include_attrs, "bucket": bucket}
         domain_objs = await getDomainObjects(app, root_id, **kwargs)
         if domain_objs:
