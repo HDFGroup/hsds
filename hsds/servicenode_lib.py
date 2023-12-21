@@ -645,21 +645,22 @@ async def doFlush(app, root_id, bucket=None):
 
 async def getAttributes(app, obj_id,
                         attr_names=None,
-                        include_data=False,
+                        include_data=True,
                         ignore_nan=False,
+                        create_order=False,
+                        limit=0,
+                        marker=None,
                         bucket=None
                         ):
     """ get the requested set of attributes from the given object """
     if attr_names is None:
-        # TBD - fetch all attributes is this is None?
-        msg = "getAttributes expected attr_names"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
+        msg = "attr_names is None, do a GET for all attributes"
+        log.debug(msg)
 
     collection = getCollectionForId(obj_id)
     node_url = getDataNodeUrl(app, obj_id)
     req = f"{node_url}/{collection}/{obj_id}/attributes"
-    log.debug(f"POST Attributes: {req}")
+    log.debug(f"getAttributes: {req}")
     params = {}
     if include_data:
         params["IncludeData"] = 1
@@ -667,10 +668,25 @@ async def getAttributes(app, obj_id,
         params["ignore_nan"] = 1
     if bucket:
         params["bucket"] = bucket
-    data = {"attributes": attr_names}
-    log.debug(f"using params: {params}")
-    dn_json = await http_post(app, req, data=data, params=params)
-    log.debug(f"attributes POST response: for obj_id {obj_id} got: {dn_json}")
+    if create_order:
+        params["CreateOrder"] = 1
+
+    if attr_names:
+        # send names via a POST request
+        data = {"attributes": attr_names}
+        log.debug(f"using params: {params}")
+        dn_json = await http_post(app, req, data=data, params=params)
+        log.debug(f"attributes POST response for obj_id {obj_id} got: {dn_json}")
+    else:
+        # some additonal query params for get attributes
+        if limit:
+            params["Limit"] = limit
+        if marker:
+            params["Marker"] = marker
+        log.debug(f"using params: {params}")
+        # do a get to fetch all the attributes
+        dn_json = await http_get(app, req, params=params)
+        log.debug(f"attribute GET response for obj_id {obj_id} got: {dn_json}")
 
     log.debug(f"got attributes json from dn for obj_id: {obj_id}")
     if "attributes" not in dn_json:
@@ -684,10 +700,49 @@ async def getAttributes(app, obj_id,
         log.error(msg)
         raise HTTPInternalServerError()
 
-    if len(attributes) < len(attr_names):
+    if attr_names and len(attributes) < len(attr_names):
         msg = f"POST attributes requested {len(attr_names)}, "
-        msg += f"but only {len(dn_json)} were returned"
+        msg += f"but only {len(attributes)} were returned"
         log.warn(msg)
 
-    log.debug(f"got attributes: {attributes}")
+    log.debug(f"getAttributes returning {len(attributes)} attributes")
     return attributes
+
+
+async def putAttributes(app,
+                        obj_id,
+                        attr_json=None,
+                        replace=False,
+                        bucket=None
+                        ):
+
+    """ write the given attributes to the appropriate DN """
+    req = getDataNodeUrl(app, obj_id)
+    collection = getCollectionForId(obj_id)
+    req += f"/{collection}/{obj_id}/attributes"
+    log.info(f"putAttribute: {req}")
+
+    params = {}
+    if replace:
+        # allow attribute to be overwritten
+        log.debug("setting replace for putAtttributes")
+        params["replace"] = 1
+    else:
+        log.debug("replace is not set for putAttributes")
+
+    if bucket:
+        params["bucket"] = bucket
+
+    data = {"attributes": attr_json}
+    log.debug(f"put attributes params: {params}")
+    log.debug(f"put attributes: {attr_json}")
+    put_rsp = await http_put(app, req, data=data, params=params)
+
+    if "status" in put_rsp:
+        status = put_rsp["status"]
+    else:
+        status = 201
+
+    log.info(f"putAttributes status: {status}")
+
+    return status

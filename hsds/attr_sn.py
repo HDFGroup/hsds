@@ -31,7 +31,8 @@ from .util.arrayUtil import jsonToArray, getNumElements
 from .util.arrayUtil import bytesArrayToList
 from .util.dsetUtil import getShapeDims
 
-from .servicenode_lib import getDomainJson, getObjectJson, validateAction, getAttributes
+from .servicenode_lib import getDomainJson, getObjectJson, validateAction
+from .servicenode_lib import getAttributes, putAttributes
 from .domain_crawl import DomainCrawler
 from . import hsds_logger as log
 from . import config
@@ -56,15 +57,23 @@ async def GET_Attributes(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    include_data = False
+    kwargs = {}
+
     ignore_nan = False
-    if "IncludeData" in params and params["IncludeData"]:
-        include_data = True
-        if "ignore_nan" in params and params["ignore_nan"]:
-            ignore_nan = True
-    create_order = False
+    include_data = True
+    if "IncludeData" in params:
+        IncludeData = params["IncludeData"]
+        if not IncludeData or IncludeData == "0":
+            include_data = False
+            kwargs["include_data"] = False
+    log.debug(f"include_data: {include_data}")
+
+    if "ignore_nan" in params and params["ignore_nan"]:
+        ignore_nan = True
+        kwargs["ignore_nan"] = True
+
     if "CreateOrder" in params and params["CreateOrder"]:
-        create_order = True
+        kwargs["create_order"] = True
 
     limit = None
     if "Limit" in params:
@@ -74,9 +83,11 @@ async def GET_Attributes(request):
             msg = "Bad Request: Expected int type for limit"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
+        kwargs["limit"] = limit
     marker = None
     if "Marker" in params:
         marker = params["Marker"]
+        kwargs["marker"] = marker
 
     username, pswd = getUserPasswordFromRequest(request)
     if username is None and app["allow_noauth"]:
@@ -90,29 +101,15 @@ async def GET_Attributes(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
+    log.debug(f"bucket: {bucket}")
+    kwargs["bucket"] = bucket
 
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "read")
 
-    req = getDataNodeUrl(app, obj_id)
+    attributes = await getAttributes(app, obj_id, **kwargs)
 
-    req += "/" + collection + "/" + obj_id + "/attributes"
-    params = {}
-    if limit is not None:
-        params["Limit"] = str(limit)
-    if marker is not None:
-        params["Marker"] = marker
-    if include_data:
-        params["IncludeData"] = 1
-    if bucket:
-        params["bucket"] = bucket
-    if create_order:
-        params["CreateOrder"] = 1
-
-    log.debug(f"get attributes: {req}")
-    dn_json = await http_get(app, req, params=params)
     log.debug(f"got attributes json from dn for obj_id: {obj_id}")
-    attributes = dn_json["attributes"]
 
     # mixin hrefs
     for attribute in attributes:
@@ -140,6 +137,7 @@ async def GET_Attribute(request):
     """HTTP method to return JSON for an attribute"""
     log.request(request)
     app = request.app
+    params = request.rel_url.query
     # returns datasets|groups|datatypes
     collection = getRequestCollectionName(request)
 
@@ -170,30 +168,40 @@ async def GET_Attribute(request):
 
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "read")
-    params = request.rel_url.query
+
     if "ignore_nan" in params and params["ignore_nan"]:
         ignore_nan = True
     else:
         ignore_nan = False
 
-    req = getDataNodeUrl(app, obj_id)
-    req += f"/{collection}/{obj_id}/attributes/{attr_name}"
-    log.debug(f"get Attribute: {req}")
-    params = {}
-    if bucket:
-        params["bucket"] = bucket
-    dn_json = await http_get(app, req, params=params)
-    log.debug(f"got attributes json from dn for obj_id: {obj_id}")
+    if "IncludeData" in params and not params["IncludeData"]:
+        include_data = False
+    else:
+        include_data = True
+
+    kwargs = {"bucket": bucket, "include_data": include_data, "attr_names": [attr_name, ]}
+    if ignore_nan:
+        kwargs["ignore_nan"] = ignore_nan
+
+    attributes = await getAttributes(app, obj_id, **kwargs)
+    if not attributes:
+        log.error("no attributes returned")  # should have been raised by getAttributes
+        raise HTTPInternalServerError()
+    if len(attributes) > 1:
+        log.error(f"expected one attribute but got: {len(attributes)}")
+        raise HTTPInternalServerError()
+    attribute = attributes[0]
 
     resp_json = {}
     resp_json["name"] = attr_name
-    resp_json["type"] = dn_json["type"]
-    resp_json["shape"] = dn_json["shape"]
-    if "value" in dn_json:
-        resp_json["value"] = dn_json["value"]
-    resp_json["created"] = dn_json["created"]
+    resp_json["type"] = attribute["type"]
+    resp_json["shape"] = attribute["shape"]
+    if "value" in attribute:
+        resp_json["value"] = attribute["value"]
+    resp_json["created"] = attribute["created"]
     # attributes don't get modified, so use created timestamp as lastModified
-    resp_json["lastModified"] = dn_json["created"]
+    # TBD: but they can if repalce is set!
+    resp_json["lastModified"] = attribute["created"]
 
     hrefs = []
     obj_uri = "/" + collection + "/" + obj_id
@@ -395,17 +403,17 @@ async def PUT_Attribute(request):
     """HTTP method to create a new attribute"""
     log.request(request)
     app = request.app
-    req_params = request.rel_url.query
+    params = request.rel_url.query
     # returns datasets|groups|datatypes
     collection = getRequestCollectionName(request)
 
-    obj_id = request.match_info.get("id")
-    if not obj_id:
+    req_obj_id = request.match_info.get("id")
+    if not req_obj_id:
         msg = "Missing object id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(obj_id, obj_class=collection):
-        msg = f"Invalid object id: {obj_id}"
+    if not isValidUuid(req_obj_id, obj_class=collection):
+        msg = f"Invalid object id: {req_obj_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     attr_name = request.match_info.get("name")
@@ -413,7 +421,7 @@ async def PUT_Attribute(request):
         log.debug(f"Attribute name: [{attr_name}]")
         validateAttributeName(attr_name)
 
-    log.info(f"PUT Attributes id: {obj_id} name: {attr_name}")
+    log.info(f"PUT Attributes id: {req_obj_id} name: {attr_name}")
     username, pswd = getUserPasswordFromRequest(request)
     # write actions need auth
     await validateUserPassword(app, username, pswd)
@@ -442,36 +450,25 @@ async def PUT_Attribute(request):
     verifyRoot(domain_json)
 
     # TBD - verify that the obj_id belongs to the given domain
-    await validateAction(app, domain, obj_id, username, "create")
+    await validateAction(app, domain, req_obj_id, username, "create")
 
-    kwargs = {"obj_id": obj_id, "bucket": bucket}
-    attr_json = await _getAttributeFromRequest(app, body, **kwargs)
-    attr_json["name"] = attr_name
-    log.debug(f"got attr_json: {attr_json}")
+    # get attribute from request body
+    kwargs = {"bucket": bucket, "obj_id": req_obj_id}
+    attr_body = await _getAttributeFromRequest(app, body, **kwargs)
 
-    # ready to add attribute now
-    req = getDataNodeUrl(app, obj_id)
-    req += f"/{collection}/{obj_id}/attributes"
-    log.info(f"PUT Attribute: {req}")
+    # write attribute to DN
+    attr_json = {attr_name: attr_body}
+    log.debug(f"putting attr {attr_name} to DN: {attr_json}")
 
-    params = {}
-    if "replace" in req_params and req_params["replace"]:
+    kwargs = {"bucket": bucket}
+    if "replace" in params and params["replace"]:
         # allow attribute to be overwritten
         log.debug("setting replace for PUT Atttribute")
-        params["replace"] = 1
+        kwargs["replace"] = True
     else:
         log.debug("replace is not set for PUT Attribute")
-
-    if bucket:
-        params["bucket"] = bucket
-
-    put_rsp = await http_put(app, req, data=attr_json, params=params)
-    log.info(f"PUT Attribute resp: {put_rsp}")
-
-    if "status" in put_rsp:
-        status = put_rsp["status"]
-    else:
-        status = 201
+    status = await putAttributes(app, req_obj_id, attr_json, **kwargs)
+    log.info(f"PUT Attributes status: {status}")
 
     hrefs = []  # TBD
     req_rsp = {"hrefs": hrefs}
@@ -484,7 +481,7 @@ async def PUT_Attribute(request):
 async def PUT_Attributes(request):
     """HTTP method to create a new attribute"""
     log.request(request)
-    req_params = request.rel_url.query
+    params = request.rel_url.query
     app = request.app
     status = None
 
@@ -512,17 +509,7 @@ async def PUT_Attributes(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
-
-    params = {}
-    if "replace" in req_params and req_params["replace"]:
-        # allow attribute to be overwritten
-        log.debug("setting replace for PUT Atttribute")
-        params["replace"] = 1
-    else:
-        log.debug("replace is not set for PUT Attribute")
-
-    if bucket:
-        params["bucket"] = bucket
+    log.debug(f"got bucket: {bucket}")
 
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
@@ -590,7 +577,7 @@ async def PUT_Attributes(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
     else:
-        # get the object id from the request
+        # use the object id from the request
         obj_id = request.match_info.get("id")
         if not obj_id:
             msg = "Missing object id"
@@ -603,6 +590,10 @@ async def PUT_Attributes(request):
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, req_obj_id, username, "create")
 
+    kwargs = {"bucket": bucket}
+    if params.get("replace"):
+        kwargs["replace"] = True
+
     count = len(obj_ids)
     if count == 0:
         msg = "no obj_ids defined"
@@ -613,18 +604,9 @@ async def PUT_Attributes(request):
         obj_id = list(obj_ids.keys())[0]
         attr_json = obj_ids[obj_id]
         log.debug(f"got attr_json: {attr_json}")
-        req = getDataNodeUrl(app, obj_id)
-        collection = getCollectionForId(obj_id)
-        req += f"/{collection}/{obj_id}/attributes"
-        log.info(f"PUT Attributes: {req}")
-        data = {"attributes": attr_json}
-        put_rsp = await http_put(app, req, data=data, params=params)
-        log.info(f"PUT Attribute sresp: {put_rsp}")
 
-        if "status" in put_rsp:
-            status = put_rsp["status"]
-        else:
-            status = 201
+        status = await putAttributes(app, obj_id, attr_json, **kwargs)
+
     else:
         # put multi obj
 
@@ -633,19 +615,13 @@ async def PUT_Attributes(request):
         if bucket:
             crawler_params["bucket"] = bucket
 
-        crawler = DomainCrawler(app, obj_ids, action="put_attr", params=crawler_params)
+        kwargs = {"action": "put_attr", "raise_error": True, "params": crawler_params}
+        crawler = DomainCrawler(app, obj_ids, **kwargs)
+
+        # will raise exception on not found, server busy, etc.
         await crawler.crawl()
 
-        status = 200
-        for obj_id in crawler._obj_dict:
-            item = crawler._obj_dict[obj_id]
-            log.debug(f"got item from crawler for {obj_id}: {item}")
-            if "status" in item:
-                item_status = item["status"]
-                if item_status > status:
-                    # return the more sever error
-                    log.debug(f"setting status to {item_status}")
-                    status = item_status
+        status = crawler.get_status()
 
         log.info("DomainCrawler done for put_attrs action")
 
@@ -1063,11 +1039,10 @@ async def POST_Attributes(request):
         items[req_id] = attr_names
     elif isinstance(obj_ids, list):
         if attr_names is None:
-            msg = "attr_names must be provided if obj_ids is a list"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+            msg = "no attr_names - will return all attributes for each object"
+            log.debug(msg)
         for obj_id in obj_ids:
-            items[obj_id] = attr_names
+            items[obj_id] = None
     elif isinstance(obj_ids, dict):
         if attr_names is not None:
             msg = "attr_names must not be proved if obj_ids is a dict"
@@ -1091,12 +1066,15 @@ async def POST_Attributes(request):
 
         attr_names = items[obj_id]
 
-        if not isinstance(attr_names, list):
+        if attr_names is None:
+            log.debug(f"getting all attributes for {obj_id}")
+        elif isinstance(attr_names, list):
+            for attr_name in attr_names:
+                validateAttributeName(attr_name)  # raises HTTPBadRequest if invalid
+        else:
             msg = f"expected list for attr_names but got: {type(attr_names)}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        for attr_name in attr_names:
-            validateAttributeName(attr_name)  # raises HTTPBadRequest if invalid
 
     username, pswd = getUserPasswordFromRequest(request)
     if username is None and app["allow_noauth"]:
@@ -1126,6 +1104,12 @@ async def POST_Attributes(request):
 
     params = request.rel_url.query
     log.debug(f"got params: {params}")
+    include_data = True
+    if "IncludeData" in params:
+        IncludeData = params["IncludeData"]
+        if not IncludeData or IncludeData == "0":
+            include_data = False
+
     if params.get("ignore_nan"):
         ignore_nan = True
     else:
@@ -1143,10 +1127,11 @@ async def POST_Attributes(request):
         collection = getCollectionForId(obj_id)
         attr_names = items[obj_id]
         kwargs = {"attr_names": attr_names, "bucket": bucket}
-        if params.get("IncludeData"):
-            kwargs["include_data"] = True
-        if params.get("ignore_nan"):
+        if not include_data:
+            kwargs["include_data"] = False
+        if ignore_nan:
             kwargs["ignore_nan"] = True
+
         attributes = await getAttributes(app, obj_id, **kwargs)
 
         # mixin hrefs
@@ -1161,22 +1146,30 @@ async def POST_Attributes(request):
         # don't follow links!
         crawler_params = {"follow_links": False, "bucket": bucket}
         # mixin params
-        if params.get("IncludeData"):
-            crawler_params["include_data"] = True
-        if params.get("ignore_nan"):
+        if not include_data:
+            crawler_params["include_data"] = False
+
+        if ignore_nan:
             crawler_params["ignore_nan"] = True
 
-        crawler = DomainCrawler(app, items, action="get_attr", params=crawler_params)
+        kwargs = {"action": "get_attr", "raise_error": True, "params": crawler_params}
+        crawler = DomainCrawler(app, items, **kwargs)
+        # will raise exception on NotFound, etc.
         await crawler.crawl()
 
-        msg = f"DomainCrawler returning: {len(crawler._obj_dict)} objects"
+        msg = f"DomainCrawler returned: {len(crawler._obj_dict)} objects"
         log.info(msg)
         attributes = crawler._obj_dict
         # mixin hrefs
-        for obj_id in attributes.keys():
+        for obj_id in attributes:
             obj_attributes = attributes[obj_id]
+            msg = f"POST_Attributes, obj_id {obj_id} "
+            msg += f"returned {len(obj_attributes)}"
+            log.debug(msg)
+
             collection = getCollectionForId(obj_id)
             for attribute in obj_attributes:
+                log.debug(f"attribute: {attribute}")
                 attr_name = attribute["name"]
                 attr_href = f"/{collection}/{obj_id}/attributes/{attr_name}"
                 attribute["href"] = getHref(request, attr_href)

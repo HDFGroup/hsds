@@ -27,7 +27,7 @@ from . import hsds_logger as log
 def _index(items, marker, create_order=False):
     """Locate the leftmost value exactly equal to x"""
     if create_order:
-        # list is not ordered, juse search linearly
+        # list is not ordered, just search linearly
         for i in range(len(items)):
             if items[i] == marker:
                 return i
@@ -50,7 +50,9 @@ async def GET_Attributes(request):
     if "bucket" in params:
         bucket = params["bucket"]
     else:
-        bucket = None
+        msg = "POST Attributes without bucket param"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     create_order = False
     if "CreateOrder" in params and params["CreateOrder"]:
@@ -162,7 +164,9 @@ async def POST_Attributes(request):
     if "bucket" in params:
         bucket = params["bucket"]
     else:
-        bucket = None
+        msg = "POST Attributes without bucket param"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     include_data = False
     log.debug(f"got params: {params}")
@@ -196,6 +200,15 @@ async def POST_Attributes(request):
         attr_list.append(des_attr)
 
     resp_json = {"attributes": attr_list}
+    if not attr_list:
+        msg = f"POST attributes - requested {len(titles)} but none were found"
+        log.warn(msg)
+        raise HTTPNotFound()
+    if len(attr_list) != len(titles):
+        msg = f"POST attributes - requested {len(titles)} attributes but only "
+        msg += f"{len(attr_list)} were found"
+        log.warn(msg)
+        raise HTTPNotFound()
     log.debug(f"POST attributes returning: {resp_json}")
     resp = json_response(resp_json)
     log.response(request, resp=resp)
@@ -216,7 +229,9 @@ async def GET_Attribute(request):
     if "bucket" in params:
         bucket = params["bucket"]
     else:
-        bucket = None
+        msg = "GET Attribute without bucket param"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     obj_json = await get_metadata_obj(app, obj_id, bucket=bucket)
     msg = f"GET attribute obj_id: {obj_id} name: {attr_name} bucket: {bucket}"
@@ -254,12 +269,15 @@ async def PUT_Attributes(request):
         raise HTTPBadRequest(message="body expected")
 
     body = await request.json()
+    log.debug(f"got body: {body}")
     if "bucket" in params:
         bucket = params["bucket"]
     elif "bucket" in body:
         bucket = params["bucket"]
     else:
-        bucket = None
+        msg = "PUT Attributes without bucket param"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     replace = False
     if "replace" in params and params["replace"]:
@@ -361,7 +379,9 @@ async def DELETE_Attribute(request):
     if "bucket" in params:
         bucket = params["bucket"]
     else:
-        bucket = None
+        msg = "DELETE Attributes without bucket param"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     attr_name = request.match_info.get('name')
     log.info(f"DELETE attribute {attr_name} in {obj_id} bucket: {bucket}")

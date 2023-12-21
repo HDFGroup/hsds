@@ -20,9 +20,8 @@ from aiohttp.web_exceptions import HTTPInternalServerError, HTTPNotFound, HTTPGo
 
 
 from .util.idUtil import getCollectionForId, getDataNodeUrl
-from .util.httpUtil import http_put
 
-from .servicenode_lib import getObjectJson, getAttributes
+from .servicenode_lib import getObjectJson, getAttributes, putAttributes
 from . import hsds_logger as log
 
 
@@ -35,8 +34,10 @@ class DomainCrawler:
         params=None,
         max_tasks=40,
         max_objects_limit=0,
+        raise_error=False
     ):
         log.info(f"DomainCrawler.__init__  root_id: {len(objs)} objs")
+        log.debug(f"params: {params}")
         self._app = app
         self._action = action
         self._max_objects_limit = max_objects_limit
@@ -45,6 +46,7 @@ class DomainCrawler:
         self._q = asyncio.Queue()
         self._obj_dict = {}
         self.seen_ids = set()
+        self._raise_error = raise_error
         if not objs:
             log.error("no objs for crawler to crawl!")
             raise ValueError()
@@ -59,13 +61,17 @@ class DomainCrawler:
 
     async def get_attributes(self, obj_id, attr_names):
         # get the given attributes for the obj_id
-        log.debug(f"get_attributes for {obj_id}, {len(attr_names)} attributes")
+        msg = f"get_attributes for {obj_id}"
+        if attr_names:
+            msg += f", {len(attr_names)} attributes"
+        log.debug(msg)
 
         kwargs = {}
         for key in ("include_data", "ignore_nan", "bucket"):
             if key in self._params:
                 kwargs[key] = self._params[key]
-        kwargs["attr_names"] = attr_names
+        if attr_names:
+            kwargs["attr_names"] = attr_names
         log.debug(f"using kwargs: {kwargs}")
 
         status = 200
@@ -100,14 +106,14 @@ class DomainCrawler:
         req = getDataNodeUrl(self._app, obj_id)
         collection = getCollectionForId(obj_id)
         req += f"/{collection}/{obj_id}/attributes"
-        params = {}
+        kwargs = {}
         if "bucket" in self._params:
-            params["bucket"] = self._params["bucket"]
-        data = {"attributes": attr_items}
+            kwargs["bucket"] = self._params["bucket"]
+        if "replace" in self._params:
+            kwargs["replace"] = self._params["replace"]
         status = None
-        put_rsp = None
         try:
-            put_rsp = await http_put(self._app, req, data=data, params=params)
+            status = await putAttributes(self._app, obj_id, attr_items, **kwargs)
         except HTTPConflict:
             log.warn("DomainCrawler - got HTTPConflict from http_put")
             status = 409
@@ -118,12 +124,6 @@ class DomainCrawler:
         except Exception as e:
             log.error(f"unexpected exception {e}")
 
-        if put_rsp is not None:
-            log.info(f"PUT Attributes resp: {put_rsp}")
-            if "status" in put_rsp:
-                status = put_rsp["status"]
-            else:
-                status = 201
         log.debug(f"DomainCrawler fetch for {obj_id} - returning status: {status}")
         self._obj_dict[obj_id] = {"status": status}
 
@@ -210,6 +210,20 @@ class DomainCrawler:
                     self._obj_dict[link_id] = {}  # placeholder for obj id
                     self._q.put_nowait(link_id)
 
+    def get_status(self):
+        """ return the highest status of any of the returned objects """
+        status = None
+        for obj_id in self._obj_dict:
+            item = self._obj_dict[obj_id]
+            log.debug(f"item: {item}")
+            if "status" in item:
+                item_status = item["status"]
+                if status is None or item_status > status:
+                    # return the more severe error
+                    log.debug(f"setting status to {item_status}")
+                    status = item_status
+        return status
+
     async def crawl(self):
         workers = [asyncio.Task(self.work()) for _ in range(self._max_tasks)]
         # When all work is done, exit.
@@ -224,6 +238,38 @@ class DomainCrawler:
         for w in workers:
             w.cancel()
         log.debug("DomainCrawler - workers canceled")
+
+        status = self.get_status()
+        if status:
+            log.debug(f"DomainCrawler -- status: {status}")
+            log.debug(f"raise_error: {self._raise_error}")
+            if self._raise_error:
+                # throw the approriate exception if other than 200, 201
+                if status == 200:
+                    pass  # ok
+                elif status == 201:
+                    pass  # also ok
+                elif status == 400:
+                    log.warn("DomainCrawler - BadRequest")
+                    raise HTTPBadRequest(reason="unkown")
+                elif status == 404:
+                    log.warn("DomainCrawler - not found")
+                    raise HTTPNotFound()
+                elif status == 409:
+                    log.warn("DomainCrawler - conflict")
+                    raise HTTPConflict()
+                elif status == 410:
+                    log.warn("DomainCrawler - gone")
+                    raise HTTPGone()
+                elif status == 500:
+                    log.error("DomainCrawler - internal server error")
+                    raise HTTPInternalServerError()
+                elif status == 503:
+                    log.error("DomainCrawler - server busy")
+                    raise HTTPServiceUnavailable()
+                else:
+                    log.error(f"DomainCrawler - unexpected status: {status}")
+                    raise HTTPInternalServerError()
 
     async def work(self):
         while True:
@@ -248,14 +294,17 @@ class DomainCrawler:
                 log.error(f"couldn't find {obj_id} in self._objs")
                 return
             attr_names = self._objs[obj_id]
-            if not isinstance(attr_names, list):
-                log.error("expected list for attribute names")
-                return
-            if len(attr_names) == 0:
-                log.warn("expected at least one name in attr_names list")
-                return
+            if attr_names is None:
+                log.debug(f"fetch all attributes for {obj_id}")
+            else:
+                if not isinstance(attr_names, list):
+                    log.error("expected list for attribute names")
+                    return
+                if len(attr_names) == 0:
+                    log.warn("expected at least one name in attr_names list")
+                    return
 
-            log.debug(f"DomainCrawler - got attribute names: {attr_names}")
+                log.debug(f"DomainCrawler - got attribute names: {attr_names}")
             await self.get_attributes(obj_id, attr_names)
         elif self._action == "put_attr":
             log.debug("DomainCrawler - put attributes")

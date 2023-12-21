@@ -277,7 +277,7 @@ async def http_get(app, url, params=None, client=None):
                 else:
                     retval = await rsp.json()
             elif status_code == 400:
-                log.info(f"BadRequest to {url}")
+                log.warn(f"BadRequest to {url}")
                 raise HTTPBadRequest()
             elif status_code == 403:
                 log.info(f"Forbiden to access {url}")

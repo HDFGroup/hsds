@@ -110,7 +110,7 @@ class AttributeTest(unittest.TestCase):
 
             # get all the attributes
             req = self.endpoint + "/groups/" + root_uuid + "/attributes"
-            params = {}
+            params = {"IncludeData": 0}
             if creation_order:
                 params["CreateOrder"] = 1
             rsp = self.session.get(req, params=params, headers=headers)
@@ -133,7 +133,6 @@ class AttributeTest(unittest.TestCase):
                 self.assertTrue("shape" in attrJson)
                 shapeJson = attrJson["shape"]
                 self.assertEqual(shapeJson["class"], "H5S_SCALAR")
-                # self.assertTrue("value" not in attrJson)  # TBD - change api to include value?
                 self.assertTrue("created" in attrJson)
                 self.assertTrue("href" in attrJson)
                 self.assertTrue("value" not in attrJson)
@@ -1492,7 +1491,8 @@ class AttributeTest(unittest.TestCase):
 
         data = {"attr_names": attr_names}
         req = helper.getEndpoint() + "/groups/" + root_id + "/attributes"
-        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        params = {"IncludeData": 0}
+        rsp = self.session.post(req, data=json.dumps(data), params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         rspJson = json.loads(rsp.text)
@@ -1517,7 +1517,7 @@ class AttributeTest(unittest.TestCase):
             self.assertTrue("href" in attrJson)
             self.assertTrue("value" not in attrJson)
 
-        # test with returning attribute values
+        # test with returning all attribute values
         params = {"IncludeData": 1}
         rsp = self.session.post(req, data=json.dumps(data), params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -1586,8 +1586,9 @@ class AttributeTest(unittest.TestCase):
         ]
 
         data = {"attr_names": attr_names, "obj_ids": obj_ids}
+        params = {"IncludeData": 0}
         req = helper.getEndpoint() + "/groups/" + root_id + "/attributes"
-        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        rsp = self.session.post(req, data=json.dumps(data), params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
         rspJson = json.loads(rsp.text)
@@ -1689,28 +1690,24 @@ class AttributeTest(unittest.TestCase):
         data = {"obj_ids": items}
         req = helper.getEndpoint() + "/groups/" + root_id + "/attributes"
         rsp = self.session.post(req, data=json.dumps(data), headers=headers)
-        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(rsp.status_code, 404)
 
+        # test with not providing any attribute names - should return all attributes
+        # for set of obj ids
+        data = {"obj_ids": obj_ids}
+        req = helper.getEndpoint() + "/groups/" + root_id + "/attributes"
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("attributes" in rspJson)
         attributes = rspJson["attributes"]
-        self.assertTrue(isinstance(attributes, dict))
         self.assertEqual(len(attributes), 2)
-
         self.assertTrue(root_id in attributes)
-        self.assertTrue(dset_id in attributes)
         root_attrs = attributes[root_id]
         self.assertEqual(len(root_attrs), 2)
         dset_attrs = attributes[dset_id]
-        self.assertEqual(len(dset_attrs), 1)  # one of the ones we asked for didn't exist
-
-        # test with no providing all attribute names - should return all attributes
-        # for set of obj ids
-        # data = {"obj_ids": obj_ids}
-        # req = helper.getEndpoint() + "/groups/" + root_id + "/attributes"
-        # rsp = self.session.post(req, data=json.dumps(data), headers=headers)
-        # self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(len(dset_attrs), 2)
 
     def testPutAttributeMultiple(self):
         print("testPutAttributeMultiple", self.base_domain)
@@ -1841,7 +1838,6 @@ class AttributeTest(unittest.TestCase):
         # do a get attributes on the three group objects to verify
         for i in range(grp_count):
             grp_id = grp_ids[i]
-            print(f"grp_id: {grp_id}")
             # do a get on the attributes
             params = {"IncludeData": 1}
             req = self.endpoint + "/groups/" + grp_id + "/attributes"
