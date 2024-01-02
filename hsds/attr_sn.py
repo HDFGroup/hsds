@@ -14,11 +14,11 @@
 #
 
 import numpy as np
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalServerError
 from aiohttp.web import StreamResponse
 from json import JSONDecodeError
 
-from .util.httpUtil import http_get, http_put, http_delete, getHref
+from .util.httpUtil import http_delete, getHref
 from .util.httpUtil import getAcceptType, jsonResponse
 from .util.idUtil import isValidUuid, getDataNodeUrl, getCollectionForId, getRootObjId
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
@@ -27,8 +27,8 @@ from .util.domainUtil import getBucketForDomain, verifyRoot
 from .util.attrUtil import validateAttributeName, getRequestCollectionName
 from .util.hdf5dtype import validateTypeItem, getBaseTypeJson
 from .util.hdf5dtype import createDataType, getItemSize
-from .util.arrayUtil import jsonToArray, getNumElements
-from .util.arrayUtil import bytesArrayToList
+from .util.arrayUtil import jsonToArray, getNumElements, bytesArrayToList
+from .util.arrayUtil import bytesToArray, arrayToBytes, decodeData, encodeData
 from .util.dsetUtil import getShapeDims
 
 from .servicenode_lib import getDomainJson, getObjectJson, validateAction
@@ -179,9 +179,20 @@ async def GET_Attribute(request):
     else:
         include_data = True
 
+    if params.get("encoding"):
+        if params["encoding"] != "base64":
+            msg = "only base64 encoding is supported"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        encoding = "base64"
+    else:
+        encoding = None
+
     kwargs = {"bucket": bucket, "include_data": include_data, "attr_names": [attr_name, ]}
     if ignore_nan:
         kwargs["ignore_nan"] = ignore_nan
+    if encoding:
+        kwargs["encoding"] = encoding
 
     attributes = await getAttributes(app, obj_id, **kwargs)
     if not attributes:
@@ -190,6 +201,8 @@ async def GET_Attribute(request):
     if len(attributes) > 1:
         log.error(f"expected one attribute but got: {len(attributes)}")
         raise HTTPInternalServerError()
+
+    log.debug(f"got attributes: {attributes}")
     attribute = attributes[0]
 
     resp_json = {}
@@ -200,8 +213,10 @@ async def GET_Attribute(request):
         resp_json["value"] = attribute["value"]
     resp_json["created"] = attribute["created"]
     # attributes don't get modified, so use created timestamp as lastModified
-    # TBD: but they can if repalce is set!
+    # TBD: but they can if replace is set!
     resp_json["lastModified"] = attribute["created"]
+    if "encoding" in attribute:
+        resp_json["encoding"] = attribute["encoding"]
 
     hrefs = []
     obj_uri = "/" + collection + "/" + obj_id
@@ -332,13 +347,61 @@ def _getValueFromRequest(body, data_type, data_shape):
         else:
             np_dims = dims
 
-        # verify that the input data matches the array shape and type
-        try:
-            jsonToArray(np_dims, arr_dtype, value)
-        except ValueError as e:
-            msg = f"Bad Request: input data doesn't match selection: {e}"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+        if body.get("encoding"):
+            item_size = getItemSize(data_type)
+            if item_size == "H5T_VARIABLE":
+                msg = "base64 encoding is not support for variable length attributes"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            try:
+                data = decodeData(value)
+            except ValueError:
+                msg = "unable to decode data"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+
+            expected_numbytes = arr_dtype.itemsize * np.prod(dims)
+            if len(data) != expected_numbytes:
+                msg = f"expected: {expected_numbytes} but got: {len(data)}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+
+            # check to see if this works with our shape and type
+            try:
+                log.debug(f"data: {data}")
+                log.debug(f"type: {arr_dtype}")
+                log.debug(f"np_dims: {np_dims}")
+                arr = bytesToArray(data, arr_dtype, np_dims)
+            except ValueError as e:
+                msg = f"Bad Request: encoded input data doesn't match shape and type: {e}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+
+            value_json = None
+            # now try converting to JSON
+            list_data = arr.tolist()
+            try:
+                value_json = bytesArrayToList(list_data)
+            except ValueError as err:
+                msg = f"Cannot decode bytes to list: {err}, will store as encoded bytes"
+                log.warn(msg)
+            if value_json:
+                log.debug("will store base64 input as json")
+                if data_shape["class"] == "H5S_SCALAR":
+                    # just use the scalar value
+                    value = value_json[0]
+                else:
+                    value = value_json  # return this
+            else:
+                value = data  # return bytes to signal that this needs to be encoded
+        else:
+            # verify that the input data matches the array shape and type
+            try:
+                jsonToArray(np_dims, arr_dtype, value)
+            except ValueError as e:
+                msg = f"Bad Request: input data doesn't match selection: {e}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
     else:
         value = None
 
@@ -353,9 +416,15 @@ async def _getAttributeFromRequest(app, req_json, obj_id=None, bucket=None):
     attr_item = {"type": attr_type, "shape": attr_shape}
     attr_value = _getValueFromRequest(req_json, attr_type, attr_shape)
     if attr_value is not None:
-        attr_item["value"] = attr_value
+        if isinstance(attr_value, bytes):
+            attr_value = encodeData(attr_value)  # store as base64
+            attr_item["encoding"] = "base64"
+        else:
+            # just store the JSON dict or primitive value
+            attr_item["value"] = attr_value
     else:
         attr_item["value"] = None
+
     return attr_item
 
 
@@ -733,15 +802,30 @@ async def GET_AttributeValue(request):
         ignore_nan = True
     else:
         ignore_nan = False
+    if "encoding" in params:
+        encoding = params["encoding"]
+        if encoding and encoding != "base64":
+            msg = f"invalid encoding value: {encoding}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    else:
+        encoding = None
 
-    req = getDataNodeUrl(app, obj_id)
-    req += "/" + collection + "/" + obj_id + "/attributes/" + attr_name
-    log.debug("get Attribute: " + req)
-    params = {}
-    if bucket:
-        params["bucket"] = bucket
-    dn_json = await http_get(app, req, params=params)
-    log.debug("got attributes json from dn for obj_id: " + str(dn_json))
+    attr_names = [attr_name, ]
+    kwargs = {"attr_names": attr_names, "bucket": bucket}
+    if ignore_nan:
+        kwargs["ignore_nan"] = True
+
+    attributes = await getAttributes(app, obj_id, **kwargs)
+
+    if not attributes:
+        msg = f"attribute {attr_name} not found"
+        log.warn(msg)
+        raise HTTPNotFound()
+
+    dn_json = attributes[0]
+
+    log.debug(f"got attributes json from dn for obj_id: {dn_json}")
 
     attr_shape = dn_json["shape"]
     log.debug(f"attribute shape: {attr_shape}")
@@ -762,19 +846,35 @@ async def GET_AttributeValue(request):
         log.info(msg)
         response_type = "json"
 
-    if response_type == "binary":
+    log.debug(f"response_type: {response_type}")
+
+    if response_type == "binary" or encoding:
         arr_dtype = createDataType(type_json)  # np datatype
         np_shape = getShapeDims(shape_json)
-        try:
-            arr = jsonToArray(np_shape, arr_dtype, dn_json["value"])
-        except ValueError as e:
-            if dn_json["value"] is None:
-                arr = np.array([]).astype(arr_dtype)
-            else:
+        if dn_json["value"] is None:
+            arr = np.zeros(np_shape, dtype=arr_dtype)
+        elif dn_json.get("encoding") == "base64":
+            # data is a base64 string we can directly convert to a
+            # np array
+            data = dn_json["value"]
+            if not isinstance(data, str):
+                msg = "expected string for base64 encoded attribute"
+                msg += f" but got: {type(data)}"
+                log.error(msg)
+                raise HTTPInternalServerError()
+            arr = bytesToArray(data, arr_dtype, np_shape, encoding="base64")
+        else:
+            try:
+                arr = jsonToArray(np_shape, arr_dtype, dn_json["value"])
+            except ValueError as e:
                 msg = f"Bad Request: input data doesn't match selection: {e}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
-        output_data = arr.tobytes()
+        output_data = arrayToBytes(arr)
+    else:
+        output_data = None  # will return as json if possible
+
+    if response_type == "binary":
         msg = f"GET AttributeValue - returning {len(output_data)} "
         msg += "bytes binary data"
         log.debug(msg)
@@ -804,7 +904,20 @@ async def GET_AttributeValue(request):
     else:
         resp_json = {}
         if "value" in dn_json:
-            resp_json["value"] = dn_json["value"]
+            json_value = dn_json["value"]
+            if dn_json.get("encoding") == "base64":
+                resp_json["value"] = json_value
+                resp_json["encoding"] = "base64"
+            elif output_data is not None:
+                # query param requesting base64 encoded value
+                # convert output_data bytes to base64 string
+                output_data = encodeData(output_data)
+                output_data = output_data.decode("ascii")  # convert to a string
+                resp_json["value"] = output_data
+                resp_json["encoding"] = "base64"
+            else:
+                # just return json data
+                resp_json["value"] = json_value
 
         hrefs = []
         obj_uri = "/" + collection + "/" + obj_id
@@ -862,14 +975,18 @@ async def PUT_AttributeValue(request):
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "update")
 
-    req = getDataNodeUrl(app, obj_id)
-    req += "/" + collection + "/" + obj_id + "/attributes/" + attr_name
-    log.debug("get Attribute: " + req)
-    params = {"replace": 1}  # allow overwrites
-    if bucket:
-        params["bucket"] = bucket
-    dn_json = await http_get(app, req, params=params)
-    log.debug("got attributes json from dn for obj_id: " + str(obj_id))
+    attr_names = [attr_name, ]
+    kwargs = {"attr_names": attr_names, "bucket": bucket}
+
+    attributes = await getAttributes(app, obj_id, **kwargs)
+
+    if not attributes:
+        msg = f"attribute {attr_name} not found"
+        log.warn(msg)
+        raise HTTPNotFound()
+
+    dn_json = attributes[0]
+
     log.debug(f"got dn_json: {dn_json}")
 
     attr_shape = dn_json["shape"]
@@ -913,6 +1030,7 @@ async def PUT_AttributeValue(request):
             msg += f"{request.content_length}"
             log.error(msg)
             raise HTTPInternalServerError()
+        log.debug(f"read {len(binary_data)} bytes of binary data")
 
     arr = None  # np array to hold request data
 
@@ -924,20 +1042,11 @@ async def PUT_AttributeValue(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         arr = np.fromstring(binary_data, dtype=np_dtype)
-        arr = arr.reshape(np_shape)  # conform to selection shape
-        # convert to JSON for transmission to DN
-        data = arr.tolist()
-
-        try:
-            value = bytesArrayToList(data)
-        except ValueError as err:
-            msg = f"Cannot decode bytes to list: {err}"
-            raise HTTPBadRequest(reason=msg)
-
         if attr_shape["class"] == "H5S_SCALAR":
-            # just send the value, not a list
-            value = value[0]
-
+            arr = arr.reshape([])
+        else:
+            arr = arr.reshape(np_shape)  # conform to selection shape
+        log.debug(f"got array {arr} from binary data")
     else:
         try:
             body = await request.json()
@@ -952,36 +1061,46 @@ async def PUT_AttributeValue(request):
             raise HTTPBadRequest(reason=msg)
         value = body["value"]
 
-        # validate that the value agrees with type/shape
-        try:
-            arr = jsonToArray(np_shape, np_dtype, value)
-        except ValueError as e:
-            if value is None:
-                arr = np.array([]).astype(np_dtype)
-            else:
-                msg = f"Bad Request: input data doesn't match selection: {e}"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
+        if value is None:
+            # write empty array
+            arr = np.zeros(np_shape, dtype=np_dtype)
+        elif "encoding" in body and body["encoding"] == "base64":
+            arr = bytesToArray(value, np_dtype, np_shape, encoding="base64")
+        else:
+            # validate that the value agrees with type/shape
+            try:
+                arr = jsonToArray(np_shape, np_dtype, value)
+            except ValueError as e:
+                if value is None:
+                    arr = np.array([]).astype(np_dtype)
+                else:
+                    msg = f"Bad Request: input data doesn't match selection: {e}"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
+
     log.debug(f"Got: {arr.size} array elements")
 
+    # convert to base64 for transmission to DN
+    data = arrayToBytes(arr, encoding="base64")
+
     # ready to add attribute now
-    attr_json = {}
-    attr_json["name"] = attr_name
-    attr_json["type"] = type_json
-    attr_json["shape"] = attr_shape
-    attr_json["value"] = value
+    attr_body = {}
+    attr_body["type"] = type_json
+    attr_body["shape"] = attr_shape
+    attr_body["value"] = data.decode("ascii")
+    attr_body["encoding"] = "base64"
+    attr_json = {attr_name: attr_body}
 
-    req = getDataNodeUrl(app, obj_id)
-    req += "/" + collection + "/" + obj_id + "/attributes"
-    log.info(f"PUT Attribute Value: {req}")
+    kwargs = {"bucket": bucket, "replace": True}
 
-    dn_json["value"] = value
-    params = {}
-    params = {"replace": 1}  # let the DN know we can overwrite the attribute
-    if bucket:
-        params["bucket"] = bucket
-    put_rsp = await http_put(app, req, params=params, data=attr_json)
-    log.info(f"PUT Attribute Value resp: {put_rsp}")
+    status = await putAttributes(app, obj_id, attr_json, **kwargs)
+
+    if status != 200:
+        msg = "putAttributesValue, expected DN status of 200"
+        msg += f" but got {status}"
+        log.warn(msg)
+    else:
+        log.info("PUT AttributesValue status: 200")
 
     hrefs = []  # TBD
     req_rsp = {"hrefs": hrefs}
@@ -1115,6 +1234,15 @@ async def POST_Attributes(request):
     else:
         ignore_nan = False
 
+    if params.get("encoding"):
+        encoding = params["encoding"]
+        if encoding != "base64":
+            msg = "only base64 encoding is supported"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    else:
+        encoding = None
+
     resp_json = {}
 
     if len(items) == 0:
@@ -1131,6 +1259,8 @@ async def POST_Attributes(request):
             kwargs["include_data"] = False
         if ignore_nan:
             kwargs["ignore_nan"] = True
+        if encoding:
+            kwargs["encoding"] = encoding
 
         attributes = await getAttributes(app, obj_id, **kwargs)
 
@@ -1151,6 +1281,9 @@ async def POST_Attributes(request):
 
         if ignore_nan:
             crawler_params["ignore_nan"] = True
+
+        if encoding:
+            crawler_params["encoding"] = encoding
 
         kwargs = {"action": "get_attr", "raise_error": True, "params": crawler_params}
         crawler = DomainCrawler(app, items, **kwargs)

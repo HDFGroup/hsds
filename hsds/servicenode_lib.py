@@ -648,6 +648,7 @@ async def getAttributes(app, obj_id,
                         include_data=True,
                         ignore_nan=False,
                         create_order=False,
+                        encoding=None,
                         limit=0,
                         marker=None,
                         bucket=None
@@ -670,6 +671,8 @@ async def getAttributes(app, obj_id,
         params["bucket"] = bucket
     if create_order:
         params["CreateOrder"] = 1
+    if encoding:
+        params["encoding"] = encoding
 
     if attr_names:
         # send names via a POST request

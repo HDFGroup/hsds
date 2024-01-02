@@ -380,9 +380,7 @@ def getShapeDims(shape):
         if shape["class"] == "H5S_NULL":
             dims = None
         elif shape["class"] == "H5S_SCALAR":
-            dims = [
-                1,
-            ]
+            dims = [1,]
         elif shape["class"] == "H5S_SIMPLE":
             if "dims" not in shape:
                 raise ValueError("'dims' key expected for shape")
@@ -390,7 +388,7 @@ def getShapeDims(shape):
         else:
             raise ValueError("Unknown shape class: {}".format(shape["class"]))
     else:
-        raise ValueError("Unexpected shape class: {}".format(type(shape)))
+        raise ValueError(f"Unexpected shape class: {type(shape)}")
 
     return dims
 

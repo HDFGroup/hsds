@@ -280,13 +280,13 @@ async def http_get(app, url, params=None, client=None):
                 log.warn(f"BadRequest to {url}")
                 raise HTTPBadRequest()
             elif status_code == 403:
-                log.info(f"Forbiden to access {url}")
+                log.warn(f"Forbiden to access {url}")
                 raise HTTPForbidden()
             elif status_code == 404:
-                log.info(f"Object: {url} not found")
+                log.warn(f"Object: {url} not found")
                 raise HTTPNotFound()
             elif status_code == 410:
-                log.info(f"Object: {url} removed")
+                log.warn(f"Object: {url} removed")
                 raise HTTPGone()
             elif status_code == 503:
                 log.warn(f"503 error for http_get_Json {url}")
@@ -338,21 +338,21 @@ async def http_post(app, url, data=None, params=None, client=None):
                 return None
             elif rsp.status == 400:
                 msg = f"POST  request HTTPBadRequest error for url: {url}"
-                log.info(msg)
+                log.warn(msg)
                 raise HTTPBadRequest()
             elif rsp.status == 404:
                 msg = f"POST  request HTTPNotFound error for url: {url}"
-                log.info(msg)
+                log.warn(msg)
                 raise HTTPNotFound()
             elif rsp.status == 410:
-                log.info(f"POST  request HTTPGone error for url: {url}")
+                log.warn(f"POST  request HTTPGone error for url: {url}")
                 raise HTTPGone()
             elif rsp.status == 503:
                 log.warn(f"503 error for http_get_Json {url}")
                 raise HTTPServiceUnavailable()
             else:
                 msg = f"POST request error for url: {url} status: {rsp.status}"
-                log.warn(msg)
+                log.error(msg)
                 raise HTTPInternalServerError()
             if isBinaryResponse(rsp):
                 # return binary data

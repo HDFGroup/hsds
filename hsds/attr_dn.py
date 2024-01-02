@@ -20,6 +20,10 @@ from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.web import json_response
 
 from .util.attrUtil import validateAttributeName
+from .util.hdf5dtype import getItemSize, createDataType
+from .util.dsetUtil import getShapeDims
+from .util.arrayUtil import arrayToBytes, jsonToArray
+from .util.arrayUtil import bytesToArray, bytesArrayToList
 from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
 from . import hsds_logger as log
 
@@ -39,6 +43,79 @@ def _index(items, marker, create_order=False):
     return -1
 
 
+def _getAttribute(attr_name, obj_json, include_data=True, encoding=None):
+    """ copy relevant fields from src to target """
+
+    if not isinstance(obj_json, dict):
+        msg = f"expected dict but got: {type(obj_json)}"
+        log.error(msg)
+        raise HTTPInternalServerError()
+
+    if "attributes" not in obj_json:
+        msg = "expected to find attributes key in obj_json"
+        log.error(msg)
+        raise HTTPInternalServerError()
+
+    attributes = obj_json["attributes"]
+    if attr_name not in attributes:
+        # this should be checked before calling this function
+        msg = f"attribute {attr_name} not found"
+        log.error(msg)
+        raise HTTPInternalServerError()
+
+    src_attr = attributes[attr_name]
+    log.debug(f"_getAttribute - src_attr: {src_attr}")
+
+    for key in ("created", "type", "shape", "value"):
+        if key not in src_attr:
+            msg = f"Expected to find key: {key} in {src_attr}"
+            log.error(msg)
+            raise HTTPInternalServerError()
+
+    des_attr = {}
+    type_json = src_attr["type"]
+    shape_json = src_attr["shape"]
+    des_attr["created"] = src_attr["created"]
+    des_attr["type"] = type_json
+    des_attr["shape"] = shape_json
+    des_attr["name"] = attr_name
+
+    if encoding:
+        item_size = getItemSize(type_json)
+        if item_size == "H5T_VARIABLE":
+            msg = "encoded value request but only json can be returned for "
+            msg = f"{attr_name} since it has variable length type"
+            log.warn(msg)
+            encoding = None
+        log.debug("base64 encoding requested")
+
+    if include_data:
+        value_json = src_attr["value"]
+        if "encoding" in src_attr:
+            des_attr["encoding"] = src_attr["encoding"]
+            # just copy the encoded value
+            des_attr["value"] = value_json
+        elif encoding:
+            # return base64 encoded value
+            if value_json is None:
+                des_attr["value"] = None
+            else:
+                arr_dtype = createDataType(type_json)
+                np_shape = getShapeDims(shape_json)
+                try:
+                    arr = jsonToArray(np_shape, arr_dtype, value_json)
+                except ValueError as e:
+                    msg = f"Bad Request: input data doesn't match selection: {e}"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
+                output_data = arrayToBytes(arr, encoding=encoding)
+                des_attr["value"] = output_data.decode("ascii")
+                des_attr["encoding"] = encoding
+        else:
+            des_attr["value"] = src_attr["value"]
+    return des_attr
+
+
 async def GET_Attributes(request):
     """ Return JSON for attribute collection
     """
@@ -55,11 +132,15 @@ async def GET_Attributes(request):
         raise HTTPBadRequest(reason=msg)
 
     create_order = False
-    if "CreateOrder" in params and params["CreateOrder"]:
+    if params.get("CreateOrder"):
         create_order = True
 
+    encoding = None
+    if params.get("encoding"):
+        encoding = params["encoding"]
+
     include_data = False
-    if "IncludeData" in params and params["IncludeData"]:
+    if params.get("IncludeData"):
         include_data = True
 
     limit = None
@@ -123,14 +204,9 @@ async def GET_Attributes(request):
     attr_list = []
     for i in range(start_index, end_index):
         attr_name = titles[i]
-        src_attr = attr_dict[attr_name]
-        des_attr = {}
-        des_attr["created"] = src_attr["created"]
-        des_attr["type"] = src_attr["type"]
-        des_attr["shape"] = src_attr["shape"]
-        des_attr["name"] = attr_name
-        if include_data:
-            des_attr["value"] = src_attr["value"]
+        kwargs = {"include_data": include_data, "encoding": encoding}
+        log.debug(f"_getAttribute kwargs: {kwargs}")
+        des_attr = _getAttribute(attr_name, obj_json, **kwargs)
         attr_list.append(des_attr)
 
     resp_json = {"attributes": attr_list}
@@ -173,6 +249,11 @@ async def POST_Attributes(request):
     if "IncludeData" in params and params["IncludeData"]:
         include_data = True
         log.debug("include attr data")
+    if params.get("encoding"):
+        encoding = params["encoding"]
+        log.debug("POST_Attributes requested base64 encoding")
+    else:
+        encoding = None
 
     obj_json = await get_metadata_obj(app, obj_id, bucket=bucket)
 
@@ -185,18 +266,14 @@ async def POST_Attributes(request):
     # return a list of attributes based on sorted dictionary keys
     attr_dict = obj_json["attributes"]
     attr_list = []
+    kwargs = {"include_data": include_data}
+    if encoding:
+        kwargs["encoding"] = encoding
 
     for attr_name in titles:
         if attr_name not in attr_dict:
             continue
-        src_attr = attr_dict[attr_name]
-        des_attr = {}
-        des_attr["created"] = src_attr["created"]
-        des_attr["type"] = src_attr["type"]
-        des_attr["shape"] = src_attr["shape"]
-        des_attr["name"] = attr_name
-        if include_data:
-            des_attr["value"] = src_attr["value"]
+        des_attr = _getAttribute(attr_name, obj_json, **kwargs)
         attr_list.append(des_attr)
 
     resp_json = {"attributes": attr_list}
@@ -232,6 +309,10 @@ async def GET_Attribute(request):
         msg = "GET Attribute without bucket param"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    if params.get("encoding"):
+        encoding = params["encoding"]
+    else:
+        encoding = None
 
     obj_json = await get_metadata_obj(app, obj_id, bucket=bucket)
     msg = f"GET attribute obj_id: {obj_id} name: {attr_name} bucket: {bucket}"
@@ -248,7 +329,8 @@ async def GET_Attribute(request):
         log.warn(msg)
         raise HTTPNotFound()
 
-    attr_json = attributes[attr_name]
+    attr_json = _getAttribute(attr_name, obj_json, include_data=True, encoding=encoding)
+    del attr_json["name"]  # don't include the name
 
     resp = json_response(attr_json)
     log.response(request, resp=resp)
@@ -301,6 +383,8 @@ async def PUT_Attributes(request):
             attribute["shape"] = body["shape"]
         if "value" in body:
             attribute["value"] = body["value"]
+        if "encoding" in body:
+            attribute["encoding"] = body["encoding"]
         items[attr_name] = attribute
 
     # validate input
@@ -313,6 +397,36 @@ async def PUT_Attributes(request):
         if "shape" not in attr_json:
             log.error("PUT attribute with no shape in body")
             raise HTTPInternalServerError()
+        if "value" in attr_json and attr_json.get("encoding"):
+            # decode and store as JSON if possible
+            value = attr_json["value"]
+            arr_dtype = createDataType(attr_json["type"])  # np datatype
+            attr_shape = attr_json["shape"]
+            np_dims = getShapeDims(attr_shape)
+            log.debug(f"np_dims: {np_dims}")
+            try:
+                arr = bytesToArray(value, arr_dtype, np_dims, encoding="base64")
+            except ValueError as e:
+                msg = f"Bad Request: encoded input data doesn't match shape and type: {e}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            log.debug(f"got arr: {arr}")
+            log.debug(f"arr.shape: {arr.shape}")
+            data = arr.tolist()
+            try:
+                json_data = bytesArrayToList(data)
+                log.debug(f"converted encoded data to {json_data}")
+                if attr_shape["class"] == "H5S_SCALAR":
+                    attr_json["value"] = json_data[0]  # just store the scalar
+                else:
+                    attr_json["value"] = json_data
+                del attr_json["encoding"]  # don't need to store as base64
+            except ValueError as err:
+                msg = f"Cannot decode bytes to list: {err}, will store as base64"
+                log.warn(msg)
+                attr_json["value"] = value  # use the base64 data
+
+        log.debug(f"attribute {attr_name}: {attr_json}")
 
     log.info(f"PUT {len(items)} attributes to obj_id: {obj_id} bucket: {bucket}")
 
