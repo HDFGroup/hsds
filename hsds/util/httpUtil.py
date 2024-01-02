@@ -445,8 +445,6 @@ async def http_delete(app, url, data=None, params=None, client=None):
         kwargs["timeout"] = timeout
     if params:
         kwargs["params"] = params
-    if data:
-        params["json"] = data
 
     try:
         async with client.delete(url, **kwargs) as rsp:

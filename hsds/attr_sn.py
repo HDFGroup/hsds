@@ -18,9 +18,9 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalSer
 from aiohttp.web import StreamResponse
 from json import JSONDecodeError
 
-from .util.httpUtil import http_delete, getHref
+from .util.httpUtil import getHref
 from .util.httpUtil import getAcceptType, jsonResponse
-from .util.idUtil import isValidUuid, getDataNodeUrl, getCollectionForId, getRootObjId
+from .util.idUtil import isValidUuid, getCollectionForId, getRootObjId
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain, verifyRoot
@@ -32,7 +32,7 @@ from .util.arrayUtil import bytesToArray, arrayToBytes, decodeData, encodeData
 from .util.dsetUtil import getShapeDims
 
 from .servicenode_lib import getDomainJson, getObjectJson, validateAction
-from .servicenode_lib import getAttributes, putAttributes
+from .servicenode_lib import getAttributes, putAttributes, deleteAttributes
 from .domain_crawl import DomainCrawler
 from . import hsds_logger as log
 from . import config
@@ -740,15 +740,10 @@ async def DELETE_Attribute(request):
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "delete")
 
-    req = getDataNodeUrl(app, obj_id)
-    req += "/" + collection + "/" + obj_id + "/attributes/" + attr_name
-    log.info("PUT Attribute: " + req)
-    params = {}
-    if bucket:
-        params["bucket"] = bucket
-    rsp_json = await http_delete(app, req, params=params)
+    attr_names = [attr_name, ]
+    kwargs = {"attr_names": attr_names, "bucket": bucket}
 
-    log.info(f"PUT Attribute resp: {rsp_json}")
+    await deleteAttributes(app, obj_id, **kwargs)
 
     hrefs = []  # TBD
     req_rsp = {"hrefs": hrefs}
@@ -1164,7 +1159,7 @@ async def POST_Attributes(request):
             items[obj_id] = None
     elif isinstance(obj_ids, dict):
         if attr_names is not None:
-            msg = "attr_names must not be proved if obj_ids is a dict"
+            msg = "attr_names must not be provided if obj_ids is a dict"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         for obj_id in obj_ids:
@@ -1319,5 +1314,86 @@ async def POST_Attributes(request):
     resp_json["hrefs"] = hrefs
 
     resp = await jsonResponse(request, resp_json, ignore_nan=ignore_nan)
+    log.response(request, resp=resp)
+    return resp
+
+
+async def DELETE_Attributes(request):
+    """HTTP method to delete multiple attribute values"""
+    log.request(request)
+    app = request.app
+    log.info("DELETE_Attributes")
+    obj_id = request.match_info.get("id")
+    if not isValidUuid(obj_id):
+        msg = f"Invalid object id: {obj_id}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    params = request.rel_url.query
+    log.debug(f"got params: {params}")
+
+    if "attr_names" not in params:
+        msg = "expected attr_names query param"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    attr_names_query_string = params["attr_names"]
+    if not attr_names_query_string:
+        msg = "empty attr_names query param"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    if "encoding" in params:
+        encoding = params["encoding"]
+        if encoding != "base64":
+            msg = "only base64 encoding is supported for attribute names"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    else:
+        encoding = None
+
+    if "seperator" in params:
+        seperator = params["seperator"]
+    else:
+        seperator = "/"
+
+    if encoding:
+        # this can be used to deal with non-url encodable names
+        attr_names_query_string = decodeData(attr_names_query_string).decode("ascii")
+
+    log.debug(f"got attr_names query string: {attr_names_query_string}")
+
+    # Use the given seperator character to construct a list from
+    # the query string
+    attr_names = attr_names_query_string.split(seperator)
+    log.info(f"delete {len(attr_names)} attributes for {obj_id}")
+    log.debug(f"attr_names: {attr_names}")
+
+    username, pswd = getUserPasswordFromRequest(request)
+    await validateUserPassword(app, username, pswd)
+
+    domain = getDomainFromRequest(request)
+    if not isValidDomain(domain):
+        msg = f"Invalid domain value: {domain}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    bucket = getBucketForDomain(domain)
+
+    # get domain JSON
+    domain_json = await getDomainJson(app, domain)
+    verifyRoot(domain_json)
+
+    # TBD - verify that the obj_id belongs to the given domain
+    await validateAction(app, domain, obj_id, username, "delete")
+
+    kwargs = {"attr_names": attr_names, "bucket": bucket, "seperator": seperator}
+
+    await deleteAttributes(app, obj_id, **kwargs)
+
+    resp_json = {}
+    hrefs = []
+    resp_json["hrefs"] = hrefs
+
+    resp = await jsonResponse(request, resp_json)
     log.response(request, resp=resp)
     return resp

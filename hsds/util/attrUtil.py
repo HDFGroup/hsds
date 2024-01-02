@@ -51,8 +51,3 @@ def validateAttributeName(name):
         msg = f"attribute name must be a string, but got: {type(name)}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if name.find("/") > -1:
-        msg = "attribute names cannot contain slashes"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    # TBD - add any other restrictions

@@ -21,11 +21,12 @@ from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 from aiohttp.client_exceptions import ClientOSError, ClientError
 
 from .util.authUtil import getAclKeys
+from .util.arrayUtil import encodeData
 from .util.idUtil import getDataNodeUrl, getCollectionForId, isSchema2Id, getS3Key
 from .util.linkUtil import h5Join
 from .util.storUtil import getStorJSONObj, isStorObj
 from .util.authUtil import aclCheck
-from .util.httpUtil import http_get, http_put, http_post
+from .util.httpUtil import http_get, http_put, http_post, http_delete
 from .util.domainUtil import getBucketForDomain, verifyRoot, getLimits
 from .util.storUtil import getCompressors
 from .basenode import getVersion
@@ -749,3 +750,28 @@ async def putAttributes(app,
     log.info(f"putAttributes status: {status}")
 
     return status
+
+
+async def deleteAttributes(app, obj_id, attr_names=None, seperator="/", bucket=None):
+    """ get the requested set of attributes from the given object """
+
+    if attr_names is None or len(attr_names) == 0:
+        msg = "provide a list of attribute names for deletion"
+        log.debug(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    collection = getCollectionForId(obj_id)
+    node_url = getDataNodeUrl(app, obj_id)
+    req = f"{node_url}/{collection}/{obj_id}/attributes"
+    log.debug(f"deleteAttributes: {req}")
+    # always use base64 to avoid any issues with url encoding
+    params = {"encoding": "base64", "seperator": seperator}
+    if bucket:
+        params["bucket"] = bucket
+
+    # stringify the list of attr_names
+    attr_name_param = seperator.join(attr_names)
+    attr_name_param = encodeData(attr_name_param).decode("ascii")
+    params["attr_names"] = attr_name_param
+    log.debug(f"using params: {params}")
+    await http_delete(app, req, params=params)

@@ -1589,6 +1589,7 @@ class AttributeTest(unittest.TestCase):
                         self.assertTrue(np.isnan(rspValue[i]))
 
     def testNonURLEncodableAttributeName(self):
+        print("testURLEncodableAttributeName", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
         req = self.endpoint + "/"
 
@@ -1599,8 +1600,23 @@ class AttributeTest(unittest.TestCase):
         root_uuid = rspJson["root"]
         helper.validateId(root_uuid)
 
-        attr_name = "#attr1#"
-        req = self.endpoint + "/groups/" + root_uuid + "/attributes"  # request without name
+        # create a subgroup
+        req = self.endpoint + "/groups"
+        rsp = self.session.post(req, headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        grp_id = rspJson["id"]
+        self.assertTrue(helper.validateId(grp_id))
+
+        # link as "grp1"
+        grp_name = "grp1"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + grp_name
+        payload = {"id": grp_id}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # created
+
+        attr_name = "#attr/1#"  # add a slash for extra challenge points
+        req = self.endpoint + "/groups/" + grp_id + "/attributes"  # request without name
         bad_req = f"{req}/{attr_name}"  # this request will fail because of the hash char
 
         # create attr
@@ -1668,7 +1684,21 @@ class AttributeTest(unittest.TestCase):
         rsp = self.session.delete(bad_req, headers=headers)
         self.assertEqual(rsp.status_code, 404)  # not found
 
-        # tbd: support sending attribute names in body
+        # send attribute name as an encoded query param
+        attr_names_param = base64.b64encode(attr_name.encode("utf8")).decode("ascii")
+        # specify a seperator since our attribute name has the default slash
+        params = {"attr_names": attr_names_param, "encoding": "base64", "seperator": "!"}
+        rsp = self.session.delete(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # verify the attribute is gone
+        rsp = self.session.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("attributes" in rspJson)
+        rsp_attributes = rspJson["attributes"]
+        self.assertEqual(len(rsp_attributes), 0)
 
     def testPostAttributeSingle(self):
         domain = helper.getTestDomain("tall.h5")
@@ -1956,7 +1986,7 @@ class AttributeTest(unittest.TestCase):
         for grp_name in grp_names:
             # create sub_groups
             req = self.endpoint + "/groups"
-            rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+            rsp = self.session.post(req, headers=headers)
             self.assertEqual(rsp.status_code, 201)
             rspJson = json.loads(rsp.text)
             self.assertEqual(rspJson["attributeCount"], 0)

@@ -22,7 +22,7 @@ from aiohttp.web import json_response
 from .util.attrUtil import validateAttributeName
 from .util.hdf5dtype import getItemSize, createDataType
 from .util.dsetUtil import getShapeDims
-from .util.arrayUtil import arrayToBytes, jsonToArray
+from .util.arrayUtil import arrayToBytes, jsonToArray, decodeData
 from .util.arrayUtil import bytesToArray, bytesArrayToList
 from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
 from . import hsds_logger as log
@@ -292,51 +292,6 @@ async def POST_Attributes(request):
     return resp
 
 
-async def GET_Attribute(request):
-    """HTTP GET method to return JSON for /(obj)/<id>/attributes/<name>
-    """
-    log.request(request)
-    app = request.app
-    params = request.rel_url.query
-
-    obj_id = get_obj_id(request)
-
-    attr_name = request.match_info.get('name')
-    validateAttributeName(attr_name)
-    if "bucket" in params:
-        bucket = params["bucket"]
-    else:
-        msg = "GET Attribute without bucket param"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    if params.get("encoding"):
-        encoding = params["encoding"]
-    else:
-        encoding = None
-
-    obj_json = await get_metadata_obj(app, obj_id, bucket=bucket)
-    msg = f"GET attribute obj_id: {obj_id} name: {attr_name} bucket: {bucket}"
-    log.info(msg)
-    log.debug(f"got obj_json: {obj_json}")
-
-    if "attributes" not in obj_json:
-        log.error(f"unexpected obj data for id: {obj_id}")
-        raise HTTPInternalServerError()
-
-    attributes = obj_json["attributes"]
-    if attr_name not in attributes:
-        msg = f"Attribute  '{attr_name}' not found for id: {obj_id}"
-        log.warn(msg)
-        raise HTTPNotFound()
-
-    attr_json = _getAttribute(attr_name, obj_json, include_data=True, encoding=encoding)
-    del attr_json["name"]  # don't include the name
-
-    resp = json_response(attr_json)
-    log.response(request, resp=resp)
-    return resp
-
-
 async def PUT_Attributes(request):
     """ Handler for PUT /(obj)/<id>/attributes
     """
@@ -482,8 +437,8 @@ async def PUT_Attributes(request):
     return resp
 
 
-async def DELETE_Attribute(request):
-    """HTTP DELETE method for /(obj)/<id>/attributes/<name>
+async def DELETE_Attributes(request):
+    """HTTP DELETE method for /(obj)/<id>/attributes
     """
     log.request(request)
     app = request.app
@@ -497,13 +452,36 @@ async def DELETE_Attribute(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    attr_name = request.match_info.get('name')
-    log.info(f"DELETE attribute {attr_name} in {obj_id} bucket: {bucket}")
-    validateAttributeName(attr_name)
+    if "encoding" in params:
+        encoding = params["encoding"]
+        if encoding != "base64":
+            msg = "only base64 encoding is supported"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    else:
+        encoding = None
+
+    if "seperator" in params:
+        seperator = params["seperator"]
+    else:
+        seperator = "/"
+
+    if "attr_names" not in params:
+        msg = "expected attr_names for DELETE attributes"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    attr_names_param = params["attr_names"]
+    if encoding:
+        attr_names_param = decodeData(attr_names_param).decode("utf-8")
+
+    attr_names = attr_names_param.split(seperator)
+
+    log.info(f"DELETE attribute {attr_names} in {obj_id} bucket: {bucket}")
 
     obj_json = await get_metadata_obj(app, obj_id, bucket=bucket)
 
-    log.debug(f"DELETE attribute obj_id: {obj_id} got json")
+    log.debug(f"DELETE attributes obj_id: {obj_id} got json")
     if "attributes" not in obj_json:
         msg = f"unexpected data for obj id: {obj_id}"
         msg.error(msg)
@@ -512,12 +490,13 @@ async def DELETE_Attribute(request):
     # return a list of attributes based on sorted dictionary keys
     attributes = obj_json["attributes"]
 
-    if attr_name not in attributes:
-        msg = f"Attribute  {attr_name} not found in objid: {obj_id}"
-        log.warn(msg)
-        raise HTTPNotFound()
+    for attr_name in attr_names:
+        if attr_name not in attributes:
+            msg = f"Attribute  {attr_name} not found in objid: {obj_id}"
+            log.warn(msg)
+            raise HTTPNotFound()
 
-    del attributes[attr_name]
+        del attributes[attr_name]
 
     await save_metadata_obj(app, obj_id, obj_json, bucket=bucket)
 
