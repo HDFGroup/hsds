@@ -461,10 +461,10 @@ async def DELETE_Attributes(request):
     else:
         encoding = None
 
-    if "seperator" in params:
-        seperator = params["seperator"]
+    if "separator" in params:
+        separator = params["separator"]
     else:
-        seperator = "/"
+        separator = "/"
 
     if "attr_names" not in params:
         msg = "expected attr_names for DELETE attributes"
@@ -475,7 +475,7 @@ async def DELETE_Attributes(request):
     if encoding:
         attr_names_param = decodeData(attr_names_param).decode("utf-8")
 
-    attr_names = attr_names_param.split(seperator)
+    attr_names = attr_names_param.split(separator)
 
     log.info(f"DELETE attribute {attr_names} in {obj_id} bucket: {bucket}")
 

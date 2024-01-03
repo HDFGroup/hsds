@@ -1352,10 +1352,10 @@ async def DELETE_Attributes(request):
     else:
         encoding = None
 
-    if "seperator" in params:
-        seperator = params["seperator"]
+    if "separator" in params:
+        separator = params["separator"]
     else:
-        seperator = "/"
+        separator = "/"
 
     if encoding:
         # this can be used to deal with non-url encodable names
@@ -1363,9 +1363,9 @@ async def DELETE_Attributes(request):
 
     log.debug(f"got attr_names query string: {attr_names_query_string}")
 
-    # Use the given seperator character to construct a list from
+    # Use the given separator character to construct a list from
     # the query string
-    attr_names = attr_names_query_string.split(seperator)
+    attr_names = attr_names_query_string.split(separator)
     log.info(f"delete {len(attr_names)} attributes for {obj_id}")
     log.debug(f"attr_names: {attr_names}")
 
@@ -1386,7 +1386,7 @@ async def DELETE_Attributes(request):
     # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "delete")
 
-    kwargs = {"attr_names": attr_names, "bucket": bucket, "seperator": seperator}
+    kwargs = {"attr_names": attr_names, "bucket": bucket, "separator": separator}
 
     await deleteAttributes(app, obj_id, **kwargs)
 

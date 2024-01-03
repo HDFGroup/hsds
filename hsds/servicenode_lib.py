@@ -752,8 +752,8 @@ async def putAttributes(app,
     return status
 
 
-async def deleteAttributes(app, obj_id, attr_names=None, seperator="/", bucket=None):
-    """ get the requested set of attributes from the given object """
+async def deleteAttributes(app, obj_id, attr_names=None, separator="/", bucket=None):
+    """ delete the requested set of attributes from the given object """
 
     if attr_names is None or len(attr_names) == 0:
         msg = "provide a list of attribute names for deletion"
@@ -765,12 +765,12 @@ async def deleteAttributes(app, obj_id, attr_names=None, seperator="/", bucket=N
     req = f"{node_url}/{collection}/{obj_id}/attributes"
     log.debug(f"deleteAttributes: {req}")
     # always use base64 to avoid any issues with url encoding
-    params = {"encoding": "base64", "seperator": seperator}
+    params = {"encoding": "base64", "separator": separator}
     if bucket:
         params["bucket"] = bucket
 
     # stringify the list of attr_names
-    attr_name_param = seperator.join(attr_names)
+    attr_name_param = separator.join(attr_names)
     attr_name_param = encodeData(attr_name_param).decode("ascii")
     params["attr_names"] = attr_name_param
     log.debug(f"using params: {params}")

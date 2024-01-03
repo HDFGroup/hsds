@@ -244,12 +244,12 @@ class AttributeTest(unittest.TestCase):
 
             rsp = self.session.get(req, headers=headers)
             self.assertEqual(rsp.status_code, 404)  # not found
+            attr_payload = {"type": "H5T_STD_I32LE", "value": 42}
 
             # try adding the attribute as a different user
             user2_name = config.get("user2_name")
             if user2_name:
                 headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
-                attr_payload = {"type": "H5T_STD_I32LE", "value": 42}
                 rsp = self.session.put(req, data=json.dumps(attr_payload), headers=headers)
                 self.assertEqual(rsp.status_code, 403)  # forbidden
             else:
@@ -1686,8 +1686,8 @@ class AttributeTest(unittest.TestCase):
 
         # send attribute name as an encoded query param
         attr_names_param = base64.b64encode(attr_name.encode("utf8")).decode("ascii")
-        # specify a seperator since our attribute name has the default slash
-        params = {"attr_names": attr_names_param, "encoding": "base64", "seperator": "!"}
+        # specify a separator since our attribute name has the default slash
+        params = {"attr_names": attr_names_param, "encoding": "base64", "separator": "!"}
         rsp = self.session.delete(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
@@ -2107,6 +2107,81 @@ class AttributeTest(unittest.TestCase):
         req = self.endpoint + "/groups/" + root_id + "/attributes"
         rsp = self.session.put(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 409)
+
+    def testDeleteAttributesMultiple(self):
+        print("testDeleteAttributesMultiple", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        attr_count = 10
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create a subgroup
+        req = self.endpoint + "/groups"
+        rsp = self.session.post(req, headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        grp_id = rspJson["id"]
+        self.assertTrue(helper.validateId(grp_id))
+
+        # link as "grp1"
+        grp_name = "grp1"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + grp_name
+        payload = {"id": grp_id}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # created
+
+        attr_names = []
+        # Create attributes
+        for i in range(attr_count):
+            attr_name = f"attr{i:04d}"
+            attr_names.append(attr_name)
+            value = [i]
+            data = {"type": "H5T_IEEE_F32LE", "shape": 1, "value": value}
+            req = self.endpoint + "/groups/" + grp_id + "/attributes/" + attr_name
+            rsp = self.session.put(req, data=json.dumps(data), headers=headers)
+            self.assertEqual(rsp.status_code, 201)  # Created
+
+        # Delete all by parameter
+        separator = '/'
+        params = {"attr_names": separator.join(attr_names)}
+        req = self.endpoint + "/groups/" + grp_id + "/attributes"
+        rsp = self.session.delete(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # Attempt to read deleted attributes
+        for i in range(attr_count):
+            req = self.endpoint + "/groups/" + grp_id + "/attributes/" + attr_names[i]
+            rsp = self.session.get(req, headers=headers)
+            self.assertEqual(rsp.status_code, 404)
+
+        # Create another batch of attributes
+        for i in range(attr_count):
+            value = [i]
+            data = {"type": "H5T_IEEE_F32LE", "shape": 1, "value": value}
+            req = self.endpoint + "/groups/" + grp_id + "/attributes/" + attr_names[i]
+            rsp = self.session.put(req, data=json.dumps(data), headers=headers)
+            self.assertEqual(rsp.status_code, 201)  # Created
+
+        # Delete with custom separator
+        separator = ':'
+        params = {"attr_names": separator.join(attr_names)}
+        params["separator"] = ":"
+        req = self.endpoint + "/groups/" + grp_id + "/attributes"
+        rsp = self.session.delete(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # Attempt to read
+        for i in range(attr_count):
+            req = self.endpoint + "/groups/" + grp_id + "/attributes/" + attr_names[i]
+            rsp = self.session.get(req, headers=headers)
+            self.assertEqual(rsp.status_code, 404)
 
 
 if __name__ == "__main__":
