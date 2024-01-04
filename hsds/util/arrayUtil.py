@@ -425,29 +425,69 @@ def readElement(buffer, offset, arr, index, dt):
     return offset
 
 
-def arrayToBytes(arr):
+def encodeData(data, encoding="base64"):
+    """ Encode given data """
+    if encoding != "base64":
+        raise ValueError("only base64 encoding is supported")
+    try:
+        if isinstance(data, str):
+            data = data.encode("utf8")
+    except UnicodeEncodeError:
+        raise ValueError("can not encode string value")
+    if not isinstance(data, bytes):
+        msg = "Expected str or bytes type to encodeData, "
+        msg += f"but got: {type(data)}"
+        raise TypeError(msg)
+    try:
+        encoded_data = base64.b64encode(data)
+    except Exception as e:
+        # TBD: what exceptions can be raised?
+        raise ValueError(f"Unable to encode: {e}")
+    return encoded_data
+
+
+def decodeData(data, encoding="base64"):
+    if encoding != "base64":
+        raise ValueError("only base64 decoding is supported")
+    try:
+        decoded_data = base64.b64decode(data)
+    except Exception as e:
+        # TBD: catch actual exception
+        raise ValueError(f"Unable to decode: {e}")
+    return decoded_data
+
+
+def arrayToBytes(arr, encoding=None):
     """
     Return byte representation of numpy array
     """
-    if not isVlen(arr.dtype):
-        # can just return normal numpy bytestream
-        return arr.tobytes()
+    if isVlen(arr.dtype):
+        nSize = getByteArraySize(arr)
+        buffer = bytearray(nSize)
+        offset = 0
+        nElements = math.prod(arr.shape)
+        arr1d = arr.reshape((nElements,))
+        for e in arr1d:
+            # print("arrayToBytes:", e)
+            offset = copyElement(e, arr1d.dtype, buffer, offset)
+        data = bytes(buffer)
+    else:
+        # fixed length type
+        data = arr.tobytes()
 
-    nSize = getByteArraySize(arr)
-    buffer = bytearray(nSize)
-    offset = 0
-    nElements = math.prod(arr.shape)
-    arr1d = arr.reshape((nElements,))
-    for e in arr1d:
-        # print("arrayToBytes:", e)
-        offset = copyElement(e, arr1d.dtype, buffer, offset)
-    return bytes(buffer)
+    if encoding:
+        data = encodeData(data)
+    return data
 
 
-def bytesToArray(data, dt, shape):
+def bytesToArray(data, dt, shape, encoding=None):
     """
     Create numpy array based on byte representation
     """
+    if encoding:
+        # decode the data
+        # will raise ValueError if non-decodeable
+        data = decodeData(data)
     if not isVlen(dt):
         # regular numpy from string
         arr = np.frombuffer(data, dtype=dt)

@@ -14,18 +14,22 @@
 #
 
 import asyncio
+import json
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 from aiohttp.client_exceptions import ClientOSError, ClientError
 
 from .util.authUtil import getAclKeys
+from .util.arrayUtil import encodeData
 from .util.idUtil import getDataNodeUrl, getCollectionForId, isSchema2Id, getS3Key
 from .util.linkUtil import h5Join
 from .util.storUtil import getStorJSONObj, isStorObj
 from .util.authUtil import aclCheck
-from .util.httpUtil import http_get, http_put
-from .util.domainUtil import getBucketForDomain, verifyRoot
+from .util.httpUtil import http_get, http_put, http_post, http_delete
+from .util.domainUtil import getBucketForDomain, verifyRoot, getLimits
+from .util.storUtil import getCompressors
+from .basenode import getVersion
 
 from . import hsds_logger as log
 
@@ -70,6 +74,88 @@ async def getDomainJson(app, domain, reload=False):
 
     domain_cache[domain] = domain_json  # add to cache
     return domain_json
+
+
+async def getDomainResponse(app, domain_json, bucket=None, verbose=False):
+    """ construct JSON response for domain request """
+    rsp_json = {}
+    if "root" in domain_json:
+        rsp_json["root"] = domain_json["root"]
+        rsp_json["class"] = "domain"
+    else:
+        rsp_json["class"] = "folder"
+    if "owner" in domain_json:
+        rsp_json["owner"] = domain_json["owner"]
+    if "created" in domain_json:
+        rsp_json["created"] = domain_json["created"]
+
+    lastModified = 0
+    if "lastModified" in domain_json:
+        lastModified = domain_json["lastModified"]
+    totalSize = len(json.dumps(domain_json))
+    metadata_bytes = 0
+    allocated_bytes = 0
+    linked_bytes = 0
+    num_chunks = 0
+    num_linked_chunks = 0
+    md5_sum = ""
+
+    if verbose and "root" in domain_json:
+        root_id = domain_json["root"]
+        root_info = await getRootInfo(app, root_id, bucket=bucket)
+        if root_info:
+            allocated_bytes = root_info["allocated_bytes"]
+            totalSize += allocated_bytes
+            if "linked_bytes" in root_info:
+                linked_bytes += root_info["linked_bytes"]
+                totalSize += linked_bytes
+            if "num_linked_chunks" in root_info:
+                num_linked_chunks = root_info["num_linked_chunks"]
+            if "metadata_bytes" in root_info:
+                # this key was added for schema v2
+                metadata_bytes = root_info["metadata_bytes"]
+                totalSize += metadata_bytes
+            if root_info["lastModified"] > lastModified:
+                lastModified = root_info["lastModified"]
+            if "md5_sum" in root_info:
+                md5_sum = root_info["md5_sum"]
+
+            num_groups = root_info["num_groups"]
+            num_datatypes = root_info["num_datatypes"]
+            num_datasets = len(root_info["datasets"])
+            num_chunks = root_info["num_chunks"]
+            rsp_json["scan_info"] = root_info  # return verbose info here
+
+        else:
+            # root info not available - just return 0 for these values
+            allocated_bytes = 0
+            totalSize = 0
+            num_groups = 0
+            num_datasets = 0
+            num_datatypes = 0
+            num_chunks = 0
+
+        num_objects = num_groups + num_datasets + num_datatypes + num_chunks
+        rsp_json["num_groups"] = num_groups
+        rsp_json["num_datasets"] = num_datasets
+        rsp_json["num_datatypes"] = num_datatypes
+        rsp_json["num_objects"] = num_objects
+        rsp_json["total_size"] = totalSize
+        rsp_json["allocated_bytes"] = allocated_bytes
+        rsp_json["num_objects"] = num_objects
+        rsp_json["metadata_bytes"] = metadata_bytes
+        rsp_json["linked_bytes"] = linked_bytes
+        rsp_json["num_chunks"] = num_chunks
+        rsp_json["num_linked_chunks"] = num_linked_chunks
+        rsp_json["md5_sum"] = md5_sum
+
+    # pass back config parameters the client may care about
+
+    rsp_json["limits"] = getLimits()
+    rsp_json["compressors"] = getCompressors()
+    rsp_json["version"] = getVersion()
+    rsp_json["lastModified"] = lastModified
+    return rsp_json
 
 
 def checkBucketAccess(app, bucket, action="read"):
@@ -169,6 +255,10 @@ async def getObjectJson(
     meta_cache = app["meta_cache"]
     obj_json = None
 
+    msg = f"GetObjectJson - obj_id: {obj_id} refresh: {refresh} "
+    msg += f"include_links: {include_links} include_attrs: {include_attrs}"
+    log.debug(msg)
+
     if include_links or include_attrs:
         # links and attributes are subject to change, so always refresh
         refresh = True
@@ -207,11 +297,21 @@ async def getObjectJson(
         log.debug(f"getObjectJson - fetching {obj_id} from {req}")
         # throws 404 if doesn't exist
         obj_json = await http_get(app, req, params=params)
-        meta_cache[obj_id] = obj_json
+
     if obj_json is None:
         msg = f"Object: {obj_id} not found, req: {req}, params: {params}"
         log.warn(msg)
         raise HTTPNotFound()
+
+    # store object in meta_cache (but don't include links or attributes,
+    #   since they are volatile)
+    cache_obj = {}
+    for k in obj_json:
+        if k in ("links", "attributes"):
+            continue
+        cache_obj[k] = obj_json[k]
+    meta_cache[obj_id] = cache_obj
+    log.debug(f"stored {cache_obj} in meta_cache")
 
     return obj_json
 
@@ -313,11 +413,14 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
             if link_json["h5path"][0] == '/':
                 msg = "External link by absolute path"
                 log.debug(msg)
+                kwargs = {}
+                kwargs["bucket"] = bucket
+                kwargs["refresh"] = refresh
+                kwargs["domain"] = domain
+                kwargs["follow_soft_links"] = follow_soft_links
+                kwargs["follow_external_links"] = follow_external_links
                 obj_id, domain, link_json = await getObjectIdByPath(
-                    app, ext_domain_json["root"], link_json["h5path"],
-                    bucket=bucket, refresh=refresh, domain=domain,
-                    follow_soft_links=follow_soft_links,
-                    follow_external_links=follow_external_links)
+                    app, ext_domain_json["root"], link_json["h5path"], **kwargs)
             else:
                 msg = "Cannot follow external link by relative path"
                 log.warn(msg)
@@ -539,3 +642,136 @@ async def doFlush(app, root_id, bucket=None):
     else:
         log.info("doFlush no fails, returning dn ids")
         return dn_ids
+
+
+async def getAttributes(app, obj_id,
+                        attr_names=None,
+                        include_data=True,
+                        ignore_nan=False,
+                        create_order=False,
+                        encoding=None,
+                        limit=0,
+                        marker=None,
+                        bucket=None
+                        ):
+    """ get the requested set of attributes from the given object """
+    if attr_names is None:
+        msg = "attr_names is None, do a GET for all attributes"
+        log.debug(msg)
+
+    collection = getCollectionForId(obj_id)
+    node_url = getDataNodeUrl(app, obj_id)
+    req = f"{node_url}/{collection}/{obj_id}/attributes"
+    log.debug(f"getAttributes: {req}")
+    params = {}
+    if include_data:
+        params["IncludeData"] = 1
+    if ignore_nan:
+        params["ignore_nan"] = 1
+    if bucket:
+        params["bucket"] = bucket
+    if create_order:
+        params["CreateOrder"] = 1
+    if encoding:
+        params["encoding"] = encoding
+
+    if attr_names:
+        # send names via a POST request
+        data = {"attributes": attr_names}
+        log.debug(f"using params: {params}")
+        dn_json = await http_post(app, req, data=data, params=params)
+        log.debug(f"attributes POST response for obj_id {obj_id} got: {dn_json}")
+    else:
+        # some additonal query params for get attributes
+        if limit:
+            params["Limit"] = limit
+        if marker:
+            params["Marker"] = marker
+        log.debug(f"using params: {params}")
+        # do a get to fetch all the attributes
+        dn_json = await http_get(app, req, params=params)
+        log.debug(f"attribute GET response for obj_id {obj_id} got: {dn_json}")
+
+    log.debug(f"got attributes json from dn for obj_id: {obj_id}")
+    if "attributes" not in dn_json:
+        msg = f"expected attributes key from dn, but got: {dn_json}"
+        log.error(msg)
+        raise HTTPInternalServerError()
+
+    attributes = dn_json["attributes"]
+    if not isinstance(attributes, list):
+        msg = f"was expecting list of attributes, but got: {type(attributes)}"
+        log.error(msg)
+        raise HTTPInternalServerError()
+
+    if attr_names and len(attributes) < len(attr_names):
+        msg = f"POST attributes requested {len(attr_names)}, "
+        msg += f"but only {len(attributes)} were returned"
+        log.warn(msg)
+
+    log.debug(f"getAttributes returning {len(attributes)} attributes")
+    return attributes
+
+
+async def putAttributes(app,
+                        obj_id,
+                        attr_json=None,
+                        replace=False,
+                        bucket=None
+                        ):
+
+    """ write the given attributes to the appropriate DN """
+    req = getDataNodeUrl(app, obj_id)
+    collection = getCollectionForId(obj_id)
+    req += f"/{collection}/{obj_id}/attributes"
+    log.info(f"putAttribute: {req}")
+
+    params = {}
+    if replace:
+        # allow attribute to be overwritten
+        log.debug("setting replace for putAtttributes")
+        params["replace"] = 1
+    else:
+        log.debug("replace is not set for putAttributes")
+
+    if bucket:
+        params["bucket"] = bucket
+
+    data = {"attributes": attr_json}
+    log.debug(f"put attributes params: {params}")
+    log.debug(f"put attributes: {attr_json}")
+    put_rsp = await http_put(app, req, data=data, params=params)
+
+    if "status" in put_rsp:
+        status = put_rsp["status"]
+    else:
+        status = 201
+
+    log.info(f"putAttributes status: {status}")
+
+    return status
+
+
+async def deleteAttributes(app, obj_id, attr_names=None, separator="/", bucket=None):
+    """ delete the requested set of attributes from the given object """
+
+    if attr_names is None or len(attr_names) == 0:
+        msg = "provide a list of attribute names for deletion"
+        log.debug(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    collection = getCollectionForId(obj_id)
+    node_url = getDataNodeUrl(app, obj_id)
+    req = f"{node_url}/{collection}/{obj_id}/attributes"
+    log.debug(f"deleteAttributes: {req}")
+    # always use base64 to avoid any issues with url encoding
+    params = {"encoding": "base64", "separator": separator}
+    if bucket:
+        params["bucket"] = bucket
+
+    # stringify the list of attr_names
+    attr_name_param = separator.join(attr_names)
+    attr_name_param = encodeData(attr_name_param).decode("ascii")
+    params["attr_names"] = attr_name_param
+    log.debug(f"using params: {params}")
+    await http_delete(app, req, params=params)

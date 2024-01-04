@@ -79,21 +79,6 @@ class AclTest(unittest.TestCase):
         rsp = self.session.get(req, headers=headers)
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
-        root_uuid = rspJson["root"]
-
-        # get the ACL for the Group
-        req = helper.getEndpoint() + "/groups/" + root_uuid + "/acls/" + username
-        rsp = self.session.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.headers["content-type"], "application/json; charset=utf-8")
-        rsp_json = json.loads(rsp.text)
-        self.assertTrue("acl" in rsp_json)
-        self.assertTrue("hrefs" in rsp_json)
-        acl = rsp_json["acl"]
-        self.assertEqual(len(acl.keys()), len(acl_keys) + 1)
-        for k in acl_keys:
-            self.assertTrue(k in acl)
-            self.assertEqual(acl[k], True)
 
         # try getting the ACL for a random user, should return 404
         req = helper.getEndpoint() + "/acls/joebob"
@@ -165,17 +150,6 @@ class AclTest(unittest.TestCase):
         self.assertTrue("root" in rspJson)
         root_uuid = rspJson["root"]
 
-        # get the ACLs for the Group
-        req = helper.getEndpoint() + "/groups/" + root_uuid + "/acls"
-        rsp = self.session.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.headers["content-type"], "application/json; charset=utf-8")
-        rsp_json = json.loads(rsp.text)
-        self.assertTrue("acls" in rsp_json)
-        self.assertTrue("hrefs" in rsp_json)
-        acls = rsp_json["acls"]
-        self.assertEqual(len(acls), expected_acl_count)
-
         # create a dataset
         payload = {
             "type": "H5T_STD_I32LE",
@@ -189,18 +163,6 @@ class AclTest(unittest.TestCase):
         dset_uuid = rspJson["id"]
         self.assertTrue(helper.validateId(dset_uuid))
 
-        # now try getting the ACLs for the dataset
-        req = helper.getEndpoint() + "/datasets/" + dset_uuid + "/acls"
-        rsp = self.session.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.headers["content-type"], "application/json; charset=utf-8")
-        rsp_json = json.loads(rsp.text)
-        self.assertTrue("acls" in rsp_json)
-        self.assertTrue("hrefs" in rsp_json)
-        acls = rsp_json["acls"]
-
-        self.assertEqual(len(acls), expected_acl_count)
-
         # create a committed type
         payload = {"type": "H5T_IEEE_F64LE", "link": {"id": root_uuid, "name": "dtype"}}
 
@@ -212,17 +174,6 @@ class AclTest(unittest.TestCase):
         self.assertEqual(rspJson["attributeCount"], 0)
         dtype_uuid = rspJson["id"]
         self.assertTrue(helper.validateId(dtype_uuid))
-
-        # now try getting the ACLs for the datatype
-        req = helper.getEndpoint() + "/datatypes/" + dtype_uuid + "/acls"
-        rsp = self.session.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.headers["content-type"], "application/json; charset=utf-8")
-        rsp_json = json.loads(rsp.text)
-        self.assertTrue("acls" in rsp_json)
-        self.assertTrue("hrefs" in rsp_json)
-        acls = rsp_json["acls"]
-        self.assertEqual(len(acls), expected_acl_count)
 
         # try fetching ACLs from a user who doesn't have readACL permissions
         req = helper.getEndpoint() + "/acls"

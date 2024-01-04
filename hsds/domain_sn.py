@@ -34,209 +34,17 @@ from .util.authUtil import getUserPasswordFromRequest, aclCheck, isAdminUser
 from .util.authUtil import validateUserPassword, getAclKeys
 from .util.domainUtil import getParentDomain, getDomainFromRequest
 from .util.domainUtil import isValidDomain, getBucketForDomain
-from .util.domainUtil import getPathForDomain
+from .util.domainUtil import getPathForDomain, getLimits
 from .util.storUtil import getStorKeys, getCompressors
 from .util.boolparser import BooleanParser
 from .util.globparser import globmatch
 from .servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath
-from .servicenode_lib import getRootInfo, checkBucketAccess, doFlush
+from .servicenode_lib import getRootInfo, checkBucketAccess, doFlush, getDomainResponse
 from .basenode import getVersion
+from .domain_crawl import DomainCrawler
+from .folder_crawl import FolderCrawler
 from . import hsds_logger as log
 from . import config
-
-
-class DomainCrawler:
-    def __init__(
-        self,
-        app,
-        root_id,
-        bucket=None,
-        include_attrs=True,
-        max_tasks=40,
-        max_objects_limit=0,
-    ):
-        log.info(f"DomainCrawler.__init__  root_id: {root_id}")
-        self._app = app
-        self._max_objects_limit = max_objects_limit
-        self._include_attrs = include_attrs
-        self._max_tasks = max_tasks
-        self._q = asyncio.Queue()
-        self._obj_dict = {}
-        self.seen_ids = set()
-        self._q.put_nowait(root_id)
-        self._bucket = bucket
-
-    async def crawl(self):
-        workers = [asyncio.Task(self.work()) for _ in range(self._max_tasks)]
-        # When all work is done, exit.
-        msg = "DomainCrawler - await queue.join - "
-        msg += f"count: {len(self._obj_dict)}"
-        log.info(msg)
-        await self._q.join()
-        msg = "DomainCrawler - join complete - "
-        msg += f"count: {len(self._obj_dict)}"
-        log.info(msg)
-
-        for w in workers:
-            w.cancel()
-        log.debug("DomainCrawler - workers canceled")
-
-    async def work(self):
-        while True:
-            obj_id = await self._q.get()
-            await self.fetch(obj_id)
-            self._q.task_done()
-
-    async def fetch(self, obj_id):
-        log.debug(f"DomainCrawler - fetch for obj_id: {obj_id}")
-        kwargs = {
-            "include_links": True,
-            "include_attrs": self._include_attrs,
-            "bucket": self._bucket,
-        }
-        obj_json = await getObjectJson(self._app, obj_id, **kwargs)
-        log.debug(f"DomainCrawler - got json for {obj_id}")
-
-        # including links, so don't need link count
-        if "link_count" in obj_json:
-            del obj_json["link_count"]
-        self._obj_dict[obj_id] = obj_json
-        if self._include_attrs:
-            del obj_json["attributeCount"]
-
-        # if this is a group, iterate through all the hard links and
-        # add to the lookup ids set
-        if getCollectionForId(obj_id) == "groups":
-            links = obj_json["links"]
-            log.debug(f"DomainCrawler links: {links}")
-            for title in links:
-                log.debug(f"DomainCrawler - got link: {title}")
-                link_obj = links[title]
-                num_objects = len(self._obj_dict)
-                if self._max_objects_limit > 0:
-                    if num_objects >= self._max_objects_limit:
-                        msg = "DomainCrawler reached limit of "
-                        msg += f"{self._max_objects_limit}"
-                        log.info(msg)
-                        break
-                if link_obj["class"] != "H5L_TYPE_HARD":
-                    continue
-                link_id = link_obj["id"]
-                if link_id not in self._obj_dict:
-                    # haven't seen this object yet, get obj json
-                    log.debug(f"DomainCrawler - adding link_id: {link_id}")
-                    self._obj_dict[link_id] = {}  # placeholder for obj id
-                    self._q.put_nowait(link_id)
-        msg = f"DomainCrawler - fetch complete obj_id: {obj_id}, "
-        msg += f"{len(self._obj_dict)} objects found"
-        log.debug(msg)
-
-
-class FolderCrawler:
-    def __init__(
-        self,
-        app,
-        domains,
-        bucket=None,
-        get_root=False,
-        verbose=False,
-        max_tasks_per_node=100,
-    ):
-        log.info(f"FolderCrawler.__init__  {len(domains)} domain names")
-        self._app = app
-        self._get_root = get_root
-        self._verbose = verbose
-        self._q = asyncio.Queue()
-        self._domain_dict = {}
-        self._group_dict = {}
-        for domain in domains:
-            self._q.put_nowait(domain)
-        self._bucket = bucket
-        max_tasks = max_tasks_per_node * getNodeCount(app)
-        if len(domains) > max_tasks:
-            self._max_tasks = max_tasks
-        else:
-            self._max_tasks = len(domains)
-
-    async def crawl(self):
-        workers = [asyncio.Task(self.work()) for _ in range(self._max_tasks)]
-        # When all work is done, exit.
-        msg = f"FolderCrawler max_tasks {self._max_tasks} = await queue.join "
-        msg += f"- count: {len(self._domain_dict)}"
-        log.info(msg)
-        await self._q.join()
-        folder_count = len(self._domain_dict)
-        msg = f"FolderCrawler - join complete - count: {folder_count}"
-        log.info(msg)
-
-        for w in workers:
-            w.cancel()
-        log.debug("FolderCrawler - workers canceled")
-
-    async def work(self):
-        while True:
-            start = time.time()
-            domain = await self._q.get()
-            await self.fetch(domain)
-            self._q.task_done()
-            elapsed = time.time() - start
-            msg = f"FolderCrawler - task {domain} start: {start:.3f} "
-            msg += f"elapsed: {elapsed:.3f}"
-            log.debug(msg)
-
-    async def fetch(self, domain):
-        msg = f"FolderCrawler - fetch for domain: {domain} bucket: "
-        msg += f"{self._bucket}"
-        log.debug(msg)
-        domain_key = self._bucket + domain
-        try:
-            kwargs = {"reload": True}
-            domain_json = await getDomainJson(self._app, domain_key, **kwargs)
-            msg = f"FolderCrawler - {domain} got domain_json: {domain_json}"
-            log.debug(msg)
-            if domain_json:
-                kwargs = {"verbose": self._verbose, "bucket": self._bucket}
-                domain_rsp = await get_domain_response(self._app, domain_json, **kwargs)
-                for k in ("limits", "version", "compressors"):
-                    if k in domain_rsp:
-                        # don't return given key for multi-domain responses
-                        del domain_rsp[k]
-                msg = f"FolderCrawler - {domain} get domain_rsp: {domain_rsp}"
-                log.debug(msg)
-                # mixin domain name
-                self._domain_dict[domain] = domain_rsp
-                if self._get_root and "root" in domain_json:
-                    root_id = domain_json["root"]
-                    log.debug(f"fetching root json for {root_id}")
-                    root_json = await getObjectJson(
-                        self._app,
-                        root_id,
-                        include_links=False,
-                        include_attrs=True,
-                        bucket=self._bucket,
-                    )
-                    log.debug(f"got root_json: {root_json}")
-                    self._group_dict[root_id] = root_json
-            else:
-                log.warn(f"FolderCrawler - no domain found for {domain}")
-        except HTTPNotFound:
-            # One of the domains not found, but continue through the list
-            log.warn(f"fetch result - not found error for: {domain}")
-        except HTTPGone:
-            log.warn(f"fetch result - domain: {domain} has been deleted")
-        except HTTPInternalServerError:
-            log.error(f"fetch result - internal error fetching: {domain}")
-        except HTTPForbidden:
-            log.warn(f"fetch result - access not allowed for: {domain}")
-        except HTTPBadRequest:
-            log.error(f"fetch result - bad request for: {domain}")
-        except HTTPServiceUnavailable:
-            msg = f"fetch result - service unavailable for domain: {domain}"
-            log.warn(msg)
-        except Exception as e:
-            msg = f"fetch result - unexpected exception for domain {domain}: "
-            msg += f"exception of type {type(e)}, {e}"
-            log.error(msg)
 
 
 async def get_collections(app, root_id, bucket=None):
@@ -301,15 +109,17 @@ async def getDomainObjects(app, root_id, include_attrs=False, bucket=None):
     keyed by obj id
     """
 
-    log.info(f"getDomainObjects for root: {root_id}")
+    log.info(f"getDomainObjects for root: {root_id}, include_attrs: {include_attrs}")
     max_objects_limit = int(config.get("domain_req_max_objects_limit", default=500))
 
-    kwargs = {
+    crawler_params = {
         "include_attrs": include_attrs,
         "bucket": bucket,
+        "follow_links": True,
         "max_objects_limit": max_objects_limit,
     }
-    crawler = DomainCrawler(app, root_id, **kwargs)
+
+    crawler = DomainCrawler(app, [root_id, ], action="get_obj", params=crawler_params)
     await crawler.crawl()
     if len(crawler._obj_dict) >= max_objects_limit:
         msg = "getDomainObjects - too many objects:  "
@@ -342,99 +152,6 @@ def getIdList(objs, marker=None, limit=None):
         if limit and len(ret_ids) == limit:
             break
     return ret_ids
-
-
-def getLimits():
-    """return limits the client may need"""
-    limits = {}
-    limits["min_chunk_size"] = int(config.get("min_chunk_size"))
-    limits["max_chunk_size"] = int(config.get("max_chunk_size"))
-    limits["max_request_size"] = int(config.get("max_request_size"))
-
-    return limits
-
-
-async def get_domain_response(app, domain_json, bucket=None, verbose=False):
-    rsp_json = {}
-    if "root" in domain_json:
-        rsp_json["root"] = domain_json["root"]
-        rsp_json["class"] = "domain"
-    else:
-        rsp_json["class"] = "folder"
-    if "owner" in domain_json:
-        rsp_json["owner"] = domain_json["owner"]
-    if "created" in domain_json:
-        rsp_json["created"] = domain_json["created"]
-
-    lastModified = 0
-    if "lastModified" in domain_json:
-        lastModified = domain_json["lastModified"]
-    totalSize = len(json.dumps(domain_json))
-    metadata_bytes = 0
-    allocated_bytes = 0
-    linked_bytes = 0
-    num_chunks = 0
-    num_linked_chunks = 0
-    md5_sum = ""
-
-    if verbose and "root" in domain_json:
-        root_id = domain_json["root"]
-        root_info = await getRootInfo(app, domain_json["root"], bucket=bucket)
-        if root_info:
-            log.info(f"got root_info for root: {root_id}")
-            allocated_bytes = root_info["allocated_bytes"]
-            totalSize += allocated_bytes
-            if "linked_bytes" in root_info:
-                linked_bytes += root_info["linked_bytes"]
-                totalSize += linked_bytes
-            if "num_linked_chunks" in root_info:
-                num_linked_chunks = root_info["num_linked_chunks"]
-            if "metadata_bytes" in root_info:
-                # this key was added for schema v2
-                metadata_bytes = root_info["metadata_bytes"]
-                totalSize += metadata_bytes
-            if root_info["lastModified"] > lastModified:
-                lastModified = root_info["lastModified"]
-            if "md5_sum" in root_info:
-                md5_sum = root_info["md5_sum"]
-
-            num_groups = root_info["num_groups"]
-            num_datatypes = root_info["num_datatypes"]
-            num_datasets = len(root_info["datasets"])
-            num_chunks = root_info["num_chunks"]
-            rsp_json["scan_info"] = root_info  # return verbose info here
-
-        else:
-            # root info not available - just return 0 for these values
-            log.info(f"root_info not available for root: {root_id}")
-            allocated_bytes = 0
-            totalSize = 0
-            num_groups = 0
-            num_datasets = 0
-            num_datatypes = 0
-            num_chunks = 0
-
-        num_objects = num_groups + num_datasets + num_datatypes + num_chunks
-        rsp_json["num_groups"] = num_groups
-        rsp_json["num_datasets"] = num_datasets
-        rsp_json["num_datatypes"] = num_datatypes
-        rsp_json["num_objects"] = num_objects
-        rsp_json["total_size"] = totalSize
-        rsp_json["allocated_bytes"] = allocated_bytes
-        rsp_json["num_objects"] = num_objects
-        rsp_json["metadata_bytes"] = metadata_bytes
-        rsp_json["linked_bytes"] = linked_bytes
-        rsp_json["num_chunks"] = num_chunks
-        rsp_json["num_linked_chunks"] = num_linked_chunks
-        rsp_json["md5_sum"] = md5_sum
-
-    # pass back config parameters the client may care about
-
-    rsp_json["limits"] = getLimits()
-    rsp_json["compressors"] = getCompressors()
-    rsp_json["version"] = getVersion()
-    rsp_json["lastModified"] = lastModified
-    return rsp_json
 
 
 async def get_domains(request):
@@ -701,6 +418,7 @@ async def GET_Domain(request):
     log.request(request)
     app = request.app
     params = request.rel_url.query
+    log.debug(f"GET_Domain query params: {params}")
 
     parent_id = None
     include_links = False
@@ -796,6 +514,7 @@ async def GET_Domain(request):
         # it's in the meta_cache).
         kwargs = {"refresh": True, "bucket": bucket,
                   "include_attrs": include_attrs, "include_links": include_links}
+        log.debug(f"kwargs for getObjectJson: {kwargs}")
 
         obj_json = await getObjectJson(app, obj_id, **kwargs)
 
@@ -840,14 +559,13 @@ async def GET_Domain(request):
 
     # return just the keys as per the REST API
     kwargs = {"verbose": verbose, "bucket": bucket}
-    rsp_json = await get_domain_response(app, domain_json, **kwargs)
+    rsp_json = await getDomainResponse(app, domain_json, **kwargs)
 
     # include domain objects if requested
-    if "getobjs" in params and params["getobjs"] and "root" in domain_json:
+    if params.get("getobjs") and "root" in domain_json:
+
+        log.debug("getting all domain objects")
         root_id = domain_json["root"]
-        include_attrs = False
-        if "include_attrs" in params and params["include_attrs"]:
-            include_attrs = True
         kwargs = {"include_attrs": include_attrs, "bucket": bucket}
         domain_objs = await getDomainObjects(app, root_id, **kwargs)
         if domain_objs:

@@ -30,8 +30,8 @@ from .domain_sn import GET_Datasets, GET_Groups, GET_Datatypes
 from .domain_sn import GET_ACL, GET_ACLs, PUT_ACL
 from .group_sn import GET_Group, POST_Group, DELETE_Group
 from .link_sn import GET_Links, GET_Link, PUT_Link, DELETE_Link
-from .attr_sn import GET_Attributes, GET_Attribute, PUT_Attribute
-from .attr_sn import DELETE_Attribute, GET_AttributeValue, PUT_AttributeValue
+from .attr_sn import GET_Attributes, GET_Attribute, PUT_Attribute, PUT_Attributes, DELETE_Attribute
+from .attr_sn import DELETE_Attributes, GET_AttributeValue, PUT_AttributeValue, POST_Attributes
 from .ctype_sn import GET_Datatype, POST_Datatype, DELETE_Datatype
 from .dset_sn import GET_Dataset, POST_Dataset, DELETE_Dataset
 from .dset_sn import GET_DatasetShape, PUT_DatasetShape, GET_DatasetType
@@ -44,98 +44,134 @@ async def init():
 
     # call app.router.add_get() here to add node-specific routes
     #
+
+    #
+    # domain paths
+    #
     path = "/"
     app.router.add_route("GET", path, GET_Domain)
     app.router.add_route("DELETE", path, DELETE_Domain)
     app.router.add_route("PUT", path, PUT_Domain)
+
     path = "/domains"
     app.router.add_route("GET", path, GET_Domains)
+
+    #
+    # acls paths
+    #
     path = "/acls/{username}"
     app.router.add_route("GET", path, GET_ACL)
     app.router.add_route("PUT", path, PUT_ACL)
+
     path = "/acls"
     app.router.add_route("GET", path, GET_ACLs)
+
+    #
+    # groups paths
+    #
     path = "/groups/"
     app.router.add_route("GET", path, GET_Group)
+
     path = "/groups"
     app.router.add_route("GET", path, GET_Groups)
     app.router.add_route("POST", path, POST_Group)
+
     path = "/groups/{id}"
     app.router.add_route("GET", path, GET_Group)
     app.router.add_route("DELETE", path, DELETE_Group)
+
     path = "/groups/{id}/links"
     app.router.add_route("GET", path, GET_Links)
+
     path = "/groups/{id}/links/{title}"
     app.router.add_route("GET", path, GET_Link)
     app.router.add_route("DELETE", path, DELETE_Link)
     app.router.add_route("PUT", path, PUT_Link)
+
     path = "/groups/{id}/attributes"
     app.router.add_route("GET", path, GET_Attributes)
+    app.router.add_route("POST", path, POST_Attributes)
+    app.router.add_route("PUT", path, PUT_Attributes)
+    app.router.add_route("DELETE", path, DELETE_Attributes)
+
     path = "/groups/{id}/attributes/{name}"
     app.router.add_route("GET", path, GET_Attribute)
     app.router.add_route("DELETE", path, DELETE_Attribute)
     app.router.add_route("PUT", path, PUT_Attribute)
+
     path = "/groups/{id}/attributes/{name}/value"
     app.router.add_route("GET", path, GET_AttributeValue)
     app.router.add_route("PUT", path, PUT_AttributeValue)
-    path = "/groups/{id}/acls/{username}"
-    app.router.add_route("GET", path, GET_ACL)
-    app.router.add_route("PUT", path, PUT_ACL)
-    path = "/groups/{id}/acls"
-    app.router.add_route("GET", path, GET_ACLs)
+
+    #
+    # datatypes paths
+    #
     path = "/datatypes"
     app.router.add_route("GET", path, GET_Datatypes)
     app.router.add_route("POST", path, POST_Datatype)
+
     path = "/datatypes/"
     app.router.add_route("GET", path, GET_Datatype)
+
     path = "/datatypes/{id}"
     app.router.add_route("GET", path, GET_Datatype)
     app.router.add_route("DELETE", path, DELETE_Datatype)
+
     path = "/datatypes/{id}/attributes"
     app.router.add_route("GET", path, GET_Attributes)
+    app.router.add_route("POST", path, POST_Attributes)
+    app.router.add_route("PUT", path, PUT_Attributes)
+    app.router.add_route("DELETE", path, DELETE_Attributes)
+
     path = "/datatypes/{id}/attributes/{name}"
     app.router.add_route("GET", path, GET_Attribute)
     app.router.add_route("DELETE", path, DELETE_Attribute)
     app.router.add_route("PUT", path, PUT_Attribute)
+
     path = "/datatypes/{id}/attributes/{name}/value"
     app.router.add_route("GET", path, GET_AttributeValue)
     app.router.add_route("PUT", path, PUT_AttributeValue)
-    path = "/datatypes/{id}/acls/{username}"
-    app.router.add_route("GET", path, GET_ACL)
-    app.router.add_route("PUT", path, PUT_ACL)
-    path = "/datatypes/{id}/acls"
-    app.router.add_route("GET", path, GET_ACLs)
+
+    #
+    # datasets paths
+    #
     path = "/datasets/{id}"
     app.router.add_route("GET", path, GET_Dataset)
     app.router.add_route("DELETE", path, DELETE_Dataset)
+
     path = "/datasets/"
     app.router.add_route("GET", path, GET_Dataset)
+
     path = "/datasets"
     app.router.add_route("GET", path, GET_Datasets)
     app.router.add_route("POST", path, POST_Dataset)
+
     path = "/datasets/{id}/shape"
     app.router.add_route("GET", path, GET_DatasetShape)
     app.router.add_route("PUT", path, PUT_DatasetShape)
+
     path = "/datasets/{id}/type"
     app.router.add_route("GET", path, GET_DatasetType)
+
     path = "/datasets/{id}/attributes"
     app.router.add_route("GET", path, GET_Attributes)
+    app.router.add_route("POST", path, POST_Attributes)
+    app.router.add_route("PUT", path, PUT_Attributes)
+    app.router.add_route("DELETE", path, DELETE_Attributes)
+
     path = "/datasets/{id}/attributes/{name}"
     app.router.add_route("GET", path, GET_Attribute)
     app.router.add_route("DELETE", path, DELETE_Attribute)
     app.router.add_route("PUT", path, PUT_Attribute)
+
     path = "/datasets/{id}/attributes/{name}/value"
     app.router.add_route("GET", path, GET_AttributeValue)
     app.router.add_route("PUT", path, PUT_AttributeValue)
+
     path = "/datasets/{id}/value"
     app.router.add_route("PUT", path, PUT_Value)
     app.router.add_route("GET", path, GET_Value)
     app.router.add_route("POST", path, POST_Value)
-    path = "/datasets/{id}/acls/{username}"
-    app.router.add_route("GET", path, GET_ACL)
-    app.router.add_route("PUT", path, PUT_ACL)
-    path = "/datasets/{id}/acls"
-    app.router.add_route("GET", path, GET_ACLs)
 
     # Add CORS to all routes
     cors_domain = config.get("cors_domain")

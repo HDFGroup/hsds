@@ -68,9 +68,8 @@ class DomainTest(unittest.TestCase):
         req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers)
         if rsp.status_code != 200:
-            print(
-                "WARNING: Failed to get domain: {}. Is test data setup?".format(domain)
-            )
+            msg = f"WARNING: Failed to get domain: {domain}. Is test data setup?"
+            print(msg)
             return  # abort rest of test
         self.assertEqual(rsp.headers["content-type"], "application/json; charset=utf-8")
         rspJson = json.loads(rsp.text)
@@ -146,7 +145,7 @@ class DomainTest(unittest.TestCase):
         attr_count = 0
         for objid in domain_objs:
             obj_json = domain_objs[objid]
-            self.assertFalse("attributeCount" in obj_json)
+            self.assertTrue("attributeCount" in obj_json)
             self.assertTrue("attributes" in obj_json)
             attributes = obj_json["attributes"]
             for attr_name in attributes:
@@ -198,9 +197,8 @@ class DomainTest(unittest.TestCase):
         req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers)
         if rsp.status_code != 200:
-            print(
-                "WARNING: Failed to get domain: {}. Is test data setup?".format(domain)
-            )
+            msg = f"WARNING: Failed to get domain: {domain}. Is test data setup?"
+            print(msg)
             return  # abort rest of test
         domainJson = json.loads(rsp.text)
         self.assertTrue("root" in domainJson)
@@ -919,9 +917,8 @@ class DomainTest(unittest.TestCase):
 
         rsp = self.session.get(req, headers=headers)
         if rsp.status_code != 200:
-            print(
-                "WARNING: Failed to get domain: {}. Is test data setup?".format(domain)
-            )
+            msg = f"WARNING: Failed to get domain: {domain}. Is test data setup?"
+            print(msg)
             return  # abort rest of test
 
         rspJson = json.loads(rsp.text)

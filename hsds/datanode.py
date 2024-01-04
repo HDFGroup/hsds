@@ -31,8 +31,8 @@ from .domain_dn import GET_Domain, PUT_Domain, DELETE_Domain, PUT_ACL
 from .group_dn import GET_Group, POST_Group, DELETE_Group, PUT_Group
 from .group_dn import POST_Root
 from .link_dn import GET_Links, GET_Link, PUT_Link, DELETE_Link
-from .attr_dn import GET_Attributes, GET_Attribute, PUT_Attribute
-from .attr_dn import DELETE_Attribute
+from .attr_dn import GET_Attributes, POST_Attributes
+from .attr_dn import PUT_Attributes, DELETE_Attributes
 from .ctype_dn import GET_Datatype, POST_Datatype, DELETE_Datatype
 from .dset_dn import GET_Dataset, POST_Dataset, DELETE_Dataset
 from .dset_dn import PUT_DatasetShape
@@ -63,26 +63,24 @@ async def init():
     app.router.add_route("DELETE", "/groups/{id}/links/{title}", DELETE_Link)
     app.router.add_route("PUT", "/groups/{id}/links/{title}", PUT_Link)
     app.router.add_route("GET", "/groups/{id}/attributes", GET_Attributes)
-    app.router.add_route("GET", "/groups/{id}/attributes/{name}", GET_Attribute)
-    app.router.add_route("DELETE", "/groups/{id}/attributes/{name}", DELETE_Attribute)
-    app.router.add_route("PUT", "/groups/{id}/attributes/{name}", PUT_Attribute)
+    app.router.add_route("POST", "/groups/{id}/attributes", POST_Attributes)
+    app.router.add_route("DELETE", "/groups/{id}/attributes", DELETE_Attributes)
+    app.router.add_route("PUT", "/groups/{id}/attributes", PUT_Attributes)
     app.router.add_route("GET", "/datatypes/{id}", GET_Datatype)
     app.router.add_route("DELETE", "/datatypes/{id}", DELETE_Datatype)
     app.router.add_route("POST", "/datatypes", POST_Datatype)
     app.router.add_route("GET", "/datatypes/{id}/attributes", GET_Attributes)
-    app.router.add_route("GET", "/datatypes/{id}/attributes/{name}", GET_Attribute)
-    app.router.add_route(
-        "DELETE", "/datatypes/{id}/attributes/{name}", DELETE_Attribute
-    )
-    app.router.add_route("PUT", "/datatypes/{id}/attributes/{name}", PUT_Attribute)
+    app.router.add_route("POST", "/datatypes/{id}/attributes", POST_Attributes)
+    app.router.add_route("DELETE", "/datatypes/{id}/attributes", DELETE_Attributes)
+    app.router.add_route("PUT", "/datatypes/{id}/attributes", PUT_Attributes)
     app.router.add_route("GET", "/datasets/{id}", GET_Dataset)
     app.router.add_route("DELETE", "/datasets/{id}", DELETE_Dataset)
     app.router.add_route("POST", "/datasets", POST_Dataset)
     app.router.add_route("PUT", "/datasets/{id}/shape", PUT_DatasetShape)
     app.router.add_route("GET", "/datasets/{id}/attributes", GET_Attributes)
-    app.router.add_route("GET", "/datasets/{id}/attributes/{name}", GET_Attribute)
-    app.router.add_route("DELETE", "/datasets/{id}/attributes/{name}", DELETE_Attribute)
-    app.router.add_route("PUT", "/datasets/{id}/attributes/{name}", PUT_Attribute)
+    app.router.add_route("POST", "/datasets/{id}/attributes", POST_Attributes)
+    app.router.add_route("DELETE", "/datasets/{id}/attributes", DELETE_Attributes)
+    app.router.add_route("PUT", "/datasets/{id}/attributes", PUT_Attributes)
     app.router.add_route("PUT", "/chunks/{id}", PUT_Chunk)
     app.router.add_route("GET", "/chunks/{id}", GET_Chunk)
     app.router.add_route("POST", "/chunks/{id}", POST_Chunk)

@@ -81,9 +81,7 @@ class ArrayUtilTest(unittest.TestCase):
         self.assertEqual([(1, 0.1), (2, 0.2), (3, 0.3), (4, 0.4)], out)
         out = toTuple(2, data3d)  # treat input as 2d array of two-field compound types
         self.assertEqual([[(0, 0.0), (1, 0.1)], [(2, 0.2), (3, 0.3)]], out)
-        out = toTuple(
-            1, data3d
-        )  # treat input a 1d array of compound type of compound types
+        out = toTuple(1, data3d)  # treat input a 1d array of compound type of compound types
         self.assertEqual([((0, 0.0), (1, 0.1)), ((2, 0.2), (3, 0.3))], out)
 
     def testGetNumElements(self):
@@ -91,9 +89,7 @@ class ArrayUtilTest(unittest.TestCase):
         nelements = getNumElements(shape)
         self.assertEqual(nelements, 4)
 
-        shape = [
-            10,
-        ]
+        shape = [10,]
         nelements = getNumElements(shape)
         self.assertEqual(nelements, 10)
 
@@ -103,9 +99,7 @@ class ArrayUtilTest(unittest.TestCase):
 
     def testJsonToArray(self):
         dt = np.dtype("i4")
-        shape = [
-            4,
-        ]
+        shape = [4, ]
         data = [0, 2, 4, 6]
         out = jsonToArray(shape, dt, data)
 
@@ -141,6 +135,17 @@ class ArrayUtilTest(unittest.TestCase):
         out = jsonToArray(shape, dt, data)
         e0 = out[0].tolist()
         self.assertEqual(e0, (6, b"six"))
+
+        # test ascii chars >127
+        dt = np.dtype("S26")
+        data = "extended ascii char 241: " + chr(241)
+        out = jsonToArray(shape, dt, data)
+        self.assertEqual(out[0], b'extended ascii char 241: \xc3')
+
+        dt = np.dtype("S12")
+        data = "eight: \u516b"
+        out = jsonToArray(shape, dt, data)
+        self.assertEqual(out[0], b'eight: \xe5\x85\xab')
 
         # VLEN ascii
         dt = special_dtype(vlen=bytes)
@@ -288,6 +293,33 @@ class ArrayUtilTest(unittest.TestCase):
 
         # convert back to array
         arr_copy = bytesToArray(buffer, dt, (3,))
+        self.assertTrue(ndarray_compare(arr, arr_copy))
+
+        # fixed length UTF8 string
+        dt = np.dtype("S10")
+        arr = np.asarray(b'eight: \xe5\x85\xab', dtype=dt)
+        buffer = arrayToBytes(arr)
+
+        # convert back to array
+        arr_copy = bytesToArray(buffer, dt, ())
+        self.assertTrue(ndarray_compare(arr, arr_copy))
+
+        # invalid UTF string
+        dt = np.dtype("S2")
+        arr = np.asarray(b'\xff\xfe', dtype=dt)
+        buffer = arrayToBytes(arr)
+
+        # convert back to array
+        arr_copy = bytesToArray(buffer, dt, ())
+        self.assertTrue(ndarray_compare(arr, arr_copy))
+
+        # invalid UTF string with base64 encoding
+        dt = np.dtype("S2")
+        arr = np.asarray(b'\xff\xfe', dtype=dt)
+        buffer = b'//4='  # this is the base64 encoding of b'\xff\xfe'
+
+        # convert back to array
+        arr_copy = bytesToArray(buffer, dt, (), encoding="base64")
         self.assertTrue(ndarray_compare(arr, arr_copy))
 
         # Compound non-vlen
@@ -455,6 +487,146 @@ class ArrayUtilTest(unittest.TestCase):
         # convert back to array
 
         arr_copy = bytesToArray(buffer, dt, (4,))
+        self.assertTrue(ndarray_compare(arr, arr_copy))
+
+    def testArrToBytesBase64(self):
+        # Simple array
+        dt = np.dtype("<i4")
+        arr = np.asarray((1, 2, 3, 4), dtype=dt)
+        buffer = arrayToBytes(arr, encoding="base64")
+        # should be a bit longer than the byte representation...
+        expected_num_bytes = np.prod(arr.shape) * dt.itemsize
+        self.assertTrue(len(buffer) > expected_num_bytes)
+
+        # convert buffer back to arr
+        arr_copy = bytesToArray(buffer, dt, (4,), encoding="base64")
+        self.assertTrue(np.array_equal(arr, arr_copy))
+
+        # fixed length string
+        dt = np.dtype("S8")
+        arr = np.asarray(("abcdefgh", "ABCDEFGH", "12345678"), dtype=dt)
+        buffer = arrayToBytes(arr, encoding="base64")
+
+        # convert back to array
+        arr_copy = bytesToArray(buffer, dt, (3,), encoding="base64")
+        self.assertTrue(ndarray_compare(arr, arr_copy))
+
+        # Compound non-vlen
+        dt = np.dtype([("x", "f8"), ("y", "i4")])
+        arr = np.zeros((4,), dtype=dt)
+        arr[0] = (3.12, 42)
+        arr[3] = (1.28, 69)
+        buffer = arrayToBytes(arr, encoding="base64")
+
+        # convert back to array
+        arr_copy = bytesToArray(buffer, dt, (4,), encoding="base64")
+        self.assertTrue(ndarray_compare(arr, arr_copy))
+
+        # VLEN of int32's
+        dt = np.dtype("O", metadata={"vlen": np.dtype("int32")})
+        arr = np.zeros((4,), dtype=dt)
+        arr[0] = np.int32([1, ])
+        arr[1] = np.int32([1, 2])
+        arr[2] = 0  # test un-intialized value
+        arr[3] = np.int32([1, 2, 3])
+        buffer = arrayToBytes(arr, encoding="base64")
+
+        # convert back to array
+        arr_copy = bytesToArray(buffer, dt, (4,), encoding="base64")
+        self.assertTrue(ndarray_compare(arr, arr_copy))
+
+        # VLEN of strings
+        dt = np.dtype("O", metadata={"vlen": str})
+        arr = np.zeros((5,), dtype=dt)
+        arr[0] = "one: \u4e00"
+        arr[1] = "two: \u4e8c"
+        arr[2] = "three: \u4e09"
+        arr[3] = "four: \u56db"
+        arr[4] = 0
+        buffer = arrayToBytes(arr, encoding="base64")
+
+        # convert back to array
+        arr_copy = bytesToArray(buffer, dt, (5,), encoding="base64")
+        self.assertTrue(ndarray_compare(arr, arr_copy))
+        # VLEN of bytes
+        dt = np.dtype("O", metadata={"vlen": bytes})
+        arr = np.zeros((5,), dtype=dt)
+        arr[0] = b"Parting"
+        arr[1] = b"is such"
+        arr[2] = b"sweet"
+        arr[3] = b"sorrow"
+        arr[4] = 0
+
+        buffer = arrayToBytes(arr, encoding="base64")
+
+        # convert back to array
+        arr_copy = bytesToArray(buffer, dt, (5,), encoding="base64")
+        self.assertTrue(ndarray_compare(arr, arr_copy))
+
+        #
+        # Compound str vlen
+        #
+        dt_vstr = np.dtype("O", metadata={"vlen": str})
+        dt = np.dtype([("x", "i4"), ("tag", dt_vstr), ("code", "S4")])
+        arr = np.zeros((4,), dtype=dt)
+        arr[0] = (42, "Hello", "X1")
+        arr[3] = (84, "Bye", "XYZ")
+        count = getByteArraySize(arr)
+        buffer = arrayToBytes(arr, encoding="base64")
+
+        # convert back to array
+        arr_copy = bytesToArray(buffer, dt, (4,), encoding="base64")
+        self.assertTrue(ndarray_compare(arr, arr_copy))
+
+        #
+        # Compound int vlen
+        #
+        dt_vint = np.dtype("O", metadata={"vlen": "int32"})
+        dt = np.dtype([("x", "int32"), ("tag", dt_vint)])
+        arr = np.zeros((4,), dtype=dt)
+        arr[0] = (42, np.array((), dtype="int32"))
+        arr[3] = (84, np.array((1, 2, 3), dtype="int32"))
+        count = getByteArraySize(arr)
+        self.assertEqual(count, 44)
+        buffer = arrayToBytes(arr, encoding="base64")
+
+        # convert back to array
+        arr_copy = bytesToArray(buffer, dt, (4,), encoding="base64")
+        self.assertTrue(ndarray_compare(arr, arr_copy))
+
+        #
+        # VLEN utf string with array type
+        #
+        dt_arr_str = np.dtype("(2,)O", metadata={"vlen": str})
+        dt = np.dtype([("x", "i4"), ("tag", dt_arr_str)])
+        arr = np.zeros((4,), dtype=dt)
+        dt_str = np.dtype("O", metadata={"vlen": str})
+        arr[0] = (42, np.asarray(["hi", "bye"], dtype=dt_str))
+        arr[3] = (84, np.asarray(["hi-hi", "bye-bye"], dtype=dt_str))
+        buffer = arrayToBytes(arr, encoding="base64")
+
+        # convert back to array
+        arr_copy = bytesToArray(buffer, dt, (4,), encoding="base64")
+
+        self.assertEqual(arr.dtype, arr_copy.dtype)
+        self.assertEqual(arr.shape, arr_copy.shape)
+        for i in range(4):
+            e = arr[i]
+            e_copy = arr_copy[i]
+            self.assertTrue(np.array_equal(e, e_copy))
+        #
+        # VLEN ascii with array type
+        #
+        dt_arr_str = np.dtype("(2,)O", metadata={"vlen": bytes})
+        dt = np.dtype([("x", "i4"), ("tag", dt_arr_str)])
+        arr = np.zeros((4,), dtype=dt)
+        dt_str = np.dtype("O", metadata={"vlen": bytes})
+        arr[0] = (42, np.asarray([b"hi", b"bye"], dtype=dt_str))
+        arr[3] = (84, np.asarray([b"hi-hi", b"bye-bye"], dtype=dt_str))
+        buffer = arrayToBytes(arr, encoding="base64")
+
+        # convert back to array
+        arr_copy = bytesToArray(buffer, dt, (4,), encoding="base64")
         self.assertTrue(ndarray_compare(arr, arr_copy))
 
     def testArrayCompareInt(self):

@@ -13,6 +13,7 @@ from copy import copy
 import unittest
 import json
 import numpy as np
+import base64
 import helper
 import config
 
@@ -30,6 +31,14 @@ class AttributeTest(unittest.TestCase):
     def tearDown(self):
         if self.session:
             self.session.close()
+
+    def getUUIDByPath(self, domain, h5path):
+        return helper.getUUIDByPath(domain, h5path, session=self.session)
+
+    def getRootUUID(self, domain, username=None, password=None):
+        return helper.getRootUUID(
+            domain, username=username, password=password, session=self.session
+        )
 
         # main
 
@@ -102,7 +111,7 @@ class AttributeTest(unittest.TestCase):
 
             # get all the attributes
             req = self.endpoint + "/groups/" + root_uuid + "/attributes"
-            params = {}
+            params = {"IncludeData": 0}
             if creation_order:
                 params["CreateOrder"] = 1
             rsp = self.session.get(req, params=params, headers=headers)
@@ -125,7 +134,6 @@ class AttributeTest(unittest.TestCase):
                 self.assertTrue("shape" in attrJson)
                 shapeJson = attrJson["shape"]
                 self.assertEqual(shapeJson["class"], "H5S_SCALAR")
-                # self.assertTrue("value" not in attrJson)  # TBD - change api to include value?
                 self.assertTrue("created" in attrJson)
                 self.assertTrue("href" in attrJson)
                 self.assertTrue("value" not in attrJson)
@@ -232,18 +240,16 @@ class AttributeTest(unittest.TestCase):
 
             # do a GET for attribute "attr" (should return 404)
             attr_name = "attr"
-            attr_payload = {"type": "H5T_STD_I32LE", "value": 42}
             req = f"{self.endpoint}/{col_name}/{obj1_id}/attributes/{attr_name}"
 
             rsp = self.session.get(req, headers=headers)
             self.assertEqual(rsp.status_code, 404)  # not found
+            attr_payload = {"type": "H5T_STD_I32LE", "value": 42}
 
             # try adding the attribute as a different user
             user2_name = config.get("user2_name")
             if user2_name:
-                headers = helper.getRequestHeaders(
-                    domain=self.base_domain, username="test_user2"
-                )
+                headers = helper.getRequestHeaders(domain=self.base_domain, username="test_user2")
                 rsp = self.session.put(req, data=json.dumps(attr_payload), headers=headers)
                 self.assertEqual(rsp.status_code, 403)  # forbidden
             else:
@@ -286,6 +292,12 @@ class AttributeTest(unittest.TestCase):
 
             rsp = self.session.put(req, data=json.dumps(attr_payload), headers=headers)
             self.assertEqual(rsp.status_code, 409)  # conflict
+
+            # set the replace param and we should get a 200
+            params = {"replace": 1}
+            data = json.dumps(attr_payload)
+            rsp = self.session.put(req, params=params, data=data, headers=headers)
+            self.assertEqual(rsp.status_code, 200)  # OK
 
             # delete the attribute
             rsp = self.session.delete(req, headers=headers)
@@ -671,6 +683,65 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(type_json["class"], "H5T_STRING")
         self.assertTrue("length" in type_json)
         self.assertEqual(type_json["length"], byte_length)
+        self.assertTrue("strPad" in type_json)
+        self.assertEqual(type_json["strPad"], "H5T_STR_NULLTERM")
+        self.assertTrue("charSet" in type_json)
+        self.assertEqual(type_json["charSet"], "H5T_CSET_UTF8")
+
+    def testPutNonUTF8String(self):
+        # Test PUT value for 1d attribute with string that is not UTF encodable
+        print("testPutFixedUTF8String", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        headers_bin_req = helper.getRequestHeaders(domain=self.base_domain)
+        headers_bin_req["Content-Type"] = "application/octet-stream"
+
+        req = self.endpoint + "/"
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create attr
+        data = b'\xfe\xff'  # invlaid UTF sequence
+
+        num_bytes = len(data)
+        fixed_str_type = {
+            "charSet": "H5T_CSET_UTF8",
+            "class": "H5T_STRING",
+            "length": num_bytes,
+            "strPad": "H5T_STR_NULLTERM",
+        }
+
+        scalar_shape = {"class": "H5S_SCALAR"}
+        body = {"type": fixed_str_type, "shape": scalar_shape}
+        attr_name = "bad_utf_attr"
+        req = self.endpoint + "/groups/" + root_uuid + "/attributes/" + attr_name
+        rsp = self.session.put(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # write binary value for attribute
+        rsp = self.session.put(req + "/value", data=data, headers=headers_bin_req)
+        self.assertEqual(rsp.status_code, 200)
+
+        # read attr
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("encoding" in rspJson)
+        self.assertEqual(rspJson["encoding"], "base64")
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], "/v8=")  # base64 encoded value for b'\xfe\xff'
+        self.assertTrue("type" in rspJson)
+        type_json = rspJson["type"]
+        self.assertTrue("class" in type_json)
+        self.assertEqual(type_json["class"], "H5T_STRING")
+        self.assertTrue("length" in type_json)
+        self.assertEqual(type_json["length"], num_bytes)
         self.assertTrue("strPad" in type_json)
         self.assertEqual(type_json["strPad"], "H5T_STR_NULLTERM")
         self.assertTrue("charSet" in type_json)
@@ -1332,7 +1403,7 @@ class AttributeTest(unittest.TestCase):
 
     def testPutAttributeBinaryValue(self):
         # Test Put Attribute value with binary response
-        print("testGetAttributeBinaryValue", self.base_domain)
+        print("testPutAttributeBinaryValue", self.base_domain)
 
         headers = helper.getRequestHeaders(domain=self.base_domain)
         headers_bin_req = helper.getRequestHeaders(domain=self.base_domain)
@@ -1347,7 +1418,7 @@ class AttributeTest(unittest.TestCase):
         root_uuid = rspJson["root"]
         helper.validateId(root_uuid)
 
-        # create attr without any data
+        # create attr with one-dimensional array
         value = [2, 3, 5, 7, 11, 13]
         extent = len(value)
         body = {"type": "H5T_STD_I32LE", "shape": extent}
@@ -1395,6 +1466,76 @@ class AttributeTest(unittest.TestCase):
         self.assertFalse("shape" in rspJson)
         self.assertEqual(rspJson["value"], value)
 
+    def testPutAttributeWithEncoding(self):
+        # Test Put Attribute with base64 encoding of the value
+        print("testPutAttributeWithEncoding", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+
+        req = self.endpoint + "/"
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # one dimensional list of ints
+        value = [2, 3, 5, 7, 11, 13]
+        extent = len(value)
+
+        # convert to numpy array
+        arr = np.array(value, np.int32)
+        arr_bytes = arr.tobytes()
+        encoded_bytes = base64.b64encode(arr_bytes)   # base64 encode array data
+        encoded_value = encoded_bytes.decode("ascii")  # convert bytes to string
+        body = {"type": "H5T_STD_I32LE", "shape": extent}
+        body["value"] = encoded_value
+        body["encoding"] = "base64"
+        attr_name = "encoded_int_arr"
+        req = self.endpoint + "/groups/" + root_uuid + "/attributes/" + attr_name
+        rsp = self.session.put(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # read attr back
+        req = f"{self.endpoint}/groups/{root_uuid}/attributes/{attr_name}"
+
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        self.assertTrue("type" in rspJson)
+        self.assertTrue("shape" in rspJson)
+        self.assertTrue("encoding" not in rspJson)
+        # self.assertEqual(rspJson["encoding"], "base64")
+        self.assertEqual(rspJson["value"], value)
+        # get the encoded value back
+        params = {"encoding": "base64"}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        self.assertTrue("type" in rspJson)
+        self.assertTrue("shape" in rspJson)
+        self.assertTrue("encoding" in rspJson)
+        self.assertEqual(rspJson["encoding"], "base64")
+        self.assertEqual(rspJson["value"], encoded_value)
+
+        # do a binary read
+        headers_bin_rsp = helper.getRequestHeaders(domain=self.base_domain)
+        headers_bin_rsp["accept"] = "application/octet-stream"
+        req = f"{self.endpoint}/groups/{root_uuid}/attributes/{attr_name}/value"
+
+        rsp = self.session.get(req, headers=headers_bin_rsp)
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(rsp.headers["Content-Type"], "application/octet-stream")
+        data = rsp.content
+        self.assertEqual(len(data), len(arr_bytes))
+        self.assertEqual(data, arr_bytes)
+
     def testNaNAttributeValue(self):
         # Test GET Attribute value with JSON response that contains NaN data
         print("testNaNAttributeValue", self.base_domain)
@@ -1410,9 +1551,7 @@ class AttributeTest(unittest.TestCase):
         helper.validateId(root_uuid)
 
         # create attr
-        value = [
-            np.NaN,
-        ] * 6
+        value = [np.NaN, ] * 6
         data = {"type": "H5T_IEEE_F32LE", "shape": 6, "value": value}
         attr_name = "nan_arr_attr"
         req = self.endpoint + "/groups/" + root_uuid + "/attributes/" + attr_name
@@ -1422,9 +1561,7 @@ class AttributeTest(unittest.TestCase):
         # get all attributes, then by name, and then by value
         for req_suffix in ("", f"/{attr_name}", f"/{attr_name}/value"):
             for ignore_nan in (False, True):
-                req = (
-                    self.endpoint + "/groups/" + root_uuid + "/attributes" + req_suffix
-                )
+                req = f"{self.endpoint}/groups/{root_uuid}/attributes{req_suffix}"
                 params = {}
                 if not req_suffix:
                     # fetch data when getting all attribute
@@ -1432,9 +1569,6 @@ class AttributeTest(unittest.TestCase):
                 if ignore_nan:
                     params["ignore_nan"] = 1
                 rsp = self.session.get(req, headers=headers, params=params)
-                if rsp.status_code == 500 and not ignore_nan:
-                    # nan value can generate json encoiding errors
-                    continue
                 self.assertEqual(rsp.status_code, 200)
                 rspJson = json.loads(rsp.text)
                 self.assertTrue("hrefs" in rspJson)
@@ -1453,6 +1587,601 @@ class AttributeTest(unittest.TestCase):
                         self.assertTrue(rspValue[i] is None)
                     else:
                         self.assertTrue(np.isnan(rspValue[i]))
+
+    def testNonURLEncodableAttributeName(self):
+        print("testURLEncodableAttributeName", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create a subgroup
+        req = self.endpoint + "/groups"
+        rsp = self.session.post(req, headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        grp_id = rspJson["id"]
+        self.assertTrue(helper.validateId(grp_id))
+
+        # link as "grp1"
+        grp_name = "grp1"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + grp_name
+        payload = {"id": grp_id}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # created
+
+        attr_name = "#attr/1#"  # add a slash for extra challenge points
+        req = self.endpoint + "/groups/" + grp_id + "/attributes"  # request without name
+        bad_req = f"{req}/{attr_name}"  # this request will fail because of the hash char
+
+        # create attr
+        value = [i * 2 for i in range(6)]
+        data = {"type": "H5T_IEEE_F32LE", "shape": 6, "value": value}
+        rsp = self.session.put(bad_req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 404)  # regular put doesn't work
+
+        attributes = {attr_name: data}
+        body = {"attributes": attributes}
+
+        rsp = self.session.put(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # this is ok
+
+        # get all attributes and verify the one we created is there
+        expected_type = {'class': 'H5T_FLOAT', 'base': 'H5T_IEEE_F32LE'}
+        expected_shape = {'class': 'H5S_SIMPLE', 'dims': [6]}
+        params = {"IncludeData": 1}
+        rsp = self.session.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("attributes" in rspJson)
+        rsp_attributes = rspJson["attributes"]
+        self.assertEqual(len(rsp_attributes), 1)
+        rsp_attr = rsp_attributes[0]
+        self.assertTrue("name" in rsp_attr)
+        self.assertEqual(rsp_attr["name"], attr_name)
+        self.assertTrue("href" in rsp_attr)
+        self.assertTrue("created" in rsp_attr)
+        self.assertTrue("type" in rsp_attr)
+        self.assertEqual(rsp_attr["type"], expected_type)
+        self.assertTrue("shape" in rsp_attr)
+        self.assertTrue(rsp_attr["shape"], expected_shape)
+        self.assertTrue("value" in rsp_attr)
+        self.assertEqual(rsp_attr["value"], value)
+
+        # try doing a get on this specific attribute
+        rsp = self.session.get(bad_req, headers=headers)
+        self.assertEqual(rsp.status_code, 404)  # can't do a get with the attribute name
+
+        # do a post request with the attribute name
+        attr_names = [attr_name, ]
+        data = {"attr_names": attr_names}
+        rsp = self.session.post(req, data=json.dumps(data), params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("attributes" in rspJson)
+        rsp_attributes = rspJson["attributes"]
+        self.assertEqual(len(rsp_attributes), 1)
+        rsp_attr = rsp_attributes[0]
+
+        self.assertTrue("name" in rsp_attr)
+        self.assertEqual(rsp_attr["name"], attr_name)
+        self.assertTrue("href" in rsp_attr)
+        self.assertTrue("created" in rsp_attr)
+        self.assertTrue("type" in rsp_attr)
+        self.assertEqual(rsp_attr["type"], expected_type)
+        self.assertTrue("shape" in rsp_attr)
+        self.assertTrue(rsp_attr["shape"], expected_shape)
+        self.assertTrue("value" in rsp_attr)
+        self.assertEqual(rsp_attr["value"], value)
+
+        # try deleting the attribute by name
+        rsp = self.session.delete(bad_req, headers=headers)
+        self.assertEqual(rsp.status_code, 404)  # not found
+
+        # send attribute name as an encoded query param
+        attr_names_param = base64.b64encode(attr_name.encode("utf8")).decode("ascii")
+        # specify a separator since our attribute name has the default slash
+        params = {"attr_names": attr_names_param, "encoding": "base64", "separator": "!"}
+        rsp = self.session.delete(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # verify the attribute is gone
+        rsp = self.session.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("attributes" in rspJson)
+        rsp_attributes = rspJson["attributes"]
+        self.assertEqual(len(rsp_attributes), 0)
+
+    def testPostAttributeSingle(self):
+        domain = helper.getTestDomain("tall.h5")
+        print("testGetDomain", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        headers["Origin"] = "https://www.hdfgroup.org"  # test CORS
+        headers_bin_rsp = helper.getRequestHeaders(domain=domain)
+        headers_bin_rsp["accept"] = "application/octet-stream"
+
+        # verify domain exists
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        if rsp.status_code != 200:
+            msg = f"WARNING: Failed to get domain: {domain}. Is test data setup?"
+            print(msg)
+            return  # abort rest of test
+        domainJson = json.loads(rsp.text)
+        root_id = domainJson["root"]
+        helper.validateId(root_id)
+
+        attr_names = ["attr1", "attr2"]
+        expected_types = ["H5T_STD_I8LE", "H5T_STD_I32BE"]
+        expected_values = [[97, 98, 99, 100, 101, 102, 103, 104, 105, 0],
+                           [[0, 1], [2, 3]]]
+
+        data = {"attr_names": attr_names}
+        req = helper.getEndpoint() + "/groups/" + root_id + "/attributes"
+        params = {"IncludeData": 0}
+        rsp = self.session.post(req, data=json.dumps(data), params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("attributes" in rspJson)
+        attributes = rspJson["attributes"]
+        self.assertTrue(isinstance(attributes, list))
+
+        self.assertEqual(len(attributes), len(attr_names))
+        for i in range(len(attr_names)):
+            attrJson = attributes[i]
+            self.assertTrue("name" in attrJson)
+            self.assertEqual(attrJson["name"], attr_names[i])
+            self.assertTrue("type" in attrJson)
+            type_json = attrJson["type"]
+            self.assertEqual(type_json["class"], "H5T_INTEGER")
+            self.assertEqual(type_json["base"], expected_types[i])
+            self.assertTrue("shape" in attrJson)
+            shapeJson = attrJson["shape"]
+            self.assertEqual(shapeJson["class"], "H5S_SIMPLE")
+            self.assertTrue("created" in attrJson)
+            self.assertTrue("href" in attrJson)
+            self.assertTrue("value" not in attrJson)
+
+        # test with returning all attribute values
+        params = {"IncludeData": 1}
+        rsp = self.session.post(req, data=json.dumps(data), params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("attributes" in rspJson)
+        attributes = rspJson["attributes"]
+        self.assertTrue(isinstance(attributes, list))
+
+        self.assertEqual(len(attributes), len(attr_names))
+        for i in range(len(attr_names)):
+            attrJson = attributes[i]
+            self.assertTrue("name" in attrJson)
+            self.assertEqual(attrJson["name"], attr_names[i])
+            self.assertTrue("type" in attrJson)
+            type_json = attrJson["type"]
+            self.assertEqual(type_json["class"], "H5T_INTEGER")
+            self.assertEqual(type_json["base"], expected_types[i])
+            self.assertTrue("shape" in attrJson)
+            shapeJson = attrJson["shape"]
+            self.assertEqual(shapeJson["class"], "H5S_SIMPLE")
+            self.assertTrue("created" in attrJson)
+            self.assertTrue("href" in attrJson)
+            self.assertTrue("value" in attrJson)
+            self.assertEqual(attrJson["value"], expected_values[i])
+
+    def testPostAttributeMultiple(self):
+        """ Get attributes for multiple objs """
+        domain = helper.getTestDomain("tall.h5")
+        print("testGetDomain", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        headers["Origin"] = "https://www.hdfgroup.org"  # test CORS
+        headers_bin_rsp = helper.getRequestHeaders(domain=domain)
+        headers_bin_rsp["accept"] = "application/octet-stream"
+
+        # verify domain exists
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        if rsp.status_code != 200:
+            msg = f"WARNING: Failed to get domain: {domain}. Is test data setup?"
+            print(msg)
+            return  # abort rest of test
+        domainJson = json.loads(rsp.text)
+        root_id = domainJson["root"]
+        helper.validateId(root_id)
+        dset_id = self.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1")
+        helper.validateId(dset_id)
+
+        attr_names = ["attr1", "attr2"]
+        obj_ids = [root_id, dset_id]
+        expected_types_lookup = {}
+        expected_types_lookup[root_id] = ["H5T_STD_I8LE", "H5T_STD_I32BE"]
+        expected_types_lookup[dset_id] = ["H5T_STD_I8LE", "H5T_STD_I8LE"]
+        expected_values_lookup = {}
+        expected_values_lookup[root_id] = [
+            [97, 98, 99, 100, 101, 102, 103, 104, 105, 0],
+            [[0, 1], [2, 3]]]
+        expected_values_lookup[dset_id] = [
+            [49, 115, 116, 32, 97, 116, 116, 114, 105, 98, 117, 116,
+             101, 32, 111, 102, 32, 100, 115, 101, 116, 49, 46, 49,
+             46, 49, 0],
+            [50, 110, 100, 32, 97, 116, 116, 114, 105, 98, 117, 116,
+             101, 32, 111, 102, 32, 100, 115, 101, 116, 49, 46, 49,
+             46, 49, 0]
+        ]
+
+        data = {"attr_names": attr_names, "obj_ids": obj_ids}
+        params = {"IncludeData": 0}
+        req = helper.getEndpoint() + "/groups/" + root_id + "/attributes"
+        rsp = self.session.post(req, data=json.dumps(data), params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("attributes" in rspJson)
+        attributes = rspJson["attributes"]
+        self.assertTrue(isinstance(attributes, dict))
+        self.assertEqual(len(attributes), 2)
+
+        self.assertTrue(root_id in attributes)
+        self.assertTrue(dset_id in attributes)
+
+        for obj_id in attributes.keys():
+            expected_types = expected_types_lookup[obj_id]
+            obj_attributes = attributes[obj_id]
+
+            self.assertEqual(len(obj_attributes), len(attr_names))
+            for i in range(len(attr_names)):
+                attrJson = obj_attributes[i]
+                self.assertTrue("name" in attrJson)
+                self.assertEqual(attrJson["name"], attr_names[i])
+                self.assertTrue("type" in attrJson)
+                type_json = attrJson["type"]
+                self.assertEqual(type_json["class"], "H5T_INTEGER")
+                self.assertEqual(type_json["base"], expected_types[i])
+                self.assertTrue("shape" in attrJson)
+                shapeJson = attrJson["shape"]
+                self.assertEqual(shapeJson["class"], "H5S_SIMPLE")
+                self.assertTrue("created" in attrJson)
+                self.assertTrue("href" in attrJson)
+                self.assertTrue("value" not in attrJson)
+
+        # test with returning attribute values
+        params = {"IncludeData": 1}
+        rsp = self.session.post(req, data=json.dumps(data), params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("attributes" in rspJson)
+        attributes = rspJson["attributes"]
+        self.assertTrue(isinstance(attributes, dict))
+        self.assertEqual(len(attributes), 2)
+
+        self.assertTrue(root_id in attributes)
+        self.assertTrue(dset_id in attributes)
+
+        for obj_id in attributes.keys():
+            expected_types = expected_types_lookup[obj_id]
+            expected_values = expected_values_lookup[obj_id]
+            obj_attributes = attributes[obj_id]
+
+            self.assertEqual(len(obj_attributes), len(attr_names))
+            for i in range(len(attr_names)):
+                attrJson = obj_attributes[i]
+                self.assertTrue("name" in attrJson)
+                self.assertEqual(attrJson["name"], attr_names[i])
+                self.assertTrue("type" in attrJson)
+                type_json = attrJson["type"]
+                self.assertEqual(type_json["class"], "H5T_INTEGER")
+                self.assertEqual(type_json["base"], expected_types[i])
+                self.assertTrue("shape" in attrJson)
+                shapeJson = attrJson["shape"]
+                self.assertEqual(shapeJson["class"], "H5S_SIMPLE")
+                self.assertTrue("created" in attrJson)
+                self.assertTrue("href" in attrJson)
+                self.assertTrue("value" in attrJson)
+                self.assertEqual(attrJson["value"], expected_values[i])
+
+        # test with unique attr names per obj id
+        items = {}
+        items[root_id] = [attr_names[0], attr_names[1]]
+        items[dset_id] = [attr_names[1], ]
+        data = {"obj_ids": items}
+        req = helper.getEndpoint() + "/groups/" + root_id + "/attributes"
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("attributes" in rspJson)
+        attributes = rspJson["attributes"]
+        self.assertTrue(isinstance(attributes, dict))
+        self.assertEqual(len(attributes), 2)
+
+        self.assertTrue(root_id in attributes)
+        self.assertTrue(dset_id in attributes)
+        root_attrs = attributes[root_id]
+        self.assertEqual(len(root_attrs), 2)
+        dset_attrs = attributes[dset_id]
+        self.assertEqual(len(dset_attrs), 1)  # only asked for attr2
+        dset_attr = dset_attrs[0]
+        self.assertEqual(dset_attr["name"], "attr2")
+
+        # try asking for a non-existent attribute
+        items = {}
+        items[root_id] = [attr_names[0], attr_names[1]]
+        items[dset_id] = [attr_names[1], "foobar"]
+        data = {"obj_ids": items}
+        req = helper.getEndpoint() + "/groups/" + root_id + "/attributes"
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 404)
+
+        # test with not providing any attribute names - should return all attributes
+        # for set of obj ids
+        data = {"obj_ids": obj_ids}
+        req = helper.getEndpoint() + "/groups/" + root_id + "/attributes"
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("attributes" in rspJson)
+        attributes = rspJson["attributes"]
+        self.assertEqual(len(attributes), 2)
+        self.assertTrue(root_id in attributes)
+        root_attrs = attributes[root_id]
+        self.assertEqual(len(root_attrs), 2)
+        dset_attrs = attributes[dset_id]
+        self.assertEqual(len(dset_attrs), 2)
+
+    def testPutAttributeMultiple(self):
+        print("testPutAttributeMultiple", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_id = rspJson["root"]
+
+        # create a dataset
+        req = self.endpoint + "/datasets"
+        data = {"type": "H5T_IEEE_F32LE"}
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        dset_id = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_id))
+
+        # link new obj as '/dset'
+        req = self.endpoint + "/groups/" + root_id + "/links/dset1"
+        payload = {"id": dset_id}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # created
+
+        # get obj and verify it has no attributes
+        req = self.endpoint + "/datasets/" + dset_id
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["attributeCount"], 0)  # no attributes
+
+        # create some groups
+        grp_count = 3
+
+        grp_names = [f"group{i+1}" for i in range(grp_count)]
+        grp_ids = []
+
+        for grp_name in grp_names:
+            # create sub_groups
+            req = self.endpoint + "/groups"
+            rsp = self.session.post(req, headers=headers)
+            self.assertEqual(rsp.status_code, 201)
+            rspJson = json.loads(rsp.text)
+            self.assertEqual(rspJson["attributeCount"], 0)
+            grp_id = rspJson["id"]
+            self.assertTrue(helper.validateId(grp_id))
+            grp_ids.append(grp_id)
+
+            # link new obj as '/grp_name'
+            req = self.endpoint + "/groups/" + root_id + "/links/" + grp_name
+            payload = {"id": grp_id}
+            rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+            self.assertEqual(rsp.status_code, 201)  # created
+
+            # get obj and verify it has no attributes
+            req = self.endpoint + "/groups/" + grp_id
+            rsp = self.session.get(req, headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+            self.assertEqual(rspJson["attributeCount"], 0)  # no attributes
+
+        # setup some attributes to write
+        attr_count = 4
+        attributes = {}
+        extent = 10
+        for i in range(attr_count):
+            value = [i * 10 + j for j in range(extent)]
+            data = {"type": "H5T_STD_I32LE", "shape": extent, "value": value}
+            attr_name = f"attr{i+1:04d}"
+            attributes[attr_name] = data
+
+        # write attributes to the dataset
+        data = {"attributes": attributes}
+        req = self.endpoint + "/datasets/" + dset_id + "/attributes"
+        rsp = self.session.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # do a get on the attributes
+        params = {"IncludeData": 1}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("attributes" in rspJson)
+        ret_attrs = rspJson["attributes"]
+        self.assertEqual(len(ret_attrs), attr_count)
+        for i in range(attr_count):
+            attr = ret_attrs[i]
+            self.assertTrue("name" in attr)
+            self.assertEqual(attr["name"], f"attr{i+1:04d}")
+            self.assertTrue("value" in attr)
+            attr_value = attr["value"]
+            self.assertEqual(len(attr_value), extent)
+            self.assertEqual(attr_value, [i * 10 + j for j in range(extent)])
+
+        # try writing again, should get 409
+        rsp = self.session.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 409)
+
+        # write attributes to the three group objects
+        data = {"obj_ids": grp_ids, "attributes": attributes}
+        req = self.endpoint + "/groups/" + root_id + "/attributes"
+        rsp = self.session.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # do a write with different attributes to different groups
+        attributes = {}
+        base_ord = ord('A')
+        for i in range(grp_count):
+            obj_id = grp_ids[i]
+            obj_attrs = {}
+            for j in range(i + 1):
+                value = [i * 10000 + (j + 1) * 100 + k for k in range(extent)]
+                data = {"type": "H5T_STD_I32LE", "shape": extent, "value": value}
+                attr_name = f"attr_{chr(base_ord + j)}"
+                obj_attrs[attr_name] = data
+            attributes[obj_id] = {"attributes": obj_attrs}
+
+        # write attributes to the three group objects
+        # attr_A to obj_id[0], attr_A and attr_B to obj_id[1], etc
+        data = {"obj_ids": attributes}  # no "attributes" key this time
+        req = self.endpoint + "/groups/" + root_id + "/attributes"
+        rsp = self.session.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # do a get attributes on the three group objects to verify
+        for i in range(grp_count):
+            grp_id = grp_ids[i]
+            # do a get on the attributes
+            params = {"IncludeData": 1}
+            req = self.endpoint + "/groups/" + grp_id + "/attributes"
+            rsp = self.session.get(req, params=params, headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+            self.assertTrue("attributes" in rspJson)
+            ret_attrs = rspJson["attributes"]
+            # expect the 4 attributes we wrote in the first post
+            # plus (i+1) in the second post
+            self.assertEqual(len(ret_attrs), attr_count + i + 1)
+            for j in range(len(ret_attrs)):
+                attr = ret_attrs[j]
+                self.assertTrue("name" in attr)
+                if j < attr_count:
+                    # should see attr0001, attr0002, etc.
+                    expected_name = f"attr{j + 1:04d}"
+                    expected_value = [j * 10 + k for k in range(extent)]
+                else:
+                    # should see attr_A, attr_B, etc.
+                    expected_name = f"attr_{chr(base_ord + j - attr_count)}"
+                    min_val = i * 10000 + (j + 1 - attr_count) * 100
+                    expected_value = [min_val + k for k in range(extent)]
+
+                self.assertEqual(attr["name"], expected_name)
+                self.assertTrue("value" in attr)
+                attr_value = attr["value"]
+                self.assertEqual(len(attr_value), extent)
+                self.assertEqual(attr_value, expected_value)
+
+        # try writing again, should get 409
+        req = self.endpoint + "/groups/" + root_id + "/attributes"
+        rsp = self.session.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 409)
+
+    def testDeleteAttributesMultiple(self):
+        print("testDeleteAttributesMultiple", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        attr_count = 10
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create a subgroup
+        req = self.endpoint + "/groups"
+        rsp = self.session.post(req, headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        grp_id = rspJson["id"]
+        self.assertTrue(helper.validateId(grp_id))
+
+        # link as "grp1"
+        grp_name = "grp1"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + grp_name
+        payload = {"id": grp_id}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # created
+
+        attr_names = []
+        # Create attributes
+        for i in range(attr_count):
+            attr_name = f"attr{i:04d}"
+            attr_names.append(attr_name)
+            value = [i]
+            data = {"type": "H5T_IEEE_F32LE", "shape": 1, "value": value}
+            req = self.endpoint + "/groups/" + grp_id + "/attributes/" + attr_name
+            rsp = self.session.put(req, data=json.dumps(data), headers=headers)
+            self.assertEqual(rsp.status_code, 201)  # Created
+
+        # Delete all by parameter
+        separator = '/'
+        params = {"attr_names": separator.join(attr_names)}
+        req = self.endpoint + "/groups/" + grp_id + "/attributes"
+        rsp = self.session.delete(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # Attempt to read deleted attributes
+        for i in range(attr_count):
+            req = self.endpoint + "/groups/" + grp_id + "/attributes/" + attr_names[i]
+            rsp = self.session.get(req, headers=headers)
+            self.assertEqual(rsp.status_code, 404)
+
+        # Create another batch of attributes
+        for i in range(attr_count):
+            value = [i]
+            data = {"type": "H5T_IEEE_F32LE", "shape": 1, "value": value}
+            req = self.endpoint + "/groups/" + grp_id + "/attributes/" + attr_names[i]
+            rsp = self.session.put(req, data=json.dumps(data), headers=headers)
+            self.assertEqual(rsp.status_code, 201)  # Created
+
+        # Delete with custom separator
+        separator = ':'
+        params = {"attr_names": separator.join(attr_names)}
+        params["separator"] = ":"
+        req = self.endpoint + "/groups/" + grp_id + "/attributes"
+        rsp = self.session.delete(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # Attempt to read
+        for i in range(attr_count):
+            req = self.endpoint + "/groups/" + grp_id + "/attributes/" + attr_names[i]
+            rsp = self.session.get(req, headers=headers)
+            self.assertEqual(rsp.status_code, 404)
 
 
 if __name__ == "__main__":
