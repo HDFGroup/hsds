@@ -21,6 +21,7 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict
 from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.web import json_response
 
+from .util.arrayUtil import decodeData
 from .util.idUtil import isValidUuid
 from .util.linkUtil import validateLinkName
 from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
@@ -82,7 +83,7 @@ async def GET_Links(request):
 
     group_json = await get_metadata_obj(app, group_id, bucket=bucket)
 
-    log.info(f"for id: {group_id} got group json: {group_json}")
+    log.debug(f"for id: {group_id} got group json: {group_json}")
     if "links" not in group_json:
         msg.error(f"unexpected group data for id: {group_id}")
         raise HTTPInternalServerError()
@@ -136,25 +137,33 @@ async def GET_Links(request):
     return resp
 
 
-async def GET_Link(request):
-    """HTTP GET method to return JSON for a link"""
+async def POST_Links(request):
+    """HTTP POST method to return JSON for a link a given set of links """
     log.request(request)
     app = request.app
     params = request.rel_url.query
     group_id = get_obj_id(request)
-    log.info(f"GET link: {group_id}")
+    log.info(f"POST_Links: {group_id}")
 
     if not isValidUuid(group_id, obj_class="group"):
         log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
 
-    link_title = request.match_info.get("title")
+    body = await request.json()
+    if "titles" not in body:
+        msg = f"POST_Links expected titles in body but got: {body.keys()}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
-    validateLinkName(link_title)
+    titles = body["titles"]  # list of link names to fetch
+
+    for title in titles:
+        validateLinkName(title)
 
     bucket = None
     if "bucket" in params:
         bucket = params["bucket"]
+
     if not bucket:
         msg = "GET_Links - no bucket param"
         log.warn(msg)
@@ -162,60 +171,75 @@ async def GET_Link(request):
 
     group_json = await get_metadata_obj(app, group_id, bucket=bucket)
     log.info(f"for id: {group_id} got group json: {group_json}")
+
     if "links" not in group_json:
         log.error(f"unexpected group data for id: {group_id}")
         raise HTTPInternalServerError()
 
     links = group_json["links"]
-    if link_title not in links:
-        log.info(f"Link name {link_title} not found in group: {group_id}")
+
+    link_list = []  # links to be returned
+
+    for title in titles:
+        if title not in links:
+            log.info(f"Link name {title} not found in group: {group_id}")
+            raise HTTPNotFound()
+        link_json = links[title]
+        link_list.append(link_json)
+
+    if not link_list:
+        msg = f"POST link - requested {len(titles)} but none were found"
+        log.warn(msg)
         raise HTTPNotFound()
 
-    link_json = links[link_title]
+    if len(link_list) != len(titles):
+        msg = f"POST_links - requested {len(titles)} links but only "
+        msg += f"{len(link_list)} were found"
+        log.warn(msg)
+        raise HTTPNotFound()
 
-    resp = json_response(link_json)
+    rspJson = {"links": link_list}
+    resp = json_response(rspJson)
     log.response(request, resp=resp)
     return resp
 
 
-async def PUT_Link(request):
-    """Handler creating a new link"""
+async def PUT_Links(request):
+    """Handler creating new links """
     log.request(request)
     app = request.app
     params = request.rel_url.query
     group_id = get_obj_id(request)
-    log.info(f"PUT link: {group_id}")
+    log.info(f"PUT links: {group_id}")
+
     if not isValidUuid(group_id, obj_class="group"):
         log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
 
-    link_title = request.match_info.get("title")
-    validateLinkName(link_title)
-
-    log.info(f"link_title: {link_title}")
-
     if not request.has_body:
-        msg = "PUT Link with no body"
+        msg = "PUT_Links with no body"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
     body = await request.json()
 
-    if "class" not in body:
-        msg = "PUT Link with no class key body"
+    if "links" not in body:
+        msg = "PUT_Links with no links key in body"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    link_class = body["class"]
 
-    link_json = {}
-    link_json["class"] = link_class
+    items = body["links"]
 
-    if "id" in body:
-        link_json["id"] = body["id"]
-    if "h5path" in body:
-        link_json["h5path"] = body["h5path"]
-    if "h5domain" in body:
-        link_json["h5domain"] = body["h5domain"]
+    # validate input
+    for title in items:
+        validateLinkName(title)
+        item = items[title]
+
+        if "id" in item:
+            if not isValidUuid(item["id"]):
+                msg = f"invalid uuid for {title}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
 
     if "bucket" in params:
         bucket = params["bucket"]
@@ -225,7 +249,7 @@ async def PUT_Link(request):
         bucket = None
 
     if not bucket:
-        msg = "GET_Links - no bucket param"
+        msg = "PUT_Links - no bucket provided"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
@@ -235,68 +259,129 @@ async def PUT_Link(request):
         raise HTTPInternalServerError()
 
     links = group_json["links"]
-    if link_title in links:
-        msg = f"Link name {link_title} already found in group: {group_id}"
-        log.warn(msg)
-        raise HTTPConflict()
+    dup_titles = []
+    for title in items:
+        if title in links:
+            link_json = items[title]
+            existing_link = links[title]
+            for prop in ("class", "id", "h5path", "h5domain"):
+                if prop in link_json:
+                    if prop not in existing_link:
+                        msg = f"PUT Link - prop {prop} not found in existing "
+                        msg += "link, returning 409"
+                        log.warn(msg)
+                        raise HTTPConflict()
 
-    now = time.time()
-    link_json["created"] = now
+                    if link_json[prop] != existing_link[prop]:
+                        msg = f"PUT Links - prop {prop} value is different, old: "
+                        msg += f"{existing_link[prop]}, new: {link_json[prop]}, "
+                        msg += "returning 409"
+                        log.warn(msg)
+                        raise HTTPConflict()
+            msg = f"Link name {title} already found in group: {group_id}"
+            log.warn(msg)
+            dup_titles.append(title)
 
-    # add the link
-    links[link_title] = link_json
+    for title in dup_titles:
+        del items[title]
 
-    # update the group lastModified
-    group_json["lastModified"] = now
+    if items:
 
-    # write back to S3, save to metadata cache
-    await save_metadata_obj(app, group_id, group_json, bucket=bucket)
+        now = time.time()
 
-    resp_json = {}
+        # add the links
+        for title in items:
+            item = items[title]
+            item["created"] = now
+            links[title] = item
 
-    resp = json_response(resp_json, status=201)
+        # update the group lastModified
+        group_json["lastModified"] = now
+
+        # write back to S3, save to metadata cache
+        await save_metadata_obj(app, group_id, group_json, bucket=bucket)
+
+        status = 201
+    else:
+        # nothing to update
+        status = 200
+
+    # put the status in the JSON response since the http_put function
+    # used the the SN won't return it
+    resp_json = {"status": status}
+
+    resp = json_response(resp_json, status=status)
     log.response(request, resp=resp)
     return resp
 
 
-async def DELETE_Link(request):
+async def DELETE_Links(request):
     """HTTP DELETE method for group links"""
     log.request(request)
     app = request.app
     params = request.rel_url.query
     group_id = get_obj_id(request)
-    log.info(f"DELETE link: {group_id}")
+    log.info(f"DELETE links: {group_id}")
 
     if not isValidUuid(group_id, obj_class="group"):
         msg = f"Unexpected group_id: {group_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    link_title = request.match_info.get("title")
-    validateLinkName(link_title)
+    if "encoding" in params:
+        encoding = params["encoding"]
+        if encoding != "base64":
+            msg = "only base64 encoding is supported"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    else:
+        encoding = None
+
+    if "separator" in params:
+        separator = params["separator"]
+    else:
+        separator = "/"
 
     if "bucket" in params:
         bucket = params["bucket"]
     else:
         bucket = None
+
     if not bucket:
-        msg = "GET_Links - no bucket param"
+        msg = "DELETE_Links - no bucket param"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
+    if "titles" not in params:
+        msg = "expected titles for DELETE links"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    titles_param = params["titles"]
+    if encoding:
+        titles_param = decodeData(titles_param).decode("utf-8")
+
+    titles = titles_param.split(separator)
+
+    log.info(f"DELETE links {titles} in {group_id} bucket: {bucket}")
+
     group_json = await get_metadata_obj(app, group_id, bucket=bucket)
-    # TBD: Possible race condition
+
     if "links" not in group_json:
         log.error(f"unexpected group data for id: {group_id}")
         raise HTTPInternalServerError()
 
     links = group_json["links"]
-    if link_title not in links:
-        msg = f"Link name {link_title} not found in group: {group_id}"
-        log.warn(msg)
-        raise HTTPNotFound()
 
-    del links[link_title]  # remove the link from dictionary
+    for title in titles:
+        if title not in links:
+            msg = f"Link name {title} not found in group: {group_id}"
+            log.warn(msg)
+            raise HTTPNotFound()
+
+    # now delete the links
+    for title in titles:
+        del links[title]  # remove the link from dictionary
 
     # update the group lastModified
     now = time.time()
@@ -305,8 +390,7 @@ async def DELETE_Link(request):
     # write back to S3
     await save_metadata_obj(app, group_id, group_json, bucket=bucket)
 
-    hrefs = []  # TBD
-    resp_json = {"href": hrefs}
+    resp_json = {}
 
     resp = json_response(resp_json)
     log.response(request, resp=resp)

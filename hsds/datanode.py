@@ -30,7 +30,7 @@ from . import hsds_logger as log
 from .domain_dn import GET_Domain, PUT_Domain, DELETE_Domain, PUT_ACL
 from .group_dn import GET_Group, POST_Group, DELETE_Group, PUT_Group
 from .group_dn import POST_Root
-from .link_dn import GET_Links, GET_Link, PUT_Link, DELETE_Link
+from .link_dn import GET_Links, POST_Links, PUT_Links, DELETE_Links
 from .attr_dn import GET_Attributes, POST_Attributes
 from .attr_dn import PUT_Attributes, DELETE_Attributes
 from .ctype_dn import GET_Datatype, POST_Datatype, DELETE_Datatype
@@ -59,9 +59,9 @@ async def init():
     app.router.add_route("PUT", "/groups/{id}", PUT_Group)
     app.router.add_route("POST", "/groups", POST_Group)
     app.router.add_route("GET", "/groups/{id}/links", GET_Links)
-    app.router.add_route("GET", "/groups/{id}/links/{title}", GET_Link)
-    app.router.add_route("DELETE", "/groups/{id}/links/{title}", DELETE_Link)
-    app.router.add_route("PUT", "/groups/{id}/links/{title}", PUT_Link)
+    app.router.add_route("POST", "/groups/{id}/links", POST_Links)
+    app.router.add_route("DELETE", "/groups/{id}/links", DELETE_Links)
+    app.router.add_route("PUT", "/groups/{id}/links", PUT_Links)
     app.router.add_route("GET", "/groups/{id}/attributes", GET_Attributes)
     app.router.add_route("POST", "/groups/{id}/attributes", POST_Attributes)
     app.router.add_route("DELETE", "/groups/{id}/attributes", DELETE_Attributes)

@@ -16,7 +16,7 @@
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
 from json import JSONDecodeError
 
-from .util.httpUtil import http_post, http_put, http_delete, getHref
+from .util.httpUtil import http_post, http_delete, getHref
 from .util.httpUtil import jsonResponse
 from .util.idUtil import isValidUuid, getDataNodeUrl, createObjId
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
@@ -24,7 +24,7 @@ from .util.authUtil import validateUserPassword
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain, getPathForDomain, verifyRoot
 from .servicenode_lib import getDomainJson, getObjectJson, validateAction
-from .servicenode_lib import getObjectIdByPath, getPathForObjectId
+from .servicenode_lib import getObjectIdByPath, getPathForObjectId, putHardLink
 from . import hsds_logger as log
 
 
@@ -223,23 +223,14 @@ async def POST_Group(request):
         group_json["creationProperties"] = creation_props
     log.debug(f"create group, body: {group_json}")
     req = getDataNodeUrl(app, group_id) + "/groups"
-    params = {}
-    if bucket:
-        params["bucket"] = bucket
+    params = {"bucket": bucket}
 
     group_json = await http_post(app, req, data=group_json, params=params)
 
     # create link if requested
     if link_id and link_title:
-        link_json = {}
-        link_json["id"] = group_id
-        link_json["class"] = "H5L_TYPE_HARD"
-        link_req = getDataNodeUrl(app, link_id)
-        link_req += "/groups/" + link_id + "/links/" + link_title
-        log.debug("PUT link - : " + link_req)
-        kwargs = {"data": link_json, "params": params}
-        put_json_rsp = await http_put(app, link_req, **kwargs)
-        log.debug(f"PUT Link resp: {put_json_rsp}")
+        await putHardLink(app, link_id, link_title, tgt_id=group_id, bucket=bucket)
+
     log.debug("returning resp")
     # group creation successful
     resp = await jsonResponse(request, group_json, status=201)

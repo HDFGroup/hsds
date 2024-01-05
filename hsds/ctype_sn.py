@@ -16,7 +16,7 @@
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPGone
 from json import JSONDecodeError
-from .util.httpUtil import http_post, http_put, http_delete, getHref, respJsonAssemble
+from .util.httpUtil import http_post, http_delete, getHref, respJsonAssemble
 from .util.httpUtil import jsonResponse
 from .util.idUtil import isValidUuid, getDataNodeUrl, createObjId
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
@@ -25,7 +25,7 @@ from .util.domainUtil import getDomainFromRequest, getPathForDomain, isValidDoma
 from .util.domainUtil import getBucketForDomain, verifyRoot
 from .util.hdf5dtype import validateTypeItem, getBaseTypeJson
 from .servicenode_lib import getDomainJson, getObjectJson, validateAction
-from .servicenode_lib import getObjectIdByPath, getPathForObjectId
+from .servicenode_lib import getObjectIdByPath, getPathForObjectId, putHardLink
 from . import hsds_logger as log
 
 
@@ -223,22 +223,13 @@ async def POST_Datatype(request):
     ctype_json = {"id": ctype_id, "root": root_id, "type": datatype}
     log.debug(f"create named type, body: {ctype_json}")
     req = getDataNodeUrl(app, ctype_id) + "/datatypes"
-    params = {}
-    if bucket:
-        params["bucket"] = bucket
+    params = {"bucket": bucket}
 
     type_json = await http_post(app, req, data=ctype_json, params=params)
 
     # create link if requested
     if link_id and link_title:
-        link_json = {}
-        link_json["id"] = ctype_id
-        link_json["class"] = "H5L_TYPE_HARD"
-        link_req = getDataNodeUrl(app, link_id)
-        link_req += "/groups/" + link_id + "/links/" + link_title
-        log.debug("PUT link - : " + link_req)
-        put_rsp = await http_put(app, link_req, data=link_json, params=params)
-        log.debug(f"PUT Link resp: {put_rsp}")
+        await putHardLink(app, link_id, link_title, tgt_id=ctype_id, bucket=bucket)
 
     # datatype creation successful
     resp = await jsonResponse(request, type_json, status=201)

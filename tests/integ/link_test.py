@@ -96,7 +96,7 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(rspLink["id"], grp1_id)
         self.assertEqual(rspLink["collection"], "groups")
 
-        # try creating the link again  (be ok = PUT is idempotent)
+        # try creating the link again  (should be ok - PUT is idempotent)
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # OK
 

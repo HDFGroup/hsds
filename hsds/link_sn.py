@@ -13,17 +13,17 @@
 # service node of hsds cluster
 #
 
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPConflict
+from aiohttp.web_exceptions import HTTPBadRequest
 from json import JSONDecodeError
 
-from .util.httpUtil import http_get, http_put, http_delete, getHref
+from .util.httpUtil import http_get, http_delete, getHref
 from .util.httpUtil import jsonResponse
 from .util.idUtil import isValidUuid, getDataNodeUrl, getCollectionForId
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain
 from .util.linkUtil import validateLinkName
-from .servicenode_lib import validateAction, getObjectJson
+from .servicenode_lib import validateAction, getLink, putLink
 from . import config
 from . import hsds_logger as log
 
@@ -155,13 +155,14 @@ async def GET_Link(request):
     await validateAction(app, domain, group_id, username, "read")
 
     req = getDataNodeUrl(app, group_id)
-    req += "/groups/" + group_id + "/links/" + link_title
+    req += "/groups/" + group_id + "/links"
     log.debug("get LINK: " + req)
     params = {}
     if bucket:
         params["bucket"] = bucket
-    link_json = await http_get(app, req, params=params)
-    log.debug("got link_json: " + str(link_json))
+
+    link_json = await getLink(app, group_id, link_title, bucket=bucket)
+
     resp_link = {}
     resp_link["title"] = link_title
     link_class = link_json["class"]
@@ -212,13 +213,9 @@ async def PUT_Link(request):
         msg = "Missing group id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(group_id, obj_class="Group"):
-        msg = f"Invalid group id: {group_id}"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
+
     link_title = request.match_info.get("title")
     log.info(f"PUT Link_title: [{link_title}]")
-    validateLinkName(link_title)
 
     username, pswd = getUserPasswordFromRequest(request)
     # write actions need auth
@@ -236,29 +233,6 @@ async def PUT_Link(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    link_json = {}
-    if "id" in body:
-        if not isValidUuid(body["id"]):
-            msg = "PUT Link with invalid id in body"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        link_json["id"] = body["id"]
-        link_json["class"] = "H5L_TYPE_HARD"
-
-    elif "h5path" in body:
-        link_json["h5path"] = body["h5path"]
-        # could be hard or soft link
-        if "h5domain" in body:
-            link_json["h5domain"] = body["h5domain"]
-            link_json["class"] = "H5L_TYPE_EXTERNAL"
-        else:
-            # soft link
-            link_json["class"] = "H5L_TYPE_SOFT"
-    else:
-        msg = "PUT Link with no id or h5path keys"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
         msg = f"Invalid domain: {domain}"
@@ -270,59 +244,20 @@ async def PUT_Link(request):
 
     await validateAction(app, domain, group_id, username, "create")
 
-    # for hard links, verify that the referenced id exists and is in
-    # this domain
-    if "id" in body:
-        ref_id = body["id"]
-        ref_json = await getObjectJson(app, ref_id, bucket=bucket)
-        group_json = await getObjectJson(app, group_id, bucket=bucket)
-        if ref_json["root"] != group_json["root"]:
-            msg = "Hard link must reference an object in the same domain"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+    # putLink will validate these arguments
+    kwargs = {"bucket": bucket}
+    kwargs["tgt_id"] = body.get("id")
+    kwargs["h5path"] = body.get("h5path")
+    kwargs["h5domain"] = body.get("h5domain")
 
-    # ready to add link now
-    req = getDataNodeUrl(app, group_id)
-    req += "/groups/" + group_id + "/links/" + link_title
-    log.debug("PUT link - getting group: " + req)
-    params = {}
-    if bucket:
-        params["bucket"] = bucket
-    try:
-        put_rsp = await http_put(app, req, data=link_json, params=params)
-        log.debug("PUT Link resp: " + str(put_rsp))
-        dn_status = 201
-    except HTTPConflict:
-        # check to see if this is just a duplicate put of an existing link
-        dn_status = 409
-        log.warn(f"PUT Link: got conflict error for link_json: {link_json}")
-        existing_link = await http_get(app, req, params=params)
-        log.warn(f"PUT Link: fetched existing link: {existing_link}")
-        for prop in ("class", "id", "h5path", "h5domain"):
-            if prop in link_json:
-                if prop not in existing_link:
-                    msg = f"PUT Link - prop {prop} not found in existing "
-                    msg += "link, returning 409"
-                    log.warn(msg)
-                    break
-                if link_json[prop] != existing_link[prop]:
-                    msg = f"PUT Link - prop {prop} value is different, old: "
-                    msg += f"{existing_link[prop]}, new: {link_json[prop]}, "
-                    msg += "returning 409"
-                    log.warn(msg)
-                    break
-        else:
-            log.info("PUT link is identical to existing value returning OK")
-            # return 200 since we didn't actually create a resource
-            dn_status = 200
-        if dn_status == 409:
-            raise  # return 409 to client
+    status = await putLink(app, group_id, link_title, **kwargs)
+
     hrefs = []  # TBD
     req_rsp = {"hrefs": hrefs}
     # link creation successful
     # returns 201 if new link was created, 200 if this is a duplicate
     # of an existing link
-    resp = await jsonResponse(request, req_rsp, status=dn_status)
+    resp = await jsonResponse(request, req_rsp, status=status)
     log.response(request, resp=resp)
     return resp
 
@@ -360,10 +295,10 @@ async def DELETE_Link(request):
     await validateAction(app, domain, group_id, username, "delete")
 
     req = getDataNodeUrl(app, group_id)
-    req += "/groups/" + group_id + "/links/" + link_title
-    params = {}
-    if bucket:
-        params["bucket"] = bucket
+    req += "/groups/" + group_id + "/links"
+
+    params = {"bucket": bucket, "titles": link_title}
+
     rsp_json = await http_delete(app, req, params=params)
 
     resp = await jsonResponse(request, rsp_json)
