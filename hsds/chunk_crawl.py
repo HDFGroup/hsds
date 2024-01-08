@@ -81,9 +81,6 @@ async def write_chunk_hyperslab(
     np_arr: numpy array of data to be written
     """
 
-    if not bucket:
-        bucket = config.get("bucket_name")
-
     msg = f"write_chunk_hyperslab, chunk_id: {chunk_id}, slices: {slices}, "
     msg += f"bucket: {bucket}"
     log.info(msg)
@@ -181,8 +178,6 @@ async def read_chunk_hyperslab(
            entire object)
     bucket: s3 bucket to read from
     """
-    if not bucket:
-        bucket = config.get("bucket_name")
 
     if chunk_map is None:
         log.error("expected chunk_map to be set")
@@ -444,9 +439,6 @@ async def read_point_sel(
     arr: numpy array to store read bytes
     """
 
-    if not bucket:
-        bucket = config.get("bucket_name")
-
     msg = f"read_point_sel, chunk_id: {chunk_id}, bucket: {bucket}"
     log.info(msg)
 
@@ -548,9 +540,6 @@ async def write_point_sel(
       point_list: array of points to write
       point_data: index of arr element to update for a given point
     """
-
-    if not bucket:
-        bucket = config.get("bucket_name")
 
     msg = f"write_point_sel, chunk_id: {chunk_id}, points: {point_list}, "
     msg += f"data: {point_data}"

@@ -342,25 +342,47 @@ async def getDsetJson(app, dset_id,
     return dset_json
 
 
-async def getLink(app, group_id, title, bucket=None):
-    """ Get the link json for the given title """
+async def getLinks(app, group_id, titles=None, bucket=None):
+    """ Get the link jsons for the given titles """
 
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id + "/links"
-    log.debug(f"getLink for {group_id} - title: {title}")
     params = {"bucket": bucket}
+    log.debug(f"getLinks {group_id}")
+    if titles:
+        # do a post request with the given title list
+        log.debug(f"getLinks for {group_id} - {len(titles)} titles")
+        data = {"titles": titles}
+        post_rsp = await http_post(app, req, data=data, params=params)
+        log.debug(f"got link_json: {post_rsp}")
+        if "links" not in post_rsp:
+            log.error("unexpected response from post links")
+            raise HTTPInternalServerError()
+        links = post_rsp["links"]
+    else:
+        # do a get for all links
+        log.debug(f"getLinks, all links for {group_id}")
+        get_rsp = await http_get(app, req, params=params)
+        log.debug(f"got link_json: {get_rsp}")
+        if "links" not in get_rsp:
+            log.error("unexpected response from get links")
+            raise HTTPInternalServerError()
+        links = get_rsp["links"]
 
-    data = {"titles": [title, ]}
-    post_rsp = await http_post(app, req, data=data, params=params)
-    log.debug(f"got link_json: {post_rsp}")
-    if "links" not in post_rsp:
-        log.error("unexpected response from post links")
-        raise HTTPInternalServerError()
-    links = post_rsp["links"]
+    return links
+
+
+async def getLink(app, group_id, title, bucket=None):
+    """ Get the link json for the given title """
+
+    titles = [title, ]
+    links = await getLinks(app, group_id, titles=titles, bucket=bucket)
+
     if len(links) != 1:
         log.error(f"expected 1 link but got: {len(links)}")
         raise HTTPInternalServerError()
     link_json = links[0]
+
     return link_json
 
 
@@ -450,6 +472,26 @@ async def putExternalLink(app, group_id, title, h5path=None, h5domain=None, buck
 
     status = await putLink(app, group_id, title, h5path=h5path, h5domain=h5domain, bucket=bucket)
     return status
+
+
+async def deleteLinks(app, group_id, titles=None, separator="/", bucket=None):
+    """ delete the requested set of attributes from the given object """
+
+    if titles is None or len(titles) == 0:
+        msg = "provide a list of link names for deletion"
+        log.debug(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    node_url = getDataNodeUrl(app, group_id)
+    req = f"{node_url}/groups/{group_id}/links"
+    log.debug(f"deleteLinks: {req}")
+    params = {"separator": separator, "bucket": bucket}
+
+    # stringify the list of link_names
+    titles_param = separator.join(titles)
+    params["titles"] = titles_param
+    log.debug(f"using params: {params}")
+    await http_delete(app, req, params=params)
 
 
 async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, domain=None,

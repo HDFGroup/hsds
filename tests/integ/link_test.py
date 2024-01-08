@@ -448,16 +448,14 @@ class LinkTest(unittest.TestCase):
         req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers)
         if rsp.status_code != 200:
-            print(
-                "WARNING: Failed to get domain: {}. Is test data setup?".format(domain)
-            )
+            print(f"WARNING: Failed to get domain: {domain}. Is test data setup?")
             return  # abort rest of test
 
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
         self.assertTrue(root_uuid.startswith("g-"))
 
-        # get the "/g1" group
+        # get the "/g1/g1.2" group
         g1_2_uuid = helper.getUUIDByPath(domain, "/g1/g1.2", session=self.session)
 
         now = time.time()
@@ -505,9 +503,7 @@ class LinkTest(unittest.TestCase):
 
         self.assertTrue(g1_2_1_uuid is not None)
         self.assertTrue(extlink_file is not None)
-        expected_uuid = helper.getUUIDByPath(
-            domain, "/g1/g1.2/g1.2.1", session=self.session
-        )
+        expected_uuid = helper.getUUIDByPath(domain, "/g1/g1.2/g1.2.1", session=self.session)
         self.assertEqual(expected_uuid, g1_2_1_uuid)
 
         # get link by title
@@ -864,6 +860,197 @@ class LinkTest(unittest.TestCase):
         for k in ("link_creation_order", "rdcc_nbytes"):
             self.assertTrue(k in cprops)
             self.assertEqual(cprops[k], creation_props[k])
+
+    def testPostLinkSingle(self):
+        domain = helper.getTestDomain("tall.h5")
+        print("testPostLinkSingle", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        headers["Origin"] = "https://www.hdfgroup.org"  # test CORS
+
+        # verify domain exists
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        if rsp.status_code != 200:
+            msg = f"WARNING: Failed to get domain: {domain}. Is test data setup?"
+            print(msg)
+            return  # abort rest of test
+
+        domainJson = json.loads(rsp.text)
+        root_id = domainJson["root"]
+        helper.validateId(root_id)
+
+        # get the "/g1/g1.2" group
+        g1_2_uuid = helper.getUUIDByPath(domain, "/g1/g1.2", session=self.session)
+
+        now = time.time()
+
+        # get link "extlink" and "g1.2.1" for /g1/g1.2:
+        titles = ["extlink", "g1.2.1"]
+        payload = {"titles": titles}
+        req = helper.getEndpoint() + "/groups/" + g1_2_uuid + "/links"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("links" in rspJson)
+        links = rspJson["links"]
+        self.assertEqual(len(links), 2)
+        g1_2_1_uuid = None
+        extlink_file = None
+        for link in links:
+            self.assertTrue("class" in link)
+            link_class = link["class"]
+            if link_class == "H5L_TYPE_HARD":
+                for name in (
+                    "created",
+                    "class",
+                    "id",
+                    "title",
+                ):
+                    self.assertTrue(name in link)
+                g1_2_1_uuid = link["id"]
+                self.assertTrue(g1_2_1_uuid.startswith("g-"))
+                self.assertEqual(link["title"], "g1.2.1")
+                self.assertTrue(link["created"] < now - 10)
+            else:
+                self.assertEqual(link_class, "H5L_TYPE_EXTERNAL")
+                for name in ("created", "class", "h5domain", "h5path", "title"):
+                    self.assertTrue(name in link)
+                self.assertEqual(link["title"], "extlink")
+                extlink_file = link["h5domain"]
+                self.assertEqual(extlink_file, "somefile")
+                self.assertEqual(link["h5path"], "somepath")
+                self.assertTrue(link["created"] < now - 10)
+
+        self.assertTrue(g1_2_1_uuid is not None)
+        self.assertTrue(extlink_file is not None)
+        expected_uuid = helper.getUUIDByPath(domain, "/g1/g1.2/g1.2.1", session=self.session)
+        self.assertEqual(expected_uuid, g1_2_1_uuid)
+
+    def testPostLinkMultiple(self):
+        domain = helper.getTestDomain("tall.h5")
+        print("testPostLinkSingle", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        headers["Origin"] = "https://www.hdfgroup.org"  # test CORS
+
+        # verify domain exists
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        if rsp.status_code != 200:
+            msg = f"WARNING: Failed to get domain: {domain}. Is test data setup?"
+            print(msg)
+            return  # abort rest of test
+
+        domainJson = json.loads(rsp.text)
+        root_id = domainJson["root"]
+        helper.validateId(root_id)
+
+        # get the "/g1/g1.2" group
+        h5paths = ["/g1", "/g2", "/g1/g1.1", "/g1/g1.2", "/g2", "/g1/g1.2/g1.2.1"]
+        grp_map = {}
+        g1_id = None
+        g2_id = None
+        for h5path in h5paths:
+            grp_id = helper.getUUIDByPath(domain, h5path, session=self.session)
+            grp_map[grp_id] = h5path
+            if h5path == "/g1":
+                g1_id = grp_id  # save
+            elif h5path == "/g2":
+                g2_id = grp_id
+
+        # get all links for the given set of group ids
+        grp_ids = list(grp_map.keys())
+        payload = {"group_ids": grp_ids}
+        req = helper.getEndpoint() + "/groups/" + root_id + "/links"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("links" in rspJson)
+        obj_links = rspJson["links"]
+        self.assertTrue(len(obj_links), len(grp_ids))
+        for grp_id in obj_links:
+            self.assertTrue(grp_id in grp_map)
+            h5path = grp_map[grp_id]
+            if h5path == "/g1/g1.2/g1.2.1":
+                expected_count = 1
+            else:
+                expected_count = 2  # all the rest have two links
+            links = obj_links[grp_id]
+            self.assertEqual(len(links), expected_count)
+            for link in links:
+                title = link["title"]
+                expected = helper.getLink(domain, grp_id, title)
+                self.assertEqual(link["class"], expected["class"])
+                link_class = link["class"]
+                if link_class == "H5L_TYPE_HARD":
+                    self.assertEqual(link["id"], expected["id"])
+                else:
+                    # soft or external link
+                    self.assertEqual(link["h5path"], expected["h5path"])
+                    if link_class == "H5L_TYPE_EXTERNAL":
+                        self.assertEqual(link["h5domain"], expected["h5domain"])
+
+        # get just the request links for each group
+        link_map = {g1_id: ["g1.1", "g1.2"], g2_id: ["dset2.2", ]}
+        payload = {"group_ids": link_map}
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("links" in rspJson)
+        obj_links = rspJson["links"]
+        self.assertEqual(len(obj_links), 2)
+        self.assertTrue(g1_id in obj_links)
+        g1_links = obj_links[g1_id]
+        self.assertEqual(len(g1_links), 2)
+        for link in g1_links:
+            self.assertTrue("class" in link)
+            self.assertEqual(link["class"], "H5L_TYPE_HARD")
+            self.assertTrue("title" in link)
+            self.assertTrue(link["title"] in ("g1.1", "g1.2"))
+            self.assertTrue("id" in link)
+        g2_links = obj_links[g2_id]
+        self.assertEqual(len(g2_links), 1)  # two links in this group but just asked for dset2.2
+        link = g2_links[0]
+        self.assertEqual(link["class"], "H5L_TYPE_HARD")
+
+        # get all links for the domain by providing the root_id with the follow_links param
+        params = {"follow_links": 1}
+        grp_ids = [root_id, ]
+        payload = {"group_ids": grp_ids}
+        rsp = self.session.post(req, data=json.dumps(payload), params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("links" in rspJson)
+        obj_links = rspJson["links"]
+        self.assertEqual(len(obj_links), 6)
+        expected_group_links = ("g1", "g2", "g1.1", "g1.2", "g1.2.1", )
+        expected_dset_links = ("dset1.2", "dset2.2", "dset1.1.1", "dset1.1.2", "dset2.1", )
+        expected_soft_links = ("slink",)
+        expected_external_links = ("extlink", )
+
+        # listify the returned links
+        links = []
+        for obj_id in obj_links:
+            links.extend(obj_links[obj_id])
+        self.assertEqual(len(links), 11)
+        for link in links:
+            self.assertTrue("title" in link)
+            title = link["title"]
+            self.assertTrue("class" in link)
+            link_class = link["class"]
+            if link_class == "H5L_TYPE_HARD":
+                link_id = link["id"]
+                if link_id.startswith("g-"):
+                    self.assertTrue(title in expected_group_links)
+                elif link_id.startswith("d-"):
+                    self.assertTrue(title in expected_dset_links)
+                else:
+                    self.assertTrue(False)  # unexpected
+            elif link_class == "H5L_TYPE_SOFT":
+                self.assertTrue(title in expected_soft_links)
+            elif link_class == "H5L_TYPE_EXTERNAL":
+                self.assertTrue(title in expected_external_links)
+            else:
+                self.assertTrue(False)  # unexpected
 
 
 if __name__ == "__main__":

@@ -50,6 +50,22 @@ def isIPAddress(s):
     return True
 
 
+def getBucketForDomain(domain):
+    """get the bucket for the domain or None
+    if no bucket is given
+    """
+    if not domain:
+        return None
+    if domain[0] == "/":
+        # no bucket specified
+        return None
+    index = domain.find("/")
+    if index < 0:
+        # invalid domain?
+        return None
+    return domain[:index]
+
+
 def getParentDomain(domain):
     """Get parent domain of given domain.
     E.g. getParentDomain("www.hdfgroup.org") returns "hdfgroup.org"
@@ -261,22 +277,6 @@ def getPathForDomain(domain):
     if index < 1:
         return domain  # no bucket
     return domain[(index):]
-
-
-def getBucketForDomain(domain):
-    """get the bucket for the domain or None
-    if no bucket is given
-    """
-    if not domain:
-        return None
-    if domain[0] == "/":
-        # no bucket specified
-        return None
-    index = domain.find("/")
-    if index < 0:
-        # invalid domain?
-        return None
-    return domain[:index]
 
 
 def verifyRoot(domain_json):

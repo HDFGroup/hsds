@@ -253,3 +253,22 @@ def getHDF5JSON(filename):
     with open(filename) as f:
         hdf5_json = json.load(f)
     return hdf5_json
+
+
+def getLink(domain, grp_id, title):
+    headers = getRequestHeaders(domain=domain)
+    session = getSession()
+    req = getEndpoint() + "/groups/" + grp_id + "/links/" + title
+    rsp = session.get(req, headers=headers)
+    if rsp.status_code in (404, 410):
+        # not found or deleted
+        return None
+    elif rsp.status_code != 200:
+        raise ValueError(f"getLink exception: {rsp.status_code}")
+
+    rspJson = json.loads(rsp.text)
+    if "link" not in rspJson:
+        raise KeyError(f"expected link key in {rspJson}")
+    link_json = rspJson["link"]
+
+    return link_json

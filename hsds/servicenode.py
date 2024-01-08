@@ -29,7 +29,7 @@ from .domain_sn import GET_Domain, PUT_Domain, DELETE_Domain, GET_Domains
 from .domain_sn import GET_Datasets, GET_Groups, GET_Datatypes
 from .domain_sn import GET_ACL, GET_ACLs, PUT_ACL
 from .group_sn import GET_Group, POST_Group, DELETE_Group
-from .link_sn import GET_Links, GET_Link, PUT_Link, DELETE_Link
+from .link_sn import GET_Links, POST_Links, GET_Link, PUT_Link, DELETE_Link, DELETE_Links
 from .attr_sn import GET_Attributes, GET_Attribute, PUT_Attribute, PUT_Attributes, DELETE_Attribute
 from .attr_sn import DELETE_Attributes, GET_AttributeValue, PUT_AttributeValue, POST_Attributes
 from .ctype_sn import GET_Datatype, POST_Datatype, DELETE_Datatype
@@ -82,6 +82,8 @@ async def init():
 
     path = "/groups/{id}/links"
     app.router.add_route("GET", path, GET_Links)
+    app.router.add_route("POST", path, POST_Links)
+    app.router.add_route("DELETE", path, DELETE_Links)
 
     path = "/groups/{id}/links/{title}"
     app.router.add_route("GET", path, GET_Link)

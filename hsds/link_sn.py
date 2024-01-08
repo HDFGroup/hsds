@@ -16,15 +16,16 @@
 from aiohttp.web_exceptions import HTTPBadRequest
 from json import JSONDecodeError
 
-from .util.httpUtil import http_get, http_delete, getHref
+from .util.httpUtil import http_get, getHref
 from .util.httpUtil import jsonResponse
 from .util.idUtil import isValidUuid, getDataNodeUrl, getCollectionForId
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
-from .util.domainUtil import getDomainFromRequest, isValidDomain
+from .util.domainUtil import getDomainFromRequest, isValidDomain, verifyRoot
 from .util.domainUtil import getBucketForDomain
 from .util.linkUtil import validateLinkName
-from .servicenode_lib import validateAction, getLink, putLink
-from . import config
+from .servicenode_lib import getDomainJson, validateAction
+from .servicenode_lib import getLink, putLink, getLinks, deleteLinks
+from .domain_crawl import DomainCrawler
 from . import hsds_logger as log
 
 
@@ -72,8 +73,6 @@ async def GET_Links(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
-    if not bucket:
-        bucket = config.get("bucket_name")
 
     await validateAction(app, domain, group_id, username, "read")
 
@@ -149,8 +148,6 @@ async def GET_Link(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
-    if not bucket:
-        bucket = config.get("bucket_name")
 
     await validateAction(app, domain, group_id, username, "read")
 
@@ -239,11 +236,8 @@ async def PUT_Link(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
-    if not bucket:
-        bucket = config.get("bucket_name")
 
     await validateAction(app, domain, group_id, username, "create")
-
     # putLink will validate these arguments
     kwargs = {"bucket": bucket}
     kwargs["tgt_id"] = body.get("id")
@@ -262,8 +256,206 @@ async def PUT_Link(request):
     return resp
 
 
+async def DELETE_Links(request):
+    """HTTP method to delete multiple link"""
+    log.request(request)
+    app = request.app
+    params = request.rel_url.query
+    group_id = request.match_info.get("id")
+    if not group_id:
+        msg = "Missing group id"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    if not isValidUuid(group_id, obj_class="Group"):
+        msg = f"Invalid group id: {group_id}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    if "titles" not in params:
+        msg = "expected titles params"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    titles_param = params["titles"]
+    if "separator" in params:
+        separator = params["separator"]
+    else:
+        separator = "/"
+    titles = titles_param.split(separator)
+
+    for title in titles:
+        validateLinkName(title)
+
+    username, pswd = getUserPasswordFromRequest(request)
+    await validateUserPassword(app, username, pswd)
+
+    domain = getDomainFromRequest(request)
+    if not isValidDomain(domain):
+        msg = f"domain: {domain}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    bucket = getBucketForDomain(domain)
+
+    await validateAction(app, domain, group_id, username, "delete")
+
+    await deleteLinks(app, group_id, titles=titles, bucket=bucket)
+
+    rsp_json = {}
+    resp = await jsonResponse(request, rsp_json)
+    log.response(request, resp=resp)
+    return resp
+
+
+async def POST_Links(request):
+    """HTTP method to get multiple links """
+    log.request(request)
+    app = request.app
+    params = request.rel_url.query
+    log.info("POST_Links")
+    req_id = request.match_info.get("id")
+
+    if params.get("follow_links"):
+        follow_links = True
+    else:
+        follow_links = False
+
+    if not request.has_body:
+        msg = "POST Links with no body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    try:
+        body = await request.json()
+    except JSONDecodeError:
+        msg = "Unable to load JSON body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    if "titles" in body:
+        titles = body["titles"]
+        if not isinstance(titles, list):
+            msg = f"expected list for titles but got: {type(titles)}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    else:
+        titles = None
+
+    if "group_ids" in body:
+        group_ids = body["group_ids"]
+    else:
+        group_ids = None
+
+    if titles is None and group_ids is None:
+        msg = "expected body to contain one of titles, group_ids keys"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    # construct an item list from titles and group_ids
+    items = {}
+    if group_ids is None:
+        if not req_id:
+            msg = "no object id in request"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        items[req_id] = titles
+    elif isinstance(group_ids, list):
+        if titles is None:
+            msg = "no titles - will return all links for each object"
+            log.debug(msg)
+        for group_id in group_ids:
+            items[group_id] = None
+    elif isinstance(group_ids, dict):
+        if titles is not None:
+            msg = "titles must not be provided if obj_ids is a dict"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        for group_id in group_ids:
+            names_for_id = group_ids[group_id]
+            if not isinstance(names_for_id, list):
+                msg = "expected list of titles"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            items[group_id] = names_for_id
+
+    log.debug(f"POST Links items: {items}")
+
+    # do a check that everything is as it should with the item list
+    for group_id in items:
+        if not isValidUuid(group_id, obj_class="Group"):
+            msg = f"Invalid group id: {group_id}"
+            log.warn(msg)
+
+        titles = items[group_id]
+
+        if titles is None:
+            log.debug(f"getting all links for {group_id}")
+        elif isinstance(titles, list):
+            for title in titles:
+                validateLinkName(title)  # raises HTTPBadRequest if invalid
+        else:
+            msg = f"expected list for titles but got: {type(titles)}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+    username, pswd = getUserPasswordFromRequest(request)
+    if username is None and app["allow_noauth"]:
+        username = "default"
+    else:
+        await validateUserPassword(app, username, pswd)
+
+    domain = getDomainFromRequest(request)
+    if not isValidDomain(domain):
+        msg = f"Invalid domain value: {domain}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    bucket = getBucketForDomain(domain)
+
+    # get domain JSON
+    domain_json = await getDomainJson(app, domain)
+    verifyRoot(domain_json)
+
+    # TBD - verify that the obj_id belongs to the given domain
+    await validateAction(app, domain, req_id, username, "read")
+
+    resp_json = {}
+
+    if len(items) == 0:
+        msg = "no group ids specified for POST Links"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    elif len(items) == 1 and not follow_links:
+        # just make a request to the datanode
+        group_id = list(items.keys())[0]
+        titles = items[group_id]
+        links = await getLinks(app, group_id, titles=titles, bucket=bucket)
+
+        resp_json["links"] = links
+    else:
+        # get multi obj
+        # don't follow links for the groups we visit!
+        crawler_params = {"follow_links": follow_links, "bucket": bucket}
+        # mixin params
+
+        kwargs = {"action": "get_link", "raise_error": True, "params": crawler_params}
+        crawler = DomainCrawler(app, items, **kwargs)
+        # will raise exception on NotFound, etc.
+        await crawler.crawl()
+
+        msg = f"DomainCrawler returned: {len(crawler._obj_dict)} objects"
+        log.info(msg)
+        links = crawler._obj_dict
+
+        log.debug(f"got {len(links)} links")
+        resp_json["links"] = links
+
+    resp = await jsonResponse(request, resp_json)
+    log.response(request, resp=resp)
+    return resp
+
+
 async def DELETE_Link(request):
-    """HTTP method to delete a link"""
+    """HTTP method to delete one or more links """
     log.request(request)
     app = request.app
 
@@ -289,18 +481,12 @@ async def DELETE_Link(request):
         raise HTTPBadRequest(reason=msg)
 
     bucket = getBucketForDomain(domain)
-    if not bucket:
-        bucket = config.get("bucket_name")
 
     await validateAction(app, domain, group_id, username, "delete")
 
-    req = getDataNodeUrl(app, group_id)
-    req += "/groups/" + group_id + "/links"
+    await deleteLinks(app, group_id, titles=[link_title, ], bucket=bucket)
 
-    params = {"bucket": bucket, "titles": link_title}
-
-    rsp_json = await http_delete(app, req, params=params)
-
+    rsp_json = {}
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp

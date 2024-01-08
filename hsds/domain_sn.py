@@ -453,7 +453,7 @@ async def GET_Domain(request):
     bucket = getBucketForDomain(domain)
     log.debug(f"GET_Domain domain: {domain} bucket: {bucket}")
 
-    if not bucket and not config.get("bucket_name"):
+    if not bucket:
         # no bucket defined, raise 400
         msg = "Bucket not provided"
         log.warn(msg)
@@ -1354,10 +1354,6 @@ async def GET_Datasets(request):
         raise HTTPBadRequest(reason=msg)
 
     bucket = getBucketForDomain(domain)
-    if not bucket:
-        bucket = config.get("bucket_name")
-    else:
-        checkBucketAccess(app, bucket)
 
     # verify the domain
     try:
@@ -1448,10 +1444,6 @@ async def GET_Groups(request):
         raise HTTPBadRequest(reason=msg)
 
     bucket = getBucketForDomain(domain)
-    if not bucket:
-        bucket = config.get("bucket_name")
-    else:
-        checkBucketAccess(app, bucket)
 
     # use reload to get authoritative domain json
     try:
@@ -1537,10 +1529,6 @@ async def GET_Datatypes(request):
         raise HTTPBadRequest(reason=msg)
 
     bucket = getBucketForDomain(domain)
-    if not bucket:
-        bucket = config.get("bucket_name")
-    else:
-        checkBucketAccess(app, bucket)
 
     # use reload to get authoritative domain json
     try:

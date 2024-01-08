@@ -18,10 +18,8 @@ import asyncio
 from aiohttp.web_exceptions import HTTPServiceUnavailable, HTTPConflict, HTTPBadRequest
 from aiohttp.web_exceptions import HTTPInternalServerError, HTTPNotFound, HTTPGone
 
-
 from .util.idUtil import getCollectionForId, getDataNodeUrl
-
-from .servicenode_lib import getObjectJson, getAttributes, putAttributes
+from .servicenode_lib import getObjectJson, getAttributes, putAttributes, getLinks
 from . import hsds_logger as log
 
 
@@ -210,6 +208,93 @@ class DomainCrawler:
                     self._obj_dict[link_id] = {}  # placeholder for obj id
                     self._q.put_nowait(link_id)
 
+    async def get_links(self, grp_id, titles=None):
+        """ if titles is set, get all the links in grp_id that
+        have a title in the list.  Otherwise, return all links for the object. """
+        log.debug(f"get_links: {grp_id}, titles; {titles}")
+        collection = getCollectionForId(grp_id)
+        if collection != "groups":
+            log.warn(f"get_links, expected groups id but got: {grp_id}")
+            return
+        kwargs = {}
+        if titles:
+            kwargs["titles"] = titles
+        if self._params.get("bucket"):
+            kwargs["bucket"] = self._params["bucket"]
+
+        if self._params.get("follow_links"):
+            follow_links = True
+        else:
+            follow_links = False
+
+        log.debug(f"follow_links: {follow_links}")
+        log.debug(f"getLinks kwargs: {kwargs}")
+
+        links = None
+        status = 200
+        try:
+            links = await getLinks(self._app, grp_id, **kwargs)
+        except HTTPNotFound:
+            status = 404
+        except HTTPServiceUnavailable:
+            status = 503
+        except HTTPInternalServerError:
+            status = 500
+        except Exception as e:
+            log.error(f"unexpected exception {e}")
+            status = 500
+        log.debug(f"getObjectJson status: {status}")
+
+        if links is None:
+            msg = f"DomainCrawler - get_links for {grp_id} "
+            if status >= 500:
+                msg += f"failed, status: {status}"
+                log.error(msg)
+            else:
+                msg += f"returned status: {status}"
+                log.warn(msg)
+            return
+
+        log.debug(f"DomainCrawler - got links for {grp_id}")
+        log.debug(f"save to obj_dict: {links}")
+
+        self._obj_dict[grp_id] = links  # store the links
+
+        # if follow_links, add any group links to the lookup ids set
+        if follow_links:
+            log.debug(f"follow links for {grp_id}")
+            for link_obj in links:
+                log.debug(f"follow links for: {link_obj}")
+                if 'title' not in link_obj:
+                    log.warn(f"expected to find title in link_json: {link_obj}")
+                    continue
+                title = link_obj["title"]
+                log.debug(f"DomainCrawler - got link: {title}")
+                num_objects = len(self._obj_dict)
+                if self._params.get("max_objects_limit") is not None:
+                    max_objects_limit = self._params["max_objects_limit"]
+                    if num_objects >= max_objects_limit:
+                        msg = "DomainCrawler reached limit of "
+                        msg += f"{max_objects_limit}"
+                        log.info(msg)
+                        break
+                if link_obj["class"] != "H5L_TYPE_HARD":
+                    # just follow hardlinks
+                    log.debug("not hard link,continue")
+                    continue
+                link_id = link_obj["id"]
+                if getCollectionForId(link_id) != "groups":
+                    # only groups can have links
+                    log.debug(f"link id: {link_id} is not for a group, continue")
+                    continue
+                if link_id not in self._obj_dict:
+                    # haven't seen this object yet, get obj json
+                    log.debug(f"DomainCrawler - adding link_id: {link_id} to queue")
+                    self._obj_dict[link_id] = {}  # placeholder for obj id
+                    self._q.put_nowait(link_id)
+                else:
+                    log.debug(f"link: {link_id} already in object dict")
+
     def get_status(self):
         """ return the highest status of any of the returned objects """
         status = None
@@ -304,7 +389,7 @@ class DomainCrawler:
                     log.warn("expected at least one name in attr_names list")
                     return
 
-                log.debug(f"DomainCrawler - got attribute names: {attr_names}")
+                log.debug(f"DomainCrawler - get attribute names: {attr_names}")
             await self.get_attributes(obj_id, attr_names)
         elif self._action == "put_attr":
             log.debug("DomainCrawler - put attributes")
@@ -316,6 +401,25 @@ class DomainCrawler:
             log.debug(f"got {len(attr_items)} attr_items")
 
             await self.put_attributes(obj_id, attr_items)
+        elif self._action == "get_link":
+            log.debug("DomainCrawlwer - get links")
+            if obj_id not in self._objs:
+                link_titles = None  # fetch all links for this object
+            else:
+                link_titles = self._objs[obj_id]
+            if link_titles is None:
+                log.debug(f"fetch all links for {obj_id}")
+            else:
+                if not isinstance(link_titles, list):
+                    log.error("expected list for link titles")
+                    return
+                if len(link_titles) == 0:
+                    log.warn("expected at least one name in link titles list")
+                    return
+
+                log.debug(f"DomainCrawler - get link titles: {link_titles}")
+            await self.get_links(obj_id, link_titles)
+
         else:
             msg = f"DomainCrawler: unexpected action: {self._action}"
             log.error(msg)

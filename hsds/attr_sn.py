@@ -20,7 +20,7 @@ from json import JSONDecodeError
 
 from .util.httpUtil import getHref
 from .util.httpUtil import getAcceptType, jsonResponse
-from .util.idUtil import isValidUuid, getCollectionForId, getRootObjId
+from .util.idUtil import isValidUuid, getRootObjId
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain, verifyRoot
@@ -1106,7 +1106,7 @@ async def PUT_AttributeValue(request):
 
 
 async def POST_Attributes(request):
-    """HTTP method to get multiple attribute values"""
+    """HTTP method to get multiple attributes """
     log.request(request)
     app = request.app
     log.info("POST_Attributes")
@@ -1247,7 +1247,6 @@ async def POST_Attributes(request):
     elif len(items) == 1:
         # just make a request the datanode
         obj_id = list(items.keys())[0]
-        collection = getCollectionForId(obj_id)
         attr_names = items[obj_id]
         kwargs = {"attr_names": attr_names, "bucket": bucket}
         if not include_data:
@@ -1258,12 +1257,6 @@ async def POST_Attributes(request):
             kwargs["encoding"] = encoding
 
         attributes = await getAttributes(app, obj_id, **kwargs)
-
-        # mixin hrefs
-        for attribute in attributes:
-            attr_name = attribute["name"]
-            attr_href = f"/{collection}/{obj_id}/attributes/{attr_name}"
-            attribute["href"] = getHref(request, attr_href)
 
         resp_json["attributes"] = attributes
     else:
@@ -1288,30 +1281,15 @@ async def POST_Attributes(request):
         msg = f"DomainCrawler returned: {len(crawler._obj_dict)} objects"
         log.info(msg)
         attributes = crawler._obj_dict
-        # mixin hrefs
+        # log attributes returned for each obj_id
         for obj_id in attributes:
             obj_attributes = attributes[obj_id]
             msg = f"POST_Attributes, obj_id {obj_id} "
             msg += f"returned {len(obj_attributes)}"
             log.debug(msg)
 
-            collection = getCollectionForId(obj_id)
-            for attribute in obj_attributes:
-                log.debug(f"attribute: {attribute}")
-                attr_name = attribute["name"]
-                attr_href = f"/{collection}/{obj_id}/attributes/{attr_name}"
-                attribute["href"] = getHref(request, attr_href)
         log.debug(f"got {len(attributes)} attributes")
         resp_json["attributes"] = attributes
-
-    hrefs = []
-    collection = getCollectionForId(req_id)
-    obj_uri = "/" + collection + "/" + req_id
-    href = getHref(request, obj_uri + "/attributes")
-    hrefs.append({"rel": "self", "href": href})
-    hrefs.append({"rel": "home", "href": getHref(request, "/")})
-    hrefs.append({"rel": "owner", "href": getHref(request, obj_uri)})
-    resp_json["hrefs"] = hrefs
 
     resp = await jsonResponse(request, resp_json, ignore_nan=ignore_nan)
     log.response(request, resp=resp)

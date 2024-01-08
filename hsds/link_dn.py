@@ -21,7 +21,6 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict
 from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.web import json_response
 
-from .util.arrayUtil import decodeData
 from .util.idUtil import isValidUuid
 from .util.linkUtil import validateLinkName
 from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
@@ -185,7 +184,44 @@ async def POST_Links(request):
             log.info(f"Link name {title} not found in group: {group_id}")
             raise HTTPNotFound()
         link_json = links[title]
-        link_list.append(link_json)
+        item = {}
+        if "class" not in link_json:
+            log.warn(f"expected to find class key for link: {title}")
+            continue
+        link_class = link_json["class"]
+        item["class"] = link_class
+        if "created" not in link_json:
+            log.warn(f"expected to find created time for link: {title}")
+            link_created = 0
+        else:
+            link_created = link_json["created"]
+        item["created"] = link_created
+        if link_class == "H5L_TYPE_HARD":
+            if "id" not in link_json:
+                log.warn(f"expected to id for hard linK: {title}")
+                continue
+            item["id"] = link_json["id"]
+        elif link_class == "H5L_TYPE_SOFT":
+            if "h5path" not in link_json:
+                log.warn(f"expected to find h5path for soft link: {title}")
+                continue
+            item["h5path"] = link_json["h5path"]
+        elif link_class == "H5L_TYPE_EXTERNAL":
+            if "h5path" not in link_json:
+                log.warn(f"expected to find h5path for external link: {title}")
+                continue
+            item["h5path"] = link_json["h5path"]
+            if "h5domain" not in link_json:
+                log.warn(f"expted to find h5domain for external link: {title}")
+                continue
+            item["h5domain"] = link_json["h5domain"]
+        else:
+            log.warn(f"unexpected to link class {link_class} for link: {title}")
+            continue
+
+        item["title"] = title
+
+        link_list.append(item)
 
     if not link_list:
         msg = f"POST link - requested {len(titles)} but none were found"
@@ -328,15 +364,6 @@ async def DELETE_Links(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    if "encoding" in params:
-        encoding = params["encoding"]
-        if encoding != "base64":
-            msg = "only base64 encoding is supported"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-    else:
-        encoding = None
-
     if "separator" in params:
         separator = params["separator"]
     else:
@@ -358,8 +385,6 @@ async def DELETE_Links(request):
         raise HTTPBadRequest(reason=msg)
 
     titles_param = params["titles"]
-    if encoding:
-        titles_param = decodeData(titles_param).decode("utf-8")
 
     titles = titles_param.split(separator)
 

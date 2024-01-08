@@ -1671,7 +1671,6 @@ class AttributeTest(unittest.TestCase):
 
         self.assertTrue("name" in rsp_attr)
         self.assertEqual(rsp_attr["name"], attr_name)
-        self.assertTrue("href" in rsp_attr)
         self.assertTrue("created" in rsp_attr)
         self.assertTrue("type" in rsp_attr)
         self.assertEqual(rsp_attr["type"], expected_type)
@@ -1684,10 +1683,8 @@ class AttributeTest(unittest.TestCase):
         rsp = self.session.delete(bad_req, headers=headers)
         self.assertEqual(rsp.status_code, 404)  # not found
 
-        # send attribute name as an encoded query param
-        attr_names_param = base64.b64encode(attr_name.encode("utf8")).decode("ascii")
         # specify a separator since our attribute name has the default slash
-        params = {"attr_names": attr_names_param, "encoding": "base64", "separator": "!"}
+        params = {"attr_names": attr_names, "separator": "!"}
         rsp = self.session.delete(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
@@ -1702,7 +1699,7 @@ class AttributeTest(unittest.TestCase):
 
     def testPostAttributeSingle(self):
         domain = helper.getTestDomain("tall.h5")
-        print("testGetDomain", domain)
+        print("testPostAttributeSingle", domain)
         headers = helper.getRequestHeaders(domain=domain)
         headers["Origin"] = "https://www.hdfgroup.org"  # test CORS
         headers_bin_rsp = helper.getRequestHeaders(domain=domain)
@@ -1731,7 +1728,6 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
 
         rspJson = json.loads(rsp.text)
-        self.assertTrue("hrefs" in rspJson)
         self.assertTrue("attributes" in rspJson)
         attributes = rspJson["attributes"]
         self.assertTrue(isinstance(attributes, list))
@@ -1749,7 +1745,6 @@ class AttributeTest(unittest.TestCase):
             shapeJson = attrJson["shape"]
             self.assertEqual(shapeJson["class"], "H5S_SIMPLE")
             self.assertTrue("created" in attrJson)
-            self.assertTrue("href" in attrJson)
             self.assertTrue("value" not in attrJson)
 
         # test with returning all attribute values
@@ -1758,7 +1753,6 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
 
         rspJson = json.loads(rsp.text)
-        self.assertTrue("hrefs" in rspJson)
         self.assertTrue("attributes" in rspJson)
         attributes = rspJson["attributes"]
         self.assertTrue(isinstance(attributes, list))
@@ -1776,14 +1770,13 @@ class AttributeTest(unittest.TestCase):
             shapeJson = attrJson["shape"]
             self.assertEqual(shapeJson["class"], "H5S_SIMPLE")
             self.assertTrue("created" in attrJson)
-            self.assertTrue("href" in attrJson)
             self.assertTrue("value" in attrJson)
             self.assertEqual(attrJson["value"], expected_values[i])
 
     def testPostAttributeMultiple(self):
         """ Get attributes for multiple objs """
         domain = helper.getTestDomain("tall.h5")
-        print("testGetDomain", domain)
+        print("testPostAttributeMultiple", domain)
         headers = helper.getRequestHeaders(domain=domain)
         headers["Origin"] = "https://www.hdfgroup.org"  # test CORS
         headers_bin_rsp = helper.getRequestHeaders(domain=domain)
@@ -1827,7 +1820,6 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
 
         rspJson = json.loads(rsp.text)
-        self.assertTrue("hrefs" in rspJson)
         self.assertTrue("attributes" in rspJson)
         attributes = rspJson["attributes"]
         self.assertTrue(isinstance(attributes, dict))
@@ -1853,7 +1845,6 @@ class AttributeTest(unittest.TestCase):
                 shapeJson = attrJson["shape"]
                 self.assertEqual(shapeJson["class"], "H5S_SIMPLE")
                 self.assertTrue("created" in attrJson)
-                self.assertTrue("href" in attrJson)
                 self.assertTrue("value" not in attrJson)
 
         # test with returning attribute values
@@ -1862,7 +1853,6 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
 
         rspJson = json.loads(rsp.text)
-        self.assertTrue("hrefs" in rspJson)
         self.assertTrue("attributes" in rspJson)
         attributes = rspJson["attributes"]
         self.assertTrue(isinstance(attributes, dict))
@@ -1889,7 +1879,6 @@ class AttributeTest(unittest.TestCase):
                 shapeJson = attrJson["shape"]
                 self.assertEqual(shapeJson["class"], "H5S_SIMPLE")
                 self.assertTrue("created" in attrJson)
-                self.assertTrue("href" in attrJson)
                 self.assertTrue("value" in attrJson)
                 self.assertEqual(attrJson["value"], expected_values[i])
 
@@ -1903,7 +1892,6 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
 
         rspJson = json.loads(rsp.text)
-        self.assertTrue("hrefs" in rspJson)
         self.assertTrue("attributes" in rspJson)
         attributes = rspJson["attributes"]
         self.assertTrue(isinstance(attributes, dict))
@@ -1934,7 +1922,6 @@ class AttributeTest(unittest.TestCase):
         rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        self.assertTrue("hrefs" in rspJson)
         self.assertTrue("attributes" in rspJson)
         attributes = rspJson["attributes"]
         self.assertEqual(len(attributes), 2)
