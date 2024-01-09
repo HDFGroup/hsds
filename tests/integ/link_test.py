@@ -1024,7 +1024,7 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(len(obj_links), 6)
         expected_group_links = ("g1", "g2", "g1.1", "g1.2", "g1.2.1", )
         expected_dset_links = ("dset1.2", "dset2.2", "dset1.1.1", "dset1.1.2", "dset2.1", )
-        expected_soft_links = ("slink",)
+        expected_soft_links = ("slink", )
         expected_external_links = ("extlink", )
 
         # listify the returned links

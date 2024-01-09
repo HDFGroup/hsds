@@ -257,7 +257,7 @@ async def PUT_Link(request):
 
 
 async def DELETE_Links(request):
-    """HTTP method to delete multiple link"""
+    """HTTP method to delete multiple links """
     log.request(request)
     app = request.app
     params = request.rel_url.query
@@ -432,10 +432,9 @@ async def POST_Links(request):
 
         resp_json["links"] = links
     else:
-        # get multi obj
-        # don't follow links for the groups we visit!
+        # Use DomainCrawler to fetch links from multiple object.
+        # set the follow_links and bucket params
         crawler_params = {"follow_links": follow_links, "bucket": bucket}
-        # mixin params
 
         kwargs = {"action": "get_link", "raise_error": True, "params": crawler_params}
         crawler = DomainCrawler(app, items, **kwargs)

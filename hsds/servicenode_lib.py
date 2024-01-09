@@ -452,30 +452,30 @@ async def putLink(app, group_id, title, tgt_id=None, h5path=None, h5domain=None,
 
 async def putHardLink(app, group_id, title, tgt_id=None, bucket=None):
     """ create a new hard link.  Return 201 if this is a new link,
-      or 201 if it's a duplicate of an existing link """
+      or 200 if it's a duplicate of an existing link """
 
     status = await putLink(app, group_id, title, tgt_id=tgt_id, bucket=bucket)
     return status
 
 
 async def putSoftLink(app, group_id, title, h5path=None, bucket=None):
-    """ create a new hard link.  Return 201 if this is a new link,
-      or 201 if it's a duplicate of an existing link """
+    """ create a new soft link.  Return 201 if this is a new link,
+      or 200 if it's a duplicate of an existing link """
 
     status = await putLink(app, group_id, title, h5path=h5path, bucket=bucket)
     return status
 
 
 async def putExternalLink(app, group_id, title, h5path=None, h5domain=None, bucket=None):
-    """ create a new hard link.  Return 201 if this is a new link,
-      or 201 if it's a duplicate of an existing link """
+    """ create a new external link.  Return 201 if this is a new link,
+      or 200 if it's a duplicate of an existing link """
 
     status = await putLink(app, group_id, title, h5path=h5path, h5domain=h5domain, bucket=bucket)
     return status
 
 
 async def deleteLinks(app, group_id, titles=None, separator="/", bucket=None):
-    """ delete the requested set of attributes from the given object """
+    """ delete the requested set of links from the given object """
 
     if titles is None or len(titles) == 0:
         msg = "provide a list of link names for deletion"

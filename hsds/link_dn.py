@@ -137,7 +137,7 @@ async def GET_Links(request):
 
 
 async def POST_Links(request):
-    """HTTP POST method to return JSON for a link a given set of links """
+    """HTTP POST method to return JSON for a link or a given set of links """
     log.request(request)
     app = request.app
     params = request.rel_url.query
@@ -164,7 +164,7 @@ async def POST_Links(request):
         bucket = params["bucket"]
 
     if not bucket:
-        msg = "GET_Links - no bucket param"
+        msg = "POST_Links - no bucket param"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
@@ -224,7 +224,7 @@ async def POST_Links(request):
         link_list.append(item)
 
     if not link_list:
-        msg = f"POST link - requested {len(titles)} but none were found"
+        msg = f"POST_links - requested {len(titles)} but none were found"
         log.warn(msg)
         raise HTTPNotFound()
 
