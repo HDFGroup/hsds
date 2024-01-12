@@ -15,11 +15,11 @@
 import time
 from bisect import bisect_left
 
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPConflict, HTTPNotFound
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPConflict, HTTPNotFound, HTTPGone
 from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.web import json_response
 
-from .util.attrUtil import validateAttributeName
+from .util.attrUtil import validateAttributeName, isEqualAttr
 from .util.hdf5dtype import getItemSize, createDataType
 from .util.dsetUtil import getShapeDims
 from .util.arrayUtil import arrayToBytes, jsonToArray, decodeData
@@ -270,21 +270,31 @@ async def POST_Attributes(request):
     if encoding:
         kwargs["encoding"] = encoding
 
+    missing_names = set()
+
     for attr_name in titles:
         if attr_name not in attr_dict:
+            missing_names.add(attr_name)
             continue
         des_attr = _getAttribute(attr_name, obj_json, **kwargs)
         attr_list.append(des_attr)
 
     resp_json = {"attributes": attr_list}
-    if not attr_list:
-        msg = f"POST attributes - requested {len(titles)} but none were found"
-        log.warn(msg)
-        raise HTTPNotFound()
-    if len(attr_list) != len(titles):
+
+    if missing_names:
         msg = f"POST attributes - requested {len(titles)} attributes but only "
         msg += f"{len(attr_list)} were found"
         log.warn(msg)
+        # one or more attributes not found, check to see if any
+        # had been previously deleted
+        deleted_attrs = app["deleted_attrs"]
+        if obj_id in deleted_attrs:
+            attr_delete_set = deleted_attrs[obj_id]
+            for attr_name in missing_names:
+                if attr_name in attr_delete_set:
+                    log.info(f"attribute: {attr_name} was previously deleted, returning 410")
+                    raise HTTPGone()
+        log.info("one or mores attributes not found, returning 404")
         raise HTTPNotFound()
     log.debug(f"POST attributes returning: {resp_json}")
     resp = json_response(resp_json)
@@ -392,18 +402,28 @@ async def PUT_Attributes(request):
 
     attributes = obj_json["attributes"]
 
-    # check for conflicts, also set timestamp
     create_time = time.time()
-    new_attribute = False  # set this if we have any new attributes
+    # check for conflicts
+    new_attributes = set()  # attribute names that are new or replacements
     for attr_name in items:
         attribute = items[attr_name]
         if attr_name in attributes:
             log.debug(f"attribute {attr_name} exists")
-            if replace:
+            old_item = attributes[attr_name]
+            try:
+                is_dup = isEqualAttr(attribute, old_item)
+            except TypeError:
+                log.error(f"isEqualAttr TypeError - new: {attribute} old: {old_item}")
+                raise HTTPInternalServerError()
+            if is_dup:
+                log.debug(f"duplicate attribute: {attr_name}")
+                continue
+            elif replace:
                 # don't change the create timestamp
                 log.debug(f"attribute {attr_name} exists, but will be updated")
                 old_item = attributes[attr_name]
                 attribute["created"] = old_item["created"]
+                new_attributes.add(attr_name)
             else:
                 # Attribute already exists, return a 409
                 msg = f"Attempt to overwrite attribute: {attr_name} "
@@ -414,18 +434,30 @@ async def PUT_Attributes(request):
             # set the timestamp
             log.debug(f"new attribute {attr_name}")
             attribute["created"] = create_time
-            new_attribute = True
+            new_attributes.add(attr_name)
 
-    # ok - all set, create the attributes
-    for attr_name in items:
+    # if any of the attribute names was previously deleted,
+    # remove from the deleted set
+    deleted_attrs = app["deleted_attrs"]
+    if obj_id in deleted_attrs:
+        attr_delete_set = deleted_attrs[obj_id]
+    else:
+        attr_delete_set = set()
+
+    # ok - all set, add the attributes
+    for attr_name in new_attributes:
         log.debug(f"adding attribute {attr_name}")
         attr_json = items[attr_name]
         attributes[attr_name] = attr_json
+        if attr_name in attr_delete_set:
+            attr_delete_set.remove(attr_name)
 
-    # write back to S3, save to metadata cache
-    await save_metadata_obj(app, obj_id, obj_json, bucket=bucket)
-
-    if new_attribute:
+    if new_attributes:
+        # update the obj lastModified
+        now = time.time()
+        obj_json["lastModified"] = now
+        # write back to S3, save to metadata cache
+        await save_metadata_obj(app, obj_id, obj_json, bucket=bucket)
         status = 201
     else:
         status = 200
@@ -490,15 +522,35 @@ async def DELETE_Attributes(request):
     # return a list of attributes based on sorted dictionary keys
     attributes = obj_json["attributes"]
 
+    # add attribute names to deleted set, so we can return a 410 if they
+    # are requested in the future
+    deleted_attrs = app["deleted_attrs"]
+    if obj_id in deleted_attrs:
+        attr_delete_set = deleted_attrs[obj_id]
+    else:
+        attr_delete_set = set()
+        deleted_attrs[obj_id] = attr_delete_set
+
+    save_obj = False  # set to True if anything is actually modified
     for attr_name in attr_names:
+        if attr_name in attr_delete_set:
+            log.warn(f"attribute {attr_name} already deleted")
+            continue
+
         if attr_name not in attributes:
-            msg = f"Attribute  {attr_name} not found in objid: {obj_id}"
+            msg = f"Attribute  {attr_name} not found in obj id: {obj_id}"
             log.warn(msg)
             raise HTTPNotFound()
 
         del attributes[attr_name]
+        attr_delete_set.add(attr_name)
+        save_obj = True
 
-    await save_metadata_obj(app, obj_id, obj_json, bucket=bucket)
+    if save_obj:
+        # update the object lastModified
+        now = time.time()
+        obj_json["lastModified"] = now
+        await save_metadata_obj(app, obj_id, obj_json, bucket=bucket)
 
     resp_json = {}
     resp = json_response(resp_json)

@@ -245,6 +245,7 @@ class AttributeTest(unittest.TestCase):
             rsp = self.session.get(req, headers=headers)
             self.assertEqual(rsp.status_code, 404)  # not found
             attr_payload = {"type": "H5T_STD_I32LE", "value": 42}
+            attr_payload2 = {"type": "H5T_STD_I32LE", "value": 84}
 
             # try adding the attribute as a different user
             user2_name = config.get("user2_name")
@@ -265,6 +266,14 @@ class AttributeTest(unittest.TestCase):
             headers = helper.getRequestHeaders(domain=self.base_domain)
             rsp = self.session.put(req, data=json.dumps(attr_payload), headers=headers)
             self.assertEqual(rsp.status_code, 201)  # created
+
+            # try resending
+            rsp = self.session.put(req, data=json.dumps(attr_payload), headers=headers)
+            self.assertEqual(rsp.status_code, 200)  # ok
+
+            # try with a different value
+            rsp = self.session.put(req, data=json.dumps(attr_payload2), headers=headers)
+            self.assertEqual(rsp.status_code, 409)  # conflict
 
             # read the attribute we just created
             rsp = self.session.get(req, headers=headers)
@@ -287,11 +296,11 @@ class AttributeTest(unittest.TestCase):
             rspJson = json.loads(rsp.text)
             self.assertEqual(rspJson["attributeCount"], 1)  # one attribute
 
-            # try creating the attribute again - should return 409
+            # try creating the attribute again - should return 200
             req = f"{self.endpoint}/{col_name}/{obj1_id}/attributes/{attr_name}"
 
             rsp = self.session.put(req, data=json.dumps(attr_payload), headers=headers)
-            self.assertEqual(rsp.status_code, 409)  # conflict
+            self.assertEqual(rsp.status_code, 200)  # OK
 
             # set the replace param and we should get a 200
             params = {"replace": 1}
@@ -326,6 +335,10 @@ class AttributeTest(unittest.TestCase):
         req = self.endpoint + "/groups/" + root_uuid + "/attributes/" + attr_name
         rsp = self.session.put(req, headers=headers, data=json.dumps(attr_payload))
         self.assertEqual(rsp.status_code, 201)  # created
+
+        # retry
+        rsp = self.session.put(req, headers=headers, data=json.dumps(attr_payload))
+        self.assertEqual(rsp.status_code, 200)  # OK
 
         # read back the attribute
         rsp = self.session.get(req, headers=headers)
@@ -411,6 +424,10 @@ class AttributeTest(unittest.TestCase):
         rsp = self.session.put(req, headers=headers, data=json.dumps(attr_payload))
         self.assertEqual(rsp.status_code, 201)  # created
 
+        # try re-sending the put.  Should return 200
+        rsp = self.session.put(req, headers=headers, data=json.dumps(attr_payload))
+        self.assertEqual(rsp.status_code, 200)
+
         # read back the attribute
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)  # OK
@@ -464,6 +481,10 @@ class AttributeTest(unittest.TestCase):
         req = self.endpoint + "/groups/" + root_uuid + "/attributes/" + attr_name
         rsp = self.session.put(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
+
+        # try re-sending the put.  Should return 200
+        rsp = self.session.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
 
         # read attr
         rsp = self.session.get(req, headers=headers)
@@ -2027,9 +2048,9 @@ class AttributeTest(unittest.TestCase):
             self.assertEqual(len(attr_value), extent)
             self.assertEqual(attr_value, [i * 10 + j for j in range(extent)])
 
-        # try writing again, should get 409
+        # try writing again, should get 200
         rsp = self.session.put(req, data=json.dumps(data), headers=headers)
-        self.assertEqual(rsp.status_code, 409)
+        self.assertEqual(rsp.status_code, 200)
 
         # write attributes to the three group objects
         data = {"obj_ids": grp_ids, "attributes": attributes}
@@ -2090,10 +2111,10 @@ class AttributeTest(unittest.TestCase):
                 self.assertEqual(len(attr_value), extent)
                 self.assertEqual(attr_value, expected_value)
 
-        # try writing again, should get 409
+        # try writing again, should get 200
         req = self.endpoint + "/groups/" + root_id + "/attributes"
         rsp = self.session.put(req, data=json.dumps(data), headers=headers)
-        self.assertEqual(rsp.status_code, 409)
+        self.assertEqual(rsp.status_code, 200)
 
     def testDeleteAttributesMultiple(self):
         print("testDeleteAttributesMultiple", self.base_domain)
@@ -2146,7 +2167,7 @@ class AttributeTest(unittest.TestCase):
         for i in range(attr_count):
             req = self.endpoint + "/groups/" + grp_id + "/attributes/" + attr_names[i]
             rsp = self.session.get(req, headers=headers)
-            self.assertEqual(rsp.status_code, 404)
+            self.assertEqual(rsp.status_code, 410)
 
         # Create another batch of attributes
         for i in range(attr_count):
@@ -2168,7 +2189,7 @@ class AttributeTest(unittest.TestCase):
         for i in range(attr_count):
             req = self.endpoint + "/groups/" + grp_id + "/attributes/" + attr_names[i]
             rsp = self.session.get(req, headers=headers)
-            self.assertEqual(rsp.status_code, 404)
+            self.assertEqual(rsp.status_code, 410)
 
 
 if __name__ == "__main__":

@@ -24,7 +24,7 @@ from .util.authUtil import getAclKeys
 from .util.arrayUtil import encodeData
 from .util.idUtil import getDataNodeUrl, getCollectionForId
 from .util.idUtil import isSchema2Id, getS3Key, isValidUuid
-from .util.linkUtil import h5Join, validateLinkName
+from .util.linkUtil import h5Join, validateLinkName, getLinkClass
 from .util.storUtil import getStorJSONObj, isStorObj
 from .util.authUtil import aclCheck
 from .util.httpUtil import http_get, http_put, http_post, http_delete
@@ -390,7 +390,10 @@ async def putLink(app, group_id, title, tgt_id=None, h5path=None, h5domain=None,
     """ create a new link.  Return 201 if this is a new link,
     or 200 if it's a duplicate of an existing link. """
 
-    validateLinkName(title)
+    try:
+        validateLinkName(title)
+    except ValueError:
+        raise HTTPBadRequest(reason="invalid link name")
 
     if h5path and tgt_id:
         msg = "putLink - provide tgt_id or h5path, but not both"
@@ -398,27 +401,17 @@ async def putLink(app, group_id, title, tgt_id=None, h5path=None, h5domain=None,
         raise HTTPBadRequest(reason=msg)
 
     link_json = {}
-
     if tgt_id:
-        if not isValidUuid(tgt_id):
-            msg = f"putLink with invalid id: {tgt_id}"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
         link_json["id"] = tgt_id
-        link_class = "H5L_TYPE_HARD"
-    elif h5path:
+    if h5path:
         link_json["h5path"] = h5path
-        # could be hard or soft link
-        if h5domain:
-            link_json["h5domain"] = h5domain
-            link_class = "H5L_TYPE_EXTERNAL"
-        else:
-            # soft link
-            link_class = "H5L_TYPE_SOFT"
-    else:
-        msg = "PUT Link with no id or h5path keys"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
+    if h5domain:
+        link_json["h5domain"] = h5domain
+
+    try:
+        link_class = getLinkClass(link_json)
+    except ValueError:
+        raise HTTPBadRequest(reason="invalid link")
 
     link_json["class"] = link_class
 
@@ -471,6 +464,54 @@ async def putExternalLink(app, group_id, title, h5path=None, h5domain=None, buck
       or 200 if it's a duplicate of an existing link """
 
     status = await putLink(app, group_id, title, h5path=h5path, h5domain=h5domain, bucket=bucket)
+    return status
+
+
+async def putLinks(app, group_id, items, bucket=None):
+    """ create a new links.  Return 201 if any item is a new link,
+    or 200 if it's a duplicate of an existing link. """
+
+    isValidUuid(group_id, obj_class="group")
+    group_json = None
+
+    # validate input
+    for title in items:
+        try:
+            validateLinkName(title)
+            item = items[title]
+            link_class = getLinkClass(item)
+        except ValueError:
+            # invalid link
+            raise HTTPBadRequest(reason="invalid link")
+
+        if link_class == "H5L_TYPE_HARD":
+            tgt_id = item["id"]
+            isValidUuid(tgt_id)
+            # for hard links, verify that the referenced id exists and is in
+            # this domain
+            ref_json = await getObjectJson(app, tgt_id, bucket=bucket)
+            if not group_json:
+                # just need to fetch this once
+                group_json = await getObjectJson(app, group_id, bucket=bucket)
+            if ref_json["root"] != group_json["root"]:
+                msg = "Hard link must reference an object in the same domain"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+
+    # ready to add links now
+    req = getDataNodeUrl(app, group_id)
+    req += "/groups/" + group_id + "/links"
+    log.debug(f"PUT links - PUT request: {req}")
+    params = {"bucket": bucket}
+
+    data = {"links": items}
+
+    put_rsp = await http_put(app, req, data=data, params=params)
+    log.debug(f"PUT Link resp: {put_rsp}")
+    if "status" in put_rsp:
+        status = put_rsp["status"]
+    else:
+        status = 201
     return status
 
 

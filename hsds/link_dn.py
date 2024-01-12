@@ -17,12 +17,12 @@ import time
 from copy import copy
 from bisect import bisect_left
 
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPGone, HTTPConflict
 from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.web import json_response
 
 from .util.idUtil import isValidUuid
-from .util.linkUtil import validateLinkName
+from .util.linkUtil import validateLinkName, getLinkClass, isEqualLink
 from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
 from . import hsds_logger as log
 
@@ -179,10 +179,12 @@ async def POST_Links(request):
 
     link_list = []  # links to be returned
 
+    missing_names = set()
     for title in titles:
         if title not in links:
+            missing_names.add(title)
             log.info(f"Link name {title} not found in group: {group_id}")
-            raise HTTPNotFound()
+            continue
         link_json = links[title]
         item = {}
         if "class" not in link_json:
@@ -223,15 +225,20 @@ async def POST_Links(request):
 
         link_list.append(item)
 
-    if not link_list:
-        msg = f"POST_links - requested {len(titles)} but none were found"
-        log.warn(msg)
-        raise HTTPNotFound()
-
-    if len(link_list) != len(titles):
+    if missing_names:
         msg = f"POST_links - requested {len(titles)} links but only "
         msg += f"{len(link_list)} were found"
         log.warn(msg)
+        # one or more links not found, check to see if any
+        # had been previously deleted
+        deleted_links = app["deleted_links"]
+        if group_id in deleted_links:
+            link_delete_set = deleted_links[group_id]
+            for link_name in missing_names:
+                if link_name in link_delete_set:
+                    log.info(f"link: {link_name} was previously deleted, returning 410")
+                    raise HTTPGone()
+        log.info("one or more links not found, returning 404")
         raise HTTPNotFound()
 
     rspJson = {"links": link_list}
@@ -270,12 +277,12 @@ async def PUT_Links(request):
     for title in items:
         validateLinkName(title)
         item = items[title]
-
-        if "id" in item:
-            if not isValidUuid(item["id"]):
-                msg = f"invalid uuid for {title}"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
+        try:
+            link_class = getLinkClass(item)
+        except ValueError:
+            raise HTTPBadRequest(reason="invalid link")
+        if "class" not in item:
+            item["class"] = link_class
 
     if "bucket" in params:
         bucket = params["bucket"]
@@ -295,44 +302,48 @@ async def PUT_Links(request):
         raise HTTPInternalServerError()
 
     links = group_json["links"]
-    dup_titles = []
+    new_links = set()
     for title in items:
         if title in links:
             link_json = items[title]
             existing_link = links[title]
-            for prop in ("class", "id", "h5path", "h5domain"):
-                if prop in link_json:
-                    if prop not in existing_link:
-                        msg = f"PUT Link - prop {prop} not found in existing "
-                        msg += "link, returning 409"
-                        log.warn(msg)
-                        raise HTTPConflict()
+            try:
+                is_dup = isEqualLink(link_json, existing_link)
+            except TypeError:
+                log.error(f"isEqualLink TypeError - new: {link_json}, old: {existing_link}")
+                raise HTTPInternalServerError()
 
-                    if link_json[prop] != existing_link[prop]:
-                        msg = f"PUT Links - prop {prop} value is different, old: "
-                        msg += f"{existing_link[prop]}, new: {link_json[prop]}, "
-                        msg += "returning 409"
-                        log.warn(msg)
-                        raise HTTPConflict()
-            msg = f"Link name {title} already found in group: {group_id}"
-            log.warn(msg)
-            dup_titles.append(title)
+            if is_dup:
+                # TBD: replace param for links?
+                continue  # dup
+            else:
+                msg = f"link {title} already exists, returning 409"
+                log.warn(msg)
+                raise HTTPConflict()
+        else:
+            new_links.add(title)
 
-    for title in dup_titles:
-        del items[title]
+    # if any of the attribute names was previously deleted,
+    # remove from the deleted set
+    deleted_links = app["deleted_links"]
+    if group_id in deleted_links:
+        link_delete_set = deleted_links[group_id]
+    else:
+        link_delete_set = set()
 
-    if items:
+    create_time = time.time()
+    for title in new_links:
+        item = items[title]
+        item["created"] = create_time
+        links[title] = item
+        log.debug(f"added link {title}: {item}")
+        if title in link_delete_set:
+            link_delete_set.remove(title)
 
-        now = time.time()
-
-        # add the links
-        for title in items:
-            item = items[title]
-            item["created"] = now
-            links[title] = item
-
+    if new_links:
         # update the group lastModified
-        group_json["lastModified"] = now
+        group_json["lastModified"] = create_time
+        log.debug(f"tbd: group_json: {group_json}")
 
         # write back to S3, save to metadata cache
         await save_metadata_obj(app, group_id, group_json, bucket=bucket)
@@ -343,7 +354,7 @@ async def PUT_Links(request):
         status = 200
 
     # put the status in the JSON response since the http_put function
-    # used the the SN won't return it
+    # used by the the SN won't return it
     resp_json = {"status": status}
 
     resp = json_response(resp_json, status=status)
@@ -398,22 +409,36 @@ async def DELETE_Links(request):
 
     links = group_json["links"]
 
+    # add link titles to deleted set, so we can return a 410 if they
+    # are requested in the future
+    deleted_links = app["deleted_links"]
+    if group_id in deleted_links:
+        link_delete_set = deleted_links[group_id]
+    else:
+        link_delete_set = set()
+        deleted_links[group_id] = link_delete_set
+
+    save_obj = False  # set to True if anything actually updated
     for title in titles:
         if title not in links:
+            if title in link_delete_set:
+                log.warn(f"Link name {title} has already been deleted")
+                continue
             msg = f"Link name {title} not found in group: {group_id}"
             log.warn(msg)
             raise HTTPNotFound()
 
-    # now delete the links
-    for title in titles:
         del links[title]  # remove the link from dictionary
+        link_delete_set.add(title)
+        save_obj = True
 
-    # update the group lastModified
-    now = time.time()
-    group_json["lastModified"] = now
+    if save_obj:
+        # update the group lastModified
+        now = time.time()
+        group_json["lastModified"] = now
 
-    # write back to S3
-    await save_metadata_obj(app, group_id, group_json, bucket=bucket)
+        # write back to S3
+        await save_metadata_obj(app, group_id, group_json, bucket=bucket)
 
     resp_json = {}
 

@@ -23,6 +23,7 @@ class LinkTest(unittest.TestCase):
         super(LinkTest, self).__init__(*args, **kwargs)
         self.base_domain = helper.getTestDomainName(self.__class__.__name__)
         helper.setupDomain(self.base_domain, folder=True)
+        self.endpoint = helper.getEndpoint()
 
     def setUp(self):
         self.session = helper.getSession()
@@ -861,6 +862,97 @@ class LinkTest(unittest.TestCase):
             self.assertTrue(k in cprops)
             self.assertEqual(cprops[k], creation_props[k])
 
+    def testNonURLEncodableLinkName(self):
+        domain = self.base_domain + "/testNonURLEncodableLinkName.h5"
+        print("testNonURLEncodableLinkName", domain)
+        helper.setupDomain(domain)
+
+        headers = helper.getRequestHeaders(domain=domain)
+        req = self.endpoint + "/"
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create a subgroup
+        req = self.endpoint + "/groups"
+        rsp = self.session.post(req, headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        grp_id = rspJson["id"]
+        self.assertTrue(helper.validateId(grp_id))
+
+        # link as "grp1"
+        grp_name = "grp1"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + grp_name
+        payload = {"id": grp_id}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # created
+
+        link_name = "#link1#"
+        data = {"h5path": "somewhere"}
+        req = self.endpoint + "/groups/" + grp_id + "/links"  # request without name
+        bad_req = f"{req}/{link_name}"  # this request will fail because of the hash char
+
+        # create link
+        rsp = self.session.put(bad_req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 404)  # regular put doesn't work
+
+        links = {link_name: data}
+        body = {"links": links}
+
+        rsp = self.session.put(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # this is ok
+
+        # get all links and verify the one we created is there
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("links" in rspJson)
+        rsp_links = rspJson["links"]
+        self.assertEqual(len(rsp_links), 1)
+        rsp_link = rsp_links[0]
+        self.assertTrue("title" in rsp_link)
+        self.assertEqual(rsp_link["title"], link_name)
+
+        # try doing a get on this specific link
+        rsp = self.session.get(bad_req, headers=headers)
+        self.assertEqual(rsp.status_code, 404)  # can't do a get with the link name
+
+        # do a post request with the link name
+        link_names = [link_name, ]
+        data = {"titles": link_names}
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("links" in rspJson)
+        rsp_links = rspJson["links"]
+        self.assertEqual(len(rsp_links), 1)
+        rsp_links = rsp_links[0]
+
+        self.assertTrue("title" in rsp_link)
+        self.assertEqual(rsp_link["title"], link_name)
+
+        # try deleting the link by name
+        rsp = self.session.delete(bad_req, headers=headers)
+        self.assertEqual(rsp.status_code, 404)  # not found
+
+        # send link name as a query param
+        params = {"titles": link_names}
+        rsp = self.session.delete(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # verify the link is gone
+        rsp = self.session.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("links" in rspJson)
+        rsp_links = rspJson["links"]
+        self.assertEqual(len(rsp_links), 0)
+
     def testPostLinkSingle(self):
         domain = helper.getTestDomain("tall.h5")
         print("testPostLinkSingle", domain)
@@ -1051,6 +1143,273 @@ class LinkTest(unittest.TestCase):
                 self.assertTrue(title in expected_external_links)
             else:
                 self.assertTrue(False)  # unexpected
+
+    def testPutLinkMultiple(self):
+        domain = self.base_domain + "/testPutLinkMultiple.h5"
+        helper.setupDomain(domain)
+        print("testPutLinkMultiple", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        req = self.endpoint + "/"
+
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_id = rspJson["root"]
+
+        # create a group
+        req = self.endpoint + "/groups"
+        rsp = self.session.post(req, headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        grpA_id = rspJson["id"]
+        self.assertTrue(helper.validateId(grpA_id))
+
+        # link new obj as '/grpA'
+        req = self.endpoint + "/groups/" + root_id + "/links/grpA"
+        payload = {"id": grpA_id}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # created
+
+        # create some groups under grp1
+        grp_count = 3
+
+        grp_names = [f"grp{(i+1):04d}" for i in range(grp_count)]
+        grp_ids = []
+
+        for grp_name in grp_names:
+            # create sub_groups
+            req = self.endpoint + "/groups"
+            rsp = self.session.post(req, headers=headers)
+            self.assertEqual(rsp.status_code, 201)
+            rspJson = json.loads(rsp.text)
+            grp_id = rspJson["id"]
+            self.assertTrue(helper.validateId(grp_id))
+            grp_ids.append(grp_id)
+
+        # create some links
+        links = {}
+        for i in range(grp_count):
+            title = grp_names[i]
+            links[title] = {"id": grp_ids[i]}
+
+        # add a soft and external link as well
+        links["softlink"] = {"h5path": "a_path"}
+        links["extlink"] = {"h5path": "another_path", "h5domain": "/a_domain"}
+        link_count = len(links)
+
+        # write links to the grpA
+        data = {"links": links}
+        req = self.endpoint + "/groups/" + grpA_id + "/links"
+        rsp = self.session.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # do a get on the links
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("links" in rspJson)
+        ret_links = rspJson["links"]
+        self.assertEqual(len(ret_links), link_count)
+        for link in ret_links:
+            self.assertTrue("title" in link)
+            title = link["title"]
+            self.assertTrue("class" in link)
+            link_class = link["class"]
+            if link_class == "H5L_TYPE_HARD":
+                self.assertTrue("id" in link)
+                self.assertTrue(link["id"] in grp_ids)
+                self.assertTrue(title in grp_names)
+            elif link_class == "H5L_TYPE_SOFT":
+                self.assertTrue("h5path" in link)
+                h5path = link["h5path"]
+                self.assertEqual(h5path, "a_path")
+            elif link_class == "H5L_TYPE_EXTERNAL":
+                self.assertTrue("h5path" in link)
+                h5path = link["h5path"]
+                self.assertEqual(h5path, "another_path")
+                self.assertTrue("h5domain" in link)
+                h5domain = link["h5domain"]
+                self.assertEqual(h5domain, "/a_domain")
+            else:
+                self.assertTrue(False)  # unexpected
+
+        # try writing again, should get 200 (no new links)
+        rsp = self.session.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # write some links to three group objects
+        links = {}
+        links["hardlink_multicast"] = {"id": root_id}
+        links["softlink_multicast"] = {"h5path": "multi_path"}
+        links["extlink_multicast"] = {"h5path": "multi_path", "h5domain": "/another_domain"}
+        link_count = len(links)
+        data = {"links": links, "grp_ids": grp_ids}
+        req = self.endpoint + "/groups/" + root_id + "/links"
+        rsp = self.session.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # check that the links got created
+        for grp_id in grp_ids:
+            req = self.endpoint + "/groups/" + grp_id + "/links"
+            rsp = self.session.get(req, headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+            self.assertTrue("links" in rspJson)
+            ret_links = rspJson["links"]
+            self.assertEqual(len(ret_links), 3)
+            for ret_link in ret_links:
+                self.assertTrue("class" in ret_link)
+                link_class = ret_link["class"]
+                if link_class == "H5L_TYPE_HARD":
+                    self.assertTrue("id" in ret_link)
+                    self.assertEqual(ret_link["id"], root_id)
+                elif link_class == "H5L_TYPE_SOFT":
+                    self.assertTrue("h5path" in ret_link)
+                    self.assertEqual(ret_link["h5path"], "multi_path")
+                elif link_class == "H5L_TYPE_EXTERNAL":
+                    self.assertTrue("h5path" in ret_link)
+                    self.assertEqual(ret_link["h5path"], "multi_path")
+                    self.assertTrue("h5domain" in ret_link)
+                    self.assertEqual(ret_link["h5domain"], "/another_domain")
+                else:
+                    self.assertTrue(False)  # unexpected
+
+        # write different links to three group objects
+        link_data = {}
+        for i in range(grp_count):
+            grp_id = grp_ids[i]
+            links = {}
+            links[f"hardlink_{i}"] = {"id": root_id}
+            links[f"softlink_{i}"] = {"h5path": f"multi_path_{i}"}
+            ext_link = {"h5path": f"multi_path_{i}", "h5domain": f"/another_domain/{i}"}
+            links[f"extlink_{i}"] = ext_link
+            link_data[grp_id] = {"links": links}
+
+        data = {"grp_ids": link_data}
+        req = self.endpoint + "/groups/" + root_id + "/links"
+        rsp = self.session.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # check that the new links got created
+        for i in range(grp_count):
+            grp_id = grp_ids[i]
+            titles = [f"hardlink_{i}", f"softlink_{i}", f"extlink_{i}", ]
+            data = {"titles": titles}
+            # do a post to just return the links we are interested in
+            req = self.endpoint + "/groups/" + grp_id + "/links"
+            rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+            self.assertTrue("links" in rspJson)
+            ret_links = rspJson["links"]
+            self.assertEqual(len(ret_links), len(titles))
+            for j in range(len(titles)):
+                ret_link = ret_links[j]
+                self.assertTrue("class" in ret_link)
+                link_class = ret_link["class"]
+                self.assertTrue("title" in ret_link)
+                link_title = ret_link["title"]
+                if link_class == "H5L_TYPE_HARD":
+                    self.assertEqual(link_title, f"hardlink_{i}")
+                    self.assertTrue("id" in ret_link)
+                    self.assertEqual(ret_link["id"], root_id)
+                elif link_class == "H5L_TYPE_SOFT":
+                    self.assertEqual(link_title, f"softlink_{i}")
+                    self.assertTrue("h5path" in ret_link)
+                    self.assertEqual(ret_link["h5path"], f"multi_path_{i}")
+                elif link_class == "H5L_TYPE_EXTERNAL":
+                    self.assertEqual(link_title, f"extlink_{i}")
+                    self.assertTrue("h5path" in ret_link)
+                    self.assertEqual(ret_link["h5path"], f"multi_path_{i}")
+                    self.assertTrue("h5domain" in ret_link)
+                    self.assertEqual(ret_link["h5domain"], f"/another_domain/{i}")
+                else:
+                    self.assertTrue(False)  # unexpected
+
+    def testDeleteLinkMultiple(self):
+        domain = self.base_domain + "/testDeleteLinkMultiple.h5"
+        helper.setupDomain(domain)
+
+        print("testDeleteLinkMultiple", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=domain)
+        req = self.endpoint + "/"
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create a subgroup
+        req = self.endpoint + "/groups"
+        rsp = self.session.post(req, headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        grp_id = rspJson["id"]
+        self.assertTrue(helper.validateId(grp_id))
+
+        # link as "grp1"
+        grp_name = "grp1"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + grp_name
+        payload = {"id": grp_id}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # created
+
+        # create some links
+        titles = []
+        links = {}
+        title = "root"
+        links[title] = {"id": root_uuid}
+        titles.append(title)
+
+        # add a soft and external link as well
+        title = "softlink"
+        links[title] = {"h5path": "a_path"}
+        titles.append(title)
+        title = "extlink"
+        links[title] = {"h5path": "another_path", "h5domain": "/a_domain"}
+        titles.append(title)
+        link_count = len(links)
+
+        # write links to the grp1
+        data = {"links": links}
+        req = self.endpoint + "/groups/" + grp_id + "/links"
+        rsp = self.session.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # Delete all by parameter
+        separator = '/'
+        params = {"titles": separator.join(titles)}
+        req = self.endpoint + "/groups/" + grp_id + "/links"
+        rsp = self.session.delete(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # Attempt to read deleted links
+        for i in range(link_count):
+            req = self.endpoint + "/groups/" + grp_id + "/links/" + titles[i]
+            rsp = self.session.get(req, headers=headers)
+            self.assertEqual(rsp.status_code, 410)
+
+        # re-create links
+        req = self.endpoint + "/groups/" + grp_id + "/links"
+        rsp = self.session.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # Delete with custom separator
+        separator = ':'
+        params = {"titles": separator.join(titles)}
+        params["separator"] = ":"
+        req = self.endpoint + "/groups/" + grp_id + "/links"
+        rsp = self.session.delete(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # Attempt to read
+        for i in range(link_count):
+            req = self.endpoint + "/groups/" + grp_id + "/links/" + titles[i]
+            rsp = self.session.get(req, headers=headers)
+            self.assertEqual(rsp.status_code, 410)
 
 
 if __name__ == "__main__":

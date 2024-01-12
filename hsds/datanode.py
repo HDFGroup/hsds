@@ -299,6 +299,8 @@ def create_app():
     }
     app["chunk_cache"] = LruCache(**kwargs)
     app["deleted_ids"] = set()
+    app["deleted_attrs"] = {}  # map of objectid to set of deleted attribute names
+    app["deleted_links"] = {}  # map of objecctid to set of deleted link names
     # map of objids to timestamp and bucket of which they were last updated
     app["dirty_ids"] = {}
     # map of dataset ids to deflate levels (if compressed)

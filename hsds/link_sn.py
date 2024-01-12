@@ -22,9 +22,9 @@ from .util.idUtil import isValidUuid, getDataNodeUrl, getCollectionForId
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from .util.domainUtil import getDomainFromRequest, isValidDomain, verifyRoot
 from .util.domainUtil import getBucketForDomain
-from .util.linkUtil import validateLinkName
+from .util.linkUtil import validateLinkName, getLinkClass
 from .servicenode_lib import getDomainJson, validateAction
-from .servicenode_lib import getLink, putLink, getLinks, deleteLinks
+from .servicenode_lib import getLink, putLink, putLinks, getLinks, deleteLinks
 from .domain_crawl import DomainCrawler
 from . import hsds_logger as log
 
@@ -134,7 +134,10 @@ async def GET_Link(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     link_title = request.match_info.get("title")
-    validateLinkName(link_title)
+    try:
+        validateLinkName(link_title)
+    except ValueError:
+        raise HTTPBadRequest(reason="invalid link name")
 
     username, pswd = getUserPasswordFromRequest(request)
     if username is None and app["allow_noauth"]:
@@ -256,6 +259,191 @@ async def PUT_Link(request):
     return resp
 
 
+async def PUT_Links(request):
+    """HTTP method to create a new links """
+    log.request(request)
+    params = request.rel_url.query
+    app = request.app
+    status = None
+
+    log.debug("PUT_Links")
+
+    username, pswd = getUserPasswordFromRequest(request)
+    # write actions need auth
+    await validateUserPassword(app, username, pswd)
+
+    if not request.has_body:
+        msg = "PUT_Links with no body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    try:
+        body = await request.json()
+    except JSONDecodeError:
+        msg = "Unable to load JSON body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    domain = getDomainFromRequest(request)
+    if not isValidDomain(domain):
+        msg = f"Invalid domain: {domain}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    bucket = getBucketForDomain(domain)
+    log.debug(f"got bucket: {bucket}")
+
+    # get domain JSON
+    domain_json = await getDomainJson(app, domain)
+    verifyRoot(domain_json)
+
+    req_grp_id = request.match_info.get("id")
+    if not req_grp_id:
+        req_grp_id = domain_json["root"]
+
+    if "links" in body:
+        link_items = body["links"]
+        if not isinstance(link_items, dict):
+            msg = f"PUT_Links expected dict for for links body, but got: {type(link_items)}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        # validate the links
+        for title in link_items:
+            try:
+                validateLinkName(title)
+                link_item = link_items[title]
+                getLinkClass(link_item)
+            except ValueError:
+                raise HTTPBadRequest(reason="invalid link item")
+    else:
+        link_items = None
+
+    if link_items:
+        log.debug(f"PUT Links {len(link_items)} links to add")
+    else:
+        log.debug("no links defined yet")
+
+    # next, sort out where these attributes are going to
+
+    grp_ids = {}
+    if "grp_ids" in body:
+        body_ids = body["grp_ids"]
+        if isinstance(body_ids, list):
+            # multi cast the links - each link  in link_items
+            # will be written to each of the objects identified by obj_id
+            if not link_items:
+                msg = "no links provided"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            else:
+                for grp_id in body_ids:
+                    if not isValidUuid(grp_id):
+                        msg = f"Invalid object id: {grp_id}"
+                        log.warn(msg)
+                        raise HTTPBadRequest(reason=msg)
+                    grp_ids[grp_id] = link_items
+
+                msg = f"{len(link_items)} links will be multicast to "
+                msg += f"{len(grp_ids)} objects"
+                log.info(msg)
+        elif isinstance(body_ids, dict):
+            # each value is body_ids is a set of links to write to the object
+            # unlike the above case, different attributes can be written to
+            # different objects
+            if link_items:
+                msg = "links defined outside the obj_ids dict"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            else:
+                for grp_id in body_ids:
+                    if not isValidUuid(grp_id):
+                        msg = f"Invalid object id: {grp_id}"
+                        log.warn(msg)
+                        raise HTTPBadRequest(reason=msg)
+                    id_json = body_ids[grp_id]
+
+                    if "links" not in id_json:
+                        msg = f"PUT_links with no links for grp_id: {grp_id}"
+                        log.warn(msg)
+                        raise HTTPBadRequest(reason=msg)
+                    link_items = id_json["links"]
+                    if not isinstance(link_items, dict):
+                        msg = f"PUT_Links expected dict for grp_id {grp_id}, "
+                        msg += f"but got: {type(link_items)}"
+                        log.warn(msg)
+                        raise HTTPBadRequest(reason=msg)
+                    # validate link items
+                    for title in link_items:
+                        try:
+                            validateLinkName(title)
+                            link_item = link_items[title]
+                            getLinkClass(link_item)
+                        except ValueError:
+                            raise HTTPBadRequest(reason="invalid link item")
+                    grp_ids[grp_id] = link_items
+
+                # write different attributes to different objects
+                msg = f"PUT_Links over {len(grp_ids)} objects"
+        else:
+            msg = f"unexpected type for grp_ids: {type(grp_ids)}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    else:
+        # use the object id from the request
+        grp_id = request.match_info.get("id")
+        if not grp_id:
+            msg = "Missing object id"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        grp_ids[grp_id] = link_items  # make it look like a list for consistency
+
+    log.debug(f"got {len(grp_ids)} grp_ids")
+
+    # TBD - verify that the grp_id belongs to the given domain
+    await validateAction(app, domain, req_grp_id, username, "create")
+
+    kwargs = {"bucket": bucket}
+    if params.get("replace"):
+        kwargs["replace"] = True
+
+    count = len(grp_ids)
+    if count == 0:
+        msg = "no grp_ids defined"
+        log.warn(f"PUT_Attributes: {msg}")
+        raise HTTPBadRequest(reason=msg)
+    elif count == 1:
+        # just send one PUT Attributes request to the dn
+        grp_id = list(grp_ids.keys())[0]
+        link_json = grp_ids[grp_id]
+        log.debug(f"got link_json: {link_json}")
+
+        status = await putLinks(app, grp_id, link_json, **kwargs)
+
+    else:
+        # put multi obj
+
+        # mixin some additonal kwargs
+        crawler_params = {"follow_links": False}
+        if bucket:
+            crawler_params["bucket"] = bucket
+
+        kwargs = {"action": "put_link", "raise_error": True, "params": crawler_params}
+        crawler = DomainCrawler(app, grp_ids, **kwargs)
+
+        # will raise exception on not found, server busy, etc.
+        await crawler.crawl()
+
+        status = crawler.get_status()
+
+        log.info("DomainCrawler done for put_links action")
+
+    # link creation successful
+    log.debug(f"PUT_Links returning status: {status}")
+    req_rsp = {}
+    resp = await jsonResponse(request, req_rsp, status=status)
+    log.response(request, resp=resp)
+    return resp
+
+
 async def DELETE_Links(request):
     """HTTP method to delete multiple links """
     log.request(request)
@@ -284,7 +472,10 @@ async def DELETE_Links(request):
     titles = titles_param.split(separator)
 
     for title in titles:
-        validateLinkName(title)
+        try:
+            validateLinkName(title)
+        except ValueError:
+            raise HTTPBadRequest(reason="invalid link name")
 
     username, pswd = getUserPasswordFromRequest(request)
     await validateUserPassword(app, username, pswd)
@@ -392,7 +583,10 @@ async def POST_Links(request):
             log.debug(f"getting all links for {group_id}")
         elif isinstance(titles, list):
             for title in titles:
-                validateLinkName(title)  # raises HTTPBadRequest if invalid
+                try:
+                    validateLinkName(title)
+                except ValueError:
+                    raise HTTPBadRequest(reason="invalid link name")
         else:
             msg = f"expected list for titles but got: {type(titles)}"
             log.warn(msg)

@@ -19,7 +19,7 @@ from aiohttp.web_exceptions import HTTPServiceUnavailable, HTTPConflict, HTTPBad
 from aiohttp.web_exceptions import HTTPInternalServerError, HTTPNotFound, HTTPGone
 
 from .util.idUtil import getCollectionForId, getDataNodeUrl
-from .servicenode_lib import getObjectJson, getAttributes, putAttributes, getLinks
+from .servicenode_lib import getObjectJson, getAttributes, putAttributes, getLinks, putLinks
 from . import hsds_logger as log
 
 
@@ -295,6 +295,30 @@ class DomainCrawler:
                 else:
                     log.debug(f"link: {link_id} already in object dict")
 
+    async def put_links(self, grp_id, link_items):
+        # write the given links for the obj_id
+        log.debug(f"put_links for {grp_id}, {len(link_items)} links")
+        req = getDataNodeUrl(self._app, grp_id)
+        req += f"/groups/{grp_id}/links"
+        kwargs = {}
+        if "bucket" in self._params:
+            kwargs["bucket"] = self._params["bucket"]
+        status = None
+        try:
+            status = await putLinks(self._app, grp_id, link_items, **kwargs)
+        except HTTPConflict:
+            log.warn("DomainCrawler - got HTTPConflict from http_put")
+            status = 409
+        except HTTPServiceUnavailable:
+            status = 503
+        except HTTPInternalServerError:
+            status = 500
+        except Exception as e:
+            log.error(f"unexpected exception {e}")
+
+        log.debug(f"DomainCrawler fetch for {grp_id} - returning status: {status}")
+        self._obj_dict[grp_id] = {"status": status}
+
     def get_status(self):
         """ return the highest status of any of the returned objects """
         status = None
@@ -419,7 +443,16 @@ class DomainCrawler:
 
                 log.debug(f"DomainCrawler - get link titles: {link_titles}")
             await self.get_links(obj_id, link_titles)
+        elif self._action == "put_link":
+            log.debug("DomainCrawlwer - put links")
+            # write links
+            if self._objs and obj_id not in self._objs:
+                log.error(f"couldn't find {obj_id} in self._objs")
+                return
+            link_items = self._objs[obj_id]
+            log.debug(f"got {len(link_items)} link items for {obj_id}")
 
+            await self.put_links(obj_id, link_items)
         else:
             msg = f"DomainCrawler: unexpected action: {self._action}"
             log.error(msg)

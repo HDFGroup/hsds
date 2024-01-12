@@ -624,6 +624,131 @@ async def getScanTime(app, root_id, bucket=None):
     return root_scan
 
 
+async def POST_Domain(request):
+    """ return object defined by h5path list """
+
+    log.request(request)
+    app = request.app
+    params = request.rel_url.query
+    log.debug(f"POST_Domain query params: {params}")
+
+    include_links = False
+    include_attrs = False
+    follow_soft_links = False
+    follow_external_links = False
+
+    if "include_links" in params and params["include_links"]:
+        include_links = True
+    if "include_attrs" in params and params["include_attrs"]:
+        include_attrs = True
+    if "follow_soft_links" in params and params["follow_soft_links"]:
+        follow_soft_links = True
+    if "follow_external_links" in params and params["follow_external_links"]:
+        follow_external_links = True
+
+    if not request.has_body:
+        msg = "POST Domain with no body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        msg = "Unable to load JSON body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    if "h5paths" in body:
+        h5paths = body["h5paths"]
+        if not isinstance(h5paths, list):
+            msg = f"expected list for h5paths but got: {type(h5paths)}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    else:
+        msg = "expected h5paths key in body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    (username, pswd) = getUserPasswordFromRequest(request)
+    if username is None and app["allow_noauth"]:
+        username = "default"
+    else:
+        await validateUserPassword(app, username, pswd)
+
+    domain = None
+    try:
+        domain = getDomainFromRequest(request)
+    except ValueError:
+        log.warn(f"Invalid domain: {domain}")
+        raise HTTPBadRequest(reason="Invalid domain name")
+
+    bucket = getBucketForDomain(domain)
+    log.debug(f"GET_Domain domain: {domain} bucket: {bucket}")
+
+    if not bucket:
+        # no bucket defined, raise 400
+        msg = "Bucket not provided"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    if bucket:
+        checkBucketAccess(app, bucket)
+
+    if not domain:
+        msg = "no domain given"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    log.info(f"got domain: {domain}")
+
+    domain_json = await getDomainJson(app, domain, reload=True)
+
+    if domain_json is None:
+        log.warn(f"domain: {domain} not found")
+        raise HTTPNotFound()
+
+    if "acls" not in domain_json:
+        log.error("No acls key found in domain")
+        raise HTTPInternalServerError()
+
+    log.debug(f"got domain_json: {domain_json}")
+    # validate that the requesting user has permission to read this domain
+    # aclCheck throws exception if not authorized
+    aclCheck(app, domain_json, "read", username)
+
+    json_objs = {}
+
+    for h5path in h5paths:
+        root_id = domain_json["root"]
+
+        # getObjectIdByPath throws 404 if not found
+        obj_id, domain, _ = await getObjectIdByPath(
+            app, root_id, h5path, bucket=bucket, domain=domain,
+            follow_soft_links=follow_soft_links,
+            follow_external_links=follow_external_links)
+        log.info(f"get obj_id: {obj_id} from h5path: {h5path}")
+        # get authoritative state for object from DN (even if
+        # it's in the meta_cache).
+        kwargs = {"refresh": True, "bucket": bucket,
+                  "include_attrs": include_attrs, "include_links": include_links}
+        log.debug(f"kwargs for getObjectJson: {kwargs}")
+
+        obj_json = await getObjectJson(app, obj_id, **kwargs)
+
+        obj_json = respJsonAssemble(obj_json, params, obj_id)
+
+        obj_json["domain"] = getPathForDomain(domain)
+
+        # client may not know class of object retrieved via path
+        obj_json["class"] = getObjectClass(obj_id)
+
+        json_objs[h5path] = obj_json
+
+    jsonRsp = {"h5paths": json_objs}
+    resp = await jsonResponse(request, jsonRsp)
+    log.response(request, resp=resp)
+    return resp
+
+
 async def PUT_Domain(request):
     """HTTP method to create a new domain"""
     log.request(request)

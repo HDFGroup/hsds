@@ -25,13 +25,14 @@ from . import config
 from .basenode import healthCheck, baseInit
 from . import hsds_logger as log
 from .util.authUtil import initUserDB, initGroupDB, setPassword
-from .domain_sn import GET_Domain, PUT_Domain, DELETE_Domain, GET_Domains
+from .domain_sn import GET_Domain, PUT_Domain, DELETE_Domain, GET_Domains, POST_Domain
 from .domain_sn import GET_Datasets, GET_Groups, GET_Datatypes
 from .domain_sn import GET_ACL, GET_ACLs, PUT_ACL
 from .group_sn import GET_Group, POST_Group, DELETE_Group
-from .link_sn import GET_Links, POST_Links, GET_Link, PUT_Link, DELETE_Link, DELETE_Links
-from .attr_sn import GET_Attributes, GET_Attribute, PUT_Attribute, PUT_Attributes, DELETE_Attribute
-from .attr_sn import DELETE_Attributes, GET_AttributeValue, PUT_AttributeValue, POST_Attributes
+from .link_sn import GET_Links, POST_Links, GET_Link, PUT_Link, PUT_Links
+from .link_sn import DELETE_Link, DELETE_Links
+from .attr_sn import GET_Attributes, GET_Attribute, PUT_Attribute, PUT_Attributes, POST_Attributes
+from .attr_sn import DELETE_Attributes, DELETE_Attribute, GET_AttributeValue, PUT_AttributeValue
 from .ctype_sn import GET_Datatype, POST_Datatype, DELETE_Datatype
 from .dset_sn import GET_Dataset, POST_Dataset, DELETE_Dataset
 from .dset_sn import GET_DatasetShape, PUT_DatasetShape, GET_DatasetType
@@ -52,6 +53,7 @@ async def init():
     app.router.add_route("GET", path, GET_Domain)
     app.router.add_route("DELETE", path, DELETE_Domain)
     app.router.add_route("PUT", path, PUT_Domain)
+    app.router.add_route("POST", path, POST_Domain)
 
     path = "/domains"
     app.router.add_route("GET", path, GET_Domains)
@@ -83,6 +85,7 @@ async def init():
     path = "/groups/{id}/links"
     app.router.add_route("GET", path, GET_Links)
     app.router.add_route("POST", path, POST_Links)
+    app.router.add_route("PUT", path, PUT_Links)
     app.router.add_route("DELETE", path, DELETE_Links)
 
     path = "/groups/{id}/links/{title}"
