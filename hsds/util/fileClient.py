@@ -190,7 +190,7 @@ class FileClient:
             raise HTTPNotFound()
 
         start_time = time.time()
-        filepath = self._getFilePath(bucket, key)
+        filepath = pp.normpath(self._getFilePath(bucket, key))
         log.debug(f"fileClient.put_object({bucket}/{key} start: {start_time}")
         loop = asyncio.get_event_loop()
         try:
