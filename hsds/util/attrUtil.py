@@ -74,9 +74,3 @@ def isEqualAttr(attr1, attr2):
         if "value" not in obj:
             raise TypeError("expected value key for attribute")
     return attr1["value"] == attr2["value"]
-
-    if not isinstance(attr1, dict):
-        raise TypeError(f"unexpected type: {type(attr1)}")
-        return True
-    if not attr1 and not attr2:
-        return True
