@@ -271,7 +271,6 @@ async def DELETE_Datatype(request):
     domain_json = await getDomainJson(app, domain)
     verifyRoot(domain_json)
 
-    # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, ctype_id, username, "delete")
 
     req = getDataNodeUrl(app, ctype_id) + "/datatypes/" + ctype_id

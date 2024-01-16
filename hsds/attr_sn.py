@@ -104,7 +104,6 @@ async def GET_Attributes(request):
     log.debug(f"bucket: {bucket}")
     kwargs["bucket"] = bucket
 
-    # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "read")
 
     attributes = await getAttributes(app, obj_id, **kwargs)
@@ -166,7 +165,6 @@ async def GET_Attribute(request):
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
 
-    # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "read")
 
     if "ignore_nan" in params and params["ignore_nan"]:
@@ -518,7 +516,6 @@ async def PUT_Attribute(request):
     domain_json = await getDomainJson(app, domain)
     verifyRoot(domain_json)
 
-    # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, req_obj_id, username, "create")
 
     # get attribute from request body
@@ -539,8 +536,7 @@ async def PUT_Attribute(request):
     status = await putAttributes(app, req_obj_id, attr_json, **kwargs)
     log.info(f"PUT Attributes status: {status}")
 
-    hrefs = []  # TBD
-    req_rsp = {"hrefs": hrefs}
+    req_rsp = {}
     # attribute creation successful
     resp = await jsonResponse(request, req_rsp, status=status)
     log.response(request, resp=resp)
@@ -656,7 +652,6 @@ async def PUT_Attributes(request):
 
     log.debug(f"got {len(obj_ids)} obj_ids")
 
-    # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, req_obj_id, username, "create")
 
     kwargs = {"bucket": bucket}
@@ -694,8 +689,7 @@ async def PUT_Attributes(request):
 
         log.info("DomainCrawler done for put_attrs action")
 
-    hrefs = []  # TBD
-    req_rsp = {"hrefs": hrefs}
+    req_rsp = {}
     # attribute creation successful
     log.debug(f"PUT_Attributes returning status: {status}")
     resp = await jsonResponse(request, req_rsp, status=status)
@@ -737,7 +731,6 @@ async def DELETE_Attribute(request):
     domain_json = await getDomainJson(app, domain)
     verifyRoot(domain_json)
 
-    # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "delete")
 
     attr_names = [attr_name, ]
@@ -745,8 +738,7 @@ async def DELETE_Attribute(request):
 
     await deleteAttributes(app, obj_id, **kwargs)
 
-    hrefs = []  # TBD
-    req_rsp = {"hrefs": hrefs}
+    req_rsp = {}
     resp = await jsonResponse(request, req_rsp)
     log.response(request, resp=resp)
     return resp
@@ -789,7 +781,6 @@ async def GET_AttributeValue(request):
     domain_json = await getDomainJson(app, domain)
     verifyRoot(domain_json)
 
-    # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "read")
 
     params = request.rel_url.query
@@ -967,7 +958,6 @@ async def PUT_AttributeValue(request):
     domain_json = await getDomainJson(app, domain)
     verifyRoot(domain_json)
 
-    # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "update")
 
     attr_names = [attr_name, ]
@@ -1097,8 +1087,7 @@ async def PUT_AttributeValue(request):
     else:
         log.info("PUT AttributesValue status: 200")
 
-    hrefs = []  # TBD
-    req_rsp = {"hrefs": hrefs}
+    req_rsp = {}
     # attribute creation successful
     resp = await jsonResponse(request, req_rsp)
     log.response(request, resp=resp)
@@ -1213,7 +1202,6 @@ async def POST_Attributes(request):
     domain_json = await getDomainJson(app, domain)
     verifyRoot(domain_json)
 
-    # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "read")
 
     params = request.rel_url.query
@@ -1361,7 +1349,6 @@ async def DELETE_Attributes(request):
     domain_json = await getDomainJson(app, domain)
     verifyRoot(domain_json)
 
-    # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "delete")
 
     kwargs = {"attr_names": attr_names, "bucket": bucket, "separator": separator}

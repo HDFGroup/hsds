@@ -398,7 +398,6 @@ async def PUT_Links(request):
 
     log.debug(f"got {len(grp_ids)} grp_ids")
 
-    # TBD - verify that the grp_id belongs to the given domain
     await validateAction(app, domain, req_grp_id, username, "create")
 
     kwargs = {"bucket": bucket}
@@ -609,7 +608,6 @@ async def POST_Links(request):
     domain_json = await getDomainJson(app, domain)
     verifyRoot(domain_json)
 
-    # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, req_id, username, "read")
 
     resp_json = {}

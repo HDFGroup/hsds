@@ -267,7 +267,6 @@ async def DELETE_Group(request):
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
 
-    # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, group_id, username, "delete")
 
     verifyRoot(domain_json)
