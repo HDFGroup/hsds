@@ -250,7 +250,6 @@ class DomainTest(unittest.TestCase):
             self.assertTrue("root" in obj_json)
             self.assertEqual(root_id, obj_json["root"])
 
-
     def testGetByPath(self):
         domain = helper.getTestDomain("tall.h5")
         print("testGetByPath", domain)
