@@ -189,9 +189,9 @@ class DomainTest(unittest.TestCase):
         rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 400)
 
-    def testPostDomain(self):
+    def testPostDomainSingle(self):
         domain = helper.getTestDomain("tall.h5")
-        print("testPostDomain", domain)
+        print("testPostDomainSingle", domain)
         headers = helper.getRequestHeaders(domain=domain)
 
         req = helper.getEndpoint() + "/"
@@ -217,6 +217,39 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(g11id, obj_json["id"])
         self.assertTrue("root" in obj_json)
         self.assertEqual(root_id, obj_json["root"])
+
+    def testPostDomainMultiple(self):
+        domain = helper.getTestDomain("tall.h5")
+        print("testPostDomainMultiple", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        if rsp.status_code != 200:
+            msg = f"WARNING: Failed to get domain: {domain}. Is test data setup?"
+            print(msg)
+            return  # abort rest of test
+        domainJson = json.loads(rsp.text)
+        self.assertTrue("root" in domainJson)
+        root_id = domainJson["root"]
+
+        # h5paths to fetch
+        h5paths = ["/g1/g1.1", "/g1/g1.2", "/g2/dset2.2"]
+        data = {"h5paths": h5paths}
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("h5paths" in rspJson)
+        rsp_paths = rspJson["h5paths"]
+        self.assertEqual(len(h5paths), len(rsp_paths))
+        for h5path in h5paths:
+            self.assertTrue(h5path in rsp_paths)
+            obj_json = rsp_paths[h5path]
+            obj_id = helper.getUUIDByPath(domain, h5path, session=self.session)
+            self.assertEqual(obj_id, obj_json["id"])
+            self.assertTrue("root" in obj_json)
+            self.assertEqual(root_id, obj_json["root"])
+
 
     def testGetByPath(self):
         domain = helper.getTestDomain("tall.h5")
