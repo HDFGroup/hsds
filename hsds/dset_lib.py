@@ -904,3 +904,22 @@ async def reduceShape(app, dset_json, shape_update, bucket=None):
         await removeChunks(app, delete_ids, bucket=bucket)
     else:
         log.info("no chunks need deletion for shape reduction")
+
+
+async def deleteAllChunks(app, dset_id, bucket=None):
+    """ Delete any allocated chunks for the given dataset """
+
+    log.info(f"deleteAllChunks for {dset_id}")
+
+    # get all chunk ids for chunks that have been allocated
+    chunk_ids = await getAllocatedChunkIds(app, dset_id, bucket=bucket)
+    chunk_ids.sort()
+
+    if chunk_ids:
+        chunk_ids = list(chunk_ids)
+        chunk_ids.sort()
+        msg = f"deleteAllChunks for {dset_id} - these chunks will need to be deleted: {chunk_ids}"
+        log.debug(msg)
+        await removeChunks(app, chunk_ids, bucket=bucket)
+    else:
+        log.info(f"deleteAllChunks for {dset_id} - no chunks need deletion")

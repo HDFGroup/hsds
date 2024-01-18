@@ -34,7 +34,7 @@ class DomainCrawler:
         max_objects_limit=0,
         raise_error=False
     ):
-        log.info(f"DomainCrawler.__init__  root_id: {len(objs)} objs")
+        log.info(f"DomainCrawler.__init__  action: {action} root_id: {len(objs)} objs")
         log.debug(f"params: {params}")
         self._app = app
         self._action = action
@@ -127,7 +127,7 @@ class DomainCrawler:
 
     async def get_obj_json(self, obj_id):
         """ get the given obj_json for the obj_id.
-            for each group found, search the links if include_links is set """
+            for each group found, search the links if follow_links is set """
         log.debug(f"get_obj_json: {obj_id}")
         collection = getCollectionForId(obj_id)
         kwargs = {}
@@ -207,11 +207,16 @@ class DomainCrawler:
                     log.debug(f"DomainCrawler - adding link_id: {link_id}")
                     self._obj_dict[link_id] = {}  # placeholder for obj id
                     self._q.put_nowait(link_id)
+            if not self._params.get("include_links"):
+                # don't keep the links
+                del obj_json["links"]
 
     async def get_links(self, grp_id, titles=None):
         """ if titles is set, get all the links in grp_id that
         have a title in the list.  Otherwise, return all links for the object. """
-        log.debug(f"get_links: {grp_id}, titles; {titles}")
+        log.debug(f"get_links: {grp_id}")
+        if titles:
+            log.debug(f"titles; {titles}")
         collection = getCollectionForId(grp_id)
         if collection != "groups":
             log.warn(f"get_links, expected groups id but got: {grp_id}")
@@ -221,7 +226,6 @@ class DomainCrawler:
             kwargs["titles"] = titles
         if self._params.get("bucket"):
             kwargs["bucket"] = self._params["bucket"]
-
         if self._params.get("follow_links"):
             follow_links = True
         else:
@@ -388,7 +392,6 @@ class DomainCrawler:
 
     async def fetch(self, obj_id):
         log.debug(f"DomainCrawler fetch for id: {obj_id}")
-        log.debug(f"action: {self._action}")
         if self._action == "get_obj":
             log.debug("DomainCrawler - get obj")
             # just get the obj json
@@ -427,7 +430,9 @@ class DomainCrawler:
             await self.put_attributes(obj_id, attr_items)
         elif self._action == "get_link":
             log.debug("DomainCrawlwer - get links")
-            if obj_id not in self._objs:
+            log.debug(f"self._objs: {self._objs}, type: {type(self._objs)}")
+
+            if self._objs is None or obj_id not in self._objs:
                 link_titles = None  # fetch all links for this object
             else:
                 link_titles = self._objs[obj_id]

@@ -22,6 +22,7 @@ from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.web import json_response
 
 from .util.idUtil import isValidUuid
+from .util.globparser import globmatch
 from .util.linkUtil import validateLinkName, getLinkClass, isEqualLink
 from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
 from . import hsds_logger as log
@@ -80,6 +81,10 @@ async def GET_Links(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
+    pattern = None
+    if "pattern" in params:
+        pattern = params["pattern"]
+
     group_json = await get_metadata_obj(app, group_id, bucket=bucket)
 
     log.debug(f"for id: {group_id} got group json: {group_json}")
@@ -108,6 +113,16 @@ async def GET_Links(request):
         titles = list(link_dict.keys())
         titles.sort()  # sort by key
         log.debug(f"links by lexographic order: {titles}")
+
+    if pattern:
+        try:
+            titles = [x for x in titles if globmatch(x, pattern)]
+        except ValueError:
+            log.error(f"exception getting links using pattern: {pattern}")
+            raise HTTPBadRequest(reason=msg)
+        msg = f"getLinks with pattern: {pattern} returning {len(titles)} "
+        msg += f"links from {len(link_dict)}"
+        log.debug(msg)
 
     start_index = 0
     if marker is not None:

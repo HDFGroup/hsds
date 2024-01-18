@@ -23,9 +23,8 @@ from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPConflict, HTTPServiceUnavailable
 from aiohttp import ClientResponseError
 from aiohttp.web import json_response
-from requests.sessions import merge_setting
 
-from .util.httpUtil import getObjectClass, http_post, http_put, http_get, http_delete
+from .util.httpUtil import getObjectClass, http_post, http_put, http_delete
 from .util.httpUtil import getHref, respJsonAssemble
 from .util.httpUtil import jsonResponse
 from .util.idUtil import getDataNodeUrl, createObjId, getCollectionForId
@@ -47,60 +46,54 @@ from . import hsds_logger as log
 from . import config
 
 
-async def get_collections(app, root_id, bucket=None):
+async def get_collections(app, root_id, bucket=None, max_objects_limit=None):
     """Return the object ids for given root."""
 
     log.info(f"get_collections for {root_id}")
-    groups = {}
-    datasets = {}
-    datatypes = {}
-    lookup_ids = set()
-    lookup_ids.add(root_id)
-    params = {"bucket": bucket}
 
-    while lookup_ids:
-        grp_id = lookup_ids.pop()
-        req = getDataNodeUrl(app, grp_id)
-        req += "/groups/" + grp_id + "/links"
-        log.debug("collection get LINKS: " + req)
-        try:
-            # throws 404 if doesn't exist
-            links_json = await http_get(app, req, params=params)
-        except HTTPNotFound:
-            log.warn(f"get_collection, group {grp_id} not found")
-            continue
+    crawler_params = {
+        "include_attrs": False,
+        "include_links": False,
+        "bucket": bucket,
+        "follow_links": True,
+    }
 
-        log.debug(f"got links json from dn for group_id: {grp_id}")
-        links = links_json["links"]
-        log.debug(f"get_collection: got links: {links}")
-        for link in links:
-            if link["class"] != "H5L_TYPE_HARD":
-                continue
-            link_id = link["id"]
-            obj_type = getCollectionForId(link_id)
-            if obj_type == "groups":
-                if link_id in groups:
-                    continue  # been here before
-                groups[link_id] = {}
-                lookup_ids.add(link_id)
-            elif obj_type == "datasets":
-                if link_id in datasets:
-                    continue
-                datasets[link_id] = {}
-            elif obj_type == "datatypes":
-                if link_id in datatypes:
-                    continue
-                datatypes[link_id] = {}
-            else:
-                msg = "get_collection: unexpected link object type: "
-                msg += f"{obj_type}"
-                log.error(merge_setting)
-                HTTPInternalServerError()
+    if max_objects_limit:
+        crawler_params["max_objects_limit"] = max_objects_limit
+
+    crawler = DomainCrawler(app, [root_id, ], action="get_obj", params=crawler_params)
+    await crawler.crawl()
+    if max_objects_limit and len(crawler._obj_dict) >= max_objects_limit:
+        msg = "get_collections - too many objects:  "
+        msg += f"{len(crawler._obj_dict)}, returning None"
+        log.info(msg)
+        return None
+    else:
+        msg = f"DomainCrawler returned: {len(crawler._obj_dict)} object ids"
+        log.info(msg)
+
+    group_ids = set()
+    dataset_ids = set()
+    datatype_ids = set()
+
+    for obj_id in crawler._obj_dict:
+        obj_type = getCollectionForId(obj_id)
+        if obj_type == "groups":
+            group_ids.add(obj_id)
+        elif obj_type == "datasets":
+            dataset_ids.add(obj_id)
+        elif obj_type == "datatypes":
+            datatype_ids.add(obj_id)
+        else:
+            log.warn(f"get_collections - unexpected id type: {obj_id}")
+    if root_id in group_ids:
+        group_ids.remove(root_id)  # don't include the root id
+    print(f"get_collections - group_ids: {group_ids}")
 
     result = {}
-    result["groups"] = groups
-    result["datasets"] = datasets
-    result["datatypes"] = datatypes
+    result["groups"] = group_ids
+    result["datasets"] = dataset_ids
+    result["datatypes"] = datatype_ids
     return result
 
 
@@ -114,9 +107,10 @@ async def getDomainObjects(app, root_id, include_attrs=False, bucket=None):
 
     crawler_params = {
         "include_attrs": include_attrs,
-        "bucket": bucket,
+        "include_links": True,
         "follow_links": True,
         "max_objects_limit": max_objects_limit,
+        "bucket": bucket,
     }
 
     crawler = DomainCrawler(app, [root_id, ], action="get_obj", params=crawler_params)
@@ -263,15 +257,13 @@ async def get_domains(request):
             if pattern:
                 # do a pattern match on the basename
                 basename = op.basename(domain)
-                log.debug(
-                    f"get_domains: checking {basename} against pattern: {pattern}"
-                )
+                msg = f"get_domains: checking {basename} against pattern: {pattern}"
+                log.debug(msg)
                 try:
                     got_match = globmatch(basename, pattern)
                 except ValueError as ve:
-                    log.warn(
-                        f"get_domains, invalid query pattern {pattern}, ValueError: {ve}"
-                    )
+                    msg = f"get_domains, invalid query pattern {pattern}, ValueError: {ve}"
+                    log.warn(msg)
                     raise HTTPBadRequest(reason="invalid query pattern")
                 if got_match:
                     log.debug("get_domains - got_match")
@@ -502,14 +494,14 @@ async def GET_Domain(request):
         h5path = params["h5path"]
 
         # select which object to perform path search under
-        root_id = parent_id if parent_id else domain_json["root"]
+        base_id = parent_id if parent_id else domain_json["root"]
 
         # getObjectIdByPath throws 404 if not found
         obj_id, domain, _ = await getObjectIdByPath(
-            app, root_id, h5path, bucket=bucket, domain=domain,
+            app, base_id, h5path, bucket=bucket, domain=domain,
             follow_soft_links=follow_soft_links,
             follow_external_links=follow_external_links)
-        log.info(f"get obj_id: {obj_id} from h5path: {h5path}")
+        log.info(f"got obj_id: {obj_id} from h5path: {h5path}")
         # get authoritative state for object from DN (even if
         # it's in the meta_cache).
         kwargs = {"refresh": True, "bucket": bucket,
@@ -632,11 +624,14 @@ async def POST_Domain(request):
     params = request.rel_url.query
     log.debug(f"POST_Domain query params: {params}")
 
+    parent_id = None
     include_links = False
     include_attrs = False
     follow_soft_links = False
     follow_external_links = False
 
+    if "parent_id" in params and params["parent_id"]:
+        parent_id = params["parent_id"]
     if "include_links" in params and params["include_links"]:
         include_links = True
     if "include_attrs" in params and params["include_attrs"]:
@@ -710,22 +705,34 @@ async def POST_Domain(request):
         log.error("No acls key found in domain")
         raise HTTPInternalServerError()
 
-    log.debug(f"got domain_json: {domain_json}")
+    if "root" not in domain_json:
+        msg = f"{domain} is a folder, not a domain"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    root_id = domain_json["root"]
+
+    # select which object to perform path search under
+    base_id = parent_id if parent_id else root_id
+
+    log.debug(f"POST_Domain with h5paths: {h5paths} from: {base_id}")
     # validate that the requesting user has permission to read this domain
     # aclCheck throws exception if not authorized
     aclCheck(app, domain_json, "read", username)
 
     json_objs = {}
 
+    # TBD: the following could be made more efficient for
+    # cases where a large number of h5paths are given...
     for h5path in h5paths:
-        root_id = domain_json["root"]
 
         # getObjectIdByPath throws 404 if not found
         obj_id, domain, _ = await getObjectIdByPath(
-            app, root_id, h5path, bucket=bucket, domain=domain,
+            app, base_id, h5path, bucket=bucket, domain=domain,
             follow_soft_links=follow_soft_links,
             follow_external_links=follow_external_links)
-        log.info(f"get obj_id: {obj_id} from h5path: {h5path}")
+
+        log.info(f"got obj_id: {obj_id} from h5path: {h5path}")
         # get authoritative state for object from DN (even if
         # it's in the meta_cache).
         kwargs = {"refresh": True, "bucket": bucket,

@@ -442,7 +442,7 @@ class LinkTest(unittest.TestCase):
     def testGet(self):
         # test getting links from an existing domain
         domain = helper.getTestDomain("tall.h5")
-        print("testGetDomain", domain)
+        print("testGet", domain)
         headers = helper.getRequestHeaders(domain=domain)
 
         # verify domain exists
@@ -507,6 +507,23 @@ class LinkTest(unittest.TestCase):
         expected_uuid = helper.getUUIDByPath(domain, "/g1/g1.2/g1.2.1", session=self.session)
         self.assertEqual(expected_uuid, g1_2_1_uuid)
 
+        # do get with a regex pattern
+        params = {"pattern": "ext*"}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("links" in rspJson)
+        links = rspJson["links"]
+        self.assertEqual(len(links), 1)  # only extlink should be returned
+        link = links[0]
+        for name in ("created", "class", "h5domain", "h5path", "title", "href"):
+            self.assertTrue(name in link)
+        self.assertEqual(link["class"], "H5L_TYPE_EXTERNAL")
+        self.assertEqual(link["title"], "extlink")
+        self.assertEqual(link["h5domain"], "somefile")
+        self.assertEqual(link["h5path"], "somepath")
+        self.assertTrue(link["created"] < now - 10)
+
         # get link by title
         req = helper.getEndpoint() + "/groups/" + g1_2_1_uuid + "/links/slink"
         rsp = self.session.get(req, headers=headers)
@@ -528,6 +545,133 @@ class LinkTest(unittest.TestCase):
         self.assertFalse("h5domain" in link)  # only for external links
         self.assertEqual(link["title"], "slink")
         self.assertEqual(link["h5path"], "somevalue")
+
+    def testGetRecursive(self):
+        # test getting links from an existing domain, following links
+        domain = helper.getTestDomain("tall.h5")
+        print("testGetRecursive", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+
+        # verify domain exists
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        if rsp.status_code != 200:
+            print(f"WARNING: Failed to get domain: {domain}. Is test data setup?")
+            return  # abort rest of test
+
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        self.assertTrue(root_uuid.startswith("g-"))
+
+        # get links for root group and other groups recursively
+        req = helper.getEndpoint() + "/groups/" + root_uuid + "/links"
+        params = {"follow_links": 1}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        hrefs = rspJson["hrefs"]
+        self.assertEqual(len(hrefs), 3)
+        self.assertTrue("links" in rspJson)
+        grp_links = rspJson["links"]
+        hardlink_count = 0
+        softlink_count = 0
+        extlink_count = 0
+        expected_group_links = ("g1", "g2", "g1.1", "g1.2", "g1.2.1", )
+        expected_dset_links = ("dset1.1.1", "dset1.1.2", "dset2.1", "dset2.2")
+        expected_soft_links = ("slink", )
+        expected_external_links = ("extlink", )
+        self.assertEqual(len(grp_links), 6)
+        for grp_id in grp_links:
+            helper.validateId(grp_id)
+            links = grp_links[grp_id]
+            for link in links:
+                self.assertTrue("title" in link)
+                link_title = link["title"]
+                self.assertTrue("class" in link)
+                link_class = link["class"]
+                if link_class == "H5L_TYPE_HARD":
+                    hardlink_count += 1
+                    self.assertTrue("id" in link)
+                    link_id = link["id"]
+                    helper.validateId(link_id)
+                    if link_id.startswith("g-"):
+                        self.assertTrue(link_title in expected_group_links)
+                    elif link_id.startswith("d-"):
+                        self.assertTrue(link_title in expected_dset_links)
+                    else:
+                        self.assertTrue(False)  # unexpected
+                elif link_class == "H5L_TYPE_SOFT":
+                    softlink_count += 1
+                    self.assertTrue("h5path" in link)
+                    self.assertFalse("h5domain" in link)
+                    self.assertFalse("id" in link)
+                    self.assertTrue(link_title in expected_soft_links)
+                elif link_class == "H5L_TYPE_EXTERNAL":
+                    extlink_count += 1
+                    self.assertTrue("h5path" in link)
+                    self.assertTrue("h5domain" in link)
+                    self.assertFalse("id" in link)
+                    self.assertTrue(link_title in expected_external_links)
+                else:
+                    self.assertTrue(False)  # unexpected
+
+        self.assertEqual(hardlink_count, len(expected_dset_links) + len(expected_group_links))
+        self.assertEqual(softlink_count, len(expected_soft_links))
+        self.assertEqual(extlink_count, len(expected_external_links))
+
+    def testGetPattern(self):
+        # test getting links from an existing domain, with a regex filter
+        domain = helper.getTestDomain("tall.h5")
+        print("testGetPattern", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+
+        # verify domain exists
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        if rsp.status_code != 200:
+            print(f"WARNING: Failed to get domain: {domain}. Is test data setup?")
+            return  # abort rest of test
+
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        self.assertTrue(root_uuid.startswith("g-"))
+
+        # get links for root group and other groups recursively
+        req = helper.getEndpoint() + "/groups/" + root_uuid + "/links"
+        params = {"follow_links": 1, "pattern": "dset*"}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        hrefs = rspJson["hrefs"]
+        self.assertEqual(len(hrefs), 3)
+        self.assertTrue("links" in rspJson)
+        grp_links = rspJson["links"]
+
+        expected_dset_links = ("dset1.1.1", "dset1.1.2", "dset2.1", "dset2.2")
+
+        self.assertEqual(len(grp_links), 6)
+        link_count = 0
+
+        for grp_id in grp_links:
+            helper.validateId(grp_id)
+            links = grp_links[grp_id]
+            for link in links:
+                self.assertTrue("title" in link)
+                link_title = link["title"]
+                self.assertTrue(link_title in expected_dset_links)
+                self.assertTrue("class" in link)
+                link_class = link["class"]
+                # only hardlinks will be a match with this pattern
+                self.assertEqual(link_class, "H5L_TYPE_HARD")
+                link_count += 1
+                self.assertTrue("id" in link)
+                link_id = link["id"]
+                helper.validateId(link_id)
+                self.assertTrue(link_id.startswith("d-"))  # link to a dataset
+
+        self.assertEqual(link_count, len(expected_dset_links))
 
     def testSoftLinkTraversal(self):
         # test that an object can be found via path with an external link
@@ -1115,7 +1259,7 @@ class LinkTest(unittest.TestCase):
         obj_links = rspJson["links"]
         self.assertEqual(len(obj_links), 6)
         expected_group_links = ("g1", "g2", "g1.1", "g1.2", "g1.2.1", )
-        expected_dset_links = ("dset1.2", "dset2.2", "dset1.1.1", "dset1.1.2", "dset2.1", )
+        expected_dset_links = ("dset1.1.1", "dset1.1.2", "dset2.1", "dset2.2")
         expected_soft_links = ("slink", )
         expected_external_links = ("extlink", )
 

@@ -16,8 +16,9 @@
 from aiohttp.web_exceptions import HTTPBadRequest
 from json import JSONDecodeError
 
-from .util.httpUtil import http_get, getHref
+from .util.httpUtil import getHref
 from .util.httpUtil import jsonResponse
+from .util.globparser import globmatch
 from .util.idUtil import isValidUuid, getDataNodeUrl, getCollectionForId
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from .util.domainUtil import getDomainFromRequest, isValidDomain, verifyRoot
@@ -45,21 +46,6 @@ async def GET_Links(request):
         msg = f"Invalid group id: {group_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    limit = None
-    create_order = False
-    if "CreateOrder" in params and params["CreateOrder"]:
-        create_order = True
-
-    if "Limit" in params:
-        try:
-            limit = int(params["Limit"])
-        except ValueError:
-            msg = "Bad Request: Expected int type for limit"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-    marker = None
-    if "Marker" in params:
-        marker = params["Marker"]
 
     username, pswd = getUserPasswordFromRequest(request)
     if username is None and app["allow_noauth"]:
@@ -76,31 +62,79 @@ async def GET_Links(request):
 
     await validateAction(app, domain, group_id, username, "read")
 
-    req = getDataNodeUrl(app, group_id)
-    req += "/groups/" + group_id + "/links"
+    kwargs = {"bucket": bucket}
 
-    params = {}
-    if create_order:
-        params["CreateOrder"] = 1
-    if limit is not None:
-        params["Limit"] = str(limit)
-    if marker is not None:
-        params["Marker"] = marker
-    if bucket:
-        params["bucket"] = bucket
-    links_json = await http_get(app, req, params=params)
-    log.debug(f"got links json from dn for group_id: {group_id}")
-    links = links_json["links"]
+    if "follow_links" in params and params["follow_links"]:
+        follow_links = True
+    else:
+        follow_links = False
 
-    # mix in collection key, target and hrefs
-    for link in links:
-        if link["class"] == "H5L_TYPE_HARD":
-            collection_name = getCollectionForId(link["id"])
-            link["collection"] = collection_name
-            target_uri = "/" + collection_name + "/" + link["id"]
-            link["target"] = getHref(request, target_uri)
-        link_uri = "/groups/" + group_id + "/links/" + link["title"]
-        link["href"] = getHref(request, link_uri)
+    if "pattern" in params and params["pattern"]:
+        pattern = params["pattern"]
+        try:
+            globmatch("abc", pattern)
+        except ValueError:
+            msg = f"invlaid pattern: {pattern} for  link matching"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        log.debug(f"using pattern: {pattern} for GET_Links")
+        kwargs["pattern"] = pattern
+    else:
+        pattern = None
+
+    if follow_links:
+        # Use DomainCrawler to fetch links from multiple objects.
+        # set the follow_links and bucket params
+        kwargs["follow_links"] = True
+        crawler_kwargs = {"action": "get_link", "raise_error": True, "params": kwargs}
+        items = [group_id, ]
+        crawler = DomainCrawler(app, items, **crawler_kwargs)
+
+        # will raise exception on NotFound, etc.
+        await crawler.crawl()
+
+        msg = f"DomainCrawler returned: {len(crawler._obj_dict)} objects"
+        log.info(msg)
+        links = crawler._obj_dict
+        if pattern:
+            for grp_id in links.keys():
+                grp_links = links[grp_id]
+                ret_links = []
+                for link in grp_links:
+                    title = link["title"]
+                    if globmatch(title, pattern):
+                        ret_links.append(link)
+                links[grp_id] = ret_links
+                msg = f"getLinks for {grp_id}, matched {len((ret_links))} links "
+                msg += f"from {len(grp_links)} links with pattern {pattern}"
+                log.debug(msg)
+    else:
+        if "CreateOrder" in params and params["CreateOrder"]:
+            kwargs["create_order"] = True
+        if "Limit" in params:
+            try:
+                limit = int(params["Limit"])
+            except ValueError:
+                msg = "Bad Request: Expected int type for limit"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            kwargs["limit"] = limit
+        if "Marker" in params:
+            kwargs["marker"] = params["Marker"]
+
+        links = await getLinks(app, group_id, **kwargs)
+
+        log.debug(f"got {len(links)} links json from dn for group_id: {group_id}")
+
+        # mix in collection key, target and hrefs
+        for link in links:
+            if link["class"] == "H5L_TYPE_HARD":
+                collection_name = getCollectionForId(link["id"])
+                link["collection"] = collection_name
+                target_uri = "/" + collection_name + "/" + link["id"]
+                link["target"] = getHref(request, target_uri)
+            link_uri = "/groups/" + group_id + "/links/" + link["title"]
+            link["href"] = getHref(request, link_uri)
 
     resp_json = {}
     resp_json["links"] = links

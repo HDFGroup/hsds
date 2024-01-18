@@ -16,14 +16,14 @@
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
 from json import JSONDecodeError
 
-from .util.httpUtil import http_post, http_delete, getHref
+from .util.httpUtil import http_post, getHref
 from .util.httpUtil import jsonResponse
 from .util.idUtil import isValidUuid, getDataNodeUrl, createObjId
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
 from .util.authUtil import validateUserPassword
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain, getPathForDomain, verifyRoot
-from .servicenode_lib import getDomainJson, getObjectJson, validateAction
+from .servicenode_lib import getDomainJson, getObjectJson, validateAction, deleteObj
 from .servicenode_lib import getObjectIdByPath, getPathForObjectId, putHardLink
 from . import hsds_logger as log
 
@@ -242,7 +242,6 @@ async def DELETE_Group(request):
     """HTTP method to delete a group resource"""
     log.request(request)
     app = request.app
-    meta_cache = app["meta_cache"]
 
     group_id = request.match_info.get("id")
     if not group_id:
@@ -277,17 +276,7 @@ async def DELETE_Group(request):
         log.warn(msg)
         raise HTTPForbidden()
 
-    req = getDataNodeUrl(app, group_id)
-    req += "/groups/" + group_id
-    params = {}
-    if bucket:
-        params["bucket"] = bucket
-    log.debug(f"http_delete req: {req} params: {params}")
-
-    await http_delete(app, req, params=params)
-
-    if group_id in meta_cache:
-        del meta_cache[group_id]  # remove from cache
+    await deleteObj(app, group_id, bucket=bucket)
 
     resp = await jsonResponse(request, {})
     log.response(request, resp=resp)

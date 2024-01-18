@@ -18,8 +18,7 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalSer
 from aiohttp.web import StreamResponse
 from json import JSONDecodeError
 
-from .util.httpUtil import getHref
-from .util.httpUtil import getAcceptType, jsonResponse
+from .util.httpUtil import getAcceptType, jsonResponse, getHref
 from .util.idUtil import isValidUuid, getRootObjId
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from .util.domainUtil import getDomainFromRequest, isValidDomain

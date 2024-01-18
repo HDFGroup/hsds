@@ -342,13 +342,21 @@ async def getDsetJson(app, dset_id,
     return dset_json
 
 
-async def getLinks(app, group_id, titles=None, bucket=None):
+async def getLinks(app, group_id,
+                   titles=None,
+                   create_order=False,
+                   limit=None,
+                   marker=None,
+                   pattern=None,
+                   bucket=None):
+
     """ Get the link jsons for the given titles """
 
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id + "/links"
     params = {"bucket": bucket}
     log.debug(f"getLinks {group_id}")
+
     if titles:
         # do a post request with the given title list
         log.debug(f"getLinks for {group_id} - {len(titles)} titles")
@@ -362,6 +370,15 @@ async def getLinks(app, group_id, titles=None, bucket=None):
     else:
         # do a get for all links
         log.debug(f"getLinks, all links for {group_id}")
+        if create_order:
+            params["CreateOrder"] = 1
+        if limit is not None:
+            params["Limit"] = str(limit)
+        if marker is not None:
+            params["Marker"] = marker
+        if pattern is not None:
+            params["pattern"] = pattern
+
         get_rsp = await http_get(app, req, params=params)
         log.debug(f"got link_json: {get_rsp}")
         if "links" not in get_rsp:
@@ -963,3 +980,21 @@ async def deleteAttributes(app, obj_id, attr_names=None, separator="/", bucket=N
     params["attr_names"] = attr_name_param
     log.debug(f"using params: {params}")
     await http_delete(app, req, params=params)
+
+
+async def deleteObj(app, obj_id, bucket=None):
+    """ send delete request for group, datatype, or dataset obj """
+    log.debug(f"deleteObj {obj_id}")
+    req = getDataNodeUrl(app, obj_id)
+    collection = getCollectionForId(obj_id)
+    req += f"/{collection}/{obj_id}"
+    params = {}
+    if bucket:
+        params["bucket"] = bucket
+    log.debug(f"http_delete req: {req} params: {params}")
+
+    await http_delete(app, req, params=params)
+
+    meta_cache = app["meta_cache"]
+    if obj_id in meta_cache:
+        del meta_cache[obj_id]  # remove from cache

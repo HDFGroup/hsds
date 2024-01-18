@@ -19,7 +19,7 @@ from json import JSONDecodeError
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound
 from aiohttp.web_exceptions import HTTPConflict, HTTPInternalServerError
 
-from .util.httpUtil import http_post, http_put, http_delete, getHref, respJsonAssemble
+from .util.httpUtil import http_post, http_put, getHref, respJsonAssemble
 from .util.httpUtil import jsonResponse
 from .util.idUtil import isValidUuid, getDataNodeUrl, createObjId, isSchema2Id
 from .util.dsetUtil import getPreviewQuery, getFilterItem, getShapeDims
@@ -35,7 +35,8 @@ from .util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson
 from .util.hdf5dtype import getItemSize
 from .servicenode_lib import getDomainJson, getObjectJson, getDsetJson, getPathForObjectId
 from .servicenode_lib import getObjectIdByPath, validateAction, getRootInfo, doFlush, putHardLink
-from .dset_lib import reduceShape
+from .servicenode_lib import deleteObj
+from .dset_lib import reduceShape, deleteAllChunks
 from . import config
 from . import hsds_logger as log
 
@@ -107,7 +108,7 @@ async def validateChunkLayout(app, shape_json, item_size, layout, bucket=None):
         # reference to a dataset in a traditional HDF5 files with
         # contigious storage
         if item_size == "H5T_VARIABLE":
-            # can't be used with variable types..
+            # can't be used with variable types...
             msg = "Datsets with variable types cannot be used with "
             msg += "reference layouts"
             log.warn(msg)
@@ -527,7 +528,6 @@ async def PUT_DatasetShape(request):
     shape_update = None
     extend = 0
     extend_dim = 0
-    hrefs = []  # tBD - definae HATEOS refs to return
 
     dset_id = request.match_info.get("id")
     if not dset_id:
@@ -638,7 +638,7 @@ async def PUT_DatasetShape(request):
 
     if shape_update == dims:
         log.info("shape update is same as current dims, no action needed")
-        json_resp = {"hrefs:", hrefs}
+        json_resp = {}
         resp = await jsonResponse(request, json_resp, status=200)
         log.response(request, resp=resp)
         return resp
@@ -671,7 +671,7 @@ async def PUT_DatasetShape(request):
     # send request onto DN
     req = getDataNodeUrl(app, dset_id) + "/datasets/" + dset_id + "/shape"
 
-    json_resp = {"hrefs": hrefs}
+    json_resp = {}
     params = {}
     if bucket:
         params["bucket"] = bucket
@@ -1189,7 +1189,6 @@ async def DELETE_Dataset(request):
     """HTTP method to delete a dataset resource"""
     log.request(request)
     app = request.app
-    meta_cache = app["meta_cache"]
 
     dset_id = request.match_info.get("id")
     if not dset_id:
@@ -1217,15 +1216,10 @@ async def DELETE_Dataset(request):
 
     await validateAction(app, domain, dset_id, username, "delete")
 
-    req = getDataNodeUrl(app, dset_id) + "/datasets/" + dset_id
+    # free any allocated chunks
+    await deleteAllChunks(app, dset_id, bucket=bucket)
 
-    params = {}
-    if bucket:
-        params["bucket"] = bucket
-    await http_delete(app, req, params=params)
-
-    if dset_id in meta_cache:
-        del meta_cache[dset_id]  # remove from cache
+    await deleteObj(app, dset_id, bucket=bucket)
 
     resp = await jsonResponse(request, {})
     log.response(request, resp=resp)

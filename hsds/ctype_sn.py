@@ -16,7 +16,7 @@
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPGone
 from json import JSONDecodeError
-from .util.httpUtil import http_post, http_delete, getHref, respJsonAssemble
+from .util.httpUtil import http_post, getHref, respJsonAssemble
 from .util.httpUtil import jsonResponse
 from .util.idUtil import isValidUuid, getDataNodeUrl, createObjId
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
@@ -24,7 +24,7 @@ from .util.authUtil import validateUserPassword
 from .util.domainUtil import getDomainFromRequest, getPathForDomain, isValidDomain
 from .util.domainUtil import getBucketForDomain, verifyRoot
 from .util.hdf5dtype import validateTypeItem, getBaseTypeJson
-from .servicenode_lib import getDomainJson, getObjectJson, validateAction
+from .servicenode_lib import getDomainJson, getObjectJson, validateAction, deleteObj
 from .servicenode_lib import getObjectIdByPath, getPathForObjectId, putHardLink
 from . import hsds_logger as log
 
@@ -242,8 +242,6 @@ async def DELETE_Datatype(request):
     """HTTP method to delete a committed type resource"""
     log.request(request)
     app = request.app
-    meta_cache = app["meta_cache"]
-
     ctype_id = request.match_info.get("id")
     if not ctype_id:
         msg = "Missing committed type id"
@@ -273,12 +271,7 @@ async def DELETE_Datatype(request):
 
     await validateAction(app, domain, ctype_id, username, "delete")
 
-    req = getDataNodeUrl(app, ctype_id) + "/datatypes/" + ctype_id
-
-    await http_delete(app, req, params=params)
-
-    if ctype_id in meta_cache:
-        del meta_cache[ctype_id]  # remove from cache
+    await deleteObj(app, ctype_id, bucket=bucket)
 
     resp = await jsonResponse(request, {})
     log.response(request, resp=resp)
