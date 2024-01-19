@@ -19,6 +19,7 @@ from aiohttp.web import StreamResponse
 from json import JSONDecodeError
 
 from .util.httpUtil import getAcceptType, jsonResponse, getHref
+from .util.globparser import globmatch
 from .util.idUtil import isValidUuid, getRootObjId
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from .util.domainUtil import getDomainFromRequest, isValidDomain
@@ -60,12 +61,22 @@ async def GET_Attributes(request):
 
     ignore_nan = False
     include_data = True
+    max_data_size = 0
     if "IncludeData" in params:
         IncludeData = params["IncludeData"]
         if not IncludeData or IncludeData == "0":
             include_data = False
             kwargs["include_data"] = False
     log.debug(f"include_data: {include_data}")
+
+    if "max_data_size" in params:
+        try:
+            max_data_size = int(params["max_data_size"])
+        except ValueError:
+            msg = "expected int for max_data_size"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        kwargs["max_data_size"] = max_data_size
 
     if "ignore_nan" in params and params["ignore_nan"]:
         ignore_nan = True
@@ -87,6 +98,19 @@ async def GET_Attributes(request):
     if "Marker" in params:
         marker = params["Marker"]
         kwargs["marker"] = marker
+
+    if "pattern" in params and params["pattern"]:
+        pattern = params["pattern"]
+        try:
+            globmatch("abc", pattern)
+        except ValueError:
+            msg = f"invlaid pattern: {pattern} for attribute matching"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        log.debug(f"using pattern: {pattern} for GET_Attributes")
+        kwargs["pattern"] = pattern
+    else:
+        pattern = None
 
     username, pswd = getUserPasswordFromRequest(request)
     if username is None and app["allow_noauth"]:
@@ -1206,10 +1230,18 @@ async def POST_Attributes(request):
     params = request.rel_url.query
     log.debug(f"got params: {params}")
     include_data = True
+    max_data_size = 0
     if "IncludeData" in params:
         IncludeData = params["IncludeData"]
         if not IncludeData or IncludeData == "0":
             include_data = False
+    if "max_data_size" in params:
+        try:
+            max_data_size = int(params["max_data_size"])
+        except ValueError:
+            msg = "expected int for max_data_size"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
 
     if params.get("ignore_nan"):
         ignore_nan = True
@@ -1238,6 +1270,8 @@ async def POST_Attributes(request):
         kwargs = {"attr_names": attr_names, "bucket": bucket}
         if not include_data:
             kwargs["include_data"] = False
+        if max_data_size > 0:
+            kwargs["max_data_size"] = max_data_size
         if ignore_nan:
             kwargs["ignore_nan"] = True
         if encoding:
@@ -1253,6 +1287,8 @@ async def POST_Attributes(request):
         # mixin params
         if not include_data:
             crawler_params["include_data"] = False
+        if max_data_size > 0:
+            crawler_params["max_data_size"] = max_data_size
 
         if ignore_nan:
             crawler_params["ignore_nan"] = True

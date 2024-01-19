@@ -852,8 +852,10 @@ async def doFlush(app, root_id, bucket=None):
 async def getAttributes(app, obj_id,
                         attr_names=None,
                         include_data=True,
+                        max_data_size=0,
                         ignore_nan=False,
                         create_order=False,
+                        pattern=None,
                         encoding=None,
                         limit=0,
                         marker=None,
@@ -879,6 +881,8 @@ async def getAttributes(app, obj_id,
         params["CreateOrder"] = 1
     if encoding:
         params["encoding"] = encoding
+    if max_data_size > 0:
+        params["max_data_size"] = max_data_size
 
     if attr_names:
         # send names via a POST request
@@ -892,6 +896,9 @@ async def getAttributes(app, obj_id,
             params["Limit"] = limit
         if marker:
             params["Marker"] = marker
+        if pattern:
+            params["pattern"] = pattern
+
         log.debug(f"using params: {params}")
         # do a get to fetch all the attributes
         dn_json = await http_get(app, req, params=params)

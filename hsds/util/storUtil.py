@@ -20,6 +20,7 @@ import zlib
 import numpy as np
 import numcodecs as codecs
 import bitshuffle
+from json import JSONDecodeError
 from aiohttp.web_exceptions import HTTPInternalServerError
 
 from .. import hsds_logger as log
@@ -388,6 +389,9 @@ async def getStorJSONObj(app, key, bucket=None):
         json_dict = json.loads(data.decode("utf8"))
     except UnicodeDecodeError:
         log.error(f"Error loading JSON at key: {key}")
+        raise HTTPInternalServerError()
+    except JSONDecodeError:
+        log.error(f"unable to load json: {data}")
         raise HTTPInternalServerError()
 
     msg = f"storage key {key} returned json object "

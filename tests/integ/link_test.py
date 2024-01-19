@@ -564,7 +564,7 @@ class LinkTest(unittest.TestCase):
         expected_dset_links = ("dset1.1.1", "dset1.1.2", "dset2.1", "dset2.2")
         expected_soft_links = ("slink", )
         expected_external_links = ("extlink", )
-        self.assertEqual(len(obj_map), 6)  
+        self.assertEqual(len(obj_map), 6)
         for grp_id in obj_map:
             helper.validateId(grp_id)
             links = obj_map[grp_id]
@@ -604,7 +604,7 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(extlink_count, len(expected_external_links))
 
     def testGetPattern(self):
-        # test getting links from an existing domain, with a regex filter
+        # test getting links from an existing domain, with a glob filter
         domain = helper.getTestDomain("tall.h5")
         print("testGetPattern", domain)
         headers = helper.getRequestHeaders(domain=domain)

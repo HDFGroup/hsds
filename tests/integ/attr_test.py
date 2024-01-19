@@ -2191,6 +2191,116 @@ class AttributeTest(unittest.TestCase):
             rsp = self.session.get(req, headers=headers)
             self.assertEqual(rsp.status_code, 410)
 
+    def testMaxDataSize(self):
+        domain = helper.getTestDomain("tall.h5")
+        print("testMaxDataSize", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+
+        # verify domain exists
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        if rsp.status_code != 200:
+            msg = f"WARNING: Failed to get domain: {domain}. Is test data setup?"
+            print(msg)
+            return  # abort rest of test
+        domainJson = json.loads(rsp.text)
+        root_id = domainJson["root"]
+        helper.validateId(root_id)
+
+        attr_names = ["attr1", "attr2"]
+
+        req = helper.getEndpoint() + "/groups/" + root_id + "/attributes"
+        params = {"IncludeData": 1}
+
+        for max_data_size in (0, 10):
+            params["max_data_size"] = max_data_size
+            rsp = self.session.get(req, params=params, headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+
+            rspJson = json.loads(rsp.text)
+            self.assertTrue("attributes" in rspJson)
+            attributes = rspJson["attributes"]
+            self.assertTrue(isinstance(attributes, list))
+
+            self.assertEqual(len(attributes), len(attr_names))
+
+            for i in range(len(attr_names)):
+                attrJson = attributes[i]
+                self.assertTrue("name" in attrJson)
+                attr_name = attrJson["name"]
+                self.assertEqual(attr_name, attr_names[i])
+                self.assertTrue("type" in attrJson)
+                self.assertTrue("shape" in attrJson)
+                shapeJson = attrJson["shape"]
+                self.assertEqual(shapeJson["class"], "H5S_SIMPLE")
+                self.assertTrue("created" in attrJson)
+                if max_data_size == 0 or attr_name == "attr1":
+                    self.assertTrue("value" in attrJson)
+                else:
+                    self.assertFalse("value" in attrJson)
+
+        # do the same thing with a post request
+        data = {"attr_names": ["attr1", "attr2", ]}
+        for max_data_size in (0, 10):
+            params["max_data_size"] = max_data_size
+            rsp = self.session.post(req, data=json.dumps(data), params=params, headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+
+            rspJson = json.loads(rsp.text)
+            self.assertTrue("attributes" in rspJson)
+            attributes = rspJson["attributes"]
+            self.assertTrue(isinstance(attributes, list))
+
+            self.assertEqual(len(attributes), len(attr_names))
+
+            for i in range(len(attr_names)):
+                attrJson = attributes[i]
+                self.assertTrue("name" in attrJson)
+                attr_name = attrJson["name"]
+                self.assertEqual(attr_name, attr_names[i])
+                self.assertTrue("type" in attrJson)
+                self.assertTrue("shape" in attrJson)
+                shapeJson = attrJson["shape"]
+                self.assertEqual(shapeJson["class"], "H5S_SIMPLE")
+                self.assertTrue("created" in attrJson)
+                if max_data_size == 0 or attr_name == "attr1":
+                    self.assertTrue("value" in attrJson)
+                else:
+                    self.assertFalse("value" in attrJson)
+
+    def testGetPattern(self):
+        # test getting attributes from an existing domain, with a glob filter
+        domain = helper.getTestDomain("tall.h5")
+        print("testGetPattern", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+
+        # verify domain exists
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        if rsp.status_code != 200:
+            print(f"WARNING: Failed to get domain: {domain}. Is test data setup?")
+            return  # abort rest of test
+
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        self.assertTrue(root_uuid.startswith("g-"))
+        # get the "/g1/g1.1/dset1.1.1" dset id
+        d111_uuid = helper.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1", session=self.session)
+
+        # do get with a glob pattern
+        req = helper.getEndpoint() + "/datasets/" + d111_uuid + "/attributes"
+        params = {"pattern": "*1"}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("attributes" in rspJson)
+        attributes = rspJson["attributes"]
+        self.assertEqual(len(attributes), 1)  # only attr1 should be returned
+        attr = attributes[0]
+        for name in ("created", "type", "shape", "value", "name", "href"):
+            self.assertTrue(name in attr)
+        self.assertEqual(attr["name"], "attr1")
+
 
 if __name__ == "__main__":
     # setup test files

@@ -21,9 +21,10 @@ from aiohttp.web import json_response
 
 from .util.attrUtil import validateAttributeName, isEqualAttr
 from .util.hdf5dtype import getItemSize, createDataType
+from .util.globparser import globmatch
 from .util.dsetUtil import getShapeDims
 from .util.arrayUtil import arrayToBytes, jsonToArray, decodeData
-from .util.arrayUtil import bytesToArray, bytesArrayToList
+from .util.arrayUtil import bytesToArray, bytesArrayToList, getNumElements
 from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
 from . import hsds_logger as log
 
@@ -43,7 +44,7 @@ def _index(items, marker, create_order=False):
     return -1
 
 
-def _getAttribute(attr_name, obj_json, include_data=True, encoding=None):
+def _getAttribute(attr_name, obj_json, include_data=True, max_data_size=0, encoding=None):
     """ copy relevant fields from src to target """
 
     if not isinstance(obj_json, dict):
@@ -88,6 +89,26 @@ def _getAttribute(attr_name, obj_json, include_data=True, encoding=None):
             log.warn(msg)
             encoding = None
         log.debug("base64 encoding requested")
+
+    if include_data and max_data_size > 0:
+        # check that the size of the data is not greater than the limit
+        item_size = getItemSize(type_json)
+        if item_size == "H5T_VARIABLE":
+            # could be anything, just guess as 512 bytes per element
+            # TBD: determine exact size
+            item_size = 512
+        dims = getShapeDims(shape_json)
+        num_elements = getNumElements(dims)
+        attr_size = item_size * num_elements
+        if attr_size > max_data_size:
+            msg = f"{attr_name} size of {attr_size} is "
+            msg += "larger than max_data_size, excluding data"
+            log.debug(msg)
+            include_data = False
+        else:
+            msg = f"{attr_name} size of {attr_size} is "
+            msg += "not larger than max_data_size, including data"
+            log.debug(msg)
 
     if include_data:
         value_json = src_attr["value"]
@@ -143,11 +164,18 @@ async def GET_Attributes(request):
     if params.get("IncludeData"):
         include_data = True
 
+    max_data_size = 0
+    if params.get("max_data_size"):
+        max_data_size = int(params["max_data_size"])
+    pattern = None
+    if params.get("pattern"):
+        pattern = params["pattern"]
+
     limit = None
     if "Limit" in params:
         try:
             limit = int(params["Limit"])
-            log.info("GET_Links - using Limit: {}".format(limit))
+            log.info(f"GET_Attributes - using Limit: {limit}")
         except ValueError:
             msg = "Bad Request: Expected int type for limit"
             log.error(msg)  # should be validated by SN
@@ -204,7 +232,14 @@ async def GET_Attributes(request):
     attr_list = []
     for i in range(start_index, end_index):
         attr_name = titles[i]
+        if pattern:
+            if not globmatch(attr_name, pattern):
+                log.debug(f"attr_name: {attr_name} did not match pattern: {pattern}")
+                continue
+
         kwargs = {"include_data": include_data, "encoding": encoding}
+        if include_data:
+            kwargs["max_data_size"] = max_data_size
         log.debug(f"_getAttribute kwargs: {kwargs}")
         des_attr = _getAttribute(attr_name, obj_json, **kwargs)
         attr_list.append(des_attr)
@@ -249,6 +284,9 @@ async def POST_Attributes(request):
     if "IncludeData" in params and params["IncludeData"]:
         include_data = True
         log.debug("include attr data")
+    max_data_size = 0
+    if params.get("max_data_size"):
+        max_data_size = int(params["max_data_size"])
     if params.get("encoding"):
         encoding = params["encoding"]
         log.debug("POST_Attributes requested base64 encoding")
@@ -269,6 +307,8 @@ async def POST_Attributes(request):
     kwargs = {"include_data": include_data}
     if encoding:
         kwargs["encoding"] = encoding
+    if max_data_size > 0:
+        kwargs["max_data_size"] = max_data_size
 
     missing_names = set()
 
