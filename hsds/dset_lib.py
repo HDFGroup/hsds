@@ -913,7 +913,6 @@ async def deleteAllChunks(app, dset_id, bucket=None):
 
     # get all chunk ids for chunks that have been allocated
     chunk_ids = await getAllocatedChunkIds(app, dset_id, bucket=bucket)
-    chunk_ids.sort()
 
     if chunk_ids:
         chunk_ids = list(chunk_ids)

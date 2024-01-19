@@ -507,23 +507,6 @@ class LinkTest(unittest.TestCase):
         expected_uuid = helper.getUUIDByPath(domain, "/g1/g1.2/g1.2.1", session=self.session)
         self.assertEqual(expected_uuid, g1_2_1_uuid)
 
-        # do get with a regex pattern
-        params = {"pattern": "ext*"}
-        rsp = self.session.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("links" in rspJson)
-        links = rspJson["links"]
-        self.assertEqual(len(links), 1)  # only extlink should be returned
-        link = links[0]
-        for name in ("created", "class", "h5domain", "h5path", "title", "href"):
-            self.assertTrue(name in link)
-        self.assertEqual(link["class"], "H5L_TYPE_EXTERNAL")
-        self.assertEqual(link["title"], "extlink")
-        self.assertEqual(link["h5domain"], "somefile")
-        self.assertEqual(link["h5path"], "somepath")
-        self.assertTrue(link["created"] < now - 10)
-
         # get link by title
         req = helper.getEndpoint() + "/groups/" + g1_2_1_uuid + "/links/slink"
         rsp = self.session.get(req, headers=headers)
@@ -573,7 +556,7 @@ class LinkTest(unittest.TestCase):
         hrefs = rspJson["hrefs"]
         self.assertEqual(len(hrefs), 3)
         self.assertTrue("links" in rspJson)
-        grp_links = rspJson["links"]
+        obj_map = rspJson["links"]  # map of obj_ids to links
         hardlink_count = 0
         softlink_count = 0
         extlink_count = 0
@@ -581,10 +564,10 @@ class LinkTest(unittest.TestCase):
         expected_dset_links = ("dset1.1.1", "dset1.1.2", "dset2.1", "dset2.2")
         expected_soft_links = ("slink", )
         expected_external_links = ("extlink", )
-        self.assertEqual(len(grp_links), 6)
-        for grp_id in grp_links:
+        self.assertEqual(len(obj_map), 6)  
+        for grp_id in obj_map:
             helper.validateId(grp_id)
-            links = grp_links[grp_id]
+            links = obj_map[grp_id]
             for link in links:
                 self.assertTrue("title" in link)
                 link_title = link["title"]
@@ -636,6 +619,28 @@ class LinkTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
         self.assertTrue(root_uuid.startswith("g-"))
+        # get the "/g1/g1.2" group id
+        g1_2_uuid = helper.getUUIDByPath(domain, "/g1/g1.2", session=self.session)
+        now = time.time()
+
+        # do get with a regex pattern
+        # get links for /g1/g1.2:
+        req = helper.getEndpoint() + "/groups/" + g1_2_uuid + "/links"
+        params = {"pattern": "ext*"}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("links" in rspJson)
+        links = rspJson["links"]
+        self.assertEqual(len(links), 1)  # only extlink should be returned
+        link = links[0]
+        for name in ("created", "class", "h5domain", "h5path", "title", "href"):
+            self.assertTrue(name in link)
+        self.assertEqual(link["class"], "H5L_TYPE_EXTERNAL")
+        self.assertEqual(link["title"], "extlink")
+        self.assertEqual(link["h5domain"], "somefile")
+        self.assertEqual(link["h5path"], "somepath")
+        self.assertTrue(link["created"] < now - 10)
 
         # get links for root group and other groups recursively
         req = helper.getEndpoint() + "/groups/" + root_uuid + "/links"
@@ -647,16 +652,16 @@ class LinkTest(unittest.TestCase):
         hrefs = rspJson["hrefs"]
         self.assertEqual(len(hrefs), 3)
         self.assertTrue("links" in rspJson)
-        grp_links = rspJson["links"]
+        obj_map = rspJson["links"]  # map of grp ids to links
 
         expected_dset_links = ("dset1.1.1", "dset1.1.2", "dset2.1", "dset2.2")
 
-        self.assertEqual(len(grp_links), 6)
+        self.assertEqual(len(obj_map), 6)  # 6 groups should be returned
         link_count = 0
 
-        for grp_id in grp_links:
+        for grp_id in obj_map:
             helper.validateId(grp_id)
-            links = grp_links[grp_id]
+            links = obj_map[grp_id]
             for link in links:
                 self.assertTrue("title" in link)
                 link_title = link["title"]
