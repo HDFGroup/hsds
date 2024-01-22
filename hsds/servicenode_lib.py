@@ -355,11 +355,14 @@ async def getLinks(app, group_id,
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id + "/links"
     params = {"bucket": bucket}
+    if pattern is not None:
+        params["pattern"] = pattern
     log.debug(f"getLinks {group_id}")
 
     if titles:
         # do a post request with the given title list
         log.debug(f"getLinks for {group_id} - {len(titles)} titles")
+        log.debug(f"  params: {params}")
         data = {"titles": titles}
         post_rsp = await http_post(app, req, data=data, params=params)
         log.debug(f"got link_json: {post_rsp}")
@@ -369,15 +372,13 @@ async def getLinks(app, group_id,
         links = post_rsp["links"]
     else:
         # do a get for all links
-        log.debug(f"getLinks, all links for {group_id}")
         if create_order:
             params["CreateOrder"] = 1
         if limit is not None:
             params["Limit"] = str(limit)
         if marker is not None:
             params["Marker"] = marker
-        if pattern is not None:
-            params["pattern"] = pattern
+        log.debug(f"getLinks, all links for {group_id}, params: {params}")
 
         get_rsp = await http_get(app, req, params=params)
         log.debug(f"got link_json: {get_rsp}")
@@ -851,7 +852,7 @@ async def doFlush(app, root_id, bucket=None):
 
 async def getAttributes(app, obj_id,
                         attr_names=None,
-                        include_data=True,
+                        include_data=False,
                         max_data_size=0,
                         ignore_nan=False,
                         create_order=False,

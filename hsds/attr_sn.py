@@ -63,14 +63,9 @@ async def GET_Attributes(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    kwargs = {}
     bucket = getBucketForDomain(domain)
     log.debug(f"bucket: {bucket}")
-    kwargs["bucket"] = bucket
 
-    ignore_nan = False
-    include_data = True
-    max_data_size = 0
     if "follow_links" in params and params["follow_links"]:
         if collection != "groups":
             msg = "follow_links can only be used with group ids"
@@ -80,11 +75,11 @@ async def GET_Attributes(request):
     else:
         follow_links = False
     log.debug(f"getAttributes follow_links: {follow_links}")
+    include_data = True
     if "IncludeData" in params:
         IncludeData = params["IncludeData"]
         if not IncludeData or IncludeData == "0":
             include_data = False
-            kwargs["include_data"] = False
     log.debug(f"include_data: {include_data}")
 
     if "max_data_size" in params:
@@ -94,16 +89,19 @@ async def GET_Attributes(request):
             msg = "expected int for max_data_size"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        kwargs["max_data_size"] = max_data_size
+    else:
+        max_data_size = 0
 
     if "ignore_nan" in params and params["ignore_nan"]:
         ignore_nan = True
-        kwargs["ignore_nan"] = True
+    else:
+        ignore_nan = False
 
     if "CreateOrder" in params and params["CreateOrder"]:
-        kwargs["create_order"] = True
+        create_order = True
+    else:
+        create_order = False
 
-    limit = None
     if "Limit" in params:
         try:
             limit = int(params["Limit"])
@@ -111,12 +109,12 @@ async def GET_Attributes(request):
             msg = "Bad Request: Expected int type for limit"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        kwargs["limit"] = limit
-    marker = None
+    else:
+        limit = None
     if "Marker" in params:
         marker = params["Marker"]
-        kwargs["marker"] = marker
-    encoding = None
+    else:
+        marker = None
     if "encoding" in params:
         encoding = params["encoding"]
         if params["encoding"] != "base64":
@@ -124,7 +122,8 @@ async def GET_Attributes(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         encoding = "base64"
-        kwargs["encoding"] = encoding
+    else:
+        encoding = None
 
     if "pattern" in params and params["pattern"]:
         pattern = params["pattern"]
@@ -135,7 +134,6 @@ async def GET_Attributes(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         log.debug(f"using pattern: {pattern} for GET_Attributes")
-        kwargs["pattern"] = pattern
     else:
         pattern = None
 
@@ -148,18 +146,15 @@ async def GET_Attributes(request):
     await validateAction(app, domain, obj_id, username, "read")
 
     if follow_links:
-        crawler_params = {"follow_links": True, "bucket": bucket}
+        # setup kwargs for DomainCrawler
+        kwargs = {"action": "get_attr", "follow_links": True, "bucket": bucket}
         # mixin params
-        if not include_data:
-            crawler_params["include_data"] = False
+        if include_data:
+            kwargs["include_data"] = True
         if max_data_size > 0:
-            crawler_params["max_data_size"] = max_data_size
+            kwargs["max_data_size"] = max_data_size
         if ignore_nan:
-            crawler_params["ignore_nan"] = True
-        if encoding:
-            crawler_params["encoding"] = encoding
-
-        kwargs = {"action": "get_attr", "raise_error": True, "params": crawler_params}
+            kwargs["ignore_nan"] = True
         items = [obj_id, ]
         crawler = DomainCrawler(app, items, **kwargs)
         # will raise exception on NotFound, etc.
@@ -169,6 +164,23 @@ async def GET_Attributes(request):
         log.info(msg)
     else:
         # just get attributes for this objects
+        kwargs = {"bucket": bucket}
+        if include_data:
+            kwargs["include_data"] = True
+        if max_data_size > 0:
+            kwargs["max_data_size"] = max_data_size
+        if ignore_nan:
+            kwargs["ignore_nan"] = True
+        if limit:
+            kwargs["limit"] = limit
+        if marker:
+            kwargs["marker"] = marker
+        if encoding:
+            kwargs["encoding"] = encoding
+        if pattern:
+            kwargs["pattern"] = pattern
+        if create_order:
+            kwargs["create_order"] = True
         attributes = await getAttributes(app, obj_id, **kwargs)
         log.debug(f"got attributes json from dn for obj_id: {obj_id}")
 
@@ -622,7 +634,6 @@ async def PUT_Attributes(request):
         msg = "PUT Attribute with no body"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-
     try:
         body = await request.json()
     except JSONDecodeError:
@@ -637,6 +648,10 @@ async def PUT_Attributes(request):
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
     log.debug(f"got bucket: {bucket}")
+    if "replace" in params and params["replace"]:
+        replace = True
+    else:
+        replace = False
 
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
@@ -716,10 +731,6 @@ async def PUT_Attributes(request):
 
     await validateAction(app, domain, req_obj_id, username, "create")
 
-    kwargs = {"bucket": bucket}
-    if params.get("replace"):
-        kwargs["replace"] = True
-
     count = len(obj_ids)
     if count == 0:
         msg = "no obj_ids defined"
@@ -730,18 +741,17 @@ async def PUT_Attributes(request):
         obj_id = list(obj_ids.keys())[0]
         attr_json = obj_ids[obj_id]
         log.debug(f"got attr_json: {attr_json}")
+        kwargs = {"bucket": bucket, "attr_json": attr_json}
+        if replace:
+            kwargs["replace"] = True
 
-        status = await putAttributes(app, obj_id, attr_json, **kwargs)
+        status = await putAttributes(app, obj_id, **kwargs)
 
     else:
         # put multi obj
-
-        # mixin some additonal kwargs
-        crawler_params = {"follow_links": False}
-        if bucket:
-            crawler_params["bucket"] = bucket
-
-        kwargs = {"action": "put_attr", "raise_error": True, "params": crawler_params}
+        kwargs = {"action": "put_attr", "bucket": bucket}
+        if replace:
+            kwargs["replace"] = True
         crawler = DomainCrawler(app, obj_ids, **kwargs)
 
         # will raise exception on not found, server busy, etc.
@@ -860,7 +870,7 @@ async def GET_AttributeValue(request):
         encoding = None
 
     attr_names = [attr_name, ]
-    kwargs = {"attr_names": attr_names, "bucket": bucket}
+    kwargs = {"attr_names": attr_names, "bucket": bucket, "include_data": True}
     if ignore_nan:
         kwargs["ignore_nan"] = True
 
@@ -1268,12 +1278,14 @@ async def POST_Attributes(request):
 
     params = request.rel_url.query
     log.debug(f"got params: {params}")
-    include_data = True
+    include_data = False
     max_data_size = 0
     if "IncludeData" in params:
         IncludeData = params["IncludeData"]
-        if not IncludeData or IncludeData == "0":
-            include_data = False
+        log.debug(f"got IncludeData: [{IncludeData}], type: {type(IncludeData)}")
+        if IncludeData and IncludeData != "0":
+            include_data = True
+        log.debug(f"include_data: {include_data}")
     if "max_data_size" in params:
         try:
             max_data_size = int(params["max_data_size"])
@@ -1307,35 +1319,35 @@ async def POST_Attributes(request):
         obj_id = list(items.keys())[0]
         attr_names = items[obj_id]
         kwargs = {"attr_names": attr_names, "bucket": bucket}
-        if not include_data:
-            kwargs["include_data"] = False
+        if include_data:
+            log.debug("setting include_data to True")
+            kwargs["include_data"] = True
         if max_data_size > 0:
             kwargs["max_data_size"] = max_data_size
         if ignore_nan:
             kwargs["ignore_nan"] = True
         if encoding:
             kwargs["encoding"] = encoding
-
+        log.debug(f"getAttributes kwargs: {kwargs}")
         attributes = await getAttributes(app, obj_id, **kwargs)
 
         resp_json["attributes"] = attributes
     else:
         # get multi obj
         # don't follow links!
-        crawler_params = {"follow_links": False, "bucket": bucket}
-        # mixin params
-        if not include_data:
-            crawler_params["include_data"] = False
+        kwargs = {"action": "get_attr", "bucket": bucket, "follow_links": False}
+        kwargs["include_attrs"] = True
+        if include_data:
+            log.debug("setting include_data to True")
+            kwargs["include_data"] = True
         if max_data_size > 0:
-            crawler_params["max_data_size"] = max_data_size
-
+            kwargs["max_data_size"] = max_data_size
         if ignore_nan:
-            crawler_params["ignore_nan"] = True
-
+            kwargs["ignore_nan"] = True
         if encoding:
-            crawler_params["encoding"] = encoding
-
-        kwargs = {"action": "get_attr", "raise_error": True, "params": crawler_params}
+            pass
+            # TBD: crawler_params["encoding"] = encoding
+        log.debug(f"DomainCrawler kwargs: {kwargs}")
         crawler = DomainCrawler(app, items, **kwargs)
         # will raise exception on NotFound, etc.
         await crawler.crawl()

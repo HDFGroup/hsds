@@ -29,26 +29,39 @@ class DomainCrawler:
         app,
         objs,
         action="get_obj",
-        params=None,
+        bucket=None,
+        follow_links=False,
+        include_links=False,
+        include_attrs=False,
+        include_data=False,
+        ignore_nan=False,
+        replace=False,
+        ignore_error=False,
         max_tasks=40,
-        max_objects_limit=0,
-        raise_error=False
+        max_objects_limit=0
     ):
         log.info(f"DomainCrawler.__init__  action: {action} - {len(objs)} objs")
-        log.debug(f"params: {params}")
         self._app = app
         self._action = action
         self._max_objects_limit = max_objects_limit
-        self._params = params
+        self._follow_links = follow_links
+        self._include_links = include_links
+        self._include_attrs = include_attrs
+        self._include_data = include_data
+        self._ignore_nan = ignore_nan
+        self._replace = replace
         self._max_tasks = max_tasks
         self._q = asyncio.Queue()
         self._obj_dict = {}
         self.seen_ids = set()
-        self._raise_error = raise_error
+        self._ignore_error = ignore_error
         if not objs:
             log.error("no objs for crawler to crawl!")
             raise ValueError()
-
+        if not bucket:
+            log.error("bucket not set for DomainCrawler")
+            raise ValueError()
+        self._bucket = bucket
         for obj_id in objs:
             log.debug(f"adding {obj_id} to the queue")
             self._q.put_nowait(obj_id)
@@ -59,7 +72,7 @@ class DomainCrawler:
 
     def follow_links(self, grp_id, links):
         # add any linked obj ids to the lookup ids set
-        log.debug(f"follow links for {grp_id}")
+        log.debug(f"follow links for {grp_id}, links: {links}")
         if getCollectionForId(grp_id) != "groups":
             log.warn(f"expected group id but got: {grp_id}")
             return
@@ -89,13 +102,10 @@ class DomainCrawler:
                 log.debug(f"link id: {link_id} is not for a group, continue")
                 continue
             num_objects = len(self._obj_dict)
-            if self._params.get("max_objects_limit") is not None:
-                max_objects_limit = self._params["max_objects_limit"]
-                if num_objects >= max_objects_limit:
-                    msg = "DomainCrawler reached limit of "
-                    msg += f"{max_objects_limit}"
-                    log.info(msg)
-                    break
+            if self._max_objects_limit and num_objects >= self._max_objects_limit:
+                msg = f"DomainCrawler reached limit of {self._max_objects_limit}"
+                log.info(msg)
+                break
             if link_id not in self._obj_dict:
                 # haven't seen this object yet, get obj json
                 log.debug(f"DomainCrawler - adding link_id: {link_id} to queue")
@@ -113,10 +123,11 @@ class DomainCrawler:
             msg += f", {len(attr_names)} attributes"
         log.debug(msg)
 
-        kwargs = {}
-        for key in ("include_data", "ignore_nan", "bucket"):
-            if key in self._params:
-                kwargs[key] = self._params[key]
+        kwargs = {"bucket": self._bucket}
+        if self._include_data:
+            kwargs["include_data"] = True
+        if self._ignore_nan:
+            kwargs["ignore_nan"] = True
         if attr_names:
             kwargs["attr_names"] = attr_names
         log.debug(f"using kwargs: {kwargs}")
@@ -148,13 +159,12 @@ class DomainCrawler:
             self._obj_dict[obj_id] = {"status": status}
 
         collection = getCollectionForId(obj_id)
-        follow_links = self._params.get("follow_links")
-        bucket = self._params.get("bucket")
-        if collection == "groups" and follow_links:
+
+        if collection == "groups" and self._follow_links:
             links = None
             status = 200
             try:
-                links = await getLinks(self._app, obj_id, bucket=bucket)
+                links = await getLinks(self._app, obj_id, bucket=self._bucket)
             except HTTPNotFound:
                 status = 404
             except HTTPServiceUnavailable:
@@ -168,7 +178,6 @@ class DomainCrawler:
             if status >= 500:
                 log.warn(f"getLinks for {obj_id} returned: {status}")
             elif links:
-                log.debug(f"follow_links for: {links}")
                 self.follow_links(obj_id, links)
             else:
                 log.debug(f"no links for {obj_id}")
@@ -179,11 +188,9 @@ class DomainCrawler:
         req = getDataNodeUrl(self._app, obj_id)
         collection = getCollectionForId(obj_id)
         req += f"/{collection}/{obj_id}/attributes"
-        kwargs = {}
-        if "bucket" in self._params:
-            kwargs["bucket"] = self._params["bucket"]
-        if "replace" in self._params:
-            kwargs["replace"] = self._params["replace"]
+        kwargs = {"bucket": self._bucket}
+        if self._replace:
+            kwargs["replace"] = True
         status = None
         try:
             status = await putAttributes(self._app, obj_id, attr_items, **kwargs)
@@ -205,17 +212,14 @@ class DomainCrawler:
             for each group found, search the links if follow_links is set """
         log.debug(f"get_obj_json: {obj_id}")
         collection = getCollectionForId(obj_id)
-        kwargs = {}
+        kwargs = {"bucket": self._bucket, "include_attrs": self._include_attrs}
 
-        for k in ("include_links", "include_attrs", "bucket"):
-            if k in self._params:
-                kwargs[k] = self._params[k]
-        if collection == "groups" and self._params.get("follow_links"):
+        if collection == "groups" and self._follow_links:
             follow_links = True
             kwargs["include_links"] = True  # get them so we can follow them
         else:
             follow_links = False
-        if follow_links or self._params.get("include_attrs"):
+        if follow_links or self._include_attrs:
             kwargs["refresh"] = True  # don't want a cached version in this case
 
         log.debug(f"follow_links: {follow_links}")
@@ -261,10 +265,9 @@ class DomainCrawler:
                 log.error("expected links key in obj_json")
                 return
             links = obj_json["links"]
-            log.debug(f"follow_links for: {links}")
             self.follow_links(obj_id, links)
 
-            if not self._params.get("include_links"):
+            if not self._include_links:
                 # don't keep the links
                 del obj_json["links"]
 
@@ -278,17 +281,11 @@ class DomainCrawler:
         if collection != "groups":
             log.warn(f"get_links, expected groups id but got: {grp_id}")
             return
-        kwargs = {}
+        kwargs = {"bucket": self._bucket}
         if titles:
             kwargs["titles"] = titles
-        if self._params.get("bucket"):
-            kwargs["bucket"] = self._params["bucket"]
-        if self._params.get("follow_links"):
-            follow_links = True
-        else:
-            follow_links = False
 
-        log.debug(f"follow_links: {follow_links}")
+        log.debug(f"follow_links: {self._follow_links}")
         log.debug(f"getLinks kwargs: {kwargs}")
 
         links = None
@@ -322,8 +319,7 @@ class DomainCrawler:
         self._obj_dict[grp_id] = links  # store the links
 
         # if follow_links, add any group links to the lookup ids set
-        if follow_links:
-            log.debug(f"follow links for {grp_id}")
+        if self._follow_links:
             self.follow_links(grp_id, links)
 
     async def put_links(self, grp_id, link_items):
@@ -331,9 +327,7 @@ class DomainCrawler:
         log.debug(f"put_links for {grp_id}, {len(link_items)} links")
         req = getDataNodeUrl(self._app, grp_id)
         req += f"/groups/{grp_id}/links"
-        kwargs = {}
-        if "bucket" in self._params:
-            kwargs["bucket"] = self._params["bucket"]
+        kwargs = {"bucket": self._bucket}
         status = None
         try:
             status = await putLinks(self._app, grp_id, link_items, **kwargs)
@@ -382,9 +376,9 @@ class DomainCrawler:
         status = self.get_status()
         if status:
             log.debug(f"DomainCrawler -- status: {status}")
-            log.debug(f"raise_error: {self._raise_error}")
-            if self._raise_error:
-                # throw the approriate exception if other than 200, 201
+            log.debug(f"ignore_error: {self._ignore_error}")
+            if not self._ignore_error:
+                # throw the appropriate exception if other than 200, 201
                 if status == 200:
                     pass  # ok
                 elif status == 201:

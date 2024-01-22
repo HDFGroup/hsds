@@ -62,8 +62,6 @@ async def GET_Links(request):
 
     await validateAction(app, domain, group_id, username, "read")
 
-    kwargs = {"bucket": bucket}
-
     if "follow_links" in params and params["follow_links"]:
         follow_links = True
     else:
@@ -78,17 +76,37 @@ async def GET_Links(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         log.debug(f"using pattern: {pattern} for GET_Links")
-        kwargs["pattern"] = pattern
     else:
         pattern = None
+
+    create_order = False
+    if "CreateOrder" in params and params["CreateOrder"]:
+        if params["CreateOrder"] != "0":
+            create_order = True
+
+    limit = None
+    if "Limit" in params:
+        try:
+            limit = int(params["Limit"])
+        except ValueError:
+            msg = "Bad Request: Expected int type for limit"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+    if "Marker" in params:
+        marker = params["Marker"]
+    else:
+        marker = None
 
     if follow_links:
         # Use DomainCrawler to fetch links from multiple objects.
         # set the follow_links and bucket params
-        kwargs["follow_links"] = True
-        crawler_kwargs = {"action": "get_link", "raise_error": True, "params": kwargs}
+        log.debug(f"GET_Links - following links starting with {group_id}")
+
+        kwargs = {"action": "get_link", "bucket": bucket, "follow_links": True}
+        kwargs["include_links"] = True
         items = [group_id, ]
-        crawler = DomainCrawler(app, items, **crawler_kwargs)
+        crawler = DomainCrawler(app, items, **kwargs)
 
         # will raise exception on NotFound, etc.
         await crawler.crawl()
@@ -109,18 +127,15 @@ async def GET_Links(request):
                 msg += f"from {len(grp_links)} links with pattern {pattern}"
                 log.debug(msg)
     else:
-        if "CreateOrder" in params and params["CreateOrder"]:
+        kwargs = {"bucket": bucket}
+        if create_order:
             kwargs["create_order"] = True
-        if "Limit" in params:
-            try:
-                limit = int(params["Limit"])
-            except ValueError:
-                msg = "Bad Request: Expected int type for limit"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
+        if limit:
             kwargs["limit"] = limit
-        if "Marker" in params:
-            kwargs["marker"] = params["Marker"]
+        if marker:
+            kwargs["marker"] = marker
+        if pattern:
+            kwargs["pattern"] = pattern
 
         links = await getLinks(app, group_id, **kwargs)
 
@@ -325,6 +340,10 @@ async def PUT_Links(request):
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
     log.debug(f"got bucket: {bucket}")
+    if "replace" in params and params["replace"]:
+        replace = True
+    else:
+        replace = False
 
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
@@ -434,10 +453,6 @@ async def PUT_Links(request):
 
     await validateAction(app, domain, req_grp_id, username, "create")
 
-    kwargs = {"bucket": bucket}
-    if params.get("replace"):
-        kwargs["replace"] = True
-
     count = len(grp_ids)
     if count == 0:
         msg = "no grp_ids defined"
@@ -445,6 +460,9 @@ async def PUT_Links(request):
         raise HTTPBadRequest(reason=msg)
     elif count == 1:
         # just send one PUT Attributes request to the dn
+        kwargs = {"bucket": bucket}
+        if replace:
+            kwargs["replace"] = True
         grp_id = list(grp_ids.keys())[0]
         link_json = grp_ids[grp_id]
         log.debug(f"got link_json: {link_json}")
@@ -453,13 +471,10 @@ async def PUT_Links(request):
 
     else:
         # put multi obj
+        kwargs = {"action": "put_link", "bucket": bucket}
+        if replace:
+            kwargs["replace"] = True
 
-        # mixin some additonal kwargs
-        crawler_params = {"follow_links": False}
-        if bucket:
-            crawler_params["bucket"] = bucket
-
-        kwargs = {"action": "put_link", "raise_error": True, "params": crawler_params}
         crawler = DomainCrawler(app, grp_ids, **kwargs)
 
         # will raise exception on not found, server busy, etc.
@@ -660,9 +675,9 @@ async def POST_Links(request):
     else:
         # Use DomainCrawler to fetch links from multiple object.
         # set the follow_links and bucket params
-        crawler_params = {"follow_links": follow_links, "bucket": bucket}
-
-        kwargs = {"action": "get_link", "raise_error": True, "params": crawler_params}
+        kwargs = {"action": "get_link", "bucket": bucket, "include_links": True}
+        if follow_links:
+            kwargs["follow_links"] = True
         crawler = DomainCrawler(app, items, **kwargs)
         # will raise exception on NotFound, etc.
         await crawler.crawl()

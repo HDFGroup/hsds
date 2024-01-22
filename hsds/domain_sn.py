@@ -51,17 +51,18 @@ async def get_collections(app, root_id, bucket=None, max_objects_limit=None):
 
     log.info(f"get_collections for {root_id}")
 
-    crawler_params = {
+    kwargs = {
+        "action": "get_obj",
         "include_attrs": False,
         "include_links": False,
-        "bucket": bucket,
         "follow_links": True,
+        "bucket": bucket,
     }
 
     if max_objects_limit:
-        crawler_params["max_objects_limit"] = max_objects_limit
+        kwargs["max_objects_limit"] = max_objects_limit
 
-    crawler = DomainCrawler(app, [root_id, ], action="get_obj", params=crawler_params)
+    crawler = DomainCrawler(app, [root_id, ], **kwargs)
     await crawler.crawl()
     if max_objects_limit and len(crawler._obj_dict) >= max_objects_limit:
         msg = "get_collections - too many objects:  "
@@ -88,7 +89,6 @@ async def get_collections(app, root_id, bucket=None, max_objects_limit=None):
             log.warn(f"get_collections - unexpected id type: {obj_id}")
     if root_id in group_ids:
         group_ids.remove(root_id)  # don't include the root id
-    print(f"get_collections - group_ids: {group_ids}")
 
     result = {}
     result["groups"] = group_ids
@@ -105,7 +105,8 @@ async def getDomainObjects(app, root_id, include_attrs=False, bucket=None):
     log.info(f"getDomainObjects for root: {root_id}, include_attrs: {include_attrs}")
     max_objects_limit = int(config.get("domain_req_max_objects_limit", default=500))
 
-    crawler_params = {
+    kwargs = {
+        "action": "get_obj",
         "include_attrs": include_attrs,
         "include_links": True,
         "follow_links": True,
@@ -113,7 +114,7 @@ async def getDomainObjects(app, root_id, include_attrs=False, bucket=None):
         "bucket": bucket,
     }
 
-    crawler = DomainCrawler(app, [root_id, ], action="get_obj", params=crawler_params)
+    crawler = DomainCrawler(app, [root_id, ], **kwargs)
     await crawler.crawl()
     if len(crawler._obj_dict) >= max_objects_limit:
         msg = "getDomainObjects - too many objects:  "
