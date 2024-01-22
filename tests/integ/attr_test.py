@@ -2301,6 +2301,54 @@ class AttributeTest(unittest.TestCase):
             self.assertTrue(name in attr)
         self.assertEqual(attr["name"], "attr1")
 
+    def testGetRecursive(self):
+        # test getting all attributes from an existing domain
+        domain = helper.getTestDomain("tall.h5")
+        print("testGetRecursive", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+
+        # verify domain exists
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        if rsp.status_code != 200:
+            print(f"WARNING: Failed to get domain: {domain}. Is test data setup?")
+            return  # abort rest of test
+
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        self.assertTrue(root_uuid.startswith("g-"))
+        # get the "/g1/g1.1/dset1.1.1" dset id
+        d111_uuid = helper.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1", session=self.session)
+
+        # do get with follow_links
+        req = helper.getEndpoint() + "/groups/" + root_uuid + "/attributes"
+        params = {"follow_links": "1"}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("attributes" in rspJson)
+        obj_map = rspJson["attributes"]
+        self.assertEqual(len(obj_map), 10)
+        attr_count = 0
+        for obj_id in obj_map:
+            attr_count += len(obj_map[obj_id])
+        self.assertEqual(attr_count, 4)
+        for obj_id in (root_uuid, d111_uuid):
+            # these are the only two objects with attributes
+            self.assertTrue(obj_id in obj_map)
+            obj_attrs = obj_map[obj_id]
+            self.assertEqual(len(obj_attrs), 2)
+            for attrJson in obj_attrs:
+                self.assertTrue("name" in attrJson)
+                attr_name = attrJson["name"]
+                self.assertTrue(attr_name in ("attr1", "attr2"))
+                self.assertTrue("type" in attrJson)
+                self.assertTrue("shape" in attrJson)
+                shapeJson = attrJson["shape"]
+                self.assertEqual(shapeJson["class"], "H5S_SIMPLE")
+                self.assertTrue("created" in attrJson)
+                self.assertTrue("value" in attrJson)
+
 
 if __name__ == "__main__":
     # setup test files

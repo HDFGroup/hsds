@@ -34,7 +34,7 @@ class DomainCrawler:
         max_objects_limit=0,
         raise_error=False
     ):
-        log.info(f"DomainCrawler.__init__  action: {action} root_id: {len(objs)} objs")
+        log.info(f"DomainCrawler.__init__  action: {action} - {len(objs)} objs")
         log.debug(f"params: {params}")
         self._app = app
         self._action = action
@@ -56,6 +56,55 @@ class DomainCrawler:
             self._objs = objs
         else:
             self._objs = None
+
+    def follow_links(self, grp_id, links):
+        # add any linked obj ids to the lookup ids set
+        log.debug(f"follow links for {grp_id}")
+        if getCollectionForId(grp_id) != "groups":
+            log.warn(f"expected group id but got: {grp_id}")
+            return
+        link_count = 0
+        for link in links:
+            log.debug(f"DomainCrawler - follow links for: {link}")
+            if isinstance(link, str):
+                # we were passed a dict of link titles to link_jsons
+                title = link
+                link_obj = links[title]
+            else:
+                # were passed a list of link jsons
+                if "title" not in link:
+                    log.warn(f"expected to find title key in link: {link}")
+                    continue
+                title = link["title"]
+                link_obj = link
+            log.debug(f"link {title}: {link_obj}")
+            if link_obj["class"] != "H5L_TYPE_HARD":
+                # just follow hardlinks
+                log.debug("not hard link, continue")
+                continue
+            link_id = link_obj["id"]
+            link_collection = getCollectionForId(link_id)
+            if self._action in ("get_link", "put_link") and link_collection != "groups":
+                # only groups can have links
+                log.debug(f"link id: {link_id} is not for a group, continue")
+                continue
+            num_objects = len(self._obj_dict)
+            if self._params.get("max_objects_limit") is not None:
+                max_objects_limit = self._params["max_objects_limit"]
+                if num_objects >= max_objects_limit:
+                    msg = "DomainCrawler reached limit of "
+                    msg += f"{max_objects_limit}"
+                    log.info(msg)
+                    break
+            if link_id not in self._obj_dict:
+                # haven't seen this object yet, get obj json
+                log.debug(f"DomainCrawler - adding link_id: {link_id} to queue")
+                self._obj_dict[link_id] = {}  # placeholder for obj id
+                self._q.put_nowait(link_id)
+                link_count += 1
+            else:
+                log.debug(f"link: {link_id} already in object dict")
+        log.debug(f"follow links done, added {link_count} ids to queue")
 
     async def get_attributes(self, obj_id, attr_names):
         # get the given attributes for the obj_id
@@ -97,6 +146,32 @@ class DomainCrawler:
         else:
             log.warn(f"Domain crawler - got {status} status for obj_id {obj_id}")
             self._obj_dict[obj_id] = {"status": status}
+
+        collection = getCollectionForId(obj_id)
+        follow_links = self._params.get("follow_links")
+        bucket = self._params.get("bucket")
+        if collection == "groups" and follow_links:
+            links = None
+            status = 200
+            try:
+                links = await getLinks(self._app, obj_id, bucket=bucket)
+            except HTTPNotFound:
+                status = 404
+            except HTTPServiceUnavailable:
+                status = 503
+            except HTTPInternalServerError:
+                status = 500
+            except Exception as e:
+                log.error(f"unexpected exception {e}")
+                status = 500
+
+            if status >= 500:
+                log.warn(f"getLinks for {obj_id} returned: {status}")
+            elif links:
+                log.debug(f"follow_links for: {links}")
+                self.follow_links(obj_id, links)
+            else:
+                log.debug(f"no links for {obj_id}")
 
     async def put_attributes(self, obj_id, attr_items):
         # write the given attributes for the obj_id
@@ -179,34 +254,16 @@ class DomainCrawler:
         # for groups iterate through all the hard links and
         # add to the lookup ids set
 
-        log.debug(f"gotCollection: {collection}")
+        log.debug(f"gotCollection: {collection}, follow_links: {follow_links}")
 
         if collection == "groups" and follow_links:
             if "links" not in obj_json:
                 log.error("expected links key in obj_json")
                 return
             links = obj_json["links"]
-            log.debug(f"DomainCrawler links: {links}")
-            for title in links:
-                log.debug(f"DomainCrawler - got link: {title}")
-                link_obj = links[title]
-                num_objects = len(self._obj_dict)
-                if self._params.get("max_objects_limit") is not None:
-                    max_objects_limit = self._params["max_objects_limit"]
-                    if num_objects >= max_objects_limit:
-                        msg = "DomainCrawler reached limit of "
-                        msg += f"{max_objects_limit}"
-                        log.info(msg)
-                        break
-                if link_obj["class"] != "H5L_TYPE_HARD":
-                    # just follow hardlinks
-                    continue
-                link_id = link_obj["id"]
-                if link_id not in self._obj_dict:
-                    # haven't seen this object yet, get obj json
-                    log.debug(f"DomainCrawler - adding link_id: {link_id}")
-                    self._obj_dict[link_id] = {}  # placeholder for obj id
-                    self._q.put_nowait(link_id)
+            log.debug(f"follow_links for: {links}")
+            self.follow_links(obj_id, links)
+
             if not self._params.get("include_links"):
                 # don't keep the links
                 del obj_json["links"]
@@ -267,37 +324,7 @@ class DomainCrawler:
         # if follow_links, add any group links to the lookup ids set
         if follow_links:
             log.debug(f"follow links for {grp_id}")
-            for link_obj in links:
-                log.debug(f"follow links for: {link_obj}")
-                if 'title' not in link_obj:
-                    log.warn(f"expected to find title in link_json: {link_obj}")
-                    continue
-                title = link_obj["title"]
-                log.debug(f"DomainCrawler - got link: {title}")
-                num_objects = len(self._obj_dict)
-                if self._params.get("max_objects_limit") is not None:
-                    max_objects_limit = self._params["max_objects_limit"]
-                    if num_objects >= max_objects_limit:
-                        msg = "DomainCrawler reached limit of "
-                        msg += f"{max_objects_limit}"
-                        log.info(msg)
-                        break
-                if link_obj["class"] != "H5L_TYPE_HARD":
-                    # just follow hardlinks
-                    log.debug("not hard link,continue")
-                    continue
-                link_id = link_obj["id"]
-                if getCollectionForId(link_id) != "groups":
-                    # only groups can have links
-                    log.debug(f"link id: {link_id} is not for a group, continue")
-                    continue
-                if link_id not in self._obj_dict:
-                    # haven't seen this object yet, get obj json
-                    log.debug(f"DomainCrawler - adding link_id: {link_id} to queue")
-                    self._obj_dict[link_id] = {}  # placeholder for obj id
-                    self._q.put_nowait(link_id)
-                else:
-                    log.debug(f"link: {link_id} already in object dict")
+            self.follow_links(grp_id, links)
 
     async def put_links(self, grp_id, link_items):
         # write the given links for the obj_id
@@ -399,13 +426,10 @@ class DomainCrawler:
         elif self._action == "get_attr":
             log.debug("DomainCrawler - get attributes")
             # fetch the given attributes
-            if self._objs is None:
-                log.error("DomainCrawler - self._objs not set")
-                return
-            if obj_id not in self._objs:
-                log.error(f"couldn't find {obj_id} in self._objs")
-                return
-            attr_names = self._objs[obj_id]
+            if self._objs is None or obj_id not in self._objs:
+                attr_names = None  # fetch all attributes for obj_id
+            else:
+                attr_names = self._objs[obj_id]
             if attr_names is None:
                 log.debug(f"fetch all attributes for {obj_id}")
             else:

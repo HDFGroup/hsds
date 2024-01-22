@@ -57,11 +57,29 @@ async def GET_Attributes(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
+    domain = getDomainFromRequest(request)
+    if not isValidDomain(domain):
+        msg = f"Invalid domain: {domain}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
     kwargs = {}
+    bucket = getBucketForDomain(domain)
+    log.debug(f"bucket: {bucket}")
+    kwargs["bucket"] = bucket
 
     ignore_nan = False
     include_data = True
     max_data_size = 0
+    if "follow_links" in params and params["follow_links"]:
+        if collection != "groups":
+            msg = "follow_links can only be used with group ids"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        follow_links = True
+    else:
+        follow_links = False
+    log.debug(f"getAttributes follow_links: {follow_links}")
     if "IncludeData" in params:
         IncludeData = params["IncludeData"]
         if not IncludeData or IncludeData == "0":
@@ -98,6 +116,15 @@ async def GET_Attributes(request):
     if "Marker" in params:
         marker = params["Marker"]
         kwargs["marker"] = marker
+    encoding = None
+    if "encoding" in params:
+        encoding = params["encoding"]
+        if params["encoding"] != "base64":
+            msg = "only base64 encoding is supported"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        encoding = "base64"
+        kwargs["encoding"] = encoding
 
     if "pattern" in params and params["pattern"]:
         pattern = params["pattern"]
@@ -118,26 +145,38 @@ async def GET_Attributes(request):
     else:
         await validateUserPassword(app, username, pswd)
 
-    domain = getDomainFromRequest(request)
-    if not isValidDomain(domain):
-        msg = f"Invalid domain: {domain}"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    bucket = getBucketForDomain(domain)
-    log.debug(f"bucket: {bucket}")
-    kwargs["bucket"] = bucket
-
     await validateAction(app, domain, obj_id, username, "read")
 
-    attributes = await getAttributes(app, obj_id, **kwargs)
+    if follow_links:
+        crawler_params = {"follow_links": True, "bucket": bucket}
+        # mixin params
+        if not include_data:
+            crawler_params["include_data"] = False
+        if max_data_size > 0:
+            crawler_params["max_data_size"] = max_data_size
+        if ignore_nan:
+            crawler_params["ignore_nan"] = True
+        if encoding:
+            crawler_params["encoding"] = encoding
 
-    log.debug(f"got attributes json from dn for obj_id: {obj_id}")
+        kwargs = {"action": "get_attr", "raise_error": True, "params": crawler_params}
+        items = [obj_id, ]
+        crawler = DomainCrawler(app, items, **kwargs)
+        # will raise exception on NotFound, etc.
+        await crawler.crawl()
+        attributes = crawler._obj_dict
+        msg = f"DomainCrawler returned: {len(attributes)} objects"
+        log.info(msg)
+    else:
+        # just get attributes for this objects
+        attributes = await getAttributes(app, obj_id, **kwargs)
+        log.debug(f"got attributes json from dn for obj_id: {obj_id}")
 
-    # mixin hrefs
-    for attribute in attributes:
-        attr_name = attribute["name"]
-        attr_href = f"/{collection}/{obj_id}/attributes/{attr_name}"
-        attribute["href"] = getHref(request, attr_href)
+        # mixin hrefs
+        for attribute in attributes:
+            attr_name = attribute["name"]
+            attr_href = f"/{collection}/{obj_id}/attributes/{attr_name}"
+            attribute["href"] = getHref(request, attr_href)
 
     resp_json = {}
     resp_json["attributes"] = attributes
