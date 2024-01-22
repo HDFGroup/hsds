@@ -43,11 +43,34 @@ def _index(items, marker, create_order=False):
     return -1
 
 
+def _getTitles(links, create_order=False):
+    titles = []
+    if create_order:
+        order_dict = {}
+        for title in links:
+            item = links[title]
+            if "created" not in item:
+                log.warning(f"expected to find 'created' key in link item {title}")
+                continue
+            order_dict[title] = item["created"]
+        log.debug(f"order_dict: {order_dict}")
+        # now sort by created
+        for k in sorted(order_dict.items(), key=lambda item: item[1]):
+            titles.append(k[0])
+        log.debug(f"links by create order: {titles}")
+    else:
+        titles = list(links.keys())
+        titles.sort()
+        log.debug(f"links by lexographic order: {titles}")
+    return titles
+
+
 async def GET_Links(request):
     """HTTP GET method to return JSON for a link collection"""
     log.request(request)
     app = request.app
     params = request.rel_url.query
+    log.debug(f"GET_Links params: {params}")
     group_id = get_obj_id(request)
     log.info(f"GET links: {group_id}")
     if not isValidUuid(group_id, obj_class="group"):
@@ -95,24 +118,7 @@ async def GET_Links(request):
     # return a list of links based on sorted dictionary keys
     link_dict = group_json["links"]
 
-    titles = []
-    if create_order:
-        order_dict = {}
-        for title in link_dict:
-            item = link_dict[title]
-            if "created" not in item:
-                log.warning(f"expected to find 'created' key in link item {title}")
-                continue
-            order_dict[title] = item["created"]
-        log.debug(f"order_dict: {order_dict}")
-        # now sort by created
-        for k in sorted(order_dict.items(), key=lambda item: item[1]):
-            titles.append(k[0])
-        log.debug(f"links by create order: {titles}")
-    else:
-        titles = list(link_dict.keys())
-        titles.sort()  # sort by key
-        log.debug(f"links by lexographic order: {titles}")
+    titles = _getTitles(link_dict, create_order=create_order)
 
     if pattern:
         try:

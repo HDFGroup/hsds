@@ -19,6 +19,7 @@ from aiohttp.web_exceptions import HTTPServiceUnavailable, HTTPConflict, HTTPBad
 from aiohttp.web_exceptions import HTTPInternalServerError, HTTPNotFound, HTTPGone
 
 from .util.idUtil import getCollectionForId, getDataNodeUrl
+from .util.globparser import globmatch
 from .servicenode_lib import getObjectJson, getAttributes, putAttributes, getLinks, putLinks
 from . import hsds_logger as log
 
@@ -35,6 +36,9 @@ class DomainCrawler:
         include_attrs=False,
         include_data=False,
         ignore_nan=False,
+        create_order=False,
+        pattern=None,
+        limit=None,
         replace=False,
         ignore_error=False,
         max_tasks=40,
@@ -49,6 +53,9 @@ class DomainCrawler:
         self._include_attrs = include_attrs
         self._include_data = include_data
         self._ignore_nan = ignore_nan
+        self._create_order = create_order
+        self._pattern = pattern
+        self._limit = limit
         self._replace = replace
         self._max_tasks = max_tasks
         self._q = asyncio.Queue()
@@ -274,7 +281,7 @@ class DomainCrawler:
     async def get_links(self, grp_id, titles=None):
         """ if titles is set, get all the links in grp_id that
         have a title in the list.  Otherwise, return all links for the object. """
-        log.debug(f"get_links: {grp_id}")
+        log.debug(f"get_links: {grp_id}m follow_links: {self._follow_links}")
         if titles:
             log.debug(f"titles; {titles}")
         collection = getCollectionForId(grp_id)
@@ -284,6 +291,20 @@ class DomainCrawler:
         kwargs = {"bucket": self._bucket}
         if titles:
             kwargs["titles"] = titles
+        else:
+            # only use limit if we are attempting to fetch all links
+            if self._limit:
+                kwargs["limit"] = self._limit
+        if self._create_order:
+            kwargs["create_order"] = True
+        pattern = None
+        if self._pattern and not titles:
+            if self._follow_links:
+                # apply the pattern after we get the links back
+                log.debug("will apply pattern on return")
+                pattern = self._pattern
+            else:
+                kwargs["pattern"] = self._pattern
 
         log.debug(f"follow_links: {self._follow_links}")
         log.debug(f"getLinks kwargs: {kwargs}")
@@ -314,9 +335,21 @@ class DomainCrawler:
             return
 
         log.debug(f"DomainCrawler - got links for {grp_id}")
-        log.debug(f"save to obj_dict: {links}")
 
-        self._obj_dict[grp_id] = links  # store the links
+        if pattern:
+            filtered_links = []
+            for link in links:
+                title = link["title"]
+                if globmatch(title, pattern):
+                    filtered_links.append(link)
+            msg = f"getLinks with pattern: {pattern} returning "
+            msg += f"{len(filtered_links)} links from {len(links)}"
+            log.debug(msg)
+            log.debug(f"save to obj_dict: {filtered_links}")
+            self._obj_dict[grp_id] = filtered_links
+        else:
+            log.debug(f"save to obj_dict: {links}")
+            self._obj_dict[grp_id] = links  # store the links
 
         # if follow_links, add any group links to the lookup ids set
         if self._follow_links:

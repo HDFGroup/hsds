@@ -551,6 +551,7 @@ async def POST_Links(request):
     log.request(request)
     app = request.app
     params = request.rel_url.query
+    log.debug(f"POST_Links params: {params}")
     log.info("POST_Links")
     req_id = request.match_info.get("id")
 
@@ -558,6 +559,22 @@ async def POST_Links(request):
         follow_links = True
     else:
         follow_links = False
+    create_order = False
+    if "CreateOrder" in params and params["CreateOrder"]:
+        if params["CreateOrder"] != "0":
+            create_order = True
+    limit = None
+    if "Limit" in params:
+        try:
+            limit = int(params["Limit"])
+        except ValueError:
+            msg = "Bad Request: Expected int type for limit"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    if "pattern" in params:
+        pattern = params["pattern"]
+    else:
+        pattern = None
 
     if not request.has_body:
         msg = "POST Links with no body"
@@ -668,8 +685,19 @@ async def POST_Links(request):
     elif len(items) == 1 and not follow_links:
         # just make a request to the datanode
         group_id = list(items.keys())[0]
+        kwargs = {"bucket": bucket}
+
         titles = items[group_id]
-        links = await getLinks(app, group_id, titles=titles, bucket=bucket)
+        if titles:
+            kwargs["titles"] = titles
+        else:
+            if limit:
+                kwargs["limit"] = limit
+        if create_order:
+            kwargs["create_order"] = True
+        if pattern:
+            kwargs["pattern"] = pattern
+        links = await getLinks(app, group_id, **kwargs)
 
         resp_json["links"] = links
     else:
@@ -678,6 +706,12 @@ async def POST_Links(request):
         kwargs = {"action": "get_link", "bucket": bucket, "include_links": True}
         if follow_links:
             kwargs["follow_links"] = True
+        if create_order:
+            kwargs["create_order"] = True
+        if limit:
+            kwargs["limit"] = limit
+        if pattern:
+            kwargs["pattern"] = pattern
         crawler = DomainCrawler(app, items, **kwargs)
         # will raise exception on NotFound, etc.
         await crawler.crawl()
