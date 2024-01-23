@@ -1272,7 +1272,8 @@ class LinkTest(unittest.TestCase):
                     if link_class == "H5L_TYPE_EXTERNAL":
                         self.assertEqual(link["h5domain"], expected["h5domain"])
 
-        # get just the request links for each group
+        # get just the requested links for each group
+        req = helper.getEndpoint() + "/groups/" + root_id + "/links"
         link_map = {g1_id: ["g1.1", "g1.2"], g2_id: ["dset2.2", ]}
         payload = {"group_ids": link_map}
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)

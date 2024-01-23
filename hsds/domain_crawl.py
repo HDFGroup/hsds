@@ -35,7 +35,9 @@ class DomainCrawler:
         include_links=False,
         include_attrs=False,
         include_data=False,
+        max_data_size=0,
         ignore_nan=False,
+        encoding=None,
         create_order=False,
         pattern=None,
         limit=None,
@@ -52,7 +54,9 @@ class DomainCrawler:
         self._include_links = include_links
         self._include_attrs = include_attrs
         self._include_data = include_data
+        self._max_data_size = max_data_size
         self._ignore_nan = ignore_nan
+        self._encoding = encoding
         self._create_order = create_order
         self._pattern = pattern
         self._limit = limit
@@ -135,8 +139,20 @@ class DomainCrawler:
             kwargs["include_data"] = True
         if self._ignore_nan:
             kwargs["ignore_nan"] = True
+        if self._encoding:
+            kwargs["encoding"] = self._encoding
         if attr_names:
             kwargs["attr_names"] = attr_names
+        else:
+            # only apply these parameters if we are attempting to fetch all links
+            if self._limit:
+                kwargs["limit"] = self._limit
+            if self._create_order:
+                kwargs["create_order"] = True
+            if self._pattern:
+                kwargs["pattern"] = self._pattern
+            if self._max_data_size > 0:
+                kwargs["max_data_size"] = self._max_data_size
         log.debug(f"using kwargs: {kwargs}")
 
         status = 200
@@ -281,7 +297,8 @@ class DomainCrawler:
     async def get_links(self, grp_id, titles=None):
         """ if titles is set, get all the links in grp_id that
         have a title in the list.  Otherwise, return all links for the object. """
-        log.debug(f"get_links: {grp_id}m follow_links: {self._follow_links}")
+        log.debug(f"get_links: {grp_id} follow_links: {self._follow_links}")
+        pattern = None
         if titles:
             log.debug(f"titles; {titles}")
         collection = getCollectionForId(grp_id)
@@ -292,19 +309,21 @@ class DomainCrawler:
         if titles:
             kwargs["titles"] = titles
         else:
-            # only use limit if we are attempting to fetch all links
+            # only apply these parameters if we are attempting to fetch all links
             if self._limit:
                 kwargs["limit"] = self._limit
-        if self._create_order:
-            kwargs["create_order"] = True
-        pattern = None
-        if self._pattern and not titles:
-            if self._follow_links:
-                # apply the pattern after we get the links back
-                log.debug("will apply pattern on return")
-                pattern = self._pattern
-            else:
-                kwargs["pattern"] = self._pattern
+            if self._create_order:
+                kwargs["create_order"] = True
+
+            if self._pattern:
+                if self._follow_links:
+                    # apply the pattern after we get the links back,
+                    # otherwise we won't get the groups links that we
+                    # need to follow
+                    log.debug("will apply pattern on return")
+                    pattern = self._pattern
+                else:
+                    kwargs["pattern"] = self._pattern
 
         log.debug(f"follow_links: {self._follow_links}")
         log.debug(f"getLinks kwargs: {kwargs}")
@@ -322,7 +341,7 @@ class DomainCrawler:
         except Exception as e:
             log.error(f"unexpected exception {e}")
             status = 500
-        log.debug(f"getObjectJson status: {status}")
+        log.debug(f"get_links status: {status}")
 
         if links is None:
             msg = f"DomainCrawler - get_links for {grp_id} "
@@ -337,6 +356,7 @@ class DomainCrawler:
         log.debug(f"DomainCrawler - got links for {grp_id}")
 
         if pattern:
+            log.debug(f"applying pattern: {pattern}")
             filtered_links = []
             for link in links:
                 title = link["title"]

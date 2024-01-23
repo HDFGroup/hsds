@@ -155,6 +155,14 @@ async def GET_Attributes(request):
             kwargs["max_data_size"] = max_data_size
         if ignore_nan:
             kwargs["ignore_nan"] = True
+        if limit:
+            kwargs["limit"] = limit
+        if encoding:
+            kwargs["encoding"] = encoding
+        if pattern:
+            kwargs["pattern"] = pattern
+        if create_order:
+            kwargs["create_order"] = True
         items = [obj_id, ]
         crawler = DomainCrawler(app, items, **kwargs)
         # will raise exception on NotFound, etc.

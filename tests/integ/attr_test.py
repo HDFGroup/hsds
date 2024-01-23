@@ -2302,6 +2302,23 @@ class AttributeTest(unittest.TestCase):
             self.assertTrue(name in attr)
         self.assertEqual(attr["name"], "attr1")
 
+        # do recursive get with a pattern
+        req = helper.getEndpoint() + "/groups/" + root_uuid + "/attributes"
+        params = {"pattern": "*1", "follow_links": 1}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("attributes" in rspJson)
+        obj_map = rspJson["attributes"]
+        self.assertEqual(len(obj_map), 10)  # 10 objects in the domain
+        attr_count = 0
+        for obj_id in obj_map:
+            attrs = obj_map[obj_id]
+            attr_count += len(attrs)
+            for attr in attrs:
+                self.assertEqual(attr["name"], "attr1")
+        self.assertEqual(attr_count, 2)
+
     def testGetRecursive(self):
         # test getting all attributes from an existing domain
         domain = helper.getTestDomain("tall.h5")
@@ -2349,6 +2366,130 @@ class AttributeTest(unittest.TestCase):
                 self.assertEqual(shapeJson["class"], "H5S_SIMPLE")
                 self.assertTrue("created" in attrJson)
                 self.assertTrue("value" in attrJson)
+
+        # same thing with Limit
+        req = helper.getEndpoint() + "/groups/" + root_uuid + "/attributes"
+        params = {"follow_links": "1", "Limit": 1}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("attributes" in rspJson)
+        obj_map = rspJson["attributes"]
+        self.assertEqual(len(obj_map), 10)
+        attr_count = 0
+        for obj_id in obj_map:
+            self.assertTrue(len(obj_map[obj_id]) <= 1)
+            attr_count += len(obj_map[obj_id])
+        self.assertEqual(attr_count, 2)
+        for obj_id in (root_uuid, d111_uuid):
+            # these are the only two objects with attributes
+            self.assertTrue(obj_id in obj_map)
+            obj_attrs = obj_map[obj_id]
+            self.assertEqual(len(obj_attrs), 1)
+            for attrJson in obj_attrs:
+                self.assertTrue("name" in attrJson)
+                attr_name = attrJson["name"]
+                self.assertTrue(attr_name in ("attr1", "attr2"))
+                self.assertTrue("type" in attrJson)
+                self.assertTrue("shape" in attrJson)
+                shapeJson = attrJson["shape"]
+                self.assertEqual(shapeJson["class"], "H5S_SIMPLE")
+                self.assertTrue("created" in attrJson)
+                self.assertTrue("value" in attrJson)
+
+        # do a get with encoding
+        req = helper.getEndpoint() + "/groups/" + root_uuid + "/attributes"
+        params = {"follow_links": "1", "encoding": "base64"}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("attributes" in rspJson)
+        obj_map = rspJson["attributes"]
+        self.assertEqual(len(obj_map), 10)
+        attr_count = 0
+        for obj_id in obj_map:
+            attr_count += len(obj_map[obj_id])
+        self.assertEqual(attr_count, 4)
+        for obj_id in (root_uuid, d111_uuid):
+            # these are the only two objects with attributes
+            self.assertTrue(obj_id in obj_map)
+            obj_attrs = obj_map[obj_id]
+            self.assertEqual(len(obj_attrs), 2)
+            for attrJson in obj_attrs:
+                self.assertTrue("name" in attrJson)
+                attr_name = attrJson["name"]
+                self.assertTrue(attr_name in ("attr1", "attr2"))
+                self.assertTrue("type" in attrJson)
+                self.assertTrue("shape" in attrJson)
+                shapeJson = attrJson["shape"]
+                self.assertEqual(shapeJson["class"], "H5S_SIMPLE")
+                self.assertTrue("created" in attrJson)
+                self.assertTrue("encoding" in attrJson)
+                self.assertEqual(attrJson["encoding"], "base64")
+                self.assertTrue("value" in attrJson)
+                self.assertTrue(isinstance(attrJson["value"], str))
+
+        # do a get with includeData set to false
+        req = helper.getEndpoint() + "/groups/" + root_uuid + "/attributes"
+        params = {"follow_links": "1", "IncludeData": "0"}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("attributes" in rspJson)
+        obj_map = rspJson["attributes"]
+        self.assertEqual(len(obj_map), 10)
+        attr_count = 0
+        for obj_id in obj_map:
+            attr_count += len(obj_map[obj_id])
+        self.assertEqual(attr_count, 4)
+        for obj_id in (root_uuid, d111_uuid):
+            # these are the only two objects with attributes
+            self.assertTrue(obj_id in obj_map)
+            obj_attrs = obj_map[obj_id]
+            self.assertEqual(len(obj_attrs), 2)
+            for attrJson in obj_attrs:
+                self.assertTrue("name" in attrJson)
+                attr_name = attrJson["name"]
+                self.assertTrue(attr_name in ("attr1", "attr2"))
+                self.assertTrue("type" in attrJson)
+                self.assertTrue("shape" in attrJson)
+                shapeJson = attrJson["shape"]
+                self.assertEqual(shapeJson["class"], "H5S_SIMPLE")
+                self.assertTrue("created" in attrJson)
+                self.assertFalse("value" in attrJson)
+
+        # do a get with max_data_size of 10 bytes
+        req = helper.getEndpoint() + "/groups/" + root_uuid + "/attributes"
+        params = {"follow_links": "1", "max_data_size": 10}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("attributes" in rspJson)
+        obj_map = rspJson["attributes"]
+        self.assertEqual(len(obj_map), 10)
+        attr_count = 0
+        for obj_id in obj_map:
+            attr_count += len(obj_map[obj_id])
+        self.assertEqual(attr_count, 4)
+        for obj_id in (root_uuid, d111_uuid):
+            # these are the only two objects with attributes
+            self.assertTrue(obj_id in obj_map)
+            obj_attrs = obj_map[obj_id]
+            self.assertEqual(len(obj_attrs), 2)
+            for attrJson in obj_attrs:
+                self.assertTrue("name" in attrJson)
+                attr_name = attrJson["name"]
+                self.assertTrue(attr_name in ("attr1", "attr2"))
+                self.assertTrue("type" in attrJson)
+                self.assertTrue("shape" in attrJson)
+                shapeJson = attrJson["shape"]
+                self.assertEqual(shapeJson["class"], "H5S_SIMPLE")
+                self.assertTrue("created" in attrJson)
+                if obj_id == root_uuid and attr_name == "attr1":
+                    self.assertTrue("value" in attrJson)
+                else:
+                    # other attributes are larger than 10 bytes
+                    self.assertFalse("value" in attrJson)
 
 
 if __name__ == "__main__":
