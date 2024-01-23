@@ -71,7 +71,7 @@ async def GET_Attributes(request):
         msg = "follow_links can only be used with group ids"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-       
+
     log.debug(f"getAttributes follow_links: {follow_links}")
     include_data = getBooleanParam(params, "IncludeData")
     log.debug(f"include_data: {include_data}")
@@ -87,8 +87,8 @@ async def GET_Attributes(request):
         max_data_size = 0
 
     ignore_nan = getBooleanParam(params, "ignore_nan")
-    create_order = getBooleanParam(params, "CreateOrder") 
-     
+    create_order = getBooleanParam(params, "CreateOrder")
+
     if "Limit" in params:
         try:
             limit = int(params["Limit"])
@@ -242,7 +242,7 @@ async def GET_Attribute(request):
         # this boolean param breaks our usual rule of default False
         include_data = True
     else:
-        include_data = getBooleanParam(params, "IncludeData")  
+        include_data = getBooleanParam(params, "IncludeData")
 
     if params.get("encoding"):
         if params["encoding"] != "base64":
@@ -1271,7 +1271,7 @@ async def POST_Attributes(request):
     log.debug(f"got params: {params}")
     include_data = False
     max_data_size = 0
-    include_data = getBooleanParam(params, "IncludeData") 
+    include_data = getBooleanParam(params, "IncludeData")
     log.debug(f"include_data: {include_data}")
     if "max_data_size" in params:
         try:

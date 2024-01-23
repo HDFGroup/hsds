@@ -63,7 +63,7 @@ async def GET_Links(request):
     await validateAction(app, domain, group_id, username, "read")
 
     follow_links = getBooleanParam(params, "follow_links")
-     
+
     if "pattern" in params and params["pattern"]:
         pattern = params["pattern"]
         try:
@@ -544,9 +544,9 @@ async def POST_Links(request):
     req_id = request.match_info.get("id")
 
     follow_links = getBooleanParam(params, "follow_links")
-     
+
     create_order = getBooleanParam(params, "CreateOrder")
-     
+
     limit = None
     if "Limit" in params:
         try:

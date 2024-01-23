@@ -42,17 +42,18 @@ def getUrl(host, port):
     """return url for host and port"""
     return f"http://{host}:{port}"
 
+
 def getBooleanParam(params, key):
     """ return False if the given key is not in the
         params dict, or is it, but has the value, 0, or "0".
         return True otherwise """
-    
+
     if not isinstance(key, str):
         raise TypeError("expected str value for key")
 
     if key not in params:
-        return False    
-    
+        return False
+
     value = params[key]
     if not value:
         return False
@@ -66,7 +67,7 @@ def getBooleanParam(params, key):
         return True
     else:
         return False
- 
+
 
 def getPortFromUrl(url):
     """Get Port number for given url"""
