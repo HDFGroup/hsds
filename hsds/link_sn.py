@@ -16,7 +16,7 @@
 from aiohttp.web_exceptions import HTTPBadRequest
 from json import JSONDecodeError
 
-from .util.httpUtil import getHref
+from .util.httpUtil import getHref, getBooleanParam
 from .util.httpUtil import jsonResponse
 from .util.globparser import globmatch
 from .util.idUtil import isValidUuid, getDataNodeUrl, getCollectionForId
@@ -62,11 +62,8 @@ async def GET_Links(request):
 
     await validateAction(app, domain, group_id, username, "read")
 
-    if "follow_links" in params and params["follow_links"]:
-        follow_links = True
-    else:
-        follow_links = False
-
+    follow_links = getBooleanParam(params, "follow_links")
+     
     if "pattern" in params and params["pattern"]:
         pattern = params["pattern"]
         try:
@@ -79,10 +76,7 @@ async def GET_Links(request):
     else:
         pattern = None
 
-    create_order = False
-    if "CreateOrder" in params and params["CreateOrder"]:
-        if params["CreateOrder"] != "0":
-            create_order = True
+    create_order = getBooleanParam(params, "CreateOrder")
 
     limit = None
     if "Limit" in params:
@@ -206,9 +200,6 @@ async def GET_Link(request):
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id + "/links"
     log.debug("get LINK: " + req)
-    params = {}
-    if bucket:
-        params["bucket"] = bucket
 
     link_json = await getLink(app, group_id, link_title, bucket=bucket)
 
@@ -340,10 +331,7 @@ async def PUT_Links(request):
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
     log.debug(f"got bucket: {bucket}")
-    if "replace" in params and params["replace"]:
-        replace = True
-    else:
-        replace = False
+    replace = getBooleanParam(params, "replace")
 
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
@@ -555,14 +543,10 @@ async def POST_Links(request):
     log.info("POST_Links")
     req_id = request.match_info.get("id")
 
-    if params.get("follow_links"):
-        follow_links = True
-    else:
-        follow_links = False
-    create_order = False
-    if "CreateOrder" in params and params["CreateOrder"]:
-        if params["CreateOrder"] != "0":
-            create_order = True
+    follow_links = getBooleanParam(params, "follow_links")
+     
+    create_order = getBooleanParam(params, "CreateOrder")
+     
     limit = None
     if "Limit" in params:
         try:

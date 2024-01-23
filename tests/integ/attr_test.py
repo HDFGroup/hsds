@@ -2290,7 +2290,7 @@ class AttributeTest(unittest.TestCase):
 
         # do get with a glob pattern
         req = helper.getEndpoint() + "/datasets/" + d111_uuid + "/attributes"
-        params = {"pattern": "*1"}
+        params = {"pattern": "*1", "IncludeData": 1}
         rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
@@ -2340,7 +2340,7 @@ class AttributeTest(unittest.TestCase):
 
         # do get with follow_links
         req = helper.getEndpoint() + "/groups/" + root_uuid + "/attributes"
-        params = {"follow_links": "1"}
+        params = {"follow_links": "1", "IncludeData": 1}
         rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
@@ -2395,11 +2395,11 @@ class AttributeTest(unittest.TestCase):
                 shapeJson = attrJson["shape"]
                 self.assertEqual(shapeJson["class"], "H5S_SIMPLE")
                 self.assertTrue("created" in attrJson)
-                self.assertTrue("value" in attrJson)
+                self.assertFalse("value" in attrJson)
 
         # do a get with encoding
         req = helper.getEndpoint() + "/groups/" + root_uuid + "/attributes"
-        params = {"follow_links": "1", "encoding": "base64"}
+        params = {"follow_links": "1", "encoding": "base64", "IncludeData": 1}
         rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
@@ -2460,7 +2460,7 @@ class AttributeTest(unittest.TestCase):
 
         # do a get with max_data_size of 10 bytes
         req = helper.getEndpoint() + "/groups/" + root_uuid + "/attributes"
-        params = {"follow_links": "1", "max_data_size": 10}
+        params = {"follow_links": "1", "max_data_size": 10, "IncludeData": 1}
         rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)

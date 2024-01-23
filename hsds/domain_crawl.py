@@ -18,6 +18,7 @@ import asyncio
 from aiohttp.web_exceptions import HTTPServiceUnavailable, HTTPConflict, HTTPBadRequest
 from aiohttp.web_exceptions import HTTPInternalServerError, HTTPNotFound, HTTPGone
 
+from .util.httpUtil import isOK
 from .util.idUtil import getCollectionForId, getDataNodeUrl
 from .util.globparser import globmatch
 from .servicenode_lib import getObjectJson, getAttributes, putAttributes, getLinks, putLinks
@@ -174,7 +175,7 @@ class DomainCrawler:
             log.error(f"unexpected exception from post request: {e}")
             status = 500
 
-        if status == 200:
+        if isOK(status):
             log.debug(f"got attributes: {attributes}")
             self._obj_dict[obj_id] = attributes
         else:
@@ -432,10 +433,8 @@ class DomainCrawler:
             log.debug(f"ignore_error: {self._ignore_error}")
             if not self._ignore_error:
                 # throw the appropriate exception if other than 200, 201
-                if status == 200:
+                if isOK(status):
                     pass  # ok
-                elif status == 201:
-                    pass  # also ok
                 elif status == 400:
                     log.warn("DomainCrawler - BadRequest")
                     raise HTTPBadRequest(reason="unkown")

@@ -18,7 +18,7 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalSer
 from aiohttp.web import StreamResponse
 from json import JSONDecodeError
 
-from .util.httpUtil import getAcceptType, jsonResponse, getHref
+from .util.httpUtil import getAcceptType, jsonResponse, getHref, getBooleanParam
 from .util.globparser import globmatch
 from .util.idUtil import isValidUuid, getRootObjId
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
@@ -66,20 +66,14 @@ async def GET_Attributes(request):
     bucket = getBucketForDomain(domain)
     log.debug(f"bucket: {bucket}")
 
-    if "follow_links" in params and params["follow_links"]:
-        if collection != "groups":
-            msg = "follow_links can only be used with group ids"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        follow_links = True
-    else:
-        follow_links = False
+    follow_links = getBooleanParam(params, "follow_links")
+    if follow_links and collection != "groups":
+        msg = "follow_links can only be used with group ids"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+       
     log.debug(f"getAttributes follow_links: {follow_links}")
-    include_data = True
-    if "IncludeData" in params:
-        IncludeData = params["IncludeData"]
-        if not IncludeData or IncludeData == "0":
-            include_data = False
+    include_data = getBooleanParam(params, "IncludeData")
     log.debug(f"include_data: {include_data}")
 
     if "max_data_size" in params:
@@ -92,16 +86,9 @@ async def GET_Attributes(request):
     else:
         max_data_size = 0
 
-    if "ignore_nan" in params and params["ignore_nan"]:
-        ignore_nan = True
-    else:
-        ignore_nan = False
-
-    if "CreateOrder" in params and params["CreateOrder"]:
-        create_order = True
-    else:
-        create_order = False
-
+    ignore_nan = getBooleanParam(params, "ignore_nan")
+    create_order = getBooleanParam(params, "CreateOrder") 
+     
     if "Limit" in params:
         try:
             limit = int(params["Limit"])
@@ -249,15 +236,13 @@ async def GET_Attribute(request):
 
     await validateAction(app, domain, obj_id, username, "read")
 
-    if "ignore_nan" in params and params["ignore_nan"]:
-        ignore_nan = True
-    else:
-        ignore_nan = False
+    ignore_nan = getBooleanParam(params, "ignore_nan")
 
-    if "IncludeData" in params and not params["IncludeData"]:
-        include_data = False
-    else:
+    if "IncludeData" not in params:
+        # this boolean param breaks our usual rule of default False
         include_data = True
+    else:
+        include_data = getBooleanParam(params, "IncludeData")  
 
     if params.get("encoding"):
         if params["encoding"] != "base64":
@@ -864,10 +849,8 @@ async def GET_AttributeValue(request):
     await validateAction(app, domain, obj_id, username, "read")
 
     params = request.rel_url.query
-    if "ignore_nan" in params and params["ignore_nan"]:
-        ignore_nan = True
-    else:
-        ignore_nan = False
+    ignore_nan = getBooleanParam(params, "ignore_nan")
+
     if "encoding" in params:
         encoding = params["encoding"]
         if encoding and encoding != "base64":
@@ -1288,12 +1271,8 @@ async def POST_Attributes(request):
     log.debug(f"got params: {params}")
     include_data = False
     max_data_size = 0
-    if "IncludeData" in params:
-        IncludeData = params["IncludeData"]
-        log.debug(f"got IncludeData: [{IncludeData}], type: {type(IncludeData)}")
-        if IncludeData and IncludeData != "0":
-            include_data = True
-        log.debug(f"include_data: {include_data}")
+    include_data = getBooleanParam(params, "IncludeData") 
+    log.debug(f"include_data: {include_data}")
     if "max_data_size" in params:
         try:
             max_data_size = int(params["max_data_size"])
