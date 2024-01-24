@@ -242,18 +242,20 @@ def _getSelectDtype(params, dset_dtype, body=None):
     """ if a field list is defined in params or body,
       create a sub-type of the dset dtype.  Else,
       just return the dset dtype. """
-
+    select_fields = None
     kw = "fields"
+
     if isinstance(body, dict) and kw in body:
         select_fields = body[kw]
+        log.debug(f"fields value in body: {select_fields}")
     elif kw in params:
-        fields_param = params.get(kw)
-        log.debug(f"fields param: {fields_param}")
-        select_fields = fields_param.split(":")
+        select_fields = params.get(kw)
+        log.debug(f"fields param: {select_fields}")
     else:
         select_fields = None
 
     if select_fields:
+        select_fields = select_fields.split(":")
         try:
             select_dtype = getSubType(dset_dtype, select_fields)
         except TypeError as te:

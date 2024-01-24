@@ -1605,7 +1605,7 @@ class PointSelTest(unittest.TestCase):
         # create 1d dataset
         #
 
-        field_names = ("x1", "X2", "x3", "X4", "X5")
+        field_names = ("x1", "x2", "x3", "x4", "x5")
 
         fields = []
         for field_name in field_names:
@@ -1643,7 +1643,7 @@ class PointSelTest(unittest.TestCase):
         for i in range(len(points)):
             self.assertEqual(ret_value[i], [0, 0, 0, 0, 0])
 
-        # write to the dset by fields
+        # write to the dset by field
         for field in field_names:
             x = int(field[1])  # get the number part of the field name
             data = [(x * i) for i in range(num_elements)]
@@ -1666,7 +1666,65 @@ class PointSelTest(unittest.TestCase):
             self.assertEqual(len(ret_value), len(points))
             for i in range(len(points)):
                 self.assertEqual(ret_value[i], [x * points[i]])
-            return
+
+        # Write "100" to first field and "200" to second field through body
+        data = [(100, 200) for i in range(num_elements)]
+        payload = {"value": data, "fields": field_names[0] + ":" + field_names[1]}
+        req = self.endpoint + "/datasets/" + dset_id + "/value"
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # read back entire dataset and check values
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        ret_value = np.array(rspJson["value"], dtype=int)
+        self.assertTrue(np.array_equal(ret_value[:, 0],
+                                       np.full(shape=num_elements, fill_value=100, dtype=int)))
+        self.assertTrue(np.array_equal(ret_value[:, 1],
+                                       np.full(shape=num_elements, fill_value=200, dtype=int)))
+        for i in range(2, 5):
+            self.assertTrue(np.array_equal(ret_value[:, i], [(i + 1) * j for j in range(100)]))
+
+        # Write 300 to third field and 400 to fourth field through URL
+        data = [(300, 400) for i in range(num_elements)]
+        payload = {"value": data}
+        req = self.endpoint + "/datasets/" + dset_id + \
+            "/value?fields=" + field_names[2] + ":" + field_names[3]
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # read back entire dataset and check values
+        req = self.endpoint + "/datasets/" + dset_id + "/value"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        ret_value = np.array(rspJson["value"], dtype=int)
+        for i in range(1, 4):
+            expected = np.full(shape=num_elements, fill_value=((i + 1) * 100), dtype=int)
+            self.assertTrue(np.array_equal(ret_value[:, i], expected))
+        self.assertTrue(np.array_equal(ret_value[:, 4], [5 * j for j in range(100)]))
+
+        # Test non-adjacent fields
+        # Write 1000 to first field and 500 to fifth field through body
+        data = [(1000, 500) for i in range(num_elements)]
+        payload = {"value": data, "fields": field_names[0] + ":" + field_names[4]}
+        req = self.endpoint + "/datasets/" + dset_id + "/value"
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # read back entire dataset and check values
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        ret_value = np.array(rspJson["value"], dtype=int)
+        self.assertTrue(np.array_equal(ret_value[:, 0],
+                                       np.full(shape=num_elements, fill_value=1000, dtype=int)))
+        for i in range(2, 5):
+            self.assertTrue(np.array_equal(ret_value[:, i], [(i + 1) * 100 for j in range(100)]))
 
 
 if __name__ == "__main__":
