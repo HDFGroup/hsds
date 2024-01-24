@@ -76,7 +76,6 @@ http_streaming: true  # enable HTTP streaming
 k8s_dn_label_selector: app=hsds # Selector for getting data node pods from a k8s deployment (https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors)
 k8s_namespace: null # Specifies if a the client should be limited to a specific namespace. Useful for some RBAC configurations.
 restart_policy: on-failure # Docker restart policy
-domain_req_max_objects_limit: 500 # maximum number of objects to return in GET domain request with use_cache
 # the following two values with give backoff times of approx: 0.2, 0.4, 0.8, 1.6, 3.2, 6.4, 12.8
 dn_max_retries: 7 # number of time to retry DN requests
 dn_retry_backoff_exp: 0.1 # backoff factor for retries
@@ -99,3 +98,4 @@ data_cache_max_req_size: 128k # max size for rangeget fetches
 data_cache_expire_time: 3600 # expire cache items after one hour
 data_cache_page_size: 4m # page size for range get cache, set to zero to disable proxy
 data_cache_max_concurrent_read: 16 # maximum number of inflight storage read requests
+domain_req_max_objects_limit: 500 # maximum number of objects to return in GET domain request with use_cache

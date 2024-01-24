@@ -18,9 +18,9 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalSer
 from aiohttp.web import StreamResponse
 from json import JSONDecodeError
 
-from .util.httpUtil import getHref
-from .util.httpUtil import getAcceptType, jsonResponse
-from .util.idUtil import isValidUuid, getCollectionForId, getRootObjId
+from .util.httpUtil import getAcceptType, jsonResponse, getHref, getBooleanParam
+from .util.globparser import globmatch
+from .util.idUtil import isValidUuid, getRootObjId
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain, verifyRoot
@@ -57,25 +57,38 @@ async def GET_Attributes(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    kwargs = {}
+    domain = getDomainFromRequest(request)
+    if not isValidDomain(domain):
+        msg = f"Invalid domain: {domain}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
-    ignore_nan = False
-    include_data = True
-    if "IncludeData" in params:
-        IncludeData = params["IncludeData"]
-        if not IncludeData or IncludeData == "0":
-            include_data = False
-            kwargs["include_data"] = False
+    bucket = getBucketForDomain(domain)
+    log.debug(f"bucket: {bucket}")
+
+    follow_links = getBooleanParam(params, "follow_links")
+    if follow_links and collection != "groups":
+        msg = "follow_links can only be used with group ids"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    log.debug(f"getAttributes follow_links: {follow_links}")
+    include_data = getBooleanParam(params, "IncludeData")
     log.debug(f"include_data: {include_data}")
 
-    if "ignore_nan" in params and params["ignore_nan"]:
-        ignore_nan = True
-        kwargs["ignore_nan"] = True
+    if "max_data_size" in params:
+        try:
+            max_data_size = int(params["max_data_size"])
+        except ValueError:
+            msg = "expected int for max_data_size"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    else:
+        max_data_size = 0
 
-    if "CreateOrder" in params and params["CreateOrder"]:
-        kwargs["create_order"] = True
+    ignore_nan = getBooleanParam(params, "ignore_nan")
+    create_order = getBooleanParam(params, "CreateOrder")
 
-    limit = None
     if "Limit" in params:
         try:
             limit = int(params["Limit"])
@@ -83,11 +96,33 @@ async def GET_Attributes(request):
             msg = "Bad Request: Expected int type for limit"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        kwargs["limit"] = limit
-    marker = None
+    else:
+        limit = None
     if "Marker" in params:
         marker = params["Marker"]
-        kwargs["marker"] = marker
+    else:
+        marker = None
+    if "encoding" in params:
+        encoding = params["encoding"]
+        if params["encoding"] != "base64":
+            msg = "only base64 encoding is supported"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        encoding = "base64"
+    else:
+        encoding = None
+
+    if "pattern" in params and params["pattern"]:
+        pattern = params["pattern"]
+        try:
+            globmatch("abc", pattern)
+        except ValueError:
+            msg = f"invlaid pattern: {pattern} for attribute matching"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        log.debug(f"using pattern: {pattern} for GET_Attributes")
+    else:
+        pattern = None
 
     username, pswd = getUserPasswordFromRequest(request)
     if username is None and app["allow_noauth"]:
@@ -95,27 +130,60 @@ async def GET_Attributes(request):
     else:
         await validateUserPassword(app, username, pswd)
 
-    domain = getDomainFromRequest(request)
-    if not isValidDomain(domain):
-        msg = f"Invalid domain: {domain}"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    bucket = getBucketForDomain(domain)
-    log.debug(f"bucket: {bucket}")
-    kwargs["bucket"] = bucket
-
-    # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "read")
 
-    attributes = await getAttributes(app, obj_id, **kwargs)
+    if follow_links:
+        # setup kwargs for DomainCrawler
+        kwargs = {"action": "get_attr", "follow_links": True, "bucket": bucket}
+        # mixin params
+        if include_data:
+            kwargs["include_data"] = True
+        if max_data_size > 0:
+            kwargs["max_data_size"] = max_data_size
+        if ignore_nan:
+            kwargs["ignore_nan"] = True
+        if limit:
+            kwargs["limit"] = limit
+        if encoding:
+            kwargs["encoding"] = encoding
+        if pattern:
+            kwargs["pattern"] = pattern
+        if create_order:
+            kwargs["create_order"] = True
+        items = [obj_id, ]
+        crawler = DomainCrawler(app, items, **kwargs)
+        # will raise exception on NotFound, etc.
+        await crawler.crawl()
+        attributes = crawler._obj_dict
+        msg = f"DomainCrawler returned: {len(attributes)} objects"
+        log.info(msg)
+    else:
+        # just get attributes for this objects
+        kwargs = {"bucket": bucket}
+        if include_data:
+            kwargs["include_data"] = True
+        if max_data_size > 0:
+            kwargs["max_data_size"] = max_data_size
+        if ignore_nan:
+            kwargs["ignore_nan"] = True
+        if limit:
+            kwargs["limit"] = limit
+        if marker:
+            kwargs["marker"] = marker
+        if encoding:
+            kwargs["encoding"] = encoding
+        if pattern:
+            kwargs["pattern"] = pattern
+        if create_order:
+            kwargs["create_order"] = True
+        attributes = await getAttributes(app, obj_id, **kwargs)
+        log.debug(f"got attributes json from dn for obj_id: {obj_id}")
 
-    log.debug(f"got attributes json from dn for obj_id: {obj_id}")
-
-    # mixin hrefs
-    for attribute in attributes:
-        attr_name = attribute["name"]
-        attr_href = f"/{collection}/{obj_id}/attributes/{attr_name}"
-        attribute["href"] = getHref(request, attr_href)
+        # mixin hrefs
+        for attribute in attributes:
+            attr_name = attribute["name"]
+            attr_href = f"/{collection}/{obj_id}/attributes/{attr_name}"
+            attribute["href"] = getHref(request, attr_href)
 
     resp_json = {}
     resp_json["attributes"] = attributes
@@ -166,18 +234,15 @@ async def GET_Attribute(request):
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
 
-    # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "read")
 
-    if "ignore_nan" in params and params["ignore_nan"]:
-        ignore_nan = True
-    else:
-        ignore_nan = False
+    ignore_nan = getBooleanParam(params, "ignore_nan")
 
-    if "IncludeData" in params and not params["IncludeData"]:
-        include_data = False
-    else:
+    if "IncludeData" not in params:
+        # this boolean param breaks our usual rule of default False
         include_data = True
+    else:
+        include_data = getBooleanParam(params, "IncludeData")
 
     if params.get("encoding"):
         if params["encoding"] != "base64":
@@ -518,7 +583,6 @@ async def PUT_Attribute(request):
     domain_json = await getDomainJson(app, domain)
     verifyRoot(domain_json)
 
-    # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, req_obj_id, username, "create")
 
     # get attribute from request body
@@ -539,8 +603,7 @@ async def PUT_Attribute(request):
     status = await putAttributes(app, req_obj_id, attr_json, **kwargs)
     log.info(f"PUT Attributes status: {status}")
 
-    hrefs = []  # TBD
-    req_rsp = {"hrefs": hrefs}
+    req_rsp = {}
     # attribute creation successful
     resp = await jsonResponse(request, req_rsp, status=status)
     log.response(request, resp=resp)
@@ -564,7 +627,6 @@ async def PUT_Attributes(request):
         msg = "PUT Attribute with no body"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-
     try:
         body = await request.json()
     except JSONDecodeError:
@@ -579,6 +641,10 @@ async def PUT_Attributes(request):
         raise HTTPBadRequest(reason=msg)
     bucket = getBucketForDomain(domain)
     log.debug(f"got bucket: {bucket}")
+    if "replace" in params and params["replace"]:
+        replace = True
+    else:
+        replace = False
 
     # get domain JSON
     domain_json = await getDomainJson(app, domain)
@@ -656,12 +722,7 @@ async def PUT_Attributes(request):
 
     log.debug(f"got {len(obj_ids)} obj_ids")
 
-    # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, req_obj_id, username, "create")
-
-    kwargs = {"bucket": bucket}
-    if params.get("replace"):
-        kwargs["replace"] = True
 
     count = len(obj_ids)
     if count == 0:
@@ -673,18 +734,17 @@ async def PUT_Attributes(request):
         obj_id = list(obj_ids.keys())[0]
         attr_json = obj_ids[obj_id]
         log.debug(f"got attr_json: {attr_json}")
+        kwargs = {"bucket": bucket, "attr_json": attr_json}
+        if replace:
+            kwargs["replace"] = True
 
-        status = await putAttributes(app, obj_id, attr_json, **kwargs)
+        status = await putAttributes(app, obj_id, **kwargs)
 
     else:
         # put multi obj
-
-        # mixin some additonal kwargs
-        crawler_params = {"follow_links": False}
-        if bucket:
-            crawler_params["bucket"] = bucket
-
-        kwargs = {"action": "put_attr", "raise_error": True, "params": crawler_params}
+        kwargs = {"action": "put_attr", "bucket": bucket}
+        if replace:
+            kwargs["replace"] = True
         crawler = DomainCrawler(app, obj_ids, **kwargs)
 
         # will raise exception on not found, server busy, etc.
@@ -694,8 +754,7 @@ async def PUT_Attributes(request):
 
         log.info("DomainCrawler done for put_attrs action")
 
-    hrefs = []  # TBD
-    req_rsp = {"hrefs": hrefs}
+    req_rsp = {}
     # attribute creation successful
     log.debug(f"PUT_Attributes returning status: {status}")
     resp = await jsonResponse(request, req_rsp, status=status)
@@ -737,7 +796,6 @@ async def DELETE_Attribute(request):
     domain_json = await getDomainJson(app, domain)
     verifyRoot(domain_json)
 
-    # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "delete")
 
     attr_names = [attr_name, ]
@@ -745,8 +803,7 @@ async def DELETE_Attribute(request):
 
     await deleteAttributes(app, obj_id, **kwargs)
 
-    hrefs = []  # TBD
-    req_rsp = {"hrefs": hrefs}
+    req_rsp = {}
     resp = await jsonResponse(request, req_rsp)
     log.response(request, resp=resp)
     return resp
@@ -789,14 +846,11 @@ async def GET_AttributeValue(request):
     domain_json = await getDomainJson(app, domain)
     verifyRoot(domain_json)
 
-    # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "read")
 
     params = request.rel_url.query
-    if "ignore_nan" in params and params["ignore_nan"]:
-        ignore_nan = True
-    else:
-        ignore_nan = False
+    ignore_nan = getBooleanParam(params, "ignore_nan")
+
     if "encoding" in params:
         encoding = params["encoding"]
         if encoding and encoding != "base64":
@@ -807,7 +861,7 @@ async def GET_AttributeValue(request):
         encoding = None
 
     attr_names = [attr_name, ]
-    kwargs = {"attr_names": attr_names, "bucket": bucket}
+    kwargs = {"attr_names": attr_names, "bucket": bucket, "include_data": True}
     if ignore_nan:
         kwargs["ignore_nan"] = True
 
@@ -967,7 +1021,6 @@ async def PUT_AttributeValue(request):
     domain_json = await getDomainJson(app, domain)
     verifyRoot(domain_json)
 
-    # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "update")
 
     attr_names = [attr_name, ]
@@ -1097,8 +1150,7 @@ async def PUT_AttributeValue(request):
     else:
         log.info("PUT AttributesValue status: 200")
 
-    hrefs = []  # TBD
-    req_rsp = {"hrefs": hrefs}
+    req_rsp = {}
     # attribute creation successful
     resp = await jsonResponse(request, req_rsp)
     log.response(request, resp=resp)
@@ -1106,7 +1158,7 @@ async def PUT_AttributeValue(request):
 
 
 async def POST_Attributes(request):
-    """HTTP method to get multiple attribute values"""
+    """HTTP method to get multiple attributes """
     log.request(request)
     app = request.app
     log.info("POST_Attributes")
@@ -1213,16 +1265,21 @@ async def POST_Attributes(request):
     domain_json = await getDomainJson(app, domain)
     verifyRoot(domain_json)
 
-    # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "read")
 
     params = request.rel_url.query
     log.debug(f"got params: {params}")
-    include_data = True
-    if "IncludeData" in params:
-        IncludeData = params["IncludeData"]
-        if not IncludeData or IncludeData == "0":
-            include_data = False
+    include_data = False
+    max_data_size = 0
+    include_data = getBooleanParam(params, "IncludeData")
+    log.debug(f"include_data: {include_data}")
+    if "max_data_size" in params:
+        try:
+            max_data_size = int(params["max_data_size"])
+        except ValueError:
+            msg = "expected int for max_data_size"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
 
     if params.get("ignore_nan"):
         ignore_nan = True
@@ -1247,40 +1304,37 @@ async def POST_Attributes(request):
     elif len(items) == 1:
         # just make a request the datanode
         obj_id = list(items.keys())[0]
-        collection = getCollectionForId(obj_id)
         attr_names = items[obj_id]
         kwargs = {"attr_names": attr_names, "bucket": bucket}
-        if not include_data:
-            kwargs["include_data"] = False
+        if include_data:
+            log.debug("setting include_data to True")
+            kwargs["include_data"] = True
+        if max_data_size > 0:
+            kwargs["max_data_size"] = max_data_size
         if ignore_nan:
             kwargs["ignore_nan"] = True
         if encoding:
             kwargs["encoding"] = encoding
-
+        log.debug(f"getAttributes kwargs: {kwargs}")
         attributes = await getAttributes(app, obj_id, **kwargs)
-
-        # mixin hrefs
-        for attribute in attributes:
-            attr_name = attribute["name"]
-            attr_href = f"/{collection}/{obj_id}/attributes/{attr_name}"
-            attribute["href"] = getHref(request, attr_href)
 
         resp_json["attributes"] = attributes
     else:
         # get multi obj
         # don't follow links!
-        crawler_params = {"follow_links": False, "bucket": bucket}
-        # mixin params
-        if not include_data:
-            crawler_params["include_data"] = False
-
+        kwargs = {"action": "get_attr", "bucket": bucket, "follow_links": False}
+        kwargs["include_attrs"] = True
+        if include_data:
+            log.debug("setting include_data to True")
+            kwargs["include_data"] = True
+        if max_data_size > 0:
+            kwargs["max_data_size"] = max_data_size
         if ignore_nan:
-            crawler_params["ignore_nan"] = True
-
+            kwargs["ignore_nan"] = True
         if encoding:
-            crawler_params["encoding"] = encoding
-
-        kwargs = {"action": "get_attr", "raise_error": True, "params": crawler_params}
+            pass
+            # TBD: crawler_params["encoding"] = encoding
+        log.debug(f"DomainCrawler kwargs: {kwargs}")
         crawler = DomainCrawler(app, items, **kwargs)
         # will raise exception on NotFound, etc.
         await crawler.crawl()
@@ -1288,30 +1342,15 @@ async def POST_Attributes(request):
         msg = f"DomainCrawler returned: {len(crawler._obj_dict)} objects"
         log.info(msg)
         attributes = crawler._obj_dict
-        # mixin hrefs
+        # log attributes returned for each obj_id
         for obj_id in attributes:
             obj_attributes = attributes[obj_id]
             msg = f"POST_Attributes, obj_id {obj_id} "
             msg += f"returned {len(obj_attributes)}"
             log.debug(msg)
 
-            collection = getCollectionForId(obj_id)
-            for attribute in obj_attributes:
-                log.debug(f"attribute: {attribute}")
-                attr_name = attribute["name"]
-                attr_href = f"/{collection}/{obj_id}/attributes/{attr_name}"
-                attribute["href"] = getHref(request, attr_href)
         log.debug(f"got {len(attributes)} attributes")
         resp_json["attributes"] = attributes
-
-    hrefs = []
-    collection = getCollectionForId(req_id)
-    obj_uri = "/" + collection + "/" + req_id
-    href = getHref(request, obj_uri + "/attributes")
-    hrefs.append({"rel": "self", "href": href})
-    hrefs.append({"rel": "home", "href": getHref(request, "/")})
-    hrefs.append({"rel": "owner", "href": getHref(request, obj_uri)})
-    resp_json["hrefs"] = hrefs
 
     resp = await jsonResponse(request, resp_json, ignore_nan=ignore_nan)
     log.response(request, resp=resp)
@@ -1383,7 +1422,6 @@ async def DELETE_Attributes(request):
     domain_json = await getDomainJson(app, domain)
     verifyRoot(domain_json)
 
-    # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, obj_id, username, "delete")
 
     kwargs = {"attr_names": attr_names, "bucket": bucket, "separator": separator}

@@ -189,6 +189,83 @@ class DomainTest(unittest.TestCase):
         rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 400)
 
+    def testPostDomainSingle(self):
+        domain = helper.getTestDomain("tall.h5")
+        print("testPostDomainSingle", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        if rsp.status_code != 200:
+            msg = f"WARNING: Failed to get domain: {domain}. Is test data setup?"
+            print(msg)
+            return  # abort rest of test
+        domainJson = json.loads(rsp.text)
+        self.assertTrue("root" in domainJson)
+        root_id = domainJson["root"]
+        g1_id = helper.getUUIDByPath(domain, "/g1", session=self.session)
+        g11_id = helper.getUUIDByPath(domain, "/g1/g1.1", session=self.session)
+        d111_id = helper.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1", session=self.session)
+
+        # Get group at /g1/g1.1 by using h5path
+        data = {"h5paths": ["/g1/g1.1", ]}
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("h5paths" in rspJson)
+        rsp_paths = rspJson["h5paths"]
+        self.assertTrue("/g1/g1.1" in rsp_paths)
+        obj_json = rsp_paths["/g1/g1.1"]
+        self.assertEqual(g11_id, obj_json["id"])
+        self.assertTrue("root" in obj_json)
+        self.assertEqual(root_id, obj_json["root"])
+
+        # Get dataset /g1/g1.1/dset1.1.1 with a relative path and parent_id g1
+        params = {"parent_id": g1_id}
+        data = {"h5paths": ["g1.1/dset1.1.1", ]}
+        rsp = self.session.post(req, data=json.dumps(data), params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("h5paths" in rspJson)
+        rsp_paths = rspJson["h5paths"]
+        self.assertTrue("g1.1/dset1.1.1" in rsp_paths)
+        obj_json = rsp_paths["g1.1/dset1.1.1"]
+        self.assertEqual(d111_id, obj_json["id"])
+        self.assertTrue("root" in obj_json)
+        self.assertEqual(root_id, obj_json["root"])
+
+    def testPostDomainMultiple(self):
+        domain = helper.getTestDomain("tall.h5")
+        print("testPostDomainMultiple", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        if rsp.status_code != 200:
+            msg = f"WARNING: Failed to get domain: {domain}. Is test data setup?"
+            print(msg)
+            return  # abort rest of test
+        domainJson = json.loads(rsp.text)
+        self.assertTrue("root" in domainJson)
+        root_id = domainJson["root"]
+
+        # h5paths to fetch
+        h5paths = ["/g1/g1.1", "/g1/g1.2", "/g2/dset2.2"]
+        data = {"h5paths": h5paths}
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("h5paths" in rspJson)
+        rsp_paths = rspJson["h5paths"]
+        self.assertEqual(len(h5paths), len(rsp_paths))
+        for h5path in h5paths:
+            self.assertTrue(h5path in rsp_paths)
+            obj_json = rsp_paths[h5path]
+            obj_id = helper.getUUIDByPath(domain, h5path, session=self.session)
+            self.assertEqual(obj_id, obj_json["id"])
+            self.assertTrue("root" in obj_json)
+            self.assertEqual(root_id, obj_json["root"])
+
     def testGetByPath(self):
         domain = helper.getTestDomain("tall.h5")
         print("testGetByPath", domain)
@@ -204,14 +281,19 @@ class DomainTest(unittest.TestCase):
         self.assertTrue("root" in domainJson)
         root_id = domainJson["root"]
 
+        # get ids that we'll need later
+        g1_id = helper.getUUIDByPath(domain, "/g1", session=self.session)
+        g11_id = helper.getUUIDByPath(domain, "/g1/g1.1", session=self.session)
+        d111_id = helper.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1", session=self.session)
+
         # Get group at /g1/g1.1 by using h5path
         params = {"h5path": "/g1/g1.1"}
         rsp = self.session.get(req, headers=headers, params=params)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("id" in rspJson)
-        g11id = helper.getUUIDByPath(domain, "/g1/g1.1", session=self.session)
-        self.assertEqual(g11id, rspJson["id"])
+
+        self.assertEqual(g11_id, rspJson["id"])
         self.assertTrue("root" in rspJson)
         self.assertEqual(root_id, rspJson["root"])
 
@@ -221,10 +303,18 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("id" in rspJson)
-        d111id = helper.getUUIDByPath(
-            domain, "/g1/g1.1/dset1.1.1", session=self.session
-        )
-        self.assertEqual(d111id, rspJson["id"])
+
+        self.assertEqual(d111_id, rspJson["id"])
+        self.assertTrue("root" in rspJson)
+        self.assertEqual(root_id, rspJson["root"])
+
+        # get /g1/g1.1/dset1.1.1 using a relative path with parent id g1
+        params = {"h5path": "g1.1/dset1.1.1", "parent_id": g1_id}
+        rsp = self.session.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("id" in rspJson)
+        self.assertEqual(d111_id, rspJson["id"])
         self.assertTrue("root" in rspJson)
         self.assertEqual(root_id, rspJson["root"])
 

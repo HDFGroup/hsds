@@ -16,7 +16,7 @@
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPGone
 from json import JSONDecodeError
-from .util.httpUtil import http_post, http_put, http_delete, getHref, respJsonAssemble
+from .util.httpUtil import http_post, getHref, respJsonAssemble
 from .util.httpUtil import jsonResponse
 from .util.idUtil import isValidUuid, getDataNodeUrl, createObjId
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
@@ -24,8 +24,8 @@ from .util.authUtil import validateUserPassword
 from .util.domainUtil import getDomainFromRequest, getPathForDomain, isValidDomain
 from .util.domainUtil import getBucketForDomain, verifyRoot
 from .util.hdf5dtype import validateTypeItem, getBaseTypeJson
-from .servicenode_lib import getDomainJson, getObjectJson, validateAction
-from .servicenode_lib import getObjectIdByPath, getPathForObjectId
+from .servicenode_lib import getDomainJson, getObjectJson, validateAction, deleteObj
+from .servicenode_lib import getObjectIdByPath, getPathForObjectId, putHardLink
 from . import hsds_logger as log
 
 
@@ -223,22 +223,13 @@ async def POST_Datatype(request):
     ctype_json = {"id": ctype_id, "root": root_id, "type": datatype}
     log.debug(f"create named type, body: {ctype_json}")
     req = getDataNodeUrl(app, ctype_id) + "/datatypes"
-    params = {}
-    if bucket:
-        params["bucket"] = bucket
+    params = {"bucket": bucket}
 
     type_json = await http_post(app, req, data=ctype_json, params=params)
 
     # create link if requested
     if link_id and link_title:
-        link_json = {}
-        link_json["id"] = ctype_id
-        link_json["class"] = "H5L_TYPE_HARD"
-        link_req = getDataNodeUrl(app, link_id)
-        link_req += "/groups/" + link_id + "/links/" + link_title
-        log.debug("PUT link - : " + link_req)
-        put_rsp = await http_put(app, link_req, data=link_json, params=params)
-        log.debug(f"PUT Link resp: {put_rsp}")
+        await putHardLink(app, link_id, link_title, tgt_id=ctype_id, bucket=bucket)
 
     # datatype creation successful
     resp = await jsonResponse(request, type_json, status=201)
@@ -251,8 +242,6 @@ async def DELETE_Datatype(request):
     """HTTP method to delete a committed type resource"""
     log.request(request)
     app = request.app
-    meta_cache = app["meta_cache"]
-
     ctype_id = request.match_info.get("id")
     if not ctype_id:
         msg = "Missing committed type id"
@@ -280,15 +269,9 @@ async def DELETE_Datatype(request):
     domain_json = await getDomainJson(app, domain)
     verifyRoot(domain_json)
 
-    # TBD - verify that the obj_id belongs to the given domain
     await validateAction(app, domain, ctype_id, username, "delete")
 
-    req = getDataNodeUrl(app, ctype_id) + "/datatypes/" + ctype_id
-
-    await http_delete(app, req, params=params)
-
-    if ctype_id in meta_cache:
-        del meta_cache[ctype_id]  # remove from cache
+    await deleteObj(app, ctype_id, bucket=bucket)
 
     resp = await jsonResponse(request, {})
     log.response(request, resp=resp)

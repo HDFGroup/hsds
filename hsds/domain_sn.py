@@ -23,9 +23,8 @@ from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPConflict, HTTPServiceUnavailable
 from aiohttp import ClientResponseError
 from aiohttp.web import json_response
-from requests.sessions import merge_setting
 
-from .util.httpUtil import getObjectClass, http_post, http_put, http_get, http_delete
+from .util.httpUtil import getObjectClass, http_post, http_put, http_delete
 from .util.httpUtil import getHref, respJsonAssemble
 from .util.httpUtil import jsonResponse
 from .util.idUtil import getDataNodeUrl, createObjId, getCollectionForId
@@ -47,60 +46,54 @@ from . import hsds_logger as log
 from . import config
 
 
-async def get_collections(app, root_id, bucket=None):
+async def get_collections(app, root_id, bucket=None, max_objects_limit=None):
     """Return the object ids for given root."""
 
     log.info(f"get_collections for {root_id}")
-    groups = {}
-    datasets = {}
-    datatypes = {}
-    lookup_ids = set()
-    lookup_ids.add(root_id)
-    params = {"bucket": bucket}
 
-    while lookup_ids:
-        grp_id = lookup_ids.pop()
-        req = getDataNodeUrl(app, grp_id)
-        req += "/groups/" + grp_id + "/links"
-        log.debug("collection get LINKS: " + req)
-        try:
-            # throws 404 if doesn't exist
-            links_json = await http_get(app, req, params=params)
-        except HTTPNotFound:
-            log.warn(f"get_collection, group {grp_id} not found")
-            continue
+    kwargs = {
+        "action": "get_obj",
+        "include_attrs": False,
+        "include_links": False,
+        "follow_links": True,
+        "bucket": bucket,
+    }
 
-        log.debug(f"got links json from dn for group_id: {grp_id}")
-        links = links_json["links"]
-        log.debug(f"get_collection: got links: {links}")
-        for link in links:
-            if link["class"] != "H5L_TYPE_HARD":
-                continue
-            link_id = link["id"]
-            obj_type = getCollectionForId(link_id)
-            if obj_type == "groups":
-                if link_id in groups:
-                    continue  # been here before
-                groups[link_id] = {}
-                lookup_ids.add(link_id)
-            elif obj_type == "datasets":
-                if link_id in datasets:
-                    continue
-                datasets[link_id] = {}
-            elif obj_type == "datatypes":
-                if link_id in datatypes:
-                    continue
-                datatypes[link_id] = {}
-            else:
-                msg = "get_collection: unexpected link object type: "
-                msg += f"{obj_type}"
-                log.error(merge_setting)
-                HTTPInternalServerError()
+    if max_objects_limit:
+        kwargs["max_objects_limit"] = max_objects_limit
+
+    crawler = DomainCrawler(app, [root_id, ], **kwargs)
+    await crawler.crawl()
+    if max_objects_limit and len(crawler._obj_dict) >= max_objects_limit:
+        msg = "get_collections - too many objects:  "
+        msg += f"{len(crawler._obj_dict)}, returning None"
+        log.info(msg)
+        return None
+    else:
+        msg = f"DomainCrawler returned: {len(crawler._obj_dict)} object ids"
+        log.info(msg)
+
+    group_ids = set()
+    dataset_ids = set()
+    datatype_ids = set()
+
+    for obj_id in crawler._obj_dict:
+        obj_type = getCollectionForId(obj_id)
+        if obj_type == "groups":
+            group_ids.add(obj_id)
+        elif obj_type == "datasets":
+            dataset_ids.add(obj_id)
+        elif obj_type == "datatypes":
+            datatype_ids.add(obj_id)
+        else:
+            log.warn(f"get_collections - unexpected id type: {obj_id}")
+    if root_id in group_ids:
+        group_ids.remove(root_id)  # don't include the root id
 
     result = {}
-    result["groups"] = groups
-    result["datasets"] = datasets
-    result["datatypes"] = datatypes
+    result["groups"] = group_ids
+    result["datasets"] = dataset_ids
+    result["datatypes"] = datatype_ids
     return result
 
 
@@ -112,14 +105,16 @@ async def getDomainObjects(app, root_id, include_attrs=False, bucket=None):
     log.info(f"getDomainObjects for root: {root_id}, include_attrs: {include_attrs}")
     max_objects_limit = int(config.get("domain_req_max_objects_limit", default=500))
 
-    crawler_params = {
+    kwargs = {
+        "action": "get_obj",
         "include_attrs": include_attrs,
-        "bucket": bucket,
+        "include_links": True,
         "follow_links": True,
         "max_objects_limit": max_objects_limit,
+        "bucket": bucket,
     }
 
-    crawler = DomainCrawler(app, [root_id, ], action="get_obj", params=crawler_params)
+    crawler = DomainCrawler(app, [root_id, ], **kwargs)
     await crawler.crawl()
     if len(crawler._obj_dict) >= max_objects_limit:
         msg = "getDomainObjects - too many objects:  "
@@ -263,15 +258,13 @@ async def get_domains(request):
             if pattern:
                 # do a pattern match on the basename
                 basename = op.basename(domain)
-                log.debug(
-                    f"get_domains: checking {basename} against pattern: {pattern}"
-                )
+                msg = f"get_domains: checking {basename} against pattern: {pattern}"
+                log.debug(msg)
                 try:
                     got_match = globmatch(basename, pattern)
                 except ValueError as ve:
-                    log.warn(
-                        f"get_domains, invalid query pattern {pattern}, ValueError: {ve}"
-                    )
+                    msg = f"get_domains, invalid query pattern {pattern}, ValueError: {ve}"
+                    log.warn(msg)
                     raise HTTPBadRequest(reason="invalid query pattern")
                 if got_match:
                     log.debug("get_domains - got_match")
@@ -453,7 +446,7 @@ async def GET_Domain(request):
     bucket = getBucketForDomain(domain)
     log.debug(f"GET_Domain domain: {domain} bucket: {bucket}")
 
-    if not bucket and not config.get("bucket_name"):
+    if not bucket:
         # no bucket defined, raise 400
         msg = "Bucket not provided"
         log.warn(msg)
@@ -502,14 +495,14 @@ async def GET_Domain(request):
         h5path = params["h5path"]
 
         # select which object to perform path search under
-        root_id = parent_id if parent_id else domain_json["root"]
+        base_id = parent_id if parent_id else domain_json["root"]
 
         # getObjectIdByPath throws 404 if not found
         obj_id, domain, _ = await getObjectIdByPath(
-            app, root_id, h5path, bucket=bucket, domain=domain,
+            app, base_id, h5path, bucket=bucket, domain=domain,
             follow_soft_links=follow_soft_links,
             follow_external_links=follow_external_links)
-        log.info(f"get obj_id: {obj_id} from h5path: {h5path}")
+        log.info(f"got obj_id: {obj_id} from h5path: {h5path}")
         # get authoritative state for object from DN (even if
         # it's in the meta_cache).
         kwargs = {"refresh": True, "bucket": bucket,
@@ -622,6 +615,146 @@ async def getScanTime(app, root_id, bucket=None):
             log.warn("scan_complete key not found in root_info")
 
     return root_scan
+
+
+async def POST_Domain(request):
+    """ return object defined by h5path list """
+
+    log.request(request)
+    app = request.app
+    params = request.rel_url.query
+    log.debug(f"POST_Domain query params: {params}")
+
+    parent_id = None
+    include_links = False
+    include_attrs = False
+    follow_soft_links = False
+    follow_external_links = False
+
+    if "parent_id" in params and params["parent_id"]:
+        parent_id = params["parent_id"]
+    if "include_links" in params and params["include_links"]:
+        include_links = True
+    if "include_attrs" in params and params["include_attrs"]:
+        include_attrs = True
+    if "follow_soft_links" in params and params["follow_soft_links"]:
+        follow_soft_links = True
+    if "follow_external_links" in params and params["follow_external_links"]:
+        follow_external_links = True
+
+    if not request.has_body:
+        msg = "POST Domain with no body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        msg = "Unable to load JSON body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    if "h5paths" in body:
+        h5paths = body["h5paths"]
+        if not isinstance(h5paths, list):
+            msg = f"expected list for h5paths but got: {type(h5paths)}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    else:
+        msg = "expected h5paths key in body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    (username, pswd) = getUserPasswordFromRequest(request)
+    if username is None and app["allow_noauth"]:
+        username = "default"
+    else:
+        await validateUserPassword(app, username, pswd)
+
+    domain = None
+    try:
+        domain = getDomainFromRequest(request)
+    except ValueError:
+        log.warn(f"Invalid domain: {domain}")
+        raise HTTPBadRequest(reason="Invalid domain name")
+
+    bucket = getBucketForDomain(domain)
+    log.debug(f"GET_Domain domain: {domain} bucket: {bucket}")
+
+    if not bucket:
+        # no bucket defined, raise 400
+        msg = "Bucket not provided"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    if bucket:
+        checkBucketAccess(app, bucket)
+
+    if not domain:
+        msg = "no domain given"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    log.info(f"got domain: {domain}")
+
+    domain_json = await getDomainJson(app, domain, reload=True)
+
+    if domain_json is None:
+        log.warn(f"domain: {domain} not found")
+        raise HTTPNotFound()
+
+    if "acls" not in domain_json:
+        log.error("No acls key found in domain")
+        raise HTTPInternalServerError()
+
+    if "root" not in domain_json:
+        msg = f"{domain} is a folder, not a domain"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    root_id = domain_json["root"]
+
+    # select which object to perform path search under
+    base_id = parent_id if parent_id else root_id
+
+    log.debug(f"POST_Domain with h5paths: {h5paths} from: {base_id}")
+    # validate that the requesting user has permission to read this domain
+    # aclCheck throws exception if not authorized
+    aclCheck(app, domain_json, "read", username)
+
+    json_objs = {}
+
+    # TBD: the following could be made more efficient for
+    # cases where a large number of h5paths are given...
+    for h5path in h5paths:
+
+        # getObjectIdByPath throws 404 if not found
+        obj_id, domain, _ = await getObjectIdByPath(
+            app, base_id, h5path, bucket=bucket, domain=domain,
+            follow_soft_links=follow_soft_links,
+            follow_external_links=follow_external_links)
+
+        log.info(f"got obj_id: {obj_id} from h5path: {h5path}")
+        # get authoritative state for object from DN (even if
+        # it's in the meta_cache).
+        kwargs = {"refresh": True, "bucket": bucket,
+                  "include_attrs": include_attrs, "include_links": include_links}
+        log.debug(f"kwargs for getObjectJson: {kwargs}")
+
+        obj_json = await getObjectJson(app, obj_id, **kwargs)
+
+        obj_json = respJsonAssemble(obj_json, params, obj_id)
+
+        obj_json["domain"] = getPathForDomain(domain)
+
+        # client may not know class of object retrieved via path
+        obj_json["class"] = getObjectClass(obj_id)
+
+        json_objs[h5path] = obj_json
+
+    jsonRsp = {"h5paths": json_objs}
+    resp = await jsonResponse(request, jsonRsp)
+    log.response(request, resp=resp)
+    return resp
 
 
 async def PUT_Domain(request):
@@ -1354,10 +1487,6 @@ async def GET_Datasets(request):
         raise HTTPBadRequest(reason=msg)
 
     bucket = getBucketForDomain(domain)
-    if not bucket:
-        bucket = config.get("bucket_name")
-    else:
-        checkBucketAccess(app, bucket)
 
     # verify the domain
     try:
@@ -1448,10 +1577,6 @@ async def GET_Groups(request):
         raise HTTPBadRequest(reason=msg)
 
     bucket = getBucketForDomain(domain)
-    if not bucket:
-        bucket = config.get("bucket_name")
-    else:
-        checkBucketAccess(app, bucket)
 
     # use reload to get authoritative domain json
     try:
@@ -1537,10 +1662,6 @@ async def GET_Datatypes(request):
         raise HTTPBadRequest(reason=msg)
 
     bucket = getBucketForDomain(domain)
-    if not bucket:
-        bucket = config.get("bucket_name")
-    else:
-        checkBucketAccess(app, bucket)
 
     # use reload to get authoritative domain json
     try:

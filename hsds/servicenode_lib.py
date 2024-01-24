@@ -22,8 +22,9 @@ from aiohttp.client_exceptions import ClientOSError, ClientError
 
 from .util.authUtil import getAclKeys
 from .util.arrayUtil import encodeData
-from .util.idUtil import getDataNodeUrl, getCollectionForId, isSchema2Id, getS3Key
-from .util.linkUtil import h5Join
+from .util.idUtil import getDataNodeUrl, getCollectionForId
+from .util.idUtil import isSchema2Id, getS3Key, isValidUuid
+from .util.linkUtil import h5Join, validateLinkName, getLinkClass
 from .util.storUtil import getStorJSONObj, isStorObj
 from .util.authUtil import aclCheck
 from .util.httpUtil import http_get, http_put, http_post, http_delete
@@ -341,6 +342,217 @@ async def getDsetJson(app, dset_id,
     return dset_json
 
 
+async def getLinks(app, group_id,
+                   titles=None,
+                   create_order=False,
+                   limit=None,
+                   marker=None,
+                   pattern=None,
+                   bucket=None):
+
+    """ Get the link jsons for the given titles """
+
+    req = getDataNodeUrl(app, group_id)
+    req += "/groups/" + group_id + "/links"
+    params = {"bucket": bucket}
+    if pattern is not None:
+        params["pattern"] = pattern
+    log.debug(f"getLinks {group_id}")
+
+    if titles:
+        # do a post request with the given title list
+        log.debug(f"getLinks for {group_id} - {len(titles)} titles")
+        log.debug(f"  params: {params}")
+        data = {"titles": titles}
+        post_rsp = await http_post(app, req, data=data, params=params)
+        log.debug(f"got link_json: {post_rsp}")
+        if "links" not in post_rsp:
+            log.error("unexpected response from post links")
+            raise HTTPInternalServerError()
+        links = post_rsp["links"]
+    else:
+        # do a get for all links
+        if create_order:
+            params["CreateOrder"] = 1
+        if limit is not None:
+            params["Limit"] = str(limit)
+        if marker is not None:
+            params["Marker"] = marker
+        log.debug(f"getLinks, all links for {group_id}, params: {params}")
+
+        get_rsp = await http_get(app, req, params=params)
+        log.debug(f"got link_json: {get_rsp}")
+        if "links" not in get_rsp:
+            log.error("unexpected response from get links")
+            raise HTTPInternalServerError()
+        links = get_rsp["links"]
+
+    return links
+
+
+async def getLink(app, group_id, title, bucket=None):
+    """ Get the link json for the given title """
+
+    titles = [title, ]
+    links = await getLinks(app, group_id, titles=titles, bucket=bucket)
+
+    if len(links) != 1:
+        log.error(f"expected 1 link but got: {len(links)}")
+        raise HTTPInternalServerError()
+    link_json = links[0]
+
+    return link_json
+
+
+async def putLink(app, group_id, title, tgt_id=None, h5path=None, h5domain=None, bucket=None):
+    """ create a new link.  Return 201 if this is a new link,
+    or 200 if it's a duplicate of an existing link. """
+
+    try:
+        validateLinkName(title)
+    except ValueError:
+        raise HTTPBadRequest(reason="invalid link name")
+
+    if h5path and tgt_id:
+        msg = "putLink - provide tgt_id or h5path, but not both"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    link_json = {}
+    if tgt_id:
+        link_json["id"] = tgt_id
+    if h5path:
+        link_json["h5path"] = h5path
+    if h5domain:
+        link_json["h5domain"] = h5domain
+
+    try:
+        link_class = getLinkClass(link_json)
+    except ValueError:
+        raise HTTPBadRequest(reason="invalid link")
+
+    link_json["class"] = link_class
+
+    # for hard links, verify that the referenced id exists and is in
+    # this domain
+    if link_class == "H5L_TYPE_HARD":
+        tgt_id = link_json["id"]
+        ref_json = await getObjectJson(app, tgt_id, bucket=bucket)
+        group_json = await getObjectJson(app, group_id, bucket=bucket)
+        if ref_json["root"] != group_json["root"]:
+            msg = "Hard link must reference an object in the same domain"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+    # ready to add link now
+    req = getDataNodeUrl(app, group_id)
+    req += "/groups/" + group_id + "/links"
+    log.debug(f"PUT links - PUT request: {req}")
+    params = {"bucket": bucket}
+
+    data = {"links": {title: link_json}}
+
+    put_rsp = await http_put(app, req, data=data, params=params)
+    log.debug(f"PUT Link resp: {put_rsp}")
+    if "status" in put_rsp:
+        status = put_rsp["status"]
+    else:
+        status = 201
+    return status
+
+
+async def putHardLink(app, group_id, title, tgt_id=None, bucket=None):
+    """ create a new hard link.  Return 201 if this is a new link,
+      or 200 if it's a duplicate of an existing link """
+
+    status = await putLink(app, group_id, title, tgt_id=tgt_id, bucket=bucket)
+    return status
+
+
+async def putSoftLink(app, group_id, title, h5path=None, bucket=None):
+    """ create a new soft link.  Return 201 if this is a new link,
+      or 200 if it's a duplicate of an existing link """
+
+    status = await putLink(app, group_id, title, h5path=h5path, bucket=bucket)
+    return status
+
+
+async def putExternalLink(app, group_id, title, h5path=None, h5domain=None, bucket=None):
+    """ create a new external link.  Return 201 if this is a new link,
+      or 200 if it's a duplicate of an existing link """
+
+    status = await putLink(app, group_id, title, h5path=h5path, h5domain=h5domain, bucket=bucket)
+    return status
+
+
+async def putLinks(app, group_id, items, bucket=None):
+    """ create a new links.  Return 201 if any item is a new link,
+    or 200 if it's a duplicate of an existing link. """
+
+    isValidUuid(group_id, obj_class="group")
+    group_json = None
+
+    # validate input
+    for title in items:
+        try:
+            validateLinkName(title)
+            item = items[title]
+            link_class = getLinkClass(item)
+        except ValueError:
+            # invalid link
+            raise HTTPBadRequest(reason="invalid link")
+
+        if link_class == "H5L_TYPE_HARD":
+            tgt_id = item["id"]
+            isValidUuid(tgt_id)
+            # for hard links, verify that the referenced id exists and is in
+            # this domain
+            ref_json = await getObjectJson(app, tgt_id, bucket=bucket)
+            if not group_json:
+                # just need to fetch this once
+                group_json = await getObjectJson(app, group_id, bucket=bucket)
+            if ref_json["root"] != group_json["root"]:
+                msg = "Hard link must reference an object in the same domain"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+
+    # ready to add links now
+    req = getDataNodeUrl(app, group_id)
+    req += "/groups/" + group_id + "/links"
+    log.debug(f"PUT links - PUT request: {req}")
+    params = {"bucket": bucket}
+
+    data = {"links": items}
+
+    put_rsp = await http_put(app, req, data=data, params=params)
+    log.debug(f"PUT Link resp: {put_rsp}")
+    if "status" in put_rsp:
+        status = put_rsp["status"]
+    else:
+        status = 201
+    return status
+
+
+async def deleteLinks(app, group_id, titles=None, separator="/", bucket=None):
+    """ delete the requested set of links from the given object """
+
+    if titles is None or len(titles) == 0:
+        msg = "provide a list of link names for deletion"
+        log.debug(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    node_url = getDataNodeUrl(app, group_id)
+    req = f"{node_url}/groups/{group_id}/links"
+    log.debug(f"deleteLinks: {req}")
+    params = {"separator": separator, "bucket": bucket}
+
+    # stringify the list of link_names
+    titles_param = separator.join(titles)
+    params["titles"] = titles_param
+    log.debug(f"using params: {params}")
+    await http_delete(app, req, params=params)
+
+
 async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, domain=None,
                             follow_soft_links=False, follow_external_links=False):
     """Find the object at the provided h5path location.
@@ -379,13 +591,7 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
         if not link:
             continue  # skip empty link
 
-        req = getDataNodeUrl(app, obj_id)
-        req += "/groups/" + obj_id + "/links/" + link
-        log.debug("get LINK: " + req)
-        params = {}
-        if bucket:
-            params["bucket"] = bucket
-        link_json = await http_get(app, req, params=params)
+        link_json = await getLink(app, obj_id, link, bucket=bucket)
 
         if link_json["class"] == "H5L_TYPE_EXTERNAL":
             if not follow_external_links:
@@ -646,9 +852,11 @@ async def doFlush(app, root_id, bucket=None):
 
 async def getAttributes(app, obj_id,
                         attr_names=None,
-                        include_data=True,
+                        include_data=False,
+                        max_data_size=0,
                         ignore_nan=False,
                         create_order=False,
+                        pattern=None,
                         encoding=None,
                         limit=0,
                         marker=None,
@@ -674,6 +882,8 @@ async def getAttributes(app, obj_id,
         params["CreateOrder"] = 1
     if encoding:
         params["encoding"] = encoding
+    if max_data_size > 0:
+        params["max_data_size"] = max_data_size
 
     if attr_names:
         # send names via a POST request
@@ -687,6 +897,9 @@ async def getAttributes(app, obj_id,
             params["Limit"] = limit
         if marker:
             params["Marker"] = marker
+        if pattern:
+            params["pattern"] = pattern
+
         log.debug(f"using params: {params}")
         # do a get to fetch all the attributes
         dn_json = await http_get(app, req, params=params)
@@ -775,3 +988,21 @@ async def deleteAttributes(app, obj_id, attr_names=None, separator="/", bucket=N
     params["attr_names"] = attr_name_param
     log.debug(f"using params: {params}")
     await http_delete(app, req, params=params)
+
+
+async def deleteObj(app, obj_id, bucket=None):
+    """ send delete request for group, datatype, or dataset obj """
+    log.debug(f"deleteObj {obj_id}")
+    req = getDataNodeUrl(app, obj_id)
+    collection = getCollectionForId(obj_id)
+    req += f"/{collection}/{obj_id}"
+    params = {}
+    if bucket:
+        params["bucket"] = bucket
+    log.debug(f"http_delete req: {req} params: {params}")
+
+    await http_delete(app, req, params=params)
+
+    meta_cache = app["meta_cache"]
+    if obj_id in meta_cache:
+        del meta_cache[obj_id]  # remove from cache

@@ -20,7 +20,7 @@ Make sure you have Python 3 and Pip installed, then:
     -  Set user_name: `$ export USER_NAME=$USER`
     -  Set user_password: `$ export USER_PASSWORD=$USER`
     -  Set admin name: `$ export ADMIN_USERNAME=$USER`
-    -  Set admin password: `$ $export ADMIN_PASSWORD=$USER`
+    -  Set admin password: `$ export ADMIN_PASSWORD=$USER`
     -  Run test suite: `$ python testall.py --skip_unit`
 5. (Optional) Install the h5pyd package for an h5py compatible api and tool suite: https://github.com/HDFGroup/h5pyd
 6. (Optional) Post install setup (test data, home folders, cli tools, etc): [docs/post_install.md](docs/post_install.md)

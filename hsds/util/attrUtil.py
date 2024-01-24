@@ -51,3 +51,26 @@ def validateAttributeName(name):
         msg = f"attribute name must be a string, but got: {type(name)}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+
+
+def isEqualAttr(attr1, attr2):
+    """ compare to attributes, return True if the same, False if differnt """
+    for obj in (attr1, attr2):
+        if not isinstance(obj, dict):
+            raise TypeError(f"unexpected type: {type(obj)}")
+        if "type" not in obj:
+            raise TypeError("expected type key for attribute")
+        if "shape" not in obj:
+            raise TypeError("expected shape key for attribute")
+        # value is optional (not set for null space attributes)
+    if attr1["type"] != attr2["type"]:
+        return False
+    if attr1["shape"] != attr2["shape"]:
+        return False
+    shape_class = attr1["shape"].get("class")
+    if shape_class == "H5S_NULL":
+        return True  # nothing else to compare
+    for obj in (attr1, attr2):
+        if "value" not in obj:
+            raise TypeError("expected value key for attribute")
+    return attr1["value"] == attr2["value"]
