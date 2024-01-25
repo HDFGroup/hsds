@@ -560,6 +560,10 @@ async def _doHyperslabWrite(app,
     log.info(f"_doHyperslabWrite on {dset_id} - page: {page_number}")
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
+
+    if (select_dtype is not None):
+        item_size = select_dtype.itemsize
+
     layout = getChunkLayout(dset_json)
 
     num_chunks = getNumChunks(page, layout)
@@ -708,6 +712,7 @@ async def PUT_Value(request):
         log.debug(f"got body: {body}")
 
     select_dtype = _getSelectDtype(params, dset_dtype, body=body)
+    select_item_size = select_dtype.itemsize
     append_rows = _getAppendRows(params, dset_json, body=body)
 
     if append_rows:
@@ -906,7 +911,7 @@ async def PUT_Value(request):
             log.debug(f"non-streaming data, setting page list to: {slices}")
         else:
             max_request_size = int(config.get("max_request_size"))
-            pages = getSelectionPagination(slices, dims, item_size, max_request_size)
+            pages = getSelectionPagination(slices, dims, select_item_size, max_request_size)
             log.debug(f"getSelectionPagination returned: {len(pages)} pages")
 
         for page_number in range(len(pages)):

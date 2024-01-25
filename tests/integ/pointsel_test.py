@@ -15,6 +15,7 @@ import json
 import numpy as np
 import helper
 import config
+from hsds.util.arrayUtil import arrayToBytes
 
 
 class PointSelTest(unittest.TestCase):
@@ -1723,6 +1724,28 @@ class PointSelTest(unittest.TestCase):
         ret_value = np.array(rspJson["value"], dtype=int)
         self.assertTrue(np.array_equal(ret_value[:, 0],
                                        np.full(shape=num_elements, fill_value=1000, dtype=int)))
+        for i in range(2, 5):
+            self.assertTrue(np.array_equal(ret_value[:, i], [(i + 1) * 100 for j in range(100)]))
+
+        # try to write to first field through binary request
+        arr = np.array([(10000,) for i in range(num_elements)], dtype=np.int32)
+        data = arrayToBytes(arr)
+        req = self.endpoint + "/datasets/" + dset_id + "/value?fields=" + field_names[0]
+        headers["Content-Type"] = "application/octet-stream"
+        rsp = self.session.put(req, data=data, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # read back entire dataset and check values
+        req = self.endpoint + "/datasets/" + dset_id + "/value"
+        headers["Content-Type"] = "application/json"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        ret_value = np.array(rspJson["value"], dtype=int)
+        print(f"ret value = {ret_value}")
+        self.assertTrue(np.array_equal(ret_value[:, 0],
+                                       np.full(shape=num_elements, fill_value=10000, dtype=int)))
         for i in range(2, 5):
             self.assertTrue(np.array_equal(ret_value[:, i], [(i + 1) * 100 for j in range(100)]))
 
