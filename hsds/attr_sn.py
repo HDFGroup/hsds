@@ -158,7 +158,7 @@ async def GET_Attributes(request):
         msg = f"DomainCrawler returned: {len(attributes)} objects"
         log.info(msg)
     else:
-        # just get attributes for this objects
+        # just get attributes for this object
         kwargs = {"bucket": bucket}
         if include_data:
             kwargs["include_data"] = True

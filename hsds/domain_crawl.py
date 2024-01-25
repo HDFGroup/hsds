@@ -61,6 +61,7 @@ class DomainCrawler:
         self._create_order = create_order
         self._pattern = pattern
         self._limit = limit
+        self._count = 0  # items collected
         self._replace = replace
         self._max_tasks = max_tasks
         self._q = asyncio.Queue()
@@ -175,8 +176,19 @@ class DomainCrawler:
             log.error(f"unexpected exception from post request: {e}")
             status = 500
 
+        follow_links = self._follow_links
         if isOK(status):
             log.debug(f"got attributes: {attributes}")
+            if self._limit:
+                left = self._limit - self._count
+                if len(attributes) > left:
+                    # truncate the attribute list
+                    msg = f"limit reached, returning {left} attributes out"
+                    msg += f"of {len(attributes)} for {obj_id}"
+                    log.warn(msg)
+                    attributes = attributes[:left]
+                    follow_links = False
+            self._count += len(attributes)
             self._obj_dict[obj_id] = attributes
         else:
             log.warn(f"Domain crawler - got {status} status for obj_id {obj_id}")
@@ -184,7 +196,7 @@ class DomainCrawler:
 
         collection = getCollectionForId(obj_id)
 
-        if collection == "groups" and self._follow_links:
+        if collection == "groups" and follow_links:
             links = None
             status = 200
             try:
@@ -263,7 +275,9 @@ class DomainCrawler:
             status = 500
         log.debug(f"getObjectJson status: {status}")
 
-        if obj_json is None:
+        if isOK(status):
+            log.debug(f"got obj json for: {obj_id}")
+        else:
             msg = f"DomainCrawler - getObjectJson for {obj_id} "
             if status >= 500:
                 msg += f"failed, status: {status}"
@@ -272,6 +286,8 @@ class DomainCrawler:
                 msg += f"returned status: {status}"
                 log.warn(msg)
             return
+
+        self._obj_dict[obj_id] = {"status": status}
 
         log.debug(f"DomainCrawler - got json for {obj_id}")
         log.debug(f"obj_json: {obj_json}")
@@ -344,7 +360,7 @@ class DomainCrawler:
             status = 500
         log.debug(f"get_links status: {status}")
 
-        if links is None:
+        if not isOK(status):
             msg = f"DomainCrawler - get_links for {grp_id} "
             if status >= 500:
                 msg += f"failed, status: {status}"
@@ -366,14 +382,27 @@ class DomainCrawler:
             msg = f"getLinks with pattern: {pattern} returning "
             msg += f"{len(filtered_links)} links from {len(links)}"
             log.debug(msg)
-            log.debug(f"save to obj_dict: {filtered_links}")
-            self._obj_dict[grp_id] = filtered_links
+            new_links = filtered_links
         else:
-            log.debug(f"save to obj_dict: {links}")
-            self._obj_dict[grp_id] = links  # store the links
+            new_links = links  # store the links
+
+        follow_links = self._follow_links
+        # check that we are not exeding the limit
+        if self._limit:
+            left = self._limit - self._count
+            if left < len(new_links):
+                # will need to truncate this list
+                msg = f"limit reached, adding {left} new links out"
+                msg += f" of {len(new_links)} for {grp_id}"
+                log.warn(msg)
+                new_links = new_links[:left]
+                follow_links = False  # no need to search more
+        self._count += len(new_links)
+        log.debug(f"adding {len(new_links)} to obj_dict for {grp_id}")
+        self._obj_dict[grp_id] = new_links
 
         # if follow_links, add any group links to the lookup ids set
-        if self._follow_links:
+        if follow_links:
             self.follow_links(grp_id, links)
 
     async def put_links(self, grp_id, link_items):

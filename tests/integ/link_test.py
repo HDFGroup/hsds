@@ -625,6 +625,24 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(softlink_count, len(expected_soft_links))
         self.assertEqual(extlink_count, len(expected_external_links))
 
+        # test follow with limit
+        # get links for root group and other groups recursively
+        req = helper.getEndpoint() + "/groups/" + root_uuid + "/links"
+        limit = 5
+        params = {"follow_links": 1, "Limit": limit}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        hrefs = rspJson["hrefs"]
+        self.assertEqual(len(hrefs), 3)
+        self.assertTrue("links" in rspJson)
+        obj_map = rspJson["links"]  # map of obj_ids to links
+        link_count = 0
+        for obj_id in obj_map:
+            link_count += len(obj_map[obj_id])
+        self.assertEqual(link_count, limit)
+
     def testGetPattern(self):
         # test getting links from an existing domain, with a glob filter
         domain = helper.getTestDomain("tall.h5")

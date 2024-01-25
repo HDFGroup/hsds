@@ -99,6 +99,8 @@ async def GET_Links(request):
 
         kwargs = {"action": "get_link", "bucket": bucket, "follow_links": True}
         kwargs["include_links"] = True
+        if limit:
+            kwargs["limit"] = limit
         items = [group_id, ]
         crawler = DomainCrawler(app, items, **kwargs)
 

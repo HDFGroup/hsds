@@ -2368,8 +2368,9 @@ class AttributeTest(unittest.TestCase):
                 self.assertTrue("value" in attrJson)
 
         # same thing with Limit
+        limit = 3
         req = helper.getEndpoint() + "/groups/" + root_uuid + "/attributes"
-        params = {"follow_links": "1", "Limit": 1}
+        params = {"follow_links": "1", "Limit": limit}
         rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
@@ -2378,24 +2379,9 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(len(obj_map), 10)
         attr_count = 0
         for obj_id in obj_map:
-            self.assertTrue(len(obj_map[obj_id]) <= 1)
+            self.assertTrue(len(obj_map[obj_id]) <= limit)
             attr_count += len(obj_map[obj_id])
-        self.assertEqual(attr_count, 2)
-        for obj_id in (root_uuid, d111_uuid):
-            # these are the only two objects with attributes
-            self.assertTrue(obj_id in obj_map)
-            obj_attrs = obj_map[obj_id]
-            self.assertEqual(len(obj_attrs), 1)
-            for attrJson in obj_attrs:
-                self.assertTrue("name" in attrJson)
-                attr_name = attrJson["name"]
-                self.assertTrue(attr_name in ("attr1", "attr2"))
-                self.assertTrue("type" in attrJson)
-                self.assertTrue("shape" in attrJson)
-                shapeJson = attrJson["shape"]
-                self.assertEqual(shapeJson["class"], "H5S_SIMPLE")
-                self.assertTrue("created" in attrJson)
-                self.assertFalse("value" in attrJson)
+        self.assertEqual(attr_count, limit)
 
         # do a get with encoding
         req = helper.getEndpoint() + "/groups/" + root_uuid + "/attributes"
