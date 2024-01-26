@@ -1743,7 +1743,6 @@ class PointSelTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("value" in rspJson)
         ret_value = np.array(rspJson["value"], dtype=int)
-        print(f"ret value = {ret_value}")
         self.assertTrue(np.array_equal(ret_value[:, 0],
                                        np.full(shape=num_elements, fill_value=10000, dtype=int)))
         for i in range(2, 5):

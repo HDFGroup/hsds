@@ -1438,7 +1438,7 @@ async def POST_Value(request):
         log.debug(f"arr shape: {arr_rsp.shape}")
         if response_type == "binary":
             log.debug("preparing binary response")
-            output_data = arr_rsp.tobytes()
+            output_data = arrayToBytes(arr_rsp)
             msg = f"POST Value - returning {len(output_data)} bytes binary data"
             log.debug(msg)
             await resp.write(output_data)
