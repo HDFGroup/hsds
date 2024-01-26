@@ -242,18 +242,20 @@ def _getSelectDtype(params, dset_dtype, body=None):
     """ if a field list is defined in params or body,
       create a sub-type of the dset dtype.  Else,
       just return the dset dtype. """
-
+    select_fields = None
     kw = "fields"
+
     if isinstance(body, dict) and kw in body:
         select_fields = body[kw]
+        log.debug(f"fields value in body: {select_fields}")
     elif kw in params:
-        fields_param = params.get(kw)
-        log.debug(f"fields param: {fields_param}")
-        select_fields = fields_param.split(":")
+        select_fields = params.get(kw)
+        log.debug(f"fields param: {select_fields}")
     else:
         select_fields = None
 
     if select_fields:
+        select_fields = select_fields.split(":")
         try:
             select_dtype = getSubType(dset_dtype, select_fields)
         except TypeError as te:
@@ -558,6 +560,10 @@ async def _doHyperslabWrite(app,
     log.info(f"_doHyperslabWrite on {dset_id} - page: {page_number}")
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
+
+    if (select_dtype is not None):
+        item_size = select_dtype.itemsize
+
     layout = getChunkLayout(dset_json)
 
     num_chunks = getNumChunks(page, layout)
@@ -706,6 +712,7 @@ async def PUT_Value(request):
         log.debug(f"got body: {body}")
 
     select_dtype = _getSelectDtype(params, dset_dtype, body=body)
+    select_item_size = select_dtype.itemsize
     append_rows = _getAppendRows(params, dset_json, body=body)
 
     if append_rows:
@@ -904,7 +911,7 @@ async def PUT_Value(request):
             log.debug(f"non-streaming data, setting page list to: {slices}")
         else:
             max_request_size = int(config.get("max_request_size"))
-            pages = getSelectionPagination(slices, dims, item_size, max_request_size)
+            pages = getSelectionPagination(slices, dims, select_item_size, max_request_size)
             log.debug(f"getSelectionPagination returned: {len(pages)} pages")
 
         for page_number in range(len(pages)):
