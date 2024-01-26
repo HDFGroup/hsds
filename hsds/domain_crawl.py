@@ -387,7 +387,7 @@ class DomainCrawler:
             new_links = links  # store the links
 
         follow_links = self._follow_links
-        # check that we are not exeding the limit
+        # check that we are not exceeding the limit
         if self._limit:
             left = self._limit - self._count
             if left < len(new_links):
