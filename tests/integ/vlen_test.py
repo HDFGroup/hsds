@@ -58,9 +58,7 @@ class VlenTest(unittest.TestCase):
         }
         payload = {
             "type": vlen_type,
-            "shape": [
-                4,
-            ],
+            "shape": [4, ],
         }
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
@@ -116,7 +114,6 @@ class VlenTest(unittest.TestCase):
         body = {"points": points}
         # read selected points
         rsp = self.session.post(req, data=json.dumps(body), headers=headers)
-        # point select not supported on zero-dimensional datasets
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("value" in rspJson)
@@ -132,9 +129,7 @@ class VlenTest(unittest.TestCase):
         count = 4
         test_values = []
         for i in range(count):
-            e = [
-                1,
-            ]
+            e = [1,]
             for j in range(0, i):
                 e.append(j + 2)
             test_values.append(e)
@@ -162,9 +157,7 @@ class VlenTest(unittest.TestCase):
         }
         payload = {
             "type": vlen_type,
-            "shape": [
-                count,
-            ],
+            "shape": [count, ],
         }
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
@@ -211,13 +204,7 @@ class VlenTest(unittest.TestCase):
         self.assertEqual(rsp.headers["Content-Type"], "application/octet-stream")
         data = rsp.content
         self.assertEqual(len(data), 56)
-        arr = bytesToArray(
-            data,
-            dt,
-            [
-                count,
-            ],
-        )
+        arr = bytesToArray(data, dt, [count, ])
         for i in range(count):
             self.assertEqual(value[i], test_values[i])
 
@@ -332,9 +319,7 @@ class VlenTest(unittest.TestCase):
         }
         payload = {
             "type": vlen_type,
-            "shape": [
-                4,
-            ],
+            "shape": [4, ],
         }
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
@@ -367,6 +352,109 @@ class VlenTest(unittest.TestCase):
         self.assertEqual(len(value), 4)
         for i in range(4):
             self.assertEqual(value[i], data[i])
+
+        # read a point selection
+        points = [1, 3]
+        body = {"points": points}
+        # read selected points
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+        self.assertEqual(len(value), 2)
+        self.assertEqual(value[0], data[1])
+        self.assertEqual(value[1], data[3])
+
+    def testPutVLenStringBinary(self):
+        # Test PUT value for 1d attribute with variable length string types
+        print("testPutVLenStringBinary", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        headers_bin_req = helper.getRequestHeaders(domain=self.base_domain)
+        headers_bin_req["Content-Type"] = "application/octet-stream"
+        headers_bin_rsp = helper.getRequestHeaders(domain=self.base_domain)
+        headers_bin_rsp["accept"] = "application/octet-stream"
+        headers_bin_reqrsp = helper.getRequestHeaders(domain=self.base_domain)
+        headers_bin_reqrsp["accept"] = "application/octet-stream"
+        headers_bin_reqrsp["Content-Type"] = "application/octet-stream"
+
+        req = self.endpoint + "/"
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create dataset
+        vlen_type = {
+            "class": "H5T_STRING",
+            "charSet": "H5T_CSET_ASCII",
+            "strPad": "H5T_STR_NULLTERM",
+            "length": "H5T_VARIABLE",
+        }
+        payload = {
+            "type": vlen_type,
+            "shape": [4, ],
+        }
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_uuid))
+
+        # link new dataset as 'dset'
+        name = "dset"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": dset_uuid}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # write values to dataset
+        data = ["This is", "a variable length", "string", "array"]
+
+        dt_str = createDataType(vlen_type)
+
+        # create numpy vlen array
+
+        arr = np.zeros((4,), dtype=dt_str)
+        for i in range(4):
+            arr[i] = data[i]
+
+        # write as binary data
+        bin_data = arrayToBytes(arr)
+
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = self.session.put(req, data=bin_data, headers=headers_bin_req)
+        self.assertEqual(rsp.status_code, 200)
+
+        # read as binary
+        rsp = self.session.get(req, headers=headers_bin_rsp)
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(rsp.headers["Content-Type"], "application/octet-stream")
+        bin_data = rsp.content
+        arr = bytesToArray(bin_data, dt_str, [4,])
+        for i in range(4):
+            self.assertEqual(arr[i].decode(), data[i])
+
+        # prepare a binary list of points to send
+        points = [1, 3]
+        arr_points = np.asarray(points, dtype="u8")  # must use unsigned 64-bit int
+        req_data = arr_points.tobytes()
+
+        # read selected points with binary request, binary response
+        rsp = self.session.post(req, data=req_data, headers=headers_bin_reqrsp)
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(rsp.headers["Content-Type"], "application/octet-stream")
+        bin_data = rsp.content
+        arr = bytesToArray(bin_data, dt_str, [2,])
+
+        self.assertEqual(arr.shape[0], 2)
+        self.assertEqual(arr[0].decode(), data[1])
+        self.assertEqual(arr[1].decode(), data[3])
 
     def testPutVLenCompound(self):
         # Test PUT value for 1d attribute with variable length int types
@@ -457,6 +545,19 @@ class VlenTest(unittest.TestCase):
         value = rspJson["value"]
         self.assertEqual(len(value), count)
 
+        # read a point selection
+        points = [1, 3]
+        body = {"points": points}
+        # read selected points
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+        self.assertEqual(len(value), 2)
+        self.assertEqual(value[0], data[1])
+        self.assertEqual(value[1], data[3])
+
     def testPutVLenCompoundBinary(self):
         # Test PUT value for 1d attribute with variable length int types
         print("testPutVLenCompoundBinary", self.base_domain)
@@ -466,6 +567,9 @@ class VlenTest(unittest.TestCase):
         headers_bin_req["Content-Type"] = "application/octet-stream"
         headers_bin_rsp = helper.getRequestHeaders(domain=self.base_domain)
         headers_bin_rsp["accept"] = "application/octet-stream"
+        headers_bin_reqrsp = helper.getRequestHeaders(domain=self.base_domain)
+        headers_bin_reqrsp["accept"] = "application/octet-stream"
+        headers_bin_reqrsp["Content-Type"] = "application/octet-stream"
 
         req = self.endpoint + "/"
 
@@ -509,9 +613,7 @@ class VlenTest(unittest.TestCase):
         datatype = {"class": "H5T_COMPOUND", "fields": fields}
         payload = {
             "type": datatype,
-            "shape": [
-                count,
-            ],
+            "shape": [count, ],
         }
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
@@ -564,13 +666,50 @@ class VlenTest(unittest.TestCase):
         self.assertEqual(rsp.headers["Content-Type"], "application/octet-stream")
         data = rsp.content
         self.assertEqual(len(data), 192)
-        arr = bytesToArray(
-            data,
-            dt_compound,
-            [
-                count,
-            ],
-        )
+        arr_rsp = bytesToArray(data, dt_compound, [count,])
+        for i in range(count):
+            req_row = arr[i]
+            rsp_row = arr_rsp[i]
+            self.assertEqual(rsp_row["VALUE1"], req_row["VALUE1"])
+            self.assertEqual(rsp_row["VALUE2"], req_row["VALUE2"])
+            req_value3 = req_row["VALUE3"]
+            rsp_value3 = rsp_row["VALUE3"]
+            self.assertEqual(len(req_value3), len(rsp_value3))
+            for j in range(len(req_value3)):
+                req_item = req_value3[j]
+                rsp_item = rsp_value3[j]
+                # strings are showing up as bytes in the response
+                self.assertEqual(req_item, rsp_item.decode())
+
+        # prepare a binary list of points to send
+        points = [1, 3]
+        arr_points = np.asarray(points, dtype="u8")  # must use unsigned 64-bit int
+        req_data = arr_points.tobytes()
+
+        # read selected points with binary request, binary response
+        rsp = self.session.post(req, data=req_data, headers=headers_bin_reqrsp)
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(rsp.headers["Content-Type"], "application/octet-stream")
+        bin_data = rsp.content
+        arr_rsp = bytesToArray(bin_data, dt_compound, [2,])
+        self.assertEqual(arr_rsp.shape[0], 2)
+
+        for i in range(2):
+            if i == 0:
+                req_row = arr[1]
+            else:
+                req_row = arr[3]
+            rsp_row = arr_rsp[i]
+            self.assertEqual(rsp_row["VALUE1"], req_row["VALUE1"])
+            self.assertEqual(rsp_row["VALUE2"], req_row["VALUE2"])
+            req_value3 = req_row["VALUE3"]
+            rsp_value3 = rsp_row["VALUE3"]
+            self.assertEqual(len(req_value3), len(rsp_value3))
+            for j in range(len(req_value3)):
+                req_item = req_value3[j]
+                rsp_item = rsp_value3[j]
+                # strings are showing up as bytes in the response
+                self.assertEqual(req_item, rsp_item.decode())
 
 
 if __name__ == "__main__":
