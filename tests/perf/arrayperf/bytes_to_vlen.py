@@ -20,7 +20,7 @@ from hsds.util.arrayUtil import (
     getByteArraySize,
 )
 
-""" Time bytesToArray and arrayToBytes with VLEN str type 
+""" Time bytesToArray and arrayToBytes with VLEN str type
 
 Got the following result with python 3.11:
 
@@ -43,7 +43,7 @@ arr = np.zeros((count,), dtype=dt)
 # create a list of random strings from 1 to 100 chars
 buffer = bytearray(100)
 for j in range(count):
-    str_len = random.randint(1,100)
+    str_len = random.randint(1, 100)
     for i in range(str_len):
         buffer[i] = ord('a') + random.randint(0, 25)
     s = buffer[:str_len].decode()
@@ -72,5 +72,4 @@ for i in range(count):
         msg = f"compare failure for element {i}: "
         msg += f"{arr[i]} vs {arr_ret[i]}"
         raise ValueError(msg)
-
 
