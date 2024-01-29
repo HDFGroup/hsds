@@ -16,13 +16,13 @@
 import asyncio
 import json
 
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPGone, HTTPConflict
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 from aiohttp.client_exceptions import ClientOSError, ClientError
 
 from .util.authUtil import getAclKeys
 from .util.arrayUtil import encodeData
-from .util.idUtil import getDataNodeUrl, getCollectionForId
+from .util.idUtil import getDataNodeUrl, getCollectionForId, createObjId, getRootObjId
 from .util.idUtil import isSchema2Id, getS3Key, isValidUuid
 from .util.linkUtil import h5Join, validateLinkName, getLinkClass
 from .util.storUtil import getStorJSONObj, isStorObj
@@ -465,6 +465,7 @@ async def putHardLink(app, group_id, title, tgt_id=None, bucket=None):
     """ create a new hard link.  Return 201 if this is a new link,
       or 200 if it's a duplicate of an existing link """
 
+    log.debug(f"putHardLink for group {group_id}, tgt: {tgt_id} title: {title}")
     status = await putLink(app, group_id, title, tgt_id=tgt_id, bucket=bucket)
     return status
 
@@ -473,6 +474,7 @@ async def putSoftLink(app, group_id, title, h5path=None, bucket=None):
     """ create a new soft link.  Return 201 if this is a new link,
       or 200 if it's a duplicate of an existing link """
 
+    log.debug(f"putSoftLink for group {group_id}, h5path: {h5path} title: {title}")
     status = await putLink(app, group_id, title, h5path=h5path, bucket=bucket)
     return status
 
@@ -481,6 +483,9 @@ async def putExternalLink(app, group_id, title, h5path=None, h5domain=None, buck
     """ create a new external link.  Return 201 if this is a new link,
       or 200 if it's a duplicate of an existing link """
 
+    msg = f"putExternalLink for group {group_id}, "
+    msg += f"h5path: {h5path}, h5domain: {h5domain}"
+    log.debug(msg)
     status = await putLink(app, group_id, title, h5path=h5path, h5domain=h5domain, bucket=bucket)
     return status
 
@@ -1006,3 +1011,116 @@ async def deleteObj(app, obj_id, bucket=None):
     meta_cache = app["meta_cache"]
     if obj_id in meta_cache:
         del meta_cache[obj_id]  # remove from cache
+
+
+async def createGroup(app, root_id=None, creation_props=None, bucket=None):
+    """ create a group object and return group json """
+
+    group_id = createObjId("groups", rootid=root_id)
+    log.info(f"new group id: {group_id}")
+    group_json = {"id": group_id, "root": root_id}
+    if creation_props:
+        group_json["creationProperties"] = creation_props
+    log.debug(f"createGjroup, body: {group_json}")
+    req = getDataNodeUrl(app, group_id) + "/groups"
+    params = {"bucket": bucket}
+    group_json = await http_post(app, req, data=group_json, params=params)
+
+    return group_json
+
+
+async def createGroupByPath(app,
+                            parent_id=None,
+                            h5path=None,
+                            implicit=False,
+                            creation_props=None,
+                            bucket=None):
+
+    """ create the group at the designated path relative to the parent.
+    If implicit is True, make any intermidiate groups needed in the h5path. """
+
+    if not parent_id:
+        msg = "no parent_id given for createGroupByPath"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    if not h5path:
+        msg = "no h5path given for createGroupByPath"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    log.debug(f"createGroupByPath - parent_id: {parent_id}, h5path: {h5path}")
+
+    root_id = getRootObjId(parent_id)
+
+    if h5path.startswith("/"):
+        if parent_id == root_id:
+            # just adjust the path to be relative
+            h5path = h5path[1:]
+        else:
+            msg = f"createGroup expecting relative h5path, but got: {h5path}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+    if h5path.endswith("/"):
+        h5path = h5path[:-1]  # makes iterating through the links a bit easier
+
+    if not h5path:
+        msg = "h5path for createGroupByPath invalid"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    group_json = None
+    link_titles = h5path.split("/")
+    log.debug(f"link_titles: {link_titles}")
+    for i in range(len(link_titles)):
+        if i == len(link_titles) - 1:
+            last_link = True
+        else:
+            last_link = False
+        link_title = link_titles[i]
+        log.debug(f"createGroupByPath - processing link: {link_title}")
+        link_json = None
+        try:
+            link_json = await getLink(app, parent_id, link_title, bucket=bucket)
+        except (HTTPNotFound, HTTPGone):
+            pass  # link doesn't exist
+
+        if link_json:
+            log.debug(f"link for link_title {link_title} found: {link_json}")
+            # if this is the last link, that's a problem
+            if last_link:
+                msg = f"object at {h5path} already exists"
+                log.warn(msg)
+                raise HTTPConflict()
+            # otherwise, verify that this is a hardlink
+            if link_json.get("class") != "H5L_TYPE_HARD":
+                msg = "createGroup h5path must contain only hardlinks"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            parent_id = link_json["id"]
+            if getCollectionForId(parent_id) != "groups":
+                # parent objects must be groups!
+                msg = f"{link_title} is not a group"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            else:
+                log.debug(f"link: {link_title} to sub-group found")
+        else:
+            log.debug(f"link for link_title {link_title} not found")
+            if not last_link and not implicit:
+                if len(link_titles) > 1:
+                    msg = f"createGroupByPath failed: not all groups in {h5path} exist"
+                else:
+                    msg = f"createGroupByPath failed: {h5path} does not exist"
+                log.warn(msg)
+                raise HTTPNotFound(reason=msg)
+            # create a group
+            kwargs = {"bucket": bucket, "root_id": root_id}
+            if creation_props:
+                kwargs["creation_props"] = creation_props
+            group_json = await createGroup(app, **kwargs)
+            group_id = group_json["id"]
+            # create a link to the new group
+            await putHardLink(app, parent_id, link_title, tgt_id=group_id, bucket=bucket)
+            parent_id = group_id  # new parent
+    log.info(f"createGroupByPath {h5path} done")
+    return group_json

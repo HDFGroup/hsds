@@ -16,15 +16,15 @@
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
 from json import JSONDecodeError
 
-from .util.httpUtil import http_post, getHref
-from .util.httpUtil import jsonResponse
-from .util.idUtil import isValidUuid, getDataNodeUrl, createObjId
+from .util.httpUtil import getHref, jsonResponse, getBooleanParam
+from .util.idUtil import isValidUuid
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
 from .util.authUtil import validateUserPassword
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain, getPathForDomain, verifyRoot
-from .servicenode_lib import getDomainJson, getObjectJson, validateAction, deleteObj
-from .servicenode_lib import getObjectIdByPath, getPathForObjectId, putHardLink
+from .util.linkUtil import validateLinkName
+from .servicenode_lib import getDomainJson, getObjectJson, validateAction, deleteObj, createGroup
+from .servicenode_lib import getObjectIdByPath, getPathForObjectId, createGroupByPath
 from . import hsds_logger as log
 
 
@@ -66,10 +66,9 @@ async def GET_Group(request):
         if group_id:
             msg += f" group_id: {group_id}"
         log.info(msg)
-    if "include_links" in params and params["include_links"]:
-        include_links = True
-    if "include_attrs" in params and params["include_attrs"]:
-        include_attrs = True
+
+    include_links = getBooleanParam(params, "include_links")
+    include_attrs = getBooleanParam(params, "include_attrs")
 
     username, pswd = getUserPasswordFromRequest(request)
     if username is None and app["allow_noauth"]:
@@ -159,6 +158,7 @@ async def POST_Group(request):
     """HTTP method to create new Group object"""
     log.request(request)
     app = request.app
+    params = request.rel_url.query
 
     username, pswd = getUserPasswordFromRequest(request)
     # write actions need auth
@@ -177,13 +177,16 @@ async def POST_Group(request):
     aclCheck(app, domain_json, "create", username)
 
     verifyRoot(domain_json)
+    root_id = domain_json["root"]
 
-    link_id = None
-    link_title = None
+    # allow parent group creation or not
+    implicit = getBooleanParam(params, "implicit")
+
+    parent_id = None
+    h5path = None
     creation_props = None
 
     if request.has_body:
-
         try:
             body = await request.json()
         except JSONDecodeError:
@@ -194,44 +197,53 @@ async def POST_Group(request):
         log.info(f"POST Group body: {body}")
         if body:
             if "link" in body:
+                if "h5path" in body:
+                    msg = "link can't be used with h5path"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
                 link_body = body["link"]
                 log.debug(f"link_body: {link_body}")
                 if "id" in link_body:
-                    link_id = link_body["id"]
+                    parent_id = link_body["id"]
                 if "name" in link_body:
                     link_title = link_body["name"]
-                if link_id and link_title:
-                    log.debug(f"link id: {link_id}")
-                    # verify that the referenced id exists and is in this
-                    # domainand that the requestor has permissions to create
-                    # a link
-                    act = "create"
-                    await validateAction(app, domain, link_id, username, act)
-                if not link_id or not link_title:
-                    log.warn(f"POST Group body with no link: {body}")
+                    try:
+                        # will throw exception if there's a slash in the name
+                        validateLinkName(link_title)
+                    except ValueError:
+                        msg = f"invalid link title: {link_title}"
+                        log.warn(msg)
+                        raise HTTPBadRequest(reason=msg)
+
+                if parent_id and link_title:
+                    log.debug(f"parent id: {parent_id}, link_title: {link_title}")
+                    h5path = link_title  # just use the link name as the h5path
+
+            if "h5path" in body:
+                h5path = body["h5path"]
+                if "parent_id" not in body:
+                    parent_id = root_id
+                else:
+                    parent_id = body["parent_id"]
             if "creationProperties" in body:
                 creation_props = body["creationProperties"]
 
-    # get again in case cache was invalidated
-    domain_json = await getDomainJson(app, domain)
+    if parent_id:
+        kwargs = {"bucket": bucket, "parent_id": parent_id, "h5path": h5path}
+        if creation_props:
+            kwargs["creation_props"] = creation_props
+        if implicit:
+            kwargs["implicit"] = True
+        log.debug(f"createGroupByPath args: {kwargs}")
+        group_json = await createGroupByPath(app, **kwargs)
+    else:
+        # create an anonymous group
+        kwargs = {"bucket": bucket, "root_id": root_id}
+        if creation_props:
+            kwargs["creation_props"] = creation_props
+        group_json = await createGroup(app, **kwargs)
 
-    root_id = domain_json["root"]
-    group_id = createObjId("groups", rootid=root_id)
-    log.info(f"new  group id: {group_id}")
-    group_json = {"id": group_id, "root": root_id}
-    if creation_props:
-        group_json["creationProperties"] = creation_props
-    log.debug(f"create group, body: {group_json}")
-    req = getDataNodeUrl(app, group_id) + "/groups"
-    params = {"bucket": bucket}
-
-    group_json = await http_post(app, req, data=group_json, params=params)
-
-    # create link if requested
-    if link_id and link_title:
-        await putHardLink(app, link_id, link_title, tgt_id=group_id, bucket=bucket)
-
-    log.debug("returning resp")
+    log.debug(f"returning resp: {group_json}")
     # group creation successful
     resp = await jsonResponse(request, group_json, status=201)
     log.response(request, resp=resp)

@@ -1026,7 +1026,7 @@ async def POST_Dataset(request):
         msg = f"chunk_size: {chunk_size}, min: {min_chunk_size}, "
         msg += f"max: {max_chunk_size}"
         log.debug(msg)
-        # nothing to do about inefficencly small chunks, but large chunks
+        # nothing to do about inefficiently small chunks, but large chunks
         # can be subdivided
         if chunk_size < min_chunk_size:
             msg = f"chunk size: {chunk_size} less than min size: "
