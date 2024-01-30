@@ -1037,7 +1037,7 @@ async def createGroupByPath(app,
                             bucket=None):
 
     """ create the group at the designated path relative to the parent.
-    If implicit is True, make any intermidiate groups needed in the h5path. """
+    If implicit is True, make any intermediate groups needed in the h5path. """
 
     if not parent_id:
         msg = "no parent_id given for createGroupByPath"
