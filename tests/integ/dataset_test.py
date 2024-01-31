@@ -1744,6 +1744,135 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(link_json["title"], "linked_dset")
         self.assertEqual(link_json["id"], dset_uuid)
 
+    def testPostWithPath(self):
+        # test POST with implicit parent group creation
+        domain = self.base_domain + "/testPostWithPath.h5"
+        helper.setupDomain(domain)
+        print("testPostWithPath", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+
+        # get root id
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # get root group and verify link count is 0
+        req = helper.getEndpoint() + "/groups/" + root_uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 0)
+
+        # create new group with link path: /g1
+        payload = {"h5path": "g1"}
+        req = helper.getEndpoint() + "/groups"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 0)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        new_group_id = rspJson["id"]
+        self.assertTrue(helper.validateId(rspJson["id"]))
+        self.assertTrue(new_group_id != root_uuid)
+
+        # get root group and verify link count is 1
+        req = helper.getEndpoint() + "/groups/" + root_uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 1)
+
+        # get the group at "g1"
+        req = helper.getEndpoint() + "/groups/"
+        params = {"h5path": "/g1"}
+        rsp = self.session.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+
+        type_vstr = {
+            "charSet": "H5T_CSET_ASCII",
+            "class": "H5T_STRING",
+            "strPad": "H5T_STR_NULLTERM",
+            "length": "H5T_VARIABLE",
+        }
+        # try creating new datatype with link path: /g2/dtype
+        payload = {"type": type_vstr, "shape": 10, "h5path": "g2/dset1"}
+        req = helper.getEndpoint() + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 404)  # g2 not found
+
+        # try again with implicit creation set
+        params = {"implicit": 1}
+        rsp = self.session.post(req, data=json.dumps(payload), params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # g2 and /g2/dset1 created
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("type" in rspJson)
+        typeJson = rspJson["type"]
+        self.assertTrue("class" in typeJson)
+        self.assertEqual(typeJson["class"], "H5T_STRING")
+        self.assertTrue("attributeCount" in rspJson)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        dataset_id = rspJson["id"]
+        self.assertTrue(helper.validateId(dataset_id))
+        self.assertTrue(dataset_id.startswith("d-"))
+
+        # get root group and verify link count is 2
+        req = helper.getEndpoint() + "/groups/" + root_uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 2)
+
+        # get the group at "/g2"
+        req = helper.getEndpoint() + "/groups/"
+        params = {"h5path": "/g2"}
+        rsp = self.session.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 1)  # link to dset1
+
+        # get the dataset at "/g2/dset1"
+        req = helper.getEndpoint() + "/datasets/"
+        params = {"h5path": "/g2/dset1"}
+        rsp = self.session.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+
+        # try creating new dataset with link path: /g2/dset2
+        payload = {"type": "H5T_IEEE_F32BE", "shape": 10, "h5path": "g2/dset2"}
+        req = helper.getEndpoint() + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # dset2 created
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        new_dataset_id = rspJson["id"]
+        self.assertTrue(helper.validateId(new_dataset_id))
+        self.assertTrue(new_dataset_id.startswith("d-"))
+
+        # get root group and verify link count is still 2
+        req = helper.getEndpoint() + "/groups/" + root_uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 2)
+
+        # get the group at "/g2"
+        req = helper.getEndpoint() + "/groups/"
+        params = {"h5path": "/g2"}
+        rsp = self.session.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 2)  # datatypes dtype1 and dtype2
+
+        # get the dataset at "/g2/dataset2"
+        req = helper.getEndpoint() + "/datasets/"
+        params = {"h5path": "/g2/dset2"}
+        rsp = self.session.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["id"], new_dataset_id)
+
     def testPostCommittedType(self):
         domain = self.base_domain + "/testPostCommittedType.h5"
         helper.setupDomain(domain)

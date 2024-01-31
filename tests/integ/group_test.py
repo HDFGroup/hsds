@@ -402,7 +402,8 @@ class GroupTest(unittest.TestCase):
         self.assertEqual(rspJson["linkCount"], 0)
         self.assertEqual(rspJson["attributeCount"], 0)
         new_group_id = rspJson["id"]
-        self.assertTrue(helper.validateId(rspJson["id"]))
+        self.assertTrue(helper.validateId(new_group_id))
+        self.assertTrue(new_group_id.startswith("g-"))
         self.assertTrue(new_group_id != root_uuid)
 
         # get root group and verify link count is still 2

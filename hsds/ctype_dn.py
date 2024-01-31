@@ -131,6 +131,7 @@ async def POST_Datatype(request):
     resp_json["root"] = root_id
     resp_json["created"] = ctype_json["created"]
     resp_json["lastModified"] = ctype_json["lastModified"]
+    resp_json["type"] = type_json
     resp_json["attributeCount"] = 0
     resp = json_response(resp_json, status=201)
 

@@ -23,8 +23,9 @@ from .util.authUtil import validateUserPassword
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain, getPathForDomain, verifyRoot
 from .util.linkUtil import validateLinkName
-from .servicenode_lib import getDomainJson, getObjectJson, validateAction, deleteObj, createGroup
-from .servicenode_lib import getObjectIdByPath, getPathForObjectId, createGroupByPath
+from .servicenode_lib import getDomainJson, getObjectJson, validateAction
+from .servicenode_lib import getObjectIdByPath, getPathForObjectId
+from .servicenode_lib import createObject, createObjectByPath, deleteObject
 from . import hsds_logger as log
 
 
@@ -234,14 +235,13 @@ async def POST_Group(request):
             kwargs["creation_props"] = creation_props
         if implicit:
             kwargs["implicit"] = True
-        log.debug(f"createGroupByPath args: {kwargs}")
-        group_json = await createGroupByPath(app, **kwargs)
+        group_json = await createObjectByPath(app, **kwargs)
     else:
         # create an anonymous group
         kwargs = {"bucket": bucket, "root_id": root_id}
         if creation_props:
             kwargs["creation_props"] = creation_props
-        group_json = await createGroup(app, **kwargs)
+        group_json = await createObject(app, **kwargs)
 
     log.debug(f"returning resp: {group_json}")
     # group creation successful
@@ -288,7 +288,7 @@ async def DELETE_Group(request):
         log.warn(msg)
         raise HTTPForbidden()
 
-    await deleteObj(app, group_id, bucket=bucket)
+    await deleteObject(app, group_id, bucket=bucket)
 
     resp = await jsonResponse(request, {})
     log.response(request, resp=resp)

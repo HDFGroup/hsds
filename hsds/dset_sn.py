@@ -19,9 +19,9 @@ from json import JSONDecodeError
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound
 from aiohttp.web_exceptions import HTTPConflict, HTTPInternalServerError
 
-from .util.httpUtil import http_post, http_put, getHref, respJsonAssemble
-from .util.httpUtil import jsonResponse
-from .util.idUtil import isValidUuid, getDataNodeUrl, createObjId, isSchema2Id
+from .util.httpUtil import http_put, getHref, respJsonAssemble
+from .util.httpUtil import jsonResponse, getBooleanParam
+from .util.idUtil import isValidUuid, getDataNodeUrl, isSchema2Id
 from .util.dsetUtil import getPreviewQuery, getFilterItem, getShapeDims
 from .util.arrayUtil import getNumElements, getNumpyValue
 from .util.chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk
@@ -33,9 +33,10 @@ from .util.domainUtil import getBucketForDomain, verifyRoot
 from .util.storUtil import getSupportedFilters
 from .util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson
 from .util.hdf5dtype import getItemSize
+from .util.linkUtil import validateLinkName
 from .servicenode_lib import getDomainJson, getObjectJson, getDsetJson, getPathForObjectId
-from .servicenode_lib import getObjectIdByPath, validateAction, getRootInfo, doFlush, putHardLink
-from .servicenode_lib import deleteObj
+from .servicenode_lib import getObjectIdByPath, validateAction, getRootInfo, doFlush
+from .servicenode_lib import createObject, createObjectByPath, deleteObject
 from .dset_lib import reduceShape, deleteAllChunks
 from . import config
 from . import hsds_logger as log
@@ -699,6 +700,7 @@ async def POST_Dataset(request):
     """HTTP method to create a new dataset object"""
     log.request(request)
     app = request.app
+    params = request.rel_url.query
 
     username, pswd = getUserPasswordFromRequest(request)
     # write actions need auth
@@ -1038,31 +1040,6 @@ async def POST_Dataset(request):
             log.warn(msg)
         layout["dims"] = chunk_dims
 
-    link_id = None
-    link_title = None
-    if "link" in body:
-        link_body = body["link"]
-        log.debug(f"got link_body: {link_body}")
-        if "id" in link_body:
-            link_id = link_body["id"]
-        if "name" in link_body:
-            link_title = link_body["name"]
-        if link_id and link_title:
-            log.info(f"link id: {link_id}")
-            # verify that the referenced id exists and is in this domain
-            # and that the requestor has permissions to create a link
-            await validateAction(app, domain, link_id, username, "create")
-
-    dset_id = createObjId("datasets", rootid=root_id)
-    log.info(f"new dataset id: {dset_id}")
-
-    dataset_json = {
-        "id": dset_id,
-        "root": root_id,
-        "type": datatype,
-        "shape": shape_json,
-    }
-
     if creationProperties:
         # TBD - validate all creationProperties
         if "fillValue" in creationProperties:
@@ -1163,23 +1140,61 @@ async def POST_Dataset(request):
             creationProperties["filters"] = f_out
 
         log.debug(f"set dataset json creationPropries: {creationProperties}")
-        dataset_json["creationProperties"] = creationProperties
 
-    if layout is not None:
-        dataset_json["layout"] = layout
+    parent_id = None
+    link_title = None
+    h5path = None
+    if "link" in body:
+        if "h5path" in body:
+            msg = "link can't be used with h5path"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        link_body = body["link"]
+        if "id" in link_body:
+            parent_id = link_body["id"]
+        if "name" in link_body:
+            link_title = link_body["name"]
+            try:
+                # will throw exception if there's a slash in the name
+                validateLinkName(link_title)
+            except ValueError:
+                msg = f"invalid link title: {link_title}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
 
-    log.debug(f"create dataset: {dataset_json}")
-    req = getDataNodeUrl(app, dset_id) + "/datasets"
-    params = {"bucket": bucket}
+        if parent_id and link_title:
+            log.debug(f"parent id: {parent_id}, link_title: {link_title}")
+            h5path = link_title  # just use the link name as the h5path
 
-    post_json = await http_post(app, req, data=dataset_json, params=params)
+    if "h5path" in body:
+        h5path = body["h5path"]
+        if "parent_id" not in body:
+            parent_id = root_id
+        else:
+            parent_id = body["parent_id"]
 
-    # create link if requested
-    if link_id and link_title:
-        await putHardLink(app, link_id, link_title, tgt_id=dset_id, bucket=bucket)
+    # setup args to createObject
+    kwargs = {"bucket": bucket, "obj_type": datatype, "obj_shape": shape_json}
+    if creationProperties:
+        kwargs["creation_props"] = creationProperties
+    if layout:
+        kwargs["layout"] = layout
+
+    if parent_id:
+        kwargs["parent_id"] = parent_id
+        kwargs["h5path"] = h5path
+        # allow parent group creation or not
+        implicit = getBooleanParam(params, "implicit")
+        if implicit:
+            kwargs["implicit"] = True
+        dset_json = await createObjectByPath(app, **kwargs)
+    else:
+        # create an anonymous datatype
+        kwargs["root_id"] = root_id
+        dset_json = await createObject(app, **kwargs)
 
     # dataset creation successful
-    resp = await jsonResponse(request, post_json, status=201)
+    resp = await jsonResponse(request, dset_json, status=201)
     log.response(request, resp=resp)
 
     return resp
@@ -1214,12 +1229,14 @@ async def DELETE_Dataset(request):
     domain_json = await getDomainJson(app, domain)
     verifyRoot(domain_json)
 
+    # check authority to do a delete
     await validateAction(app, domain, dset_id, username, "delete")
 
     # free any allocated chunks
     await deleteAllChunks(app, dset_id, bucket=bucket)
 
-    await deleteObj(app, dset_id, bucket=bucket)
+    # delete the dataset object
+    await deleteObject(app, dset_id, bucket=bucket)
 
     resp = await jsonResponse(request, {})
     log.response(request, resp=resp)

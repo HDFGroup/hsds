@@ -52,6 +52,10 @@ class DatatypeTest(unittest.TestCase):
         self.assertEqual(rspJson["attributeCount"], 0)
         ctype_id = rspJson["id"]
         self.assertTrue(helper.validateId(ctype_id))
+        self.assertTrue("type" in rspJson)
+        type_json = rspJson["type"]
+        self.assertEqual(type_json["class"], "H5T_FLOAT")
+        self.assertEqual(type_json["base"], "H5T_IEEE_F32LE")
 
         # read back the obj
         req = self.endpoint + "/datatypes/" + ctype_id
@@ -381,6 +385,129 @@ class DatatypeTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("alias" in rspJson)
         self.assertEqual(rspJson["alias"], ["/linked_dtype"])
+
+    def testPostWithPath(self):
+        # test POST with implicit parent group creation
+        print("testPostWithPath", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+
+        # get root id
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # get root group and verify link count is 0
+        req = helper.getEndpoint() + "/groups/" + root_uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 0)
+
+        # create new group with link path: /g1
+        payload = {"h5path": "g1"}
+        req = helper.getEndpoint() + "/groups"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 0)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        new_group_id = rspJson["id"]
+        self.assertTrue(helper.validateId(rspJson["id"]))
+        self.assertTrue(new_group_id != root_uuid)
+
+        # get root group and verify link count is 1
+        req = helper.getEndpoint() + "/groups/" + root_uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 1)
+
+        # get the group at "g1"
+        req = helper.getEndpoint() + "/groups/"
+        params = {"h5path": "/g1"}
+        rsp = self.session.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+
+        # try creating new datatype with link path: /g2/dtype
+        payload = {"type": "H5T_IEEE_F64LE", "h5path": "g2/dtype1"}
+        req = helper.getEndpoint() + "/datatypes"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 404)  # g2 not found
+
+        # try again with implicit creation set
+        params = {"implicit": 1}
+        rsp = self.session.post(req, data=json.dumps(payload), params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # g2 and /g2/dtype1 created
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("type" in rspJson)
+        typeJson = rspJson["type"]
+        self.assertTrue("class" in typeJson)
+        self.assertEqual(typeJson["class"], "H5T_FLOAT")
+        self.assertTrue("base" in typeJson)
+        self.assertEqual(typeJson["base"], "H5T_IEEE_F64LE")
+        self.assertTrue("attributeCount" in rspJson)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        datatype_id = rspJson["id"]
+        self.assertTrue(helper.validateId(datatype_id))
+        self.assertTrue(datatype_id.startswith("t-"))
+
+        # get root group and verify link count is 2
+        req = helper.getEndpoint() + "/groups/" + root_uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 2)
+
+        # get the group at "/g2"
+        req = helper.getEndpoint() + "/groups/"
+        params = {"h5path": "/g2"}
+        rsp = self.session.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 1)  # link to dtype1
+
+        # get the datatype at "/g2/dtype1"
+        req = helper.getEndpoint() + "/datatypes/"
+        params = {"h5path": "/g2/dtype1"}
+        rsp = self.session.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+
+        # try creating new datatype with link path: /g2/dtype2
+        payload = {"type": "H5T_IEEE_F32BE", "h5path": "g2/dtype2"}
+        req = helper.getEndpoint() + "/datatypes"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # dtype2 created
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        new_datatype_id = rspJson["id"]
+        self.assertTrue(helper.validateId(new_datatype_id))
+        self.assertTrue(new_datatype_id.startswith("t-"))
+
+        # get root group and verify link count is still 2
+        req = helper.getEndpoint() + "/groups/" + root_uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 2)
+
+        # get the group at "/g2"
+        req = helper.getEndpoint() + "/groups/"
+        params = {"h5path": "/g2"}
+        rsp = self.session.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 2)  # datatypes dtype1 and dtype2
+
+        # get the datatype at "/g2/datatype2"
+        req = helper.getEndpoint() + "/datatypes/"
+        params = {"h5path": "/g2/dtype2"}
+        rsp = self.session.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["id"], new_datatype_id)
 
 
 if __name__ == "__main__":

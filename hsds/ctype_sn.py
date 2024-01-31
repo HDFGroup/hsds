@@ -16,16 +16,18 @@
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPGone
 from json import JSONDecodeError
-from .util.httpUtil import http_post, getHref, respJsonAssemble
+from .util.httpUtil import getHref, respJsonAssemble, getBooleanParam
 from .util.httpUtil import jsonResponse
-from .util.idUtil import isValidUuid, getDataNodeUrl, createObjId
+from .util.idUtil import isValidUuid
+from .util.linkUtil import validateLinkName
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
 from .util.authUtil import validateUserPassword
 from .util.domainUtil import getDomainFromRequest, getPathForDomain, isValidDomain
 from .util.domainUtil import getBucketForDomain, verifyRoot
 from .util.hdf5dtype import validateTypeItem, getBaseTypeJson
-from .servicenode_lib import getDomainJson, getObjectJson, validateAction, deleteObj
-from .servicenode_lib import getObjectIdByPath, getPathForObjectId, putHardLink
+from .servicenode_lib import getDomainJson, getObjectJson, validateAction
+from .servicenode_lib import getObjectIdByPath, getPathForObjectId
+from .servicenode_lib import createObject, createObjectByPath, deleteObject
 from . import hsds_logger as log
 
 
@@ -144,6 +146,7 @@ async def POST_Datatype(request):
     """HTTP method to create new committed datatype object"""
     log.request(request)
     app = request.app
+    params = request.rel_url.query
 
     username, pswd = getUserPasswordFromRequest(request)
     # write actions need auth
@@ -202,37 +205,58 @@ async def POST_Datatype(request):
     aclCheck(app, domain_json, "create", username)
 
     verifyRoot(domain_json)
+    root_id = domain_json["root"]
 
-    link_id = None
+    parent_id = None
     link_title = None
+    h5path = None
     if "link" in body:
+        if "h5path" in body:
+            msg = "link can't be used with h5path"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
         link_body = body["link"]
         if "id" in link_body:
-            link_id = link_body["id"]
+            parent_id = link_body["id"]
         if "name" in link_body:
             link_title = link_body["name"]
-        if link_id and link_title:
-            log.debug(f"link id: {link_id}")
-            # verify that the referenced id exists and is in this domain
-            # and that the requestor has permissions to create a link
-            await validateAction(app, domain, link_id, username, "create")
+            try:
+                # will throw exception if there's a slash in the name
+                validateLinkName(link_title)
+            except ValueError:
+                msg = f"invalid link title: {link_title}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
 
-    root_id = domain_json["root"]
-    ctype_id = createObjId("datatypes", rootid=root_id)
-    log.debug(f"new  type id: {ctype_id}")
-    ctype_json = {"id": ctype_id, "root": root_id, "type": datatype}
-    log.debug(f"create named type, body: {ctype_json}")
-    req = getDataNodeUrl(app, ctype_id) + "/datatypes"
-    params = {"bucket": bucket}
+        if parent_id and link_title:
+            log.debug(f"parent id: {parent_id}, link_title: {link_title}")
+            h5path = link_title  # just use the link name as the h5path
 
-    type_json = await http_post(app, req, data=ctype_json, params=params)
+    if "h5path" in body:
+        h5path = body["h5path"]
+        if "parent_id" not in body:
+            parent_id = root_id
+        else:
+            parent_id = body["parent_id"]
 
-    # create link if requested
-    if link_id and link_title:
-        await putHardLink(app, link_id, link_title, tgt_id=ctype_id, bucket=bucket)
+    # setup args to createObject
+    kwargs = {"bucket": bucket, "obj_type": datatype}
+    # TBD: creation props for datatype obj?
+    if parent_id:
+        kwargs["parent_id"] = parent_id
+        kwargs["h5path"] = h5path
+        # allow parent group creation or not
+        implicit = getBooleanParam(params, "implicit")
+        if implicit:
+            kwargs["implicit"] = True
+        ctype_json = await createObjectByPath(app, **kwargs)
+    else:
+        # create an anonymous datatype
+        kwargs["root_id"] = root_id
+        ctype_json = await createObject(app, **kwargs)
 
     # datatype creation successful
-    resp = await jsonResponse(request, type_json, status=201)
+    resp = await jsonResponse(request, ctype_json, status=201)
     log.response(request, resp=resp)
 
     return resp
@@ -271,7 +295,7 @@ async def DELETE_Datatype(request):
 
     await validateAction(app, domain, ctype_id, username, "delete")
 
-    await deleteObj(app, ctype_id, bucket=bucket)
+    await deleteObject(app, ctype_id, bucket=bucket)
 
     resp = await jsonResponse(request, {})
     log.response(request, resp=resp)
