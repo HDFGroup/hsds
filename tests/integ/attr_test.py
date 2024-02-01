@@ -97,7 +97,6 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(rspJson["attributeCount"], attr_count)
 
         for creation_order in (False, True):
-            print("creation_order:", creation_order)
             expected_names = copy(attr_names)
 
             if creation_order:

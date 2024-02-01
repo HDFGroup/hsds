@@ -242,9 +242,13 @@ async def validateAction(app, domain, obj_id, username, action):
         aclCheck(app, domain_json, action, username)
 
 
-async def getObjectJson(
-    app, obj_id, bucket=None, refresh=False, include_links=False, include_attrs=False
-):
+async def getObjectJson(app,
+                        obj_id,
+                        bucket=None,
+                        refresh=False,
+                        include_links=False,
+                        include_attrs=False
+                        ):
     """Return top-level json (i.e. excluding attributes or links by default)
     for a given obj_id.
     If refresh is False, any data present in the meta_cache will be
@@ -995,9 +999,9 @@ async def deleteAttributes(app, obj_id, attr_names=None, separator="/", bucket=N
     await http_delete(app, req, params=params)
 
 
-async def deleteObj(app, obj_id, bucket=None):
+async def deleteObject(app, obj_id, bucket=None):
     """ send delete request for group, datatype, or dataset obj """
-    log.debug(f"deleteObj {obj_id}")
+    log.debug(f"deleteObject {obj_id}")
     req = getDataNodeUrl(app, obj_id)
     collection = getCollectionForId(obj_id)
     req += f"/{collection}/{obj_id}"
@@ -1013,41 +1017,78 @@ async def deleteObj(app, obj_id, bucket=None):
         del meta_cache[obj_id]  # remove from cache
 
 
-async def createGroup(app, root_id=None, creation_props=None, bucket=None):
-    """ create a group object and return group json """
-
-    group_id = createObjId("groups", rootid=root_id)
-    log.info(f"new group id: {group_id}")
-    group_json = {"id": group_id, "root": root_id}
+async def createObject(app,
+                       root_id=None,
+                       obj_type=None,
+                       obj_shape=None,
+                       layout=None,
+                       creation_props=None,
+                       bucket=None):
+    """ create a group, ctype, or dataset object and return object json
+        Determination on whether a group, ctype, or dataset is created is based on:
+            1) if obj_type and obj_shape are set, a dataset object will be created
+            2) if obj_type is set but not obj_shape, a  datatype object will be created
+            3) otherwise (type and shape are both None), a group object will be created
+        The layout parameter only applies to dataset creation
+    """
+    if obj_type and obj_shape:
+        collection = "datasets"
+    elif obj_type:
+        collection = "datatypes"
+    else:
+        collection = "groups"
+    log.info(f"createObject for {collection} collection, root: {root_id}, bucket: {bucket}")
+    if obj_type:
+        log.debug(f"    obj_type: {obj_type}")
+    if obj_shape:
+        log.debug(f"    obj_shape: {obj_shape}")
+    if layout:
+        log.debug(f"    layout: {layout}")
     if creation_props:
-        group_json["creationProperties"] = creation_props
-    log.debug(f"createGjroup, body: {group_json}")
-    req = getDataNodeUrl(app, group_id) + "/groups"
+        log.debug(f"    cprops: {creation_props}")
+
+    obj_id = createObjId(collection, rootid=root_id)
+    log.info(f"new obj id: {obj_id}")
+    obj_json = {"id": obj_id, "root": root_id}
+    if obj_type:
+        obj_json["type"] = obj_type
+    if obj_shape:
+        obj_json["shape"] = obj_shape
+    if layout:
+        obj_json["layout"] = layout
+    if creation_props:
+        obj_json["creationProperties"] = creation_props
+    log.debug(f"create {collection} obj, body: {obj_json}")
+    dn_url = getDataNodeUrl(app, obj_id)
+    req = f"{dn_url}/{collection}"
     params = {"bucket": bucket}
-    group_json = await http_post(app, req, data=group_json, params=params)
+    rsp_json = await http_post(app, req, data=obj_json, params=params)
 
-    return group_json
+    return rsp_json
 
 
-async def createGroupByPath(app,
-                            parent_id=None,
-                            h5path=None,
-                            implicit=False,
-                            creation_props=None,
-                            bucket=None):
+async def createObjectByPath(app,
+                             parent_id=None,
+                             h5path=None,
+                             implicit=False,
+                             obj_type=None,
+                             obj_shape=None,
+                             layout=None,
+                             creation_props=None,
+                             bucket=None):
 
-    """ create the group at the designated path relative to the parent.
+    """ create an object at the designated path relative to the parent.
     If implicit is True, make any intermediate groups needed in the h5path. """
 
     if not parent_id:
-        msg = "no parent_id given for createGroupByPath"
+        msg = "no parent_id given for createObjectByPath"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     if not h5path:
-        msg = "no h5path given for createGroupByPath"
+        msg = "no h5path given for createObjectByPath"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    log.debug(f"createGroupByPath - parent_id: {parent_id}, h5path: {h5path}")
+    log.debug(f"createObjectByPath - parent_id: {parent_id}, h5path: {h5path}")
 
     root_id = getRootObjId(parent_id)
 
@@ -1056,7 +1097,7 @@ async def createGroupByPath(app,
             # just adjust the path to be relative
             h5path = h5path[1:]
         else:
-            msg = f"createGroup expecting relative h5path, but got: {h5path}"
+            msg = f"createObjectByPath expecting relative h5path, but got: {h5path}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
@@ -1064,11 +1105,11 @@ async def createGroupByPath(app,
         h5path = h5path[:-1]  # makes iterating through the links a bit easier
 
     if not h5path:
-        msg = "h5path for createGroupByPath invalid"
+        msg = "h5path for createObjectByPath invalid"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    group_json = None
+    obj_json = None
     link_titles = h5path.split("/")
     log.debug(f"link_titles: {link_titles}")
     for i in range(len(link_titles)):
@@ -1077,7 +1118,7 @@ async def createGroupByPath(app,
         else:
             last_link = False
         link_title = link_titles[i]
-        log.debug(f"createGroupByPath - processing link: {link_title}")
+        log.debug(f"createObjectByPath - processing link: {link_title}")
         link_json = None
         try:
             link_json = await getLink(app, parent_id, link_title, bucket=bucket)
@@ -1093,7 +1134,7 @@ async def createGroupByPath(app,
                 raise HTTPConflict()
             # otherwise, verify that this is a hardlink
             if link_json.get("class") != "H5L_TYPE_HARD":
-                msg = "createGroup h5path must contain only hardlinks"
+                msg = "createObjectByPath - h5path must contain only hardlinks"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
             parent_id = link_json["id"]
@@ -1108,19 +1149,30 @@ async def createGroupByPath(app,
             log.debug(f"link for link_title {link_title} not found")
             if not last_link and not implicit:
                 if len(link_titles) > 1:
-                    msg = f"createGroupByPath failed: not all groups in {h5path} exist"
+                    msg = f"createObjectByPath failed: not all groups in {h5path} exist"
                 else:
-                    msg = f"createGroupByPath failed: {h5path} does not exist"
+                    msg = f"createObjectByPath failed: {h5path} does not exist"
                 log.warn(msg)
                 raise HTTPNotFound(reason=msg)
-            # create a group
+            # create the group or group/datatype/dataset for the last
+            # item in the path (based on parameters passed in)
             kwargs = {"bucket": bucket, "root_id": root_id}
-            if creation_props:
-                kwargs["creation_props"] = creation_props
-            group_json = await createGroup(app, **kwargs)
-            group_id = group_json["id"]
-            # create a link to the new group
-            await putHardLink(app, parent_id, link_title, tgt_id=group_id, bucket=bucket)
-            parent_id = group_id  # new parent
-    log.info(f"createGroupByPath {h5path} done")
-    return group_json
+
+            if last_link:
+                if obj_type:
+                    kwargs["obj_type"] = obj_type
+                if obj_shape:
+                    kwargs["obj_shape"] = obj_shape
+                if layout:
+                    kwargs["layout"] = layout
+                if creation_props:
+                    kwargs["creation_props"] = creation_props
+            obj_json = await createObject(app, **kwargs)
+            obj_id = obj_json["id"]
+            # create a link to the new object
+            await putHardLink(app, parent_id, link_title, tgt_id=obj_id, bucket=bucket)
+            parent_id = obj_id  # new parent
+    log.info(f"createObjectByPath {h5path} done")
+    log.debug(f"  returning obj_json: {obj_json}")
+
+    return obj_json
