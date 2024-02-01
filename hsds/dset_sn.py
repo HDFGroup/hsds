@@ -17,11 +17,10 @@
 import math
 from json import JSONDecodeError
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound
-from aiohttp.web_exceptions import HTTPConflict, HTTPInternalServerError
 
-from .util.httpUtil import http_put, getHref, respJsonAssemble
+from .util.httpUtil import getHref, respJsonAssemble
 from .util.httpUtil import jsonResponse, getBooleanParam
-from .util.idUtil import isValidUuid, getDataNodeUrl, isSchema2Id
+from .util.idUtil import isValidUuid, isSchema2Id
 from .util.dsetUtil import getPreviewQuery, getFilterItem, getShapeDims
 from .util.arrayUtil import getNumElements, getNumpyValue
 from .util.chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk
@@ -35,9 +34,9 @@ from .util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson
 from .util.hdf5dtype import getItemSize
 from .util.linkUtil import validateLinkName
 from .servicenode_lib import getDomainJson, getObjectJson, getDsetJson, getPathForObjectId
-from .servicenode_lib import getObjectIdByPath, validateAction, getRootInfo, doFlush
+from .servicenode_lib import getObjectIdByPath, validateAction, getRootInfo
 from .servicenode_lib import createObject, createObjectByPath, deleteObject
-from .dset_lib import reduceShape, deleteAllChunks
+from .dset_lib import updateShape, deleteAllChunks
 from . import config
 from . import hsds_logger as log
 
@@ -607,6 +606,7 @@ async def PUT_DatasetShape(request):
     await validateAction(app, domain, dset_id, username, "update")
 
     dset_json = await getDsetJson(app, dset_id, bucket=bucket)
+
     shape_orig = dset_json["shape"]
     log.debug(f"shape_orig: {shape_orig}")
 
@@ -621,7 +621,7 @@ async def PUT_DatasetShape(request):
         raise HTTPBadRequest(reason=msg)
     dims = shape_orig["dims"]
     rank = len(dims)
-    maxdims = shape_orig["maxdims"]
+
     if shape_update and len(shape_update) != rank:
         msg = "Extent of update shape request does not match dataset sahpe"
         log.warn(msg)
@@ -635,61 +635,13 @@ async def PUT_DatasetShape(request):
     if shape_update is None:
         # construct a shape update using original dims and extend dim and value
         shape_update = dims.copy()
-        shape_update[extend_dim] = extend
+        shape_update[extend_dim] += extend
 
-    if shape_update == dims:
-        log.info("shape update is same as current dims, no action needed")
-        json_resp = {}
-        resp = await jsonResponse(request, json_resp, status=200)
-        log.response(request, resp=resp)
-        return resp
-
-    shape_reduction = False
-    for i in range(rank):
-        if shape_update and shape_update[i] < dims[i]:
-            shape_reduction = True
-            if shape_update[i] < 0:
-                msg = "Extension dimension can not be made less than zero"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-        if shape_update and maxdims[i] != 0 and shape_update[i] > maxdims[i]:
-            msg = "Extension dimension can not be extended past max extent"
-            log.warn(msg)
-            raise HTTPConflict()
-
-    if shape_reduction:
-        log.info(f"Shape extent reduced for dataset (rank: {rank})")
-        root_id = dset_json["root"]
-        # need to do a flush to know which chunks to update or delete
-        await doFlush(app, root_id, bucket=bucket)
-        try:
-            await reduceShape(app, dset_json, shape_update, bucket=bucket)
-        except ValueError as ve:
-            msg = f"reduceShape for {dset_id} to {shape_update} resulted in exception: {ve}"
-            log.error(msg)
-            raise HTTPInternalServerError()
-
-    # send request onto DN
-    req = getDataNodeUrl(app, dset_id) + "/datasets/" + dset_id + "/shape"
+    selection = await updateShape(app, dset_json, shape_update, bucket=bucket)
 
     json_resp = {}
-    params = {}
-    if bucket:
-        params["bucket"] = bucket
-
-    if extend:
-        data = {"extend": extend, "extend_dim": extend_dim}
-    else:
-        data = {"shape": shape_update}
-    try:
-        put_rsp = await http_put(app, req, data=data, params=params)
-        log.info(f"got shape put rsp: {put_rsp}")
-        if "selection" in put_rsp:
-            json_resp["selection"] = put_rsp["selection"]
-
-    except HTTPConflict:
-        log.warn("got 409 extending dataspace")
-        raise
+    if selection:
+        json_resp["selection"] = selection
 
     resp = await jsonResponse(request, json_resp, status=201)
     log.response(request, resp=resp)
