@@ -1024,7 +1024,7 @@ async def createObject(app,
                        layout=None,
                        creation_props=None,
                        bucket=None):
-    """ create a group, ctype, or dataset object and return group json
+    """ create a group, ctype, or dataset object and return object json
         Determination on whether a group, ctype, or dataset is created is based on:
             1) if obj_type and obj_shape are set, a dataset object will be created
             2) if obj_type is set but not obj_shape, a  datatype object will be created
