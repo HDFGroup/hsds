@@ -29,7 +29,7 @@ from .util.httpUtil import http_delete, http_put
 from .util.idUtil import getDataNodeUrl, isSchema2Id, getS3Key, getObjId
 from .util.storUtil import getStorKeys
 
-from .servicenode_lib import getDsetJson
+from .servicenode_lib import getDsetJson, doFlush
 from .chunk_crawl import ChunkCrawler
 from . import config
 from . import hsds_logger as log
@@ -904,6 +904,93 @@ async def reduceShape(app, dset_json, shape_update, bucket=None):
         await removeChunks(app, delete_ids, bucket=bucket)
     else:
         log.info("no chunks need deletion for shape reduction")
+
+
+async def updateShape(app, dset_json, shape_update, bucket=None):
+    """ Update the current dataset shape """
+
+    dset_id = dset_json["id"]
+    shape_orig = dset_json["shape"]
+    log.info(f"updateShape dset: {dset_id}: {shape_update}")
+
+    # verify that the extend request is valid
+    if shape_orig["class"] != "H5S_SIMPLE":
+        msg = "Unable to extend shape of datasets who are not H5S_SIMPLE"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    if "maxdims" not in shape_orig:
+        msg = "Dataset is not extensible"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    dims = shape_orig["dims"]
+    rank = len(dims)
+    maxdims = shape_orig["maxdims"]
+    log.debug(f"dims: {dims}, maxdims: {maxdims}")
+    if shape_update and len(shape_update) != rank:
+        msg = "Extent of update shape request does not match dataset sahpe"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    if shape_update == dims:
+        log.info("shape update is same as current dims, no action needed")
+        return
+
+    increasing_dims = []
+    decreasing_dims = []
+
+    for i in range(rank):
+        if shape_update[i] < dims[i]:
+            if shape_update[i] < 0:
+                msg = "Extension dimension can not be made less than zero"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            decreasing_dims.append(i)
+        elif shape_update[i] > dims[i]:
+            if maxdims[i] != 0 and shape_update[i] > maxdims[i]:
+                msg = "Extension dimension can not be extended past max extent"
+                log.warn(msg)
+                raise HTTPConflict()
+            increasing_dims.append(i)
+        else:
+            pass  # extents are the same for this dimension
+
+    if decreasing_dims:
+        log.info(f"Shape extent reduced for dataset dims: {decreasing_dims}")
+        root_id = dset_json["root"]
+        # need to do a flush to know which chunks to update or delete
+        await doFlush(app, root_id, bucket=bucket)
+        try:
+            await reduceShape(app, dset_json, shape_update, bucket=bucket)
+        except ValueError as ve:
+            msg = f"reduceShape for {dset_id} to {shape_update} resulted in exception: {ve}"
+            log.error(msg)
+            raise HTTPInternalServerError()
+
+    log.debug(f"increasing dims: {increasing_dims}")
+
+    # send request to modify shape to DN
+    req = getDataNodeUrl(app, dset_id) + "/datasets/" + dset_id + "/shape"
+    params = {"bucket": bucket}
+    if not decreasing_dims and len(increasing_dims) == 1:
+        extend_dim = increasing_dims[0]
+        extend = shape_update[extend_dim] - dims[extend_dim]
+        data = {"extend": extend, "extend_dim": extend_dim}
+    else:
+        data = {"shape": shape_update}
+
+    try:
+        put_rsp = await http_put(app, req, data=data, params=params)
+    except HTTPConflict:
+        log.warn("got 409 extending dataspace")
+        raise
+
+    log.info(f"got shape put rsp: {put_rsp}")
+    if "selection" in put_rsp:
+        return put_rsp["selection"]
+    else:
+        return None
 
 
 async def deleteAllChunks(app, dset_id, bucket=None):
