@@ -628,7 +628,8 @@ async def POST_Links(request):
             msg = f"Invalid group id: {group_id}"
             log.warn(msg)
 
-        titles = items[group_id]
+        if (group_ids is not None) and isinstance(group_ids, dict):
+            titles = items[group_id]
 
         if titles is None:
             log.debug(f"getting all links for {group_id}")
@@ -698,6 +699,12 @@ async def POST_Links(request):
             kwargs["limit"] = limit
         if pattern:
             kwargs["pattern"] = pattern
+
+        # If retrieving same link names from multiple groups, map each UUID to all links provided
+        if isinstance(group_ids, list) and titles:
+            for i in items:
+                items[i] = titles
+
         crawler = DomainCrawler(app, items, **kwargs)
         # will raise exception on NotFound, etc.
         await crawler.crawl()

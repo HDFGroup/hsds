@@ -1229,7 +1229,7 @@ class LinkTest(unittest.TestCase):
 
     def testPostLinkMultiple(self):
         domain = helper.getTestDomain("tall.h5")
-        print("testPostLinkSingle", domain)
+        print("testPostLinkMultiple", domain)
         headers = helper.getRequestHeaders(domain=domain)
         headers["Origin"] = "https://www.hdfgroup.org"  # test CORS
 
@@ -1353,6 +1353,79 @@ class LinkTest(unittest.TestCase):
                 self.assertTrue(title in expected_external_links)
             else:
                 self.assertTrue(False)  # unexpected
+
+    def testPostLinksGroupList(self):
+        domain = self.base_domain + "/testPostLinksGroupList.h5"
+        helper.setupDomain(domain)
+        print("testPostLinksGroupList", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_id = rspJson["root"]
+
+        # create group "g1" in root group
+        req = helper.getEndpoint() + "/groups"
+        body = {"link": {"id": root_id, "name": "g1"}}
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        group_id = rspJson["id"]
+
+        path = "/dummy_target"
+        # create link "link1" in root group
+        req = helper.getEndpoint() + "/groups/" + root_id + "/links/link1"
+        body = {"h5path": path}
+        rsp = self.session.put(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # create link "link1" in g1
+        req = helper.getEndpoint() + "/groups/" + group_id + "/links/link1"
+        body = {"h5path": path}
+        rsp = self.session.put(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # create link "link2" in root group
+        req = helper.getEndpoint() + "/groups/" + root_id + "/links/link2"
+        body = {"h5path": path}
+        rsp = self.session.put(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # make POST_Links request to retrieve only /link1 and /g1/link1
+        req = helper.getEndpoint() + "/groups/" + root_id + "/links"
+        group_ids = [root_id, group_id]
+        titles = ["link1"]
+        body = {"group_ids": group_ids, "titles": titles}
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+
+        # verify that only the two "link1"s are returned
+        self.assertTrue("links" in rspJson)
+        links = rspJson["links"]
+        self.assertEqual(len(links), 2)
+
+        self.assertTrue(root_id in links)
+        root_links = links[root_id]
+        self.assertEqual(len(root_links), 1)
+        self.assertTrue("h5path" in root_links[0])
+        root_link = root_links[0]
+        self.assertTrue("h5path" in root_link)
+        self.assertEqual(root_link["h5path"], path)
+        self.assertTrue("title" in root_link)
+        self.assertEqual(root_link["title"], "link1")
+
+        self.assertTrue(group_id in links)
+        group_links = links[group_id]
+        self.assertEqual(len(group_links), 1)
+        self.assertTrue("h5path" in group_links[0])
+        group_link = group_links[0]
+        self.assertTrue("h5path" in group_link)
+        self.assertEqual(group_link["h5path"], path)
+        self.assertTrue("title" in group_link)
+        self.assertEqual(group_link["title"], "link1")
 
     def testPutLinkMultiple(self):
         domain = self.base_domain + "/testPutLinkMultiple.h5"
