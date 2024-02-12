@@ -434,6 +434,10 @@ class PointSelTest(unittest.TestCase):
         num_points = len(points)
         arr_points = np.asarray(points, dtype="u8")  # must use unsigned 64-bit int
         pt_bytes = arr_points.tobytes()
+        print(arr_points)
+        print(type(arr_points))
+        print(arr_points.shape)
+        self.assertTrue(False)
 
         # read selected points
         rsp = self.session.post(req, data=pt_bytes, headers=headers_bin_reqrsp)

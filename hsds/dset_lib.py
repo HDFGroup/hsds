@@ -66,6 +66,27 @@ def getFillValue(dset_json):
     return arr
 
 
+def _get_arr_pts(arr_points, arr_index, pt, dim=0, chunk_index=None, factors=None):
+    """ recursive function to fill in chunk locations for a hyperchunk """
+
+    log.debug(f"get_arr_pts = arr_index: {arr_index}, dim: {dim}, pt: {pt}")
+    index = chunk_index[dim]
+    factor = factors[dim]
+    rank = len(chunk_index)
+    for i in range(factor):
+        pt[dim] = (index * factor + i)
+        if dim + 1 == rank:
+            idx = int(arr_index) + i
+            #print(f"idx: {idx}, type: {type(idx)}")
+            #print("arr_points.shape:", arr_points.shape)
+            #print("pt:", pt)
+            arr_points[idx] = pt[0] if rank == 1 else pt
+        else:
+            kwargs = {"dim": dim+1, "chunk_index": chunk_index, "factors": factors}
+            next_index = arr_index + i*np.prod(factors[1:])
+            _get_arr_pts(arr_points, next_index, pt, **kwargs)
+
+
 async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, bucket=None):
     """
     Get info for chunk locations (for reference layouts)
@@ -122,9 +143,7 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
             log.info(msg)
             return
         item_size = getItemSize(datatype)
-        chunk_size = item_size
-        for dim in chunk_dims:
-            chunk_size *= dim
+        chunk_size = item_size * np.prod(chunk_dims)
         log.debug(f"using chunk_size: {chunk_size} for H5D_CONTIGUOUS_REF")
 
         for chunk_id in chunk_ids:
@@ -232,28 +251,33 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
         log.debug(f"ref_num_chunks: {ref_num_chunks}")
         log.debug(f"hyper_dims: {hyper_dims}")
 
-        if rank == 1:
-            arr_points = np.zeros((ref_num_chunks,), dtype=np.dtype("u8"))
-            table_factor = table_factors[0]
+        arr_points_shape = (ref_num_chunks, rank)
+        arr_points = np.zeros(arr_points_shape, dtype=np.dtype("u8"))
+        log.debug(f"tbd: arr_points: {arr_points}")
+        
+        if ref_num_chunks == num_chunks:
+            for i in range(num_chunks):
+                chunk_id = chunk_ids[i]
+                indx = getChunkIndex(chunk_id)
+                log.debug(f"tbd: chunkindex: {indx}")
+                arr_points[i] = indx
+        else:
+            # hyper chunking
+            chunks_per_hyperchunk = np.prod(table_factors)
+            pt = [0,] * rank
             for i in range(num_chunks):
                 chunk_id = chunk_ids[i]
                 chunk_index = getChunkIndex(chunk_id)
-                chunk_index = chunk_index[0]
+                arr_index = i * chunks_per_hyperchunk
+                kwargs = {"chunk_index": chunk_index, "factors": table_factors}
+                _get_arr_pts(arr_points, arr_index, pt, **kwargs)
+                """
                 for j in range(table_factor):
                     index = chunk_index * table_factor + j
                     arr_index = i * table_factor + j
                     arr_points[arr_index] = index
-        else:
-            if ref_num_chunks != num_chunks:
-                msg = "hyperchunks not supported for multidimensional datasets"
-                log.warn(msg)
-                raise HTTPBadRequest(msg=msg)
-            arr_points = np.zeros((num_chunks, rank), dtype=np.dtype("u8"))
-            for i in range(num_chunks):
-                chunk_id = chunk_ids[i]
-                indx = getChunkIndex(chunk_id)
-                arr_points[i] = indx
-
+                """
+            
         msg = f"got chunktable - {len(arr_points)} entries, calling getSelectionData"
         log.debug(msg)
         # this call won't lead to a circular loop of calls since we've checked

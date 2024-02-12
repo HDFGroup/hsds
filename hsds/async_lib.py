@@ -165,6 +165,7 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
         chunktable_type_json = chunktable_json["type"]
         chunktable_item_size = getItemSize(chunktable_type_json)
         chunktable_dt = createDataType(chunktable_type_json)
+        log.debug(f"tbd chunktable_json: {chunktable_json}")
         chunktable_filter_ops = getFilterOps(app, chunktable_json, chunktable_item_size)
 
         # read chunktable one chunk at a time - this can be slow if there

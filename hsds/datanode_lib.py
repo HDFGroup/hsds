@@ -840,13 +840,6 @@ async def get_chunk_bytes(
         log.error("get_chunk_bytes - expected hyper_dims parameter to be set")
         raise HTTPInternalServerError()
 
-    rank = len(chunk_dims)
-    if rank != 1:
-        msg = "get_chunk_bytes - only one-dimensional datasets are supported currently "
-        msg += "for intelligent range gets"
-        log.error(msg)
-        raise HTTPInternalServerError()
-
     num_chunks = len(offset)
     log.debug(f"get_chunk_bytes - num_chunks: {num_chunks}")
     if len(length) != num_chunks:
@@ -873,6 +866,7 @@ async def get_chunk_bytes(
             # ignore empty range get requests
             continue
         chunk_list.append(ChunkLocation(i, offset[i], length[i]))
+        log.debug(f"add ChunkLocation({i}, {offset[i]}, {length[i]})")
 
     if len(chunk_list) == 0:
         # nothing to fetch, return zero-initialized array
@@ -882,7 +876,7 @@ async def get_chunk_bytes(
     # requests needed
     chunk_list = chunkMunge(chunk_list, max_gap=1024)
 
-    log.info(f"get_chunk_butes - stor get requests reduced from {num_chunks} to {len(chunk_list)}")
+    log.info(f"get_chunk_bytes - stor get requests reduced from {num_chunks} to {len(chunk_list)}")
 
     # gather all the individual h5 chunk reads into a list of tasks
     tasks = []
