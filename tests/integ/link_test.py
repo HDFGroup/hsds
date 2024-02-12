@@ -578,7 +578,7 @@ class LinkTest(unittest.TestCase):
         hrefs = rspJson["hrefs"]
         self.assertEqual(len(hrefs), 3)
         self.assertTrue("links" in rspJson)
-        obj_map = rspJson["links"]  # map of obj_ids to links
+        obj_map = rspJson["links"]  # map of group_ids to links
         hardlink_count = 0
         softlink_count = 0
         extlink_count = 0
@@ -637,7 +637,7 @@ class LinkTest(unittest.TestCase):
         hrefs = rspJson["hrefs"]
         self.assertEqual(len(hrefs), 3)
         self.assertTrue("links" in rspJson)
-        obj_map = rspJson["links"]  # map of obj_ids to links
+        obj_map = rspJson["links"]  # map of group_ids to links
         link_count = 0
         for obj_id in obj_map:
             link_count += len(obj_map[obj_id])
@@ -1453,7 +1453,7 @@ class LinkTest(unittest.TestCase):
         links["softlink_multicast"] = {"h5path": "multi_path"}
         links["extlink_multicast"] = {"h5path": "multi_path", "h5domain": "/another_domain"}
         link_count = len(links)
-        data = {"links": links, "grp_ids": grp_ids}
+        data = {"links": links, "group_ids": grp_ids}
         req = self.endpoint + "/groups/" + root_id + "/links"
         rsp = self.session.put(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
@@ -1495,7 +1495,7 @@ class LinkTest(unittest.TestCase):
             links[f"extlink_{i}"] = ext_link
             link_data[grp_id] = {"links": links}
 
-        data = {"grp_ids": link_data}
+        data = {"group_ids": link_data}
         req = self.endpoint + "/groups/" + root_id + "/links"
         rsp = self.session.put(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)

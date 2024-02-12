@@ -368,8 +368,8 @@ async def PUT_Links(request):
     # next, sort out where these attributes are going to
 
     grp_ids = {}
-    if "grp_ids" in body:
-        body_ids = body["grp_ids"]
+    if "group_ids" in body:
+        body_ids = body["group_ids"]
         if isinstance(body_ids, list):
             # multi cast the links - each link  in link_items
             # will be written to each of the objects identified by obj_id
@@ -393,7 +393,7 @@ async def PUT_Links(request):
             # unlike the above case, different attributes can be written to
             # different objects
             if link_items:
-                msg = "links defined outside the obj_ids dict"
+                msg = "links defined outside the group_ids dict"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
             else:
@@ -609,7 +609,7 @@ async def POST_Links(request):
             items[group_id] = None
     elif isinstance(group_ids, dict):
         if titles is not None:
-            msg = "titles must not be provided if obj_ids is a dict"
+            msg = "titles must not be provided if group_ids is a dict"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         for group_id in group_ids:
