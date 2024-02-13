@@ -352,7 +352,7 @@ class LinkTest(unittest.TestCase):
                     params["CreateOrder"] = 1
 
                 if use_post:
-                    payload = {"group_ids": [root_id, ]}
+                    payload = {"grp_ids": [root_id, ]}
                     data = json.dumps(payload)
                     rsp = self.session.post(req, data=data, params=params, headers=headers)
                 else:
@@ -400,7 +400,7 @@ class LinkTest(unittest.TestCase):
                 if creation_order:
                     params["CreateOrder"] = 1
                 if use_post:
-                    payload = {"group_ids": [root_id, ]}
+                    payload = {"grp_ids": [root_id, ]}
                     data = json.dumps(payload)
                     rsp = self.session.post(req, data=data, params=params, headers=headers)
                 else:
@@ -670,7 +670,7 @@ class LinkTest(unittest.TestCase):
             req = helper.getEndpoint() + "/groups/" + g1_2_uuid + "/links"
             params = {"pattern": "ext*"}
             if use_post:
-                payload = {"group_ids": [g1_2_uuid, ]}
+                payload = {"grp_ids": [g1_2_uuid, ]}
                 data = json.dumps(payload)
                 rsp = self.session.post(req, data=data, params=params, headers=headers)
             else:
@@ -698,7 +698,7 @@ class LinkTest(unittest.TestCase):
             req = helper.getEndpoint() + "/groups/" + root_uuid + "/links"
             params = {"follow_links": 1, "pattern": "dset*"}
             if use_post:
-                payload = {"group_ids": [root_uuid, ]}
+                payload = {"grp_ids": [root_uuid, ]}
                 data = json.dumps(payload)
                 rsp = self.session.post(req, data=data, params=params, headers=headers)
             else:
@@ -1260,7 +1260,7 @@ class LinkTest(unittest.TestCase):
 
         # get all links for the given set of group ids
         grp_ids = list(grp_map.keys())
-        payload = {"group_ids": grp_ids}
+        payload = {"grp_ids": grp_ids}
         req = helper.getEndpoint() + "/groups/" + root_id + "/links"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -1293,7 +1293,7 @@ class LinkTest(unittest.TestCase):
         # get just the requested links for each group
         req = helper.getEndpoint() + "/groups/" + root_id + "/links"
         link_map = {g1_id: ["g1.1", "g1.2"], g2_id: ["dset2.2", ]}
-        payload = {"group_ids": link_map}
+        payload = {"grp_ids": link_map}
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
@@ -1317,7 +1317,7 @@ class LinkTest(unittest.TestCase):
         # get all links for the domain by providing the root_id with the follow_links param
         params = {"follow_links": 1}
         grp_ids = [root_id, ]
-        payload = {"group_ids": grp_ids}
+        payload = {"grp_ids": grp_ids}
         rsp = self.session.post(req, data=json.dumps(payload), params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
@@ -1453,7 +1453,7 @@ class LinkTest(unittest.TestCase):
         links["softlink_multicast"] = {"h5path": "multi_path"}
         links["extlink_multicast"] = {"h5path": "multi_path", "h5domain": "/another_domain"}
         link_count = len(links)
-        data = {"links": links, "group_ids": grp_ids}
+        data = {"links": links, "grp_ids": grp_ids}
         req = self.endpoint + "/groups/" + root_id + "/links"
         rsp = self.session.put(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
@@ -1495,7 +1495,7 @@ class LinkTest(unittest.TestCase):
             links[f"extlink_{i}"] = ext_link
             link_data[grp_id] = {"links": links}
 
-        data = {"group_ids": link_data}
+        data = {"grp_ids": link_data}
         req = self.endpoint + "/groups/" + root_id + "/links"
         rsp = self.session.put(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)

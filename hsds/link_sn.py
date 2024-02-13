@@ -368,8 +368,8 @@ async def PUT_Links(request):
     # next, sort out where these attributes are going to
 
     grp_ids = {}
-    if "group_ids" in body:
-        body_ids = body["group_ids"]
+    if "grp_ids" in body:
+        body_ids = body["grp_ids"]
         if isinstance(body_ids, list):
             # multi cast the links - each link  in link_items
             # will be written to each of the objects identified by obj_id
@@ -583,8 +583,8 @@ async def POST_Links(request):
     else:
         titles = None
 
-    if "group_ids" in body:
-        group_ids = body["group_ids"]
+    if "grp_ids" in body:
+        group_ids = body["grp_ids"]
     else:
         group_ids = None
 
