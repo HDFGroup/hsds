@@ -1,5 +1,6 @@
 from operator import attrgetter
 from collections import namedtuple
+import numpy as np
 
 # HDF5 file chunk location named tuple
 #  index: index of the chunk
@@ -18,6 +19,36 @@ def _chunk_start(c):
     else:
         start = c.offset
     return start
+
+def getHyperChunkFactors(chunk_dims, hyper_dims):
+    """ return list of rations betwen chunk and hyperchunkdims """
+
+    factors = []
+    rank = len(chunk_dims)
+    if len(hyper_dims) != rank:
+        raise ValueError("unexpected length for hyper_dims")
+    for i in range(rank):
+        chunk_extent = chunk_dims[i]
+        hyper_extent = hyper_dims[i]
+        if chunk_extent % hyper_extent != 0:
+            raise ValueError("unexpected value for hyper_dims")
+        factor = chunk_extent // hyper_extent
+        factors.append(factor)
+    return factors
+
+def getHyperChunkIndex(i, factors):
+    """ return index of ith hyperchunk based on the chunk factors 
+        e.g. for factors: [2,3,4], the 5th index will be: 0_1_1
+    """
+
+    rank = len(factors)
+    index = []
+    for dim in range(rank):
+        factor = int(np.prod(factors[(dim+1):]))
+        n = (i // factor) % factors[dim] 
+        index.append(n)
+    return tuple(index)
+
 
 
 def _chunk_end(c):

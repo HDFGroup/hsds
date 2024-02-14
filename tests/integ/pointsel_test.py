@@ -434,10 +434,6 @@ class PointSelTest(unittest.TestCase):
         num_points = len(points)
         arr_points = np.asarray(points, dtype="u8")  # must use unsigned 64-bit int
         pt_bytes = arr_points.tobytes()
-        print(arr_points)
-        print(type(arr_points))
-        print(arr_points.shape)
-        self.assertTrue(False)
 
         # read selected points
         rsp = self.session.post(req, data=pt_bytes, headers=headers_bin_reqrsp)
@@ -473,9 +469,7 @@ class PointSelTest(unittest.TestCase):
 
         hdf5_sample_bucket = config.get("hdf5_sample_bucket")
         if not hdf5_sample_bucket:
-            print(
-                "hdf5_sample_bucket config not set, skipping testPostContiguousDataset"
-            )
+            print("hdf5_sample_bucket config not set, skipping testPostContiguousDataset")
             return
 
         tall_json = helper.getHDF5JSON("tall.json")

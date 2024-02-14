@@ -18,8 +18,8 @@ from aiohttp.client_exceptions import ClientError
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPConflict, HTTPInternalServerError
 from .util.arrayUtil import getNumpyValue
 from .util.boolparser import BooleanParser
-from .util.dsetUtil import isNullSpace, getDatasetLayout, getDatasetLayoutClass
-from .util.dsetUtil import getChunkLayout, getSelectionShape, getShapeDims, get_slices
+from .util.dsetUtil import isNullSpace, getDatasetLayout, getDatasetLayoutClass, get_slices
+from .util.dsetUtil import getChunkLayout, getSelectionShape, getShapeDims
 from .util.chunkUtil import getChunkCoordinate, getChunkIndex, getChunkSuffix
 from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
@@ -27,6 +27,7 @@ from .util.chunkUtil import getQueryDtype, get_chunktable_dims
 from .util.hdf5dtype import createDataType, getItemSize
 from .util.httpUtil import http_delete, http_put
 from .util.idUtil import getDataNodeUrl, isSchema2Id, getS3Key, getObjId
+from .util.rangegetUtil import getHyperChunkFactors
 from .util.storUtil import getStorKeys
 
 from .servicenode_lib import getDsetJson, doFlush
@@ -70,6 +71,8 @@ def _get_arr_pts(arr_points, arr_index, pt, dim=0, chunk_index=None, factors=Non
     """ recursive function to fill in chunk locations for a hyperchunk """
 
     log.debug(f"get_arr_pts = arr_index: {arr_index}, dim: {dim}, pt: {pt}")
+    log.debug(f"chunk_index: {chunk_index}")
+    
     index = chunk_index[dim]
     factor = factors[dim]
     rank = len(chunk_index)
@@ -80,7 +83,10 @@ def _get_arr_pts(arr_points, arr_index, pt, dim=0, chunk_index=None, factors=Non
             #print(f"idx: {idx}, type: {type(idx)}")
             #print("arr_points.shape:", arr_points.shape)
             #print("pt:", pt)
-            arr_points[idx] = pt[0] if rank == 1 else pt
+            if rank == 1:
+                arr_points[idx] = pt[0]  # need to set 1d arrays with an int index
+            else:
+                arr_points[idx] = pt 
         else:
             kwargs = {"dim": dim+1, "chunk_index": chunk_index, "factors": factors}
             next_index = arr_index + i*np.prod(factors[1:])
@@ -187,9 +193,10 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
         log.debug(f"cpl layout: {layout}")
         s3path = layout["file_uri"]
         chunks = layout["chunks"]
-
+        log.debug(f"tbd: chunks: {chunks}")
         for chunk_id in chunk_ids:
             chunk_item = getChunkItem(chunk_id)
+            log.debug(f"tbd: {chunk_id} chunk_item: {chunk_item}")
             s3offset = 0
             s3size = 0
             chunk_key = getChunkSuffix(chunk_id)
@@ -231,12 +238,21 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
         log.debug(f"chunktable_dims: {chunktable_dims}")
         default_chunktable_dims = get_chunktable_dims(dims, chunk_dims)
         log.debug(f"default_chunktable_dims: {default_chunktable_dims}")
-        table_factors = []
         if "hyper_dims" in layout:
             hyper_dims = layout["hyper_dims"]
+            
         else:
             # assume 1 to 1 matching
             hyper_dims = chunk_dims
+        try:
+            table_factors = getHyperChunkFactors(chunk_dims, hyper_dims)
+        except ValueError:
+            msg = f"expected hyper_dims [{hyper_dims[dim]}] to be a factor"
+            msg += f" of {chunk_dims[dim]}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        log.debug(f"table_factors: {table_factors}")
+
         ref_num_chunks = num_chunks
         for dim in range(rank):
             if chunk_dims[dim] % hyper_dims[dim] != 0:
@@ -244,10 +260,9 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
                 msg += f" of {chunk_dims[dim]}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
-            factor = chunk_dims[dim] // hyper_dims[dim]
-            table_factors.append(factor)
-            ref_num_chunks *= factor
-        log.debug(f"table_factors: {table_factors}")
+             
+        ref_num_chunks = num_chunks * np.prod(table_factors)
+        
         log.debug(f"ref_num_chunks: {ref_num_chunks}")
         log.debug(f"hyper_dims: {hyper_dims}")
 
@@ -271,15 +286,11 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
                 arr_index = i * chunks_per_hyperchunk
                 kwargs = {"chunk_index": chunk_index, "factors": table_factors}
                 _get_arr_pts(arr_points, arr_index, pt, **kwargs)
-                """
-                for j in range(table_factor):
-                    index = chunk_index * table_factor + j
-                    arr_index = i * table_factor + j
-                    arr_points[arr_index] = index
-                """
+                log.debug(f"tbd: arr_points: {arr_points}")
             
         msg = f"got chunktable - {len(arr_points)} entries, calling getSelectionData"
         log.debug(msg)
+        log.debug(f"tbd: arr_points: {arr_points}")
         # this call won't lead to a circular loop of calls since we've checked
         # that the chunktable layout is not H5D_CHUNKED_REF_INDIRECT
         kwargs = {"points": arr_points, "bucket": bucket}
@@ -295,6 +306,7 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
         for i in range(num_chunks):
             chunk_id = chunk_ids[i]
             chunk_item = getChunkItem(chunk_id)
+            chunk_index = getChunkIndex(chunk_id)
             item = point_data[i]
             if s3_layout_path is None:
                 if len(item) < 3:
@@ -319,15 +331,23 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
                 factor = ref_num_chunks // num_chunks
                 s3offsets = []
                 s3sizes = []
+                # hyper_index = []
+                index_base = chunk_index[0]
+                log.debug(f"tbd - index_base: {index_base}")
                 for j in range(factor):
                     item = point_data[i * factor + j]
                     s3offset = int(item[0])
                     s3offsets.append(s3offset)
                     s3size = int(item[1])
-                    s3sizes.append(s3size)
+                    s3sizes.append(s3size)  
+                    # index = int(arr_points[i * factor + j]) % index_base
+                    #index = getHyperChunkIndex(j, table_factors)
+                    # hyper_index.append(index)
                 chunk_item["s3offset"] = s3offsets
                 chunk_item["s3size"] = s3sizes
                 chunk_item["hyper_dims"] = hyper_dims
+                # chunk_item["hyper_index"] = hyper_index
+                log.debug(f"tbd - chunk_item: {chunk_item}")
 
     else:
         log.error(f"Unexpected chunk layout: {layout['class']}")

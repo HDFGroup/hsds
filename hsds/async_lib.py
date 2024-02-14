@@ -21,7 +21,7 @@ from .util.idUtil import getObjId, isValidChunkId, getCollectionForId
 from .util.chunkUtil import getDatasetId, getNumChunks, ChunkIterator
 from .util.hdf5dtype import getItemSize, createDataType
 from .util.arrayUtil import getNumElements, bytesToArray
-from .util.dsetUtil import getHyperslabSelection, getFilterOps, getChunkDims
+from .util.dsetUtil import getHyperslabSelection, getFilterOps, getChunkDims, getFilters
 from .util.dsetUtil import getDatasetLayoutClass, getDatasetLayout, getShapeDims
 
 from .util.storUtil import getStorKeys, putStorJSONObj, getStorJSONObj
@@ -163,10 +163,11 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
             return
         dims = chunktable_layout["dims"]
         chunktable_type_json = chunktable_json["type"]
-        chunktable_item_size = getItemSize(chunktable_type_json)
         chunktable_dt = createDataType(chunktable_type_json)
+        filters = getFilters(chunktable_json)
         log.debug(f"tbd chunktable_json: {chunktable_json}")
-        chunktable_filter_ops = getFilterOps(app, chunktable_json, chunktable_item_size)
+        kwargs = {"dtype": chunktable_dt, "chunk_shape": dims}
+        chunktable_filter_ops = getFilterOps(app, chunktable_id, filters, **kwargs)
 
         # read chunktable one chunk at a time - this can be slow if there
         # are a lot of chunks, but this is only used by the async bucket

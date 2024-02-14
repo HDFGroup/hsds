@@ -162,9 +162,13 @@ def getFilterOps(app, dset_id, filters, dtype=None, chunk_shape=None):
     """Get list of filter operations to be used for this dataset"""
     filter_map = app["filter_map"]
 
-    if dset_id in filter_map:
-        log.debug(f"returning filter from filter_map {filter_map[dset_id]}")
-        return filter_map[dset_id]
+    try:
+        if dset_id in filter_map:
+            log.debug(f"returning filter from filter_map {filter_map[dset_id]}")
+            return filter_map[dset_id]
+    except TypeError:
+        log.error(f"getFilterOps TypeError - dset_id: {dset_id} filter_map: {filter_map}")
+        raise
 
     compressionFilter = getCompressionFilter(filters)
     log.debug(f"got compressionFilter: {compressionFilter}")
@@ -1021,9 +1025,7 @@ class ItemIterator:
     def __init__(self, selection):
         self._selection = selection
         self._rank = len(selection)
-        self._index = [
-            0,
-        ] * self._rank
+        self._index = [0,] * self._rank
         for i in range(self._rank):
             s = self._selection[i]
             self._index[i] = s.start
@@ -1037,9 +1039,7 @@ class ItemIterator:
             raise StopIteration()
         dim = self._rank - 1
 
-        index = [
-            0,
-        ] * self._rank
+        index = [0, ] * self._rank
         for i in range(self._rank):
             index[i] = self._index[i]
         while dim >= 0:

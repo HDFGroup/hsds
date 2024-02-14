@@ -348,7 +348,6 @@ async def GET_Chunk(request):
 
     if "s3offset" in params:
         param_s3offset = params["s3offset"]
-        log.debug(f"s3offset param: {param_s3offset}")
         try:
             if param_s3offset.find(":") > 0:
                 # colon seperated index values, convert to list
@@ -362,7 +361,6 @@ async def GET_Chunk(request):
 
     if "s3size" in params:
         param_s3size = params["s3size"]
-        log.debug(f"s3size param: {param_s3size}")
         try:
             if param_s3size.find(":") > 0:
                 s3size = list(map(int, param_s3size.split(":")))
@@ -384,6 +382,16 @@ async def GET_Chunk(request):
             log.error(f"invalid hyper_dims params: {param_hyper_dims}")
             raise HTTPBadRequest()
         log.debug(f"hyper_dims: {hyper_dims}")
+    """
+    if "hyper_index" in params:
+        param_hyper_index = params["hyper_index"]
+        log.debug(f"tbd param_hyper_index: {param_hyper_index}")
+        if param_hyper_index.find(":") > 0:
+            hyper_index = param_hyper_index.split(":")
+        else:
+            hyper_index = param_hyper_index
+        log.debug(f"hyper_index: {hyper_index}")
+    """
 
     if "query" in params:
         query = params["query"]
@@ -454,6 +462,8 @@ async def GET_Chunk(request):
         kwargs["s3size"] = s3size
         if hyper_dims:
             kwargs["hyper_dims"] = hyper_dims
+        #if hyper_index:
+        #    kwargs["hyper_index"] = hyper_index
     else:
         kwargs["bucket"] = bucket
 

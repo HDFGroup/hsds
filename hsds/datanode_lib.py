@@ -24,7 +24,7 @@ from .util.idUtil import validateInPartition, getS3Key, isValidUuid
 from .util.idUtil import isValidChunkId, getDataNodeUrl, isSchema2Id
 from .util.idUtil import getRootObjId, isRootObjId
 from .util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes
-from .util.storUtil import getStorBytes, isStorObj, deleteStorObj
+from .util.storUtil import getStorBytes, isStorObj, deleteStorObj, getHyperChunks
 from .util.storUtil import getBucketFromStorURI, getKeyFromStorURI, getURIFromKey
 from .util.domainUtil import isValidDomain, getBucketForDomain
 from .util.attrUtil import getRequestCollectionName
@@ -34,7 +34,7 @@ from .util.dsetUtil import getChunkInitializer, getSliceQueryParam, getFilters
 from .util.chunkUtil import getDatasetId, getChunkSelection, getChunkIndex
 from .util.arrayUtil import arrayToBytes, bytesToArray, jsonToArray
 from .util.hdf5dtype import createDataType
-from .util.rangegetUtil import ChunkLocation, chunkMunge
+from .util.rangegetUtil import ChunkLocation, chunkMunge, getHyperChunkIndex, getHyperChunkFactors
 
 from . import config
 from . import hsds_logger as log
@@ -801,6 +801,7 @@ async def run_chunk_initializer(
     return chunk_arr
 
 
+
 async def get_chunk_bytes(
         app,
         s3key,
@@ -811,11 +812,15 @@ async def get_chunk_bytes(
         dtype=None,
         chunk_id=None,
         chunk_dims=None,
-        hyper_dims=None
+        layout_class=None,
+        hyper_dims=None,
+        fill_value=None,
 ):
     """ For regular chunk reads, just call getStorBytes.
         """
     item_size = dtype.itemsize
+    chunk_size = np.prod(chunk_dims) * item_size
+    rank = len(chunk_dims)
 
     msg = f"get_chunk_bytes({chunk_id}, bucket={bucket}, offset={offset}, length={length}, "
     msg += f"item_size={item_size}, chunk_dims={chunk_dims}, hyper_dims={hyper_dims}"
@@ -831,42 +836,77 @@ async def get_chunk_bytes(
         }
 
         chunk_bytes = await getStorBytes(app, s3key, **kwargs)
-        return chunk_bytes
+        if chunk_bytes is None:
+            msg = f"read {chunk_id} bucket: {bucket} returned None"
+            raise ValueError(msg)
+        if layout_class == "H5D_CONTIGUOUS_REF":
+            if len(chunk_bytes) < chunk_size:
+                # we may get less than expected bytes if this chunk
+                # is close to the end of the file
+                # expand to expected number of bytes
+                msg = "extending returned bytearray for "
+                msg += "H5D_CONTIGUOUS layout from "
+                msg += f"{len(chunk_bytes)} to {chunk_size}"
+                log.info(msg)
+                tmp_buffer = bytearray(chunk_size)
+                tmp_buffer[: len(chunk_bytes)] = chunk_bytes
+                chunk_bytes = bytes(tmp_buffer)
+        chunk_arr = bytesToArray(chunk_bytes, dtype, chunk_dims)
+        return chunk_arr
 
     # intelligent range get request
     log.debug("intelligent range get")
 
     if hyper_dims is None:
-        log.error("get_chunk_bytes - expected hyper_dims parameter to be set")
-        raise HTTPInternalServerError()
+        msg = "expected hyper_dims parameter to be set"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    if len(hyper_dims) != rank:
+        msg = f"invalid hyper_dims: {hyper_dims}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
-    num_chunks = len(offset)
+    table_factors = getHyperChunkFactors(chunk_dims, hyper_dims)
+
+    num_chunks = len(offset)  # offset is a list of chunk offsets
     log.debug(f"get_chunk_bytes - num_chunks: {num_chunks}")
-    if len(length) != num_chunks:
-        log.error("get_chunk_bytes - expecting length and num_chunks to have same value")
-        raise HTTPInternalServerError()
+    if np.prod(table_factors) != num_chunks:
+        msg = f"unexpected number of hyperchunks: {num_chunks}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    if not isinstance(length, list) or len(length) != num_chunks:
+        msg = "get_chunk_bytes - expecting length count and num_chunks to have same value"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
-    # create a buffer for the hsds chunk and arrange h5 chunks within it
-    chunk_size = np.prod(chunk_dims) * item_size
     # number of bytes in the hd5 chunk
-    # hyper_dims = [4000,]  # test
     h5_size = np.prod(hyper_dims) * item_size
     log.debug(f"h5 chunk size: {h5_size}")
-    chunk_bytes = bytearray(chunk_size)
+
     if num_chunks > chunk_size // h5_size:
         # shouldn't have more than this many hyperchunks
         msg = f"get_chunk_bytes - got more than expected hyperchunks: {num_chunks}"
-        log.error(msg)
-        raise HTTPInternalServerError()
-
-    # create a list of the chunk to be fetched
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    
+    # create an numpy array for the hsds chunk and arrange h5 chunks within it
+    if fill_value is not None:
+        chunk_arr = np.empty(chunk_dims, dtype=dtype, order="C")
+        chunk_arr[...] = fill_value
+    else:
+        chunk_arr = np.zeros(chunk_dims, dtype=dtype, order="C")
+    
+    # create a list of the hyperchunks to be fetched
     chunk_list = []
     for i in range(num_chunks):
         if length[i] == 0:
             # ignore empty range get requests
             continue
-        chunk_list.append(ChunkLocation(i, offset[i], length[i]))
-        log.debug(f"add ChunkLocation({i}, {offset[i]}, {length[i]})")
+        hyper_index = getHyperChunkIndex(i, table_factors)
+        log.debug(f"tbd: got hyper_index: {hyper_index}")
+        chunk_location = ChunkLocation(hyper_index, offset[i], length[i])
+        log.debug(f"add ChunkLocation : {chunk_location}")
+        chunk_list.append(chunk_location)
 
     if len(chunk_list) == 0:
         # nothing to fetch, return zero-initialized array
@@ -875,8 +915,7 @@ async def get_chunk_bytes(
     # munge adjacent chunks to reduce the number of storage
     # requests needed
     chunk_list = chunkMunge(chunk_list, max_gap=1024)
-
-    log.info(f"get_chunk_bytes - stor get requests reduced from {num_chunks} to {len(chunk_list)}")
+    log.info(f"get_chunk_bytes - get requests reduced from {num_chunks} to {len(chunk_list)}")
 
     # gather all the individual h5 chunk reads into a list of tasks
     tasks = []
@@ -890,22 +929,17 @@ async def get_chunk_bytes(
 
         log.debug(f"getStorBytes processing chunk_locations {chunk_locations}")
         # get the byte range we'll read from storage
-        item_offset = chunk_locations[0].offset
-        item_length = chunk_locations[-1].offset + chunk_locations[-1].length - item_offset
-
+        
         kwargs = {
             "filter_ops": filter_ops,
-            "offset": item_offset,
-            "length": item_length,
             "chunk_locations": chunk_locations,
             "bucket": bucket,
-            "chunk_bytes": chunk_bytes,
-            "h5_size": h5_size,
+            "chunk_arr": chunk_arr,
+            "hyper_dims": hyper_dims,
         }
-        msg = f"get_chunk_bytes - {len(chunk_locations)} h5 chunks,  "
-        msg += f"offset: {item_offset}, length: {item_length}"
+        msg = f"get_chunk_bytes - {len(chunk_locations)} h5 chunks"
         log.debug(msg)
-        tasks.append(getStorBytes(app, s3key, **kwargs))
+        tasks.append(getHyperChunks(app, s3key, **kwargs))
 
     log.debug(f"running asyncio.gather on {len(tasks)} tasks")
     results = await asyncio.gather(*tasks)
@@ -916,8 +950,11 @@ async def get_chunk_bytes(
         log.error(msg)
         raise HTTPInternalServerError()
 
-    log.debug("get_chunk_bytes done")
-    return chunk_bytes
+    msg = "get_chunk_bytes done for hyperchunks "
+    msg += f"arr min: {chunk_arr.min()}, arr_max: {chunk_arr.max()}"
+    log.debug(msg)
+
+    return chunk_arr
 
 
 async def get_chunk(
@@ -943,6 +980,8 @@ async def get_chunk(
         log.debug(f"   s3path: {s3path} s3offset: {s3offset} s3size: {s3size}")
     if hyper_dims is not None:
         log.debug(f"   hyper_dims: {hyper_dims}")
+    #if hyper_index is not None:
+    #    log.debug(f"   hyper_index: {hyper_index}")
     chunk_cache = app["chunk_cache"]
     if chunk_init and s3offset > 0:
         msg = f"unable to initialize chunk {chunk_id} for reference layouts "
@@ -976,6 +1015,7 @@ async def get_chunk(
     layout_json = dset_json["layout"]
     layout_class = layout_json.get("class")
     chunk_dims = getChunkLayout(dset_json)
+    fill_value = getFillValue(dset_json)
 
     # note - officially we should follow the order in which the filters are
     # defined in the filter_list,
@@ -1047,10 +1087,12 @@ async def get_chunk(
                     "dtype": dt,
                     "chunk_dims": chunk_dims,
                     "hyper_dims": hyper_dims,
+                    "fill_value": fill_value,
+                    "layout_class": layout_class,
                     "bucket": bucket,
                 }
 
-                chunk_bytes = await get_chunk_bytes(app, s3key, **kwargs)
+                chunk_arr = await get_chunk_bytes(app, s3key, **kwargs)
 
                 if chunk_id in pending_s3_read:
                     # read complete - remove from pending map
@@ -1060,23 +1102,6 @@ async def get_chunk(
                     msg = f"expected to find {chunk_id} in "
                     msg += "pending_s3_read map"
                     log.warn(msg)
-                if chunk_bytes is None:
-                    msg = f"read {chunk_id} bucket: {bucket} returned None"
-                    raise ValueError(msg)
-                if layout_class == "H5D_CONTIGUOUS_REF":
-                    if len(chunk_bytes) < s3size:
-                        # we may get less than expected bytes if this chunk
-                        # is close to the end of the file
-                        # expand to expected number of bytes
-                        msg = "extending returned bytearray for "
-                        msg += "H5D_CONTIGUOUS layout from "
-                        msg += f"{len(chunk_bytes)} to {s3size}"
-                        log.info(msg)
-                        tmp_buffer = bytearray(s3size)
-                        tmp_buffer[: len(chunk_bytes)] = chunk_bytes
-                        chunk_bytes = bytes(tmp_buffer)
-                chunk_arr = bytesToArray(chunk_bytes, dt, dims)
-                log.debug(f"chunk size: {chunk_arr.size}")
             except HTTPNotFound:
                 if not chunk_init:
                     log.info(f"chunk not found for id: {chunk_id}")
@@ -1116,8 +1141,6 @@ async def get_chunk(
 
             if chunk_arr is None:
                 # normal fill value based init or initializer failed
-                fill_value = getFillValue(dset_json)
-
                 if fill_value is not None:
                     chunk_arr = np.empty(dims, dtype=dt, order="C")
                     chunk_arr[...] = fill_value
