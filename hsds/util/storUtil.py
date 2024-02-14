@@ -461,7 +461,7 @@ async def getStorBytes(app,
                 continue
             # add to the list
             chunk_bytes.append(h5_bytes)
-    
+
         return chunk_bytes
     elif filter_ops:
         # uncompress and return
@@ -472,14 +472,14 @@ async def getStorBytes(app,
 
 
 async def getHyperChunks(app,
-                           key,
-                           chunk_arr=None,
-                           hyper_dims=None,
-                           filter_ops=None,
-                           chunk_locations=None,
-                           bucket=None
-                          ):
-    
+                         key,
+                         chunk_arr=None,
+                         hyper_dims=None,
+                         filter_ops=None,
+                         chunk_locations=None,
+                         bucket=None
+                         ):
+
     min_offset = None
     max_offset = None
     rank = len(chunk_arr.shape)
@@ -501,39 +501,35 @@ async def getHyperChunks(app,
     log.debug(f"getHyperChunks: read {len(data)} bytes")
     if len(data) < item_length:
         log.warn(f"getHyperChunks, requested: {item_length}, but got: {len(data)} bytes")
-    
+
     # slot in the data
     for item in chunk_locations:
-        log.debug(f"tbd - got item: {item}")
         chunk_offset = item.offset - min_offset
         if chunk_offset + item.length > len(data):
             # edge chunk
             chunk_size = len(data) - chunk_offset
             h5_bytes = bytearray(h5_size)
-            h5_bytes[:chunk_size] = data[chunk_offset:chunk_offset+chunk_size]
+            h5_bytes[:chunk_size] = data[chunk_offset:chunk_offset + chunk_size]
         else:
-            h5_bytes = data[chunk_offset: chunk_offset+item.length]
+            h5_bytes = data[chunk_offset:chunk_offset + item.length]
         if filter_ops:
             h5_bytes = _uncompress(h5_bytes, **filter_ops)
         hyper_chunk = np.frombuffer(h5_bytes, dtype=chunk_arr.dtype)
         hyper_chunk = hyper_chunk.reshape(hyper_dims)
-        log.debug(f"tbd - hyper_dims: {hyper_dims}")
         hyper_index = item.index
         slices = []
         for i in range(rank):
             extent = hyper_dims[i]
             index = hyper_index[i]
-            log.debug(f"getting slice for hyperchunk: {index} with extent: {extent}")
             start = extent * index
             end = start + extent
             s = slice(start, end, 1)
-            log.debug(f"tbd - adding slice: {s}")
             slices.append(s)
         slices = tuple(slices)  # need tuple to use as numpy index
-        log.debug(f"tbd - hyper index {hyper_index} slice: {slices}")
         chunk_arr[slices] = hyper_chunk[...]
     log.debug(f"read {len(chunk_locations)} hyperchunks")
-    
+
+
 async def putStorBytes(app, key, data, filter_ops=None, bucket=None):
     """Store byte string as S3 object with given key"""
 

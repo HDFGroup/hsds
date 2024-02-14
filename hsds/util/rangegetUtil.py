@@ -20,6 +20,7 @@ def _chunk_start(c):
         start = c.offset
     return start
 
+
 def getHyperChunkFactors(chunk_dims, hyper_dims):
     """ return list of rations betwen chunk and hyperchunkdims """
 
@@ -36,19 +37,19 @@ def getHyperChunkFactors(chunk_dims, hyper_dims):
         factors.append(factor)
     return factors
 
+
 def getHyperChunkIndex(i, factors):
-    """ return index of ith hyperchunk based on the chunk factors 
+    """ return index of ith hyperchunk based on the chunk factors
         e.g. for factors: [2,3,4], the 5th index will be: 0_1_1
     """
 
     rank = len(factors)
     index = []
     for dim in range(rank):
-        factor = int(np.prod(factors[(dim+1):]))
-        n = (i // factor) % factors[dim] 
+        factor = int(np.prod(factors[(dim + 1):]))
+        n = (i // factor) % factors[dim]
         index.append(n)
     return tuple(index)
-
 
 
 def _chunk_end(c):

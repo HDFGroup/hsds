@@ -3163,7 +3163,6 @@ class ValueTest(unittest.TestCase):
         chunk_dims = (50, 25)  # ~5KB chunk size
         chunks_per_col = dset_shape[0] // chunk_dims[0]
         chunks_per_row = dset_shape[1] // chunk_dims[1]
-        num_chunks = chunks_per_col * chunks_per_row
 
         # get domain
         req = helper.getEndpoint() + "/"
@@ -3211,7 +3210,7 @@ class ValueTest(unittest.TestCase):
         # make the dataset chunk a multiple of linked chunk shape
         hyper_dims = chunk_dims
         chunk_dims = [chunk_dims[0] * 4, chunk_dims[1] * 4]
-        
+
         layout = {
             "class": "H5D_CHUNKED_REF_INDIRECT",
             "file_uri": file_uri,
@@ -3247,7 +3246,8 @@ class ValueTest(unittest.TestCase):
         start = 1234
         stop = start + 10
         col_index = 123
-        params = {"select": f"[{start}:{stop}, {col_index}]"}  # read 10 element, starting at index 1234567
+        # read 10 element, starting at index 1234
+        params = {"select": f"[{start}:{stop}, {col_index}]"}
         params["nonstrict"] = 1  # enable SN to invoke lambda func
 
         # read the selection
@@ -3260,7 +3260,7 @@ class ValueTest(unittest.TestCase):
         # should get ten elements back
         self.assertEqual(len(value), 10)
         # data values for element (i,j) should be i*1000+j
-        expected = [[(start+i)*1000+col_index,] for i in range(10)]
+        expected = [[(start + i) * 1000 + col_index,] for i in range(10)]
         self.assertEqual(value, expected)
 
     def testIntelligentRangeGetFillValue(self):

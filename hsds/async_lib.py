@@ -165,7 +165,6 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
         chunktable_type_json = chunktable_json["type"]
         chunktable_dt = createDataType(chunktable_type_json)
         filters = getFilters(chunktable_json)
-        log.debug(f"tbd chunktable_json: {chunktable_json}")
         kwargs = {"dtype": chunktable_dt, "chunk_shape": dims}
         chunktable_filter_ops = getFilterOps(app, chunktable_id, filters, **kwargs)
 

@@ -197,7 +197,6 @@ async def read_chunk_hyperslab(
         return
     chunk_info = chunk_map[chunk_id]
     log.debug(f"using chunk_map entry for {chunk_id}")
-    log.debug(f"tbd: chunk_info: {chunk_info}")
     if "points" in chunk_info:
         points = chunk_info["points"]
         log.debug(f"chunkinfo {len(points)} points")
@@ -291,15 +290,7 @@ async def read_chunk_hyperslab(
             # convert to colon seperated string
             hyper_dims = ":".join(map(str, hyper_dims))
         params["hyper_dims"] = hyper_dims
-    """
-    if "hyper_index" in chunk_info:
-        hyper_index = chunk_info["hyper_index"]
-        if isinstance(hyper_index, list):
-            # convert to colon seperated string
-            hyper_index = ":".join(map(str, hyper_index))
-        params["hyper_index"] = hyper_index
-        log.debug(f"tbd: hyper_index_param: {hyper_index}")
-    """
+
     if len(select_dtype) < len(dset_dt):
         # field selection, pass in the field names
         fields_param = ":".join(select_dtype.names)

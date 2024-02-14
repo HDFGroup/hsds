@@ -462,8 +462,6 @@ async def GET_Chunk(request):
         kwargs["s3size"] = s3size
         if hyper_dims:
             kwargs["hyper_dims"] = hyper_dims
-        #if hyper_index:
-        #    kwargs["hyper_index"] = hyper_index
     else:
         kwargs["bucket"] = bucket
 

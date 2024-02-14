@@ -801,7 +801,6 @@ async def run_chunk_initializer(
     return chunk_arr
 
 
-
 async def get_chunk_bytes(
         app,
         s3key,
@@ -888,14 +887,14 @@ async def get_chunk_bytes(
         msg = f"get_chunk_bytes - got more than expected hyperchunks: {num_chunks}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    
+
     # create an numpy array for the hsds chunk and arrange h5 chunks within it
     if fill_value is not None:
         chunk_arr = np.empty(chunk_dims, dtype=dtype, order="C")
         chunk_arr[...] = fill_value
     else:
         chunk_arr = np.zeros(chunk_dims, dtype=dtype, order="C")
-    
+
     # create a list of the hyperchunks to be fetched
     chunk_list = []
     for i in range(num_chunks):
@@ -903,9 +902,7 @@ async def get_chunk_bytes(
             # ignore empty range get requests
             continue
         hyper_index = getHyperChunkIndex(i, table_factors)
-        log.debug(f"tbd: got hyper_index: {hyper_index}")
         chunk_location = ChunkLocation(hyper_index, offset[i], length[i])
-        log.debug(f"add ChunkLocation : {chunk_location}")
         chunk_list.append(chunk_location)
 
     if len(chunk_list) == 0:
@@ -929,7 +926,7 @@ async def get_chunk_bytes(
 
         log.debug(f"getStorBytes processing chunk_locations {chunk_locations}")
         # get the byte range we'll read from storage
-        
+
         kwargs = {
             "filter_ops": filter_ops,
             "chunk_locations": chunk_locations,
@@ -980,8 +977,7 @@ async def get_chunk(
         log.debug(f"   s3path: {s3path} s3offset: {s3offset} s3size: {s3size}")
     if hyper_dims is not None:
         log.debug(f"   hyper_dims: {hyper_dims}")
-    #if hyper_index is not None:
-    #    log.debug(f"   hyper_index: {hyper_index}")
+
     chunk_cache = app["chunk_cache"]
     if chunk_init and s3offset > 0:
         msg = f"unable to initialize chunk {chunk_id} for reference layouts "
