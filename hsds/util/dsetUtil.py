@@ -151,8 +151,6 @@ def getShuffleFilter(filters):
         if filter_class in FILTER_CLASSES:
             log.debug(f"found filter: {filter}")
             return filter
-        else:
-            log.warn(f"unexpected filter class: {filter_class}")
 
     log.debug("Shuffle filter not used")
     return None
