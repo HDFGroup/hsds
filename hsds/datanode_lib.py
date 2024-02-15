@@ -911,7 +911,8 @@ async def get_chunk_bytes(
 
     # munge adjacent chunks to reduce the number of storage
     # requests needed
-    chunk_list = chunkMunge(chunk_list, max_gap=1024)
+    max_gap = int(config.get("max_rangeget_gap", default=1024))
+    chunk_list = chunkMunge(chunk_list, max_gap=max_gap)
     log.info(f"get_chunk_bytes - get requests reduced from {num_chunks} to {len(chunk_list)}")
 
     # gather all the individual h5 chunk reads into a list of tasks
