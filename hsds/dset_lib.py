@@ -68,7 +68,9 @@ def getFillValue(dset_json):
 
 
 def _get_arr_pts(arr_points, arr_index, pt, dim=0, chunk_index=None, factors=None):
-    """ recursive function to fill in chunk locations for hyperchunk selection.
+    """ recursive function which fills arr_points with the coordinates to locate
+        all the hyperchunks for a given chunk.
+
         arr_points: numpy array of shape (num_chunks, rank)
         arr_index: row of arr_points for the first hyper chunk pt
         pt: list of [0,] * rank - one element will get set for each recursive call
@@ -78,7 +80,7 @@ def _get_arr_pts(arr_points, arr_index, pt, dim=0, chunk_index=None, factors=Non
 
         on return arr_points rows arr_index[arr_index*N:(arr_index+1)*N-1] will be
         set to the values needed to do a point selection on the chunk table, where
-        N is the ratioo of chunks to hyperchunks - np.prod(factors)
+        N is the ratio of chunks to hyperchunks - np.prod(factors)
 
     """
 
@@ -98,7 +100,7 @@ def _get_arr_pts(arr_points, arr_index, pt, dim=0, chunk_index=None, factors=Non
                 arr_points[idx] = pt
         else:
             kwargs = {"dim": dim + 1, "chunk_index": chunk_index, "factors": factors}
-            next_index = arr_index + (i * np.prod(factors[1:]))
+            next_index = arr_index + (i * np.prod(factors[(dim + 1):]))
             _get_arr_pts(arr_points, next_index, pt, **kwargs)
 
 

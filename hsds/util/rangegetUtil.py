@@ -22,7 +22,7 @@ def _chunk_start(c):
 
 
 def getHyperChunkFactors(chunk_dims, hyper_dims):
-    """ return list of rations betwen chunk and hyperchunkdims """
+    """ return list of ratios betwen chunk and hyperchunkdims """
 
     factors = []
     rank = len(chunk_dims)

@@ -382,16 +382,6 @@ async def GET_Chunk(request):
             log.error(f"invalid hyper_dims params: {param_hyper_dims}")
             raise HTTPBadRequest()
         log.debug(f"hyper_dims: {hyper_dims}")
-    """
-    if "hyper_index" in params:
-        param_hyper_index = params["hyper_index"]
-        log.debug(f"tbd param_hyper_index: {param_hyper_index}")
-        if param_hyper_index.find(":") > 0:
-            hyper_index = param_hyper_index.split(":")
-        else:
-            hyper_index = param_hyper_index
-        log.debug(f"hyper_index: {hyper_index}")
-    """
 
     if "query" in params:
         query = params["query"]
