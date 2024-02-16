@@ -72,4 +72,3 @@ for i in range(count):
         msg = f"compare failure for element {i}: "
         msg += f"{arr[i]} vs {arr_ret[i]}"
         raise ValueError(msg)
-
