@@ -1503,6 +1503,28 @@ class LinkTest(unittest.TestCase):
         self.assertTrue("title" in link)
         self.assertEqual(link["title"], "link1")
 
+        # create link2, verify that it is not returned
+        req = helper.getEndpoint() + "/groups/" + group_id + "/links/link2"
+        body = {"h5path": path}
+        rsp = self.session.put(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # verify link2 is not returned when searching for link1
+        body = {"titles": ["link1"]}
+        req = helper.getEndpoint() + "/groups/" + root_id + "/links?follow_links=1"
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+
+        print(f"\n rspJson with PostLInks title follow_links = {rspJson}\n")
+        self.assertTrue("links" in rspJson)
+
+        links = rspJson["links"]
+        self.assertTrue(group_id in links)
+        group_links = links[group_id]
+        self.assertTrue(len(group_links) == 1)
+        self.assertTrue((group_links[0]['title'] == "link1"))
+
     def testPutLinkMultiple(self):
         domain = self.base_domain + "/testPutLinkMultiple.h5"
         helper.setupDomain(domain)

@@ -42,6 +42,7 @@ class DomainCrawler:
         create_order=False,
         pattern=None,
         limit=None,
+        link_titles=None,
         replace=False,
         ignore_error=False,
         max_tasks=40,
@@ -61,6 +62,7 @@ class DomainCrawler:
         self._create_order = create_order
         self._pattern = pattern
         self._limit = limit
+        self._link_titles = link_titles
         self._count = 0  # items collected
         self._replace = replace
         self._max_tasks = max_tasks
@@ -541,10 +543,12 @@ class DomainCrawler:
 
             await self.put_attributes(obj_id, attr_items)
         elif self._action == "get_link":
-            log.debug("DomainCrawlwer - get links")
+            log.debug("DomainCrawler - get links")
             log.debug(f"self._objs: {self._objs}, type: {type(self._objs)}")
 
-            if self._objs is None or obj_id not in self._objs:
+            if self._link_titles:
+                link_titles = self._link_titles
+            elif self._objs is None or obj_id not in self._objs:
                 link_titles = None  # fetch all links for this object
             else:
                 link_titles = self._objs[obj_id]

@@ -699,6 +699,9 @@ async def POST_Links(request):
             kwargs["limit"] = limit
         if pattern:
             kwargs["pattern"] = pattern
+        if titles and (group_ids is None):
+            # Search for title in target group(s)
+            kwargs["link_titles"] = titles
 
         # If retrieving same link names from multiple groups, map each UUID to all links provided
         if isinstance(group_ids, list) and titles:
