@@ -323,32 +323,42 @@ class DomainCrawler:
             log.warn(f"get_links, expected groups id but got: {grp_id}")
             return
         kwargs = {"bucket": self._bucket}
-        if titles:
-            kwargs["titles"] = titles
-        else:
-            # only apply these parameters if we are attempting to fetch all links
+
+        # only apply these parameters if we are attempting to fetch all links
+        if not titles:
             if self._limit:
                 kwargs["limit"] = self._limit
             if self._create_order:
                 kwargs["create_order"] = True
 
-            if self._pattern:
-                if self._follow_links:
-                    # apply the pattern after we get the links back,
-                    # otherwise we won't get the groups links that we
-                    # need to follow
-                    log.debug("will apply pattern on return")
-                    pattern = self._pattern
-                else:
-                    kwargs["pattern"] = self._pattern
+        if self._pattern:
+            if self._follow_links:
+                # apply the pattern after we get the links back,
+                # otherwise we won't get the groups links that we
+                # need to follow
+                log.debug("will apply pattern on return")
+                pattern = self._pattern
+            else:
+                kwargs["pattern"] = self._pattern
 
         log.debug(f"follow_links: {self._follow_links}")
         log.debug(f"getLinks kwargs: {kwargs}")
 
-        links = None
+        all_links = None
+        ret_links = []
         status = 200
         try:
-            links = await getLinks(self._app, grp_id, **kwargs)
+            all_links = await getLinks(self._app, grp_id, **kwargs)
+
+            # If search by title, only return matches
+            if titles:
+                for link in all_links:
+                    if link["title"] in titles:
+                        ret_links.append(link)
+            else:
+                # Not doing title search - return all links in grp
+                ret_links = all_links
+
         except HTTPNotFound:
             status = 404
         except HTTPServiceUnavailable:
@@ -368,23 +378,25 @@ class DomainCrawler:
             else:
                 msg += f"returned status: {status}"
                 log.warn(msg)
-            return
+            # If not found and follow_links, keep searching
+            if not ((status == 404) and (self._follow_links)):
+                return
 
         log.debug(f"DomainCrawler - got links for {grp_id}")
 
         if pattern:
             log.debug(f"applying pattern: {pattern}")
             filtered_links = []
-            for link in links:
+            for link in ret_links:
                 title = link["title"]
                 if globmatch(title, pattern):
                     filtered_links.append(link)
             msg = f"getLinks with pattern: {pattern} returning "
-            msg += f"{len(filtered_links)} links from {len(links)}"
+            msg += f"{len(filtered_links)} links from {len(ret_links)}"
             log.debug(msg)
             new_links = filtered_links
         else:
-            new_links = links  # store the links
+            new_links = ret_links  # store the links
 
         follow_links = self._follow_links
         # check that we are not exceeding the limit
@@ -397,13 +409,14 @@ class DomainCrawler:
                 log.warn(msg)
                 new_links = new_links[:left]
                 follow_links = False  # no need to search more
+
         self._count += len(new_links)
         log.debug(f"adding {len(new_links)} to obj_dict for {grp_id}")
         self._obj_dict[grp_id] = new_links
 
         # if follow_links, add any group links to the lookup ids set
         if follow_links:
-            self.follow_links(grp_id, links)
+            self.follow_links(grp_id, all_links)
 
     async def put_links(self, grp_id, link_items):
         # write the given links for the obj_id

@@ -1427,6 +1427,82 @@ class LinkTest(unittest.TestCase):
         self.assertTrue("title" in group_link)
         self.assertEqual(group_link["title"], "link1")
 
+    def testPostLinksFollowLinks(self):
+        domain = self.base_domain + "/testPostLinksFollowLinks.h5"
+        helper.setupDomain(domain)
+        print("testPostLinksFollowLinks", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_id = rspJson["root"]
+
+        # create group "g1" in root group
+        req = helper.getEndpoint() + "/groups"
+        body = {"link": {"id": root_id, "name": "g1"}}
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        group_id = rspJson["id"]
+
+        path = "/dummy_target"
+
+        # create link "link1" in g1
+        req = helper.getEndpoint() + "/groups/" + group_id + "/links/link1"
+        body = {"h5path": path}
+        rsp = self.session.put(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # make POST_Links request to root group, expect 404
+        body = {"titles": ["link1"]}
+        req = helper.getEndpoint() + "/groups/" + root_id + "/links"
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 404)
+
+        # make POST_Links request to root group with follow_links, expect to find link1
+        req = helper.getEndpoint() + "/groups/" + root_id + "/links?follow_links=1"
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("links" in rspJson)
+
+        links = rspJson["links"]
+        self.assertTrue(group_id in links)
+        self.assertTrue(root_id in links)
+        group = links[group_id]
+        link = group[0]
+        self.assertTrue("title" in link)
+        self.assertEqual(link["title"], "link1")
+
+        # add another link1
+        req = helper.getEndpoint() + "/groups/" + root_id + "/links/link1"
+        body = {"h5path": path}
+        rsp = self.session.put(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # make POST_Links request to root group with follow_links, expect to find link1
+        body = {"titles": ["link1"]}
+        req = helper.getEndpoint() + "/groups/" + root_id + "/links?follow_links=1"
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("links" in rspJson)
+
+        links = rspJson["links"]
+        self.assertTrue(group_id in links)
+        self.assertTrue(root_id in links)
+        group = links[group_id]
+        link = group[0]
+        self.assertTrue("title" in link)
+        self.assertEqual(link["title"], "link1")
+
+        root = links[root_id]
+        link = root[0]
+        self.assertTrue("title" in link)
+        self.assertEqual(link["title"], "link1")
+
     def testPutLinkMultiple(self):
         domain = self.base_domain + "/testPutLinkMultiple.h5"
         helper.setupDomain(domain)
