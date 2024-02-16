@@ -304,7 +304,7 @@ async def http_get(app, url, params=None, client=None):
                     retval = await rsp.json()
             elif status_code == 400:
                 log.warn(f"BadRequest to {url}")
-                raise HTTPBadRequest()
+                raise HTTPBadRequest(reason="Bad Request")
             elif status_code == 403:
                 log.warn(f"Forbiden to access {url}")
                 raise HTTPForbidden()
@@ -365,7 +365,7 @@ async def http_post(app, url, data=None, params=None, client=None):
             elif rsp.status == 400:
                 msg = f"POST  request HTTPBadRequest error for url: {url}"
                 log.warn(msg)
-                raise HTTPBadRequest()
+                raise HTTPBadRequest(reason="Bad Request")
             elif rsp.status == 404:
                 msg = f"POST  request HTTPNotFound error for url: {url}"
                 log.warn(msg)

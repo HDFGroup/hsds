@@ -348,7 +348,6 @@ async def GET_Chunk(request):
 
     if "s3offset" in params:
         param_s3offset = params["s3offset"]
-        log.debug(f"s3offset param: {param_s3offset}")
         try:
             if param_s3offset.find(":") > 0:
                 # colon seperated index values, convert to list
@@ -362,7 +361,6 @@ async def GET_Chunk(request):
 
     if "s3size" in params:
         param_s3size = params["s3size"]
-        log.debug(f"s3size param: {param_s3size}")
         try:
             if param_s3size.find(":") > 0:
                 s3size = list(map(int, param_s3size.split(":")))

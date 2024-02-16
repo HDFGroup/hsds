@@ -271,6 +271,8 @@ async def read_chunk_hyperslab(
         if isinstance(s3offset, list):
             # convert to a colon seperated string
             s3offset = ":".join(map(str, s3offset))
+        else:
+            s3offset = int(s3offset)
         params["s3offset"] = s3offset
 
     if "s3size" in chunk_info:
@@ -278,6 +280,8 @@ async def read_chunk_hyperslab(
         if isinstance(s3size, list):
             # convert to a colon seperated string
             s3size = ":".join(map(str, s3size))
+        else:
+            s3size = int(s3size)
         params["s3size"] = s3size
 
     if "hyper_dims" in chunk_info:
@@ -286,6 +290,7 @@ async def read_chunk_hyperslab(
             # convert to colon seperated string
             hyper_dims = ":".join(map(str, hyper_dims))
         params["hyper_dims"] = hyper_dims
+
     if len(select_dtype) < len(dset_dt):
         # field selection, pass in the field names
         fields_param = ":".join(select_dtype.names)

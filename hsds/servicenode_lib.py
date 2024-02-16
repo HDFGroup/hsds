@@ -606,7 +606,7 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
             if not follow_external_links:
                 msg = "Query found unexpected external link"
                 log.warn(msg)
-                raise HTTPBadRequest()
+                raise HTTPBadRequest(reason=msg)
 
             # find domain object is stored under
             domain = link_json["h5domain"]
@@ -645,7 +645,7 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
             if not follow_soft_links:
                 msg = "Query found unexpected soft link"
                 log.warn(msg)
-                raise HTTPBadRequest()
+                raise HTTPBadRequest(reason=msg)
 
             path_from_link = link_json["h5path"]
 

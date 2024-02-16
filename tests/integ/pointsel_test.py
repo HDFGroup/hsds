@@ -469,9 +469,7 @@ class PointSelTest(unittest.TestCase):
 
         hdf5_sample_bucket = config.get("hdf5_sample_bucket")
         if not hdf5_sample_bucket:
-            print(
-                "hdf5_sample_bucket config not set, skipping testPostContiguousDataset"
-            )
+            print("hdf5_sample_bucket config not set, skipping testPostContiguousDataset")
             return
 
         tall_json = helper.getHDF5JSON("tall.json")

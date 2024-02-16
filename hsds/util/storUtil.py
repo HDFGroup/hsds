@@ -406,7 +406,6 @@ async def getStorBytes(app,
                        offset=0,
                        length=-1,
                        chunk_locations=None,
-                       chunk_bytes=None,
                        h5_size=None,
                        bucket=None,
                        ):
@@ -433,7 +432,6 @@ async def getStorBytes(app,
     log.info(f"read: {len(data)} bytes for key: {key}")
     if length > 0 and len(data) != length:
         log.warn(f"requested {length} bytes but got {len(data)} bytes")
-
     if chunk_locations:
         log.debug(f"getStorBytes - got {len(chunk_locations)} chunk locations")
         # uncompress chunks within the fetched data and store to
@@ -441,11 +439,7 @@ async def getStorBytes(app,
         if not h5_size:
             log.error("getStorBytes - h5_size not set")
             raise HTTPInternalServerError()
-        if not chunk_bytes:
-            log.error("getStorBytes - chunk_bytes not set")
-            raise HTTPInternalServerError()
-        if len(chunk_locations) * h5_size < len(chunk_bytes):
-            log.error(f"getStorBytes - invalid chunk_bytes length: {len(chunk_bytes)}")
+        chunk_bytes = []
 
         for chunk_location in chunk_locations:
             log.debug(f"getStoreBytes - processing chunk_location: {chunk_location}")
@@ -465,22 +459,75 @@ async def getStorBytes(app,
                 msg += f"{h5_size} but got: {len(h5_bytes)}"
                 log.warning(msg)
                 continue
-            # slot into the hsds chunk
-            hs_offset = chunk_location.index * h5_size
-            if hs_offset + h5_size > len(chunk_bytes):
-                msg = f"expected chunk index: {chunk_location.index} to have offset: "
-                msg += f"less than {len(chunk_bytes) - h5_size} but got: {hs_offset}"
-                log.warning(msg)
-                continue
-            chunk_bytes[hs_offset:(hs_offset + h5_size)] = h5_bytes
-        # chunk_bytes got updated, so just return None
-        return None
+            # add to the list
+            chunk_bytes.append(h5_bytes)
+
+        return chunk_bytes
     elif filter_ops:
         # uncompress and return
         data = _uncompress(data, **filter_ops)
         return data
     else:
         return data
+
+
+async def getHyperChunks(app,
+                         key,
+                         chunk_arr=None,
+                         hyper_dims=None,
+                         filter_ops=None,
+                         chunk_locations=None,
+                         bucket=None
+                         ):
+
+    min_offset = None
+    max_offset = None
+    rank = len(chunk_arr.shape)
+    h5_size = np.prod(hyper_dims) * chunk_arr.dtype.itemsize
+    for item in chunk_locations:
+        if min_offset is None or item.offset < min_offset:
+            min_offset = item.offset
+        if max_offset is None or item.offset + item.length > max_offset:
+            max_offset = item.offset + item.length
+
+    log.debug(f"getHyperChunks - min_offset: {min_offset} max_offset: {max_offset}")
+    item_length = max_offset - min_offset
+    log.debug(f"getHyperChunks - item_length: {item_length}")
+    kwargs = {"offset": min_offset, "length": item_length, "bucket": bucket}
+    data = await getStorBytes(app, key, **kwargs)
+    if not data:
+        log.warn(f"get_chunk_bytes {key} returned no data")
+        return
+    log.debug(f"getHyperChunks: read {len(data)} bytes")
+    if len(data) < item_length:
+        log.warn(f"getHyperChunks, requested: {item_length}, but got: {len(data)} bytes")
+
+    # slot in the data
+    for item in chunk_locations:
+        chunk_offset = item.offset - min_offset
+        if chunk_offset + item.length > len(data):
+            # edge chunk
+            chunk_size = len(data) - chunk_offset
+            h5_bytes = bytearray(h5_size)
+            h5_bytes[:chunk_size] = data[chunk_offset:chunk_offset + chunk_size]
+        else:
+            h5_bytes = data[chunk_offset:chunk_offset + item.length]
+        if filter_ops:
+            h5_bytes = _uncompress(h5_bytes, **filter_ops)
+        hyper_chunk = np.frombuffer(h5_bytes, dtype=chunk_arr.dtype)
+        hyper_chunk = hyper_chunk.reshape(hyper_dims)
+        hyper_index = item.index
+        slices = []
+        for i in range(rank):
+            extent = hyper_dims[i]
+            index = hyper_index[i]
+            start = extent * index
+            end = start + extent
+            s = slice(start, end, 1)
+            slices.append(s)
+        slices = tuple(slices)  # need tuple to use as numpy index
+        chunk_arr[slices] = hyper_chunk[...]
+    log.debug(f"read {len(chunk_locations)} hyperchunks")
 
 
 async def putStorBytes(app, key, data, filter_ops=None, bucket=None):
