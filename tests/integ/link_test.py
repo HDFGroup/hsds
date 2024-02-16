@@ -1397,7 +1397,7 @@ class LinkTest(unittest.TestCase):
         req = helper.getEndpoint() + "/groups/" + root_id + "/links"
         group_ids = [root_id, group_id]
         titles = ["link1"]
-        body = {"group_ids": group_ids, "titles": titles}
+        body = {"grp_ids": group_ids, "titles": titles}
         rsp = self.session.post(req, data=json.dumps(body), headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
