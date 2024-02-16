@@ -16,7 +16,7 @@ Export environment variables as shown in "Sample .bashrc" below.
 9. If group-level permissions are desired (See [Authorization](authorization.md)), copy the file "groups.default" to "groups.txt".  Modify existing groups as needed
 10. If a non-valid DNS name is used for the HSDS_ENDPOINT (e.g. "hsds.hdf.test"), create a /etc/hosts entry for the DNS name
 11. Verify the environment variables as in "Sample .bashrc" below
-12. For a custom build, build docker image:  `$ docker build -t hdfgroup/hsds .`
+12. Build the docker image: `$ ./build.sh --nolint`
 13. Create the file **admin/config/override.yml** for deployment specific settings (see "Sample override.yml")
 14. Start the service `$./runall.sh <n>` where n is the number of containers desired (defaults to 1)
 15. Run `$ docker ps` and verify that the containers are running: hsds_head, hsds_sn_[1-n], hsds_dn_[1-n]
