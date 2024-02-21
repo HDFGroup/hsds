@@ -271,4 +271,6 @@ def getLink(domain, grp_id, title):
         raise KeyError(f"expected link key in {rspJson}")
     link_json = rspJson["link"]
 
+    session.close()
+
     return link_json
