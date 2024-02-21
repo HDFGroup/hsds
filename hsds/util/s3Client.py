@@ -145,7 +145,7 @@ class S3Client:
         kwargs["endpoint_url"] = self._s3_gateway
         kwargs["use_ssl"] = self._use_ssl
         kwargs["config"] = self._aio_config
-        log.debug(f"s3 kwargs: {kwargs}")
+        # log.debug(f"s3 kwargs: {kwargs}")
         return kwargs
 
     def _renewToken(self):

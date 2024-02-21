@@ -878,7 +878,7 @@ async def get_chunk_bytes(
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    # number of bytes in the hd5 chunk
+    # number of bytes in the hdf5 chunk
     h5_size = np.prod(hyper_dims) * item_size
     log.debug(f"h5 chunk size: {h5_size}")
 
