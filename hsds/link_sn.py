@@ -593,6 +593,21 @@ async def POST_Links(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
+    if follow_links and titles:
+        msg = "titles list can not be used with follow_links"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    if limit and titles:
+        msg = "Limit parameter can not be used with titles list"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    if create_order and titles:
+        msg = "CreateOrder parameter can not be used with titles"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
     # construct an item list from titles and group_ids
     items = {}
     if group_ids is None:

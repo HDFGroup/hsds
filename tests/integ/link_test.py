@@ -1354,6 +1354,14 @@ class LinkTest(unittest.TestCase):
             else:
                 self.assertTrue(False)  # unexpected
 
+        # try follow_links with titles.  Should return a 400
+        params = {"follow_links": 1}
+        grp_ids = [root_id, ]
+        titles = ["dset1.1.1", "dset1.1.2", "dset2.1", "dset2.2"]
+        payload = {"grp_ids": grp_ids, "titles": titles}
+        rsp = self.session.post(req, data=json.dumps(payload), params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 400)  # titles not allowed with follow_links
+
     def testPostLinksGroupList(self):
         domain = self.base_domain + "/testPostLinksGroupList.h5"
         helper.setupDomain(domain)

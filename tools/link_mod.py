@@ -44,52 +44,80 @@ def printUsage():
     sys.exit()
 
 
+def getFileUri(dset_json):
+    # older format used "layout" key to store file_uri.
+    # newer ones use "creationProperties"
+    # return whichever one has a file_uri or None if neither do
+
+    if "creationProperties" in dset_json:
+        cpl = dset_json["creationProperties"]
+        if "layout" in cpl:
+            cpl_layout = cpl["layout"]
+            if "file_uri" in cpl_layout:
+                return cpl_layout["file_uri"]
+    # not found under cpl
+    if "layout" in dset_json:
+        layout = dset_json["layout"]
+        if "file_uri" in layout:
+            return layout["file_uri"]
+
+    # no found in either
+    return None
+
+
+def setFileUri(dset_json, file_uri):
+    if "creationProperties" in dset_json:
+        cpl = dset_json["creationProperties"]
+        if "layout" in cpl:
+            cpl_layout = cpl["layout"]
+            if "file_uri" in cpl_layout:
+                cpl_layout["file_uri"] = file_uri
+                log.info(f"updated creationProperties layout with {file_uri}")
+                return
+    # not found under cpl
+    if "layout" in dset_json:
+        layout = dset_json["layout"]
+        if "file_uri" in layout:
+            layout["file_uri"] = file_uri
+            log.info(f"updated dset layout with {file_uri}")
+            return
+
+    # no found in either
+    log.warning("expected to find file_uri for update")
+
+
 async def checkDataset(app, dset_key):
     log.info(f"checkDataset for key: {dset_key}")
     dset_json = await getStorJSONObj(app, dset_key)
+    log.debug(f"get dset_json: {dset_json}")
     dset_id = dset_json["id"]
     prefix_old = app["prefix_old"]
     prefix_new = app["prefix_new"]
     do_update = app["do_update"]
-    indirect_dataset_keys = app["indirect_dataset_keys"]
     app["dataset_count"] += 1
     log.info(f"checkDataset for id: {dset_id}")
-    if "layout" not in dset_json:
-        log.info("no layout found")
+    file_uri = getFileUri(dset_json)
+
+    if not file_uri:
+        log.debug(f"no file_uri for {dset_key}")
         return
-    layout_json = dset_json["layout"]
-    if "class" not in layout_json:
-        log.warn(f"no class found in layout for id: {dset_id}")
-        return
-    layout_class = layout_json["class"]
-    log.info(f"got layout_class: {layout_class}")
-    if layout_class in ("H5D_CONTIGUOUS_REF", "H5D_CHUNKED_REF"):
-        if "file_uri" not in layout_json:
-            log.warn(
-                f"Expected to find key 'file_uri' in layout_json for id: {dset_id}"
-            )
-            return
-        file_uri = layout_json["file_uri"]
-        if file_uri.startswith(prefix_old):
-            prefix_len = len(prefix_old)
-            new_file_uri = prefix_new + file_uri[prefix_len:]
-            log.info(f"replacing uri: {file_uri} with {new_file_uri}")
-            app["matched_dset_uri"] += 1
-            if do_update:
-                # update the dataset json
-                layout_json["file_uri"] = new_file_uri
-                dset_json["layout"] = layout_json
-                # write back to storage
-                try:
-                    await putStorJSONObj(app, dset_key, dset_json)
-                    log.info(f"dataset {dset_id} updated")
-                except Exception as e:
-                    log.error(f"get exception writing dataset json: {e}")
-    elif layout_class == "H5D_CHUNKED_REF_INDIRECT":
-        # add to list to be scanned later
-        indirect_dataset_keys += dset_key[: -len(".dataset.json")]
-    else:
-        log.info(f"skipping check for layout_class: {layout_class}")
+
+    log.debug(f"got file_uri: {file_uri}")
+
+    if file_uri.startswith(prefix_old):
+        prefix_len = len(prefix_old)
+        new_file_uri = prefix_new + file_uri[prefix_len:]
+        log.info(f"replacing uri: {file_uri} with {new_file_uri}")
+        app["matched_dset_uri"] += 1
+        if do_update:
+            setFileUri(dset_json, new_file_uri)
+
+            # write back to storage
+            try:
+                await putStorJSONObj(app, dset_key, dset_json)
+                log.info(f"dataset {dset_id} updated")
+            except Exception as e:
+                log.error(f"get exception writing dataset json: {e}")
 
 
 async def getKeysCallback(app, s3keys):
@@ -104,16 +132,11 @@ async def getKeysCallback(app, s3keys):
         raise ValueError("Invalid getKeysCallback")
 
     prefix = app["root_prefix"]
-    prefix_len = len(prefix)
     for s3key in s3keys:
         if not s3key.startswith(prefix):
             log.error(f"Unexpected key {s3key} for prefix: {prefix}")
             raise ValueError("invalid s3key for getKeysCallback")
-        if not s3key.endswith(".dataset.json"):
-            log.info(f"got unexpected key {s3key}, ignoring")
-            continue
-        dset_key = prefix + s3key[prefix_len:]
-        log.info(f"getKeys - :{dset_key}")
+        dset_key = s3key + ".dataset.json"
         await checkDataset(app, dset_key)
 
     log.info("getKeysCallback complete")
@@ -126,36 +149,30 @@ async def run_scan(app, rootid, update=False):
     if not root_key.endswith("/.group.json"):
         raise ValueError("unexpected root key")
     root_prefix = root_key[: -(len(".group.json"))]
+    root_prefix += "d/"
+    log.info(f"getting s3 keys with prefix: {root_prefix}")
     app["root_prefix"] = root_prefix
 
     try:
         await getStorKeys(
             app,
             prefix=root_prefix,
-            suffix=".dataset.json",
+            deliminator="/",
             include_stats=False,
             callback=getKeysCallback,
         )
     except ClientError as ce:
         log.error(f"removeKeys - getS3Keys faiiled: {ce}")
     except HTTPNotFound:
-        log.warn(
-            f"getStorKeys - HTTPNotFound error for getStorKeys with prefix: {root_prefix}"
-        )
+        msg = f"getStorKeys - HTTPNotFound error for getStorKeys with prefix: {root_prefix}"
+        log.warn(msg)
     except HTTPInternalServerError:
-        log.error(
-            f"getStorKeys - HTTPInternalServerError for getStorKeys with prefix: {root_prefix}"
-        )
+        msg = f"getStorKeys - HTTPInternalServerError for getStorKeys with prefix: {root_prefix}"
+        log.error(msg)
     except Exception as e:
-        log.error(
-            f"getStorKeys - Unexpected Exception for getStorKeys with prefix: {root_prefix}: {e}"
-        )
-
-    # update all chunks for datasets with H5D_CHUNKED_REF_INDIRECT layout
-    indirect_dataset_keys = app["indirect_dataset_keys"]
-    for prefix in indirect_dataset_keys:
-        log.info(f"got inidirect prefix: {prefix}")
-        # TBD...
+        msg = "getStorKeys - Unexpected Exception for getStorKeys with prefix: "
+        msg += f"{root_prefix}: {e}"
+        log.error(msg)
 
     await releaseStorageClient(app)
 
@@ -184,6 +201,10 @@ def main():
     if prefix_old == prefix_new:
         print("prefix_old and prefix_new or the same")
         sys.exit(1)
+
+    # setup log config
+    log_level = "WARN"  # ERROR, WARN, INFO, or DEBUG
+    log.setLogConfig(log_level)
 
     # we need to setup a asyncio loop to query s3
     loop = asyncio.get_event_loop()
