@@ -1,9 +1,12 @@
-aiohttp==3.8.4
+aiohttp==3.9.3
 aiobotocore==2.5.0
 aiohttp_cors
 aiofiles
+azure-storage-blob
+bitshuffle
 botocore
 cryptography
+h5py>=3.6.0
 numcodecs
 numpy
 psutil
@@ -12,3 +15,4 @@ pytz
 pyyaml
 requests-unixsocket
 simplejson
+s3fs
