@@ -107,9 +107,10 @@ async def checkDataset(app, dset_key):
     if file_uri.startswith(prefix_old):
         prefix_len = len(prefix_old)
         new_file_uri = prefix_new + file_uri[prefix_len:]
-        log.info(f"replacing uri: {file_uri} with {new_file_uri}")
+        print(f"found uri match: {file_uri} in {dset_key}")
         app["matched_dset_uri"] += 1
         if do_update:
+            print(f"replacing uri: {file_uri} with {new_file_uri}")
             setFileUri(dset_json, new_file_uri)
 
             # write back to storage
