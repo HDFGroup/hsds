@@ -20,6 +20,7 @@ from aiohttp.web import json_response
 
 
 from .util.idUtil import isValidUuid, validateUuid
+from .util.domainUtil import isValidBucketName
 from .datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj
 from .datanode_lib import save_metadata_obj, delete_metadata_obj
 from . import hsds_logger as log
@@ -39,6 +40,11 @@ async def GET_Dataset(request):
         bucket = params["bucket"]
     else:
         bucket = None
+
+    if not isValidBucketName(bucket):
+        msg = f"Invalid bucket name: {bucket}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
 
@@ -81,6 +87,11 @@ async def POST_Dataset(request):
         bucket = params["bucket"]
     else:
         bucket = None
+
+    if not isValidBucketName(bucket):
+        msg = f"Invalid bucket name: {bucket}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     dset_id = get_obj_id(request, body=body)
     if not isValidUuid(dset_id, obj_class="dataset"):
@@ -178,6 +189,10 @@ async def DELETE_Dataset(request):
         msg = "DELETE_Dataset - bucket not set"
         log.error(msg)
         raise HTTPBadRequest(reason=msg)
+    elif not isValidBucketName(bucket):
+        msg = f"Invalid bucket name: {bucket}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     # verify the id  exist
     obj_found = await check_metadata_obj(app, dset_id, bucket=bucket)
@@ -223,6 +238,11 @@ async def PUT_DatasetShape(request):
         bucket = params["bucket"]
     else:
         bucket = None
+
+    if not isValidBucketName(bucket):
+        msg = f"Invalid bucket name: {bucket}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
 

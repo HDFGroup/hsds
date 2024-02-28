@@ -21,6 +21,7 @@ from aiohttp.web_exceptions import HTTPNotFound, HTTPServiceUnavailable
 from aiohttp.web import json_response
 
 from .util.idUtil import isValidUuid, isSchema2Id, isRootObjId, getRootObjId
+from .util.domainUtil import isValidBucketName
 from .datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj
 from .datanode_lib import save_metadata_obj, delete_metadata_obj
 from . import hsds_logger as log
@@ -37,6 +38,12 @@ async def GET_Group(request):
         bucket = params["bucket"]
     else:
         bucket = None
+
+    if not isValidBucketName(bucket):
+        msg = f"Invalid bucket name: {bucket}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
     log.info(f"GET group: {group_id} bucket: {bucket}")
 
     if not isValidUuid(group_id, obj_class="group"):
@@ -83,6 +90,11 @@ async def POST_Group(request):
         bucket = params["bucket"]
     else:
         bucket = None
+
+    if not isValidBucketName(bucket):
+        msg = f"Invalid bucket name: {bucket}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     group_id = get_obj_id(request, body=body)
 
@@ -156,6 +168,12 @@ async def PUT_Group(request):
         bucket = params["bucket"]
     else:
         bucket = None
+
+    if not isValidBucketName(bucket):
+        msg = f"Invalid bucket name: {bucket}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
     log.info(f"PUT group (flush): {root_id}  bucket: {bucket}")
     # don't really need bucket param since the dirty ids know which bucket
     # they should write too
@@ -242,6 +260,10 @@ async def DELETE_Group(request):
         msg = "DELETE_Group - bucket not set"
         log.error(msg)
         raise HTTPBadRequest(reason=msg)
+    elif not isValidBucketName(bucket):
+        msg = f"Invalid bucket name: {bucket}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     log.info(f"DELETE group: {group_id} bucket: {bucket}")
 
@@ -287,6 +309,12 @@ async def POST_Root(request):
         bucket = params["bucket"]
     else:
         bucket = None
+
+    if not isValidBucketName(bucket):
+        msg = f"Invalid bucket name: {bucket}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
     if "timestamp" in params:
         try:
             timestamp = int(params["timestamp"])

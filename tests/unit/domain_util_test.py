@@ -19,6 +19,7 @@ from hsds.util.domainUtil import (
     isValidDomainPath,
     getBucketForDomain,
     getPathForDomain,
+    isValidBucketName
 )
 
 
@@ -119,6 +120,27 @@ class DomainUtilTest(unittest.TestCase):
         self.assertEqual(domain_path, "/home/test_user1/myfile.h5")
         bucket = getBucketForDomain(domain)
         self.assertEqual(bucket, "mybucket")
+
+    def testIsValidBucketName(self):
+        # Illegal characters
+        self.assertFalse(isValidBucketName("bucket;"))
+        self.assertFalse(isValidBucketName("bucket|"))
+        self.assertFalse(isValidBucketName("bucket&"))
+        self.assertFalse(isValidBucketName("bucket\""))
+        self.assertFalse(isValidBucketName("bucket "))
+        self.assertFalse(isValidBucketName("bucket>"))
+        # Must begin and end with letter/number
+        self.assertFalse(isValidBucketName(".bucket"))
+        self.assertFalse(isValidBucketName("bucket."))
+        self.assertFalse(isValidBucketName("-bucket"))
+        # Double periods not allowed
+        self.assertFalse(isValidBucketName("buck..et"))
+
+        self.assertTrue(isValidBucketName("bucket"))
+        self.assertTrue(isValidBucketName("buck.et"))
+        self.assertTrue(isValidBucketName("bucket1"))
+        self.assertTrue(isValidBucketName("buck-et"))
+        self.assertTrue(isValidBucketName("bucket-1.bucket1-.1"))
 
 
 if __name__ == "__main__":

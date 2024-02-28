@@ -11,6 +11,7 @@
 ##############################################################################
 
 import os.path as op
+import re
 from aiohttp.web_exceptions import HTTPBadRequest
 
 from .. import config
@@ -62,6 +63,8 @@ def getBucketForDomain(domain):
     index = domain.find("/")
     if index < 0:
         # invalid domain?
+        return None
+    if not isValidBucketName(domain[:index]):
         return None
     return domain[:index]
 
@@ -259,11 +262,10 @@ def getDomainFromRequest(request, validate=True, allow_dns=True):
         pass  # no bucket specified
 
     if bucket and validate:
-        if bucket.find("/") >= 0:
+        if (bucket.find("/") >= 0) or (not isValidBucketName(bucket)):
             raise ValueError(f"bucket name: {bucket} is not valid")
         if domain[0] == "/":
             domain = bucket + domain
-
     return domain
 
 
@@ -298,3 +300,35 @@ def getLimits():
     limits["max_request_size"] = int(config.get("max_request_size"))
 
     return limits
+
+
+def isValidBucketName(bucket):
+    """
+    Check whether the given bucket name follows (a subset of)
+    the rules for naming buckets in Amazon S3
+    https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucketnamingrules.html
+    """
+    is_valid = True
+
+    if bucket is None:
+        return True
+
+    # Bucket names must be between 3 (min) and 63 (max) characters long.
+    if len(bucket) < 3 or len(bucket) > 63:
+        is_valid = False
+
+    # Bucket names can consist only of lowercase letters, numbers, dots (.), and hyphens (-).
+    if not re.fullmatch("[a-zA-Z0-9\\.\\-]+", bucket):
+        is_valid = False
+
+    # Bucket names must begin and end with a letter or number.
+    if not re.fullmatch("[a-zA-Z0-9]+", bucket[0]):
+        is_valid = False
+    if not re.fullmatch("[a-zA-Z0-9]+", bucket[len(bucket) - 1]):
+        is_valid = False
+
+    # Bucket names must not contain two adjacent periods.
+    if ".." in bucket:
+        is_valid = False
+
+    return is_valid

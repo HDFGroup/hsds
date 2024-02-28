@@ -22,6 +22,7 @@ from aiohttp.web import json_response
 from .util.idUtil import isValidUuid, validateUuid
 from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
 from .datanode_lib import delete_metadata_obj, check_metadata_obj
+from .util.domainUtil import isValidBucketName
 from . import hsds_logger as log
 
 
@@ -40,6 +41,11 @@ async def GET_Datatype(request):
         bucket = params["bucket"]
     else:
         bucket = None
+
+    if not isValidBucketName(bucket):
+        msg = f"Invalid bucket name: {bucket}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     ctype_json = await get_metadata_obj(app, ctype_id, bucket=bucket)
 
@@ -74,9 +80,14 @@ async def POST_Datatype(request):
     if "bucket" in params:
         bucket = params["bucket"]
     elif "bucket" in body:
-        bucket = params["bucket"]
+        bucket = body["bucket"]
     else:
         bucket = None
+
+    if not isValidBucketName(bucket):
+        msg = f"Invalid bucket name: {bucket}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     ctype_id = get_obj_id(request, body=body)
     if not isValidUuid(ctype_id, obj_class="datatype"):
@@ -152,6 +163,11 @@ async def DELETE_Datatype(request):
         bucket = params["bucket"]
     else:
         bucket = app["bucket_name"]
+
+    if not isValidBucketName(bucket):
+        msg = f"Invalid bucket name: {bucket}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     if not bucket:
         msg = "DELETE_Datatype - bucket not set"
