@@ -304,31 +304,20 @@ def getLimits():
 
 def isValidBucketName(bucket):
     """
-    Check whether the given bucket name follows (a subset of)
-    the rules for naming buckets in Amazon S3
-    https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucketnamingrules.html
+    Check whether the given bucket name contains only
+    alphanumeric characters and underscores
     """
     is_valid = True
 
     if bucket is None:
         return True
 
-    # Bucket names must be between 3 (min) and 63 (max) characters long.
-    if len(bucket) < 3 or len(bucket) > 63:
+    # Bucket names must contain at least 1 character
+    if len(bucket) < 1:
         is_valid = False
 
-    # Bucket names can consist only of lowercase letters, numbers, dots (.), and hyphens (-).
-    if not re.fullmatch("[a-zA-Z0-9\\.\\-]+", bucket):
-        is_valid = False
-
-    # Bucket names must begin and end with a letter or number.
-    if not re.fullmatch("[a-zA-Z0-9]+", bucket[0]):
-        is_valid = False
-    if not re.fullmatch("[a-zA-Z0-9]+", bucket[len(bucket) - 1]):
-        is_valid = False
-
-    # Bucket names must not contain two adjacent periods.
-    if ".." in bucket:
+    # Bucket names can consist only of alphanumeric characters and underscores
+    if not re.fullmatch("[a-zA-Z0-9_]+", bucket):
         is_valid = False
 
     return is_valid
