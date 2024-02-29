@@ -29,6 +29,7 @@ from .util.dsetUtil import getSelectionShape, getChunkInitializer
 from .util.chunkUtil import getChunkIndex, getDatasetId, chunkQuery
 from .util.chunkUtil import chunkWriteSelection, chunkReadSelection
 from .util.chunkUtil import chunkWritePoints, chunkReadPoints
+from .util.domainUtil import isValidBucketName
 from .util.boolparser import BooleanParser
 from .datanode_lib import get_metadata_obj, get_chunk, save_chunk
 
@@ -81,6 +82,10 @@ async def PUT_Chunk(request):
         msg = "PUT_Chunk - bucket is None"
         log.warn(msg)
         raise HTTPInternalServerError(reason=msg)
+    elif not isValidBucketName(bucket):
+        msg = f"Invalid bucket name: {bucket}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     if "element_count" in params:
         try:
@@ -343,6 +348,10 @@ async def GET_Chunk(request):
         msg = "GET_Chunk - bucket is None"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    elif not isValidBucketName(bucket):
+        msg = f"Invalid bucket name: {bucket}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     log.debug(f"GET_Chunk - using bucket: {bucket}")
 
@@ -584,6 +593,11 @@ async def POST_Chunk(request):
 
     bucket = params["bucket"]
 
+    if not isValidBucketName(bucket):
+        msg = f"Invalid bucket name: {bucket}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
     s3path = None
     s3offset = 0
     s3size = 0
@@ -812,6 +826,10 @@ async def DELETE_Chunk(request):
 
     if not bucket:
         msg = "DELETE_Chunk - bucket param not set"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    elif not isValidBucketName(bucket):
+        msg = f"Invalid bucket name: {bucket}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 

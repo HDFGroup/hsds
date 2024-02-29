@@ -24,6 +24,7 @@ from aiohttp.web import json_response
 from .util.idUtil import isValidUuid
 from .util.globparser import globmatch
 from .util.linkUtil import validateLinkName, getLinkClass, isEqualLink
+from .util.domainUtil import isValidBucketName
 from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
 from . import hsds_logger as log
 
@@ -101,6 +102,10 @@ async def GET_Links(request):
 
     if not bucket:
         msg = "GET_Links - no bucket param"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    elif not isValidBucketName(bucket):
+        msg = f"Invalid bucket name: {bucket}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
@@ -186,6 +191,10 @@ async def POST_Links(request):
 
     if not bucket:
         msg = "POST_Links - no bucket param"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    elif not isValidBucketName(bucket):
+        msg = f"Invalid bucket name: {bucket}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
@@ -316,6 +325,10 @@ async def PUT_Links(request):
         msg = "PUT_Links - no bucket provided"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    elif not isValidBucketName(bucket):
+        msg = f"Invalid bucket name: {bucket}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     group_json = await get_metadata_obj(app, group_id, bucket=bucket)
     if "links" not in group_json:
@@ -408,6 +421,10 @@ async def DELETE_Links(request):
 
     if not bucket:
         msg = "DELETE_Links - no bucket param"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    elif not isValidBucketName(bucket):
+        msg = f"Invalid bucket name: {bucket}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 

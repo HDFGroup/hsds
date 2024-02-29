@@ -11,6 +11,7 @@
 ##############################################################################
 
 import os.path as op
+import re
 from aiohttp.web_exceptions import HTTPBadRequest
 
 from .. import config
@@ -62,6 +63,8 @@ def getBucketForDomain(domain):
     index = domain.find("/")
     if index < 0:
         # invalid domain?
+        return None
+    if not isValidBucketName(domain[:index]):
         return None
     return domain[:index]
 
@@ -259,11 +262,10 @@ def getDomainFromRequest(request, validate=True, allow_dns=True):
         pass  # no bucket specified
 
     if bucket and validate:
-        if bucket.find("/") >= 0:
+        if (bucket.find("/") >= 0) or (not isValidBucketName(bucket)):
             raise ValueError(f"bucket name: {bucket} is not valid")
         if domain[0] == "/":
             domain = bucket + domain
-
     return domain
 
 
@@ -298,3 +300,24 @@ def getLimits():
     limits["max_request_size"] = int(config.get("max_request_size"))
 
     return limits
+
+
+def isValidBucketName(bucket):
+    """
+    Check whether the given bucket name contains only
+    alphanumeric characters and underscores
+    """
+    is_valid = True
+
+    if bucket is None:
+        return True
+
+    # Bucket names must contain at least 1 character
+    if len(bucket) < 1:
+        is_valid = False
+
+    # Bucket names can consist only of alphanumeric characters and underscores
+    if not re.fullmatch("[a-zA-Z0-9_]+", bucket):
+        is_valid = False
+
+    return is_valid

@@ -25,6 +25,7 @@ from .util.globparser import globmatch
 from .util.dsetUtil import getShapeDims
 from .util.arrayUtil import arrayToBytes, jsonToArray, decodeData
 from .util.arrayUtil import bytesToArray, bytesArrayToList, getNumElements
+from .util.domainUtil import isValidBucketName
 from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
 from . import hsds_logger as log
 
@@ -149,6 +150,11 @@ async def GET_Attributes(request):
         bucket = params["bucket"]
     else:
         msg = "POST Attributes without bucket param"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    if not isValidBucketName(bucket):
+        msg = f"Invalid bucket name: {bucket}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
@@ -279,6 +285,11 @@ async def POST_Attributes(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
+    if not isValidBucketName(bucket):
+        msg = f"Invalid bucket name: {bucket}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
     include_data = False
     log.debug(f"got params: {params}")
     if "IncludeData" in params and params["IncludeData"]:
@@ -360,9 +371,14 @@ async def PUT_Attributes(request):
     if "bucket" in params:
         bucket = params["bucket"]
     elif "bucket" in body:
-        bucket = params["bucket"]
+        bucket = body["bucket"]
     else:
         msg = "PUT Attributes without bucket param"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    if not isValidBucketName(bucket):
+        msg = f"Invalid bucket name: {bucket}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
@@ -521,6 +537,11 @@ async def DELETE_Attributes(request):
         bucket = params["bucket"]
     else:
         msg = "DELETE Attributes without bucket param"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    if not isValidBucketName(bucket):
+        msg = f"Invalid bucket name: {bucket}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 

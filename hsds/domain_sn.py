@@ -32,7 +32,7 @@ from .util.idUtil import isValidUuid, isSchema2Id, getNodeCount
 from .util.authUtil import getUserPasswordFromRequest, aclCheck, isAdminUser
 from .util.authUtil import validateUserPassword, getAclKeys
 from .util.domainUtil import getParentDomain, getDomainFromRequest
-from .util.domainUtil import isValidDomain, getBucketForDomain
+from .util.domainUtil import isValidDomain, getBucketForDomain, isValidBucketName
 from .util.domainUtil import getPathForDomain, getLimits
 from .util.storUtil import getStorKeys, getCompressors
 from .util.boolparser import BooleanParser
@@ -225,6 +225,11 @@ async def get_domains(request):
         msg = "no bucket specified for request"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    elif not isValidBucketName(bucket):
+        msg = f"Invalid bucket name: {bucket}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
     log.info(f"get_domains - prefix: {prefix} bucket: {bucket}")
 
     # list the S3 keys for this prefix
