@@ -39,6 +39,7 @@ services:
     mem_limit: ${SN_RAM}
     environment:
       - SN_PORT=${SN_PORT}
+      - SN_CORES=${SN_CORES}
       - NODE_TYPE=sn
       - ROOT_DIR=/data
       - BUCKET_NAME=${BUCKET_NAME}

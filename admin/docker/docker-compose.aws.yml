@@ -46,6 +46,7 @@ services:
     mem_limit: ${SN_RAM}
     environment:
       - SN_PORT=${SN_PORT}
+      - SN_CORES=${SN_CORES}
       - NODE_TYPE=sn
       - AWS_S3_GATEWAY=${AWS_S3_GATEWAY}
       - AWS_REGION=${AWS_REGION}

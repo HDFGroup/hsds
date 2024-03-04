@@ -43,6 +43,7 @@ services:
     mem_limit: ${SN_RAM}
     environment:
       - SN_PORT=${SN_PORT}
+      - SN_CORES=${SN_CORES}
       - NODE_TYPE=sn
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
