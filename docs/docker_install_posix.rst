@@ -1,15 +1,15 @@
 Installation using Docker with POSIX storage
 ============================================
 
-HSDS can be used with POSIX storage (i.e. an ordinary file system)
+HSDS can be used with POSIX storage (i.e. an ordinary file system)
 rather than object storage. While not recommended for use with AWS or
-Azure (e.g. if the disk crashes, all data will be lost), using POSIX is
-convienent for testing or trial installations on a desktop, or do
+Azure (e.g. if the disk crashes, all data will be lost), using POSIX is
+convienent for testing or trial installations on a desktop, or to
 utilize existing HDF5 file archives.
 
 Export environment variables as shown in “Sample .bashrc” below.
 
-1.  Install Python 3 (e.g. with Miniconda
+1.  Install Python 3 (e.g. with Miniconda
     https://docs.conda.io/en/latest/miniconda.html)
 2.  Create a directory for storage files and set the ROOT_DIR
     environment variable to point to it
@@ -29,7 +29,7 @@ Export environment variables as shown in “Sample .bashrc” below.
     `Authorization <authorization.md>`__), copy the file
     “groups.default” to “groups.txt”. Modify existing groups as needed
 10. If a non-valid DNS name is used for the HSDS_ENDPOINT
-    (e.g. “hsds.hdf.test”), create a /etc/hosts entry for the DNS name
+    (e.g. “hsds.hdf.test”), create a /etc/hosts entry for the DNS name
 11. Verify the environment variables as in “Sample .bashrc” below
 12. Build the docker image: ``$ ./build.sh --nolint``
 13. Create the file **admin/config/override.yml** for deployment

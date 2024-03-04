@@ -39,7 +39,7 @@ in the following fields:
 -  Supported account types: Leave as default or choose appropriate
    multitennant type
 -  Redirect URI: Enter DNS endpoint for HSDS
-   (e.g. https://hsds.hdf.test)
+   (e.g. https://hsds.hdf.test)
 
 HSDS Configuration
 ------------------

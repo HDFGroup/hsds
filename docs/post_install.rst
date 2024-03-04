@@ -10,7 +10,7 @@ Home Folder Creation
 --------------------
 
 By design, only the admin account is allowed to create top-level domains
-(e.g. ``/mydomain.h5`` cannot be created by a non-admin account).
+(e.g. ``/mydomain.h5`` cannot be created by a non-admin account).
 Typically a folder named ``/home`` is created by the admin account, and
 under ``/home``, folders that are owned by sepcific user accounts.
 

@@ -32,7 +32,7 @@ Prerequisites
 -------------
 
 Setup Pip and Python 3 on your local machine if not already installed
-(e.g. with Miniconda https://docs.conda.io/en/latest/miniconda.html).
+(e.g. with Miniconda https://docs.conda.io/en/latest/miniconda.html).
 
 Clone the hsds repository in a local folder:
 ``git clone https://github.com/HDFGroup/hsds``.
@@ -164,7 +164,7 @@ ConnfigMaps: ``admin/kubernetes/k8s_make_configmap.sh``
 Building HSDS image
 -------------------
 
-If you need to build and deploy a custom HSDS image (e.g. you have made
+If you need to build and deploy a custom HSDS image (e.g. you have made
 changes to the HSDS code), first build and deploy the code to ACR as
 described in section “Building a docker image and deploying to ACR”
 below. Otherwise, the standard image from docker hub

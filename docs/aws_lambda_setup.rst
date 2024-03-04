@@ -39,7 +39,7 @@ To use HSDS for Lambda, follow these steps:
     desired region
 2.  Click the “Create Function” button
 3.  Choose the “Container Image” option
-4.  Enter a function name (e.g. “hslambda”)
+4.  Enter a function name (e.g. “hslambda”)
 5.  Click the “Browse Image” button and select the image you uploaded to
     ECR. Use one of the images “hslambda…” image tags in
     https://gallery.ecr.aws/w7l0z8b2/hdfgroup, or upload your own image
@@ -195,7 +195,7 @@ Using h5pyd with HSDS Lambda
 ============================
 
 You can use h5pyd (version 0.10.4 and higher) to invoke HSDS Lambda
-directly (i.e. no need to setup API Gateway). To use, install the Lambda
+directly (i.e. no need to setup API Gateway). To use, install the Lambda
 function as described above. Then use the following values for endpoint,
 username, and password:
 

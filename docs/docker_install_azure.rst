@@ -26,7 +26,7 @@ Prerequisites
 -------------
 
 Setup Pip and Python 3 on your local machine if not already installed
-(e.g. with Miniconda https://docs.conda.io/en/latest/miniconda.html)
+(e.g. with Miniconda https://docs.conda.io/en/latest/miniconda.html)
 
 Set up your Azure environment
 -----------------------------

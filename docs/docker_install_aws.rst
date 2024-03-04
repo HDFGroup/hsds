@@ -3,7 +3,7 @@ Installation using Docker with AWS S3 storage
 
 Export environment variables as shown in “Sample .bashrc” below.
 
-1.  Install Python 3 (e.g. with Miniconda
+1.  Install Python 3 (e.g. with Miniconda
     https://docs.conda.io/en/latest/miniconda.html)
 2.  Install Docker and docker-compose if necessary. See `Docker
     Setup <setup_docker.md>`__
@@ -58,11 +58,11 @@ Sample override.yml
 -------------------
 
 Review the contents of **admin/config/config.yml** and create the file
-**admin/config/override.yml** for any keys where you don’t wish to use
+**admin/config/override.yml** for any keys where you don't wish to use
 the default value. Values that you will most certainly want to override
 are:
 
--  aws_iam_)role # set to the name of an iam_role that allows read/write
+-  aws_iam_role # set to the name of an iam_role that allows read/write
    to the S3 bucket
 
 Installing Software Updates

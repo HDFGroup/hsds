@@ -43,15 +43,15 @@ Installation with Azure Portal
 3.  Select ‘Front Door’ and then ‘Create’
 4.  Select the appropriate ‘Subscription’ and ‘Resource group’ on the
     ‘Basics’ Tab
-5.  Select the ‘Configuration’ Tab |alt text| All the 3 areas: Frontend
+5.  Select the ‘Configuration’ Tab |alt text1| All the 3 areas: Frontend
     hosts, Backend pools and Routing rules will be empty
-6.  Select to add (+) Frontend hosts \ |alt text| add a valid hostname
+6.  Select to add (+) Frontend hosts \ |alt text2| add a valid hostname
     and select ‘Add’Select ‘Update’
-7.  Now select add (+) Backend pools \ |alt text| Select ‘Custom host’
+7.  Now select add (+) Backend pools \ |alt text3| Select ‘Custom host’
     for ‘Backend host type’ and in the ‘Backend host name’ field enter
     the public-ip for the load balancer from Step 1 above Select
     ‘Update’
-8.  Now select add (+) routing rules \ |alt text| Select ‘Accepted
+8.  Now select add (+) routing rules \ |alt text4| Select ‘Accepted
     protocol’ and ‘Forwarding protocol’ as shown here. For ‘Frontend
     hosts’ and ‘Backend pool’ select the entries created in the previous
     stepsSelect ‘Update’
@@ -109,7 +109,7 @@ These environment variables will be used to configure Front Door.
    Front Door deployment is complete with the https endpoint taking
    longer
 
-.. |alt text| image:: ./img/front_door1.jpg
-.. |alt text| image:: ./img/front_door2.jpg
-.. |alt text| image:: ./img/front_door3.jpg
-.. |alt text| image:: ./img/front_door4.jpg
+.. |alt text1| image:: ./img/front_door1.jpg
+.. |alt text2| image:: ./img/front_door2.jpg
+.. |alt text3| image:: ./img/front_door3.jpg
+.. |alt text4| image:: ./img/front_door4.jpg

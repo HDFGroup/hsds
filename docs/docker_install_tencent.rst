@@ -21,7 +21,7 @@ Installation using Docker with Tencent Cloud object storage
 8.  For the security group, enable ports 22, and 80
 9.  Start instance and ssh into the instance. The following steps will
     be performed on the instance
-10. Install Python 3 (e.g. with Miniconda
+10. Install Python 3 (e.g. with Miniconda
     https://docs.conda.io/en/latest/miniconda.html)
 11. Install docker-compose by running:
     ``$ curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose``,

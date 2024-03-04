@@ -18,8 +18,8 @@ Lists (ACLs) of the domain the request is acting on.
 Access Control Lists
 --------------------
 
-Once a request is authenticated (i.e. the requesting user is verified)
-it is then authorized (i.e. determine if the user is allowed to perform
+Once a request is authenticated (i.e. the requesting user is verified)
+it is then authorized (i.e. determine if the user is allowed to perform
 a specific action, say deleting a domain). To do this Access Control
 Lists (ACLs) are associated with each domain or folder and they
 determine which actions are permitted for each user (or user group).
@@ -36,10 +36,10 @@ the given username is provided in the http Authorization header:
    (generally all GET requests)
 -  create: The given user is authorized to create new resources
    (generally POST or PUT requests)
--  update: The given user is authorized to modify a resource (e.g. PUT
+-  update: The given user is authorized to modify a resource (e.g. PUT
    /datasets/<id>/value)
 -  delete: The given user is authorized to delete a resource
-   (e.g. DELETE /groups/<id>)
+   (e.g. DELETE /groups/<id>)
 -  readACL: The given user is authorized to read the ACLs of a resource
    (excepting that users are always allowed to read their own ACL, if
    defined)
@@ -73,7 +73,7 @@ Suppose a given domain has the following ACLs:
 
 The ACL with username “default” would enable anyone to read (perform GET
 requests) from the domain. The ACL with username “joe” would enable
-requests with username “joe” to read and update the domain (e.g. modify
+requests with username “joe” to read and update the domain (e.g. modify
 values in a dataset). While user ‘ann’ would have full control to do any
 operation on the domain (including modifying permissions for herself or
 other users) based on the ACL with username “ann”.

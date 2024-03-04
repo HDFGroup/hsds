@@ -69,9 +69,9 @@ In the JSON tab, edit the contents as in the example below (with
        ]
    }
 
-Save the policy using a description name (e.g. “hsds-policy”).
+Save the policy using a description name (e.g. “hsds-policy”).
 
-Next create an IAM user (e.g. “hsds-user”) with just “Access-key
+Next create an IAM user (e.g. “hsds-user”) with just “Access-key
 programmatic access”. In the “Permissions” step, select the “Attach
 existing policies directly” option, and add just the policy created
 above.
@@ -127,7 +127,7 @@ are:
 -  bucket_name # set to the name of the bucket you will be using (must
    be globally unique)
 -  aws_region # set to the aws region you will be deploying to
-   (e.g. us-west-2)
+   (e.g. us-west-2)
 -  hsds_endpoint # use the external IP endpoint or DNS name that maps to
    the IP
 -  aws_s3_gateway # Use AWS endpoint for the region you will be
@@ -142,7 +142,7 @@ entries.
 Deploy HSDS to K8s
 ------------------
 
-If you need to build and deploy a custom HSDS image (e.g. you have made
+If you need to build and deploy a custom HSDS image (e.g. you have made
 changes to the HSDS code), first build and deploy the code to ECR as
 described in section “Building a docker image and deploying to ECR”
 below. Otherwise, the standard image from docker hub
