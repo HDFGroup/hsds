@@ -109,7 +109,7 @@ These environment variables will be used to configure Front Door.
    Front Door deployment is complete with the https endpoint taking
    longer
 
-.. |alt text1| image:: ./img/front_door1.jpg
-.. |alt text2| image:: ./img/front_door2.jpg
-.. |alt text3| image:: ./img/front_door3.jpg
-.. |alt text4| image:: ./img/front_door4.jpg
+.. |alt text1| image:: ./img/Front_door1.jpg
+.. |alt text2| image:: ./img/Front_door2.jpg
+.. |alt text3| image:: ./img/Front_door3.jpg
+.. |alt text4| image:: ./img/Front_door4.jpg

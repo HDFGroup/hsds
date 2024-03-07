@@ -63,6 +63,7 @@ Advanced topics
     :maxdepth: 1
 
     authorization
+    azure_ad_setup
     related_projects
 
 
