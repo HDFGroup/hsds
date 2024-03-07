@@ -184,7 +184,7 @@ async def _k8sListPod(k8s_label_selector):
                     log.warn(f"BadRequest to {url}")
                     raise HTTPBadRequest("Bad request for Kuberentes pod status")
                 elif status_code == 403:
-                    log.warn(f"Forbiden to access {url}")
+                    log.warn(f"Forbidden to access {url}")
                     raise HTTPForbidden()
                 elif status_code == 404:
                     log.warn(f"Object: {url} not found")
