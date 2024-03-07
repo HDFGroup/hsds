@@ -306,7 +306,7 @@ async def http_get(app, url, params=None, client=None):
                 log.warn(f"BadRequest to {url}")
                 raise HTTPBadRequest(reason="Bad Request")
             elif status_code == 403:
-                log.warn(f"Forbiden to access {url}")
+                log.warn(f"Forbidden to access {url}")
                 raise HTTPForbidden()
             elif status_code == 404:
                 log.warn(f"Object: {url} not found")
