@@ -27,7 +27,7 @@ Boolean                             NumPy 1-byte bool                           
 Array                               Any supported type
 Enumeration                         Any NumPy integer type                          Read/write as integers
 References                          Region and object
-Variable length array               Any supported type                              See :ref:`Special Types <vlen>`
+Variable length array               Any supported type                              
 =========================           ============================================    ================================
 
 Other numpy dtypes, such as datetime64 and timedelta64, can optionally be
@@ -109,20 +109,18 @@ There's also a PyTables perspective on this question at the
 `PyTables FAQ <http://www.pytables.org/FAQ.html#how-does-pytables-compare-with-the-h5py-project>`_.
 
 
-Does h5py support Parallel HDF5?
+Does HSDS support Parallel HDF5?
 --------------------------------
 
-Starting with version 2.2, h5py supports Parallel HDF5 on UNIX platforms.
-``mpi4py`` is required, as well as an MPIO-enabled build of HDF5.
-Check out :ref:`parallel` for details.
-
+HSDS doesn't explictily use MPIO, but MWMR (Multi-Write/Multi-Read) clients are supported, enabling
+larger jobs to complicted faster but running mutliple workers on one or more machines.
 
 Variable-length (VLEN) data
 ---------------------------
 
 Starting with version 2.3, all supported types can be stored in variable-length
-arrays (previously only variable-length byte and unicode strings were supported)
-See :ref:`Special Types <vlen>` for use details.  Please note that since strings
+arrays (previously only variable-length byte and unicode strings were supported).  
+Please note that since strings
 in HDF5 are encoded as ASCII or UTF-8, NUL bytes are not allowed in strings.
 
 
@@ -190,7 +188,7 @@ Development
 Building from Git
 ~~~~~~~~~~~~~~~~~
 
-We moved to GitHub in December of 2012 (http://github.com/h5py/h5py).
+This project is available on github: http://github.com/HDFGroup/hsds.
 
 We use the following conventions for branches and tags:
 

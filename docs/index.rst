@@ -36,6 +36,9 @@ Introductory info
     :maxdepth: 1
 
     introduction
+    quick
+    related_projects
+
 
 Installation
 ------------
@@ -43,18 +46,32 @@ Installation
 .. toctree::
    :maxdepth: 1
 
-   docker_install_aws
-   docker_install_azure
-   docker_install_tencent
-   docker_install_posix
-   docker_install_dcos
-   kubernetes_install_aws
-   kubernetes_install_azure
-   aws_lambda_setup
-   post_install
-   setup_docker
+   install/introduction
+   install/docker_install_aws
+   install/docker_install_azure
+   install/docker_install_tencent
+   install/docker_install_posix
+   install/docker_install_dcos
+   install/kubernetes_install_aws
+   install/kubernetes_install_azure
+   install/aws_lambda_setup
+   install/post_install
+   install/setup_docker
+   
 
- 
+Use cases
+---------
+
+.. toctree::
+   :maxdepth: 1
+   
+   usecases/intro
+   usecases/view_end-point_metadata
+   usecases/extract_one_dimensional_subset
+   usecases/extract_several_one_dimensional_subsets
+   usecases/extract_subsets_with_shared_common_dimensions
+   usecases/extract_two_dimensional_subset
+   usecases/extract_three_dimensional_subset
 
 Advanced topics
 ---------------
@@ -62,9 +79,10 @@ Advanced topics
 .. toctree::
     :maxdepth: 1
 
-    authorization
-    azure_ad_setup
-    related_projects
+    advanced/authorization
+    advanced/azure_ad_setup
+    advanced/frontdoor_install_azure
+    advanced/keycloak_setup
 
 
 Meta-info about the HSDS project
@@ -73,6 +91,7 @@ Meta-info about the HSDS project
 .. toctree::
     :maxdepth: 1
 
+    whatsnew/index
     contributing
     release_guide
     faq
