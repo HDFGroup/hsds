@@ -5,4 +5,4 @@ Domain operations
 -----------------
 
 .. openapi:: openapi.yaml
-    :examples
+   :examples:
