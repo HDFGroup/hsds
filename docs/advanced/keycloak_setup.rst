@@ -3,7 +3,7 @@ Keycloak Authentication
 
 Rather than user names and passwords being maintained by HSDS, Keycloak
 (“https://www.keycloak.org/”) can be used for authentication. In this
-mode, the client will fetch atoken from the Keycloak service that it
+mode, the client will fetch a token from the Keycloak service that it
 then passes to the server as an HTTP request with a “Bearer”
 authorization header. From this token the server can validate the token
 and determine the username. The token is valid for a specific period

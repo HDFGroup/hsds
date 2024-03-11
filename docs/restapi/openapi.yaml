@@ -304,8 +304,7 @@ paths:
 
         Note: if there are Domains which are children of this Domain
         (e.g., deleting `somedir` from `/home/user/project/somedir/data.h5`),
-        those children directories will _not_ be deleted.
-        (TODO: abandoned children is incorrect behavior?)
+        a 409 error (Conflict) will be returned.
       operationId: deleteDomain
       parameters:
         - $ref: "#/components/parameters/query_domain"
