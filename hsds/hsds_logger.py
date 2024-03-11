@@ -15,6 +15,7 @@
 
 import asyncio
 import time
+import sys
 from aiohttp.web_exceptions import HTTPServiceUnavailable
 from .util.domainUtil import getDomainFromRequest
 
@@ -28,6 +29,9 @@ req_count = {"GET": 0, "POST": 0, "PUT": 0, "DELETE": 0, "num_tasks": 0}
 log_count = {"DEBUG": 0, "INFO": 0, "WARN": 0, "ERROR": 0}
 # the following defaults will be adjusted by the app
 config = {"log_level": DEBUG, "prefix": "", "timestamps": False}
+
+# Support logging UTF-8 characters
+sys.stdout.reconfigure(encoding='utf-8')
 
 
 def _getLevelName(level):
