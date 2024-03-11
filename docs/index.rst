@@ -57,7 +57,14 @@ Installation
    install/aws_lambda_setup
    install/post_install
    install/setup_docker
-   
+
+REST API
+--------
+
+.. toctree::
+   :maxdepth: 1
+
+   restapi/restapi  
 
 Use cases
 ---------

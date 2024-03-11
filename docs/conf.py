@@ -40,6 +40,7 @@ extensions = [
         'sphinx.ext.intersphinx',
         'sphinx.ext.extlinks',
         'sphinx.ext.mathjax',
+        'sphinxcontrib.openapi',
 ]
 
 # intersphinx_mapping = {'hdf5json': ('https://readthedocs.org/projects/hdf5-json/', None)}
