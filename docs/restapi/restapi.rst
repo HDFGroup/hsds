@@ -1,6 +1,9 @@
-The operations supportd by HSDS are described here
-==================================================
+REST API Reference
+==================
 
-GET, PUT, POST, and DELETE operations...
+Domain operations
+-----------------
 
 .. openapi:: openapi.yaml
+   :paths:
+       /
