@@ -69,24 +69,34 @@ paths:
         a rescanning operation (see `rescan`).
       operationId: createDomain
       tags:
-        - domains
+        - Domain
       requestBody:
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/domain'
+            schema:      # Request body contents
+              type: object
+              properties:
+                id:
+                  type: integer
+                name:
+                  type: string
+              example:   # Sample object
+                id: 10
+                name: Jessica Smith
       parameters:
         - name: domain 
           in: query
           schema:
             type: string
           description: the domain path (e.g. "/home/test_user1/tall.h5")
+          example: /home/test_user1/test/tall.h5
         - name: bucket
           in: query
           required: false
           schema:
             type: string
-          description: name of the bucket to be used  
+          description: name of the bucket to be used
+          example: hsdstest  
         - name: getdnids
           in: query
           required: false
@@ -118,7 +128,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/domain"
-
+              examples:    # Child of media type
+                Jessica:   # Example 1
+                  value:
+                    id: 10
+                    name: Jessica Smith
         '201':
           description: Created.
             
