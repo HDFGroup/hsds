@@ -40,128 +40,88 @@ servers:
 # TBD: see https://redocly.com/docs/cli/rules/security-defined/
 security: []
 
-components:
-  schemas:
-    ACL:
-      description: Access Control List for a single user.
-      type: object
-      properties:
-        username:
-          type: object
-          properties:
-            create:
-              type: boolean
-            update:
-              type: boolean
-            delete:
-              type: boolean
-            updateACL:
-              type: boolean
-            read:
-              type: boolean
-            readACL:
-              type: boolean
-    ACLS:
-      type: object
-      description: Access Control Lists for users.
-      properties:
-        forWhom:
-          $ref: "#/components/schemas/ACL"
-      examples:
-        - test_user1:
-            create: true
-            update: true
-            delete: true
-            updateACL: true
-            read: true
-            readACL: true
-          default:
-            create: false
-            update: false
-            delete: false
-            updateACL: false
-            read: true
-            readACL: false
-
-  parameters:
-    authorization:
-      in: header
-      name: Authorization
-      schema:
-        type: string
-        description: >
-          Credentials for the request.
-
-          'Basic' authorization, `"Basic " + base64(<username>:<password>)`
-    query_domain:
-      in: query
-      name: domain
-      schema:
-        type: string
-        description: Domain on service to access, e.g., `/home/user/someproject/somefile`.
-
-  securitySchemes:
-    basicAuth:
-      type: http
-      scheme: basic
 
 paths:
   /:
     put:
-      tags:
-        - Domain
-      summary: Create a new Domain on the service.
+      summary: Create a new Domain
       description: >
-        Domains represent dataspaces analogous to hdf5 files.
+        Domains represent collections of groups, datasets, and committed datatypes
+        analogous to hdf5 files.
 
-        Folders are 'placeholder' domains which lack a root Group. Their
-        main use is to manage top-level directories (outside of user space)
-        and to fill out a user's directory paths if required.
-        E.g., `/home/user/project/missingdir/data.h5`
-
+        Folders are domains which lack a root Group. Their
+        main use is to provide a directory-like way to group other domains.
+         
         Note: Initially, the only object in a Domain is the root group. Use
-        other `put` and `post` operations to create new objects in the
-        domain.
+        other `put` and `post` operations to create new group, datasets, or 
+        committed datatypes in the domain.
 
         Note: Domains (and Folders) may only be created as direct children
-        of existing Domains. e.g., `/home/user/project/missingdir` _must_
+        of existing Domains. e.g., `/home/user/project/missing_folder/` *must*
         exist prior to the creation of Domain
-        `/home/user/project/missingdir/data.h5`.
+        `/home/user/project/missing_folder/data.h5`, otherwise Error 404 will be returned.
 
         Note: The operation will fail if the domain already exists
         (Error 409).
+
+        In addition to creation new domains, this operation can also be used with existing domains
+        to flush recent changes to the domain to storage (see `flush` parameter) or force
+        a rescanning operation (see `rescan`).
       operationId: createDomain
+      tags:
+        - domains
       requestBody:
         content:
           application/json:
             schema:
-              type: object
+              $ref: '#/components/schemas/domain'
       parameters:
-        - $ref: "#/components/parameters/query_domain"
-        - name: folder
+        - name: domain 
           in: query
           schema:
+            type: string
+          description: the domain path (e.g. "/home/test_user1/tall.h5")
+        - name: bucket
+          in: query
+          required: false
+          schema:
+            type: string
+          description: name of the bucket to be used  
+        - name: getdnids
+          in: query
+          required: false
+          schema:
             type: number
-          description: If present and `1`, creates a Folder instead of a Domain.
-        - $ref: "#/components/parameters/authorization"
+          description: If present and `1`, return the DN ids in the response
+        - name: flush
+          in: query
+          required: false
+          schema:
+            type: number
+          description: > 
+            If present and `1`, force any recent updates to the domain to written to
+            permanent storage before returning a response from this request.  
+            Returns 200 or 204 (No Content) if successful
+        - name: rescan
+          in: query
+          required: false
+          schema:
+            type: number
+          description: >
+            If present and `1`, force a domain scan to be completed before returning
+            from this request.
+            Returns 200 or 204 (No Content) if successful
       responses:
+        '200':
+          description: OK - no new resource was created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/domain"
+
         '201':
           description: Created.
-          headers:
-            Content-Length:
-              description: Length of response in bytes.
-              schema:
-                type: string
-            Etag:
-              description: Hash-code status of resource.
-              schema:
-                type: string
-            Content-Type:
-              description: MIME type of response.
-              schema:
-                type: string
-                enum:
-                  - application/json
+            
           content:
             application/json:
               schema:
@@ -338,4 +298,83 @@ paths:
             description: Bad request. Domain name invalid
 
   # end '/'
+
+components:
+  schemas:
+    ACL:
+      description: Access Control List for a single user.
+      type: object
+      properties:
+        username:
+          type: object
+          properties:
+            create:
+              type: boolean
+            update:
+              type: boolean
+            delete:
+              type: boolean
+            updateACL:
+              type: boolean
+            read:
+              type: boolean
+            readACL:
+              type: boolean
+    ACLS:
+      type: object
+      description: Access Control Lists for users.
+      properties:
+        forWhom:
+          $ref: "#/components/schemas/ACL"
+      examples:
+        - test_user1:
+            create: true
+            update: true
+            delete: true
+            updateACL: true
+            read: true
+            readACL: true
+          default:
+            create: false
+            update: false
+            delete: false
+            updateACL: false
+            read: true
+            readACL: false
+    domain:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        tag:
+          type: string
+
+  parameters:
+    authorization:
+      in: header
+      name: Authorization
+      schema:
+        type: string
+        description: >
+          Credentials for the request.
+
+          'Basic' authorization, `"Basic " + base64(<username>:<password>)`
+    query_domain:
+      in: query
+      name: domain
+      schema:
+        type: string
+        description: Domain on service to access, e.g., `/home/user/someproject/somefile`.
+
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+
 
