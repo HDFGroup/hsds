@@ -385,6 +385,7 @@ async def _getRequestData(request, http_streaming=True):
             base64_data = body["value_base64"]
             base64_data = base64_data.encode("ascii")
             input_data = base64.b64decode(base64_data)
+            log.debug(f"input_data from base64: {input_data}")
         else:
             msg = "request has no value or value_base64 key in body"
             log.warn(msg)
@@ -760,7 +761,6 @@ async def PUT_Value(request):
         return resp
 
     # regular PUT_Value processing without query update
-    binary_data = None
     np_shape = []  # shape of incoming data
     bc_shape = []  # shape of broadcast array (if element_count is set)
     input_data = await _getRequestData(request, http_streaming=http_streaming)
@@ -832,12 +832,12 @@ async def PUT_Value(request):
             # fixed item size
             if len(input_data) % item_size != 0:
                 msg = f"Expected request size to be a multiple of {item_size}, "
-                msg += f"but {len(binary_data)} bytes received"
+                msg += f"but {len(input_data)} bytes received"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
 
             if len(input_data) // item_size != num_elements:
-                msg = f"expected {item_size * num_elements} bytes but got {len(binary_data)}"
+                msg = f"expected {item_size * num_elements} bytes but got {len(input_data)}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
 

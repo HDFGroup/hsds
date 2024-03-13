@@ -1154,6 +1154,127 @@ class PointSelTest(unittest.TestCase):
             else:
                 self.assertEqual(ret_values[i], 0)
 
+    def testPut1DDatasetVlenBinary(self):
+        # Test writing using point selection for a 1D dataset of vlen types
+        print("testPut1DDatasetVlenBinary", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create dataset
+        # pass in layout specification so that we can test selection across chunk boundries
+        vlen_type = {"class": "H5T_VLEN", "base": "H5T_STD_I8LE"}
+        data = {"type": vlen_type, "shape": (100,)}
+        data["creationProperties"] = {
+            "layout": {
+                "class": "H5D_CHUNKED",
+                "dims": [20, ],
+            }
+        }
+
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        dset_id = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_id))
+
+        # link new dataset as 'dset1d'
+        name = "dset"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": dset_id}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # Do a point selection write
+        primes = [
+            2,
+            3,
+            5,
+            7,
+            11,
+            13,
+            17,
+            19,
+            23,
+            29,
+            31,
+            37,
+            41,
+            43,
+            47,
+            53,
+            59,
+            61,
+            67,
+            71,
+            73,
+            79,
+            83,
+            89,
+            97,
+        ]
+
+        # create binary array for the values
+        # each length value is 4 bytes, each sequence contains 2 elements
+        num_bytes = len(primes) * 6
+        byte_array = bytearray(num_bytes)
+        for i in range(len(primes)):
+            idx = i * 6
+            byte_array[idx] = 2  # length of this sequence in bytes
+            # skip bytes because the length is a 32-bit integer
+            byte_array[idx + 4] = 1  # values in this vlen sequence
+            byte_array[idx + 5] = 2
+
+        value_base64 = base64.b64encode(bytes(byte_array))
+        value_base64 = value_base64.decode("ascii")
+
+        # write to all the prime indexes
+        payload = {"points": primes, "value_base64": value_base64}
+        req = self.endpoint + "/datasets/" + dset_id + "/value"
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # read back data
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+
+        # verify the correct elements got set
+        value = rspJson["value"]
+        for i in range(100):
+            if i in primes:
+                seq = value[i]
+                self.assertEqual(seq[0], 1)
+                self.assertEqual(seq[1], 2)
+            else:
+                self.assertEqual(value[i], 0)
+
+        # read back data as one big hyperslab selection
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        ret_values = rspJson["value"]
+        self.assertEqual(len(ret_values), 100)
+        for i in range(100):
+            if i in primes:
+                seq = value[i]
+                self.assertEqual(seq[0], 1)
+                self.assertEqual(seq[1], 2)
+            else:
+                self.assertEqual(ret_values[i], 0)
+
     def testPut2DDatasetBinary(self):
         # Test writing with point selection for 2d dataset with binary data
         print("testPut2DDatasetBinary", self.base_domain)
