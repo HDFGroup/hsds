@@ -107,3 +107,6 @@ spec:
         - name: config
           configMap:
             name: hsds-config
+        - name: override
+          configMap:
+            name: hsds-override
