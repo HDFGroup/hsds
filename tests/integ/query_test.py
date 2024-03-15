@@ -156,6 +156,7 @@ class QueryTest(unittest.TestCase):
             # check we got the expected number of results
             if expected_count is not None:
                 self.assertEqual(len(data), expected_count)
+        # end verifyQueryRsp
 
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
 
@@ -167,6 +168,11 @@ class QueryTest(unittest.TestCase):
             else:
                 kwargs["expect_bin"] = False
 
+            # items in list
+            params = {"query": "stock_symbol in (b'AAPL', b'EBAY')"}
+            rsp = self.session.get(req, params=params, headers=query_headers)
+            self.assertEqual(rsp.status_code, 200)
+                
             # read first row with AAPL
             params = {"query": "stock_symbol == b'AAPL'", "Limit": 1}
             rsp = self.session.get(req, params=params, headers=query_headers)

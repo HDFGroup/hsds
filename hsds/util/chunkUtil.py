@@ -57,6 +57,7 @@ def expandChunk(
         return (1,)  # just enough to store one item
 
     layout = list(layout)
+    log.debug(f"expandChunk layout: {layout} typesize: {typesize}")
     dims = shape_json["dims"]
     rank = len(dims)
     extendable_dims = 0  # number of dimensions that are extenable
@@ -79,11 +80,11 @@ def expandChunk(
         # just adjust along extendable dimensions first
         old_chunk_size = chunk_size
         for n in range(rank):
-            dim = rank - n - 1  # start from
+            dim = rank - n - 1  # start from last dim
 
             if extendable_dims > 0:
                 if maxdims[dim] == 0:
-                    # infinately extendable dimensions
+                    # infinitely extendable dimensions
                     layout[dim] *= 2
                     chunk_size = getChunkSize(layout, typesize)
                     if chunk_size > chunk_min:
@@ -113,9 +114,8 @@ def expandChunk(
                 else:
                     pass  # can't extend chunk along this dimension
         if chunk_size <= old_chunk_size:
-            # reality check to see if we'll ever break out of the while loop
-            log.warn("Unexpected error in guess_chunk size")
-
+            # stop iteration if we haven't increased the chunk size
+            log.debug("stopping epandChunk iteration")
             break
         elif chunk_size > chunk_min:
             break  # we're good
@@ -130,6 +130,7 @@ def shrinkChunk(layout, typesize, chunk_max=CHUNK_MAX, layout_class="H5D_CHUNKED
     chunk_size = getChunkSize(layout, typesize)
     if chunk_size <= chunk_max:
         return tuple(layout)  # good already
+    log.debug(f"shrinkChunk layout: {layout} typesize: {typesize}")
     rank = len(layout)
 
     while chunk_size > chunk_max:
@@ -1014,6 +1015,104 @@ def chunkWritePoints(chunk_id=None,
 
         chunk_arr[coord] = val  # update the point
 
+def _getWhereFieldName(query):
+    """
+    Get the field name for a where clause.
+    Returns None if no where statement
+    """
+    if query.startswith("where "):
+        i = len("where ")
+    else:
+        i = query.find(" where ")
+        if i > 0:
+            i += len(" where ")
+    if i < 0:
+        # no where statement
+        return None
+    
+    field_name = ""
+    end_quote_char = None
+    while i < len(query):
+        ch = query[i]
+        i += 1
+        if end_quote_char and ch == end_quote_char:
+            # end of variable
+            end_quote_char = None
+            break
+        elif ch in ("'", '"'):
+            end_quote_char = ch
+            continue
+        if field_name and not ch.isalnum() and not ch == "_" and not end_quote_char:
+            # end of variable
+            break
+        if end_quote_char or ch.isalnum() or ch == "_":
+            field_name += ch
+    if not field_name:
+        # got a where keyword, but no field name
+        raise ValueError("query where with no fieldname")
+    if end_quote_char:
+        raise ValueError("unclosed quote")
+
+    return field_name
+
+def _getWhereElements(query):
+    """
+    Get the values from a where clause
+    """
+
+    n = query.find(" in ")
+    if n < 0:
+        raise ValueError("where query with no 'in' keyword")
+    n += 4  # advance past " in "
+    elements = []
+    i = query[n:].find("(")
+    if i < 0:
+        raise ValueError("where in query with no '(' character)")
+    i += n + 1  # advance past '('
+   
+    end_quote_char = None
+    s = None
+
+    while i < len(query):
+        ch = query[i]
+        i += 1
+        if end_quote_char and ch == end_quote_char:
+            # end of variable
+            end_quote_char = None
+            if s is None:
+                s = ""
+            elements.append(s)
+            s = None
+            continue
+        if ch in ("'", '"'):
+            end_quote_char = ch
+            s = ""
+            continue
+        if ch == ",":
+            if s is not None:
+                elements.append(s)
+                s = None
+            continue
+        if ch == ")":
+            if end_quote_char:
+                raise ValueError("unclosed quote in 'where in' list")
+            if s is not None:
+                elements.append(s)
+            break
+        if ch.isspace():
+            if end_quote_char:
+                s += ch
+            continue
+        # anything else, just add to our variable
+        if s is None:
+            s = ch
+        else:
+            s += ch
+
+    if end_quote_char:
+        raise ValueError("unclosed quote")
+
+    return elements
 
 def _getEvalStr(query, arr_name, field_names):
     """
@@ -1032,6 +1131,21 @@ def _getEvalStr(query, arr_name, field_names):
             msg = "invalid field name"
             log.warn("Bad query: " + msg)
             raise ValueError(msg)
+        
+    if query.startswith("where "):
+        # no eval, return None
+        return None
+    # strip off any where clause after the query
+    n = query.find(" where ")
+    
+    where_field = None
+    if n > 0:
+        where_field = _getWhereFieldName(query)
+        log.debug(f"where field: [{where_field}]")
+        log.debug(f"query orig: {query}")
+        query = query[:n]
+        log.debug(f"query adjusted: {query}")
+
     while i < len(query):
         ch = query[i]
         if (i + 1) < len(query):
@@ -1127,7 +1241,7 @@ def chunkQuery(
     """
     Run query on chunk and selection
     """
-    msg = f"chunkQuery - chunk_id: {chunk_id} query: {query} slices: {slices}, "
+    msg = f"chunkQuery - chunk_id: {chunk_id} query: [{query}] slices: {slices}, "
     msg += f"limit: {limit} select_dt: {select_dt}"
     log.debug(msg)
 
@@ -1148,41 +1262,95 @@ def chunkQuery(
         raise ValueError(msg)
 
     if not slices:
-        slices = [
-            slice(0, dims[0], 1),
-        ]
+        slices = [slice(0, dims[0], 1), ]
     log.debug(f"chunkQuery slices: {slices}")
     if len(slices) != rank:
         msg = "Selection rank does not match shape rank"
         log.error(msg)
         raise ValueError(msg)
     slices = tuple(slices)
+    chunk_sel = chunk_arr[slices]
 
     chunk_coord = getChunkCoordinate(chunk_id, chunk_layout)
 
     # do query selection
     field_names = dset_dt.names
 
+    # get the eval str
+    eval_str = _getEvalStr(query, "chunk_sel", field_names)
+    if eval_str:
+        log.debug(f"eval_str: {eval_str}")
+    else:
+        log.debug("no eval_str")
+        
+    # check for a where in statement
+    where_field = _getWhereFieldName(query)
+    if where_field:
+        log.debug(f"where_field: {where_field}")
+        if where_field not in field_names:
+            msg = f"where field {where_field} is not a member of dataset type"
+            raise ValueError(msg)
+        where_elements  = _getWhereElements(query)
+        if not where_elements:
+            msg = "query: where key word with no elements"
+            raise ValueError(msg)
+        # convert to ndarray, checking than we can convert to our dtype along the way
+        try:
+            where_elements_arr = np.array(where_elements, dtype=dset_dt[where_field])
+        except ValueError:
+            msg = "where elements are not compatible with field datatype"
+            raise ValueError(msg)
+        log.debug(f"tbd: where_elements_arr; {where_elements_arr}")
+        log.debug(f"tbd: chunk_sel[{where_field}]: {chunk_sel[where_field]}")
+        isin_arr = np.isin(chunk_sel[where_field], where_elements_arr)
+        log.debug(f"tbd: isin_arr: {isin_arr}")
+    
+        if not np.any(isin_arr):
+            # all false
+            log.debug("query - no rows found for where elements")
+            return None
+        
+        chunk_sel = chunk_sel[isin_arr]
+        log.debug(f"tbd - chunk_sel after boolean selection: {chunk_sel}")
+        
+        if len(chunk_sel) == 0:
+            log.debug("query - no elements matched where list")
+            return None
+        if not eval_str:
+            # can just return the array
+            return chunk_sel
+    elif eval_str:
+        log.debug("no where keyword")
+    else:
+        log.warn("query  - no eval and no where in, returning None")
+        return None
+
     if query_update:
-        replace_mask = [
-            None,
-        ] * len(field_names)
+        if where_field:
+            msg = "query update is not supported with where in"
+            raise ValueError(msg)
+        replace_mask = [None,] * len(field_names)
         for i in range(len(field_names)):
             field_name = field_names[i]
             if field_name in query_update:
                 replace_mask[i] = query_update[field_name]
         log.debug(f"chunkQuery - replace_mask: {replace_mask}")
-        replace_fields = [
-            None,
-        ] * len(field_names)
+        replace_fields = [None, ] * len(field_names)
         if replace_mask == replace_fields:
             msg = "chunkQuery - no fields found in query_update"
             raise ValueError(msg)
     else:
         replace_mask = None
-
-    x = chunk_arr[slices]
-    eval_str = _getEvalStr(query, "x", field_names)
+    
+    if not eval_str:
+        if where_field:
+            # return array based on where in elements
+            log.debug("query - no eval_str, returning where in array")
+            return chunk_arr
+        else:
+            log.warn("query  - no eval and no where in, returning None")
+            return None
+    
     where_indices = np.where(eval(eval_str))
     if not isinstance(where_indices, tuple):
         log.warn(f"expected where_indices of tuple but got: {type(where_indices)}")
@@ -1204,7 +1372,7 @@ def chunkQuery(
         where_indices = where_indices[:limit]
         nrows = limit
 
-    where_result = x[where_indices].copy()
+    where_result = chunk_sel[where_indices].copy()
 
     if replace_mask and nrows > 0:
         log.debug(f"apply replace_mask: {replace_mask}")
