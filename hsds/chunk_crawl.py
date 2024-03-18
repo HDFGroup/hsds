@@ -569,10 +569,14 @@ async def write_point_sel(
     log.debug("POST chunk req: " + req)
 
     num_points = len(point_list)
-    log.debug(f"write_point_sel - {num_points}")
 
     # create a numpy array with point_data
-    data_arr = jsonToArray((num_points,), dset_dtype, point_data)
+
+    # if point data was already decoded from binary, don't decode again
+    if len(point_data) > 0 and isinstance(point_data[0], np.ndarray):
+        data_arr = point_data
+    else:
+        data_arr = jsonToArray((num_points,), dset_dtype, point_data)
 
     # create a numpy array with the following type:
     #   (coord1, coord2, ...) | dset_dtype
@@ -592,8 +596,7 @@ async def write_point_sel(
             elem = (tuple(point_list[i]), data_arr[i])
         np_arr[i] = elem
 
-    # TBD - support VLEN data
-    post_data = np_arr.tobytes()
+    post_data = arrayToBytes(np_arr)
 
     # pass dset_json as query params
     params = {}
