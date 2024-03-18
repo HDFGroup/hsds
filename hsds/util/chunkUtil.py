@@ -1015,6 +1015,7 @@ def chunkWritePoints(chunk_id=None,
 
         chunk_arr[coord] = val  # update the point
 
+
 def _getWhereFieldName(query):
     """
     Get the field name for a where clause.
@@ -1029,7 +1030,7 @@ def _getWhereFieldName(query):
     if i < 0:
         # no where statement
         return None
-    
+
     field_name = ""
     end_quote_char = None
     while i < len(query):
@@ -1055,6 +1056,7 @@ def _getWhereFieldName(query):
 
     return field_name
 
+
 def _getWhereElements(query):
     """
     Get the values from a where clause
@@ -1069,7 +1071,7 @@ def _getWhereElements(query):
     if i < 0:
         raise ValueError("where in query with no '(' character)")
     i += n + 1  # advance past '('
-   
+
     end_quote_char = None
     s = None
 
@@ -1086,7 +1088,11 @@ def _getWhereElements(query):
             continue
         if ch in ("'", '"'):
             end_quote_char = ch
-            s = ""
+            if s == "b":
+                # use bytes not str
+                s = b''
+            else:
+                s = ""
             continue
         if ch == ",":
             if s is not None:
@@ -1101,9 +1107,13 @@ def _getWhereElements(query):
             break
         if ch.isspace():
             if end_quote_char:
+                if isinstance(s, bytes):
+                    ch = ch.encode('utf8')
                 s += ch
             continue
         # anything else, just add to our variable
+        if isinstance(s, bytes):
+            ch = ch.encode('utf8')
         if s is None:
             s = ch
         else:
@@ -1113,6 +1123,7 @@ def _getWhereElements(query):
         raise ValueError("unclosed quote")
 
     return elements
+
 
 def _getEvalStr(query, arr_name, field_names):
     """
@@ -1131,13 +1142,13 @@ def _getEvalStr(query, arr_name, field_names):
             msg = "invalid field name"
             log.warn("Bad query: " + msg)
             raise ValueError(msg)
-        
+
     if query.startswith("where "):
         # no eval, return None
         return None
     # strip off any where clause after the query
     n = query.find(" where ")
-    
+
     where_field = None
     if n > 0:
         where_field = _getWhereFieldName(query)
@@ -1282,7 +1293,7 @@ def chunkQuery(
         log.debug(f"eval_str: {eval_str}")
     else:
         log.debug("no eval_str")
-        
+
     # check for a where in statement
     where_field = _getWhereFieldName(query)
     if where_field:
@@ -1290,7 +1301,7 @@ def chunkQuery(
         if where_field not in field_names:
             msg = f"where field {where_field} is not a member of dataset type"
             raise ValueError(msg)
-        where_elements  = _getWhereElements(query)
+        where_elements = _getWhereElements(query)
         if not where_elements:
             msg = "query: where key word with no elements"
             raise ValueError(msg)
@@ -1304,15 +1315,15 @@ def chunkQuery(
         log.debug(f"tbd: chunk_sel[{where_field}]: {chunk_sel[where_field]}")
         isin_arr = np.isin(chunk_sel[where_field], where_elements_arr)
         log.debug(f"tbd: isin_arr: {isin_arr}")
-    
+
         if not np.any(isin_arr):
             # all false
             log.debug("query - no rows found for where elements")
             return None
-        
+
         chunk_sel = chunk_sel[isin_arr]
         log.debug(f"tbd - chunk_sel after boolean selection: {chunk_sel}")
-        
+
         if len(chunk_sel) == 0:
             log.debug("query - no elements matched where list")
             return None
@@ -1341,7 +1352,7 @@ def chunkQuery(
             raise ValueError(msg)
     else:
         replace_mask = None
-    
+
     if not eval_str:
         if where_field:
             # return array based on where in elements
@@ -1350,7 +1361,7 @@ def chunkQuery(
         else:
             log.warn("query  - no eval and no where in, returning None")
             return None
-    
+
     where_indices = np.where(eval(eval_str))
     if not isinstance(where_indices, tuple):
         log.warn(f"expected where_indices of tuple but got: {type(where_indices)}")

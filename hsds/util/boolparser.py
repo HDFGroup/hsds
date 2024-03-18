@@ -127,6 +127,15 @@ class BooleanParser:
     root = None
 
     def __init__(self, exp):
+        # tbd - BooleanParser doesn't know about where clauses.
+        # For now just strip it off the query.
+        if exp.startswith("where"):
+            return None
+
+        n = exp.find("where")
+        if n > 0:
+            exp = exp[:n]
+
         self.tokenizer = Tokenizer(exp)
         self.tokenizer.tokenize()
         self.parse()

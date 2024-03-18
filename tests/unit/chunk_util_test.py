@@ -1353,9 +1353,10 @@ class ChunkUtilTest(unittest.TestCase):
         queries["temp > 61"] = "rows['temp'] > 61"
         queries["(date >= 22) & (date <= 24)"] = "(rows['date'] >= 22) & (rows['date'] <= 24)"
         queries["(date == 21) & (temp > 70)"] = "(rows['date'] == 21) & (rows['temp'] > 70)"
-        queries["(wind == b'E 7') | (wind == b'S 7')"
-        ] = "(rows['wind'] == b'E 7') | (rows['wind'] == b'S 7')"
+        expected = "(rows['wind'] == b'E 7') | (rows['wind'] == b'S 7')"
+        queries["(wind == b'E 7') | (wind == b'S 7')"] = expected
         queries["where 'temp' in (61, 68, 72)"] = None
+        queries["where 'name' in (b'Bob', b'Rob', b'Alice')"] = None
         queries["date >= 22 where 'temp' in (61, 68, 72)"] = "rows['date'] >= 22"
         queries["date >= 22 where 'temp F' in (61, 68, 72)"] = "rows['date'] >= 22"
 
@@ -1379,10 +1380,11 @@ class ChunkUtilTest(unittest.TestCase):
 
     def testGetWhereElements(self):
         queries = {}
-        #queries["where 'temp' in (61, 68, 72)"] = ["61", "68", "72"]
-        #queries["where 'temp' in (abc, xyz, abacab)"] = ["abc", "xyz", "abacab"]
+        queries["where 'temp' in (61, 68, 72)"] = ["61", "68", "72"]
+        queries["where 'temp' in (abc, xyz, abacab)"] = ["abc", "xyz", "abacab"]
         queries["where 'temp' in ('ab cd', 'xyz ', 'abacab')"] = ["ab cd", "xyz ", "abacab"]
-        #queries["where 'temp' in (123, -456, 3.12)"] = ["123", "-456", "3.12"]
+        queries["where 'temp' in (123, -456, 3.12)"] = ["123", "-456", "3.12"]
+        queries["where 'temp' in (b'abc', b'xyz')"] = [b'abc', b'xyz']
 
         for query in queries.keys():
             elements = _getWhereElements(query)
@@ -1687,9 +1689,19 @@ class ChunkUtilTest(unittest.TestCase):
             chunk_arr=chunk_arr,
             query="where open in (3023, 3182, 1234)",
         )
-        print("result:", result)
         self.assertTrue(isinstance(result, np.ndarray))
         self.assertEqual(len(result), 2)
+
+        # query with where
+        result = chunkQuery(
+            chunk_id=chunk_id,
+            chunk_layout=chunk_layout,
+            chunk_arr=chunk_arr,
+            query="where symbol in (b'AAPL', b'EBAY'",
+        )
+        print(result)
+        self.assertTrue(isinstance(result, np.ndarray))
+        self.assertEqual(len(result), 8)
 
         # try bad Limit
         try:
