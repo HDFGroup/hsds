@@ -156,6 +156,7 @@ class QueryTest(unittest.TestCase):
             # check we got the expected number of results
             if expected_count is not None:
                 self.assertEqual(len(data), expected_count)
+        # end verifyQueryRsp
 
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
 
@@ -166,6 +167,17 @@ class QueryTest(unittest.TestCase):
                 kwargs["expect_bin"] = True
             else:
                 kwargs["expect_bin"] = False
+
+            # items in list
+            # TBD - needs update for chunk_dn.py to work
+            """
+            params = {"query": "where stock_symbol in (b'AAPL', b'EBAY')"}
+            rsp = self.session.get(req, params=params, headers=query_headers)
+            self.assertEqual(rsp.status_code, 200)
+            kwargs["expected_indices"] = [0, 1, 3, 4, 6, 7, 9, 10]
+            print(rsp.text)
+            verifyQueryRsp(rsp, **kwargs)
+            """
 
             # read first row with AAPL
             params = {"query": "stock_symbol == b'AAPL'", "Limit": 1}
@@ -179,7 +191,6 @@ class QueryTest(unittest.TestCase):
             rsp = self.session.get(req, params=params, headers=query_headers)
             expected_indices = (1, 4, 7, 10)
             kwargs["expected_indices"] = expected_indices
-
             verifyQueryRsp(rsp, **kwargs)
 
             # return just open and close fields
