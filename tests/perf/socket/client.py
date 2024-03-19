@@ -72,7 +72,7 @@ if use_shared_mem:
     shm_block.unlink()
 
 if total_bytes > 1024 * 1024:
-    print(f"mb: {total_bytes//(1024*1024)}")
+    print(f"mb: {total_bytes // (1024 * 1024)}")
 else:
     print(f"bytes: {total_bytes}")
     elapse = tEnd - tStart

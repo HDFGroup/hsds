@@ -51,7 +51,7 @@ def benchmark_link_multi(headers, endpoint, file):
         raise ValueError(msg)
 
     end = time.time()
-    msg = f"Time to create {link_count} links with multi API: {(end-start):6.4f} seconds"
+    msg = f"Time to create {link_count} links with multi API: {(end - start):6.4f} seconds"
     print(msg)
 
     # Retrieve many links using multi API
@@ -65,7 +65,7 @@ def benchmark_link_multi(headers, endpoint, file):
         raise ValueError(msg)
 
     end = time.time()
-    msg = f"Time to retrieve {link_count} links with multi API: {(end-start):6.4f} seconds"
+    msg = f"Time to retrieve {link_count} links with multi API: {(end - start):6.4f} seconds"
     print(msg)
 
     # Check return correctness
@@ -115,7 +115,7 @@ def benchmark_link_serial(headers, endpoint, file):
             msg = f"Could not create link #{i}: {rsp.status_code}"
             raise ValueError(msg)
     end = time.time()
-    msg = f"Time to create {link_count} links individually: {(end-start):6.4f} seconds"
+    msg = f"Time to create {link_count} links individually: {(end - start):6.4f} seconds"
     print(msg)
 
     # Retrieve many links from root group individually
@@ -133,7 +133,7 @@ def benchmark_link_serial(headers, endpoint, file):
         link_rsp[i] = rsp
 
     end = time.time()
-    msg = f"Time to retrieve {link_count} links individually: {(end-start):6.4f} seconds"
+    msg = f"Time to retrieve {link_count} links individually: {(end - start):6.4f} seconds"
     print(msg)
 
     # Check return correctness

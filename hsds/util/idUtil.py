@@ -305,7 +305,7 @@ def createNodeId(prefix, node_number=None):
     node_id = ""  # nothing too bad happens if this doesn't get set
     if node_number is not None:
         # just make an id based on the node_number
-        hash_key = f"{node_number+1:03d}"
+        hash_key = f"{node_number + 1:03d}"
     else:
         # use the container id if we are running inside docker
         hash_key = getIdHash(str(uuid.uuid1()))

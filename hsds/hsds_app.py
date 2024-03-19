@@ -157,7 +157,7 @@ class HsdsApp:
             sn_url = f"http+unix://{socket_url}sn_1.sock"
 
             for i in range(dn_count):
-                socket_name = f"dn_{(i+1)}.sock"
+                socket_name = f"dn_{(i + 1)}.sock"
                 dn_url = f"http+unix://{socket_url}{socket_name}"
                 self._dn_urls.append(dn_url)
                 self._socket_paths.append(f"{socket_dir}{socket_name}")
@@ -167,7 +167,7 @@ class HsdsApp:
             sn_url = f"http://{host}:{sn_port}"
             dn_port = 6101  # TBD: pull this from config
             for i in range(dn_count):
-                dn_url = f"http://{host}:{dn_port+i}"
+                dn_url = f"http://{host}:{dn_port + i}"
                 self._dn_urls.append(dn_url)
 
         # sort the ports so that node_number can be determined based on dn_url
@@ -296,7 +296,7 @@ class HsdsApp:
                     py_exe,
                     cmd_path,
                     "--node_type=dn",
-                    f"--log_prefix=dn{node_number+1} ",
+                    f"--log_prefix=dn{node_number + 1} ",
                 ]
                 pargs.append(f"--dn_urls={dn_urls_arg}")
                 pargs.append(f"--node_number={node_number}")
@@ -342,7 +342,7 @@ class HsdsApp:
                     self.log.error(msg)
                     raise IOError(msg)
 
-        self.log.info(f"Ready after: {(time.time()-start_ts):4.2f} s")
+        self.log.info(f"Ready after: {(time.time() - start_ts):4.2f} s")
         self._ready = True
 
     def stop(self):

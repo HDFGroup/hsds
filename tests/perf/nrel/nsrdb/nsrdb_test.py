@@ -130,7 +130,7 @@ for i in range(num_blocks):
     te = time.time()
     result[start:end] = arr
     msg = f"    read[{start}:{end}]: {arr.min():4.2f}, {arr.max():4.2f}, "
-    msg += f"{arr.mean():4.2f}, {te-ts:4.2f} s"
+    msg += f"{arr.mean():4.2f}, {te - ts:4.2f} s"
     print(msg)
 
 print(f"{H5_PATH}[{index}:]: {result}")

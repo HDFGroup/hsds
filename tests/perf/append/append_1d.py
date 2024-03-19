@@ -156,5 +156,5 @@ f.close()
 # print out stats
 if mode == "a":
     end_ts = time.time()
-    print(f"added {count} rows in {(end_ts-start_ts):8.4f} seconds")
-    print(f"{count/(end_ts-start_ts):5.4f} rows/sec")
+    print(f"added {count} rows in {(end_ts - start_ts):8.4f} seconds")
+    print(f"{count / (end_ts - start_ts):5.4f} rows/sec")

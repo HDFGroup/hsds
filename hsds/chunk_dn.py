@@ -253,7 +253,7 @@ async def PUT_Chunk(request):
         # regular chunk update
         # check that the content_length is what we expect
         if itemsize != "H5T_VARIABLE":
-            log.debug(f"expected content_length: {num_elements*itemsize}")
+            log.debug(f"expected content_length: {num_elements * itemsize}")
         log.debug(f"actual content_length: {request.content_length}")
 
         actual = request.content_length

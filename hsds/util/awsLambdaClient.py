@@ -164,7 +164,7 @@ class lambdaInvoke:
             msg = f"lambda.invoke({self.lambdaFunction} "
             msg += f"start={start_time:.4f} "
             msg += f"finish={finish_time:.4f} "
-            msg += f"elapsed={finish_time-start_time:.4f}"
+            msg += f"elapsed={finish_time - start_time:.4f}"
             log.info(msg)
             self.funcStats["inflight"] -= 1
             msg = f"lambda.invoke - {self.funcStats['inflight']} "

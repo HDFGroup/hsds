@@ -98,7 +98,7 @@ for iter_num in range(iter_count):
 
     msg = f"contiguous selection: [{i}:{i + xlen}, {j}:{j + ylen}]: "
     msg += f"{arr.min():4.2f}, {arr.max():4.2f}, "
-    msg += f"{arr.mean():4.2f}, {te-ts:4.2f} s"
+    msg += f"{arr.mean():4.2f}, {te - ts:4.2f} s"
     print(msg)
 
     # do strided selection
@@ -119,7 +119,7 @@ for iter_num in range(iter_count):
 
         msg = f"strided selection: [{start}:{end}:{stride}, {j}:{j + ylen}]: "
         msg += f"{arr.min():4.2f}, {arr.max():4.2f}, "
-        msg += f"{arr.mean():4.2f}, {te-ts:4.2f} s"
+        msg += f"{arr.mean():4.2f}, {te - ts:4.2f} s"
         print(msg)
 
     # do fancy selection
@@ -142,5 +142,5 @@ for iter_num in range(iter_count):
         msg += f"{indices[-2]}, {indices[-1]}], "
         msg += f"{j}:{j + ylen}]: "
         msg += f"{arr.min():4.2f}, {arr.max():4.2f}, "
-        msg += f"{arr.mean():4.2f}, {te-ts:4.2f} s"
+        msg += f"{arr.mean():4.2f}, {te - ts:4.2f} s"
         print(msg)
