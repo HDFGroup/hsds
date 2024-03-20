@@ -195,6 +195,7 @@ async def PUT_Chunk(request):
         if rank != 1:
             log.error("expected one-dimensional array for PUT query")
             raise HTTPInternalServerError()
+
         try:
             parser = BooleanParser(query)
         except Exception as e:
@@ -487,19 +488,31 @@ async def GET_Chunk(request):
         select_dt = chunk_arr.dtype
 
     if query:
-        try:
-            parser = BooleanParser(query)
-        except Exception as e:
-            msg = f"query: {query} is not valid, got exception: {e}"
-            log.error(msg)
-            raise HTTPInternalServerError()
-        try:
-            eval_str = parser.getEvalStr()
-        except Exception as e:
-            msg = f"query: {query} unable to get eval str, got exception: {e}"
-            log.error(msg)
-            raise HTTPInternalServerError()
-        log.debug(f"got eval str: {eval_str} for query: {query}")
+        # if there's a where clause, just use the expression
+        # part with BooleanParser
+        # TBD: Remove when BooleanParser knows how to use where keyword
+        if query.startswith("where"):
+            query_expr = None
+        else:
+            n = query.find(" where ")
+            if n > 0:
+                query_expr = query[:n]
+            else:
+                query_expr = query
+        if query_expr:
+            try:
+                parser = BooleanParser(query_expr)
+            except Exception as e:
+                msg = f"query: {query} is not valid, got exception: {e}"
+                log.error(msg)
+                raise HTTPInternalServerError()
+            try:
+                eval_str = parser.getEvalStr()
+            except Exception as e:
+                msg = f"query: {query} unable to get eval str, got exception: {e}"
+                log.error(msg)
+                raise HTTPInternalServerError()
+            log.debug(f"got eval str: {eval_str} for query: {query}")
 
         # run given query
         try:
@@ -508,7 +521,7 @@ async def GET_Chunk(request):
                 "chunk_layout": dims,
                 "chunk_arr": chunk_arr,
                 "slices": selection,
-                "query": eval_str,
+                "query": query,
                 "limit": limit,
                 "select_dt": select_dt,
             }

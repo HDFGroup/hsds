@@ -1216,7 +1216,6 @@ def _getEvalStr(query, arr_name, field_names):
         msg = "Mismatched paren"
         log.warn("Bad query: " + msg)
         raise ValueError(msg)
-    log.debug(f"eval_str: {eval_str}")
     return eval_str
 
 
@@ -1313,25 +1312,34 @@ def chunkQuery(
             raise ValueError(msg)
         log.debug(f"tbd: where_elements_arr; {where_elements_arr}")
         log.debug(f"tbd: chunk_sel[{where_field}]: {chunk_sel[where_field]}")
-        isin_arr = np.isin(chunk_sel[where_field], where_elements_arr)
-        log.debug(f"tbd: isin_arr: {isin_arr}")
+        isin_mask = np.isin(chunk_sel[where_field], where_elements_arr)
+        log.debug(f"tbd: isin_arr: {isin_mask}")
 
-        if not np.any(isin_arr):
+        if not np.any(isin_mask):
             # all false
             log.debug("query - no rows found for where elements")
             return None
+        log.debug(f"tbd - isin_mask: {isin_mask}")
 
-        chunk_sel = chunk_sel[isin_arr]
-        log.debug(f"tbd - chunk_sel after boolean selection: {chunk_sel}")
-
-        if len(chunk_sel) == 0:
-            log.debug("query - no elements matched where list")
+        isin_indices = np.where(isin_mask)
+        if not isinstance(isin_indices, tuple):
+            log.warn(f"expected where_indices of tuple but got: {type(isin_indices)}")
             return None
-        if not eval_str:
-            # can just return the array
-            return chunk_sel
+        if len(isin_indices) == 0:
+            log.warn("chunkQuery - got empty tuple where in result")
+            return None
+        log.debug(f"tbd: isin_indices: {isin_indices}")
+
+        isin_indices = isin_indices[0]
+        if not isinstance(isin_indices, np.ndarray):
+            log.warn(f"expected isin_indices of ndarray but got: {type(isin_indices)}")
+            return None
+        log.debug(f"tbd - isin_indices: {isin_indices}")
+        nrows = isin_indices.shape[0]
+        log.debug(f"tbd - isin_indices nrows: {nrows}")
     elif eval_str:
         log.debug("no where keyword")
+        isin_indices = None
     else:
         log.warn("query  - no eval and no where in, returning None")
         return None
@@ -1353,20 +1361,45 @@ def chunkQuery(
     else:
         replace_mask = None
 
-    where_indices = np.where(eval(eval_str))
-    if not isinstance(where_indices, tuple):
-        log.warn(f"expected where_indices of tuple but got: {type(where_indices)}")
-        return None
-    if len(where_indices) == 0:
-        log.warn("chunkQuery - got empty tuple where result")
-        return None
+    if eval_str:
+        where_indices = np.where(eval(eval_str))
+        if not isinstance(where_indices, tuple):
+            log.warn(f"expected where_indices of tuple but got: {type(where_indices)}")
+            return None
+        if len(where_indices) == 0:
+            log.warn("chunkQuery - got empty tuple where result")
+            return None
 
-    where_indices = where_indices[0]
-    if not isinstance(where_indices, np.ndarray):
-        log.warn(f"expected where_indices of ndarray but got: {type(where_indices)}")
-        return None
-    nrows = where_indices.shape[0]
-    log.debug(f"chunkQuery - {nrows} found")
+        where_indices = where_indices[0]
+        log.debug(f"tbd - where_indices: {where_indices}")
+        if not isinstance(where_indices, np.ndarray):
+            log.warn(f"expected where_indices of ndarray but got: {type(where_indices)}")
+            return None
+        nrows = where_indices.shape[0]
+        log.debug(f"chunkQuery - {nrows} where rows found")
+    else:
+        where_indices = None
+
+    log.debug("tbd - check isin_indices")
+    if isin_indices is None:
+        pass  # skip intersection
+    else:
+        if where_indices is None:
+            # just use the isin_indices
+            where_indices = isin_indices
+        else:
+            # interest the two sets of indices
+            intersect = np.intersect1d(where_indices, isin_indices)
+            log.debug(f"tbd - intersect: {intersect}")
+
+            nrows = intersect.shape[0]
+            if nrows == 0:
+                log.debug("chunkQuery - no rows found after intersect with is in")
+                return None
+            else:
+                log.debug(f"chunkQuery - intersection, {nrows} found")
+            # use the intsection as our new where index
+            where_indices = intersect
 
     if limit > 0 and nrows > limit:
         # truncate to limit rows

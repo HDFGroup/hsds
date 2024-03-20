@@ -169,15 +169,11 @@ class QueryTest(unittest.TestCase):
                 kwargs["expect_bin"] = False
 
             # items in list
-            # TBD - needs update for chunk_dn.py to work
-            """
-            params = {"query": "where stock_symbol in (b'AAPL', b'EBAY')"}
+            params = {"query": "open < 4000 where stock_symbol in (b'AAPL', b'EBAY')"}
             rsp = self.session.get(req, params=params, headers=query_headers)
             self.assertEqual(rsp.status_code, 200)
             kwargs["expected_indices"] = [0, 1, 3, 4, 6, 7, 9, 10]
-            print(rsp.text)
             verifyQueryRsp(rsp, **kwargs)
-            """
 
             # read first row with AAPL
             params = {"query": "stock_symbol == b'AAPL'", "Limit": 1}
@@ -214,10 +210,21 @@ class QueryTest(unittest.TestCase):
             kwargs["expected_indices"] = (4, 7, 10)
             verifyQueryRsp(rsp, **kwargs)
 
+            params = {"query": "where stock_symbol in (b'AAPL', b'EBAY')"}
+            rsp = self.session.get(req, params=params, headers=query_headers)
+            self.assertEqual(rsp.status_code, 200)
+            kwargs["expected_indices"] = [0, 1, 3, 4, 6, 7, 9, 10]
+            verifyQueryRsp(rsp, **kwargs)
+            params = {"query": "open < 3000 where stock_symbol in (b'AAPL', b'EBAY')"}
+            rsp = self.session.get(req, params=params, headers=query_headers)
+            self.assertEqual(rsp.status_code, 200)
+            kwargs["expected_indices"] = [6, 7, 9, 10]
+            verifyQueryRsp(rsp, **kwargs)
+
             # combine with Limit
             params["Limit"] = 2
             rsp = self.session.get(req, params=params, headers=query_headers)
-            kwargs["expected_indices"] = (4, 7)
+            kwargs["expected_indices"] = (6, 7)
             verifyQueryRsp(rsp, **kwargs)
 
             # try bad Limit
