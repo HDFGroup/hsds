@@ -1310,16 +1310,12 @@ def chunkQuery(
         except ValueError:
             msg = "where elements are not compatible with field datatype"
             raise ValueError(msg)
-        log.debug(f"tbd: where_elements_arr; {where_elements_arr}")
-        log.debug(f"tbd: chunk_sel[{where_field}]: {chunk_sel[where_field]}")
         isin_mask = np.isin(chunk_sel[where_field], where_elements_arr)
-        log.debug(f"tbd: isin_arr: {isin_mask}")
 
         if not np.any(isin_mask):
             # all false
             log.debug("query - no rows found for where elements")
             return None
-        log.debug(f"tbd - isin_mask: {isin_mask}")
 
         isin_indices = np.where(isin_mask)
         if not isinstance(isin_indices, tuple):
@@ -1328,15 +1324,12 @@ def chunkQuery(
         if len(isin_indices) == 0:
             log.warn("chunkQuery - got empty tuple where in result")
             return None
-        log.debug(f"tbd: isin_indices: {isin_indices}")
 
         isin_indices = isin_indices[0]
         if not isinstance(isin_indices, np.ndarray):
             log.warn(f"expected isin_indices of ndarray but got: {type(isin_indices)}")
             return None
-        log.debug(f"tbd - isin_indices: {isin_indices}")
         nrows = isin_indices.shape[0]
-        log.debug(f"tbd - isin_indices nrows: {nrows}")
     elif eval_str:
         log.debug("no where keyword")
         isin_indices = None
@@ -1371,7 +1364,6 @@ def chunkQuery(
             return None
 
         where_indices = where_indices[0]
-        log.debug(f"tbd - where_indices: {where_indices}")
         if not isinstance(where_indices, np.ndarray):
             log.warn(f"expected where_indices of ndarray but got: {type(where_indices)}")
             return None
@@ -1380,7 +1372,6 @@ def chunkQuery(
     else:
         where_indices = None
 
-    log.debug("tbd - check isin_indices")
     if isin_indices is None:
         pass  # skip intersection
     else:
@@ -1390,7 +1381,6 @@ def chunkQuery(
         else:
             # interest the two sets of indices
             intersect = np.intersect1d(where_indices, isin_indices)
-            log.debug(f"tbd - intersect: {intersect}")
 
             nrows = intersect.shape[0]
             if nrows == 0:
@@ -1442,7 +1432,5 @@ def chunkQuery(
     index_name = dt_rsp.names[0]
     rsp_arr[index_name] = where_indices
     log.debug(f"chunkQuery returning {len(rsp_arr)} rows")
-    for i in range(len(rsp_arr)):
-        log.debug(f"   {i}: {rsp_arr[i]}")
 
     return rsp_arr
