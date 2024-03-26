@@ -344,7 +344,6 @@ def getTypeItem(dt, metadata=None):
         type_info["strPad"] = "H5T_STR_NULLPAD"
     elif dt.base.kind == "U":
         # Fixed length unicode type
-        print("fixed UTF, itemsize:", dt.itemsize)
         ref_check = check_dtype(ref=dt.base)
         if ref_check is not None:
             raise TypeError("unexpected reference type")
@@ -522,6 +521,30 @@ def getItemSize(typeItem):
         for dim in dims:
             item_size *= dim
 
+    return item_size
+
+
+def getDtypeItemSize(dtype):
+    """ Return size of dtype in bytes
+        For variable length types (e.g. variable length strings),
+        return the string "H5T_VARIABLE
+    """
+    item_size = 0
+    if len(dtype) > 0:
+        # compound dtype
+        for i in range(len(dtype)):
+            sub_dt = dtype[i]
+            sub_dt_size = getDtypeItemSize(sub_dt)
+            if sub_dt_size == "H5T_VARIABLE":
+                item_size = "H5T_VARIABLE"  # return variable if any component is variable
+                break
+            item_size += sub_dt_size
+    else:
+        # primitive type
+        if dtype.metadata and "vlen" in dtype.metadata:
+            item_size = "H5T_VARIABLE"
+        else:
+            item_size = dtype.itemsize
     return item_size
 
 
