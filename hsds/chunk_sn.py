@@ -29,7 +29,7 @@ from .util.httpUtil import request_read, jsonResponse, isAWSLambda
 from .util.idUtil import isValidUuid
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain
-from .util.hdf5dtype import getItemSize, getSubType, createDataType
+from .util.hdf5dtype import getItemSize, getDtypeItemSize, getSubType, createDataType
 from .util.dsetUtil import isNullSpace, isScalarSpace, get_slices, getShapeDims
 from .util.dsetUtil import isExtensible, getSelectionPagination
 from .util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout
@@ -560,10 +560,15 @@ async def _doHyperslabWrite(app,
     dset_id = dset_json["id"]
     log.info(f"_doHyperslabWrite on {dset_id} - page: {page_number}")
     type_json = dset_json["type"]
-    item_size = getItemSize(type_json)
 
-    if (select_dtype is not None):
-        item_size = select_dtype.itemsize
+    if select_dtype is not None:
+        item_size = getDtypeItemSize(select_dtype)
+    else:
+        item_size = getItemSize(type_json)
+    if item_size == "H5T_VARIABLE" and data is None:
+        msg = "unexpected call to _doHyperslabWrite for variable length data"
+        log.error(msg)
+        raise HTTPInternalServerError()
 
     layout = getChunkLayout(dset_json)
 
@@ -575,8 +580,9 @@ async def _doHyperslabWrite(app,
         log.warn(msg)
     select_shape = getSelectionShape(page)
     log.debug(f"got select_shape: {select_shape} for page: {page_number}")
-    num_bytes = math.prod(select_shape) * item_size
+
     if data is None:
+        num_bytes = math.prod(select_shape) * item_size
         log.debug(f"reading {num_bytes} from request stream")
         # read page of data from input stream
         try:
@@ -1027,8 +1033,8 @@ async def GET_Value(request):
 
     # for non query requests with non-variable types we can fetch
     # the expected response bytes length now
-    item_size = getItemSize(type_json)
-    log.debug(f"item size: {item_size}")
+    item_size = getDtypeItemSize(select_dtype)
+    log.debug(f"item size based on dtype: {item_size}")
 
     # get the shape of the response array
     np_shape = getSelectionShape(slices)
