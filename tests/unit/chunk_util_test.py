@@ -17,34 +17,30 @@ import numpy as np
 sys.path.append("../..")
 from hsds.util.dsetUtil import getHyperslabSelection
 from hsds.util.chunkUtil import (
+    ChunkIterator,
+    chunkReadSelection,
+    chunkWriteSelection,
+    chunkReadPoints,
+    chunkWritePoints,
+    chunkQuery,
     guessChunk,
     getNumChunks,
     getChunkIds,
     getChunkId,
     getPartitionKey,
     getChunkPartition,
-)
-from hsds.util.chunkUtil import (
     getChunkIndex,
     getChunkSelection,
     getChunkCoverage,
     getDataCoverage,
-    ChunkIterator,
-)
-from hsds.util.chunkUtil import (
     getChunkSize,
     shrinkChunk,
     expandChunk,
     getDatasetId,
     getContiguousLayout,
     _getEvalStr,
-)
-from hsds.util.chunkUtil import (
-    chunkReadSelection,
-    chunkWriteSelection,
-    chunkReadPoints,
-    chunkWritePoints,
-    chunkQuery,
+    _getWhereFieldName,
+    _getWhereElements,
 )
 
 
@@ -154,6 +150,18 @@ class ChunkUtilTest(unittest.TestCase):
     def testExpandChunk(self):
         CHUNK_MIN = 5000
         CHUNK_MAX = 50000
+
+        typesize = 20
+        shape = {"class": "H5S_SIMPLE", "dims": [12, ], "maxdims": [20, ]}
+        layout = (20,)
+        num_bytes = getChunkSize(layout, typesize)
+        self.assertTrue(num_bytes < CHUNK_MIN)
+        expanded = expandChunk(layout, typesize, shape, chunk_min=CHUNK_MIN)
+        num_bytes = getChunkSize(expanded, typesize)
+        # chunk layout can't be larger than dataspace
+        self.assertTrue(num_bytes < CHUNK_MIN)
+        self.assertEqual(expanded, (20,))
+
         typesize = 1
         shape = {"class": "H5S_SIMPLE", "dims": [10, 10, 10]}
         layout = (10, 10, 10)
@@ -1343,21 +1351,44 @@ class ChunkUtilTest(unittest.TestCase):
         queries["date == 23"] = "rows['date'] == 23"
         queries["wind == b'W 5'"] = "rows['wind'] == b'W 5'"
         queries["temp > 61"] = "rows['temp'] > 61"
-        queries[
-            "(date >=22) & (date <= 24)"
-        ] = "(rows['date'] >=22) & (rows['date'] <= 24)"
-        queries[
-            "(date == 21) & (temp > 70)"
-        ] = "(rows['date'] == 21) & (rows['temp'] > 70)"
-        queries[
-            "(wind == b'E 7') | (wind == b'S 7')"
-        ] = "(rows['wind'] == b'E 7') | (rows['wind'] == b'S 7')"
+        queries["(date >= 22) & (date <= 24)"] = "(rows['date'] >= 22) & (rows['date'] <= 24)"
+        queries["(date == 21) & (temp > 70)"] = "(rows['date'] == 21) & (rows['temp'] > 70)"
+        expected = "(rows['wind'] == b'E 7') | (rows['wind'] == b'S 7')"
+        queries["(wind == b'E 7') | (wind == b'S 7')"] = expected
+        queries["where 'temp' in (61, 68, 72)"] = None
+        queries["where 'name' in (b'Bob', b'Rob', b'Alice')"] = None
+        queries["date >= 22 where 'temp' in (61, 68, 72)"] = "rows['date'] >= 22"
+        queries["date >= 22 where 'temp F' in (61, 68, 72)"] = "rows['date'] >= 22"
 
         fields = ["date", "wind", "temp"]
 
         for query in queries.keys():
             eval_str = _getEvalStr(query, "rows", fields)
             self.assertEqual(eval_str, queries[query])
+
+    def testGetWhereFieldName(self):
+        queries = {}
+        queries["date == 23"] = None
+        queries["where 'temp' in (61, 68, 72)"] = "temp"
+        queries["date >= 22 where 'temp' in (61, 68, 72)"] = "temp"
+        queries["date >= 22 where 'temp F' in (61, 68, 72)"] = "temp F"
+        queries["date >= 22 where 'temp F123' in (61, 68, 72)"] = "temp F123"
+
+        for query in queries.keys():
+            field = _getWhereFieldName(query)
+            self.assertEqual(field, queries[query])
+
+    def testGetWhereElements(self):
+        queries = {}
+        queries["where 'temp' in (61, 68, 72)"] = ["61", "68", "72"]
+        queries["where 'temp' in (abc, xyz, abacab)"] = ["abc", "xyz", "abacab"]
+        queries["where 'temp' in ('ab cd', 'xyz ', 'abacab')"] = ["ab cd", "xyz ", "abacab"]
+        queries["where 'temp' in (123, -456, 3.12)"] = ["123", "-456", "3.12"]
+        queries["where 'temp' in (b'abc', b'xyz')"] = [b'abc', b'xyz']
+
+        for query in queries.keys():
+            elements = _getWhereElements(query)
+            self.assertEqual(elements, queries[query])
 
     def testBadQuery(self):
         queries = (
@@ -1650,6 +1681,27 @@ class ChunkUtilTest(unittest.TestCase):
         )
         self.assertTrue(isinstance(result, np.ndarray))
         self.assertEqual(len(result), 0)
+
+        # query with where
+        result = chunkQuery(
+            chunk_id=chunk_id,
+            chunk_layout=chunk_layout,
+            chunk_arr=chunk_arr,
+            query="where open in (3023, 3182, 1234)",
+        )
+        self.assertTrue(isinstance(result, np.ndarray))
+        self.assertEqual(len(result), 2)
+
+        # query with where
+        result = chunkQuery(
+            chunk_id=chunk_id,
+            chunk_layout=chunk_layout,
+            chunk_arr=chunk_arr,
+            query="where symbol in (b'AAPL', b'EBAY'",
+        )
+        print(result)
+        self.assertTrue(isinstance(result, np.ndarray))
+        self.assertEqual(len(result), 8)
 
         # try bad Limit
         try:

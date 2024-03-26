@@ -412,10 +412,31 @@ def getParser(query, dtype):
     """ get query BooleanParser.  If query contains variables that
        arent' part of the data type, throw a HTTPBadRequest exception. """
 
+    # separate out the where clause if any
+    if query.startswith("where"):
+        where_in = query
+        expr = None
+    else:
+        n = query.find(" where ")
+        if n > 0:
+            where_in = query[(n + 1):]
+            expr = query[:n]
+        else:
+            where_in = None
+            expr = query
+
+    if where_in:
+        log.debug(f"got where in clause: {where_in}")
+        # TBD: do full syntax check on this
+
+    if not expr:
+        # just a where clause
+        return None
+
     try:
-        parser = BooleanParser(query)
+        parser = BooleanParser(expr)
     except Exception:
-        msg = f"query: {query} is not valid"
+        msg = f"query: {expr} is not valid"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 

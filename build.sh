@@ -1,13 +1,18 @@
 #!/bin/bash
 run_pyflakes=1
+run_docker=1
 if [ $# -gt 0 ]; then
     if [ $1 == "-h" ] || [ $1 == "--help" ]; then
-        echo "Usage: build.sh [--nolint]"
+        echo "Usage: build.sh [--nolint | --no-docker]"
         exit 1
     fi
     if [ $1 == "--nolint" ]; then
         echo "no pyflakes"
         run_pyflakes=
+    fi
+    if [ $1 == "--no-docker" ]; then
+        echo "no docker"
+        run_docker=
     fi
 fi
 
@@ -32,9 +37,9 @@ pip install --upgrade build
 echo "running build"
 python -m build
 pip install -v .
-
-command -v docker 
-if [ $? -ne 1 ]; then
+ 
+if [ $run_docker ]; then
+    command -v docker
     echo "clean stopped containers"
     docker rm -v $(docker ps -aq -f status=exited)
 
