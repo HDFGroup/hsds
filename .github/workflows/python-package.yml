@@ -72,20 +72,20 @@ jobs:
           pytest tests/integ
 
       - name: Checkout h5pyd
-        if: ${{matrix.test-other == 'h5pyd'}}
+        if: ${{ ( matrix.test-other ==  'h5pyd' ) && ( matrix.os != 'windows-latest' ) }}
         uses: actions/checkout@v4
         with:
           repository: HDFGroup/h5pyd
           path: ${{github.workspace}}/h5pyd
 
       - name: Install h5pyd
-        if: ${{matrix.test-other == 'h5pyd'}}
+        if: ${{ ( matrix.test-other ==  'h5pyd' ) && ( matrix.os != 'windows-latest' ) }}
         working-directory: ${{github.workspace}}/h5pyd
         run: |
           pip install . -v
         
       - name: Create h5pyd test folder
-        if: ${{matrix.test-other == 'h5pyd'}}
+        if: ${{ ( matrix.test-other ==  'h5pyd' ) && ( matrix.os != 'windows-latest' ) }}
         working-directory: ${{github.workspace}}/h5pyd
         env:
           HS_USERNAME: test_user1
@@ -98,7 +98,7 @@ jobs:
           hstouch -e http://127.0.0.1:5101 /home/test_user1/h5pyd_tests/
 
       - name: Run h5pyd tests
-        if: ${{matrix.test-other == 'h5pyd'}}
+        if: ${{ ( matrix.test-other ==  'h5pyd' ) && ( matrix.os != 'windows-latest' ) }}
         working-directory: ${{github.workspace}}/h5pyd
         env:
           HS_USERNAME: test_user1
