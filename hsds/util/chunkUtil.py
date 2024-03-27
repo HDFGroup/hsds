@@ -50,7 +50,7 @@ def get_dset_size(shape_json, typesize):
 def expandChunk(
     layout, typesize, shape_json, chunk_min=CHUNK_MIN, layout_class="H5D_CHUNKED"
 ):
-    """Extend the chunk shape until it is above the MIN target."""
+    """Compute an increased chunk shape with a size in bytes greater than chunk_min."""
     if shape_json is None or shape_json["class"] == "H5S_NULL":
         return None
     if shape_json["class"] == "H5S_SCALAR":
@@ -125,7 +125,7 @@ def expandChunk(
 
 
 def shrinkChunk(layout, typesize, chunk_max=CHUNK_MAX, layout_class="H5D_CHUNKED"):
-    """Shrink the chunk shape until it is less than the MAX target."""
+    """Compute a reduced chunk shape with a size in bytes less than chunk_max."""
     layout = list(layout)
     chunk_size = getChunkSize(layout, typesize)
     if chunk_size <= chunk_max:
