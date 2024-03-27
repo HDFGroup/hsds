@@ -305,6 +305,7 @@ class HsdsApp:
             p = subprocess.Popen(
                 pargs, bufsize=1, universal_newlines=True, shell=False, stdout=pout
             )
+            p.stdout.reconfigure(encoding='utf-8')
             self._processes[pname] = p
             # setup queue so we can check on process output without blocking
             q = queue.Queue()
