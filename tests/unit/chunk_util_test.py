@@ -182,6 +182,16 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertTrue(num_bytes > CHUNK_MIN)
         self.assertTrue(num_bytes < CHUNK_MAX)
 
+        shape = {"class": "H5S_SIMPLE", "dims": [1000,]}
+        layout = (10,)
+        num_bytes = getChunkSize(layout, "H5T_VARIABLE")
+        self.assertTrue(num_bytes < CHUNK_MIN)
+        expanded = expandChunk(layout, "H5T_VARIABLE", shape, chunk_min=CHUNK_MIN)
+        print("expanded:", expanded)
+        num_bytes = getChunkSize(expanded, "H5T_VARIABLE")
+        self.assertTrue(num_bytes > CHUNK_MIN)
+        self.assertTrue(num_bytes < CHUNK_MAX)
+
         shape = {
             "class": "H5S_SIMPLE",
             "dims": [1000, 10, 1000],
