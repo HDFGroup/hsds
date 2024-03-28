@@ -335,10 +335,18 @@ async def http_post(app, url, data=None, params=None, client=None):
     """
     Helper function  - async HTTP POST
     """
+    if not url:
+        log.error("http_post with no url")
+        return
+    if url.startswith("http://head"):
+        # just use debug for health check traffic
+        logmsg = log.debug
+    else:
+        logmsg = log.info
     msg = f"http_post('{url}'"
     if isinstance(data, bytes):
         msg += f" {len(data)} bytes"
-    log.info(msg)
+    logmsg(msg)
     if client is None:
         client = get_http_client(app, url=url)
     url = get_http_std_url(url)
@@ -355,7 +363,7 @@ async def http_post(app, url, data=None, params=None, client=None):
 
     try:
         async with client.post(url, **kwargs) as rsp:
-            log.info(f"http_post status: {rsp.status}")
+            logmsg(f"http_post status: {rsp.status}")
             if rsp.status == 200:
                 pass  # ok
             elif rsp.status == 201:

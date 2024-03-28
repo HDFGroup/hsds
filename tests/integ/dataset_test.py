@@ -161,7 +161,6 @@ class DatasetTest(unittest.TestCase):
         # try to do a GET with a different domain (should fail)
         another_domain = self.base_domain + "/testScalarDataset2.h5"
         helper.setupDomain(another_domain)
-        print("testScalarDataset2", another_domain)
         headers = helper.getRequestHeaders(domain=another_domain)
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 400)
@@ -246,9 +245,7 @@ class DatasetTest(unittest.TestCase):
         req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers)
         if rsp.status_code != 200:
-            print(
-                "WARNING: Failed to get domain: {}. Is test data setup?".format(domain)
-            )
+            print(f"WARNING: Failed to get domain: {domain}. Is test data setup?")
             return  # abort rest of test
         domainJson = json.loads(rsp.text)
         root_uuid = domainJson["root"]

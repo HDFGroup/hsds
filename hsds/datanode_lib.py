@@ -1202,7 +1202,7 @@ async def s3sync(app, s3_age_time=0):
 
     dirty_count = len(dirty_ids)
     if not dirty_count:
-        log.info("s3sync nothing to update")
+        log.debug("s3sync nothing to update")
         return 0
     msg = f"s3sync update - dirtyid count: {dirty_count}, "
     msg += f"active write tasks: {len(pending_s3_write_tasks)}/"
@@ -1378,5 +1378,5 @@ async def s3syncCheck(app):
                 sleep_time = last_update_delta
             msg = "s3syncCheck no objects to write, "
             msg += f"sleeping for {sleep_time:.2f}"
-            log.info(msg)
+            log.debug(msg)
             await asyncio.sleep(sleep_time)

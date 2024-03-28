@@ -95,9 +95,9 @@ async def bucketScan(app):
     """Scan v2 keys and update .info.json"""
     log.info("bucketScan start")
 
-    async_sleep_time = int(config.get("async_sleep_time"))
-    short_sleep_time = float(async_sleep_time) / 10.0
-    scan_wait_time = async_sleep_time  # default to ~1min
+    scan_sleep_time = int(config.get("scan_sleep_time", default=10.0))
+    short_sleep_time = float(scan_sleep_time) / 10.0
+    scan_wait_time = int(config.get("scan_wait_time", default=60.0))  # default to ~1min
     log.info(f"scan_wait_time: {scan_wait_time}")
     last_action = time.time()  # keep track of the last time any work was done
 
@@ -106,7 +106,7 @@ async def bucketScan(app):
     while True:
         if app["node_state"] != "READY":
             log.info("bucketScan waiting for Node state to be READY")
-            await asyncio.sleep(async_sleep_time)
+            await asyncio.sleep(scan_sleep_time)
             continue  # wait for READY state
 
         root_scan_ids = app["root_scan_ids"]
@@ -168,8 +168,8 @@ async def bucketScan(app):
             last_action = time.time()
 
         now = time.time()
-        if (now - last_action) > async_sleep_time:
-            sleep_time = async_sleep_time  # long nap
+        if (now - last_action) > scan_sleep_time:
+            sleep_time = scan_sleep_time  # long nap
         else:
             sleep_time = short_sleep_time  # shot nap
 
@@ -193,15 +193,15 @@ def get_gc_count(app):
 
 async def bucketGC(app):
     """remove objects from db for any deleted root groups or datasets"""
-    async_sleep_time = int(config.get("async_sleep_time"))
-    log.info(f"bucketGC start - async_sleep_time: {async_sleep_time}")
+    gc_sleep_time = int(config.get("gc_sleep_time", default=10))
+    log.info(f"bucketGC start - gc_sleep_time: {gc_sleep_time}")
 
     # update/initialize root object before starting GC
 
     while True:
         if app["node_state"] not in ("READY", "TERMINATING"):
             log.info("bucketGC - waiting for Node state to be READY")
-            await asyncio.sleep(async_sleep_time)
+            await asyncio.sleep(gc_sleep_time)
             continue  # wait for READY state
 
         gc_buckets = app["gc_buckets"]
@@ -231,8 +231,8 @@ async def bucketGC(app):
                 else:
                     log.error(f"bucketGC - unexpected obj_id class: {bucket}/{obj_id}")
 
-        log.info(f"bucketGC - sleep: {async_sleep_time}")
-        await asyncio.sleep(async_sleep_time)
+        log.info(f"bucketGC - sleep: {gc_sleep_time}")
+        await asyncio.sleep(gc_sleep_time)
 
     # shouldn't ever get here
     log.error("bucketGC terminating unexpectedly")
