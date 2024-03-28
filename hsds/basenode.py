@@ -550,6 +550,10 @@ def baseInit(node_type):
     log_level = config.get("log_level")
     prefix = config.get("log_prefix")
     log_timestamps = config.get("log_timestamps", default=False)
+
+    # Support logging UTF-8 characters on Windows
+    sys.stdout.reconfigure(encoding='utf-8')
+
     log.setLogConfig(log_level, prefix=prefix, timestamps=log_timestamps)
 
     # create the app object

@@ -1988,7 +1988,7 @@ class AttributeTest(unittest.TestCase):
         # create some groups
         grp_count = 3
 
-        grp_names = [f"group{i+1}" for i in range(grp_count)]
+        grp_names = [f"group{i + 1}" for i in range(grp_count)]
         grp_ids = []
 
         for grp_name in grp_names:
@@ -2022,7 +2022,7 @@ class AttributeTest(unittest.TestCase):
         for i in range(attr_count):
             value = [i * 10 + j for j in range(extent)]
             data = {"type": "H5T_STD_I32LE", "shape": extent, "value": value}
-            attr_name = f"attr{i+1:04d}"
+            attr_name = f"attr{i + 1:04d}"
             attributes[attr_name] = data
 
         # write attributes to the dataset
@@ -2042,7 +2042,7 @@ class AttributeTest(unittest.TestCase):
         for i in range(attr_count):
             attr = ret_attrs[i]
             self.assertTrue("name" in attr)
-            self.assertEqual(attr["name"], f"attr{i+1:04d}")
+            self.assertEqual(attr["name"], f"attr{i + 1:04d}")
             self.assertTrue("value" in attr)
             attr_value = attr["value"]
             self.assertEqual(len(attr_value), extent)
@@ -2090,7 +2090,7 @@ class AttributeTest(unittest.TestCase):
             self.assertTrue("attributes" in rspJson)
             ret_attrs = rspJson["attributes"]
             # expect the 4 attributes we wrote in the first post
-            # plus (i+1) in the second post
+            # plus (i + 1) in the second post
             self.assertEqual(len(ret_attrs), attr_count + i + 1)
             for j in range(len(ret_attrs)):
                 attr = ret_attrs[j]

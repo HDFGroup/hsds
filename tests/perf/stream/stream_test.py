@@ -137,7 +137,7 @@ class StreamTest(unittest.TestCase):
         # initialize bytearray to test values
         num_bytes = item_size * num_row * num_col
         print(
-            f"initializing test data ({num_bytes} bytes, {num_bytes/(1024*1024):.2f} MiB)"
+            f"initializing test data ({num_bytes} bytes, {num_bytes / (1024 * 1024):.2f} MiB)"
         )
         bin_data = bytearray(num_bytes)
         exp = int(math.log10(num_col)) + 1

@@ -1464,7 +1464,7 @@ class LinkTest(unittest.TestCase):
         # create some groups under grp1
         grp_count = 3
 
-        grp_names = [f"grp{(i+1):04d}" for i in range(grp_count)]
+        grp_names = [f"grp{(i + 1):04d}" for i in range(grp_count)]
         grp_ids = []
 
         for grp_name in grp_names:

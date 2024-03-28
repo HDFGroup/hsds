@@ -48,7 +48,7 @@ class AzureBlobClient:
             msg = "No connection string specified"
             log.error(msg)
             raise ValueError(msg)
-        log.info(f"Using azure_connection_string: {'*'*len(azure_connection_string)}")
+        log.info(f"Using azure_connection_string: {'*' * len(azure_connection_string)}")
 
         self._client = BlobServiceClient.from_connection_string(azure_connection_string)
 
@@ -121,7 +121,7 @@ class AzureBlobClient:
             finish_time = time.time()
             msg = f"azureBlobClient.get_object({key} bucket={bucket}) "
             msg += f"start={start_time:.4f} finish={finish_time:.4f} "
-            msg += f"elapsed={finish_time-start_time:.4f} "
+            msg += f"elapsed={finish_time - start_time:.4f} "
             msg += f"bytes={len(data)}"
             log.info(msg)
         except CancelledError as cle:
@@ -179,7 +179,7 @@ class AzureBlobClient:
             log.debug(f"put_object {key} returning: {rsp}")
             msg = f"azureBlobClient.put_object({key} bucket={bucket}) "
             msg += f"start={start_time:.4f} finish={finish_time:.4f} "
-            msg += "elapsed={finish_time-start_time:.4f} "
+            msg += "elapsed={finish_time - start_time:.4f} "
             msg += f"bytes={len(data)}"
             log.info(msg)
 
@@ -231,7 +231,7 @@ class AzureBlobClient:
             finish_time = time.time()
             msg = f"azureBlobClient.delete_object({key} bucket={bucket}) "
             msg += f"start={start_time:.4f} finish={finish_time:.4f} "
-            msg += f"elapsed={finish_time-start_time:.4f}"
+            msg += f"elapsed={finish_time - start_time:.4f}"
             log.info(msg)
 
         except CancelledError as cle:
@@ -309,7 +309,7 @@ class AzureBlobClient:
 
         msg = f"azureBlobClient.is_object({key} bucket={bucket}) "
         msg += f"start={start_time:.4f} finish={finish_time:.4f} "
-        msg += f"elapsed={finish_time-start_time:.4f}"
+        msg += f"elapsed={finish_time - start_time:.4f}"
         log.info(msg)
 
         return found
@@ -365,7 +365,7 @@ class AzureBlobClient:
         key_stats["LastModified"] = datetime.datetime.timestamp(lm_dt)
         msg = f"azureBlobClient.get_key_stats({key} bucket={bucket}) "
         msg += f"start={start_time:.4f} finish={finish_time:.4f} "
-        msg += f"elapsed={finish_time-start_time:.4f}"
+        msg += f"elapsed={finish_time - start_time:.4f}"
         log.info(msg)
 
         return key_stats

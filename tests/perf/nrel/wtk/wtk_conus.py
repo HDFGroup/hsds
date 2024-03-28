@@ -125,7 +125,7 @@ else:
 
 filepaths = []
 for i in range(num_years):
-    filename = f"wtk_conus_{2007+i}.h5"
+    filename = f"wtk_conus_{2007 + i}.h5"
     filepath = os.path.join(folderpath, filename)
     filepaths.append(filepath)
 
@@ -151,7 +151,7 @@ if __name__ == "__main__":
                     arr = year_arrs[i]
                     print_stats(filepath, cfg["index"], arr)
                 if iter_count > 1:
-                    print(f"iter {i}: {(t_end-t_start):6.2f} s")
+                    print(f"iter {i}: {(t_end - t_start):6.2f} s")
         else:
             for i in range(num_years):
                 filepath = filepaths[i]
@@ -160,7 +160,7 @@ if __name__ == "__main__":
 
         t_end = time.time()
         if iter_count > 1:
-            print(f"iter {iter}: {(t_end-t_start):6.2f} s")
+            print(f"iter {iter}: {(t_end - t_start):6.2f} s")
 
     print("------------")
 

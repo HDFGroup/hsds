@@ -1085,7 +1085,7 @@ async def PUT_AttributeValue(request):
     if binary_data:
         npoints = getNumElements(np_shape)
         if npoints * item_size != len(binary_data):
-            msg = f"Expected: {npoints*item_size} bytes, "
+            msg = f"Expected: {npoints * item_size} bytes, "
             msg += f"but got {len(binary_data)}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)

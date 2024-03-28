@@ -309,7 +309,7 @@ class LruCache(object):
             if pos == 0:
                 raise ValueError(f"unexpected node: {node._id}")
             if node._id != id_list[pos - 1]:
-                msg = f"expected node: {id_list[pos-1]} but found: {node._id}"
+                msg = f"expected node: {id_list[pos - 1]} but found: {node._id}"
                 raise ValueError(msg)
             pos -= 1
             node = node._prev

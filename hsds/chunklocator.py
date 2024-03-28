@@ -231,4 +231,4 @@ def main():
     log.info('done')
     stop_time = time.time()
     log.info(f"chunklocator stop: {stop_time:.2f}")
-    log.info(f"chunklocator elapsed: {(stop_time-start_time):.2f}")
+    log.info(f"chunklocator elapsed: {(stop_time - start_time):.2f}")

@@ -36,13 +36,13 @@ arr = np.random.choice(strings, count)
 then = time.time()
 buffer_size = getByteArraySize(arr)
 now = time.time()
-msg = f"getByteArraySize - elapsed: {(now-then):6.4f} for {count} elements, "
+msg = f"getByteArraySize - elapsed: {(now - then):6.4f} for {count} elements, "
 msg += f"returned {buffer_size}"
 print(msg)
 then = time.time()
 buffer = arrayToBytes(arr)
 now = time.time()
-print(f"arrayToBytes - elpased: {(now-then):6.4f} for {count} elements")
+print(f"arrayToBytes - elpased: {(now - then):6.4f} for {count} elements")
 if len(buffer) != buffer_size:
     raise ValueError(f"unexpected buffer length: {len(buffer)}")
 then = time.time()
@@ -50,4 +50,4 @@ copy = bytesToArray(buffer, dt, (count,))
 now = time.time()
 if copy.shape[0] != count:
     raise ValueError(f"unexpected array shape: {copy.shape}")
-print(f"bytesToArray - elapsed: {(now-then):6.4f}")
+print(f"bytesToArray - elapsed: {(now - then):6.4f}")
